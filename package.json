@@ -11,7 +11,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "type-check": "tsc --noEmit",
-    "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
+    "lint": "eslint . --ext .ts,.tsx --config eslint.config.mjs --max-warnings=0",
     "postinstall": "wxt prepare",
     "test:e2e": "playwright test",
     "test:e2e:ci": "playwright test --reporter=line",
@@ -20,7 +20,9 @@
     "check:connector-ids": "node ./scripts/check-connector-ids.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.35.0",
     "@playwright/test": "^1.55.0",
+    "@tailwindcss/vite": "^4.1.13",
     "@types/chrome": "^0.0.268",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
@@ -31,15 +33,14 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.43.0",
     "vite": "^5.4.20",
-    "wxt": "^0.20.11",
-    "@tailwindcss/vite": "^4.1.13",
-    "tailwindcss": "^4.1.13"
+    "wxt": "^0.20.11"
   },
   "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
+    "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -54,13 +55,16 @@
     "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
-    "@hookform/resolvers": "^3.10.0",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.2.8",
     "bottleneck": "^2.19.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fflate": "^0.8.2",
     "lucide-react": "^0.525.0",
     "next-themes": "^0.4.6",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "react-hook-form": "^7.62.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
@@ -75,5 +79,5 @@
   ],
   "author": "oovz",
   "license": "MIT",
-  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+  "packageManager": "pnpm@10.17.1+sha512.17c560fca4867ae9473a3899ad84a88334914f379be46d455cbf92e5cf4b39d34985d452d2583baf19967fa76cb5c17bc9e245529d0b98745721aa7200ecaf7a"
 }
