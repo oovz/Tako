@@ -12,14 +12,14 @@ import {
   hasUnresolvedMacros,
   extractMacrosFromTemplate,
   type TemplateContext,
-} from '@/src/lib/template-resolver';
+} from '@/src/shared/template-resolver';
 
 describe('template-resolver', () => {
   describe('resolveDownloadDirectory', () => {
     const baseContext: TemplateContext = {
       date: new Date('2024-03-15T10:30:00Z'),
       publisher: 'Weekly Shonen Jump',
-      connectorName: 'bato.to',
+      integrationName: 'mangadex.org',
       seriesTitle: 'One Piece',
       chapterTitle: 'Chapter 1001 - Big Moms Rage',
       volumeTitle: 'Volume 99',
@@ -85,10 +85,10 @@ describe('template-resolver', () => {
       expect(result.resolvedPath).toBe('Vol03');
     });
 
-    it('resolves template with connector name', () => {
-      const result = resolveDownloadDirectory('<CONNECTOR_NAME>/<SERIES_TITLE>', baseContext);
+    it('resolves template with integration name', () => {
+      const result = resolveDownloadDirectory('<INTEGRATION_NAME>/<SERIES_TITLE>', baseContext);
       expect(result.success).toBe(true);
-      expect(result.resolvedPath).toBe('bato.to/One Piece');
+      expect(result.resolvedPath).toBe('mangadex.org/One Piece');
     });
 
     it('sanitizes unsafe characters in resolved path', () => {
@@ -249,8 +249,8 @@ describe('template-resolver', () => {
   describe('previewTemplate', () => {
     it('returns preview with sample context', () => {
       const preview = previewTemplate('<SERIES_TITLE>/<CHAPTER_TITLE>');
-      expect(preview).toContain('One Piece');
-      expect(preview).toContain('Chapter 1001');
+      expect(preview).toContain('Hunter x Hunter');
+      expect(preview).toContain('Chapter 1');
       expect(preview).toContain('.cbz');
     });
 
@@ -409,3 +409,4 @@ describe('template-resolver', () => {
     });
   });
 });
+
