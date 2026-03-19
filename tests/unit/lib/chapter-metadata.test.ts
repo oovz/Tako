@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { composeChapterMetadata } from '@/src/lib/chapter-metadata';
-import type { Book, ChapterInput } from '@/src/types/core';
+import { buildSeriesComicInfoBase, composeChapterMetadata } from '@/src/shared/chapter-metadata';
+import type { Book } from '@/src/types/book';
+import type { ChapterInput } from '@/src/types/chapter';
+import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots';
 
 // Test helper factories
 function createTestBook(overrides?: Partial<Book>): Book {
@@ -34,7 +36,7 @@ describe('composeChapterMetadata', () => {
       });
 
       const input = createTestChapterInput({
-        number: '1',
+        chapterLabel: '1',
         chapterNumber: 1,
       });
 
@@ -43,7 +45,7 @@ describe('composeChapterMetadata', () => {
       expect(result.id).toBe('ch-1');
       expect(result.url).toBe('https://example.com/chapter/1');
       expect(result.title).toBe('Chapter 1');
-      expect(result.number).toBe('1');
+      expect(result.chapterLabel).toBe('1');
       expect(result.chapterNumber).toBe(1);
     });
 
@@ -66,14 +68,43 @@ describe('composeChapterMetadata', () => {
       expect(result.comicInfo.Publisher).toBe('Test Publisher');
       expect(result.comicInfo.Genre).toBe('Action, Adventure');
     });
+
+    it('builds ComicInfo base from queue metadata snapshots without requiring title', () => {
+      const metadata: SeriesMetadataSnapshot = {
+        author: 'Test Author',
+        publisher: 'Test Publisher',
+        language: 'ja',
+        readingDirection: 'rtl',
+      };
+
+      const result = buildSeriesComicInfoBase('Queued Series', metadata);
+
+      expect(result.Series).toBe('Queued Series');
+      expect(result.Writer).toBe('Test Author');
+      expect(result.Publisher).toBe('Test Publisher');
+      expect(result.LanguageISO).toBe('ja');
+      expect(result.Manga).toBe('YesAndRightToLeft');
+    });
+
+    it('defaults Manga to Yes when the site does not provide an explicit reading direction', () => {
+      const metadata: SeriesMetadataSnapshot = {
+        language: 'ja',
+      };
+
+      const result = buildSeriesComicInfoBase('Queued Series', metadata);
+
+      expect(result.LanguageISO).toBe('ja');
+      expect(result.Manga).toBe('Yes');
+    });
   });
 
   describe('Title handling', () => {
     it('uses chapter title when provided', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -89,14 +120,16 @@ describe('composeChapterMetadata', () => {
 
     it('falls back to series title when chapter title missing', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
         id: 'ch-1',
         url: 'https://example.com/chapter/1',
+        title: 'Test Manga',
       };
 
       const result = composeChapterMetadata(book, input);
@@ -106,9 +139,9 @@ describe('composeChapterMetadata', () => {
 
     it('preserves base Title if present and no chapter title', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {
           Title: 'Original Title',
         },
@@ -117,6 +150,7 @@ describe('composeChapterMetadata', () => {
       const input: ChapterInput = {
         id: 'ch-1',
         url: 'https://example.com/chapter/1',
+        title: 'Original Title',
       };
 
       const result = composeChapterMetadata(book, input);
@@ -128,9 +162,9 @@ describe('composeChapterMetadata', () => {
   describe('Series field handling', () => {
     it('uses Series from comicInfoBase when present', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {
           Series: 'Official Series Name',
         },
@@ -149,9 +183,9 @@ describe('composeChapterMetadata', () => {
 
     it('falls back to seriesTitle when Series not in base', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {},
       };
 
@@ -168,32 +202,34 @@ describe('composeChapterMetadata', () => {
   });
 
   describe('Chapter number handling', () => {
-    it('uses string number when provided', () => {
+    it('uses chapterLabel when provided', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
         id: 'ch-1',
         url: 'https://example.com/chapter/1',
         title: 'Chapter 1',
-        number: '1',
+        chapterLabel: '1',
         chapterNumber: 1,
       };
 
       const result = composeChapterMetadata(book, input);
 
       expect(result.comicInfo.Number).toBe('1');
-      expect(result.number).toBe('1');
+      expect(result.chapterLabel).toBe('1');
     });
 
-    it('converts numeric chapterNumber to string when number not provided', () => {
+    it('converts numeric chapterNumber to string when chapterLabel not provided', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -210,9 +246,10 @@ describe('composeChapterMetadata', () => {
 
     it('preserves decimal chapter numbers', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -229,9 +266,10 @@ describe('composeChapterMetadata', () => {
 
     it('handles zero chapter number', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -246,18 +284,19 @@ describe('composeChapterMetadata', () => {
       expect(result.comicInfo.Number).toBe('0');
     });
 
-    it('trims whitespace from string number', () => {
+    it('trims whitespace from chapterLabel', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
         id: 'ch-1',
         url: 'https://example.com/chapter/1',
         title: 'Chapter 1',
-        number: '  1  ',
+        chapterLabel: '  1  ',
       };
 
       const result = composeChapterMetadata(book, input);
@@ -267,31 +306,33 @@ describe('composeChapterMetadata', () => {
 
     it('handles special chapter numbers (bonus, extra)', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
         id: 'bonus',
         url: 'https://example.com/chapter/bonus',
         title: 'Bonus Chapter',
-        number: 'Bonus',
+        chapterLabel: 'Bonus',
       };
 
       const result = composeChapterMetadata(book, input);
 
       expect(result.comicInfo.Number).toBe('Bonus');
-      expect(result.number).toBe('Bonus');
+      expect(result.chapterLabel).toBe('Bonus');
     });
   });
 
   describe('Volume number handling', () => {
     it('includes volume number when provided', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -311,9 +352,10 @@ describe('composeChapterMetadata', () => {
 
     it('omits volume when not provided', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -330,9 +372,10 @@ describe('composeChapterMetadata', () => {
 
     it('handles volume 0', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -350,54 +393,12 @@ describe('composeChapterMetadata', () => {
     });
   });
 
-  describe('ComicInfo version handling', () => {
-    it('defaults to version 2.0 when not present', () => {
-      const book: Book = {
-        seriesTitle: 'Test Manga',
-        seriesId: 'test-manga',
-        
-        comicInfoBase: {},
-      };
-
-      const input: ChapterInput = {
-        id: 'ch-1',
-        url: 'https://example.com/chapter/1',
-        title: 'Chapter 1',
-      };
-
-      const result = composeChapterMetadata(book, input);
-
-      expect(result.comicInfo.ComicInfoVersion).toBe('2.0');
-    });
-
-    it('preserves existing ComicInfoVersion', () => {
-      const book: Book = {
-        seriesTitle: 'Test Manga',
-        seriesId: 'test-manga',
-        
-        comicInfoBase: {
-          ComicInfoVersion: '2.0',
-        },
-      };
-
-      const input: ChapterInput = {
-        id: 'ch-1',
-        url: 'https://example.com/chapter/1',
-        title: 'Chapter 1',
-      };
-
-      const result = composeChapterMetadata(book, input);
-
-      expect(result.comicInfo.ComicInfoVersion).toBe('2.0');
-    });
-  });
-
   describe('Metadata preservation', () => {
     it('does not mutate book.comicInfoBase', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {
           Series: 'Original Series',
           Writer: 'Original Author',
@@ -423,9 +424,9 @@ describe('composeChapterMetadata', () => {
 
     it('preserves all base metadata fields', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {
           Series: 'Test Manga',
           Writer: 'John Doe',
@@ -452,15 +453,39 @@ describe('composeChapterMetadata', () => {
       expect(result.comicInfo.Year).toBe(2024);
       expect(result.comicInfo.Manga).toBe('Yes');
     });
+
+    it('propagates chapter language into composed chapter metadata', () => {
+      const book: Book = {
+        siteId: 'test-site',
+        seriesTitle: 'Test Manga',
+        seriesId: 'test-manga',
+        comicInfoBase: {
+          Series: 'Test Manga',
+          LanguageISO: 'en',
+        },
+      };
+
+      const input: ChapterInput = {
+        id: 'ch-ja',
+        url: 'https://example.com/chapter/ja',
+        title: 'Japanese Chapter',
+        language: 'ja',
+      };
+
+      const result = composeChapterMetadata(book, input);
+
+      expect(result.language).toBe('ja');
+      expect(result.comicInfo.LanguageISO).toBe('ja');
+    });
   });
 
   describe('Edge cases', () => {
     it('handles missing comicInfoBase', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
-        // No comicInfoBase
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -473,14 +498,13 @@ describe('composeChapterMetadata', () => {
 
       expect(result.comicInfo.Series).toBe('Test Manga');
       expect(result.comicInfo.Title).toBe('Chapter 1');
-      expect(result.comicInfo.ComicInfoVersion).toBe('2.0');
     });
 
     it('handles empty comicInfoBase', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
         comicInfoBase: {},
       };
 
@@ -498,14 +522,16 @@ describe('composeChapterMetadata', () => {
 
     it('handles minimal ChapterInput', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
         id: 'ch-1',
         url: 'https://example.com/chapter/1',
+        title: 'Minimal Chapter',
       };
 
       const result = composeChapterMetadata(book, input);
@@ -517,8 +543,10 @@ describe('composeChapterMetadata', () => {
 
     it('handles unicode in titles', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: '進撃の巨人',
         seriesId: 'shingeki',
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -536,9 +564,10 @@ describe('composeChapterMetadata', () => {
     it('handles very long chapter titles', () => {
       const longTitle = 'A'.repeat(500);
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Test Manga',
         seriesId: 'test-manga',
-        
+        comicInfoBase: {},
       };
 
       const input: ChapterInput = {
@@ -557,9 +586,9 @@ describe('composeChapterMetadata', () => {
   describe('Real-world scenarios', () => {
     it('composes metadata for standard numbered chapter', () => {
       const book: Book = {
+        siteId: 'mangadex',
         seriesTitle: 'One Piece',
         seriesId: 'one-piece',
-        seriesUrl: 'https://batoto.to/series/123',
         comicInfoBase: {
           Series: 'One Piece',
           Writer: 'Eiichiro Oda',
@@ -571,9 +600,9 @@ describe('composeChapterMetadata', () => {
 
       const input: ChapterInput = {
         id: 'ch-1100',
-        url: 'https://batoto.to/chapter/1100',
+        url: 'https://mangadex.org/chapter/1100',
         title: 'Thank You, Bonney',
-        number: '1100',
+        chapterLabel: '1100',
         chapterNumber: 1100,
       };
 
@@ -581,7 +610,7 @@ describe('composeChapterMetadata', () => {
 
       expect(result.id).toBe('ch-1100');
       expect(result.title).toBe('Thank You, Bonney');
-      expect(result.number).toBe('1100');
+      expect(result.chapterLabel).toBe('1100');
       expect(result.comicInfo.Series).toBe('One Piece');
       expect(result.comicInfo.Number).toBe('1100');
       expect(result.comicInfo.Writer).toBe('Eiichiro Oda');
@@ -589,6 +618,7 @@ describe('composeChapterMetadata', () => {
 
     it('composes metadata for volume-based chapter', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'Attack on Titan',
         seriesId: 'aot',
         comicInfoBase: {
@@ -601,7 +631,7 @@ describe('composeChapterMetadata', () => {
         id: 'vol-34-ch-139',
         url: 'https://example.com/chapter/139',
         title: 'Toward the Tree on That Hill',
-        number: '139',
+        chapterLabel: '139',
         chapterNumber: 139,
         volumeNumber: 34,
         volumeLabel: 'Volume 34',
@@ -616,6 +646,7 @@ describe('composeChapterMetadata', () => {
 
     it('composes metadata for special chapter', () => {
       const book: Book = {
+        siteId: 'test-site',
         seriesTitle: 'My Hero Academia',
         seriesId: 'mha',
         comicInfoBase: {
@@ -627,13 +658,14 @@ describe('composeChapterMetadata', () => {
         id: 'extra-1',
         url: 'https://example.com/chapter/extra-1',
         title: 'Hero Costume Special',
-        number: 'Extra 1',
+        chapterLabel: 'Extra 1',
       };
 
       const result = composeChapterMetadata(book, input);
 
       expect(result.comicInfo.Number).toBe('Extra 1');
-      expect(result.number).toBe('Extra 1');
+      expect(result.chapterLabel).toBe('Extra 1');
     });
   });
 });
+

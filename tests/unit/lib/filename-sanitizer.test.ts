@@ -3,7 +3,7 @@ import {
   sanitizeFilename,
   normalizeImageFilename,
   getExtensionFromMimeType,
-} from '@/src/lib/filename-sanitizer';
+} from '@/src/shared/filename-sanitizer';
 
 describe('sanitizeFilename', () => {
   describe('Basic sanitization', () => {
@@ -561,3 +561,4 @@ describe('getExtensionFromMimeType', () => {
     });
   });
 });
+
