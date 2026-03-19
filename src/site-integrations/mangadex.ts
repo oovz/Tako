@@ -1,0 +1,1 @@
+export * from './mangadex/index'

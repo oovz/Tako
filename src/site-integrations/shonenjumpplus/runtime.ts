@@ -1,0 +1,1 @@
+export { shonenJumpPlusIntegration } from './index'

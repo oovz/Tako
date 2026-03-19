@@ -1,0 +1,5 @@
+export const STALL_TIMEOUT_MS = 30_000
+export const HARD_TIMEOUT_MS = 150_000
+export const LIVENESS_TIMEOUT_MS = 60_000
+export const IPC_THROTTLE_MS = 250
+export const TRANSITION_DURATION_MS = 275
