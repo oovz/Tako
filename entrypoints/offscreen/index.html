@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Tako Manga Downloader Offscreen Worker</title>
+        <!-- MV3 offscreen doc: no inline scripts. Inline styles are ok. Keep it small and local. -->
+        <style>
+            :root { color-scheme: light dark; }
+            body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; }
+            .container { padding: 16px; max-width: 720px; margin: 0 auto; }
+            header h1 { margin: 0 0 6px; font-size: 20px; }
+            .subtitle { margin: 0 0 12px; color: #666; font-size: 13px; }
+            .panel { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+            .status { font-weight: 600; }
+            .muted { color: #888; }
+            .error { color: #b91c1c; }
+            .jobs { display: grid; gap: 8px; }
+            .job { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }
+            .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+            .job-title { font-weight: 600; }
+            .job-id { color: #888; }
+            .progress { position: relative; height: 6px; background: #eee; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+            .bar { height: 100%; background: #3b82f6; width: 0%; }
+            h2 { margin: 0 0 8px; font-size: 14px; }
+        </style>
+        <!-- Dev notes: This page is a tiny, static shell. TS updates text and data-attrs only. -->
+    </head>
+    <body>
+        <main id="offscreen-root" class="container">
+            <header>
+                <h1>📚 Tako Manga Downloader Offscreen Worker</h1>
+                <p class="subtitle">Background processing for manga downloads and archive creation.</p>
+            </header>
+
+            <section id="status-section" class="panel">
+                <div id="offscreen-status" class="status">Active</div>
+                <div id="offscreen-health" data-ready="false" data-active-jobs="0">ready:false activeJobs:0</div>
+                <div id="offscreen-error" class="error" hidden></div>
+            </section>
+
+            <section id="jobs-section" class="panel">
+                <h2>Active Jobs</h2>
+                <div id="jobs-empty" class="muted">No active jobs</div>
+                <div id="jobs" class="jobs"></div>
+            </section>
+        </main>
+        <script type="module" src="./main.ts"></script>
+    </body>
+    </html>
+
