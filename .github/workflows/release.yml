@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAKO_CRX_PRIVATE_KEY_BASE64: ${{ secrets.TAKO_CRX_PRIVATE_KEY_BASE64 }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build release bundle
+        run: pnpm zip
+      - name: Pack CRX asset
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAKO_CRX_PRIVATE_KEY_BASE64)) {
+            throw 'TAKO_CRX_PRIVATE_KEY_BASE64 secret is required to create a stable .crx release asset.'
+          }
+
+          $chromePath = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+          if (-not (Test-Path $chromePath)) {
+            throw "Chrome executable not found at $chromePath"
+          }
+
+          $keyPath = Join-Path $env:RUNNER_TEMP 'tako-release.pem'
+          [System.IO.File]::WriteAllBytes($keyPath, [System.Convert]::FromBase64String($env:TAKO_CRX_PRIVATE_KEY_BASE64))
+
+          $unpackedPath = Resolve-Path '.output\chrome-mv3'
+          & $chromePath "--pack-extension=$unpackedPath" "--pack-extension-key=$keyPath"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Chrome failed to pack the extension.'
+          }
+      - name: Collect release assets
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $assetDir = 'release-assets'
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+          Copy-Item '.output\tako-manga-downloader-*-chrome.zip' $assetDir
+          Copy-Item '.output\chrome-mv3.crx' (Join-Path $assetDir "tako-manga-downloader-$tag.crx")
+      - name: Upload packaged assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Publish GitHub release
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $assets = Get-ChildItem 'release-assets' | ForEach-Object { $_.FullName }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $assets --clobber
+          } else {
+            gh release create $tag $assets --title "Tako $tag" --generate-notes --verify-tag
+          }

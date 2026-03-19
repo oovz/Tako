@@ -39,7 +39,16 @@ build/Release
 
 # Dependency directories
 node_modules/
-jspm_packages/
+dist/
+build/
+coverage/
+*.log
+.env*
+*.tmp
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -64,11 +73,6 @@ web_modules/
 
 # Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variable files
-.env
-.env.*
-!.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -144,3 +148,7 @@ stats.html
 stats-*.json
 .wxt
 web-ext.config.ts
+
+# Playwright test artifacts
+test-results/
+playwright-report/
