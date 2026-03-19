@@ -1,0 +1,15 @@
+node_modules/
+.output/
+.artifacts/
+dist/
+build/
+.wxt/
+.vite/
+coverage/
+nyc_output/
+playwright-report/
+test-results/
+.vscode/
+.idea/
+.git/
+pnpm-lock.yaml

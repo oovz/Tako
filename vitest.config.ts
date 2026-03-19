@@ -6,11 +6,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
-    name: 'Tako Unit Tests',
     globals: true,
-    environment: 'node',
-    include: ['tests/unit/**/*.{test,spec}.{js,ts}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.output/**'],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['tests/unit/**/*.{test,spec}.{js,ts}'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'integration',
+          environment: 'node',
+          include: ['tests/integration/**/*.{test,spec}.{js,ts}'],
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
