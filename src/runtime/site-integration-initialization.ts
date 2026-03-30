@@ -15,7 +15,11 @@ import { registerSiteIntegration, siteIntegrationRegistry } from './site-integra
 import logger from '@/src/runtime/logger';
 import { SITE_INTEGRATION_MANIFESTS, getSiteIntegrationManifestById, type SiteIntegrationManifest } from '../site-integrations/manifest';
 import { setUserSiteIntegrationEnablement } from '../site-integrations/registry';
-import { SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY, siteIntegrationEnablementService } from '@/src/storage/site-integration-enablement-service';
+import {
+  normalizeEnablementMap,
+  SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
+  siteIntegrationEnablementService,
+} from '@/src/storage/site-integration-enablement-service';
 import type { SiteIntegration } from '../types/site-integrations';
 
 const siteIntegrationModuleLoaders = import.meta.glob<Record<string, unknown>>('../site-integrations/*/runtime.ts');
@@ -46,18 +50,7 @@ async function initializeSiteIntegrationEnablement(): Promise<void> {
       }
 
       const nextValue: unknown = changes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]?.newValue;
-      if (!nextValue || typeof nextValue !== 'object' || Array.isArray(nextValue)) {
-        setUserSiteIntegrationEnablement({});
-        return;
-      }
-
-      const nextEnablement: Record<string, boolean> = {};
-      for (const [key, value] of Object.entries(nextValue as Record<string, unknown>)) {
-        if (typeof value === 'boolean') {
-          nextEnablement[key] = value;
-        }
-      }
-      setUserSiteIntegrationEnablement(nextEnablement);
+      setUserSiteIntegrationEnablement(normalizeEnablementMap(nextValue));
     });
   }
 

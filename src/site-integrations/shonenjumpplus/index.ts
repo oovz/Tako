@@ -3,7 +3,6 @@ import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, 
 import logger from '@/src/runtime/logger';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { IntegrationContextValidator } from '../../types/site-integrations';
 import { parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import {
   extractImageUrlsFromEpisodeJsonScript,
@@ -277,7 +276,6 @@ const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
   name: 'Shonen Jump+ Content',
   series: {
     getSeriesId(): string {
-      IntegrationContextValidator.validateContentScriptContext();
       const episodeId = parseEpisodeId(window.location.pathname);
       if (!episodeId) {
         throw new Error(`Failed to extract series ID from URL: ${window.location.pathname}`);
@@ -286,7 +284,6 @@ const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
     },
 
     async extractChapterList(): Promise<Chapter[]> {
-      IntegrationContextValidator.validateContentScriptContext();
       const aggregateId = getSeriesAggregateIdFromDom();
       const episodeId = parseEpisodeId(window.location.pathname);
       if (!aggregateId || !episodeId) {
@@ -336,7 +333,6 @@ const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
     },
 
     extractSeriesMetadata() {
-      IntegrationContextValidator.validateContentScriptContext();
       const jsonMetadata = readEpisodeJsonSeriesMetadataFromDocument();
       const domTitle = readTextBySelectors([
         '.series-header-title',
@@ -381,7 +377,6 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
   name: 'Shonen Jump+ Background',
   chapter: {
     async resolveImageUrls(chapter): Promise<string[]> {
-      IntegrationContextValidator.validateBackgroundOrOffscreenContext();
       const episodeId = parseEpisodeId(new URL(chapter.url).pathname);
       if (!episodeId) {
         throw new Error(`Invalid Shonen Jump+ chapter URL: ${chapter.url}`);
@@ -408,7 +403,6 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
     },
 
     parseImageUrlsFromHtml({ chapterHtml, chapterUrl }: ParseImageUrlsFromHtmlInput): Promise<string[]> {
-      IntegrationContextValidator.validateBackgroundOrOffscreenContext();
       const episodeId = parseEpisodeId(new URL(chapterUrl).pathname);
       if (!episodeId) {
         throw new Error(`Invalid Shonen Jump+ chapter URL: ${chapterUrl}`);
@@ -424,7 +418,6 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
     },
 
     processImageUrls(urls: string[]): Promise<string[]> {
-      IntegrationContextValidator.validateBackgroundOrOffscreenContext();
       const filtered = urls.filter((url) => {
         try {
           new URL(url);
@@ -437,7 +430,6 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
     },
 
     async downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-      IntegrationContextValidator.validateBackgroundOrOffscreenContext();
       if (opts?.signal?.aborted) {
         throw new Error('aborted');
       }

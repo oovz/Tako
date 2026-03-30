@@ -24,8 +24,8 @@ async function configureSessionAccessLevel(): Promise<void> {
     };
 
     if (session.setAccessLevel) {
-      await session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
-      logger.info('✅ Storage access level set to TRUSTED_AND_UNTRUSTED_CONTEXTS');
+      await session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+      logger.info('✅ Storage access level set to TRUSTED_CONTEXTS');
     } else {
       logger.debug('ℹ️ storage.session.setAccessLevel unavailable; skipping');
     }

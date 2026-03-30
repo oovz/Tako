@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import logger from '@/src/runtime/logger'
+import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 import { StateAction } from '@/src/types/state-actions'
@@ -13,11 +14,20 @@ export type FsaErrorState = {
 }
 
 export function normalizeDownloadQueueState(raw: unknown): DownloadTaskState[] {
-  return Array.isArray(raw) ? (raw as DownloadTaskState[]) : []
+  return Array.isArray(raw)
+    ? raw.map(normalizePersistedDownloadTask).filter((task): task is DownloadTaskState => task !== null)
+    : []
 }
 
 export function normalizeFsaErrorState(raw: unknown): FsaErrorState | null {
-  return isRecord(raw) ? (raw as FsaErrorState) : null
+  if (!isRecord(raw)) {
+    return null
+  }
+
+  return {
+    active: raw.active === true,
+    message: typeof raw.message === 'string' ? raw.message : undefined,
+  }
 }
 
 async function readHistoryStorageBytes(): Promise<number> {

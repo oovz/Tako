@@ -1,14 +1,14 @@
 import logger from '@/src/runtime/logger'
 import { isRecord } from '@/src/shared/type-guards'
 
-export interface DownloadPipelineError {
-  message: string
-  category: 'network' | 'download' | 'other'
-  code?: string
-  cause?: unknown
-}
-
 export type PersistentErrorSeverity = 'warning' | 'error'
+
+type PersistentErrorInput = {
+  code: string
+  message: string
+  severity?: PersistentErrorSeverity
+  ts?: number
+}
 
 export interface PersistentError {
   code: string
@@ -17,7 +17,7 @@ export interface PersistentError {
   ts: number
 }
 
-export const PERSISTENT_ERRORS_STORAGE_KEY = 'persistent_errors'
+const PERSISTENT_ERRORS_STORAGE_KEY = 'persistent_errors'
 
 async function readPersistentErrors(): Promise<PersistentError[]> {
   try {
@@ -50,52 +50,36 @@ async function writePersistentErrors(errors: PersistentError[]): Promise<void> {
   }
 }
 
+async function updatePersistentErrors(
+  update: (existing: PersistentError[]) => PersistentError[],
+  errorContext: string,
+): Promise<void> {
+  try {
+    const existing = await readPersistentErrors()
+    await writePersistentErrors(update(existing))
+  } catch (error) {
+    logger.error(`persistentErrors: failed to ${errorContext}`, error)
+  }
+}
+
 export async function getPersistentErrors(): Promise<PersistentError[]> {
   return readPersistentErrors()
 }
 
-export async function addPersistentError(input: {
-  code: string
-  message: string
-  severity?: PersistentErrorSeverity
-  ts?: number
-}): Promise<void> {
+export async function addPersistentError(input: PersistentErrorInput): Promise<void> {
   const { code, message } = input
   const severity: PersistentErrorSeverity = input.severity ?? 'error'
   const ts = input.ts ?? Date.now()
 
-  try {
-    const existing = await readPersistentErrors()
-    const filtered = existing.filter((e) => e.code !== code)
-    const next: PersistentError[] = [...filtered, { code, message, severity, ts }]
-    await writePersistentErrors(next)
-  } catch (error) {
-    logger.error('persistentErrors: failed to add error', error)
-  }
+  await updatePersistentErrors((existing) => {
+    const filtered = existing.filter((error) => error.code !== code)
+    return [...filtered, { code, message, severity, ts }]
+  }, 'add error')
 }
 
 export async function clearPersistentError(code: string): Promise<void> {
-  try {
-    const existing = await readPersistentErrors()
-    const next = existing.filter((e) => e.code !== code)
-    await writePersistentErrors(next)
-  } catch (error) {
-    logger.error('persistentErrors: failed to clear error', error)
-  }
+  await updatePersistentErrors(
+    (existing) => existing.filter((error) => error.code !== code),
+    'clear error',
+  )
 }
-
-export async function clearAllPersistentErrors(): Promise<void> {
-  try {
-    await writePersistentErrors([])
-  } catch (error) {
-    logger.error('persistentErrors: failed to clear all errors', error)
-  }
-}
-
-export const errorService = {
-  emit: addPersistentError,
-  clear: clearPersistentError,
-  clearAll: clearAllPersistentErrors,
-  getAll: getPersistentErrors
-}
-

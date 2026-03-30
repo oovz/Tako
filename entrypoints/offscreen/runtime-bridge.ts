@@ -1,4 +1,8 @@
 import logger from '@/src/runtime/logger'
+import {
+  OffscreenMessageSchema,
+  type OffscreenMessage,
+} from '@/src/runtime/message-schemas'
 import type {
   ExtensionMessage,
   ExtensionMessageResponse,
@@ -15,6 +19,7 @@ interface OffscreenWorkerRuntime {
   ) => Promise<{
     status: 'completed' | 'partial_success' | 'failed'
     errorMessage?: string
+    errorCategory?: 'network' | 'download' | 'other'
     imagesFailed?: number
   }>
   cancelTask: (taskId: string) => boolean
@@ -31,6 +36,18 @@ interface RegisterOffscreenRuntimeOptions {
   onInitializationError?: (errorMessage: string) => void
 }
 
+function parseOffscreenMessage<TType extends OffscreenMessage['type']>(
+  message: ExtensionMessage,
+  expectedType: TType,
+): Extract<OffscreenMessage, { type: TType }> | null {
+  const parsed = OffscreenMessageSchema.safeParse(message)
+  if (!parsed.success || parsed.data.type !== expectedType) {
+    return null
+  }
+
+  return parsed.data as Extract<OffscreenMessage, { type: TType }>
+}
+
 function processMessage(
   worker: OffscreenWorkerRuntime,
   message: ExtensionMessage,
@@ -38,12 +55,19 @@ function processMessage(
   runtimeState?: { isInitialized: boolean; initializationError: string | null },
 ): boolean {
   if (message.type === 'OFFSCREEN_DOWNLOAD_CHAPTER') {
-    worker.processDownloadChapter(message.payload)
+    const parsedMessage = parseOffscreenMessage(message, 'OFFSCREEN_DOWNLOAD_CHAPTER')
+    if (!parsedMessage) {
+      sendResponse?.({ success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_CHAPTER payload' })
+      return true
+    }
+
+    worker.processDownloadChapter(parsedMessage.payload as unknown as OffscreenDownloadChapterMessage['payload'])
       .then((outcome) => {
         const response: OffscreenDownloadChapterResponse = {
           success: true,
           status: outcome.status,
           errorMessage: outcome.errorMessage,
+          errorCategory: outcome.errorCategory,
           imagesFailed: outcome.imagesFailed,
         }
         sendResponse?.(response)
@@ -59,11 +83,17 @@ function processMessage(
   }
 
   if (message.type === 'OFFSCREEN_CONTROL') {
+    const parsedMessage = parseOffscreenMessage(message, 'OFFSCREEN_CONTROL')
+    if (!parsedMessage) {
+      sendResponse?.({ success: false, error: 'Invalid OFFSCREEN_CONTROL payload' })
+      return true
+    }
+
     try {
-      const { taskId, action } = message.payload
+      const { taskId, action } = parsedMessage.payload
       logger.debug('🎮 [OFFSCREEN] OFFSCREEN_CONTROL received:', { taskId, action })
 
-      if (action === 'cancel' && taskId && worker.cancelTask(taskId)) {
+      if (worker.cancelTask(taskId)) {
         logger.debug(`✅ [OFFSCREEN] Cancelled active chapter downloads for task ${taskId}`)
         sendResponse?.({ success: true })
         return true
@@ -81,7 +111,14 @@ function processMessage(
   }
 
   if (message.type === 'OFFSCREEN_STATUS') {
+    const parsedMessage = parseOffscreenMessage(message, 'OFFSCREEN_STATUS')
+    if (!parsedMessage) {
+      sendResponse?.({ success: false, error: 'Invalid OFFSCREEN_STATUS payload' })
+      return true
+    }
+
     try {
+      void parsedMessage
       sendResponse?.({
         success: true,
         isInitialized: runtimeState?.isInitialized === true,
@@ -98,11 +135,14 @@ function processMessage(
   }
 
   if (message.type === 'REVOKE_BLOB_URL') {
+    const parsedMessage = parseOffscreenMessage(message, 'REVOKE_BLOB_URL')
+    if (!parsedMessage) {
+      sendResponse?.({ success: false, error: 'Invalid REVOKE_BLOB_URL payload' })
+      return true
+    }
+
     try {
-      const { blobUrl } = message.payload
-      if (typeof blobUrl === 'string' && blobUrl.length > 0) {
-        URL.revokeObjectURL(blobUrl)
-      }
+      URL.revokeObjectURL(parsedMessage.payload.blobUrl)
       sendResponse?.({ success: true })
     } catch (error) {
       logger.debug('REVOKE_BLOB_URL failed (non-fatal):', error)

@@ -1,17 +1,22 @@
 import { loadDownloadRootHandle, clearDownloadRootHandle } from '@/src/storage/fs-access';
 import { settingsService } from '@/src/storage/settings-service';
-import { errorService } from './errors';
+import type { ExtensionSettings } from '@/src/storage/settings-types';
+import { addPersistentError } from './errors';
 import logger from '@/src/runtime/logger';
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 
+type EffectiveDestination =
+    | { kind: 'custom'; handleId: string; handle: FileSystemDirectoryHandle }
+    | { kind: 'downloads' };
+
 export class DestinationService {
     /**
-     * Resolves the effective download directory handle ID.
-     * If the user has enabled custom directory and a valid handle exists, returns it.
-     * If the handle is invalid or missing, it falls back to browser downloads,
-     * updates settings, and logs a persistent error.
+     * Resolves the effective download destination for the next task.
+     * When custom-directory mode is enabled and the persisted handle is still available,
+     * returns the custom handle. Otherwise it falls back to browser downloads and
+     * persists the fallback state for the UI.
      */
-    async getEffectiveDestination(): Promise<{ kind: 'custom'; handleId: string; handle: FileSystemDirectoryHandle } | { kind: 'downloads' }> {
+    async getEffectiveDestination(): Promise<EffectiveDestination> {
         const settings = await settingsService.getSettings();
 
         if (!settings.downloads.customDirectoryEnabled || !settings.downloads.customDirectoryHandleId) {
@@ -21,8 +26,7 @@ export class DestinationService {
         const handleId = settings.downloads.customDirectoryHandleId;
 
         try {
-            // Verify handle existence and permission (basic check)
-            // We use loadDownloadRootHandle which uses the fixed 'download-root' key
+            // `loadDownloadRootHandle` resolves the persisted root handle if it is still available.
             const handle = await loadDownloadRootHandle();
             if (!handle) {
                 await this.clearCustomDirectoryAndFallback(
@@ -31,12 +35,6 @@ export class DestinationService {
                 );
                 return { kind: 'downloads' };
             }
-
-            // Permission check is often async and might require user gesture if not persisted,
-            // but for background/offscreen use, we rely on the handle being valid.
-            // If we can't verify it here without gesture, we assume it's good and let the offscreen script fail if needed.
-            // However, we can check if we have read/write access if the API allows queryPermission.
-            // For MVP, we'll assume if we have the handle, we try to use it.
 
             return { kind: 'custom', handleId, handle };
         } catch (error) {
@@ -59,6 +57,7 @@ export class DestinationService {
      */
     async clearCustomDirectoryAndFallback(errorTitle: string, errorMessage: string): Promise<void> {
         const settings = await settingsService.getSettings();
+        const fullMessage = `${errorTitle}: ${errorMessage}`;
 
         // Only perform updates if we are currently in custom mode to avoid redundant writes
         if (!settings.downloads.customDirectoryEnabled) {
@@ -67,34 +66,41 @@ export class DestinationService {
 
         logger.warn('[DestinationService] Clearing custom directory, falling back to browser downloads');
 
-        // 1. Disable custom directory in settings
+        await this.disableCustomDirectory(settings);
+
+        await addPersistentError({
+            code: 'FSA_HANDLE_INVALID',
+            message: fullMessage,
+            severity: 'warning'
+        });
+
+        await this.persistFallbackBanner(fullMessage);
+    }
+
+    private async disableCustomDirectory(settings: ExtensionSettings): Promise<void> {
+        const { downloads } = settings;
+
         await settingsService.updateSettings({
             downloads: {
-                ...settings.downloads,
+                ...downloads,
+                downloadMode: 'browser',
                 customDirectoryEnabled: false,
                 customDirectoryHandleId: null,
             },
         });
 
-        // 2. Clean up handle from IndexedDB
         try {
             await clearDownloadRootHandle();
         } catch (e) {
             logger.error('[DestinationService] Failed to remove handle from IDB', e);
         }
+    }
 
-        // 3. Emit persistent error to notify user
-        await errorService.emit({
-            code: 'FSA_HANDLE_INVALID',
-            message: `${errorTitle}: ${errorMessage}`,
-            severity: 'warning'
-        });
-
-        // 4. Persist banner state for Side Panel/Options warning surfaces
+    private async persistFallbackBanner(message: string): Promise<void> {
         await chrome.storage.local.set({
             [LOCAL_STORAGE_KEYS.fsaError]: {
                 active: true,
-                message: `${errorTitle}: ${errorMessage}`,
+                message,
             },
         });
     }

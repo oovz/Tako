@@ -24,10 +24,14 @@ export function getBadgeText(nonTerminalCount: number): string {
 }
 
 export async function updateActionBadge(nonTerminalCount: number): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.action?.setBadgeText) {
+    return
+  }
+
   const text = getBadgeText(nonTerminalCount)
   await chrome.action.setBadgeText({ text })
 
-  if (text !== '') {
+  if (text !== '' && chrome.action.setBadgeBackgroundColor) {
     await chrome.action.setBadgeBackgroundColor({ color: '#2563eb' })
   }
 }
@@ -73,7 +77,9 @@ export function projectToQueueView(downloadQueue: DownloadTaskState[]): QueueVie
   }
 
   active.sort((a, b) => a.timestamps.created - b.timestamps.created)
-  queued.sort((a, b) => a.timestamps.created - b.timestamps.created)
+  // Queued tasks preserve array order from downloadQueue (FIFO by default,
+  // reorderable via moveTaskToTop). Do NOT sort by timestamps.created here —
+  // that would undo manual reordering.
   terminal.sort((a, b) => (b.timestamps.completed ?? 0) - (a.timestamps.completed ?? 0))
 
   const history = terminal.slice(0, 5)

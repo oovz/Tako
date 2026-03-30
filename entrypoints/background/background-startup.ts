@@ -2,36 +2,60 @@ import logger from '@/src/runtime/logger'
 import { initializeSiteIntegrations } from '@/src/runtime/site-integration-initialization'
 import { settingsService } from '@/src/storage/settings-service'
 import { settingsSyncService } from '@/src/storage/settings-sync-service'
-import { createStateManager } from '@/entrypoints/background/state-manager'
+import { createStateManager } from '@/entrypoints/background/state-action-router'
 import { initializeFromStorage } from '@/entrypoints/background/initialize-from-storage'
 import { processDownloadQueue } from '@/entrypoints/background/download-queue'
+import { getOffscreenContexts } from '@/entrypoints/background/offscreen-lifecycle'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
+import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { PendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
 const PIXIV_REFERER_REWRITE_RULE_ID = 41001
 
-type RuntimeGetContexts = (params: {
-  contextTypes: Array<'OFFSCREEN_DOCUMENT'>
-  documentUrls: string[]
-}) => Promise<unknown[]>
+async function readPersistedDownloadQueue(): Promise<DownloadTaskState[]> {
+  const result = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.downloadQueue) as Record<string, unknown>
+  const queue = result[LOCAL_STORAGE_KEYS.downloadQueue]
+  return Array.isArray(queue)
+    ? queue.map(normalizePersistedDownloadTask).filter((task): task is DownloadTaskState => task !== null)
+    : []
+}
 
-export async function getOffscreenContexts(): Promise<unknown[]> {
+async function writePersistedDownloadQueue(queue: DownloadTaskState[]): Promise<void> {
+  await chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: queue })
+}
+
+async function applyRecoveredQueue(
+  stateManager: CentralizedStateManager,
+  queue: DownloadTaskState[],
+): Promise<void> {
+  await stateManager.updateGlobalState({ downloadQueue: queue })
+}
+
+async function resumeRecoveredQueue(
+  stateManager: CentralizedStateManager,
+  ensureOffscreenDocumentReady: () => Promise<void>,
+): Promise<void> {
+  await processDownloadQueue(stateManager, ensureOffscreenDocumentReady)
+}
+
+async function initializeSiteIntegrationsSafely(): Promise<void> {
   try {
-    const offscreenUrl = chrome.runtime.getURL('offscreen.html')
-    const runtimeWithGetContexts = chrome.runtime as unknown as { getContexts?: RuntimeGetContexts }
-    if (!runtimeWithGetContexts.getContexts) {
-      return []
-    }
-
-    return await runtimeWithGetContexts.getContexts({
-      contextTypes: ['OFFSCREEN_DOCUMENT'],
-      documentUrls: [offscreenUrl],
-    })
+    await initializeSiteIntegrations()
   } catch (error) {
-    logger.debug('Failed to query offscreen contexts during startup recovery (non-fatal):', error)
-    return []
+    logger.warn('Warning during site integration initialization (continuing anyway):', error)
+  }
+}
+
+async function syncSettingsToState(stateManager: CentralizedStateManager): Promise<void> {
+  try {
+    const settings = await settingsService.getSettings()
+    logger.debug(`[Init] Loading settings - defaultFormat: ${settings.downloads.defaultFormat}`)
+    await stateManager.updateGlobalState({ settings })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.warn('Failed to sync settings to centralized state:', message)
   }
 }
 
@@ -88,46 +112,25 @@ export async function initializeBackgroundRuntime(input: {
 
     await input.pendingDownloadsStore.hydrate()
 
-    try {
-      await initializeSiteIntegrations()
-    } catch (error) {
-      logger.warn('Warning during site integration initialization (continuing anyway):', error)
-    }
+    await initializeSiteIntegrationsSafely()
 
     const startupRecovery = await initializeFromStorage({
-      readQueue: async () => {
-        const result = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.downloadQueue) as Record<string, unknown>
-        const queue = result[LOCAL_STORAGE_KEYS.downloadQueue]
-        return Array.isArray(queue) ? queue as DownloadTaskState[] : []
-      },
-      writeQueue: async (queue) => {
-        await chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: queue })
-      },
+      readQueue: readPersistedDownloadQueue,
+      writeQueue: writePersistedDownloadQueue,
       writeSession: async (values) => {
         await chrome.storage.session.set(values)
       },
-      applyQueue: async (queue) => {
-        await stateManager.updateGlobalState({ downloadQueue: queue })
-      },
+      applyQueue: async (queue) => applyRecoveredQueue(stateManager, queue),
       getOffscreenContexts,
       ensureLivenessAlarm: input.ensureLivenessAlarm,
-      resumeQueue: async () => {
-        await processDownloadQueue(stateManager, input.ensureOffscreenDocumentReady)
-      },
+      resumeQueue: async () => resumeRecoveredQueue(stateManager, input.ensureOffscreenDocumentReady),
     })
 
     if (startupRecovery.initFailed) {
       throw new Error(startupRecovery.error ?? 'Extension initialization failed')
     }
 
-    try {
-      const settings = await settingsService.getSettings()
-      logger.debug(`[Init] Loading settings - defaultFormat: ${settings.downloads.defaultFormat}`)
-      await stateManager.updateGlobalState({ settings })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      logger.warn('Failed to sync settings to centralized state:', message)
-    }
+    await syncSettingsToState(stateManager)
 
     logger.info('Extension runtime initialized successfully')
     return stateManager

@@ -2,7 +2,7 @@
  * Background Script - Refactored with Focused Modules
  * 
  * Simple orchestrator that delegates to focused modules:
- * - State management → state-manager.ts
+ * - State management → state-action-router.ts
  * - Download queue → download-queue.ts  
  * - Offscreen lifecycle → offscreen-lifecycle.ts
  */

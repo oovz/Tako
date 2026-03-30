@@ -2,10 +2,8 @@
 // Runs CPU-heavy zipping off the main offscreen thread with streaming compression.
 import { Zip, AsyncZipDeflate, strToU8 } from 'fflate';
 import { normalizeImageFilename } from '@/src/shared/filename-sanitizer';
-import logger from '@/src/runtime/logger';
 
-// Message-based streaming protocol to avoid buffering full chapter images in memory
-// Worker commands
+// Message-based streaming protocol used by the offscreen archive pipeline.
 type InitMsg = { 
   type: 'init'; 
   chapterTitle: string; 
@@ -16,7 +14,6 @@ type InitMsg = {
   totalImages?: number; // Required if normalization enabled
 };
 type AddComicInfoMsg = { type: 'addComicInfo'; xml: string };
-type AddCoverMsg = { type: 'addCover'; buffer: ArrayBuffer; extension: string };
 type AddImageMsg = { 
   type: 'addImage'; 
   filename: string; 
@@ -27,16 +24,8 @@ type AddImageMsg = {
 };
 type FinalizeMsg = { type: 'finalize' };
 type ResetMsg = { type: 'reset' };
-// Batch API (used by archive-creator.ts)
-type BatchMsg = {
-  chapterTitle: string;
-  images: Array<{ filename: string; data: number[] }>;
-  coverImage?: { data: number[]; extension: string };
-  comicInfoXml?: string;
-  extension: 'cbz' | 'zip';
-};
 
-type InboundMsg = InitMsg | AddComicInfoMsg | AddCoverMsg | AddImageMsg | FinalizeMsg | ResetMsg | BatchMsg;
+type InboundMsg = InitMsg | AddComicInfoMsg | AddImageMsg | FinalizeMsg | ResetMsg;
 
 export type ZipWorkerResponse =
   | {
@@ -150,58 +139,9 @@ function resetState() {
   streamState.totalImages = 0;
 }
 
-/**
- * Handle batch API request (used by archive-creator.ts)
- * Processes all data in one go including cover image support
- */
-function handleBatchAPI(msg: BatchMsg) {
-  resetState();
-  streamState.chapterTitle = msg.chapterTitle;
-  streamState.extension = msg.extension;
-  const zip = ensureZip();
-  
-  // Add ComicInfo.xml first if provided
-  if (msg.comicInfoXml) {
-    const comicInfoStream = new AsyncZipDeflate('ComicInfo.xml', { level: 6 });
-    zip.add(comicInfoStream);
-    comicInfoStream.push(strToU8(msg.comicInfoXml), true);
-  }
-  
-  // Add cover image as first file (000_cover.ext) if provided
-  if (msg.coverImage && msg.coverImage.data.length > 0) {
-    const coverBytes = new Uint8Array(msg.coverImage.data);
-    const coverFilename = `000_cover.${msg.coverImage.extension}`;
-    const coverStream = new AsyncZipDeflate(coverFilename, { level: 6 });
-    zip.add(coverStream);
-    coverStream.push(coverBytes, true);
-    logger.debug(`🖼️ Added cover to archive: ${coverFilename}`);
-  }
-  
-  // Add all chapter images
-  for (const img of msg.images) {
-    if (img.data && img.data.length > 0) {
-      const bytes = new Uint8Array(img.data);
-      const stream = new AsyncZipDeflate(img.filename, { level: 6 });
-      zip.add(stream);
-      stream.push(bytes, true);
-      streamState.imageCount++;
-    }
-  }
-  
-  // Finalize
-  zip.end();
-}
-
 self.onmessage = (ev: MessageEvent<InboundMsg>) => {
   const msg = ev.data;
   try {
-    // Handle batch API (no 'type' field, used by archive-creator.ts)
-    if ('chapterTitle' in msg && !('type' in msg)) {
-      handleBatchAPI(msg);
-      return;
-    }
-    
-    // Handle streaming API (has 'type' field)
     switch (msg.type) {
       case 'reset': {
         resetState();
@@ -224,20 +164,6 @@ self.onmessage = (ev: MessageEvent<InboundMsg>) => {
         const stream = new AsyncZipDeflate('ComicInfo.xml', { level: 6 });
         zip.add(stream);
         stream.push(strToU8(msg.xml), true);
-        return;
-      }
-      case 'addCover': {
-        // Add cover image as first file (000_cover.ext)
-        const zip = ensureZip();
-        const bytes = new Uint8Array(msg.buffer);
-        if (bytes.byteLength > 0) {
-          const coverFilename = `000_cover.${msg.extension}`;
-          const cover = new AsyncZipDeflate(coverFilename, { level: 6 });
-          zip.add(cover);
-          cover.push(bytes, true);
-          // Note: Don't increment imageCount for cover, it's tracked separately
-          logger.debug(`🖼️ Added cover to archive: ${coverFilename}`);
-        }
         return;
       }
       case 'addImage': {
@@ -271,8 +197,7 @@ self.onmessage = (ev: MessageEvent<InboundMsg>) => {
       }
     }
   } catch (error) {
-    const messageType = 'type' in msg ? msg.type : 'batch';
-    post({ success: false, error: formatWorkerError(error, `Zip worker ${messageType}`) });
+    post({ success: false, error: formatWorkerError(error, `Zip worker ${msg.type}`) });
   }
 };
 

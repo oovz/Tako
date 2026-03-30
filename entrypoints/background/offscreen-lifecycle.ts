@@ -1,8 +1,8 @@
 /**
- * Offscreen Lifecycle Manager - Background Service Worker Only
- * 
- * Handles offscreen document creation, lifecycle, and communication.
- * CRITICAL: This should ONLY be used in the Service Worker.
+ * Background-side offscreen lifecycle helpers.
+ *
+ * Responsible for creating, querying, and tearing down the single MV3
+ * offscreen document used by the archive pipeline.
  */
 
 import logger from '@/src/runtime/logger';
@@ -21,18 +21,35 @@ export const LIVENESS_ALARM_NAME = 'offscreen-liveness';
 
 type RuntimeGetContexts = (params: { contextTypes: Array<'OFFSCREEN_DOCUMENT'>; documentUrls: string[] }) => Promise<unknown[]>;
 
-async function getOffscreenContexts(): Promise<unknown[]> {
-  const offscreenUrl = chrome.runtime.getURL('offscreen.html');
-  const runtimeWithGetContexts = chrome.runtime as unknown as { getContexts?: RuntimeGetContexts };
+export async function getOffscreenContexts(): Promise<unknown[]> {
+  try {
+    const offscreenUrl = chrome.runtime.getURL('offscreen.html');
+    const runtimeWithGetContexts = chrome.runtime as unknown as { getContexts?: RuntimeGetContexts };
 
-  if (typeof runtimeWithGetContexts.getContexts !== 'function') {
+    if (typeof runtimeWithGetContexts.getContexts !== 'function') {
+      return [];
+    }
+
+    return runtimeWithGetContexts.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [offscreenUrl],
+    });
+  } catch (error) {
+    logger.debug('Failed to query offscreen contexts (non-fatal):', error);
     return [];
   }
+}
 
-  return runtimeWithGetContexts.getContexts({
-    contextTypes: ['OFFSCREEN_DOCUMENT'],
-    documentUrls: [offscreenUrl],
-  });
+async function hasOffscreenDocument(): Promise<boolean> {
+  const contexts = await getOffscreenContexts();
+  return contexts.length > 0;
+}
+
+async function readLastOffscreenActivity(): Promise<number> {
+  const session = await chrome.storage.session.get(SESSION_STORAGE_KEYS.lastOffscreenActivity) as Record<string, unknown>;
+  return typeof session[SESSION_STORAGE_KEYS.lastOffscreenActivity] === 'number'
+    ? session[SESSION_STORAGE_KEYS.lastOffscreenActivity] as number
+    : 0;
 }
 
 async function closeOffscreenDocumentSafe(): Promise<void> {
@@ -51,19 +68,6 @@ export async function recordOffscreenActivity(): Promise<void> {
   await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.lastOffscreenActivity]: Date.now() });
 }
 
-export async function closeOffscreenIfQueueIdle(pendingDownloadsStore: PendingDownloadsStore): Promise<void> {
-  if (pendingDownloadsStore.snapshot().size > 0) {
-    return;
-  }
-
-  await closeOffscreenDocumentSafe();
-}
-
-export async function closeOffscreenForCancellation(pendingDownloadsStore: PendingDownloadsStore): Promise<void> {
-  pendingDownloadsStore.clear();
-  await closeOffscreenDocumentSafe();
-}
-
 export async function recoverFromLivenessTimeout(
   stateManager: CentralizedStateManager,
   pendingDownloadsStore: PendingDownloadsStore,
@@ -75,10 +79,7 @@ export async function recoverFromLivenessTimeout(
     return;
   }
 
-  const session = await chrome.storage.session.get(SESSION_STORAGE_KEYS.lastOffscreenActivity) as Record<string, unknown>;
-  const lastActivity = typeof session[SESSION_STORAGE_KEYS.lastOffscreenActivity] === 'number'
-    ? session[SESSION_STORAGE_KEYS.lastOffscreenActivity] as number
-    : 0;
+  const lastActivity = await readLastOffscreenActivity();
   if (Date.now() - lastActivity <= LIVENESS_TIMEOUT_MS) {
     return;
   }
@@ -98,9 +99,11 @@ export async function recoverFromLivenessTimeout(
       }
     }
 
-    const completedChapters = activeTask.chapters.filter((chapter) => chapter.status === 'completed').length;
+    const successfulChapters = activeTask.chapters.filter(
+      (chapter) => chapter.status === 'completed' || chapter.status === 'partial_success',
+    ).length;
     await stateManager.updateDownloadTask(activeTask.id, {
-      status: completedChapters > 0 ? 'partial_success' : 'failed',
+      status: successfulChapters > 0 ? 'partial_success' : 'failed',
       errorMessage: 'Download process unresponsive',
       completed: recoveredAt,
     });
@@ -116,13 +119,10 @@ export async function recoverFromLivenessTimeout(
 }
 
 /**
- * Ensure offscreen document exists and is ready
+ * Ensure the offscreen document exists before work is dispatched.
  */
 export async function ensureOffscreenDocumentReady(): Promise<void> {
-  const contexts = await getOffscreenContexts();
-  const exists = Array.isArray(contexts) && contexts.length > 0;
-
-  if (exists) {
+  if (await hasOffscreenDocument()) {
     logger.info('Offscreen document already present');
     return;
   }
@@ -147,14 +147,11 @@ export async function ensureOffscreenDocumentReady(): Promise<void> {
 }
 
 /**
- * Query offscreen document status
+ * Query whether the offscreen document is ready and how much work it is doing.
  */
 export async function queryOffscreenStatus(): Promise<{ ready: boolean; activeJobCount: number } | null> {
   try {
-    const contexts = await getOffscreenContexts();
-    const exists = Array.isArray(contexts) && contexts.length > 0;
-
-    if (!exists) {
+    if (!(await hasOffscreenDocument())) {
       return null;
     }
 
@@ -175,10 +172,9 @@ export async function queryOffscreenStatus(): Promise<{ ready: boolean; activeJo
 }
 
 /**
- * Schedule offscreen document closure if idle
+ * Close the offscreen document when it is idle and no native downloads remain.
  */
 export async function scheduleOffscreenCloseIfIdle(
-  stateManager: CentralizedStateManager,
   pendingDownloadsStore: PendingDownloadsStore,
 ): Promise<void> {
   try {
@@ -186,8 +182,6 @@ export async function scheduleOffscreenCloseIfIdle(
     if (!status || !status.ready) {
       return; // Not ready or not responding
     }
-
-    void stateManager;
 
     if (status.activeJobCount === 0 && pendingDownloadsStore.snapshot().size === 0) {
       await closeOffscreenDocumentSafe();

@@ -4,6 +4,7 @@
 
 import { useState, useMemo } from "react"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { SiteIntegrationCard } from "../components/SiteIntegrationCard"
 import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
@@ -92,38 +93,49 @@ export function SiteIntegrationManagementTab({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div className="min-w-0 space-y-6">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-semibold text-foreground">Site Integrations</h2>
+            <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
+              {sortedIntegrations.length}
+              {' integrations'}
+            </Badge>
+          </div>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Tune site-specific defaults, custom settings, and enablement without touching the global download profile.
+          </p>
+        </div>
+
         {/* Search Input */}
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search site integrations by name or domain..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="h-10 border-border/70 bg-background pl-9 text-sm"
           />
         </div>
 
         {/* Override Summary Banner */}
         {overrideCount > 0 && (
-          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4 flex items-center gap-3 text-yellow-600 dark:text-yellow-400">
-            <div className="h-5 w-5 rounded-full border-2 border-current flex items-center justify-center font-bold text-[10px]">
-              !
-            </div>
-            <p className="text-sm font-medium">
-              You have active overrides for {overrideCount} {overrideCount !== 1 ? 'integrations' : 'integration'}.
-            </p>
+          <div className="rounded-md border border-yellow-500/25 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400">
+            <Badge variant="outline" className="mr-2 border-yellow-500/40 bg-transparent text-[10px] font-medium text-current">
+              Overrides
+            </Badge>
+            You have active overrides for {overrideCount} {overrideCount !== 1 ? 'integrations' : 'integration'}.
           </div>
         )}
 
         {/* Site Integration List */}
         <div className="min-w-0 space-y-4">
           {sortedIntegrations.length === 0 ? (
-            <div className="text-center py-12 border rounded-lg bg-muted/10 border-dashed">
+            <div className="rounded-md border border-dashed border-border/80 bg-muted/10 py-12 text-center">
               <div className="text-muted-foreground">
                 {search ? (
                   <>
-                    <p className="font-medium">No integrations found</p>
-                    <p className="text-sm mt-1">Try searching for something else</p>
+                    <p className="font-medium text-foreground">No integrations found</p>
+                    <p className="mt-1 text-sm">Try searching for something else</p>
                   </>
                 ) : (
                   <p>No integrations available</p>

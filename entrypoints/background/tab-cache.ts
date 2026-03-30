@@ -77,10 +77,6 @@ function isMangaPageState(value: unknown): value is MangaPageState {
   )
 }
 
-function isErrorContext(value: unknown): value is TabContextError {
-  return !!value && typeof value === 'object' && typeof (value as { error?: unknown }).error === 'string'
-}
-
 export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
   const dependencies: TabCacheDependencies = {
     readSession: async (keys) => chrome.storage.session.get(keys),
@@ -259,12 +255,3 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
 }
 
 export const tabContextCache = createTabContextCache()
-
-export function createErrorTabContext(error: string): TabContextError {
-  return { error }
-}
-
-export function isTabContextError(value: unknown): value is TabContextError {
-  return isErrorContext(value)
-}
-

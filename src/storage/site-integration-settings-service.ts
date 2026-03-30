@@ -4,8 +4,8 @@
  */
 
 import { getSiteIntegrationManifestById } from '@/src/site-integrations/manifest'
-
-type StorageValue = string | number | boolean | null | StorageValue[] | { [key: string]: StorageValue };
+import { type StorageValue } from '@/src/shared/type-guards'
+import { z } from 'zod'
 
 export type SiteIntegrationSettingValue = StorageValue;
 
@@ -13,12 +13,32 @@ export type SiteIntegrationSettingsMap = Record<string, Record<string, StorageVa
 
 export const SITE_INTEGRATION_SETTINGS_STORAGE_KEY = 'siteIntegrationSettings';
 
-function toSiteIntegrationSettingsMap(value: unknown): SiteIntegrationSettingsMap {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {};
+const StorageValueSchema: z.ZodType<StorageValue> = z.lazy(() => z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(StorageValueSchema),
+  z.record(z.string(), StorageValueSchema),
+]))
+
+const SiteIntegrationSettingsRecordSchema = z.record(z.string(), StorageValueSchema)
+
+const SiteIntegrationSettingsMapSchema = z.record(z.string(), z.unknown()).transform((entries) => {
+  const normalized: SiteIntegrationSettingsMap = {}
+  for (const [siteId, siteSettings] of Object.entries(entries)) {
+    const parsed = SiteIntegrationSettingsRecordSchema.safeParse(siteSettings)
+    if (parsed.success) {
+      normalized[siteId] = parsed.data
+    }
   }
 
-  return value as SiteIntegrationSettingsMap;
+  return normalized
+})
+
+function toSiteIntegrationSettingsMap(value: unknown): SiteIntegrationSettingsMap {
+  const parsed = SiteIntegrationSettingsMapSchema.safeParse(value)
+  return parsed.success ? parsed.data : {}
 }
 
 function getManifestDefaultsForSite(siteId: string): Record<string, StorageValue> {

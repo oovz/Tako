@@ -1,42 +1,84 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { useStorageSubscription } from '@/entrypoints/sidepanel/hooks/useStorageSubscription'
-import { isRecord } from '@/src/shared/type-guards'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
+import { z } from 'zod'
 
 const SKELETON_TIMEOUT_MS = 500
-const QUEUE_TASK_STATUSES = new Set<QueueTaskSummary['status']>([
+const QUEUE_TASK_STATUSES = [
   'queued',
   'downloading',
   'completed',
   'partial_success',
   'failed',
   'canceled',
-])
+] as const satisfies ReadonlyArray<QueueTaskSummary['status']>
 
-function isQueueTaskSummary(value: unknown): value is QueueTaskSummary {
-  if (!isRecord(value)) {
-    return false
+const QUEUE_FAILURE_CATEGORIES = [
+  'network',
+  'download',
+  'other',
+] as const satisfies ReadonlyArray<NonNullable<QueueTaskSummary['failureCategory']>>
+
+const QueueTaskStatusSchema = z.enum(QUEUE_TASK_STATUSES)
+const QueueFailureCategorySchema = z.enum(QUEUE_FAILURE_CATEGORIES)
+
+const QueueTaskSummaryStorageSchema = z.object({
+  id: z.string(),
+  seriesKey: z.string(),
+  seriesTitle: z.string(),
+  siteIntegration: z.string(),
+  coverUrl: z.unknown().optional(),
+  status: QueueTaskStatusSchema,
+  chapters: z.object({
+    total: z.number(),
+    completed: z.number(),
+    unsuccessful: z.number(),
+  }),
+  timestamps: z.object({
+    created: z.number(),
+    completed: z.number().optional(),
+  }),
+  failureReason: z.unknown().optional(),
+  failureCategory: z.unknown().optional(),
+  isRetried: z.unknown().optional(),
+  isRetryTask: z.unknown().optional(),
+  lastSuccessfulDownloadId: z.unknown().optional(),
+})
+
+function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
+  const parsed = QueueTaskSummaryStorageSchema.safeParse(value)
+  if (!parsed.success) {
+    return null
   }
 
-  if (!isRecord(value.chapters) || !isRecord(value.timestamps)) {
-    return false
-  }
+  const data = parsed.data
 
-  return (
-    typeof value.id === 'string'
-    && typeof value.seriesKey === 'string'
-    && typeof value.status === 'string'
-    && QUEUE_TASK_STATUSES.has(value.status as QueueTaskSummary['status'])
-    && typeof value.seriesTitle === 'string'
-    && typeof value.siteIntegration === 'string'
-    && typeof value.chapters.total === 'number'
-    && typeof value.chapters.completed === 'number'
-    && typeof value.chapters.unsuccessful === 'number'
-    && typeof value.timestamps.created === 'number'
-    && (typeof value.timestamps.completed === 'number' || typeof value.timestamps.completed === 'undefined')
-  )
+  return {
+    id: data.id,
+    seriesKey: data.seriesKey,
+    seriesTitle: data.seriesTitle,
+    siteIntegration: data.siteIntegration,
+    coverUrl: typeof data.coverUrl === 'string' ? data.coverUrl : undefined,
+    status: data.status,
+    chapters: {
+      total: data.chapters.total,
+      completed: data.chapters.completed,
+      unsuccessful: data.chapters.unsuccessful,
+    },
+    timestamps: {
+      created: data.timestamps.created,
+      completed: data.timestamps.completed,
+    },
+    failureReason: typeof data.failureReason === 'string' ? data.failureReason : undefined,
+    failureCategory: QueueFailureCategorySchema.safeParse(data.failureCategory).success
+      ? QueueFailureCategorySchema.parse(data.failureCategory)
+      : undefined,
+    isRetried: typeof data.isRetried === 'boolean' ? data.isRetried : undefined,
+    isRetryTask: typeof data.isRetryTask === 'boolean' ? data.isRetryTask : undefined,
+    lastSuccessfulDownloadId: typeof data.lastSuccessfulDownloadId === 'number' ? data.lastSuccessfulDownloadId : undefined,
+  }
 }
 
 export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
@@ -44,7 +86,7 @@ export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
     return []
   }
 
-  return value.filter(isQueueTaskSummary)
+  return value.map(normalizeQueueTaskSummary).filter((task): task is QueueTaskSummary => task !== null)
 }
 
 export interface UseQueueViewResult {
@@ -59,7 +101,7 @@ export interface UseQueueViewResult {
 }
 
 export function useQueueView(): UseQueueViewResult {
-  const { value: queueView, hydrated } = useStorageSubscription<QueueTaskSummary[]>({
+  const { value: queueView, hydrated } = useChromeStorageValue<QueueTaskSummary[]>({
     areaName: 'session',
     key: SESSION_STORAGE_KEYS.queueView,
     initialValue: [],

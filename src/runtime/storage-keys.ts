@@ -1,8 +1,10 @@
 export const SESSION_STORAGE_KEYS = {
+  globalState: 'globalState',
   queueView: 'queueView',
   activeTabContext: 'activeTabContext',
   activeTaskProgress: 'activeTaskProgress',
   lastOffscreenActivity: 'lastOffscreenActivity',
+  externalTabInitPrefix: 'externalTabInit_',
   pendingDownloads: 'pendingDownloads',
   initFailed: 'initFailed',
   initError: 'error',

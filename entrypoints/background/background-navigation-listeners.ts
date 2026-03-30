@@ -2,6 +2,7 @@ import logger from '@/src/runtime/logger'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
 import { resolveSpaNavigationAction } from '@/entrypoints/background/spa-navigation'
 import { isInternalUrl } from '@/entrypoints/background/tab-ui-coordinator'
+import { isMangaPageState } from '@/src/runtime/state-shapes'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 
 interface NavigationListenerTabUiCoordinator {
@@ -70,7 +71,7 @@ export function registerBackgroundNavigationListeners(
             try {
               const storageKey = `tab_${details.tabId}`
               const existing = await chrome.storage.session.get(storageKey)
-              if (existing[storageKey]) {
+              if (isMangaPageState(existing[storageKey])) {
                 logger.info(`background: unsupported URL detected, clearing tab state for tab ${details.tabId}`)
                 deps.tabContextCache.setCachedContext(details.tabId, null)
                 await deps.getStateManager().clearTabState(details.tabId)
@@ -108,7 +109,7 @@ export function registerBackgroundNavigationListeners(
             const existing = await chrome.storage.session.get(storageKey)
             const navigationAction = resolveSpaNavigationAction({
               isUrlSupported,
-              hasExistingTabState: Boolean(existing[storageKey]),
+              hasExistingTabState: isMangaPageState(existing[storageKey]),
             })
 
             if (navigationAction === 'clear-tab-state') {

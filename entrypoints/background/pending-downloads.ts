@@ -1,5 +1,4 @@
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { IPC_THROTTLE_MS } from '@/src/constants/timeouts'
 
 export interface PendingDownloadsStore {
   hydrate: () => Promise<void>
@@ -20,28 +19,24 @@ function toSerializableRecord(map: Map<number, string>): Record<string, string> 
 
 export function createPendingDownloadsStore(): PendingDownloadsStore {
   const inMemory = new Map<number, string>()
-  let persistTimer: ReturnType<typeof setTimeout> | undefined
+  let persistChain: Promise<void> = Promise.resolve()
 
   const persist = () => {
-    persistTimer = undefined
     const payload = toSerializableRecord(inMemory)
-    void chrome.storage.session.set({ [SESSION_STORAGE_KEYS.pendingDownloads]: payload })
-  }
-
-  const schedulePersist = () => {
-    if (persistTimer !== undefined) {
-      clearTimeout(persistTimer)
-    }
-
-    persistTimer = setTimeout(() => {
-      persist()
-    }, IPC_THROTTLE_MS)
+    persistChain = persistChain
+      .catch(() => undefined)
+      .then(async () => {
+        await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.pendingDownloads]: payload })
+      })
+      .catch(() => undefined)
   }
 
   return {
     async hydrate() {
       const result = await chrome.storage.session.get(SESSION_STORAGE_KEYS.pendingDownloads) as Record<string, unknown>
       const raw: unknown = result[SESSION_STORAGE_KEYS.pendingDownloads]
+      inMemory.clear()
+
       if (!raw || typeof raw !== 'object') {
         return
       }
@@ -62,7 +57,7 @@ export function createPendingDownloadsStore(): PendingDownloadsStore {
     },
     set(downloadId, blobUrl) {
       inMemory.set(downloadId, blobUrl)
-      schedulePersist()
+      persist()
     },
     remove(downloadId) {
       if (!inMemory.has(downloadId)) {
@@ -70,7 +65,7 @@ export function createPendingDownloadsStore(): PendingDownloadsStore {
       }
 
       inMemory.delete(downloadId)
-      schedulePersist()
+      persist()
     },
     clear() {
       if (inMemory.size === 0) {
@@ -78,7 +73,7 @@ export function createPendingDownloadsStore(): PendingDownloadsStore {
       }
 
       inMemory.clear()
-      schedulePersist()
+      persist()
     },
     snapshot() {
       return new Map(inMemory)

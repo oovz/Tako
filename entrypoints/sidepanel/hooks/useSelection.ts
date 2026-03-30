@@ -64,15 +64,12 @@ export function __applySelectionToItemsForTests(
 
 export function useSelection({ items, setItems, tabId, isDownloading }: UseSelectionOptions): UseSelectionReturn {
   const lastClickedIndexRef = useRef<number>(-1)
-  
-  // Bug #4 fix: Use refs to keep callbacks stable while accessing latest values
-  // This prevents ChapterRow re-renders when items/tabId/isDownloading change
+
   const itemsRef = useRef(items)
   const setItemsRef = useRef(setItems)
   const tabIdRef = useRef(tabId)
   const isDownloadingRef = useRef(isDownloading)
-  
-  // Keep refs in sync with latest values
+
   itemsRef.current = items
   setItemsRef.current = setItems
   tabIdRef.current = tabId
@@ -105,7 +102,7 @@ export function useSelection({ items, setItems, tabId, isDownloading }: UseSelec
 
     const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), checked)
     setItemsRef.current(updatedItems)
-  }, []) // Empty deps - uses refs for stable callback
+  }, [])
   
   const handleSelectAll = useCallback((forceSelect?: boolean | 'indeterminate') => {
     if (isDownloadingRef.current || tabIdRef.current == null) return
@@ -123,9 +120,11 @@ export function useSelection({ items, setItems, tabId, isDownloading }: UseSelec
     const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), newSelected)
 
     setItemsRef.current(updatedItems)
-  }, []) // Empty deps - uses refs for stable callback
+  }, [])
   
   const handleVolumeToggle = useCallback((groupId: string) => {
+    if (isDownloadingRef.current || tabIdRef.current == null) return
+
     const updatedItems = itemsRef.current.map(item => {
       if ('chapters' in item && item.groupId === groupId) {
         return { ...item, collapsed: !item.collapsed }
@@ -133,7 +132,7 @@ export function useSelection({ items, setItems, tabId, isDownloading }: UseSelec
       return item
     })
     setItemsRef.current(updatedItems)
-  }, []) // Empty deps - uses refs for stable callback
+  }, [])
   
   const handleVolumeSelectAll = useCallback((groupId: string) => {
     if (isDownloadingRef.current || tabIdRef.current == null) return
@@ -152,7 +151,7 @@ export function useSelection({ items, setItems, tabId, isDownloading }: UseSelec
     const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), newSelected)
 
     setItemsRef.current(updatedItems)
-  }, []) // Empty deps - uses refs for stable callback
+  }, [])
   
   return {
     handleChapterSelect,

@@ -5,7 +5,7 @@
 
 import { createRoot } from 'react-dom/client'
 import '@/globals.css'
-import { useState, lazy, Suspense, Profiler } from "react"
+import { useState, lazy, Suspense, Profiler, useEffect } from "react"
 import { Toaster } from "@/components/ui/sonner"
 import { Loader2 } from "lucide-react"
 import {
@@ -80,6 +80,27 @@ function onRenderCallback(
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const [activeSection, setActiveSection] = useState<OptionsSection>(() => getInitialOptionsSection(window.location.search))
 
+  useEffect(() => {
+    const root = document.getElementById('root')
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+    const previousRootOverflow = root?.style.overflow ?? ''
+
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    if (root) {
+      root.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+      if (root) {
+        root.style.overflow = previousRootOverflow
+      }
+    }
+  }, [])
+
   if (isLoading || !settings || !settingsBuffer) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -93,14 +114,14 @@ function onRenderCallback(
 
   return (
     <Profiler id="OptionsPage" onRender={onRenderCallback}>
-      <div className="flex h-full min-h-0 bg-background text-foreground font-sans antialiased">
+      <div className="flex h-full min-h-0 overflow-hidden bg-background text-foreground font-sans antialiased">
         <Toaster />
 
         <OptionsSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
 
         {/* Main Content - following shadcn/ui dashboard patterns */}
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col p-10 pb-24">
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col p-8 pb-24">
             {activeSection === 'global' && (
               <section className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <GlobalSettingsTab

@@ -28,7 +28,7 @@ export interface DownloadSettings {
   maxConcurrentDownloads: number;
   overwriteExisting: boolean;
   includeComicInfo: boolean; // whether to embed ComicInfo.xml in archives
-  includeCoverImage?: boolean; // whether to include series cover image in archives
+  includeCoverImage: boolean; // whether to include series cover image in archives
   // Image filename normalization
   normalizeImageFilenames: boolean; // whether to rename images to numeric indices (001.jpg, 002.jpg, etc.)
   imagePaddingDigits: 'auto' | 2 | 3 | 4 | 5; // zero-padding for image filenames ('auto' = based on total count)

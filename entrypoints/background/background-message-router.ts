@@ -1,5 +1,11 @@
 import logger from '@/src/runtime/logger'
-import { settingsService } from '@/src/storage/settings-service'
+import {
+  ActionMessageSchema,
+  OffscreenMessageSchema,
+  type ActionMessage,
+  type OffscreenMessage,
+} from '@/src/runtime/message-schemas'
+import { canonicalizeSettingsDocument, settingsService } from '@/src/storage/settings-service'
 import { clearPersistentError } from '@/entrypoints/background/errors'
 import {
   enqueueStartDownloadTask,
@@ -9,7 +15,7 @@ import {
   moveTaskToTop,
   clearAllHistory,
 } from '@/entrypoints/background/download-queue'
-import { processStateAction } from '@/entrypoints/background/state-manager'
+import { processStateAction } from '@/entrypoints/background/state-action-router'
 import { handleOffscreenDownloadProgress } from '@/entrypoints/background/offscreen-progress-handler'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import {
@@ -58,6 +64,30 @@ interface BackgroundMessageRouterDependencies {
   requestBlobRevocation: (blobUrl: string) => Promise<void>
 }
 
+function parseActionMessage<TType extends ActionMessage['type']>(
+  message: ExtensionMessage,
+  expectedType: TType,
+): Extract<ActionMessage, { type: TType }> | null {
+  const parsed = ActionMessageSchema.safeParse(message)
+  if (!parsed.success || parsed.data.type !== expectedType) {
+    return null
+  }
+
+  return parsed.data as Extract<ActionMessage, { type: TType }>
+}
+
+function parseOffscreenMessage<TType extends OffscreenMessage['type']>(
+  message: ExtensionMessage,
+  expectedType: TType,
+): Extract<OffscreenMessage, { type: TType }> | null {
+  const parsed = OffscreenMessageSchema.safeParse(message)
+  if (!parsed.success || parsed.data.type !== expectedType) {
+    return null
+  }
+
+  return parsed.data as Extract<OffscreenMessage, { type: TType }>
+}
+
 async function handleStateAction(
   message: StateActionMessage,
   sender: chrome.runtime.MessageSender | undefined,
@@ -103,32 +133,33 @@ export async function handleBackgroundMessage(
         return resolveGetTabIdResponse(sender)
       }
       case 'STATE_ACTION': {
-        if (!Object.prototype.hasOwnProperty.call(message, 'action')) {
+        const parsedMessage = parseActionMessage(message, 'STATE_ACTION')
+        if (!parsedMessage) {
           return { success: false, error: 'Invalid STATE_ACTION message shape' }
         }
-        if (typeof message.action !== 'number') {
-          return { success: false, error: 'STATE_ACTION.action must be a StateAction enum value' }
-        }
-        return await handleStateAction(message, sender, deps)
+        return await handleStateAction(parsedMessage, sender, deps)
       }
       case 'ACKNOWLEDGE_ERROR': {
+        const parsedMessage = parseActionMessage(message, 'ACKNOWLEDGE_ERROR')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid ACKNOWLEDGE_ERROR payload' }
+        }
+
         try {
-          const code = message.payload?.code
-          if (code) {
-            if (code === 'FSA_HANDLE_INVALID') {
-              const current = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.fsaError)
-              const raw = current[LOCAL_STORAGE_KEYS.fsaError] as { active?: boolean; message?: string } | undefined
-              if (raw && typeof raw === 'object') {
-                await chrome.storage.local.set({
-                  [LOCAL_STORAGE_KEYS.fsaError]: {
-                    ...raw,
-                    active: false,
-                  },
-                })
-              }
+          const { code } = parsedMessage.payload
+          if (code === 'FSA_HANDLE_INVALID') {
+            const current = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.fsaError)
+            const raw = current[LOCAL_STORAGE_KEYS.fsaError] as { active?: boolean; message?: string } | undefined
+            if (raw && typeof raw === 'object') {
+              await chrome.storage.local.set({
+                [LOCAL_STORAGE_KEYS.fsaError]: {
+                  ...raw,
+                  active: false,
+                },
+              })
             }
-            await clearPersistentError(code)
           }
+          await clearPersistentError(code)
         } catch (e) {
           logger.debug('ACKNOWLEDGE_ERROR failed (non-fatal)', e)
           return { success: false, error: 'Failed to acknowledge error' }
@@ -145,25 +176,19 @@ export async function handleBackgroundMessage(
         }
       }
       case 'SYNC_SETTINGS_TO_STATE': {
-        try {
-          await deps.ensureStateManagerInitialized()
-          const current = await settingsService.getSettings()
-          const patch = message.payload.settings
-          const merged = patch ? {
-            ...current,
-            downloads: { ...current.downloads, ...patch.downloads },
-            globalPolicy: patch.globalPolicy ? {
-              image: { ...current.globalPolicy.image, ...patch.globalPolicy.image },
-              chapter: { ...current.globalPolicy.chapter, ...patch.globalPolicy.chapter },
-            } : current.globalPolicy,
-            globalRetries: patch.globalRetries
-              ? { ...current.globalRetries, ...patch.globalRetries }
-              : current.globalRetries,
-            notifications: typeof patch.notifications === 'boolean' ? patch.notifications : current.notifications,
-            advanced: patch.advanced ? { ...current.advanced, ...patch.advanced } : current.advanced,
-          } : current
+        const parsedMessage = parseActionMessage(message, 'SYNC_SETTINGS_TO_STATE')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid SYNC_SETTINGS_TO_STATE payload' }
+        }
 
-          await deps.getStateManager().updateGlobalState({ settings: merged })
+        try {
+          const nextSettings = canonicalizeSettingsDocument(parsedMessage.payload.settings)
+          if (!nextSettings) {
+            return { success: false, error: 'Invalid SYNC_SETTINGS_TO_STATE payload' }
+          }
+
+          await deps.ensureStateManagerInitialized()
+          await deps.getStateManager().updateGlobalState({ settings: nextSettings })
           return { success: true }
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : 'Failed to sync settings to state'
@@ -171,16 +196,13 @@ export async function handleBackgroundMessage(
         }
       }
       case 'OFFSCREEN_DOWNLOAD_API_REQUEST': {
-        try {
-          const { payload } = message
-          const taskId = typeof payload.taskId === 'string' ? payload.taskId : ''
-          const chapterId = typeof payload.chapterId === 'string' ? payload.chapterId : ''
-          const fileUrl = typeof payload.fileUrl === 'string' ? payload.fileUrl : ''
-          const filename = typeof payload.filename === 'string' ? payload.filename : ''
+        const parsedMessage = parseOffscreenMessage(message, 'OFFSCREEN_DOWNLOAD_API_REQUEST')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_API_REQUEST payload' }
+        }
 
-          if (!taskId || !chapterId || !fileUrl || !filename) {
-            return { success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_API_REQUEST payload' }
-          }
+        try {
+          const { taskId, chapterId, fileUrl, filename } = parsedMessage.payload
 
           logger.debug('[background-message-router] Processing OFFSCREEN_DOWNLOAD_API_REQUEST', {
             taskId,
@@ -208,7 +230,7 @@ export async function handleBackgroundMessage(
           await deps.getStateManager().updateDownloadTask(taskId, { lastSuccessfulDownloadId: downloadId })
           return { success: true, id: downloadId }
         } catch (error) {
-          const fileUrl = typeof message.payload?.fileUrl === 'string' ? message.payload.fileUrl : ''
+          const fileUrl = parsedMessage.payload.fileUrl
           if (fileUrl) {
             await deps.requestBlobRevocation(fileUrl)
           }
@@ -219,14 +241,15 @@ export async function handleBackgroundMessage(
         }
       }
       case 'RETRY_FAILED_CHAPTERS': {
-        await deps.ensureStateManagerInitialized()
-        const taskId = message.payload?.taskId
-        if (!taskId) {
+        const parsedMessage = parseActionMessage(message, 'RETRY_FAILED_CHAPTERS')
+        if (!parsedMessage) {
           return { success: false, error: 'Missing taskId' }
         }
 
+        await deps.ensureStateManagerInitialized()
+
         try {
-          const result = await retryFailedChapters(deps.getStateManager(), taskId)
+          const result = await retryFailedChapters(deps.getStateManager(), parsedMessage.payload.taskId)
           if (!result.success) {
             return { success: false, error: result.reason || 'Retry failed' }
           }
@@ -240,14 +263,15 @@ export async function handleBackgroundMessage(
         }
       }
       case 'RESTART_TASK': {
-        await deps.ensureStateManagerInitialized()
-        const taskId = message.payload?.taskId
-        if (!taskId) {
+        const parsedMessage = parseActionMessage(message, 'RESTART_TASK')
+        if (!parsedMessage) {
           return { success: false, error: 'Missing taskId' }
         }
 
+        await deps.ensureStateManagerInitialized()
+
         try {
-          const result = await restartTask(deps.getStateManager(), taskId)
+          const result = await restartTask(deps.getStateManager(), parsedMessage.payload.taskId)
           if (!result.success) {
             return { success: false, error: result.reason || 'Restart failed' }
           }
@@ -261,14 +285,15 @@ export async function handleBackgroundMessage(
         }
       }
       case 'MOVE_TASK_TO_TOP': {
-        await deps.ensureStateManagerInitialized()
-        const taskId = message.payload?.taskId
-        if (!taskId) {
+        const parsedMessage = parseActionMessage(message, 'MOVE_TASK_TO_TOP')
+        if (!parsedMessage) {
           return { success: false, error: 'Missing taskId' }
         }
 
+        await deps.ensureStateManagerInitialized()
+
         try {
-          const result = await moveTaskToTop(deps.getStateManager(), taskId)
+          const result = await moveTaskToTop(deps.getStateManager(), parsedMessage.payload.taskId)
           if (!result.success) {
             return { success: false, error: result.reason || 'Unable to move task to top' }
           }
@@ -280,6 +305,10 @@ export async function handleBackgroundMessage(
         }
       }
       case 'CLEAR_ALL_HISTORY': {
+        if (!parseActionMessage(message, 'CLEAR_ALL_HISTORY')) {
+          return { success: false, error: 'Invalid CLEAR_ALL_HISTORY payload' }
+        }
+
         const optionsUrlPrefix = chrome.runtime.getURL('options.html')
         if (!isSenderFromOptionsPage(sender, optionsUrlPrefix)) {
           return { success: false, error: 'CLEAR_ALL_HISTORY is only available from Options page' }
@@ -296,7 +325,12 @@ export async function handleBackgroundMessage(
         }
       }
       case 'OPEN_OPTIONS': {
-        const page = message.payload?.page
+        const parsedMessage = parseActionMessage(message, 'OPEN_OPTIONS')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid OPEN_OPTIONS payload' }
+        }
+
+        const page = parsedMessage.payload.page
         const tabParam = page ? `?tab=${encodeURIComponent(page)}` : ''
         const url = chrome.runtime.getURL(`options.html${tabParam}`)
 
@@ -320,12 +354,15 @@ export async function handleBackgroundMessage(
         }
       }
       case 'START_DOWNLOAD': {
+        const parsedMessage = parseActionMessage(message, 'START_DOWNLOAD')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid START_DOWNLOAD payload' }
+        }
+
         await deps.ensureStateManagerInitialized()
         const sourceTabId = resolveSourceTabId(
           sender,
-          typeof message.payload?.sourceTabId === 'number'
-            ? message.payload.sourceTabId
-            : undefined,
+          parsedMessage.payload.sourceTabId,
         )
 
         if (typeof sourceTabId !== 'number') {
@@ -334,7 +371,7 @@ export async function handleBackgroundMessage(
 
         const result = await enqueueStartDownloadTask(
           deps.getStateManager(),
-          message.payload,
+          parsedMessage.payload,
           sourceTabId,
         )
 
@@ -349,8 +386,13 @@ export async function handleBackgroundMessage(
         return { success: true, taskId: result.taskId } as StartDownloadResponse
       }
       case 'OFFSCREEN_DOWNLOAD_PROGRESS': {
+        const parsedMessage = parseOffscreenMessage(message, 'OFFSCREEN_DOWNLOAD_PROGRESS')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_PROGRESS payload' }
+        }
+
         await deps.ensureStateManagerInitialized()
-        return await handleOffscreenDownloadProgress(deps.getStateManager(), message)
+        return await handleOffscreenDownloadProgress(deps.getStateManager(), parsedMessage)
       }
       default:
         logger.debug(`Background ignoring message type: ${type}`)

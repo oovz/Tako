@@ -47,10 +47,9 @@ async function logQueueEvent(
  */
 export async function handleUpdateDownloadTask(
   stateManager: CentralizedStateManager,
-  payload: unknown
+  payload: UpdateDownloadTaskPayload
 ): Promise<{ success: boolean }> {
-  const typedPayload = payload as UpdateDownloadTaskPayload;
-  const { taskId, updates } = typedPayload;
+  const { taskId, updates } = payload;
   await stateManager.updateDownloadTask(taskId, updates);
   await logQueueEvent(stateManager, 'info', '[Queue] TASK_UPDATED', {
     event: 'TASK_UPDATED',
@@ -71,10 +70,9 @@ export async function handleUpdateDownloadTask(
  */
 export async function handleRemoveDownloadTask(
   stateManager: CentralizedStateManager,
-  payload: unknown
+  payload: RemoveDownloadTaskPayload
 ): Promise<{ success: boolean }> {
-  const typedPayload = payload as RemoveDownloadTaskPayload;
-  const { taskId } = typedPayload;
+  const { taskId } = payload;
   await stateManager.removeDownloadTask(taskId);
   await logQueueEvent(stateManager, 'info', '[Queue] REMOVED', {
     event: 'REMOVED',
@@ -100,10 +98,9 @@ export async function handleRemoveDownloadTask(
  */
 export async function handleCancelDownloadTask(
   stateManager: CentralizedStateManager,
-  payload: unknown
+  payload: CancelDownloadTaskPayload
 ): Promise<{ success: boolean }> {
-  const typedPayload = payload as CancelDownloadTaskPayload;
-  const { taskId } = typedPayload;
+  const { taskId } = payload;
 
   await logQueueEvent(stateManager, 'info', '[Queue] CANCELED', {
     event: 'CANCELED',

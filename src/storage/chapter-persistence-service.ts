@@ -8,7 +8,8 @@
  * retained only as descriptive source metadata.
  */
 import logger from '@/src/runtime/logger';
-import { isRecord, type JsonValue } from '@/src/shared/type-guards';
+import type { JsonValue } from '@/src/shared/type-guards';
+import { z } from 'zod';
 
 export interface DownloadedChapterRecord {
   chapterId: string;
@@ -33,46 +34,49 @@ export interface SeriesDownloadHistory {
 
 const VALID_FORMATS = ['zip', 'cbz', 'cbr', 'pdf', 'none'] as const;
 
-const isDownloadedChapterRecord = (value: unknown): value is DownloadedChapterRecord => {
-  if (!isRecord(value)) return false;
-  const hasValidFormat =
-    typeof value.format === 'string'
-    && VALID_FORMATS.some((candidate) => candidate === value.format);
-  return (
-    typeof value.chapterId === 'string'
-    && typeof value.url === 'string'
-    && typeof value.title === 'string'
-    && typeof value.seriesId === 'string'
-    && typeof value.seriesTitle === 'string'
-    && typeof value.downloadedAt === 'number'
-    && hasValidFormat
-  );
-};
+const DownloadedChapterRecordSchema = z.object({
+  chapterId: z.string(),
+  url: z.string(),
+  title: z.string(),
+  seriesId: z.string(),
+  seriesTitle: z.string(),
+  chapterNumber: z.number().optional(),
+  volumeNumber: z.number().optional(),
+  downloadedAt: z.number(),
+  filePath: z.string().optional(),
+  fileSize: z.number().optional(),
+  format: z.enum(VALID_FORMATS),
+});
 
 const parseDownloadedChapters = (raw: unknown): DownloadedChapterRecord[] => {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(isDownloadedChapterRecord);
+  return raw.flatMap((entry) => {
+    const parsed = DownloadedChapterRecordSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
 };
 
+const SeriesDownloadHistorySchema = z.object({
+  seriesId: z.string(),
+  seriesTitle: z.string(),
+  lastUpdated: z.number(),
+  downloadedChapters: z.array(z.unknown()).transform((entries) => parseDownloadedChapters(entries)),
+});
+
 const parseSeriesHistory = (value: JsonValue | undefined): SeriesDownloadHistory | null => {
-  if (!isRecord(value)) return null;
-  if (typeof value.seriesId !== 'string') return null;
-  if (typeof value.seriesTitle !== 'string') return null;
-  if (typeof value.lastUpdated !== 'number') return null;
-  const downloadedChapters = parseDownloadedChapters(value.downloadedChapters);
-  return {
-    seriesId: value.seriesId,
-    seriesTitle: value.seriesTitle,
-    lastUpdated: value.lastUpdated,
-    downloadedChapters,
-  };
+  const parsed = SeriesDownloadHistorySchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 };
 
 const parseSeriesHistoryMap = (raw: JsonValue | undefined): Record<string, SeriesDownloadHistory> => {
-  if (!isRecord(raw)) return {};
+  const rawEntries = z.record(z.string(), z.unknown()).safeParse(raw);
+  if (!rawEntries.success) {
+    return {};
+  }
+
   const entries: Record<string, SeriesDownloadHistory> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    const parsed = parseSeriesHistory(value);
+  for (const [key, value] of Object.entries(rawEntries.data)) {
+    const parsed = parseSeriesHistory(value as JsonValue | undefined);
     if (parsed) entries[key] = parsed;
   }
   return entries;
@@ -81,7 +85,7 @@ const parseSeriesHistoryMap = (raw: JsonValue | undefined): Record<string, Serie
 class ChapterPersistenceService {
   private readonly STORAGE_KEY = 'downloadedChapters';
   private readonly SERIES_HISTORY_KEY = 'seriesDownloadHistory';
-  
+
   /**
    * Mark a chapter as downloaded
    */

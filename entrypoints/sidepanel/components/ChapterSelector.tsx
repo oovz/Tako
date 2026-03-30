@@ -2,7 +2,6 @@ import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronRight } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/src/shared/utils'
@@ -133,15 +132,64 @@ export function ChapterSelector({
   })
 
   const renderRow = (row: SelectorRow) => {
-    return row.kind === 'volume-header' ? (
+    if (row.kind !== 'volume-header') {
+      const isChapterDisabled = isEnqueuing || row.chapter.locked === true
+
+      return (
+        <div
+          className={cn(
+            'group flex items-center gap-2 border-b border-border/40 px-3 py-2 text-sm transition-colors duration-150',
+            isChapterDisabled
+              ? 'cursor-default'
+              : 'cursor-pointer hover:bg-muted/35',
+          )}
+          data-testid={row.kind === 'standalone-chapter' ? 'inline-item' : undefined}
+          data-kind={row.kind === 'standalone-chapter' ? 'standalone' : undefined}
+          onClick={() => {
+            if (isChapterDisabled) return
+            onToggleChapter(row.chapter.id, !row.chapter.selected)
+          }}
+        >
+          <Checkbox
+            id={row.chapter.id}
+            aria-label={row.chapter.title}
+            checked={row.chapter.selected}
+            onCheckedChange={() => onToggleChapter(row.chapter.id, !row.chapter.selected)}
+            onClick={(event) => event.stopPropagation()}
+            disabled={isChapterDisabled}
+          />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="w-7 shrink-0 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">
+              {row.chapter.index}
+            </span>
+            <span className="flex-1 truncate text-sm leading-5 text-foreground">
+              {row.chapter.title}
+            </span>
+            {row.chapter.locked === true && (
+              <span className="shrink-0 text-[11px] text-muted-foreground">Locked</span>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    return (
       <div className="border-b border-border/30" data-testid="inline-item" data-kind="volume">
         <div
-          className="flex items-center gap-2.5 px-3 py-2 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors duration-100"
-          onClick={() => onToggleGroup(row.groupKey)}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 transition-colors duration-150',
+            isEnqueuing
+              ? 'cursor-default bg-muted/20'
+              : 'cursor-pointer bg-muted/20 hover:bg-muted/45',
+          )}
+          onClick={() => {
+            if (isEnqueuing) return
+            onToggleGroup(row.groupKey)
+          }}
         >
           <ChevronRight
             className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform duration-200',
+              'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
               row.isExpanded && 'rotate-90',
             )}
           />
@@ -151,11 +199,18 @@ export function ChapterSelector({
             onClick={(event) => event.stopPropagation()}
             disabled={row.selectableChapterCount === 0 || isEnqueuing}
           />
-          <span className="text-sm font-medium flex-1">Volume {row.number}</span>
+          <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
+            <span className="truncate">
+              Volume
+              {' '}
+              {row.number}
+            </span>
+          </div>
+          <span className="shrink-0 text-xs text-muted-foreground">{row.chapterCount}</span>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs px-2"
+            className="h-7 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation()
               onVolumeSelectAll(row.groupId)
@@ -164,35 +219,6 @@ export function ChapterSelector({
           >
             Select All
           </Button>
-          <Badge variant="outline" className="text-[10px] h-5 px-2 py-0">
-            {row.chapterCount}
-          </Badge>
-        </div>
-      </div>
-    ) : (
-      <div
-        className="group flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50 border-b border-border/40 transition-colors duration-100"
-        data-testid={row.kind === 'standalone-chapter' ? 'inline-item' : undefined}
-        data-kind={row.kind === 'standalone-chapter' ? 'standalone' : undefined}
-      >
-        <Checkbox
-          id={row.chapter.id}
-          checked={row.chapter.selected}
-          onCheckedChange={() => onToggleChapter(row.chapter.id, !row.chapter.selected)}
-          disabled={isEnqueuing || row.chapter.locked === true}
-        />
-        <div className="flex-1 min-w-0 flex items-center gap-2.5">
-          <span className="font-mono text-xs text-muted-foreground w-8 shrink-0 tabular-nums">
-            {row.chapter.index}
-          </span>
-          <label htmlFor={row.chapter.id} className="text-sm cursor-pointer truncate flex-1">
-            {row.chapter.title}
-          </label>
-          {row.chapter.locked === true && (
-            <Badge variant="outline" className="text-[9px] h-4 px-1.5 py-0 shrink-0">
-              Locked
-            </Badge>
-          )}
         </div>
       </div>
     )

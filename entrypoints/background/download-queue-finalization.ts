@@ -1,7 +1,7 @@
 import logger from '@/src/runtime/logger'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import { areNotificationsEnabled } from '@/entrypoints/background/notification-preferences'
-import { getNotificationManager } from '@/entrypoints/background/notification-manager'
+import { getNotificationService } from '@/entrypoints/background/notification-service'
 import { settingsService } from '@/src/storage/settings-service'
 import { chapterPersistenceService } from '@/src/storage/chapter-persistence-service'
 import type { DownloadTaskState } from '@/src/types/queue-state'
@@ -10,6 +10,7 @@ export type ChapterDispatchOutcome = {
   chapterId: string
   status: 'completed' | 'partial_success' | 'failed'
   errorMessage?: string
+  errorCategory?: 'network' | 'download' | 'other'
   imagesFailed?: number
 }
 
@@ -109,10 +110,12 @@ export async function finalizeDownloadTaskAfterDispatch(input: {
 
   await persistCompletedChapters(input.task, chapterOutcomes, persistedFormat)
 
+  const firstFailedOutcome = chapterOutcomes.find((o) => o.status === 'failed')
   await input.stateManager.updateDownloadTask(input.taskId, {
     status: finalStatus,
     completed: Date.now(),
     errorMessage: failedCount > 0 ? `Some chapters failed (${completedCount}/${chapterOutcomes.length})` : undefined,
+    errorCategory: firstFailedOutcome?.errorCategory,
   })
 
   return {
@@ -143,9 +146,9 @@ export async function notifyDownloadTaskCompletion(input: {
       return
     }
 
-    const notificationManager = getNotificationManager()
+    const notificationService = getNotificationService()
     if (input.finalStatus === 'completed') {
-      notificationManager.showDownloadCompleteNotification({
+      notificationService.showDownloadCompleteNotification({
         task: taskAfterCompletion,
         notificationsEnabled,
         chaptersCompleted: input.completedCount,
@@ -154,7 +157,7 @@ export async function notifyDownloadTaskCompletion(input: {
     }
 
     if ((input.finalStatus === 'failed' || input.finalStatus === 'partial_success') && taskAfterCompletion.errorMessage) {
-      notificationManager.notifyTaskFailed({
+      notificationService.notifyTaskFailed({
         task: taskAfterCompletion,
         notificationsEnabled,
         errorMessage: taskAfterCompletion.errorMessage,

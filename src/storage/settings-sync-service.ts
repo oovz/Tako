@@ -6,12 +6,12 @@
  */
 
 import logger from '@/src/runtime/logger';
-import { settingsService, SETTINGS_STORAGE_KEY } from './settings-service';
+import { canonicalizeSettingsDocument, settingsService, SETTINGS_STORAGE_KEY } from './settings-service';
 import { loadDownloadRootHandle, verifyPermission, clearDownloadRootHandle } from './fs-access';
 import type { ExtensionSettings } from './settings-types';
 import { SyncSettingsToStateMessage } from '../types/runtime-command-messages';
 import { addPersistentError } from '@/entrypoints/background/errors';
-import { isRecord, type StorageValue } from '@/src/shared/type-guards';
+import { isRecord } from '@/src/shared/type-guards';
 
 export interface SettingsSyncNotification {
   type: 'SETTINGS_CHANGED';
@@ -36,11 +36,11 @@ export class SettingsSyncService {
       // Listen for changes to the settings key in storage.local
       chrome.storage.onChanged.addListener((changes, areaName) => {
         if (areaName === 'local' && changes[SETTINGS_STORAGE_KEY]) {
-          const newSettings = changes[SETTINGS_STORAGE_KEY].newValue as ExtensionSettings;
-          const oldSettings = changes[SETTINGS_STORAGE_KEY].oldValue as ExtensionSettings | undefined;
+          const newSettings = canonicalizeSettingsDocument(changes[SETTINGS_STORAGE_KEY].newValue);
+          const oldSettings = canonicalizeSettingsDocument(changes[SETTINGS_STORAGE_KEY].oldValue);
 
           if (newSettings) {
-            this.notifySettingsChange(newSettings, oldSettings);
+            this.notifySettingsChange(newSettings, oldSettings ?? undefined);
           }
         }
       });
@@ -156,7 +156,9 @@ export class SettingsSyncService {
       await settingsService.updateSettings({
         downloads: {
           ...currentSettings.downloads,
-          downloadMode: 'browser'
+          downloadMode: 'browser',
+          customDirectoryEnabled: false,
+          customDirectoryHandleId: null,
         }
       });
       logger.info('Automatically switched to browser download mode due to missing custom folder');
@@ -217,8 +219,7 @@ export class SettingsSyncService {
     const changedKeys: string[] = [];
 
     if (oldSettings) {
-      // Deep compare to find changed keys (cast to Record for recursive comparison)
-      this.findChangedKeys('', newSettings as unknown as Record<string, StorageValue>, oldSettings as unknown as Record<string, StorageValue>, changedKeys);
+      this.findChangedKeys('', newSettings, oldSettings, changedKeys);
     } else {
       changedKeys.push('*'); // All keys changed (first time)
     }
@@ -247,13 +248,14 @@ export class SettingsSyncService {
    */
   private findChangedKeys(
     prefix: string,
-    newObj: Record<string, StorageValue>,
-    oldObj: Record<string, StorageValue> | undefined,
+    newObj: object,
+    oldObj: object | undefined,
     changedKeys: string[]
   ): void {
-    for (const key in newObj) {
-      const newValue = newObj[key];
-      const oldValue = oldObj?.[key];
+    const oldEntries = new Map<string, unknown>(Object.entries(oldObj ?? {}));
+
+    for (const [key, newValue] of Object.entries(newObj)) {
+      const oldValue = oldEntries.get(key);
       const fullKey = prefix ? `${prefix}.${key}` : key;
 
       if (isRecord(newValue) && isRecord(oldValue)) {
