@@ -1,6 +1,7 @@
 import logger from '@/src/runtime/logger'
 import { findSiteIntegrationForUrl } from '@/src/runtime/site-integration-registry'
 import { sendStateAction } from '@/src/runtime/centralized-state'
+import { consumeRecentExternalTabInitialization } from '@/src/runtime/external-tab-init'
 import type { SeriesMetadata } from '@/src/types/series-metadata'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
 import type { SiteIntegration } from '@/src/types/site-integrations'
@@ -220,11 +221,7 @@ export function initializeContentScript() {
         })
 
         try {
-          const lockKey = `tabInitLock_${this.tabId}`
-          const lockResult = await chrome.storage.session.get([lockKey])
-          const rawLock = lockResult[lockKey] as number | undefined
-          const lockTimestamp = typeof rawLock === 'number' ? rawLock : undefined
-          if (typeof lockTimestamp === 'number' && Date.now() - lockTimestamp < 30_000) {
+          if (await consumeRecentExternalTabInitialization(this.tabId)) {
             return
           }
         } catch {

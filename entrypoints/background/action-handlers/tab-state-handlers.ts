@@ -5,13 +5,9 @@
  */
 
 import { CentralizedStateManager } from '@/src/runtime/centralized-state';
+import { InitializeTabPayloadSchema } from '@/src/runtime/state-action-schemas';
 import { tabContextCache, type TabContextCacheValue } from '@/entrypoints/background/tab-cache';
-import type { InitializeTabReadyPayload } from '@/src/types/state-action-tab-payloads';
-
-type InitializeTabPayloadError = { error: string }
-type InitializeTabPayloadUnsupported = { unsupportedPage: true }
-type InitializeTabContextError = { context: 'error'; error: string }
-type InitializeTabContextUnsupported = { context: 'unsupported' }
+import type { InitializeTabPayload, InitializeTabReadyPayload } from '@/src/types/state-action-tab-payloads';
 
 function getTabStateStorageKey(tabId: number): string {
   return `tab_${tabId}`
@@ -24,27 +20,6 @@ function getTabErrorStorageKey(tabId: number): string {
 async function syncCachedProjection(tabId: number, value: TabContextCacheValue): Promise<void> {
   tabContextCache.setCachedContext(tabId, value)
   await tabContextCache.syncActiveTabContext()
-}
-
-function isErrorPayload(payload: unknown): payload is InitializeTabPayloadError {
-  return !!payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string'
-}
-
-function isUnsupportedPayload(payload: unknown): payload is InitializeTabPayloadUnsupported {
-  return !!payload && typeof payload === 'object' && (payload as { unsupportedPage?: unknown }).unsupportedPage === true
-}
-
-function isContextErrorPayload(payload: unknown): payload is InitializeTabContextError {
-  return !!payload
-    && typeof payload === 'object'
-    && (payload as { context?: unknown }).context === 'error'
-    && typeof (payload as { error?: unknown }).error === 'string'
-}
-
-function isContextUnsupportedPayload(payload: unknown): payload is InitializeTabContextUnsupported {
-  return !!payload
-    && typeof payload === 'object'
-    && (payload as { context?: unknown }).context === 'unsupported'
 }
 
 type InitializeTabChapter = NonNullable<InitializeTabReadyPayload['chapters']>[number]
@@ -64,47 +39,42 @@ type InitializeTabChapter = NonNullable<InitializeTabReadyPayload['chapters']>[n
  */
 export async function handleInitializeTab(
   stateManager: CentralizedStateManager,
-  payload: unknown,
+  payload: InitializeTabPayload,
   tabId: number
 ): Promise<{ success: boolean; tabState?: unknown }> {
   const tabStateStorageKey = getTabStateStorageKey(tabId)
   const tabErrorStorageKey = getTabErrorStorageKey(tabId)
 
-  if (isUnsupportedPayload(payload) || isContextUnsupportedPayload(payload)) {
+  const parsedPayload = InitializeTabPayloadSchema.safeParse(payload)
+  if (!parsedPayload.success) {
+    await chrome.storage.session.remove(tabStateStorageKey)
+    await chrome.storage.session.set({ [tabErrorStorageKey]: 'Invalid INITIALIZE_TAB payload' })
+    await syncCachedProjection(tabId, { error: 'Invalid INITIALIZE_TAB payload' })
+    return { success: false }
+  }
+
+  const typedPayload = parsedPayload.data
+
+  if (typedPayload.context === 'unsupported') {
     await chrome.storage.session.remove([tabStateStorageKey, tabErrorStorageKey])
     await syncCachedProjection(tabId, null)
     return { success: true, tabState: null }
   }
 
-  if (isErrorPayload(payload) || isContextErrorPayload(payload)) {
+  if (typedPayload.context === 'error') {
     await chrome.storage.session.remove(tabStateStorageKey)
-    await chrome.storage.session.set({ [tabErrorStorageKey]: payload.error })
-    await syncCachedProjection(tabId, { error: payload.error })
-    return { success: true, tabState: { error: payload.error } }
+    await chrome.storage.session.set({ [tabErrorStorageKey]: typedPayload.error })
+    await syncCachedProjection(tabId, { error: typedPayload.error })
+    return { success: true, tabState: { error: typedPayload.error } }
   }
 
-  const typedPayload = payload as InitializeTabReadyPayload;
   const siteId = typedPayload.siteIntegrationId
   const seriesId = typedPayload.mangaId
-  const seriesTitle = typedPayload.seriesTitle ?? ''
-  const chapters = typedPayload.chapters ?? []
+  const seriesTitle = typedPayload.seriesTitle
+  const chapters = typedPayload.chapters
   const volumes = typedPayload.volumes
   const metadata = typedPayload.metadata
 
-  if (!siteId || !seriesId) {
-    await chrome.storage.session.remove(tabStateStorageKey)
-    await chrome.storage.session.set({ [tabErrorStorageKey]: 'Invalid INITIALIZE_TAB payload' })
-    await syncCachedProjection(tabId, { error: 'Invalid INITIALIZE_TAB payload' })
-    return { success: false }
-  }
-
-  if (chapters.some((chapter) => typeof chapter.id !== 'string' || chapter.id.trim().length === 0)) {
-    await chrome.storage.session.remove(tabStateStorageKey)
-    await chrome.storage.session.set({ [tabErrorStorageKey]: 'Invalid INITIALIZE_TAB payload' })
-    await syncCachedProjection(tabId, { error: 'Invalid INITIALIZE_TAB payload' })
-    return { success: false }
-  }
-  
   const chaptersState = chapters.map((ch: InitializeTabChapter, idx: number) => ({
     id: ch.id,
     url: ch.url,

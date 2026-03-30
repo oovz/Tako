@@ -1,20 +1,23 @@
+import { z } from 'zod'
+
 export type SiteIntegrationEnablementMap = Record<string, boolean>
 
 export const SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY = 'siteIntegrationEnablement'
 
-function normalizeEnablementMap(value: unknown): SiteIntegrationEnablementMap {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {}
-  }
-
+const SiteIntegrationEnablementMapSchema = z.record(z.string(), z.unknown()).transform((entries) => {
   const result: SiteIntegrationEnablementMap = {}
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of Object.entries(entries)) {
     if (typeof entry === 'boolean') {
       result[key] = entry
     }
   }
 
   return result
+})
+
+export function normalizeEnablementMap(value: unknown): SiteIntegrationEnablementMap {
+  const parsed = SiteIntegrationEnablementMapSchema.safeParse(value)
+  return parsed.success ? parsed.data : {}
 }
 
 async function getStoredEnablementMap(): Promise<SiteIntegrationEnablementMap> {

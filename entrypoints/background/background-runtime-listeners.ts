@@ -5,10 +5,10 @@ import {
   recoverFromLivenessTimeout,
   scheduleOffscreenCloseIfIdle,
 } from '@/entrypoints/background/offscreen-lifecycle'
+import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { PendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
-import type { DownloadTaskState } from '@/src/types/queue-state'
 
 interface RuntimeListenerTabContextCache {
   handleTabRemoved: (tabId: number) => Promise<void>
@@ -36,7 +36,7 @@ export function registerBackgroundRuntimeListeners(
           return
         }
 
-        const globalStateChange = changes.global_state
+        const globalStateChange = changes[SESSION_STORAGE_KEYS.globalState]
         if (!globalStateChange?.newValue || typeof globalStateChange.newValue !== 'object') {
           return
         }
@@ -47,7 +47,10 @@ export function registerBackgroundRuntimeListeners(
         }
 
         try {
-          const projection = projectToQueueView(maybeQueue as DownloadTaskState[])
+          const normalizedQueue = maybeQueue
+            .map(normalizePersistedDownloadTask)
+            .filter((task) => task !== null)
+          const projection = projectToQueueView(normalizedQueue)
           await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.queueView]: projection.queueView })
           await updateActionBadge(projection.nonTerminalCount)
         } catch (error) {
@@ -71,8 +74,8 @@ export function registerBackgroundRuntimeListeners(
   })
 
   chrome.downloads.onChanged.addListener((delta) => {
-    void deps.ensureStateManagerInitialized()
-      .then(() => {
+    void (async () => {
+      try {
         if (typeof delta.id !== 'number') {
           return
         }
@@ -82,7 +85,12 @@ export function registerBackgroundRuntimeListeners(
           return
         }
 
-        const blobUrl = deps.pendingDownloadsStore.get(delta.id)
+        let blobUrl = deps.pendingDownloadsStore.get(delta.id)
+        if (!blobUrl) {
+          await deps.pendingDownloadsStore.hydrate()
+          blobUrl = deps.pendingDownloadsStore.get(delta.id)
+        }
+
         if (!blobUrl) {
           logger.debug(`Download ${delta.id} not tracked - likely from canceled/timed-out task`)
           return
@@ -90,10 +98,10 @@ export function registerBackgroundRuntimeListeners(
 
         deps.pendingDownloadsStore.remove(delta.id)
         void deps.requestBlobRevocation(blobUrl)
-      })
-      .catch((error) => {
-        logger.error('Failed to process downloads.onChanged with initialized state:', error)
-      })
+      } catch (error) {
+        logger.error('Failed to process downloads.onChanged cleanup:', error)
+      }
+    })()
   })
 
   chrome.alarms.onAlarm.addListener((alarm) => {
@@ -129,7 +137,7 @@ export function registerBackgroundRuntimeListeners(
         void (async () => {
           await deps.ensureStateManagerInitialized()
           try {
-            await scheduleOffscreenCloseIfIdle(deps.getStateManager(), deps.pendingDownloadsStore)
+            await scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore)
           } catch (error) {
             logger.debug('Failed to schedule offscreen close on suspend:', error)
           }

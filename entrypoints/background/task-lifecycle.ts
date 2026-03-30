@@ -23,11 +23,13 @@ export function normalizeInterruptedTask(
   now: number = Date.now(),
 ): DownloadTaskState {
   const normalizedChapters = task.chapters.map((chapter) => normalizeInterruptedChapter(chapter, errorMessage, now))
-  const completedCount = normalizedChapters.filter((chapter) => chapter.status === 'completed').length
+  const successfulCount = normalizedChapters.filter(
+    (chapter) => chapter.status === 'completed' || chapter.status === 'partial_success',
+  ).length
 
   return {
     ...task,
-    status: completedCount > 0 ? 'partial_success' : 'failed',
+    status: successfulCount > 0 ? 'partial_success' : 'failed',
     errorMessage,
     completed: task.completed ?? now,
     chapters: normalizedChapters,

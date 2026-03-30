@@ -63,6 +63,7 @@ export type OffscreenDownloadChapterResponse = ({
   success: true;
   status: 'completed' | 'partial_success' | 'failed';
   errorMessage?: string;
+  errorCategory?: 'network' | 'download' | 'other';
   imagesFailed?: number;
 }) | ErrorResponse;
 

@@ -1,5 +1,6 @@
 import type { InitializeTabPayload, InitializeTabReadyPayload } from '@/src/types/state-action-tab-payloads'
 import type { GetTabIdResponse } from '@/src/types/runtime-command-messages'
+import { isRecord } from '@/src/shared/type-guards'
 
 import type {
   ContentSiteIntegration,
@@ -35,19 +36,73 @@ export function resolveSeriesDataStrategy(
   return { kind: 'content-dom' }
 }
 
+function normalizeRawChapter(value: unknown): InitializeTabRawChapter | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const url = typeof value.url === 'string' ? value.url.trim() : ''
+  const title = typeof value.title === 'string' ? value.title.trim() : ''
+
+  if (url.length === 0 || title.length === 0) {
+    return null
+  }
+
+  return {
+    id: typeof value.id === 'string' && value.id.trim().length > 0 ? value.id.trim() : undefined,
+    url,
+    title,
+    locked: value.locked === true,
+    chapterLabel: typeof value.chapterLabel === 'string' && value.chapterLabel.trim().length > 0
+      ? value.chapterLabel.trim()
+      : undefined,
+    chapterNumber: typeof value.chapterNumber === 'number' ? value.chapterNumber : undefined,
+    volumeNumber: typeof value.volumeNumber === 'number' ? value.volumeNumber : undefined,
+    volumeLabel: typeof value.volumeLabel === 'string' && value.volumeLabel.trim().length > 0
+      ? value.volumeLabel.trim()
+      : undefined,
+    language: typeof value.language === 'string' && value.language.trim().length > 0
+      ? value.language.trim()
+      : undefined,
+  }
+}
+
+function normalizeRawVolume(value: unknown): InitializeTabRawVolume | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id = typeof value.id === 'string' ? value.id.trim() : ''
+  if (id.length === 0) {
+    return null
+  }
+
+  return {
+    id,
+    title: typeof value.title === 'string' && value.title.trim().length > 0 ? value.title.trim() : undefined,
+    label: typeof value.label === 'string' && value.label.trim().length > 0 ? value.label.trim() : undefined,
+  }
+}
+
 export function normalizeFetchedSeriesData(result: unknown): NormalizedSeriesData {
   if (Array.isArray(result)) {
     return {
-      chapters: result as InitializeTabRawChapter[],
+      chapters: result.map(normalizeRawChapter).filter((chapter): chapter is InitializeTabRawChapter => chapter !== null),
       volumes: [],
     }
   }
 
   if (result && typeof result === 'object' && Array.isArray((result as { chapters?: unknown }).chapters)) {
-    const normalizedResult = result as { chapters: InitializeTabRawChapter[]; volumes?: InitializeTabRawVolume[] }
+    const normalizedResult = result as { chapters: unknown[]; volumes?: unknown[] }
     return {
-      chapters: normalizedResult.chapters,
-      volumes: Array.isArray(normalizedResult.volumes) ? normalizedResult.volumes : [],
+      chapters: normalizedResult.chapters
+        .map(normalizeRawChapter)
+        .filter((chapter): chapter is InitializeTabRawChapter => chapter !== null),
+      volumes: Array.isArray(normalizedResult.volumes)
+        ? normalizedResult.volumes
+          .map(normalizeRawVolume)
+          .filter((volume): volume is InitializeTabRawVolume => volume !== null)
+        : [],
     }
   }
 

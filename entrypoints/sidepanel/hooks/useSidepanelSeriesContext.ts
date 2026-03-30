@@ -1,27 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useMemo } from 'react'
 
 import type { FormatDisplay, VolumeOrChapter } from '../types'
 import { useSidepanelDefaultFormat } from '@/entrypoints/sidepanel/hooks/useSidepanelDefaultFormat'
-import {
-  isInternalUrl,
-  queryActiveTabInLastFocusedNormalWindow,
-  resolveTabUrlForSupportCheck,
-} from '@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers'
 import { useSidepanelTrackedTabId } from '@/entrypoints/sidepanel/hooks/useSidepanelTrackedTabId'
-import { useStorageSubscription } from '@/entrypoints/sidepanel/hooks/useStorageSubscription'
 import {
   deriveSeriesContextFromActiveTabContext,
-  groupChapters,
-  normalizeActiveTabContext,
-  selectPreferredSeriesContextTask,
+  normalizeStoredSeriesContext,
   type ActiveTabContextValue,
 } from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import logger from '@/src/runtime/logger'
-import type { DownloadTaskState } from '@/src/types/queue-state'
 import type { MangaPageState } from '@/src/types/tab-state'
-
-export { groupChapters, isInternalUrl, queryActiveTabInLastFocusedNormalWindow }
+import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
 
 export interface SidepanelSeriesContextData {
   tabId: number | undefined
@@ -37,71 +26,37 @@ export interface SidepanelSeriesContextData {
   defaultFormat: FormatDisplay
 }
 
-export function __resolveTabUrlForSupportCheckForTests(
-  tab: Pick<chrome.tabs.Tab, 'url' | 'pendingUrl'> | undefined,
-): string {
-  return resolveTabUrlForSupportCheck(tab)
-}
-
-export function __selectPreferredSeriesContextTaskForTests(
-  tasks: DownloadTaskState[],
-): DownloadTaskState | undefined {
-  return selectPreferredSeriesContextTask(tasks)
-}
-
-export function __deriveSeriesContextFromActiveTabContextForTests(
-  context: ActiveTabContextValue,
-  defaultFormat: FormatDisplay,
-): Omit<SidepanelSeriesContextData, 'tabId'> {
-  return deriveSeriesContextFromActiveTabContext(context, defaultFormat)
-}
-
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   const defaultFormat = useSidepanelDefaultFormat()
   const tabId = useSidepanelTrackedTabId()
-  const { value: activeTabContext } = useStorageSubscription<ActiveTabContextValue>({
+  const storageKeys = useMemo(
+    () => (
+      typeof tabId === 'number'
+        ? [`tab_${tabId}`, `seriesContextError_${tabId}`, SESSION_STORAGE_KEYS.activeTabContext]
+        : [SESSION_STORAGE_KEYS.activeTabContext]
+    ),
+    [tabId],
+  )
+  const parseStoredContext = useCallback(
+    (value: unknown) => normalizeStoredSeriesContext(value, tabId),
+    [tabId],
+  )
+  const { value: activeTabContext } = useChromeStorageValue<ActiveTabContextValue>({
     areaName: 'session',
-    key: SESSION_STORAGE_KEYS.activeTabContext,
-    initialValue: { loading: true },
-    parse: normalizeActiveTabContext,
+    key: storageKeys,
+    initialValue: { kind: 'unsupported' },
+    parse: parseStoredContext,
   })
 
-  const [data, setData] = useState<Omit<SidepanelSeriesContextData, 'tabId'>>({
-    mangaState: undefined,
-    items: [],
-    mangaTitle: 'Loading...',
-    seriesId: undefined,
-    isLoading: true,
-    blockingMessage: undefined,
-    siteId: undefined,
-    author: undefined,
-    coverUrl: undefined,
-    defaultFormat,
-  })
-
-  useEffect(() => {
-    logger.debug('[sidepanel] Initializing series-context hook')
-    return () => {
-      logger.debug('[sidepanel] Disposing series-context hook')
-    }
-  }, [])
-
-  useEffect(() => {
-    logger.debug('[sidepanel] Deriving series context from activeTabContext', {
-      tabId,
-      defaultFormat,
-      activeTabContext,
-    })
-    setData((prev) => ({
-      ...deriveSeriesContextFromActiveTabContext(activeTabContext, defaultFormat, prev.items),
-    }))
-  }, [activeTabContext, defaultFormat, tabId])
+  const data = useMemo(
+    () => deriveSeriesContextFromActiveTabContext(activeTabContext, defaultFormat),
+    [activeTabContext, defaultFormat],
+  )
 
   return {
     tabId,
     ...data,
   }
 }
-export default useSidepanelSeriesContext;
 
 

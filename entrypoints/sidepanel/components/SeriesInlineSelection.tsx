@@ -1,31 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
-import { Download, Check, MoreVertical } from 'lucide-react'
-
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/src/shared/utils'
-import type { SidePanelChapter, VolumeOrChapter } from '@/entrypoints/sidepanel/types'
+import type { SidePanelChapter } from '@/entrypoints/sidepanel/types'
 import type { ChapterSelectionsBySeries } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
 import type { SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
 import { useSelection } from '@/entrypoints/sidepanel/hooks/useSelection'
 import { useDownload } from '@/entrypoints/sidepanel/hooks/useDownload'
 import { buildSeriesKey, useChapterSelections } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
 import { ChapterSelector } from '@/entrypoints/sidepanel/components/ChapterSelector'
+import {
+  getExpandedGroupKeys,
+  getInlineSelectionViewSummary,
+  syncInlineSelectionItems,
+} from '@/entrypoints/sidepanel/components/series-inline-selection-helpers'
+import { Check, Download } from 'lucide-react'
 
 interface SeriesInlineSelectionProps {
   data: SidepanelSeriesContextData
   chapterSelectionsBySeries: ChapterSelectionsBySeries
   setChapterSelectionsBySeries: React.Dispatch<React.SetStateAction<ChapterSelectionsBySeries>>
   onAfterStart?: () => void
-}
-
-function getGroupKey(item: VolumeOrChapter): string {
-  if ('chapters' in item) {
-    return item.groupId
-  }
-
-  return `standalone-${item.id}`
 }
 
 export function SeriesInlineSelection({
@@ -44,34 +40,10 @@ export function SeriesInlineSelection({
     setChapterSelectionsBySeries,
   )
 
-  const [items, setItems] = useState(data.items)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [items, setItems] = useState(() => syncInlineSelectionItems(data.items, selectedChapterIds))
 
   useEffect(() => {
-    setItems(prevItems => {
-      const selectedSet = new Set(selectedChapterIds)
-      const collapsedStateMap = new Map<string, boolean>()
-      prevItems.forEach(item => {
-        if ('chapters' in item) collapsedStateMap.set(item.groupId, item.collapsed)
-      })
-      return data.items.map(item => {
-        if ('chapters' in item) {
-          const preserved = collapsedStateMap.get(item.groupId)
-          return {
-            ...item,
-            collapsed: preserved ?? item.collapsed,
-            chapters: item.chapters.map((chapter) => ({
-              ...chapter,
-              selected: selectedSet.has(chapter.id),
-            })),
-          }
-        }
-        return {
-          ...item,
-          selected: selectedSet.has(item.id),
-        }
-      })
-    })
+    setItems(previousItems => syncInlineSelectionItems(data.items, selectedChapterIds, previousItems))
   }, [data.items, selectedChapterIds])
 
   useEffect(() => {
@@ -85,17 +57,6 @@ export function SeriesInlineSelection({
 
     setSelectedChapterIds(nextSelected)
   }, [items, setSelectedChapterIds])
-
-  useEffect(() => {
-    // Expand ALL volume groups by default for better UX
-    const allExpanded = new Set<string>()
-    items.forEach((item) => {
-      if ('chapters' in item) {
-        allExpanded.add(getGroupKey(item))
-      }
-    })
-    setExpandedGroups(allExpanded)
-  }, [items.length])
 
   const downloadHook = useDownload({ tabId: data.tabId, mangaState: data.mangaState })
   const download = downloadHook
@@ -127,18 +88,8 @@ export function SeriesInlineSelection({
   }, [allChapters])
 
   const [viewMode, setViewMode] = useState<'volumes' | 'chapters'>('volumes')
-
-  const toggleGroup = (groupKey: string) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev)
-      if (next.has(groupKey)) {
-        next.delete(groupKey)
-      } else {
-        next.add(groupKey)
-      }
-      return next
-    })
-  }
+  const expandedGroups = useMemo(() => getExpandedGroupKeys(items), [items])
+  const viewSummary = useMemo(() => getInlineSelectionViewSummary(items), [items])
 
   if (data.blockingMessage) {
     return null
@@ -175,34 +126,69 @@ export function SeriesInlineSelection({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Selection controls - enlarged for better visibility */}
-      <div className="px-3 py-2.5 bg-muted/50 border-b border-border flex items-center justify-between text-sm sticky top-0 z-10">
-        <div className="flex items-center gap-2.5">
-          <Checkbox
-            id="select-all-ctx"
-            checked={selectedCount > 0 && selectedCount === selectableCount}
-            onCheckedChange={selection.handleSelectAll}
-            disabled={download.isEnqueuing || selectableCount === 0}
-          />
-          <label
-            htmlFor="select-all-ctx"
-            className="font-medium cursor-pointer select-none text-muted-foreground"
-          >
-            {selectedCount} selected
-          </label>
-        </div>
-        <div className="flex gap-1.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-xs"
-            aria-label={viewMode === 'chapters' ? 'Group by Volume' : 'Show All Chapters'}
-            onClick={() => setViewMode((currentViewMode) => currentViewMode === 'chapters' ? 'volumes' : 'chapters')}
-          >
-            <MoreVertical className="h-3.5 w-3.5" />
-            {viewMode === 'chapters' ? 'Group by Volume' : 'Show All Chapters'}
-          </Button>
+      <div className="sticky top-0 z-10 border-b border-border bg-background">
+        <div className="space-y-2 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <label
+                htmlFor="select-all-ctx"
+                className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground"
+              >
+                <Checkbox
+                  id="select-all-ctx"
+                  checked={selectedCount > 0 && selectedCount === selectableCount}
+                  onCheckedChange={selection.handleSelectAll}
+                  disabled={download.isEnqueuing || selectableCount === 0}
+                />
+                <span>Select chapters</span>
+              </label>
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {selectedCount > 0 ? `${selectedCount} selected` : `${selectableCount} available`}
+            </span>
+          </div>
+
+          {viewSummary.canToggleView && (
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+              <Button
+                type="button"
+                variant={viewMode === 'volumes' ? 'secondary' : 'ghost'}
+                size="sm"
+                className={cn(
+                  'h-8 justify-center rounded-sm px-2 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none',
+                  viewMode === 'volumes'
+                    ? 'bg-background text-foreground shadow-none hover:bg-background'
+                    : 'text-muted-foreground hover:bg-background hover:text-foreground',
+                )}
+                aria-pressed={viewMode === 'volumes'}
+                aria-label="Group by Volume"
+                onClick={() => {
+                  if (viewMode !== 'volumes') setViewMode('volumes')
+                }}
+              >
+                Volumes
+              </Button>
+
+              <Button
+                type="button"
+                variant={viewMode === 'chapters' ? 'secondary' : 'ghost'}
+                size="sm"
+                className={cn(
+                  'h-8 justify-center rounded-sm px-2 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none',
+                  viewMode === 'chapters'
+                    ? 'bg-background text-foreground shadow-none hover:bg-background'
+                    : 'text-muted-foreground hover:bg-background hover:text-foreground',
+                )}
+                aria-pressed={viewMode === 'chapters'}
+                aria-label="Show All Chapters"
+                onClick={() => {
+                  if (viewMode !== 'chapters') setViewMode('chapters')
+                }}
+              >
+                All chapters
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -211,22 +197,21 @@ export function SeriesInlineSelection({
         viewMode={viewMode}
         expandedGroups={expandedGroups}
         isEnqueuing={download.isEnqueuing}
-        onToggleGroup={toggleGroup}
+        onToggleGroup={selection.handleVolumeToggle}
         onToggleChapter={selection.handleChapterSelect}
         onVolumeSelectAll={selection.handleVolumeSelectAll}
       />
 
-      {/* Download button footer - enlarged for better visibility */}
       <div
         className={cn(
-          'overflow-hidden transition-all duration-200 ease-out',
+          'overflow-hidden border-t border-border bg-background transition-[max-height,opacity] duration-200 ease-out motion-reduce:transition-none',
           selectedCount > 0 && !download.isEnqueuing ? 'max-h-[64px] opacity-100' : 'max-h-0 opacity-0',
         )}
       >
-        <div className="h-[64px] px-3 py-2.5 bg-background border-t border-border">
+        <div className="h-[64px] px-3 py-2.5">
           <Button
             type="button"
-            className="w-full gap-2 h-10 text-sm shadow-sm"
+            className="h-10 w-full gap-2 text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none"
             onClick={handleStart}
             disabled={download.isEnqueuing}
           >

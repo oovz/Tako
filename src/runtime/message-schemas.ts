@@ -23,28 +23,27 @@ const StartDownloadPayloadSchema = z.object({
 
 export const ActionMessageSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('INITIALIZE_TAB'),
-    payload: z.union([
-      z.object({
-        siteIntegrationId: z.string().min(1),
-        url: z.string().url(),
-        mangaId: z.string().min(1),
-        seriesTitle: z.string().optional(),
-        chapters: z.array(ChapterPayloadSchema).optional(),
-        volumes: z.array(z.object({ id: z.string().min(1), title: z.string().optional(), label: z.string().optional() })).optional(),
-        metadata: z.record(z.string(), z.unknown()).optional(),
-      }),
-      z.object({ error: z.string().min(1) }),
-      z.object({ unsupportedPage: z.literal(true) }),
-    ]),
+    type: z.literal('GET_TAB_ID'),
+  }),
+  z.object({
+    type: z.literal('GET_SETTINGS'),
+  }),
+  z.object({
+    type: z.literal('SYNC_SETTINGS_TO_STATE'),
+    payload: z.object({
+      settings: z.record(z.string(), z.unknown()),
+    }),
+  }),
+  z.object({
+    type: z.literal('STATE_ACTION'),
+    action: z.number().int(),
+    payload: z.unknown().optional(),
+    tabId: z.number().int().nonnegative().optional(),
+    timestamp: z.number().optional(),
   }),
   z.object({
     type: z.literal('START_DOWNLOAD'),
     payload: StartDownloadPayloadSchema,
-  }),
-  z.object({
-    type: z.literal('CANCEL_DOWNLOAD'),
-    payload: z.object({ taskId: z.string().min(1) }),
   }),
   z.object({
     type: z.literal('RETRY_FAILED_CHAPTERS'),
@@ -52,10 +51,6 @@ export const ActionMessageSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('RESTART_TASK'),
-    payload: z.object({ taskId: z.string().min(1) }),
-  }),
-  z.object({
-    type: z.literal('REMOVE_TASK'),
     payload: z.object({ taskId: z.string().min(1) }),
   }),
   z.object({
@@ -77,6 +72,16 @@ export const ActionMessageSchema = z.discriminatedUnion('type', [
 ])
 
 export const OffscreenMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('OFFSCREEN_STATUS'),
+  }),
+  z.object({
+    type: z.literal('OFFSCREEN_CONTROL'),
+    payload: z.object({
+      taskId: z.string().min(1),
+      action: z.literal('cancel'),
+    }),
+  }),
   z.object({
     type: z.literal('REVOKE_BLOB_URL'),
     payload: z.object({ blobUrl: z.string().min(1) }),

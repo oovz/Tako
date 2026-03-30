@@ -17,6 +17,9 @@ import { getSiteIntegrationById } from '@/src/runtime/site-integration-initializ
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 
+const MAX_CONCURRENT_CHAPTER_DISPATCHES_PER_TASK = 1;
+const MAX_CONCURRENT_QUEUED_TASKS = 1;
+
 async function clearActiveTaskProgress(): Promise<void> {
   await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.activeTaskProgress]: null });
 }
@@ -108,7 +111,7 @@ export async function startDownloadTask(
       effectiveSettings.downloads.downloadMode === 'custom' ? 'fsa' : 'downloads-api';
     const settingsSnapshot = task.settingsSnapshot;
     const chapterDelayMs = Math.max(0, settingsSnapshot.rateLimitSettings.chapter.delayMs);
-    const maxConcurrentChapters = 1;
+    const maxConcurrentChapters = MAX_CONCURRENT_CHAPTER_DISPATCHES_PER_TASK;
     const totalChapters = task.chapters.length;
     const chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined> = Array.from(
       { length: totalChapters },
@@ -180,7 +183,7 @@ export async function startDownloadTask(
               id: chapter.id,
               title: chapter.title,
               url: chapter.url,
-              index: chapterIndex + 1,
+              index: fallbackTaskChapter?.index ?? chapterIndex + 1,
               chapterLabel: chapter.chapterLabel,
               chapterNumber: chapter.chapterNumber,
               volumeNumber: chapter.volumeNumber,
@@ -200,6 +203,7 @@ export async function startDownloadTask(
         const chapterErrorMessage = response.success
           ? response.errorMessage
           : response.error;
+        const chapterErrorCategory = response.success ? response.errorCategory : undefined;
         const imagesFailed = response.success ? response.imagesFailed : undefined;
 
         const taskAfterDispatch = (await stateManager.getGlobalState()).downloadQueue.find((queuedTask) => queuedTask.id === taskId);
@@ -212,6 +216,7 @@ export async function startDownloadTask(
           chapterId: chapter.id,
           status: chapterStatus,
           errorMessage: chapterErrorMessage,
+          errorCategory: chapterErrorCategory,
           imagesFailed,
         };
 
@@ -226,6 +231,7 @@ export async function startDownloadTask(
         ).length;
         await stateManager.updateDownloadTask(taskId, {
           errorMessage: chapterStatus === 'failed' ? chapterErrorMessage : undefined,
+          errorCategory: chapterStatus === 'failed' ? chapterErrorCategory : undefined,
         });
 
         logger.info('[Queue]', {
@@ -362,7 +368,7 @@ export async function processDownloadQueue(
     const globalState = await stateManager.getGlobalState();
     const queuedTasks = globalState.downloadQueue.filter(task => task.status === 'queued');
     const activeTasks = globalState.downloadQueue.filter(task => task.status === 'downloading');
-    const concurrentLimit = 1;
+    const concurrentLimit = MAX_CONCURRENT_QUEUED_TASKS;
     const availableSlots = Math.max(0, concurrentLimit - activeTasks.length);
 
     if (queuedTasks.length === 0 || availableSlots === 0) {

@@ -7,6 +7,8 @@ import type {
 } from '../types'
 import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '../messages'
 import type { DownloadTaskState } from '@/src/types/queue-state'
+import { isMangaPageState } from '@/src/runtime/state-shapes'
+import { isRecord } from '@/src/shared/type-guards'
 import type { ChapterState, MangaPageState } from '@/src/types/tab-state'
 
 export interface DerivedSidepanelSeriesContextData {
@@ -22,7 +24,19 @@ export interface DerivedSidepanelSeriesContextData {
   defaultFormat: FormatDisplay
 }
 
-export type ActiveTabContextValue = MangaPageState | { error: string } | { loading: true } | null
+export type ActiveTabContextValue =
+  | { kind: 'ready'; mangaState: MangaPageState }
+  | { kind: 'error'; error: string }
+  | { kind: 'loading' }
+  | { kind: 'unsupported' }
+
+function getTabStorageKey(tabId: number): string {
+  return `tab_${tabId}`
+}
+
+function getTabErrorStorageKey(tabId: number): string {
+  return `seriesContextError_${tabId}`
+}
 
 export function selectPreferredSeriesContextTask(
   tasks: DownloadTaskState[],
@@ -40,18 +54,6 @@ export function selectPreferredSeriesContextTask(
   return tasks
     .filter((task) => task.status === 'queued')
     .sort(byCreatedAscending)[0]
-}
-
-const isMangaPageState = (value: unknown): value is MangaPageState => {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as MangaPageState
-  return (
-    typeof candidate.siteIntegrationId === 'string' &&
-    typeof candidate.mangaId === 'string' &&
-    typeof candidate.seriesTitle === 'string' &&
-    Array.isArray(candidate.chapters) &&
-    Array.isArray(candidate.volumes)
-  )
 }
 
 function isLoadingContext(value: unknown): value is { loading: true } {
@@ -90,46 +92,71 @@ export function deriveSeriesContextFromActiveTabContext(
   defaultFormat: FormatDisplay,
   previousItems?: VolumeOrChapter[],
 ): DerivedSidepanelSeriesContextData {
-  if (isMangaPageState(context)) {
-    return {
-      mangaState: context,
-      items: groupChapters(context.chapters, previousItems),
-      mangaTitle: context.seriesTitle,
-      seriesId: context.mangaId,
-      isLoading: false,
-      blockingMessage: undefined,
-      siteId: context.siteIntegrationId,
-      author: context.metadata?.author,
-      coverUrl: context.metadata?.coverUrl,
-      defaultFormat,
+  switch (context.kind) {
+    case 'ready': {
+      const { mangaState } = context
+      return {
+        mangaState,
+        items: groupChapters(mangaState.chapters, previousItems),
+        mangaTitle: mangaState.seriesTitle,
+        seriesId: mangaState.mangaId,
+        isLoading: false,
+        blockingMessage: undefined,
+        siteId: mangaState.siteIntegrationId,
+        author: mangaState.metadata?.author,
+        coverUrl: mangaState.metadata?.coverUrl,
+        defaultFormat,
+      }
     }
-  }
 
-  if (isLoadingContext(context)) {
-    return getEmptySeriesContext(defaultFormat, undefined, true)
-  }
+    case 'loading':
+      return getEmptySeriesContext(defaultFormat, undefined, true)
 
-  if (isErrorContext(context)) {
-    return getEmptySeriesContext(defaultFormat, normalizeBlockingMessage(context.error), false)
-  }
+    case 'error':
+      return getEmptySeriesContext(defaultFormat, normalizeBlockingMessage(context.error), false)
 
-  return getEmptySeriesContext(defaultFormat, TAB_NOT_SUPPORTED_MSG, false)
+    case 'unsupported':
+      return getEmptySeriesContext(defaultFormat, TAB_NOT_SUPPORTED_MSG, false)
+  }
 }
 
 export function normalizeActiveTabContext(value: unknown): ActiveTabContextValue {
   if (isMangaPageState(value)) {
-    return value
+    return { kind: 'ready', mangaState: value }
   }
 
   if (isLoadingContext(value)) {
-    return { loading: true }
+    return { kind: 'loading' }
   }
 
   if (isErrorContext(value)) {
-    return { error: value.error }
+    return { kind: 'error', error: value.error }
   }
 
-  return null
+  return { kind: 'unsupported' }
+}
+
+export function normalizeStoredSeriesContext(
+  value: unknown,
+  tabId: number | undefined,
+): ActiveTabContextValue {
+  if (!isRecord(value)) {
+    return { kind: 'unsupported' }
+  }
+
+  if (typeof tabId === 'number') {
+    const tabState = value[getTabStorageKey(tabId)]
+    if (isMangaPageState(tabState)) {
+      return { kind: 'ready', mangaState: tabState }
+    }
+
+    const tabError = value[getTabErrorStorageKey(tabId)]
+    if (typeof tabError === 'string' && tabError.length > 0) {
+      return { kind: 'error', error: tabError }
+    }
+  }
+
+  return normalizeActiveTabContext(value.activeTabContext)
 }
 
 function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {

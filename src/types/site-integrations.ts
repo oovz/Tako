@@ -71,25 +71,3 @@ export interface SiteIntegration {
   content: ContentScriptIntegration;
   background: BackgroundIntegration;
 }
-
-/**
- * Context validator to ensure functions run in correct environment
- */
-export class IntegrationContextValidator {
-  static validateContentScriptContext(): void {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      throw new Error('This function must run in content script context with DOM access');
-    }
-  }
-
-  static validateBackgroundOrOffscreenContext(): void {
-    // Allow both background scripts (no window) and offscreen documents (window + chrome.runtime)
-    if (typeof chrome === 'undefined' || !chrome.runtime) {
-      throw new Error('This function requires Chrome runtime API access');
-    }
-
-    // If window exists, we might be in offscreen context - that's OK
-    // If no window, we're in background script context - that's also OK
-    // Only reject if we have neither chrome.runtime access
-  }
-}

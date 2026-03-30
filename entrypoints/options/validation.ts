@@ -20,6 +20,7 @@ export const downloadSettingsSchema = z.object({
   maxConcurrentDownloads: z.number().min(1).max(10),
   overwriteExisting: z.boolean(),
   includeComicInfo: z.boolean(),
+  includeCoverImage: z.boolean(),
   normalizeImageFilenames: z.boolean(),
   imagePaddingDigits: z.union([
     z.literal('auto'), 
@@ -54,7 +55,6 @@ export const extensionSettingsSchema = z.object({
 // Site override record schema (matches SiteOverrideRecord from site-overrides-service.ts)
 // All fields optional - presence indicates override
 export const siteOverrideRecordSchema = z.object({
-  autoInjectUI: z.boolean().optional(),
   outputFormat: z.enum(['cbz', 'zip', 'none']).optional(),
   pathTemplate: z.string().optional(),
   imagePolicy: rateScopePolicySchema.partial().optional(),

@@ -8,224 +8,19 @@
 
 import logger from '@/src/runtime/logger';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
 import { initializeChapterStates } from './state-helpers';
-import { isRecord, type StorageValue } from '@/src/shared/type-guards';
 import { LOCAL_STORAGE_KEYS, SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 import { projectToQueueView, updateActionBadge } from '@/entrypoints/background/projection';
+import type { StorageValue } from '@/src/shared/type-guards';
+import { normalizePersistedDownloadTask } from './persisted-download-task';
+import { isGlobalAppState, isMangaPageState, resolveVolumeStates } from './state-shapes';
 import type { ChapterStatus } from '@/src/types/chapter';
-import type { DownloadTaskState, GlobalAppState, TaskChapter } from '@/src/types/queue-state';
+import type { DownloadTaskState, GlobalAppState } from '@/src/types/queue-state';
 import type { ChapterState, MangaPageState } from '@/src/types/tab-state';
-
-function normalizePersistedDownloadTask(rawTask: unknown): DownloadTaskState | null {
-  if (!isRecord(rawTask)) {
-    return null;
-  }
-
-  const siteIntegrationId = typeof rawTask.siteIntegrationId === 'string'
-    ? rawTask.siteIntegrationId
-    : typeof rawTask.siteId === 'string'
-      ? rawTask.siteId
-      : null;
-  const mangaId = typeof rawTask.mangaId === 'string'
-    ? rawTask.mangaId
-    : typeof rawTask.seriesId === 'string'
-      ? rawTask.seriesId
-      : null;
-  const seriesTitle = typeof rawTask.seriesTitle === 'string' ? rawTask.seriesTitle : null;
-
-  if (!siteIntegrationId || !mangaId || !seriesTitle || !Array.isArray(rawTask.chapters)) {
-    return null;
-  }
-
-  const legacySeriesMetadata = isRecord(rawTask.seriesMetadata)
-    ? rawTask.seriesMetadata
-    : undefined;
-
-  const baseSnapshot = createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId, {
-    comicInfo: legacySeriesMetadata as DownloadTaskState['settingsSnapshot']['comicInfo'],
-  });
-
-  const rawSnapshot = isRecord(rawTask.settingsSnapshot)
-    ? rawTask.settingsSnapshot
-    : isRecord(rawTask.taskSettingsSnapshot)
-      ? rawTask.taskSettingsSnapshot
-      : undefined;
-
-  const settingsSnapshot = rawSnapshot
-    ? {
-        ...baseSnapshot,
-        ...rawSnapshot,
-        rateLimitSettings: {
-          image: {
-            ...baseSnapshot.rateLimitSettings.image,
-            ...(isRecord(rawSnapshot.rateLimitSettings) && isRecord(rawSnapshot.rateLimitSettings.image)
-              ? rawSnapshot.rateLimitSettings.image
-              : {}),
-          },
-          chapter: {
-            ...baseSnapshot.rateLimitSettings.chapter,
-            ...(isRecord(rawSnapshot.rateLimitSettings) && isRecord(rawSnapshot.rateLimitSettings.chapter)
-              ? rawSnapshot.rateLimitSettings.chapter
-              : {}),
-          },
-        },
-        siteSettings: isRecord(rawSnapshot.siteSettings) ? rawSnapshot.siteSettings : baseSnapshot.siteSettings,
-        normalizeImageFilenames: typeof rawSnapshot.normalizeImageFilenames === 'boolean'
-          ? rawSnapshot.normalizeImageFilenames
-          : baseSnapshot.normalizeImageFilenames,
-        imagePaddingDigits:
-          rawSnapshot.imagePaddingDigits === 'auto'
-          || rawSnapshot.imagePaddingDigits === 2
-          || rawSnapshot.imagePaddingDigits === 3
-          || rawSnapshot.imagePaddingDigits === 4
-          || rawSnapshot.imagePaddingDigits === 5
-            ? rawSnapshot.imagePaddingDigits
-            : baseSnapshot.imagePaddingDigits,
-        comicInfo: isRecord(rawSnapshot.comicInfo)
-          ? rawSnapshot.comicInfo as DownloadTaskState['settingsSnapshot']['comicInfo']
-          : baseSnapshot.comicInfo,
-        siteIntegrationId,
-      }
-    : baseSnapshot;
-
-  const chapters: TaskChapter[] = rawTask.chapters
-    .filter(isRecord)
-    .map((chapter) => ({
-      id: typeof chapter.id === 'string' ? chapter.id : typeof chapter.url === 'string' ? chapter.url : crypto.randomUUID(),
-      url: typeof chapter.url === 'string' ? chapter.url : '',
-      title: typeof chapter.title === 'string' ? chapter.title : 'Untitled chapter',
-      locked: chapter.locked === true,
-      index: typeof chapter.index === 'number' ? chapter.index : 0,
-      language: typeof chapter.language === 'string' ? chapter.language : undefined,
-      chapterLabel: typeof chapter.chapterLabel === 'string' ? chapter.chapterLabel : undefined,
-      chapterNumber: typeof chapter.chapterNumber === 'number' ? chapter.chapterNumber : undefined,
-      volumeNumber: typeof chapter.volumeNumber === 'number' ? chapter.volumeNumber : undefined,
-      volumeLabel: typeof chapter.volumeLabel === 'string' ? chapter.volumeLabel : undefined,
-      status:
-        chapter.status === 'queued'
-        || chapter.status === 'downloading'
-        || chapter.status === 'completed'
-        || chapter.status === 'partial_success'
-        || chapter.status === 'failed'
-          ? chapter.status
-          : 'queued',
-      errorMessage: typeof chapter.errorMessage === 'string' ? chapter.errorMessage : undefined,
-      totalImages: typeof chapter.totalImages === 'number' ? chapter.totalImages : undefined,
-      imagesFailed: typeof chapter.imagesFailed === 'number' ? chapter.imagesFailed : undefined,
-      lastUpdated: typeof chapter.lastUpdated === 'number' ? chapter.lastUpdated : Date.now(),
-    }));
-
-  return {
-    id: typeof rawTask.id === 'string' ? rawTask.id : crypto.randomUUID(),
-    siteIntegrationId,
-    mangaId,
-    seriesTitle,
-    seriesCoverUrl: typeof rawTask.seriesCoverUrl === 'string' ? rawTask.seriesCoverUrl : undefined,
-    chapters,
-    status:
-      rawTask.status === 'queued'
-      || rawTask.status === 'downloading'
-      || rawTask.status === 'completed'
-      || rawTask.status === 'partial_success'
-      || rawTask.status === 'failed'
-      || rawTask.status === 'canceled'
-        ? rawTask.status
-        : 'queued',
-    errorMessage: typeof rawTask.errorMessage === 'string' ? rawTask.errorMessage : undefined,
-    errorCategory:
-      rawTask.errorCategory === 'network'
-      || rawTask.errorCategory === 'download'
-      || rawTask.errorCategory === 'other'
-        ? rawTask.errorCategory
-        : undefined,
-    created: typeof rawTask.created === 'number' ? rawTask.created : Date.now(),
-    started: typeof rawTask.started === 'number' ? rawTask.started : undefined,
-    completed: typeof rawTask.completed === 'number' ? rawTask.completed : undefined,
-    isRetried: rawTask.isRetried === true,
-    isRetryTask: rawTask.isRetryTask === true,
-    lastSuccessfulDownloadId: typeof rawTask.lastSuccessfulDownloadId === 'number' ? rawTask.lastSuccessfulDownloadId : undefined,
-    settingsSnapshot,
-  };
-}
 
 // Re-export helpers for convenience
 export { sendStateAction, cancelDownloadTask } from './state-actions';
 export { toQueueTaskSummary } from './queue-task-summary';
-
-const isMangaPageState = (value: unknown): value is MangaPageState => {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.siteIntegrationId === 'string'
-    && typeof value.mangaId === 'string'
-    && typeof value.seriesTitle === 'string'
-    && Array.isArray(value.chapters)
-    && Array.isArray(value.volumes)
-  );
-};
-
-const isGlobalAppState = (value: unknown): value is GlobalAppState => {
-  if (!isRecord(value)) return false;
-  return Array.isArray(value.downloadQueue) && isRecord(value.settings);
-};
-
-function deriveVolumeStates(
-  chapters: Array<Pick<ChapterState, 'volumeNumber' | 'volumeLabel' | 'index'>>,
-): MangaPageState['volumes'] {
-  const volumeMap = new Map<number, { label?: string; firstIndex: number }>();
-
-  for (const chapter of chapters) {
-    if (typeof chapter.volumeNumber !== 'number' || Number.isNaN(chapter.volumeNumber)) {
-      continue;
-    }
-
-    const existing = volumeMap.get(chapter.volumeNumber);
-    const label = typeof chapter.volumeLabel === 'string' && chapter.volumeLabel.trim().length > 0
-      ? chapter.volumeLabel.trim()
-      : `Volume ${chapter.volumeNumber}`;
-
-    if (!existing) {
-      volumeMap.set(chapter.volumeNumber, {
-        label,
-        firstIndex: typeof chapter.index === 'number' ? chapter.index : Number.MAX_SAFE_INTEGER,
-      });
-      continue;
-    }
-
-    if (!existing.label && label) {
-      existing.label = label;
-    }
-
-    if (typeof chapter.index === 'number' && chapter.index < existing.firstIndex) {
-      existing.firstIndex = chapter.index;
-    }
-  }
-
-  return Array.from(volumeMap.entries())
-    .sort(([leftVolumeNumber, left], [rightVolumeNumber, right]) => {
-      if (leftVolumeNumber !== rightVolumeNumber) {
-        return leftVolumeNumber - rightVolumeNumber;
-      }
-
-      return left.firstIndex - right.firstIndex;
-    })
-    .map(([volumeNumber, value]) => ({
-      id: `volume-${volumeNumber}`,
-      title: value.label,
-      label: value.label,
-    }));
-}
-
-function resolveVolumeStates(
-  chapters: Array<Pick<ChapterState, 'volumeNumber' | 'volumeLabel' | 'index'>>,
-  volumes?: MangaPageState['volumes'],
-): MangaPageState['volumes'] {
-  if (Array.isArray(volumes) && volumes.length > 0) {
-    return volumes;
-  }
-
-  return deriveVolumeStates(chapters);
-}
 
 /**
  * State Manager - Service Worker Only
@@ -252,7 +47,12 @@ export class CentralizedStateManager {
 
   private async syncActiveTabContext(tabId: number, context: MangaPageState | null): Promise<void> {
     try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabsQuery = chrome.tabs?.query;
+      if (typeof tabsQuery !== 'function') {
+        return;
+      }
+
+      const [activeTab] = await tabsQuery({ active: true, currentWindow: true });
       if (activeTab?.id !== tabId) {
         return;
       }
@@ -264,7 +64,7 @@ export class CentralizedStateManager {
   }
 
   constructor() {
-    if (typeof chrome.storage === 'undefined') {
+    if (typeof chrome === 'undefined' || typeof chrome.storage === 'undefined') {
       throw new Error('StateManager can only be used in Service Worker context');
     }
   }
@@ -330,14 +130,13 @@ export class CentralizedStateManager {
     if (this.initialized) return;
 
     try {
-      // Set storage access level for content scripts
       await chrome.storage.session.setAccessLevel({
-        accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
+        accessLevel: 'TRUSTED_CONTEXTS'
       });
 
       // Initialize global state if not exists
-      const globalState = await chrome.storage.session.get('global_state') as Record<string, StorageValue>;
-      const existingGlobal = globalState.global_state;
+      const globalState = await chrome.storage.session.get(SESSION_STORAGE_KEYS.globalState) as Record<string, StorageValue>;
+      const existingGlobal = globalState[SESSION_STORAGE_KEYS.globalState];
       if (!isGlobalAppState(existingGlobal)) {
         await this.initializeGlobalState();
       }
@@ -367,7 +166,7 @@ export class CentralizedStateManager {
     };
 
     await Promise.all([
-      chrome.storage.session.set({ global_state: initialState }),
+      chrome.storage.session.set({ [SESSION_STORAGE_KEYS.globalState]: initialState }),
       chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: initialQueue }),
     ]);
     await this.syncQueueProjection(initialState.downloadQueue);
@@ -540,8 +339,8 @@ export class CentralizedStateManager {
    * Get global application state
    */
   async getGlobalState(): Promise<GlobalAppState> {
-    const result = await chrome.storage.session.get('global_state') as Record<string, StorageValue>;
-    const maybeState = result.global_state;
+    const result = await chrome.storage.session.get(SESSION_STORAGE_KEYS.globalState) as Record<string, StorageValue>;
+    const maybeState = result[SESSION_STORAGE_KEYS.globalState];
     return isGlobalAppState(maybeState) ? maybeState : this.getDefaultGlobalState();
   }
 
@@ -557,7 +356,7 @@ export class CentralizedStateManager {
   private async writeGlobalState(state: GlobalAppState): Promise<void> {
     state.lastActivity = Date.now();
     await Promise.all([
-      chrome.storage.session.set({ global_state: state }),
+      chrome.storage.session.set({ [SESSION_STORAGE_KEYS.globalState]: state }),
       chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: state.downloadQueue }),
     ]);
     await this.syncQueueProjection(state.downloadQueue);

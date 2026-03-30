@@ -21,8 +21,8 @@ export function isInternalUrl(url: string | undefined): boolean {
   )
 }
 
-function isExtensionUrl(url: string | undefined): boolean {
-  return !!url && url.startsWith('chrome-extension://')
+export function isExtensionUrl(url: string | undefined): boolean {
+  return typeof url === 'string' && url.startsWith('chrome-extension://')
 }
 
 export function resolveTabUrlForSupportCheck(
@@ -38,39 +38,15 @@ export function resolveTabUrlForSupportCheck(
   return currentUrl ?? pendingUrl ?? ''
 }
 
-function getMostRecentlyAccessedNonInternalTab(tabs: chrome.tabs.Tab[]): chrome.tabs.Tab | null {
-  const candidates = tabs.filter((tab) => !isInternalUrl(tab.url))
-  if (!candidates.length) return null
+export function resolveTrackedTabId(
+  previousTrackedTabId: number | undefined,
+  activeTab: Pick<chrome.tabs.Tab, 'id' | 'url' | 'pendingUrl'> | undefined,
+): number | undefined {
+  const activeUrl = resolveTabUrlForSupportCheck(activeTab)
 
-  return candidates.reduce((latest, tab) => {
-    const latestAccessed = latest.lastAccessed ?? 0
-    const tabAccessed = tab.lastAccessed ?? 0
-    return tabAccessed > latestAccessed ? tab : latest
-  })
-}
-
-export async function queryActiveTabInLastFocusedNormalWindow(): Promise<chrome.tabs.Tab | null> {
-  try {
-    const [active] = await chrome.tabs.query({ currentWindow: true, active: true })
-    if (active && !isExtensionUrl(active.url)) return active
-
-    const [lastFocusedActive] = await chrome.tabs.query({ lastFocusedWindow: true, active: true })
-    if (lastFocusedActive && !isExtensionUrl(lastFocusedActive.url)) return lastFocusedActive
-
-    const tabs = await chrome.tabs.query({ currentWindow: true })
-    const recentNonInternal = getMostRecentlyAccessedNonInternalTab(tabs)
-    if (recentNonInternal) return recentNonInternal
-
-    const lastFocusedTabs = await chrome.tabs.query({ lastFocusedWindow: true })
-    const lastFocusedNonInternal = getMostRecentlyAccessedNonInternalTab(lastFocusedTabs)
-    if (lastFocusedNonInternal) return lastFocusedNonInternal
-
-    const allTabs = await chrome.tabs.query({})
-    const globalNonInternal = getMostRecentlyAccessedNonInternalTab(allTabs)
-    if (globalNonInternal) return globalNonInternal
-
-    return active || lastFocusedActive || null
-  } catch {
-    return null
+  if (isExtensionUrl(activeUrl)) {
+    return previousTrackedTabId
   }
+
+  return typeof activeTab?.id === 'number' ? activeTab.id : undefined
 }

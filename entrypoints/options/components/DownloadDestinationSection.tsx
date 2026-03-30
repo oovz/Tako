@@ -28,7 +28,7 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
               {selectedFolderName ? `Current folder: ${selectedFolderName}` : 'No custom folder selected. Uses default browser downloads.'}
             </p>
             <p className="text-xs text-muted-foreground">
-              In MVP, custom folder mode always overwrites existing files with the same name.
+              Custom folder mode always overwrites existing files with the same name.
             </p>
           </div>
           <Switch
@@ -67,7 +67,7 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
 
         {downloads.downloadMode === 'custom' && (
           <p className="rounded-md border border-amber-500/40 bg-amber-50/40 p-2 text-xs text-amber-900">
-            Custom folder mode ignores the overwrite setting in MVP and always replaces same-name files in the selected folder.
+            Custom folder mode ignores the overwrite setting and always replaces same-name files in the selected folder.
           </p>
         )}
       </CardContent>

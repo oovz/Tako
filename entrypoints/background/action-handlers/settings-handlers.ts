@@ -26,10 +26,9 @@ import type {
  */
 export async function handleUpdateSettings(
   stateManager: CentralizedStateManager,
-  payload: unknown
+  payload: UpdateSettingsPayload
 ): Promise<{ success: boolean }> {
-  const typedPayload = payload as UpdateSettingsPayload;
-  const { settings: partialSettings } = typedPayload;
+  const { settings: partialSettings } = payload;
   const currentState = await stateManager.getGlobalState();
   const mergedSettings = { ...currentState.settings, ...partialSettings };
   await stateManager.updateGlobalState({ settings: mergedSettings });
@@ -50,11 +49,10 @@ export async function handleUpdateSettings(
  */
 export async function handleClearDownloadHistory(
   _stateManager: CentralizedStateManager,
-  payload: unknown
+  payload?: ClearDownloadHistoryPayload
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const typedPayload = payload as ClearDownloadHistoryPayload | undefined;
-    const { seriesId } = typedPayload || {};
+    const { seriesId } = payload || {};
     
     // Clear history (all or specific series)
     if (seriesId) {

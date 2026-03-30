@@ -11,6 +11,8 @@
  *   } }
  */
 
+import { z } from 'zod';
+
 export type SiteOverrideRecord = {
   // Format override
   outputFormat?: 'cbz' | 'zip' | 'none';
@@ -27,51 +29,38 @@ export type SiteOverridesMap = Record<string, SiteOverrideRecord>;
 
 export const SITE_OVERRIDES_STORAGE_KEY = 'siteOverrides';
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const RatePolicySchema = z.object({
+  concurrency: z.number().optional(),
+  delayMs: z.number().optional(),
+});
 
-const isRatePolicy = (value: unknown): value is { concurrency?: number; delayMs?: number } => {
-  if (value === undefined) return true;
-  if (!isRecord(value)) return false;
-  if (value.concurrency !== undefined && typeof value.concurrency !== 'number') return false;
-  if (value.delayMs !== undefined && typeof value.delayMs !== 'number') return false;
-  return true;
-};
+const RetryOverridesSchema = z.object({
+  image: z.number().optional(),
+  chapter: z.number().optional(),
+});
 
-const isRetryOverrides = (value: unknown): value is { image?: number; chapter?: number } => {
-  if (value === undefined) return true;
-  if (!isRecord(value)) return false;
-  if (value.image !== undefined && typeof value.image !== 'number') return false;
-  if (value.chapter !== undefined && typeof value.chapter !== 'number') return false;
-  return true;
-};
+const SiteOverrideRecordSchema = z.object({
+  outputFormat: z.enum(['cbz', 'zip', 'none']).optional(),
+  pathTemplate: z.string().optional(),
+  imagePolicy: RatePolicySchema.optional(),
+  chapterPolicy: RatePolicySchema.optional(),
+  retries: RetryOverridesSchema.optional(),
+});
 
-const isSiteOverrideRecord = (value: unknown): value is SiteOverrideRecord => {
-  if (!isRecord(value)) return false;
-  if (
-    value.outputFormat !== undefined
-    && value.outputFormat !== 'cbz'
-    && value.outputFormat !== 'zip'
-    && value.outputFormat !== 'none'
-  ) {
-    return false;
-  }
-  if (value.pathTemplate !== undefined && typeof value.pathTemplate !== 'string') return false;
-  if (!isRatePolicy(value.imagePolicy)) return false;
-  if (!isRatePolicy(value.chapterPolicy)) return false;
-  if (!isRetryOverrides(value.retries)) return false;
-  return true;
-};
-
-export const normalizeSiteOverridesMap = (raw: unknown): SiteOverridesMap => {
-  if (!isRecord(raw)) return {};
+const SiteOverridesMapSchema = z.record(z.string(), z.unknown()).transform((entries) => {
   const map: SiteOverridesMap = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (isSiteOverrideRecord(value)) {
-      map[key] = value;
+  for (const [key, value] of Object.entries(entries)) {
+    const parsed = SiteOverrideRecordSchema.safeParse(value);
+    if (parsed.success) {
+      map[key] = parsed.data;
     }
   }
   return map;
+});
+
+export const normalizeSiteOverridesMap = (raw: unknown): SiteOverridesMap => {
+  const parsed = SiteOverridesMapSchema.safeParse(raw);
+  return parsed.success ? parsed.data : {};
 };
 
 export const siteOverridesService = {

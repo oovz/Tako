@@ -1,11 +1,13 @@
 /**
- * State Manager Module - Background Service Worker Only
+ * State Action Router - Background Service Worker Only
  * 
- * Handles all state management operations for the Chrome extension.
+ * Routes state action messages to the authoritative service worker handlers.
  * CRITICAL: This should ONLY be used in the Service Worker.
  */
 
 import logger from '@/src/runtime/logger';
+import { markExternalTabInitialization } from '@/src/runtime/external-tab-init';
+import { parseStateActionPayload } from '@/src/runtime/state-action-schemas';
 import { CentralizedStateManager } from '@/src/runtime/centralized-state';
 import { matchUrl } from '@/src/site-integrations/url-matcher';
 import type { StateActionMessage } from '@/src/types/state-action-message';
@@ -26,20 +28,22 @@ import {
   handleClearDownloadHistory
 } from './action-handlers/settings-handlers';
 
+let stateManagerPromise: Promise<CentralizedStateManager> | null = null;
+
 /**
  * Initialize and return the centralized state manager
  * 
- * @internal This function should ONLY be called from the Service Worker (background.ts).
+ * @internal This function should ONLY be called from the Service Worker entrypoint (`entrypoints/background/index.ts`).
  * 
  * **CRITICAL USAGE CONSTRAINTS**:
- * - ✅ CORRECT: Call from `background.ts` to create singleton instance
+ * - ✅ CORRECT: Call from `entrypoints/background/index.ts` to create singleton instance
  * - ❌ WRONG: Import and call from content scripts, popup, or options page
  * - ❌ WRONG: Create multiple instances of CentralizedStateManager
  * 
  * **Proper Patterns**:
  * ```typescript
- * // ✅ Service Worker (background.ts):
- * import { createStateManager } from '@/entrypoints/background/state-manager';
+ * // ✅ Service Worker (entrypoints/background/index.ts):
+ * import { createStateManager } from '@/entrypoints/background/state-action-router';
  * const stateManager = await createStateManager(); // Single instance
  * 
  * // ✅ Content Script / Popup (mutations):
@@ -57,9 +61,18 @@ import {
  * @returns Promise resolving to initialized state manager singleton
  */
 export async function createStateManager(): Promise<CentralizedStateManager> {
-  const stateManager = new CentralizedStateManager();
-  await stateManager.initialize();
-  return stateManager;
+  if (!stateManagerPromise) {
+    stateManagerPromise = (async () => {
+      const stateManager = new CentralizedStateManager();
+      await stateManager.initialize();
+      return stateManager;
+    })().catch((error) => {
+      stateManagerPromise = null;
+      throw error;
+    });
+  }
+
+  return await stateManagerPromise;
 }
 
 /**
@@ -107,10 +120,23 @@ export async function processStateAction(
     payload 
   });
 
+  if (!(action in StateAction)) {
+    logger.warn(`Unknown state action: ${String(action)}`);
+    return { success: false, error: 'Unknown action' };
+  }
+
+  let parsedPayload: unknown
+  try {
+    parsedPayload = parseStateActionPayload(action, payload)
+  } catch (error) {
+    logger.warn(`Invalid payload for state action ${String(action)}`, error)
+    return { success: false, error: `Invalid payload for ${StateAction[action] ?? `action ${String(action)}`}` }
+  }
+
   const isReadyInitializePayload = action === StateAction.INITIALIZE_TAB
-    && !!payload
-    && typeof payload === 'object'
-    && (payload as { context?: unknown }).context === 'ready'
+    && !!parsedPayload
+    && typeof parsedPayload === 'object'
+    && (parsedPayload as { context?: unknown }).context === 'ready'
   
   try {
     switch (action) {
@@ -134,10 +160,10 @@ export async function processStateAction(
             }
           }
 
-          const result = await handleInitializeTab(stateManager, payload, tabId);
+          const result = await handleInitializeTab(stateManager, parsedPayload as Parameters<typeof handleInitializeTab>[1], tabId);
           if (result.success && typeof providedTabId === 'number' && typeof senderTabId === 'number' && senderTabId !== tabId) {
             try {
-              await chrome.storage.session.set({ [`tabInitLock_${tabId}`]: Date.now() });
+              await markExternalTabInitialization(tabId);
             } catch {
               void 0;
             }
@@ -150,19 +176,19 @@ export async function processStateAction(
         return await handleClearTabState(stateManager, tabId);
       
       case StateAction.UPDATE_DOWNLOAD_TASK:
-        return await handleUpdateDownloadTask(stateManager, payload);
+        return await handleUpdateDownloadTask(stateManager, parsedPayload as Parameters<typeof handleUpdateDownloadTask>[1]);
       
       case StateAction.REMOVE_DOWNLOAD_TASK:
-        return await handleRemoveDownloadTask(stateManager, payload);
+        return await handleRemoveDownloadTask(stateManager, parsedPayload as Parameters<typeof handleRemoveDownloadTask>[1]);
       
       case StateAction.CANCEL_DOWNLOAD_TASK:
-        return await handleCancelDownloadTask(stateManager, payload);
+        return await handleCancelDownloadTask(stateManager, parsedPayload as Parameters<typeof handleCancelDownloadTask>[1]);
       
       case StateAction.UPDATE_SETTINGS:
-        return await handleUpdateSettings(stateManager, payload);
+        return await handleUpdateSettings(stateManager, parsedPayload as Parameters<typeof handleUpdateSettings>[1]);
       
       case StateAction.CLEAR_DOWNLOAD_HISTORY:
-        return await handleClearDownloadHistory(stateManager, payload);
+        return await handleClearDownloadHistory(stateManager, parsedPayload as Parameters<typeof handleClearDownloadHistory>[1]);
       
       default:
         logger.warn(`Unknown state action: ${String(action)}`);

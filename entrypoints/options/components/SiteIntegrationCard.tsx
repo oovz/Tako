@@ -6,8 +6,8 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronRight, RotateCcw } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -95,31 +95,37 @@ export function SiteIntegrationCard({
   return (
     <Card
       data-testid={`site-integration-card-${siteIntegration.id}`}
-      className={!isEnabled ? "overflow-hidden border-muted-foreground/20 bg-muted/20" : hasOverrides ? "overflow-hidden border-yellow-500/30 bg-yellow-500/5" : "overflow-hidden"}
+      className={
+        !isEnabled
+          ? "overflow-hidden border-border/70 bg-muted/15 transition-colors duration-150"
+          : hasOverrides
+            ? "overflow-hidden border-yellow-500/35 bg-yellow-500/5 transition-colors duration-150"
+            : "overflow-hidden border-border/70 transition-colors duration-150 hover:border-border"
+      }
     >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CardHeader className="py-4">
+        <CardHeader className="gap-0 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-3">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <CardTitle className="text-base font-semibold">{siteIntegration.name}</CardTitle>
                 {!isEnabled && (
-                  <Badge variant="secondary" className="text-[10px] h-5 text-muted-foreground">
+                  <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
                     Disabled
                   </Badge>
                 )}
                 {hasOverrides && (
-                  <Badge variant="outline" className="border-yellow-500/50 text-yellow-600 bg-yellow-500/10 text-[10px] uppercase tracking-wider font-semibold h-5">
-                    Override Active
+                  <Badge variant="outline" className="h-5 border-yellow-500/50 bg-yellow-500/10 px-2 text-[10px] font-medium text-yellow-700">
+                    Override
                   </Badge>
                 )}
                 {siteIntegration.version && (
-                  <Badge variant="secondary" className="text-[10px] h-5 text-muted-foreground">
+                  <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
                     v{siteIntegration.version}
                   </Badge>
                 )}
               </div>
-              <CardDescription className="break-all text-xs font-mono text-muted-foreground/80">
+              <CardDescription className="text-xs text-muted-foreground">
                 {siteIntegration.domains.join(', ')}
               </CardDescription>
             </div>
@@ -138,30 +144,25 @@ export function SiteIntegrationCard({
                   data-testid={`configure-site-integration-${siteIntegration.id}`}
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 gap-1.5 px-2 text-xs font-medium"
                 >
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span className="sr-only">Toggle settings</span>
+                  {isExpanded ? 'Hide' : 'Configure'}
                 </Button>
               </CollapsibleTrigger>
             </div>
           </div>
         </CardHeader>
 
-        <CollapsibleContent>
-          <CardContent className="space-y-6 pt-0">
+        <CollapsibleContent className="border-t border-border/60">
+          <CardContent className="space-y-6 px-5 py-5">
             {/* Download Settings */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium">Download Settings</h4>
+              <h4 className="text-sm font-semibold">Download Settings</h4>
               <div className="space-y-2">
                 <Label htmlFor={`${siteIntegration.id}-format`}>
                   Archive Format
                   {override?.outputFormat !== undefined && (
-                    <Badge variant="outline" className="ml-2 text-xs">Overridden</Badge>
+                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">Override</Badge>
                   )}
                 </Label>
                 <Select
@@ -172,7 +173,7 @@ export function SiteIntegrationCard({
                     })
                   }}
                 >
-                  <SelectTrigger id={`${siteIntegration.id}-format`}>
+                  <SelectTrigger id={`${siteIntegration.id}-format`} className="font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -187,7 +188,7 @@ export function SiteIntegrationCard({
                 <Label htmlFor={`${siteIntegration.id}-path`}>
                   Download Path Template
                   {override?.pathTemplate !== undefined && (
-                    <Badge variant="outline" className="ml-2 text-xs">Overridden</Badge>
+                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">Override</Badge>
                   )}
                 </Label>
                 <Input
@@ -196,7 +197,7 @@ export function SiteIntegrationCard({
                   onChange={(e) => updateOverride({ pathTemplate: e.target.value || undefined })}
                   placeholder="Leave empty to use global path"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] font-medium text-muted-foreground">
                   Use macros like &lt;SERIES_TITLE&gt;, &lt;CHAPTER_NUMBER&gt;
                 </p>
               </div>
@@ -204,7 +205,7 @@ export function SiteIntegrationCard({
 
             {/* Rate Limiting - Image */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium">Rate Limiting - Images</h4>
+              <h4 className="text-sm font-semibold">Rate Limiting - Images</h4>
               <RateLimitingForm
                 scope="image"
                 value={override?.imagePolicy || {}}
@@ -219,7 +220,7 @@ export function SiteIntegrationCard({
 
             {/* Rate Limiting - Chapter */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium">Rate Limiting - Chapters</h4>
+              <h4 className="text-sm font-semibold">Rate Limiting - Chapters</h4>
               <RateLimitingForm
                 scope="chapter"
                 value={override?.chapterPolicy || {}}
@@ -234,7 +235,7 @@ export function SiteIntegrationCard({
 
             {/* Retry Settings */}
             <div className="space-y-3">
-              <h4 className="text-sm font-medium">Retry Settings</h4>
+              <h4 className="text-sm font-semibold">Retry Settings</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor={`${siteIntegration.id}-image-retries`}>Image Retries</Label>
@@ -275,7 +276,7 @@ export function SiteIntegrationCard({
 
             {customSettings.length > 0 && (
               <div className="space-y-3">
-                <h4 className="text-sm font-medium">Custom settings</h4>
+                <h4 className="text-sm font-semibold">Custom settings</h4>
                 <div className="space-y-3">
                   {customSettings.map((schema) => {
                     const enabled = isCustomSettingEnabled(schema)
@@ -290,16 +291,21 @@ export function SiteIntegrationCard({
                       : []
 
                     return (
-                      <div key={`${siteIntegration.id}-${schema.id}`} className="space-y-2 rounded-md border p-3">
+                      <div
+                        key={`${siteIntegration.id}-${schema.id}`}
+                        className="space-y-3 rounded-md border border-border/70 p-4"
+                      >
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-1">
-                            <Label htmlFor={`${siteIntegration.id}-custom-${schema.id}`}>{schema.label}</Label>
+                            <Label htmlFor={`${siteIntegration.id}-custom-${schema.id}`} className="font-medium">
+                              {schema.label}
+                            </Label>
                             {schema.description && (
-                              <p className="text-xs text-muted-foreground">{schema.description}</p>
+                              <p className="text-[11px] text-muted-foreground">{schema.description}</p>
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground">Enable override</Label>
+                            <Label className="text-[11px] text-muted-foreground">Enable override</Label>
                             <Switch
                               checked={enabled}
                               onCheckedChange={(checked) => {
@@ -314,6 +320,7 @@ export function SiteIntegrationCard({
                             id={`${siteIntegration.id}-custom-${schema.id}`}
                             checked={Boolean(effectiveValue)}
                             disabled={!enabled}
+                            className="data-[state=unchecked]:bg-muted-foreground/25"
                             onCheckedChange={(checked) => updateCustomSetting(schema, enabled, checked)}
                           />
                         )}
@@ -323,6 +330,7 @@ export function SiteIntegrationCard({
                             id={`${siteIntegration.id}-custom-${schema.id}`}
                             value={textValue}
                             disabled={!enabled}
+                            className="font-medium"
                             onChange={(e) => updateCustomSetting(schema, enabled, e.target.value)}
                           />
                         )}
@@ -333,6 +341,7 @@ export function SiteIntegrationCard({
                             type="number"
                             value={numberValue}
                             disabled={!enabled}
+                            className="font-medium"
                             onChange={(e) => updateCustomSetting(schema, enabled, Number(e.target.value))}
                           />
                         )}
@@ -343,7 +352,7 @@ export function SiteIntegrationCard({
                             disabled={!enabled}
                             onValueChange={(nextValue) => updateCustomSetting(schema, enabled, nextValue)}
                           >
-                            <SelectTrigger id={`${siteIntegration.id}-custom-${schema.id}`}>
+                            <SelectTrigger id={`${siteIntegration.id}-custom-${schema.id}`} className="font-medium">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -356,12 +365,38 @@ export function SiteIntegrationCard({
                           </Select>
                         )}
 
-                        {schema.type === 'multiselect' && (
+                        {schema.type === 'multiselect' && schema.options && schema.options.length > 0 && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {schema.options.map((option) => {
+                              const isChecked = multiselectValues.includes(option.value)
+                              return (
+                                <label
+                                  key={`${schema.id}-ms-${option.value}`}
+                                  className={`flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm ${enabled ? 'cursor-pointer hover:bg-muted/40' : 'cursor-not-allowed bg-muted/20 text-muted-foreground/70'}`}
+                                >
+                                  <Checkbox
+                                    checked={isChecked}
+                                    disabled={!enabled}
+                                    onCheckedChange={() => {
+                                      const nextValues = isChecked
+                                        ? multiselectValues.filter((v) => v !== option.value)
+                                        : [...multiselectValues, option.value]
+                                      updateCustomSetting(schema, enabled, nextValues)
+                                    }}
+                                  />
+                                  <span className="truncate">{option.label}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {schema.type === 'multiselect' && (!schema.options || schema.options.length === 0) && (
                           <Input
                             id={`${siteIntegration.id}-custom-${schema.id}`}
                             value={multiselectValues.join(', ')}
                             disabled={!enabled}
                             placeholder="Comma-separated values"
+                            className="font-medium"
                             onChange={(e) => {
                               const nextValues = e.target.value
                                 .split(',')
@@ -380,7 +415,7 @@ export function SiteIntegrationCard({
 
             {/* Reset Button */}
             {hasOverrides && (
-              <div className="pt-2 border-t">
+              <div className="border-t border-border/70 pt-2">
                 <Button
                   data-testid={`reset-site-integration-overrides-${siteIntegration.id}`}
                   variant="outline"
@@ -388,7 +423,6 @@ export function SiteIntegrationCard({
                   onClick={handleReset}
                   className="w-full"
                 >
-                  <RotateCcw className="mr-2 h-4 w-4" />
                   Reset to Global Defaults
                 </Button>
               </div>
