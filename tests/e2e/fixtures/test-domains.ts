@@ -10,6 +10,11 @@ export const MANGADEX_BASE_URL = `https://${MANGADEX_TEST_DOMAIN}`;
 export const MANGADEX_DEFAULT_SERIES_PATH = '/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter';
 export const MANGADEX_TEST_SERIES_URL = new URL(MANGADEX_DEFAULT_SERIES_PATH, MANGADEX_BASE_URL).toString();
 export const MANGADEX_GENERIC_SERIES_URL = new URL(MANGADEX_DEFAULT_SERIES_PATH, MANGADEX_BASE_URL).toString();
+export const MANGADEX_ORDER_TEST_SERIES_ID = '11111111-1111-4111-8111-111111111111';
+export const MANGADEX_VIEW_TOGGLE_SERIES_ID = '22222222-2222-4222-8222-222222222222';
+export const MANGADEX_STRESS_TOGGLE_SERIES_ID = '33333333-3333-4333-8333-333333333333';
+export const MANGADEX_GROUPED_COLLAPSE_SERIES_ID = '44444444-4444-4444-8444-444444444444';
+export const MANGADEX_LOCKED_SELECTION_SERIES_ID = '55555555-5555-4555-8555-555555555555';
 export const LIVE_MANGADEX_REFERENCE_URL = process.env.TMD_LIVE_MANGADEX_URL
   ?? 'https://mangadex.org/title/b28525ae-ef8a-47aa-a120-5917a351be2d/kemutai-hanashi';
 
@@ -29,6 +34,78 @@ export const LIVE_SHONENJUMPPLUS_REFERENCE_URL = process.env.TMD_LIVE_SHONENJUMP
 
 const MANGADEX_API_BASE = process.env.TMD_TEST_MANGADEX_API_BASE ?? 'https://api.mangadex.org';
 export const MANGADEX_API_DOMAIN = new URL(MANGADEX_API_BASE).hostname;
+
+type CustomMangadexFixtureChapter = {
+  id: string;
+  url: string;
+  title: string;
+  chapterNumber?: number;
+  volumeNumber?: number;
+  locked?: boolean;
+};
+
+type CustomMangadexSeriesFixture = {
+  seriesTitle: string;
+  chapters: CustomMangadexFixtureChapter[];
+};
+
+const CUSTOM_MANGADEX_SERIES_FIXTURES: Record<string, CustomMangadexSeriesFixture> = {
+  [MANGADEX_ORDER_TEST_SERIES_ID]: {
+    seriesTitle: 'Ordering Test Series',
+    chapters: [
+      { id: 'standalone-1', url: buildExampleUrl('/standalone-1'), title: 'Standalone chapter 1' },
+      { id: 'v2-c3', url: buildExampleUrl('/v2-c3'), title: 'Volume 2 Chapter 3', chapterNumber: 3, volumeNumber: 2 },
+      { id: 'standalone-2', url: buildExampleUrl('/standalone-2'), title: 'Standalone chapter 2' },
+      { id: 'v2-c4', url: buildExampleUrl('/v2-c4'), title: 'Volume 2 Chapter 4', chapterNumber: 4, volumeNumber: 2 },
+      { id: 'v2-c5', url: buildExampleUrl('/v2-c5'), title: 'Volume 2 Chapter 5', chapterNumber: 5, volumeNumber: 2 },
+      { id: 'standalone-3', url: buildExampleUrl('/standalone-3'), title: 'Standalone chapter 3' },
+      { id: 'v2-c6', url: buildExampleUrl('/v2-c6'), title: 'Volume 2 Chapter 6', chapterNumber: 6, volumeNumber: 2 },
+    ],
+  },
+  [MANGADEX_VIEW_TOGGLE_SERIES_ID]: {
+    seriesTitle: 'View Toggle Series',
+    chapters: Array.from({ length: 32 }, (_, index) => {
+      const chapterNumber = index + 1;
+      const volumeNumber = chapterNumber <= 16 ? 1 : 2;
+      return {
+        id: `toggle-${chapterNumber}`,
+        url: buildExampleUrl(`/toggle-${chapterNumber}`),
+        title: `Volume ${volumeNumber} Chapter ${chapterNumber}`,
+        chapterNumber,
+        volumeNumber,
+      };
+    }),
+  },
+  [MANGADEX_STRESS_TOGGLE_SERIES_ID]: {
+    seriesTitle: 'Stress Toggle Series',
+    chapters: Array.from({ length: 36 }, (_, index) => {
+      const chapterNumber = index + 1;
+      const volumeNumber = chapterNumber <= 18 ? 1 : 2;
+      return {
+        id: `stress-${chapterNumber}`,
+        url: buildExampleUrl(`/stress-${chapterNumber}`),
+        title: `Volume ${volumeNumber} Chapter ${chapterNumber}`,
+        chapterNumber,
+        volumeNumber,
+      };
+    }),
+  },
+  [MANGADEX_GROUPED_COLLAPSE_SERIES_ID]: {
+    seriesTitle: 'Grouped Collapse Series',
+    chapters: [
+      { id: 'v1-c1', url: buildExampleUrl('/collapse-v1-c1'), title: 'Volume 1 Chapter 1', chapterNumber: 1, volumeNumber: 1 },
+      { id: 'v1-c2', url: buildExampleUrl('/collapse-v1-c2'), title: 'Volume 1 Chapter 2', chapterNumber: 2, volumeNumber: 1 },
+      { id: 'v2-c3', url: buildExampleUrl('/collapse-v2-c3'), title: 'Volume 2 Chapter 3', chapterNumber: 3, volumeNumber: 2 },
+    ],
+  },
+  [MANGADEX_LOCKED_SELECTION_SERIES_ID]: {
+    seriesTitle: 'Locked Selection Series',
+    chapters: [
+      { id: 'locked-chapter-1', url: buildExampleUrl('/locked-chapter-1'), title: 'Locked Chapter 1', locked: true },
+      { id: 'open-chapter-1', url: buildExampleUrl('/open-chapter-1'), title: 'Open Chapter 1' },
+    ],
+  },
+};
 
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;
@@ -78,9 +155,12 @@ export async function registerTestRoutes(
 
     const mangaId = parts[1];
     const isFeed = parts.length >= 3 && parts[2] === 'feed';
+    const customSeriesFixture = CUSTOM_MANGADEX_SERIES_FIXTURES[mangaId as keyof typeof CUSTOM_MANGADEX_SERIES_FIXTURES];
 
     if (isFeed) {
-      const dataset = mangaId === Mangadex.BASIC_SERIES.series.seriesId
+      const dataset = customSeriesFixture
+        ? customSeriesFixture.chapters
+        : mangaId === Mangadex.BASIC_SERIES.series.seriesId
         ? Mangadex.BASIC_CHAPTERS.chapters
         : mangaId === Mangadex.MINIMAL_SERIES.series.seriesId
           ? Mangadex.SMALL_SERIES.chapters
@@ -94,7 +174,8 @@ export async function registerTestRoutes(
           chapter: ch.chapterNumber !== undefined ? String(ch.chapterNumber) : null,
           title: ch.title,
           translatedLanguage: 'en',
-          pages: 1,
+          pages: ch.locked === true ? 0 : 1,
+          externalUrl: ch.locked === true ? ch.url : undefined,
         },
       }));
 
@@ -107,7 +188,15 @@ export async function registerTestRoutes(
       });
     }
 
-    const meta = mangaId === Mangadex.BASIC_SERIES.series.seriesId
+    const meta = customSeriesFixture
+      ? {
+          siteId: 'mangadex',
+          seriesId: mangaId,
+          seriesTitle: customSeriesFixture.seriesTitle,
+          author: 'Test Author',
+          coverUrl: `https://uploads.mangadex.org/covers/${mangaId}/cover.jpg`,
+        }
+      : mangaId === Mangadex.BASIC_SERIES.series.seriesId
       ? Mangadex.BASIC_SERIES.series
       : mangaId === Mangadex.MINIMAL_SERIES.series.seriesId
         ? Mangadex.MINIMAL_SERIES.series

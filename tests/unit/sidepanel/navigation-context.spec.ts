@@ -16,6 +16,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { isInternalUrl } from '@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers'
+import { groupChapters } from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
 
 // Mock chrome APIs
 const mockStorageData: Record<string, unknown> = {}
@@ -129,9 +131,7 @@ describe('Navigation Context', () => {
   })
 
   describe('isInternalUrl', () => {
-    it('correctly identifies internal chrome URLs', async () => {
-      const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
+    it('correctly identifies internal chrome URLs', () => {
       expect(isInternalUrl('chrome://newtab')).toBe(true)
       expect(isInternalUrl('chrome://settings')).toBe(true)
       expect(isInternalUrl('chrome-extension://fake-id/popup.html')).toBe(true)
@@ -140,25 +140,21 @@ describe('Navigation Context', () => {
       expect(isInternalUrl('devtools://devtools/inspector.html')).toBe(true)
     })
 
-    it('correctly identifies external HTTP URLs as non-internal', async () => {
-      const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
+    it('correctly identifies external HTTP URLs as non-internal', () => {
       expect(isInternalUrl('https://mangadex.org/')).toBe(false)
       expect(isInternalUrl('https://mangadex.org/title/abc123/manga-name')).toBe(false)
       expect(isInternalUrl('https://google.com/')).toBe(false)
       expect(isInternalUrl('http://localhost:3000')).toBe(false)
     })
 
-    it('treats empty/undefined URLs as internal', async () => {
-      const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
+    it('treats empty/undefined URLs as internal', () => {
       expect(isInternalUrl(undefined)).toBe(true)
       expect(isInternalUrl('')).toBe(true)
     })
   })
 
   describe('Tab switch navigation state reset', () => {
-    it('should reset lastNavigationUrl when switching tabs', async () => {
+    it('should reset lastNavigationUrl when switching tabs', () => {
       /**
        * Scenario:
        * 1. Tab 1 is on URL A (supported manga page)
@@ -167,12 +163,10 @@ describe('Navigation Context', () => {
        * 
        * Root cause: Module-level lastNavigationUrl was not reset on tab switch
        */
-      
-      const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-      
+
       // Verify the helper is working
       expect(isInternalUrl('https://mangadex.org/title/abc123/test')).toBe(false)
-      
+
       // The actual test would require rendering the hook, which needs React Testing Library
       // For now, we test the underlying logic
     })
@@ -331,16 +325,12 @@ describe('groupChapters', () => {
     vi.resetModules()
   })
 
-  it('handles empty chapter list', async () => {
-    const { groupChapters } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-    
+  it('handles empty chapter list', () => {
     const result = groupChapters([])
     expect(result).toEqual([])
   })
 
-  it('creates volume groups for chapters with volumeNumber', async () => {
-    const { groupChapters } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-    
+  it('creates volume groups for chapters with volumeNumber', () => {
     const chapters = [
       { id: 'ch1', url: 'ch1', title: 'Ch 1', index: 0, chapterNumber: 1, volumeNumber: 1, status: 'queued' as const, lastUpdated: Date.now() },
       { id: 'ch2', url: 'ch2', title: 'Ch 2', index: 1, chapterNumber: 2, volumeNumber: 1, status: 'queued' as const, lastUpdated: Date.now() },
@@ -353,20 +343,18 @@ describe('groupChapters', () => {
     expect(result.length).toBe(2)
   })
 
-  it('preserves collapsed state from previous items', async () => {
-    const { groupChapters } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-    
+  it('preserves collapsed state from previous items', () => {
     const chapters = [
       { id: 'ch1', url: 'ch1', title: 'Ch 1', index: 0, chapterNumber: 1, volumeNumber: 1, status: 'queued' as const, lastUpdated: Date.now() },
     ]
-    
+
     // First call - default collapsed: true
     const firstResult = groupChapters(chapters)
     expect((firstResult[0] as { collapsed: boolean }).collapsed).toBe(true)
-    
+
     // Simulate user expanding
     const expanded = [{ ...(firstResult[0] as object), collapsed: false }] as unknown as import('@/entrypoints/sidepanel/types').VolumeOrChapter[]
-    
+
     // Second call with previous state
     const secondResult = groupChapters(chapters, expanded)
     expect((secondResult[0] as { collapsed: boolean }).collapsed).toBe(false)

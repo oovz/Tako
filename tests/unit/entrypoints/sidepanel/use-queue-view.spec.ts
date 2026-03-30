@@ -51,4 +51,48 @@ describe('useQueueView normalizeQueueView', () => {
       makeQueueTask('task-2', 'failed', 'Series B'),
     ])
   })
+
+  it('strips malformed optional summary fields while preserving valid ones', () => {
+    const normalized = normalizeQueueView([
+      {
+        ...makeQueueTask('task-1', 'completed', 'Series A'),
+        coverUrl: 123,
+        failureReason: ['bad'],
+        failureCategory: 'bogus',
+        isRetried: 'yes',
+        isRetryTask: true,
+        lastSuccessfulDownloadId: 'nope',
+      },
+      {
+        ...makeQueueTask('task-2', 'partial_success', 'Series B'),
+        coverUrl: 'https://example.com/cover.jpg',
+        failureReason: 'Network issue',
+        failureCategory: 'network',
+        isRetried: false,
+        isRetryTask: true,
+        lastSuccessfulDownloadId: 42,
+      },
+    ])
+
+    expect(normalized).toEqual([
+      {
+        ...makeQueueTask('task-1', 'completed', 'Series A'),
+        coverUrl: undefined,
+        failureReason: undefined,
+        failureCategory: undefined,
+        isRetried: undefined,
+        isRetryTask: true,
+        lastSuccessfulDownloadId: undefined,
+      },
+      {
+        ...makeQueueTask('task-2', 'partial_success', 'Series B'),
+        coverUrl: 'https://example.com/cover.jpg',
+        failureReason: 'Network issue',
+        failureCategory: 'network',
+        isRetried: false,
+        isRetryTask: true,
+        lastSuccessfulDownloadId: 42,
+      },
+    ])
+  })
 })

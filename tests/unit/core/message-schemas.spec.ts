@@ -5,8 +5,50 @@ import {
   OffscreenMessageSchema,
   RuntimeMessageSchema,
 } from '@/src/runtime/message-schemas'
+import { StateAction } from '@/src/types/state-actions'
 
 describe('message-schemas', () => {
+  it('accepts GET_TAB_ID and GET_SETTINGS runtime command messages', () => {
+    expect(ActionMessageSchema.parse({ type: 'GET_TAB_ID' }).type).toBe('GET_TAB_ID')
+    expect(ActionMessageSchema.parse({ type: 'GET_SETTINGS' }).type).toBe('GET_SETTINGS')
+  })
+
+  it('accepts SYNC_SETTINGS_TO_STATE with a settings payload', () => {
+    const parsed = ActionMessageSchema.parse({
+      type: 'SYNC_SETTINGS_TO_STATE',
+      payload: {
+        settings: {
+          downloads: { defaultFormat: 'zip' },
+        },
+      },
+    })
+
+    expect(parsed.type).toBe('SYNC_SETTINGS_TO_STATE')
+    if (parsed.type !== 'SYNC_SETTINGS_TO_STATE') {
+      throw new Error('Expected SYNC_SETTINGS_TO_STATE message')
+    }
+    expect(parsed.payload.settings).toEqual({
+      downloads: { defaultFormat: 'zip' },
+    })
+  })
+
+  it('accepts STATE_ACTION runtime messages', () => {
+    const parsed = ActionMessageSchema.parse({
+      type: 'STATE_ACTION',
+      action: StateAction.CLEAR_TAB_STATE,
+      tabId: 42,
+      payload: { reason: 'navigation' },
+      timestamp: 1234567890,
+    })
+
+    expect(parsed.type).toBe('STATE_ACTION')
+    if (parsed.type !== 'STATE_ACTION') {
+      throw new Error('Expected STATE_ACTION message')
+    }
+    expect(parsed.action).toBe(StateAction.CLEAR_TAB_STATE)
+    expect(parsed.tabId).toBe(42)
+  })
+
   it('accepts START_DOWNLOAD with fat payload contract', () => {
     const parsed = ActionMessageSchema.parse({
       type: 'START_DOWNLOAD',
@@ -169,6 +211,24 @@ describe('message-schemas', () => {
     expect(parsed.payload.chapterTitle).toBe('Chapter 1')
   })
 
+  it('accepts OFFSCREEN_STATUS and OFFSCREEN_CONTROL contract shapes', () => {
+    expect(OffscreenMessageSchema.parse({ type: 'OFFSCREEN_STATUS' }).type).toBe('OFFSCREEN_STATUS')
+
+    const parsed = OffscreenMessageSchema.parse({
+      type: 'OFFSCREEN_CONTROL',
+      payload: {
+        taskId: 'task-1',
+        action: 'cancel',
+      },
+    })
+
+    expect(parsed.type).toBe('OFFSCREEN_CONTROL')
+    if (parsed.type !== 'OFFSCREEN_CONTROL') {
+      throw new Error('Expected OFFSCREEN_CONTROL message')
+    }
+    expect(parsed.payload.action).toBe('cancel')
+  })
+
   it('accepts OFFSCREEN_DOWNLOAD_CHAPTER with series metadata payload', () => {
     const parsed = OffscreenMessageSchema.parse({
       type: 'OFFSCREEN_DOWNLOAD_CHAPTER',
@@ -246,6 +306,24 @@ describe('message-schemas', () => {
     expect(parsed.success).toBe(false)
   })
 
+  it('rejects removed CANCEL_DOWNLOAD runtime messages', () => {
+    const parsed = RuntimeMessageSchema.safeParse({
+      type: 'CANCEL_DOWNLOAD',
+      payload: { taskId: 'task-1' },
+    })
+
+    expect(parsed.success).toBe(false)
+  })
+
+  it('rejects removed REMOVE_TASK runtime messages', () => {
+    const parsed = RuntimeMessageSchema.safeParse({
+      type: 'REMOVE_TASK',
+      payload: { taskId: 'task-1' },
+    })
+
+    expect(parsed.success).toBe(false)
+  })
+
   it('accepts OPEN_OPTIONS with valid tab', () => {
     const parsed = ActionMessageSchema.parse({
       type: 'OPEN_OPTIONS',
@@ -270,8 +348,9 @@ describe('message-schemas', () => {
   it('accepts the union of action and offscreen messages', () => {
     expect(
       RuntimeMessageSchema.safeParse({
-        type: 'CANCEL_DOWNLOAD',
-        payload: { taskId: 'task-1' },
+        type: 'STATE_ACTION',
+        action: StateAction.CLEAR_TAB_STATE,
+        tabId: 42,
       }).success,
     ).toBe(true)
 
@@ -284,6 +363,12 @@ describe('message-schemas', () => {
           fileUrl: 'blob:chrome-extension://abc',
           filename: 'Series/Chapter 1.cbz',
         },
+      }).success,
+    ).toBe(true)
+
+    expect(
+      RuntimeMessageSchema.safeParse({
+        type: 'OFFSCREEN_STATUS',
       }).success,
     ).toBe(true)
   })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { groupChapters } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
+import { groupChapters } from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
 import type { ChapterState } from '@/src/types/tab-state'
 
 function makeChapter(partial: Partial<ChapterState> & { url: string; title: string }): ChapterState {

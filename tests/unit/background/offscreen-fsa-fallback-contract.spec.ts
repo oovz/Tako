@@ -24,9 +24,7 @@ vi.mock('@/src/storage/fs-access', () => ({
 }))
 
 vi.mock('@/entrypoints/background/errors', () => ({
-  errorService: {
-    emit: mocks.emitError,
-  },
+  addPersistentError: mocks.emitError,
 }))
 
 vi.mock('@/src/runtime/logger', () => ({
@@ -69,6 +67,7 @@ describe('DestinationService fallback behavior', () => {
     expect(mocks.updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         downloads: expect.objectContaining({
+          downloadMode: 'browser',
           customDirectoryEnabled: false,
           customDirectoryHandleId: null,
         }),

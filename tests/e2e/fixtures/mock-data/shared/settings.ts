@@ -31,6 +31,7 @@ export const BASE_DEFAULT_SETTINGS: ExtensionSettings = {
     maxConcurrentDownloads: 3,
     overwriteExisting: false,
     includeComicInfo: true,
+    includeCoverImage: true,
     normalizeImageFilenames: true,
     imagePaddingDigits: 'auto',
   },

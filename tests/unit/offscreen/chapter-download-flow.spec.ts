@@ -295,6 +295,64 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         expect(throttledFollowUp).toBeUndefined()
     })
 
+    it('skips extension retry wrapper when integration declares handlesOwnRetries', async () => {
+        vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
+            id: 'test-site',
+            name: 'Test',
+            version: '1.0',
+            author: 'test',
+            handlesOwnRetries: true,
+            integration: {
+                background: {
+                    chapter: {
+                        downloadImage: mockDownloadImage,
+                        parseImageUrlsFromHtml: async () => ['img1.jpg'],
+                        processImageUrls: async (raw: any) => raw,
+                        resolveImageUrls: async () => ['img1.jpg'],
+                    },
+                },
+            },
+        } as any)
+
+        mockDownloadImage.mockReset()
+        let callCount = 0
+        mockDownloadImage.mockImplementation(async () => {
+            callCount++
+            if (callCount === 1) {
+                throw new Error('HTTP 503: Service Unavailable')
+            }
+            return { filename: 'img1.jpg', data: new ArrayBuffer(10), mimeType: 'image/jpeg' }
+        })
+
+        const outcome = await worker.processDownloadChapter({
+            taskId: 'task-no-ext-retry',
+            seriesKey: 'test-site:series-1',
+            book: {
+                siteIntegrationId: 'test-site',
+                seriesTitle: 'Test Book',
+                coverUrl: undefined,
+            },
+            chapter: {
+                id: 'c1',
+                title: 'Chapter 1',
+                url: 'http://example.com/c1',
+                index: 1,
+                chapterNumber: 1,
+                resolvedPath: 'Chapter 1',
+            },
+            settingsSnapshot: {
+                ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'test-site'),
+                archiveFormat: 'none',
+                includeComicInfo: false,
+                includeCoverImage: false,
+            },
+            saveMode: 'downloads-api',
+        })
+
+        expect(callCount).toBe(1)
+        expect(outcome.status).toBe('failed')
+    })
+
     it('emits an immediate startup heartbeat before optional cover-image prefetch begins', async () => {
         let resolveCoverFetch!: (value: { filename: string; data: ArrayBuffer; mimeType: string }) => void
         mockDownloadImage.mockImplementationOnce(async () => {

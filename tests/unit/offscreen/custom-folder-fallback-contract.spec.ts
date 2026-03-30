@@ -63,7 +63,11 @@ describe('custom folder fallback contracts (behavior-based)', () => {
     })
     expect(mocks.updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        downloads: expect.objectContaining({ downloadMode: 'browser' }),
+        downloads: expect.objectContaining({
+          downloadMode: 'browser',
+          customDirectoryEnabled: false,
+          customDirectoryHandleId: null,
+        }),
       }),
     )
     expect(mocks.clearDownloadRootHandle).toHaveBeenCalledTimes(1)
@@ -90,7 +94,11 @@ describe('custom folder fallback contracts (behavior-based)', () => {
     })
     expect(mocks.updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        downloads: expect.objectContaining({ downloadMode: 'browser' }),
+        downloads: expect.objectContaining({
+          downloadMode: 'browser',
+          customDirectoryEnabled: false,
+          customDirectoryHandleId: null,
+        }),
       }),
     )
     expect(mocks.clearDownloadRootHandle).toHaveBeenCalledTimes(1)

@@ -118,4 +118,53 @@ describe('registerBackgroundNavigationListeners', () => {
     expect(ensureContentScriptPresent).not.toHaveBeenCalled()
     expect(clearTabState).not.toHaveBeenCalled()
   })
+
+  it('ignores malformed stored tab state when deciding unsupported SPA cleanup', async () => {
+    const clearTabState = vi.fn(async () => undefined)
+    const deleteCachedContext = vi.fn()
+
+    storageGet.mockResolvedValue({
+      tab_9: {
+        bogus: true,
+      },
+    })
+
+    registerBackgroundNavigationListeners({
+      ensureStateManagerInitialized: async () => undefined,
+      getStateManager: () => ({
+        clearTabState,
+      }) as never,
+      tabContextCache: {
+        handleTabActivated: vi.fn(async () => undefined),
+        handleTabUpdated: vi.fn(async () => undefined),
+        setCachedContext: vi.fn(),
+        deleteCachedContext,
+        syncActiveTabContext: vi.fn(async () => undefined),
+      },
+      tabUiCoordinator: {
+        ensureContentScriptPresent: vi.fn(async () => undefined),
+        updateActionForTab: vi.fn(async () => undefined),
+        updateSidePanelForTab: vi.fn(async () => undefined),
+      },
+    })
+
+    const historyListener = webNavigationOnHistoryStateUpdatedAddListener.mock.calls[0]?.[0] as (details: {
+      tabId: number
+      frameId: number
+      url?: string
+    }) => void
+
+    historyListener({
+      tabId: 9,
+      frameId: 0,
+      url: 'https://example.com/unsupported-spa-route',
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(deleteCachedContext).not.toHaveBeenCalled()
+    expect(storageRemove).not.toHaveBeenCalled()
+    expect(clearTabState).not.toHaveBeenCalled()
+  })
 })

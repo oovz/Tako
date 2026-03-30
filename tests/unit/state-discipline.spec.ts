@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { sendStateAction } from '@/src/runtime/state-actions'
-import { processStateAction } from '@/entrypoints/background/state-manager'
+import { processStateAction } from '@/entrypoints/background/state-action-router'
 import { StateAction } from '@/src/types/state-actions'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { StateActionMessage } from '@/src/types/state-action-message'
@@ -184,6 +184,45 @@ describe('State discipline runtime guards', () => {
 
       expect(result).toEqual({ success: true, data: { skipped: true, reason: 'stale-target-url' } })
       expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
+    })
+
+    it('rejects malformed INITIALIZE_TAB payloads before reaching the handler', async () => {
+      const message: StateActionMessage = {
+        type: 'STATE_ACTION',
+        action: StateAction.INITIALIZE_TAB,
+        tabId: 77,
+        payload: {
+          context: 'ready',
+          siteIntegrationId: 'mangadex',
+          mangaId: 'series-1',
+          seriesTitle: 'Series 1',
+          chapters: [
+            {
+              id: '',
+              url: 'https://mangadex.org/chapter/1',
+              title: 'Chapter 1',
+            },
+          ],
+        } as unknown,
+      }
+
+      const result = await processStateAction(stateManager, message)
+
+      expect(result).toEqual({ success: false, error: 'Invalid payload for INITIALIZE_TAB' })
+      expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
+    })
+
+    it('rejects malformed UPDATE_SETTINGS payloads before reaching the handler', async () => {
+      const message: StateActionMessage = {
+        type: 'STATE_ACTION',
+        action: StateAction.UPDATE_SETTINGS,
+        payload: {},
+      }
+
+      const result = await processStateAction(stateManager, message)
+
+      expect(result).toEqual({ success: false, error: 'Invalid payload for UPDATE_SETTINGS' })
+      expect(mocks.handleUpdateSettings).not.toHaveBeenCalled()
     })
 
     it('returns standardized unknown-action error for unsupported actions', async () => {

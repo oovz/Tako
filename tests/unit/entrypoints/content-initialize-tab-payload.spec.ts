@@ -19,6 +19,97 @@ vi.mock('@/src/storage/settings-service', () => ({
   },
 }))
 
+describe('normalizeFetchedSeriesData', () => {
+  it('filters malformed chapter entries from array results', async () => {
+    const { normalizeFetchedSeriesData } = await import('@/entrypoints/content/content-helpers')
+
+    const normalized = normalizeFetchedSeriesData([
+      {
+        id: 'chapter-1',
+        url: 'https://mangadex.org/chapter/1',
+        title: 'Chapter 1',
+        locked: true,
+        chapterNumber: 1,
+      },
+      {
+        id: 'chapter-2',
+        url: 42,
+        title: 'Bad chapter',
+      },
+      {
+        bogus: true,
+      },
+      {
+        id: 'chapter-3',
+        url: '   ',
+        title: '   ',
+      },
+    ])
+
+    expect(normalized).toEqual({
+      chapters: [
+        {
+          id: 'chapter-1',
+          url: 'https://mangadex.org/chapter/1',
+          title: 'Chapter 1',
+          locked: true,
+          chapterLabel: undefined,
+          chapterNumber: 1,
+          volumeNumber: undefined,
+          volumeLabel: undefined,
+          language: undefined,
+        },
+      ],
+      volumes: [],
+    })
+  })
+
+  it('filters malformed chapters and volumes from object results', async () => {
+    const { normalizeFetchedSeriesData } = await import('@/entrypoints/content/content-helpers')
+
+    const normalized = normalizeFetchedSeriesData({
+      chapters: [
+        {
+          url: ' https://shonenjumpplus.com/episode/1 ',
+          title: ' Chapter 1 ',
+          id: ' chapter-1 ',
+          volumeLabel: ' Arc A ',
+          language: ' en ',
+        },
+        {
+          url: 'https://shonenjumpplus.com/episode/2',
+          title: 99,
+          id: 'chapter-2',
+        },
+      ],
+      volumes: [
+        { id: ' volume-a ', title: ' Arc A ', label: ' Arc A ' },
+        { id: 123, title: 'Invalid' },
+        { id: '   ', title: 'Blank' },
+      ],
+    })
+
+    expect(normalized).toEqual({
+      chapters: [
+        {
+          id: 'chapter-1',
+          url: 'https://shonenjumpplus.com/episode/1',
+          title: 'Chapter 1',
+          locked: false,
+          chapterLabel: undefined,
+          chapterNumber: undefined,
+          volumeNumber: undefined,
+          volumeLabel: 'Arc A',
+          language: 'en',
+        },
+      ],
+      volumes: [
+        { id: 'volume-a', title: 'Arc A', label: 'Arc A' },
+      ],
+    })
+  })
+})
+
 describe('resolveInitializeTabPayload', () => {
   it('returns unsupported when no real manga id can be extracted', async () => {
     const { resolveInitializeTabPayload } = await import('@/entrypoints/content')

@@ -84,7 +84,7 @@ describe('URL Pattern Matching', () => {
       expect(result1?.integrationId).toBe('shonenjumpplus');
     });
 
-    it('does not match non-MVP domains with wildcards (e.g., e-hentai)', () => {
+it('does not match unsupported domains with wildcards (e.g., e-hentai)', () => {
       const result = matchUrl('https://e-hentai.org/g/12345/test-token');
       expect(result).toBeNull();
     });
@@ -96,7 +96,7 @@ describe('URL Pattern Matching', () => {
       expect(result).toBeNull();
     });
 
-    it('does not match manganelo domain (MVP scope)', () => {
+it('does not match manganelo domain (unsupported scope)', () => {
       const result = matchUrl('https://chapmanganato.to/manga-test/chapter-1');
       expect(result).toBeNull();
     });
@@ -134,7 +134,7 @@ describe('URL Pattern Matching', () => {
       expect(isSupportedDomain('https://mangadex.org/anything')).toBe(true);
     });
 
-    it('returns false for unsupported or non-MVP domains', () => {
+it('returns false for unsupported domains', () => {
       expect(isSupportedDomain('https://mangadex.org/title/abc')).toBe(true);
       expect(isSupportedDomain('https://unsupported.com/manga/123')).toBe(false);
       expect(isSupportedDomain('https://google.com')).toBe(false);

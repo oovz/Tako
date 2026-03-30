@@ -9,7 +9,11 @@
  */
 
 import type { Page, BrowserContext } from '@playwright/test';
-import type { GlobalAppState } from '../../../src/types/queue-state';
+import { projectToQueueView } from '../../../entrypoints/background/projection';
+import { DEFAULT_SETTINGS } from '../../../src/storage/default-settings';
+import { getExternalTabInitStorageKey } from '../../../src/runtime/external-tab-init';
+import { SESSION_STORAGE_KEYS } from '../../../src/runtime/storage-keys';
+import type { DownloadTaskState, GlobalAppState, QueueTaskSummary } from '../../../src/types/queue-state';
 import type { MangaPageState } from '../../../src/types/tab-state';
 import { StateAction } from '../../../src/types/state-actions';
 import type { InitializeTabReadyPayload } from '../../../src/types/state-action-tab-payloads';
@@ -118,7 +122,7 @@ export async function initializeTabViaAction(
   }
 
   const tabId = await getTabId(page, context)
-  await setTabInitLock(context, tabId)
+  await markExternalTabInitializationForTest(context, tabId)
   if (page.url() !== navigateToUrl) {
     await page.goto(navigateToUrl, { waitUntil: 'domcontentloaded' })
   }
@@ -184,7 +188,7 @@ export async function initializeTabViaAction(
     return tabId
   }
 
-  await setTabInitLock(context, tabId)
+  await markExternalTabInitializationForTest(context, tabId)
   await sendInitAction()
   const retryState = await waitForInitState(10000)
   if (isExpectedState(retryState)) {
@@ -304,6 +308,73 @@ export async function setLocalState<T = unknown>(
   }, { key, value: serializedValue })
 }
 
+export async function seedDownloadQueueState(
+  page: Page,
+  queue: DownloadTaskState[],
+): Promise<void> {
+  const context = page.context()
+  const ids = queue.map((task) => task.id).sort()
+  const projected = projectToQueueView(queue)
+  const worker = await getServiceWorker(context)
+
+  if (queue.some((task) => task.status === 'downloading')) {
+    await ensureOffscreenAliveForActiveQueue(context)
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const existing = await getGlobalState(context)
+    const next = {
+      ...(existing ?? {}),
+      downloadQueue: queue,
+      settings: existing?.settings ?? DEFAULT_SETTINGS,
+      lastActivity: Date.now(),
+    }
+
+    await setLocalState(context, 'downloadQueue', queue)
+    await setSessionState(context, SESSION_STORAGE_KEYS.globalState, next as GlobalAppState)
+    await setSessionState(context, 'queueView', projected.queueView as QueueTaskSummary[])
+    await setSessionState(context, 'lastOffscreenActivity', next.lastActivity)
+
+    try {
+      await waitForGlobalState(context, (state) => {
+        const seededQueue = state.downloadQueue ?? []
+        if (seededQueue.length !== queue.length) {
+          return false
+        }
+
+        const queueIds = seededQueue.map((task) => task.id).sort()
+        return queueIds.length === ids.length && queueIds.every((id, index) => id === ids[index])
+      }, { timeout: 15000 })
+
+      const localQueueSeeded = await worker.evaluate(async (expectedIds: string[]) => {
+        const result = await chrome.storage.local.get('downloadQueue') as {
+          downloadQueue?: Array<{ id?: string }>
+        }
+        const queue = Array.isArray(result.downloadQueue) ? result.downloadQueue : []
+        const queueIds = queue
+          .map((task) => (typeof task?.id === 'string' ? task.id : null))
+          .filter((id): id is string => id !== null)
+          .sort()
+
+        return queueIds.length === expectedIds.length
+          && queueIds.every((id, index) => id === expectedIds[index])
+      }, ids)
+
+      if (!localQueueSeeded) {
+        throw new Error('downloadQueue not seeded yet')
+      }
+
+      return
+    } catch (error) {
+      if (attempt === 2) {
+        throw error
+      }
+
+      await page.waitForTimeout(150)
+    }
+  }
+}
+
 export async function ensureOffscreenAliveForActiveQueue(context: BrowserContext): Promise<void> {
   const worker = await getServiceWorker(context)
 
@@ -341,13 +412,13 @@ export async function ensureOffscreenAliveForActiveQueue(context: BrowserContext
 }
 
 /**
- * Set the content-script init lock for a tab to prevent racing initializations.
+ * Mark a tab as externally initialized so the content script consumes the next duplicate init attempt.
  */
-export async function setTabInitLock(
+export async function markExternalTabInitializationForTest(
   context: BrowserContext,
   tabId: number
 ): Promise<void> {
-  await setSessionState(context, `tabInitLock_${tabId}`, Date.now())
+  await setSessionState(context, getExternalTabInitStorageKey(tabId), Date.now())
 }
 
 /**
@@ -397,7 +468,7 @@ export async function getTabState(
 export async function getGlobalState(
   context: BrowserContext
 ): Promise<GlobalAppState | undefined> {
-  return await getSessionState<GlobalAppState>(context, 'global_state');
+  return await getSessionState<GlobalAppState>(context, SESSION_STORAGE_KEYS.globalState);
 }
 
 /**

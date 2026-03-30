@@ -9,7 +9,7 @@ test.describe('Options Page', () => {
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
     
     // Verify options page loaded - check for sidebar navigation
-    await expect(page.getByText('Tako Manga Downloader Settings')).toBeVisible();
+    await expect(page.getByText('Tako Settings')).toBeVisible();
     await expect(page.getByText('General')).toBeVisible();
   });
   
@@ -48,6 +48,36 @@ test.describe('Options Page', () => {
 
     await page.getByRole('button', { name: 'Downloads' }).click();
     await expect(page.getByText('Download destination')).toBeVisible();
+  });
+
+  test('keeps page-level vertical scrolling disabled so only the main options pane scrolls', async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html?tab=integrations`);
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Site Integrations' })).toBeVisible();
+
+    const metrics = await page.evaluate(() => ({
+      rootScrollHeight: document.documentElement.scrollHeight,
+      rootClientHeight: document.documentElement.clientHeight,
+      bodyScrollHeight: document.body.scrollHeight,
+      bodyClientHeight: document.body.clientHeight,
+    }));
+
+    expect(metrics.rootScrollHeight).toBeLessThanOrEqual(metrics.rootClientHeight + 1);
+    expect(metrics.bodyScrollHeight).toBeLessThanOrEqual(metrics.bodyClientHeight + 1);
+
+    const overflow = await page.evaluate(() => ({
+      root: getComputedStyle(document.documentElement).overflowY,
+      body: getComputedStyle(document.body).overflowY,
+      appRoot: getComputedStyle(document.getElementById('root')!).overflowY,
+      main: getComputedStyle(document.querySelector('main')!).overflowY,
+    }));
+
+    expect(overflow.root).toBe('hidden');
+    expect(overflow.body).toBe('hidden');
+    expect(overflow.appRoot).toBe('hidden');
+    expect(overflow.main).toBe('auto');
   });
 
   test('does not show stale new-indicator history copy in About / Debug', async ({ page, extensionId }) => {

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getBadgeText, projectToQueueView } from '@/entrypoints/background/projection'
+import { getBadgeText, projectToQueueView, updateActionBadge } from '@/entrypoints/background/projection'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'
@@ -19,6 +19,10 @@ function makeTask(overrides: Partial<DownloadTaskState>): DownloadTaskState {
     ...overrides,
   }
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('projectToQueueView', () => {
   it('projects all six canonical statuses into expected buckets', () => {
@@ -134,12 +138,39 @@ describe('projectToQueueView', () => {
     expect(result.history).toHaveLength(5)
   })
 
+  it('preserves queued task array order (supports moveTaskToTop reordering)', () => {
+    const tasks: DownloadTaskState[] = [
+      makeTask({ id: 'active', status: 'downloading', created: 1 }),
+      makeTask({ id: 'queued-moved-to-top', status: 'queued', created: 100 }),
+      makeTask({ id: 'queued-original-first', status: 'queued', created: 10 }),
+      makeTask({ id: 'queued-original-second', status: 'queued', created: 50 }),
+    ]
+
+    const result = projectToQueueView(tasks)
+
+    const queuedIds = result.queueView
+      .filter((task) => task.status === 'queued')
+      .map((task) => task.id)
+
+    expect(queuedIds).toEqual([
+      'queued-moved-to-top',
+      'queued-original-first',
+      'queued-original-second',
+    ])
+  })
+
   it('formats action badge text for non-terminal task counts', () => {
     expect(getBadgeText(0)).toBe('')
     expect(getBadgeText(1)).toBe('1')
     expect(getBadgeText(12)).toBe('12')
     expect(getBadgeText(999)).toBe('999')
     expect(getBadgeText(1000)).toBe('999+')
+  })
+
+  it('returns without touching badge APIs when chrome.action is unavailable', async () => {
+    vi.stubGlobal('chrome', {})
+
+    await expect(updateActionBadge(3)).resolves.toBeUndefined()
   })
 })
 

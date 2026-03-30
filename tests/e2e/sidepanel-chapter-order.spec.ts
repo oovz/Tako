@@ -1,14 +1,23 @@
 import { test, expect } from './fixtures/extension'
 import { initializeTabViaAction, openSidepanelHarness, waitForGlobalState, waitForTabState } from './fixtures/state-helpers'
-import { MANGADEX_TEST_SERIES_URL } from './fixtures/test-domains'
+import {
+  buildMangadexUrl,
+  MANGADEX_GROUPED_COLLAPSE_SERIES_ID,
+  MANGADEX_ORDER_TEST_SERIES_ID,
+  MANGADEX_STRESS_TOGGLE_SERIES_ID,
+  MANGADEX_VIEW_TOGGLE_SERIES_ID,
+} from './fixtures/test-domains'
 
-const SERIES_URL = MANGADEX_TEST_SERIES_URL
+const ORDER_TEST_SERIES_URL = buildMangadexUrl(`/title/${MANGADEX_ORDER_TEST_SERIES_ID}/ordering-test-series`)
+const VIEW_TOGGLE_SERIES_URL = buildMangadexUrl(`/title/${MANGADEX_VIEW_TOGGLE_SERIES_ID}/view-toggle-series`)
+const STRESS_TOGGLE_SERIES_URL = buildMangadexUrl(`/title/${MANGADEX_STRESS_TOGGLE_SERIES_ID}/stress-toggle-series`)
+const GROUPED_COLLAPSE_SERIES_URL = buildMangadexUrl(`/title/${MANGADEX_GROUPED_COLLAPSE_SERIES_ID}/grouped-collapse-series`)
 
 // Side Panel chapter list preserves mixed standalone/volume order
 
 test.describe('Side Panel chapter/volume order', () => {
   test('renders standalone chapters and volumes in correct mixed order', async ({ context, extensionId, page }) => {
-    await page.goto(SERIES_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
     const baseChapters = [
       { id: 'standalone-1', url: 'https://example.com/standalone-1', title: 'Standalone chapter 1' },
@@ -26,16 +35,16 @@ test.describe('Side Panel chapter/volume order', () => {
       extensionId,
       {
         siteIntegrationId: 'mangadex',
-        mangaId: 'order-test-series',
+        mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
         seriesTitle: 'Ordering Test Series',
         chapters: baseChapters,
       },
-      SERIES_URL,
+      ORDER_TEST_SERIES_URL,
     )
 
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === 'order-test-series' &&
+        state.mangaId === MANGADEX_ORDER_TEST_SERIES_ID &&
         state.seriesTitle === 'Ordering Test Series' &&
         state.chapters?.length === baseChapters.length
       )
@@ -91,7 +100,7 @@ test.describe('Side Panel chapter/volume order', () => {
   })
 
   test('volume select-all operates per contiguous volume group', async ({ context, extensionId, page }) => {
-    await page.goto(SERIES_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
     const baseChapters = [
       { id: 'standalone-1', url: 'https://example.com/standalone-1', title: 'Standalone chapter 1' },
@@ -109,16 +118,16 @@ test.describe('Side Panel chapter/volume order', () => {
       extensionId,
       {
         siteIntegrationId: 'mangadex',
-        mangaId: 'order-test-series',
+        mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
         seriesTitle: 'Ordering Test Series',
         chapters: baseChapters,
       },
-      SERIES_URL,
+      ORDER_TEST_SERIES_URL,
     )
 
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === 'order-test-series' &&
+        state.mangaId === MANGADEX_ORDER_TEST_SERIES_ID &&
         state.seriesTitle === 'Ordering Test Series' &&
         state.chapters?.length === baseChapters.length
       )
@@ -152,7 +161,7 @@ test.describe('Side Panel chapter/volume order', () => {
   })
 
   test('switches between grouped and flat chapter views without crashing the side panel', async ({ context, extensionId, page }) => {
-    await page.goto(SERIES_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(VIEW_TOGGLE_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
     const baseChapters = Array.from({ length: 32 }, (_, index) => {
       const chapterNumber = index + 1
@@ -173,16 +182,16 @@ test.describe('Side Panel chapter/volume order', () => {
       extensionId,
       {
         siteIntegrationId: 'mangadex',
-        mangaId: 'view-toggle-series',
+        mangaId: MANGADEX_VIEW_TOGGLE_SERIES_ID,
         seriesTitle: 'View Toggle Series',
         chapters: baseChapters,
       },
-      SERIES_URL,
+      VIEW_TOGGLE_SERIES_URL,
     )
 
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === 'view-toggle-series' &&
+        state.mangaId === MANGADEX_VIEW_TOGGLE_SERIES_ID &&
         state.seriesTitle === 'View Toggle Series' &&
         state.chapters?.length === baseChapters.length
       )
@@ -197,12 +206,17 @@ test.describe('Side Panel chapter/volume order', () => {
 
     await expect(sp.getByText(/^Volume 1$/)).toBeVisible()
     await expect(viewModeTrigger).toBeVisible()
+    await expect(viewModeTrigger).toHaveText('All chapters')
+
+    const firstVolumeRow = sp.locator('[data-testid="inline-item"][data-kind="volume"]').first()
+    await expect(firstVolumeRow).not.toContainText('selectable')
 
     await viewModeTrigger.click()
 
     await expect(sp.getByText('View Toggle Series')).toBeVisible()
     const groupByVolumeButton = sp.getByRole('button', { name: /Group by Volume/i })
     await expect(groupByVolumeButton).toBeVisible()
+    await expect(groupByVolumeButton).toHaveText('Volumes')
     await expect(sp.locator('#toggle-1')).toBeVisible()
     await expect(sp.locator('#toggle-2')).toBeVisible()
 
@@ -215,7 +229,7 @@ test.describe('Side Panel chapter/volume order', () => {
   })
 
   test('survives repeated grouped-flat selector toggles on virtualized chapter lists without React depth errors', async ({ context, extensionId, page }) => {
-    await page.goto(SERIES_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(STRESS_TOGGLE_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
     const baseChapters = Array.from({ length: 36 }, (_, index) => {
       const chapterNumber = index + 1
@@ -236,16 +250,16 @@ test.describe('Side Panel chapter/volume order', () => {
       extensionId,
       {
         siteIntegrationId: 'mangadex',
-        mangaId: 'stress-toggle-series',
+        mangaId: MANGADEX_STRESS_TOGGLE_SERIES_ID,
         seriesTitle: 'Stress Toggle Series',
         chapters: baseChapters,
       },
-      SERIES_URL,
+      STRESS_TOGGLE_SERIES_URL,
     )
 
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === 'stress-toggle-series' &&
+        state.mangaId === MANGADEX_STRESS_TOGGLE_SERIES_ID &&
         state.seriesTitle === 'Stress Toggle Series' &&
         state.chapters?.length === baseChapters.length
       )
@@ -282,7 +296,7 @@ test.describe('Side Panel chapter/volume order', () => {
   })
 
   test('auto-collapses the grouped selector after successfully starting a download', async ({ context, extensionId, page }) => {
-    await page.goto(SERIES_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(GROUPED_COLLAPSE_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
     const baseChapters = [
       { id: 'v1-c1', url: 'https://example.com/collapse-v1-c1', title: 'Volume 1 Chapter 1', chapterNumber: 1, volumeNumber: 1 },
@@ -296,16 +310,16 @@ test.describe('Side Panel chapter/volume order', () => {
       extensionId,
       {
         siteIntegrationId: 'mangadex',
-        mangaId: 'grouped-collapse-series',
+        mangaId: MANGADEX_GROUPED_COLLAPSE_SERIES_ID,
         seriesTitle: 'Grouped Collapse Series',
         chapters: baseChapters,
       },
-      SERIES_URL,
+      GROUPED_COLLAPSE_SERIES_URL,
     )
 
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === 'grouped-collapse-series' &&
+        state.mangaId === MANGADEX_GROUPED_COLLAPSE_SERIES_ID &&
         state.seriesTitle === 'Grouped Collapse Series' &&
         state.chapters?.length === baseChapters.length
       )
