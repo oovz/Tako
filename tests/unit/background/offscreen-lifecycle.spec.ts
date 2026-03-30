@@ -104,10 +104,7 @@ describe('scheduleOffscreenCloseIfIdle', () => {
       snapshot: vi.fn(() => new Map<number, string>([[101, 'blob:chapter-101']])),
     }
 
-    await scheduleOffscreenCloseIfIdle(
-      {} as never,
-      pendingDownloadsStore as never,
-    )
+    await scheduleOffscreenCloseIfIdle(pendingDownloadsStore as never)
 
     expect(closeDocument).not.toHaveBeenCalled()
   })
@@ -120,10 +117,7 @@ describe('scheduleOffscreenCloseIfIdle', () => {
       snapshot: vi.fn(() => new Map<number, string>()),
     }
 
-    await scheduleOffscreenCloseIfIdle(
-      {} as never,
-      pendingDownloadsStore as never,
-    )
+    await scheduleOffscreenCloseIfIdle(pendingDownloadsStore as never)
 
     expect(closeDocument).toHaveBeenCalledTimes(1)
   })

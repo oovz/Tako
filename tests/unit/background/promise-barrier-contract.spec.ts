@@ -43,6 +43,7 @@ describe('service-worker event promise barrier', () => {
     const secondWait = waitForInitialization()
 
     expect(setAccessLevel).toHaveBeenCalledTimes(1)
+    expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' })
 
     await flushAsyncWork()
     expect(resolveAccessLevel).toBeTypeOf('function')
@@ -68,6 +69,7 @@ describe('service-worker event promise barrier', () => {
 
     await expect(waitForInitialization()).resolves.toBeUndefined()
     expect(setAccessLevel).toHaveBeenCalledTimes(1)
+    expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' })
   })
 })
 

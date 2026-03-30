@@ -7,7 +7,7 @@ describe('site integration registry', () => {
     expect(SITE_INTEGRATION_MANIFESTS.length).toBeGreaterThan(0)
   })
 
-  it('declares chapter policy concurrency as 1 for all manifests in MVP', () => {
+it('declares chapter policy concurrency as 1 for all manifests', () => {
     expect(SITE_INTEGRATION_MANIFESTS.every((manifest) => manifest.policyDefaults.chapter.concurrency === 1)).toBe(true)
   })
 

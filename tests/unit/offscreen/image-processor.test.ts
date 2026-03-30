@@ -4,8 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { downloadCoverImage, fetchImageWithStallDetection, downloadImages, fetchChapterHtml } from '@/entrypoints/offscreen/image-processor'
-import type { BackgroundIntegration } from '@/src/types/site-integrations'
+import { downloadCoverImage, fetchImageWithStallDetection, fetchChapterHtml } from '@/entrypoints/offscreen/image-processor'
 
 // Mock rate-limited fetch
 vi.mock('@/src/runtime/rate-limit', () => ({
@@ -439,81 +438,5 @@ describe('downloadCoverImage', () => {
     })
   })
 
-  describe('Image Concurrency', () => {
-    it('reads per-site image delay from dynamic settings without registry indirection', async () => {
-      const { siteIntegrationSettingsService } = await import('@/src/storage/site-integration-settings-service')
-      const getForSiteSpy = vi
-        .spyOn(siteIntegrationSettingsService, 'getForSite')
-        .mockResolvedValue({ imageDownloadDelayMs: 1 })
-      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
-
-      const backgroundIntegration = {
-        chapter: {
-          downloadImage: vi.fn(async () => ({
-            filename: 'image.jpg',
-            data: new ArrayBuffer(16),
-            mimeType: 'image/jpeg',
-          })),
-        },
-      } as unknown as BackgroundIntegration
-
-      const results = await downloadImages(
-        ['https://img.example/1'],
-        backgroundIntegration,
-        {
-          integrationId: 'mangadex',
-          retries: { image: 1, chapter: 1 },
-          fetchTimeout: 1000,
-          imageTimeout: 1000,
-        },
-        () => undefined,
-      )
-
-      expect(results).toHaveLength(1)
-      expect(getForSiteSpy).toHaveBeenCalledWith('mangadex')
-      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1)
-    })
-
-    it('limits concurrent image downloads to 16 workers', async () => {
-      let inFlight = 0
-      let maxInFlight = 0
-
-      const backgroundIntegration = {
-        chapter: {
-          downloadImage: vi.fn(async (url: string) => {
-            inFlight += 1
-            maxInFlight = Math.max(maxInFlight, inFlight)
-
-            await new Promise((resolve) => setTimeout(resolve, 5))
-
-            inFlight -= 1
-            return {
-              filename: `${url.split('/').pop() ?? 'image'}.jpg`,
-              data: new ArrayBuffer(16),
-              mimeType: 'image/jpeg',
-            }
-          }),
-        },
-      } as unknown as BackgroundIntegration
-
-      const imageUrls = Array.from({ length: 40 }, (_, index) => `https://img.example/${index}`)
-
-      const results = await downloadImages(
-        imageUrls,
-        backgroundIntegration,
-        {
-          integrationId: 'mangadex',
-          retries: { image: 1, chapter: 1 },
-          fetchTimeout: 1000,
-          imageTimeout: 1000,
-        },
-        () => undefined,
-      )
-
-      expect(results).toHaveLength(40)
-      expect(maxInFlight).toBeLessThanOrEqual(16)
-      expect(maxInFlight).toBeGreaterThan(1)
-    })
-  })
 })
 

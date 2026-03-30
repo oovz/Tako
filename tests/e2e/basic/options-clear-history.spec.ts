@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/extension'
-import { ensureOffscreenAliveForActiveQueue, setLocalState, setSessionState } from '../fixtures/state-helpers'
+import { seedDownloadQueueState } from '../fixtures/state-helpers'
 import { createTaskSettingsSnapshot } from '../../../entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '../../../src/storage/default-settings'
 import type { DownloadTaskState } from '../../../src/types/queue-state'
@@ -33,40 +33,6 @@ function makeTask(id: string, status: DownloadTaskState['status']): DownloadTask
 }
 
 test.describe('Options Downloads history management', () => {
-  async function seedQueueState(
-    page: import('@playwright/test').Page,
-    queue: DownloadTaskState[],
-  ): Promise<void> {
-    if (queue.some((task) => task.status === 'downloading')) {
-      await ensureOffscreenAliveForActiveQueue(page.context())
-    }
-
-    const now = Date.now()
-    const existingGlobalState = await page.evaluate(async () => {
-      return (await chrome.storage.session.get('global_state')) as {
-        global_state?: {
-          settings?: unknown
-          lastActivity?: number
-        }
-      }
-    })
-
-    const globalState = existingGlobalState.global_state
-    const seededSettings =
-      globalState && typeof globalState.settings === 'object' && globalState.settings !== null
-        ? globalState.settings
-        : {}
-
-    await setLocalState(page.context(), 'downloadQueue', queue)
-    await setSessionState(page.context(), 'global_state', {
-      downloadQueue: queue,
-      settings: seededSettings,
-      lastActivity: globalState?.lastActivity ?? now,
-    })
-    await setSessionState(page.context(), 'lastOffscreenActivity', now)
-    await page.waitForTimeout(150)
-  }
-
   test('clear all history removes only terminal tasks and keeps active/queued', async ({ page, extensionId }) => {
     const seededQueue: DownloadTaskState[] = [
       makeTask('active', 'downloading'),
@@ -80,7 +46,7 @@ test.describe('Options Downloads history management', () => {
     await page.goto(`chrome-extension://${extensionId}/options.html?tab=downloads`, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 })
 
-    await seedQueueState(page, seededQueue)
+    await seedDownloadQueueState(page, seededQueue)
 
     await page.getByRole('button', { name: 'Downloads' }).click()
 
@@ -116,7 +82,7 @@ test.describe('Options Downloads history management', () => {
 
     await page.goto(`chrome-extension://${extensionId}/options.html?tab=downloads`, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 })
-    await seedQueueState(page, seededQueue)
+    await seedDownloadQueueState(page, seededQueue)
 
     const sidepanelPage = await page.context().newPage()
     await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })

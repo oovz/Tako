@@ -9,10 +9,12 @@ import {
 
 describe('storage-keys', () => {
   it('defines required session storage keys', () => {
+    expect(SESSION_STORAGE_KEYS.globalState).toBe('globalState')
     expect(SESSION_STORAGE_KEYS.queueView).toBe('queueView')
     expect(SESSION_STORAGE_KEYS.activeTabContext).toBe('activeTabContext')
     expect(SESSION_STORAGE_KEYS.activeTaskProgress).toBe('activeTaskProgress')
     expect(SESSION_STORAGE_KEYS.lastOffscreenActivity).toBe('lastOffscreenActivity')
+    expect(SESSION_STORAGE_KEYS.externalTabInitPrefix).toBe('externalTabInit_')
     expect(SESSION_STORAGE_KEYS.pendingDownloads).toBe('pendingDownloads')
     expect(SESSION_STORAGE_KEYS.initFailed).toBe('initFailed')
     expect(SESSION_STORAGE_KEYS.initError).toBe('error')

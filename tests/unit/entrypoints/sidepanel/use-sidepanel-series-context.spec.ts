@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
+import {
+    isInternalUrl,
+    isExtensionUrl,
+    resolveTabUrlForSupportCheck,
+    resolveTrackedTabId,
+} from '@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers'
+import {
+    deriveSeriesContextFromActiveTabContext,
+    normalizeActiveTabContext,
+    normalizeStoredSeriesContext,
+    selectPreferredSeriesContextTask,
+} from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
 
 // Mock global chrome object
 const chromeMock = {
@@ -9,14 +21,6 @@ const chromeMock = {
     },
 }
 vi.stubGlobal('chrome', chromeMock)
-
-import {
-    queryActiveTabInLastFocusedNormalWindow,
-    isInternalUrl,
-    __resolveTabUrlForSupportCheckForTests,
-    __selectPreferredSeriesContextTaskForTests,
-    __deriveSeriesContextFromActiveTabContextForTests,
-} from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '@/entrypoints/sidepanel/messages'
 
@@ -35,137 +39,9 @@ function makeTask(overrides: Partial<DownloadTaskState>): DownloadTaskState {
     }
 }
 
-describe('queryActiveTabInLastFocusedNormalWindow', () => {
+describe('sidepanel active-tab helpers', () => {
     beforeEach(() => {
         vi.resetAllMocks()
-    })
-
-    it('returns the active tab in the current window when available', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return [{ id: 100, active: true, url: 'chrome://newtab' }]
-            }
-            return []
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-        expect(result?.id).toBe(100)
-        expect(chromeMock.tabs.query).toHaveBeenCalled()
-    })
-
-    it('falls back to any active tab from the current window if the direct active query returns nothing', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return []
-            }
-            if (q.currentWindow === true) {
-                return [
-                    { id: 200, active: true, url: 'https://mangadex.org/title/123' },
-                    { id: 201, active: false, url: 'https://example.com/' },
-                ]
-            }
-            return []
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-        expect(result?.id).toBe(200)
-        expect(chromeMock.tabs.query).toHaveBeenCalled()
-    })
-
-    it('falls back to any non-internal tab when no active tab can be found', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return []
-            }
-            if (q.currentWindow === true) {
-                return [
-                    { id: 300, active: false, url: 'chrome://newtab' },
-                    { id: 301, active: false, url: 'https://mangadex.org/title/123' },
-                ]
-            }
-            return []
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-        expect(result?.id).toBe(301)
-    })
-
-    it('returns null when the current window has no tabs', async () => {
-        chromeMock.tabs.query.mockResolvedValue([])
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-        expect(result).toBeNull()
-    })
-
-    it('prefers the actual active tab even when it is internal and other non-internal tabs exist', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return [{ id: 410, active: true, url: 'about:blank' }]
-            }
-            if (q.currentWindow === true) {
-                return [
-                    { id: 410, active: true, url: 'about:blank', lastAccessed: 100 },
-                    { id: 411, active: false, url: 'https://mangadex.org/title/first-tab', lastAccessed: 200 },
-                ]
-            }
-            return []
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-
-        expect(result?.id).toBe(410)
-    })
-
-    it('prefers last-focused active internal tab over non-internal fallback tabs', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return []
-            }
-            if (q.lastFocusedWindow === true && q.active === true) {
-                return [{ id: 510, active: true, url: 'chrome://newtab' }]
-            }
-            if (q.currentWindow === true) {
-                return [
-                    { id: 511, active: false, url: 'https://mangadex.org/title/other-tab', lastAccessed: 999 },
-                ]
-            }
-            return []
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-
-        expect(result?.id).toBe(510)
-    })
-
-    it('falls back to a non-internal tab across all windows when the extension page owns the current window', async () => {
-        chromeMock.tabs.query.mockImplementation(async (queryInfo: unknown) => {
-            const q = queryInfo as Record<string, unknown>
-            if (q.currentWindow === true && q.active === true) {
-                return [{ id: 610, active: true, url: 'chrome-extension://test/sidepanel.html' }]
-            }
-            if (q.lastFocusedWindow === true && q.active === true) {
-                return [{ id: 610, active: true, url: 'chrome-extension://test/sidepanel.html' }]
-            }
-            if (q.currentWindow === true) {
-                return [{ id: 610, active: true, url: 'chrome-extension://test/sidepanel.html' }]
-            }
-            if (q.lastFocusedWindow === true) {
-                return [{ id: 610, active: true, url: 'chrome-extension://test/sidepanel.html' }]
-            }
-
-            return [
-                { id: 611, active: false, url: 'https://mangadex.org/title/real-target', lastAccessed: 500 },
-                { id: 612, active: false, url: 'about:blank', lastAccessed: 100 },
-            ]
-        })
-
-        const result = await queryActiveTabInLastFocusedNormalWindow()
-
-        expect(result?.id).toBe(611)
     })
 
     it('should identify internal URLs correctly', () => {
@@ -176,7 +52,7 @@ describe('queryActiveTabInLastFocusedNormalWindow', () => {
     })
 
     it('prefers committed tab.url over pendingUrl when resolving support-check URL', () => {
-        const resolved = __resolveTabUrlForSupportCheckForTests({
+        const resolved = resolveTabUrlForSupportCheck({
             url: 'https://comic.pixiv.net/works/9012',
             pendingUrl: 'https://accounts.pixiv.net/?return_to=...',
         })
@@ -185,7 +61,7 @@ describe('queryActiveTabInLastFocusedNormalWindow', () => {
     })
 
     it('falls back to pendingUrl when tab.url is unavailable', () => {
-        const resolved = __resolveTabUrlForSupportCheckForTests({
+        const resolved = resolveTabUrlForSupportCheck({
             pendingUrl: 'https://comic.pixiv.net/viewer/stories/44495',
         })
 
@@ -193,18 +69,38 @@ describe('queryActiveTabInLastFocusedNormalWindow', () => {
     })
 
     it('prefers pendingUrl when the committed URL is an internal placeholder', () => {
-        const resolved = __resolveTabUrlForSupportCheckForTests({
+        const resolved = resolveTabUrlForSupportCheck({
             url: 'about:blank',
             pendingUrl: 'chrome-extension://test/sidepanel.html',
         })
 
         expect(resolved).toBe('chrome-extension://test/sidepanel.html')
     })
+
+    it('identifies extension URLs separately from general internal URLs', () => {
+        expect(isExtensionUrl('chrome-extension://test/sidepanel.html')).toBe(true)
+        expect(isExtensionUrl('https://comic.pixiv.net/works/9012')).toBe(false)
+        expect(isExtensionUrl(undefined)).toBe(false)
+    })
+
+    it('preserves the previously tracked browser tab when the active surface is an extension page', () => {
+        expect(resolveTrackedTabId(42, {
+            id: 100,
+            url: 'chrome-extension://test/sidepanel.html',
+        })).toBe(42)
+    })
+
+    it('switches tracked tab ids when a real browser tab becomes active', () => {
+        expect(resolveTrackedTabId(42, {
+            id: 77,
+            url: 'https://mangadex.org/title/abc123/series',
+        })).toBe(77)
+    })
 })
 
 describe('series-context task selection', () => {
     it('prefers downloading tasks over queued tasks regardless of queue order', () => {
-        const selected = __selectPreferredSeriesContextTaskForTests([
+        const selected = selectPreferredSeriesContextTask([
             makeTask({ id: 'queued-first', status: 'queued', created: 1 }),
             makeTask({ id: 'active-second', status: 'downloading', created: 2 }),
         ])
@@ -213,7 +109,7 @@ describe('series-context task selection', () => {
     })
 
     it('picks the oldest created task among tasks with the same preferred status', () => {
-        const selected = __selectPreferredSeriesContextTaskForTests([
+        const selected = selectPreferredSeriesContextTask([
             makeTask({ id: 'active-newer', status: 'downloading', created: 20 }),
             makeTask({ id: 'active-older', status: 'downloading', created: 10 }),
             makeTask({ id: 'queued-fallback', status: 'queued', created: 1 }),
@@ -223,7 +119,7 @@ describe('series-context task selection', () => {
     })
 
     it('falls back to the oldest queued task when no downloading task exists', () => {
-        const selected = __selectPreferredSeriesContextTaskForTests([
+        const selected = selectPreferredSeriesContextTask([
             makeTask({ id: 'queued-newer', status: 'queued', created: 20 }),
             makeTask({ id: 'queued-older', status: 'queued', created: 10 }),
             makeTask({ id: 'completed-task', status: 'completed', created: 1 }),
@@ -235,28 +131,31 @@ describe('series-context task selection', () => {
 
 describe('activeTabContext mapping', () => {
     it('derives series data from a MangaPageState context', () => {
-        const result = __deriveSeriesContextFromActiveTabContextForTests(
+        const result = deriveSeriesContextFromActiveTabContext(
             {
-                siteIntegrationId: 'mangadex',
-                mangaId: 'series-ctx',
-                seriesTitle: 'Series Context',
-                chapters: [
-                    {
-                        id: 'ch-1',
-                        url: 'https://mangadex.org/chapter/1',
-                        title: 'Chapter 1',
-                        index: 1,
-                        chapterNumber: 1,
-                        status: 'queued',
-                        lastUpdated: 1,
+                kind: 'ready',
+                mangaState: {
+                    siteIntegrationId: 'mangadex',
+                    mangaId: 'series-ctx',
+                    seriesTitle: 'Series Context',
+                    chapters: [
+                        {
+                            id: 'ch-1',
+                            url: 'https://mangadex.org/chapter/1',
+                            title: 'Chapter 1',
+                            index: 1,
+                            chapterNumber: 1,
+                            status: 'queued',
+                            lastUpdated: 1,
+                        },
+                    ],
+                    volumes: [],
+                    metadata: {
+                        author: 'Author',
+                        coverUrl: 'https://example.com/cover.jpg',
                     },
-                ],
-                volumes: [],
-                metadata: {
-                    author: 'Author',
-                    coverUrl: 'https://example.com/cover.jpg',
+                    lastUpdated: 1,
                 },
-                lastUpdated: 1,
             },
             'CBZ',
         )
@@ -277,7 +176,7 @@ describe('activeTabContext mapping', () => {
     })
 
     it('derives loading state from a loading context', () => {
-        const result = __deriveSeriesContextFromActiveTabContextForTests({ loading: true }, 'CBZ')
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'loading' }, 'CBZ')
 
         expect(result.isLoading).toBe(true)
         expect(result.blockingMessage).toBeUndefined()
@@ -285,19 +184,83 @@ describe('activeTabContext mapping', () => {
     })
 
     it('normalizes no-manga errors into the canonical blocking message', () => {
-        const result = __deriveSeriesContextFromActiveTabContextForTests({ error: 'No manga found on this page' }, 'CBZ')
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'error', error: 'No manga found on this page' }, 'CBZ')
 
         expect(result.isLoading).toBe(false)
         expect(result.blockingMessage).toBe(NO_MANGA_FOUND_MSG)
     })
 
-    it('maps null context to the generic no-series guidance state', () => {
-        const result = __deriveSeriesContextFromActiveTabContextForTests(null, 'CBZ')
+    it('maps unsupported context to the generic no-series guidance state', () => {
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'unsupported' }, 'CBZ')
 
         expect(result.isLoading).toBe(false)
         expect(result.blockingMessage).toBe(TAB_NOT_SUPPORTED_MSG)
         expect(result.mangaState).toBeUndefined()
         expect(result.items).toEqual([])
+    })
+
+    it('normalizes raw session context into the discriminated active-tab union', () => {
+        expect(normalizeActiveTabContext({ loading: true })).toEqual({ kind: 'loading' })
+        expect(normalizeActiveTabContext({ error: 'storage corruption' })).toEqual({ kind: 'error', error: 'storage corruption' })
+        expect(normalizeActiveTabContext({ nope: true })).toEqual({ kind: 'unsupported' })
+        expect(normalizeActiveTabContext({
+            siteIntegrationId: 'mangadex',
+            mangaId: 'series-ctx',
+            seriesTitle: 'Series Context',
+            chapters: [],
+            volumes: [],
+            lastUpdated: 1,
+        })).toEqual({
+            kind: 'ready',
+            mangaState: {
+                siteIntegrationId: 'mangadex',
+                mangaId: 'series-ctx',
+                seriesTitle: 'Series Context',
+                chapters: [],
+                volumes: [],
+                lastUpdated: 1,
+            },
+        })
+    })
+
+    it('prefers tracked tab session state over the projected activeTabContext', () => {
+        expect(normalizeStoredSeriesContext({
+            tab_17: {
+                siteIntegrationId: 'mangadex',
+                mangaId: 'tracked-series',
+                seriesTitle: 'Tracked Series',
+                chapters: [],
+                volumes: [],
+                lastUpdated: 1,
+            },
+            activeTabContext: { error: 'stale projection' },
+        }, 17)).toEqual({
+            kind: 'ready',
+            mangaState: {
+                siteIntegrationId: 'mangadex',
+                mangaId: 'tracked-series',
+                seriesTitle: 'Tracked Series',
+                chapters: [],
+                volumes: [],
+                lastUpdated: 1,
+            },
+        })
+    })
+
+    it('reads tracked tab errors before falling back to the projected activeTabContext', () => {
+        expect(normalizeStoredSeriesContext({
+            seriesContextError_17: 'Tab-specific parse failure',
+            activeTabContext: { loading: true },
+        }, 17)).toEqual({
+            kind: 'error',
+            error: 'Tab-specific parse failure',
+        })
+    })
+
+    it('falls back to activeTabContext when no tracked tab state exists', () => {
+        expect(normalizeStoredSeriesContext({
+            activeTabContext: { loading: true },
+        }, 17)).toEqual({ kind: 'loading' })
     })
 })
 

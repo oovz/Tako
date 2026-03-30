@@ -6,12 +6,19 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+const storageOnChangedAddListener = vi.fn()
+const setUserSiteIntegrationEnablementMock = vi.fn()
+
 // Mock the site-integration registry before importing
 vi.mock('@/src/runtime/site-integration-registry', () => ({
     registerSiteIntegration: vi.fn(),
     siteIntegrationRegistry: {
         findById: vi.fn(() => null),
     },
+}))
+
+vi.mock('@/src/site-integrations/registry', () => ({
+    setUserSiteIntegrationEnablement: setUserSiteIntegrationEnablementMock,
 }))
 
 // Mock the logger
@@ -30,6 +37,16 @@ describe('site-integration-initialization singleton pattern', () => {
     beforeEach(async () => {
         // Reset module registry to get fresh singleton state
         vi.resetModules()
+        vi.stubGlobal('chrome', {
+            storage: {
+                local: {
+                    get: vi.fn(async () => ({})),
+                },
+                onChanged: {
+                    addListener: storageOnChangedAddListener,
+                },
+            },
+        })
 
         // Re-setup mocks after module reset
         vi.doMock('@/src/runtime/site-integration-registry', () => ({
@@ -46,6 +63,9 @@ describe('site-integration-initialization singleton pattern', () => {
                 error: vi.fn(),
             },
         }))
+        vi.doMock('@/src/site-integrations/registry', () => ({
+            setUserSiteIntegrationEnablement: setUserSiteIntegrationEnablementMock,
+        }))
 
         // Get the mock reference
         const registryModule = await import('@/src/runtime/site-integration-registry')
@@ -54,6 +74,7 @@ describe('site-integration-initialization singleton pattern', () => {
 
     afterEach(() => {
         vi.clearAllMocks()
+        vi.unstubAllGlobals()
     })
 
     it('registers site integrations only once on first call', async () => {
@@ -106,6 +127,44 @@ describe('site-integration-initialization singleton pattern', () => {
 
         // Should only register 3 site integrations total (not 9)
         expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('normalizes malformed enablement storage changes through the shared parser', async () => {
+        const { initializeSiteIntegrationMetadataOnly } = await import('@/src/runtime/site-integration-initialization')
+
+        await initializeSiteIntegrationMetadataOnly()
+
+        const onChangedListener = storageOnChangedAddListener.mock.calls[0]?.[0] as (
+            changes: Record<string, chrome.storage.StorageChange>,
+            areaName: chrome.storage.AreaName,
+        ) => void
+
+        onChangedListener(
+            {
+                siteIntegrationEnablement: {
+                    oldValue: null,
+                    newValue: {
+                        mangadex: false,
+                        broken: 'bad',
+                    },
+                },
+            } as Record<string, chrome.storage.StorageChange>,
+            'local',
+        )
+
+        expect(setUserSiteIntegrationEnablementMock).toHaveBeenLastCalledWith({ mangadex: false })
+
+        onChangedListener(
+            {
+                siteIntegrationEnablement: {
+                    oldValue: null,
+                    newValue: 'bad',
+                },
+            } as Record<string, chrome.storage.StorageChange>,
+            'local',
+        )
+
+        expect(setUserSiteIntegrationEnablementMock).toHaveBeenLastCalledWith({})
     })
 })
 

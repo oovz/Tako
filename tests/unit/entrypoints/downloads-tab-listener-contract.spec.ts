@@ -1,6 +1,54 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  normalizeDownloadQueueState,
+  normalizeFsaErrorState,
+} from '@/entrypoints/options/hooks/useDownloadsTabState'
 import { __createChromeStorageStoreForTests } from '@/src/ui/shared/hooks/useChromeStorageValue'
+
+describe('DownloadsTab queue parsing', () => {
+  it('normalizes malformed persisted queue entries before exposing them to the UI', () => {
+    const normalized = normalizeDownloadQueueState([
+      {
+        id: 'task-1',
+        siteIntegrationId: 'mangadex',
+        mangaId: 'series-1',
+        seriesTitle: 'Series 1',
+        status: 'queued',
+        created: 123,
+        lastSuccessfulDownloadId: 456,
+        chapters: [
+          {
+            url: 'https://example.com/ch-1',
+            title: 'Chapter 1',
+            index: 1,
+            status: 'queued',
+            lastUpdated: 789,
+          },
+        ],
+      },
+      {
+        bogus: true,
+      },
+    ])
+
+    expect(normalized).toHaveLength(1)
+    expect(normalized[0]?.lastSuccessfulDownloadId).toBeUndefined()
+    expect(normalized[0]?.chapters[0]?.id).toBe('https://example.com/ch-1')
+  })
+
+  it('normalizes malformed FSA error payloads before exposing them to the UI', () => {
+    expect(normalizeFsaErrorState({ active: 'yes', message: 123 })).toEqual({
+      active: false,
+      message: undefined,
+    })
+    expect(normalizeFsaErrorState({ active: true, message: 'Folder access lost' })).toEqual({
+      active: true,
+      message: 'Folder access lost',
+    })
+    expect(normalizeFsaErrorState(null)).toBeNull()
+  })
+})
 
 describe('DownloadsTab storage subscription contract (behavior-based)', () => {
   const addListener = vi.fn()

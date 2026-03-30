@@ -131,6 +131,45 @@ describe('recoverFromLivenessTimeout', () => {
     expect(onRecover).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps tasks at partial_success when stale recovery finds existing partial_success chapters', async () => {
+    const now = Date.now()
+    storageSessionGet.mockResolvedValue({
+      lastOffscreenActivity: now - 120_000,
+    })
+
+    const stateManager = createStateManagerMock([
+      {
+        id: 'active-task-partial',
+        status: 'downloading',
+        chapters: [
+          { id: 'c1', url: 'https://example.com/c1', status: 'partial_success' },
+          { id: 'c2', url: 'https://example.com/c2', status: 'downloading' },
+        ],
+      },
+    ])
+
+    const pendingDownloadsStore = {
+      clear: vi.fn(),
+      snapshot: vi.fn(() => new Map<number, string>()),
+      hydrate: vi.fn(async () => {}),
+      get: vi.fn(),
+      set: vi.fn(),
+      remove: vi.fn(),
+    }
+
+    const onRecover = vi.fn(async () => {})
+
+    await recoverFromLivenessTimeout(stateManager, pendingDownloadsStore, onRecover)
+
+    expect(stateManager.updateDownloadTask).toHaveBeenCalledWith(
+      'active-task-partial',
+      expect.objectContaining({
+        status: 'partial_success',
+        errorMessage: 'Download process unresponsive',
+      }),
+    )
+  })
+
   it('does nothing when offscreen activity is within timeout threshold', async () => {
     const now = Date.now()
     storageSessionGet.mockResolvedValue({

@@ -14,6 +14,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { isInternalUrl } from '@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers'
+import { groupChapters } from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
 
 // Mock chrome APIs
 const mockStorageData: Record<string, unknown> = {}
@@ -106,17 +108,13 @@ describe('Unsupported URL Navigation Bug Fix', () => {
     })
 
     describe('isInternalUrl', () => {
-        it('correctly identifies MangaDex homepage as NOT internal (but may be unsupported)', async () => {
-            const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
+        it('correctly identifies MangaDex homepage as NOT internal (but may be unsupported)', () => {
             // The homepage is a valid HTTP URL, not an internal chrome:// URL
             expect(isInternalUrl('https://mangadex.org/')).toBe(false)
             expect(isInternalUrl('https://mangadex.org/title/abc123/manga-name')).toBe(false)
         })
 
-        it('correctly identifies chrome:// URLs as internal', async () => {
-            const { isInternalUrl } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
+        it('correctly identifies chrome:// URLs as internal', () => {
             expect(isInternalUrl('chrome://newtab')).toBe(true)
             expect(isInternalUrl('chrome-extension://fake-id/popup.html')).toBe(true)
             expect(isInternalUrl('about:blank')).toBe(true)
@@ -145,7 +143,7 @@ describe('Unsupported URL Navigation Bug Fix', () => {
 
             // Setup: tab state exists for old manga
             mockStorageData[`tab_${tabId}`] = oldMangaState
-            mockStorageData['global_state'] = { downloadQueue: [] }
+            mockStorageData.globalState = { downloadQueue: [] }
 
             // Mock tabs.query to return the current tab with unsupported URL
             chromeMock.tabs.get.mockResolvedValue({
@@ -166,8 +164,6 @@ describe('Unsupported URL Navigation Bug Fix', () => {
             })
 
             // This tests the groupChapters function which is exported
-            const { groupChapters } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
             // Verify groupChapters handles empty arrays gracefully
             const result = groupChapters([])
             expect(result).toEqual([])
@@ -182,8 +178,6 @@ describe('Unsupported URL Navigation Bug Fix', () => {
         })
 
         it('groupChapters preserves collapsed state from previous items', async () => {
-            const { groupChapters } = await import('@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext')
-
             // Create chapters with volume numbers
             const chapters = [
                 { id: 'ch1', url: 'ch1', title: 'Ch 1', index: 0, chapterNumber: 1, volumeNumber: 1, status: 'queued' as const, lastUpdated: Date.now() },

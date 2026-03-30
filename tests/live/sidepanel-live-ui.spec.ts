@@ -84,7 +84,7 @@ test.describe('Live side panel UI smoke', () => {
     ])
 
     await optionsPage.waitForLoadState('domcontentloaded')
-    await expect(optionsPage.getByText('Tako Manga Downloader Settings')).toBeVisible({ timeout: 10_000 })
+    await expect(optionsPage.getByText('Tako Settings')).toBeVisible({ timeout: 10_000 })
 
     await optionsPage.close()
     await sidepanel.close()

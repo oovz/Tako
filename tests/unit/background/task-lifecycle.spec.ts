@@ -76,6 +76,30 @@ describe('task lifecycle helpers', () => {
     expect(normalized.chapters.map((chapter) => chapter.status)).toEqual(['completed', 'failed', 'failed'])
   })
 
+  it('keeps interrupted tasks at partial_success when any chapters already have partial_success', () => {
+    const now = 2500
+    const task: DownloadTaskState = {
+      id: 'task-partial-success',
+      siteIntegrationId: 'mangadex',
+      mangaId: 'series-1b',
+      seriesTitle: 'Series 1B',
+      chapters: [
+        { id: 'c1', url: 'c1', title: 'c1', index: 1, status: 'partial_success', lastUpdated: 10 },
+        { id: 'c2', url: 'c2', title: 'c2', index: 2, status: 'downloading', lastUpdated: 11 },
+      ],
+      status: 'downloading',
+      created: 1100,
+      settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'mangadex'),
+    }
+
+    const normalized = normalizeInterruptedTask(task, 'Download interrupted', now)
+
+    expect(normalized.status).toBe('partial_success')
+    expect(normalized.errorMessage).toBe('Download interrupted')
+    expect(normalized.completed).toBe(now)
+    expect(normalized.chapters.map((chapter) => chapter.status)).toEqual(['partial_success', 'failed'])
+  })
+
   it('normalizes fully interrupted tasks to failed and preserves an existing completed timestamp', () => {
     const task: DownloadTaskState = {
       id: 'task-failed',

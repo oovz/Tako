@@ -11,6 +11,7 @@ import {
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { projectToQueueView } from '@/entrypoints/background/projection'
+import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { buildExampleUrl } from './fixtures/test-domains'
 import type { DownloadTaskState } from '../../src/types/queue-state'
 import type { ChapterState } from '../../src/types/tab-state'
@@ -111,7 +112,7 @@ async function seedGlobalQueue(
       lastActivity: Date.now(),
     }
 
-    await setSessionState(context, 'global_state', next as any)
+    await setSessionState(context, SESSION_STORAGE_KEYS.globalState, next as any)
     await setSessionState(context, 'queueView', projected.queueView as any)
     await worker.evaluate(async (downloadQueue: DownloadTaskState[]) => {
       await chrome.storage.local.set({ downloadQueue })

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { normalizeActiveTaskProgress } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { NotificationManager } from '@/entrypoints/background/notification-manager'
+import { NotificationService } from '@/entrypoints/background/notification-service'
 import { OffscreenMessageSchema } from '@/src/runtime/message-schemas'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
@@ -94,7 +94,7 @@ describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
   })
 
   it('dispatches one completion notification call per completion event', () => {
-    const manager = new NotificationManager()
+    const service = new NotificationService()
     const task = makeTask({
       chapters: [
         {
@@ -108,7 +108,7 @@ describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
       ],
     })
 
-    manager.showDownloadCompleteNotification({
+    service.showDownloadCompleteNotification({
       task,
       notificationsEnabled: true,
       chaptersCompleted: 1,

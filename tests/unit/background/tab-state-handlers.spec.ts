@@ -72,20 +72,6 @@ describe('handleInitializeTab', () => {
     }
   })
 
-  it('handles unsupported payload by clearing activeTabContext', async () => {
-    const stateManager = {
-      initializeTabState: vi.fn(),
-      getTabState: vi.fn(),
-    } as unknown as CentralizedStateManager
-
-    const result = await handleInitializeTab(stateManager, { unsupportedPage: true }, 5)
-
-    expect(result).toEqual({ success: true, tabState: null })
-    expect(sessionRemove).toHaveBeenCalledWith(['tab_5', 'seriesContextError_5'])
-    expect(sessionSet).toHaveBeenCalledWith({ [SESSION_STORAGE_KEYS.activeTabContext]: null })
-    expect((stateManager.initializeTabState as unknown as { mock: { calls: unknown[][] } }).mock.calls).toHaveLength(0)
-  })
-
   it('handles discriminated unsupported payload by clearing activeTabContext', async () => {
     const stateManager = {
       initializeTabState: vi.fn(),
@@ -98,21 +84,6 @@ describe('handleInitializeTab', () => {
     expect(sessionRemove).toHaveBeenCalledWith(['tab_15', 'seriesContextError_15'])
     expect(sessionSet).toHaveBeenCalledWith({ [SESSION_STORAGE_KEYS.activeTabContext]: activeTabState })
     expect((stateManager.initializeTabState as unknown as { mock: { calls: unknown[][] } }).mock.calls).toHaveLength(0)
-  })
-
-  it('handles error payload by writing error context', async () => {
-    const stateManager = {
-      initializeTabState: vi.fn(),
-      getTabState: vi.fn(),
-    } as unknown as CentralizedStateManager
-
-    const result = await handleInitializeTab(stateManager, { error: 'Extraction failed' }, 6)
-
-    expect(result).toEqual({ success: true, tabState: { error: 'Extraction failed' } })
-    expect(sessionRemove).toHaveBeenCalledWith('tab_6')
-    expect(sessionSet).toHaveBeenCalledWith({
-      ['seriesContextError_6']: 'Extraction failed',
-    })
   })
 
   it('handles discriminated error payload by writing error context', async () => {
@@ -147,6 +118,7 @@ describe('handleInitializeTab', () => {
     const result = await handleInitializeTab(
       stateManager,
       {
+        context: 'ready',
         siteIntegrationId: 'mangadex',
         mangaId: 'series-1',
         seriesTitle: 'Series 1',
@@ -213,6 +185,7 @@ describe('handleInitializeTab', () => {
     const result = await handleInitializeTab(
       stateManager,
       {
+        context: 'ready',
         siteIntegrationId: 'shonenjumpplus',
         mangaId: 'series-with-custom-volumes',
         seriesTitle: 'Series With Custom Volumes',
@@ -280,6 +253,7 @@ describe('handleInitializeTab', () => {
     const result = await handleInitializeTab(
       stateManager,
       {
+        context: 'ready',
         siteIntegrationId: 'mangadex',
         mangaId: 'inactive-series',
         seriesTitle: 'Inactive Series',
@@ -294,7 +268,7 @@ describe('handleInitializeTab', () => {
     expect(sessionSet).not.toHaveBeenCalledWith({ [SESSION_STORAGE_KEYS.activeTabContext]: tabState })
   })
 
-  it('rejects ready payloads with chapters missing stable ids', async () => {
+  it('rejects malformed INITIALIZE_TAB payloads outside the discriminated union contract', async () => {
     const stateManager = {
       initializeTabState: vi.fn(async () => {}),
       getTabState: vi.fn(async () => null),
@@ -303,16 +277,18 @@ describe('handleInitializeTab', () => {
     const result = await handleInitializeTab(
       stateManager,
       {
+        context: 'ready',
         siteIntegrationId: 'mangadex',
         mangaId: 'series-1',
         seriesTitle: 'Series 1',
         chapters: [
           {
+            id: '',
             url: 'https://mangadex.org/chapter/1',
             title: 'Chapter 1',
           },
         ],
-      },
+      } as never,
       9,
     )
 
@@ -331,6 +307,7 @@ describe('handleInitializeTab', () => {
     await handleInitializeTab(
       stateManager,
       {
+        context: 'ready',
         siteIntegrationId: 'mangadex',
         mangaId: 'series-locked',
         seriesTitle: 'Locked Series',

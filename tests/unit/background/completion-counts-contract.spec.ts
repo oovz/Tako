@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
-import { NotificationManager } from '@/entrypoints/background/notification-manager'
+import { NotificationService } from '@/entrypoints/background/notification-service'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
@@ -78,8 +78,8 @@ describe('completion notification chapter counts', () => {
       ],
     })
 
-    const manager = new NotificationManager()
-    manager.notifyTaskCompleted({ task, notificationsEnabled: true })
+    const service = new NotificationService()
+    service.notifyTaskCompleted({ task, notificationsEnabled: true })
 
     expect(notificationsCreate).toHaveBeenCalledWith(
       `task_complete_${task.id}`,

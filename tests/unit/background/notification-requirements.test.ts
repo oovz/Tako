@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
-import { NotificationManager } from '@/entrypoints/background/notification-manager';
+import { NotificationService } from '@/entrypoints/background/notification-service';
 import { addPersistentError, clearPersistentError, getPersistentErrors } from '@/entrypoints/background/errors';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import type { DownloadTaskState } from '@/src/types/queue-state';
@@ -76,12 +76,12 @@ describe('notification behavior', () => {
   });
 
   it('creates completion notification with iconUrl from runtime URL', () => {
-    const manager = new NotificationManager();
+    const service = new NotificationService();
     const task = makeTask({
       chapters: [{ id: 'ch-1', url: 'https://example.com/ch-1', title: 'Chapter 1', index: 1, status: 'completed', lastUpdated: Date.now() }],
     });
 
-    manager.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
+    service.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
 
     expect(runtimeGetUrl).toHaveBeenCalledWith('icon/128.png');
     expect(notificationsCreate).toHaveBeenCalledWith(
@@ -95,10 +95,10 @@ describe('notification behavior', () => {
   });
 
   it('does not create notification when notifications are disabled', () => {
-    const manager = new NotificationManager();
+    const service = new NotificationService();
     const task = makeTask();
 
-    manager.notifyTaskCompleted({ task, notificationsEnabled: false });
+    service.notifyTaskCompleted({ task, notificationsEnabled: false });
 
     expect(notificationsCreate).not.toHaveBeenCalled();
   });
@@ -111,8 +111,8 @@ describe('notification behavior', () => {
     });
     storageLocalGet.mockResolvedValue({ [LOCAL_STORAGE_KEYS.downloadQueue]: [task] });
 
-    const manager = new NotificationManager();
-    manager.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
+    const service = new NotificationService();
+    service.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
 
     const clickHandler = onClickedAddListener.mock.calls[0]?.[0] as ((notificationId: string) => void) | undefined;
     expect(clickHandler).toBeTypeOf('function');
@@ -125,6 +125,45 @@ describe('notification behavior', () => {
     expect(storageLocalGet).toHaveBeenCalledWith(LOCAL_STORAGE_KEYS.downloadQueue);
     expect(downloadsShow).toHaveBeenCalledWith(321);
     expect(notificationsClear).toHaveBeenCalledWith(`task_complete_${task.id}`);
+  });
+
+  it('ignores stale persisted lastSuccessfulDownloadId values for active tasks when resolving notification clicks', async () => {
+    storageLocalGet.mockResolvedValue({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: [
+        {
+          id: 'task-click-stale',
+          siteIntegrationId: 'mangadex',
+          mangaId: 'series-1',
+          seriesTitle: 'Series 1',
+          status: 'queued',
+          created: Date.now(),
+          lastSuccessfulDownloadId: 654,
+          chapters: [
+            {
+              id: 'ch-1',
+              url: 'https://example.com/ch-1',
+              title: 'Chapter 1',
+              index: 1,
+              status: 'queued',
+              lastUpdated: Date.now(),
+            },
+          ],
+        },
+      ],
+    });
+
+    new NotificationService();
+    const clickHandler = onClickedAddListener.mock.calls[0]?.[0] as ((notificationId: string) => void) | undefined;
+    expect(clickHandler).toBeTypeOf('function');
+
+    clickHandler?.('task_complete_task-click-stale');
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(storageLocalGet).toHaveBeenCalledWith(LOCAL_STORAGE_KEYS.downloadQueue);
+    expect(downloadsShow).not.toHaveBeenCalled();
+    expect(notificationsClear).toHaveBeenCalledWith('task_complete_task-click-stale');
   });
 });
 
