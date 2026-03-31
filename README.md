@@ -18,7 +18,7 @@ Browse a supported site, choose chapters, queue downloads, and watch progress wi
   Save as CBZ, ZIP, or loose images, use path and filename templates, and include ComicInfo metadata when you want cleaner imports into comic readers and library tools.
 
 - **Use site-specific integrations**
-  Supported sites do not share a generic scraper. Each integration handles the metadata, chapter discovery, and image flow that site actually needs.
+  Each integration handles the metadata, chapter discovery, and image flow that site actually needs.
 
 ## Supported sites
 
