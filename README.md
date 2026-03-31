@@ -1,37 +1,38 @@
 # Tako Manga Downloader
 
-Tako is a Chrome extension for downloading manga without turning the browser into a mess of tabs, prompts, and half-finished folders.
+![Tako logo](public/icon/128.png)
 
-It lives in Chrome's Side Panel, so you can stay on the site you're reading, choose the chapters you want, queue downloads, and keep an eye on progress from the same place.
+Tako is a Chrome extension that keeps manga downloading inside Chrome's Side Panel.
 
-## Highlights
+Browse a supported site, choose chapters, queue downloads, and watch progress without juggling popups, extra tabs, or half-finished folders.
 
-- **Side Panel workflow**
-  Tako stays beside the page instead of disappearing like a popup, which makes it much easier to browse, select, and download in one pass.
+## Why Tako
 
-- **Queue and history built in**
-  Active downloads, queued work, failures, retries, and recent history all live in the same interface.
+- **Stay on the page**
+  Tako works in the Side Panel, so chapter selection, queue management, and progress tracking stay next to the site you are browsing.
 
-- **Library-friendly output**
-  Export as CBZ, ZIP, or loose images, use path and filename templates, and include ComicInfo metadata when you want cleaner imports into comic readers and library tools.
+- **Keep downloads organized**
+  Active tasks, queued work, failures, retries, and recent history live in one place instead of getting scattered across browser prompts.
 
-- **Site-specific handling**
-  Supported sites do not share a one-size-fits-all scraper. Each integration handles the reader, metadata, and image flow it actually needs.
+- **Export in reader-friendly formats**
+  Save as CBZ, ZIP, or loose images, use path and filename templates, and include ComicInfo metadata when you want cleaner imports into comic readers and library tools.
+
+- **Use site-specific integrations**
+  Supported sites do not share a generic scraper. Each integration handles the metadata, chapter discovery, and image flow that site actually needs.
 
 ## Supported sites
 
-- **MangaDex**
-  Supports rich metadata, language filtering, image-quality controls, and optional reuse of your MangaDex website preferences.
+| Site | Status | What you can do |
+|---|---|---|
+| MangaDex | Supported | Filter by language, choose image quality, reuse supported site preferences, and download with rich series metadata. |
+| Pixiv Comic | Supported | Download supported chapters from reader pages with the handling needed for protected images and site-specific metadata. |
+| Shonen Jump+ | Supported | Download supported chapters from official episode pages with clean metadata defaults for manga readers and libraries. |
 
-- **Pixiv Comic**
-  Supports Pixiv Comic viewer flows, authenticated requests where needed, and image reconstruction for supported protected content flows.
+Future integrations can be added to the same table with statuses such as `Planned`, `In progress`, or `Supported` once they are scoped.
 
-- **Shonen Jump+**
-  Supports official episode pages with integration-specific image handling and manga-friendly metadata defaults.
+## Quick start
 
-## Getting started
-
-### Load Tako locally in Chrome
+### Build and load in Chrome
 
 ```powershell
 pnpm install
@@ -45,6 +46,25 @@ Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpack
 ```powershell
 pnpm dev
 ```
+
+### Validation
+
+```powershell
+pnpm lint
+pnpm type-check
+pnpm test:unit
+pnpm test:integration
+pnpm test:e2e
+```
+
+## Documentation
+
+If you want to work on the extension, start with the guide that matches the area you are changing:
+
+- `docs/ARCHITECTURE.md` — core runtime, UI, storage, and state flow
+- `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
+- `docs/MESSAGING.md` — runtime message reference and sender rules
+- `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
 
 ## Roadmap
 
@@ -65,12 +85,8 @@ pnpm dev
 
 ## Contributing
 
-If you want to contribute, start with the guide that matches the area you're changing:
+Follow the existing code style and test patterns in the area you are changing. For larger changes, update the relevant docs when behavior, architecture, or contributor workflows change.
 
-- `docs/ARCHITECTURE.md` — core runtime, UI, storage, and state flow
-- `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
-- `docs/MESSAGING.md` — runtime message reference and sender rules
-- `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
-- `docs/README.md` — contributor documentation index
+## Feedback
 
 If you hit a bug, a site changes behavior, or you have a feature idea, open an issue with the page URL, the affected site, and any error details you can capture.
