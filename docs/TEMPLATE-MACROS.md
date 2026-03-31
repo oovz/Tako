@@ -1,6 +1,6 @@
 # Download Path Template Macros
 
-This document describes all available macros for customizing download paths and filenames in Tako Manga Downloader.
+This document describes all available macros for customizing download paths and filenames in Tako.
 
 ## Overview
 
