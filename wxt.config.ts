@@ -57,7 +57,7 @@ export default defineConfig({
   manifest: {
     name: "Tako Manga Downloader",
     version: "1.0.0",
-    description: "Tako Manga Downloader (TMD) is an enhanced manga downloader with multiple-site support.",
+    description: "Save chapters from supported manga sites into organized CBZ, ZIP, or image files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [
       "storage",
