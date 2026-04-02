@@ -71,7 +71,7 @@ export default defineConfig({
       "notifications",
       "alarms",
       "declarativeNetRequest", // Required for Pixiv-only session DNR referer rewrite on img-comic.pximg.net image fetches
-      "cookies"  // Required for chrome.cookies.getAll() — Pixiv Comic auth cookie forwarding (FR-A27b)
+      "cookies"  // Required for chrome.cookies.getAll() — Pixiv Comic auth cookie forwarding
     ],
     background: {
       type: "module"
