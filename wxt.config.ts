@@ -66,7 +66,6 @@ export default defineConfig({
       "offscreen",
       "sidePanel",
       "scripting",
-      "activeTab",
       "tabs",
       "webNavigation",
       "notifications",
