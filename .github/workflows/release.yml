@@ -171,11 +171,11 @@ jobs:
             }
 
             const assetData = fs.readFileSync(assetPath);
-            await github.request('POST /repos/{owner}/{repo}/releases/{release_id}/assets', {
-              owner,
-              repo,
-              release_id: release.id,
-              name: assetName,
+            const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(assetName)}`);
+
+            await github.request({
+              method: 'POST',
+              url: uploadUrl,
               headers: {
                 'content-type': 'application/zip',
                 'content-length': String(assetData.length),
