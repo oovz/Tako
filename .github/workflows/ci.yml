@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - '**'
+    tags:
+      - 'v*'
   pull_request:
 
 permissions:
@@ -87,3 +89,15 @@ jobs:
             test-results
             .output
           if-no-files-found: ignore
+
+  release:
+    needs:
+      - quality
+      - e2e
+      - live-e2e
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/release.yml
+    with:
+      release_tag: ${{ github.ref_name }}
+    permissions:
+      contents: write
