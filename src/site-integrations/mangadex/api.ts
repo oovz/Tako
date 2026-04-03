@@ -1,23 +1,14 @@
 import type { AtHomeResponse } from './image-delivery'
 import logger from '@/src/runtime/logger'
 
-export const MANGADEX_API_BASE =
-  import.meta.env.TMD_TEST_MANGADEX_API_BASE
-  || 'https://api.mangadex.org'
-export const MANGADEX_UPLOADS_BASE =
-  import.meta.env.TMD_TEST_MANGADEX_UPLOADS_BASE
-  || 'https://uploads.mangadex.org'
-export const MANGADEX_NETWORK_REPORT =
-  import.meta.env.TMD_TEST_MANGADEX_NETWORK_REPORT
-  || 'https://api.mangadex.network/report'
+export const MANGADEX_API_BASE = 'https://api.mangadex.org'
+export const MANGADEX_UPLOADS_BASE = 'https://uploads.mangadex.org'
+export const MANGADEX_NETWORK_REPORT = 'https://api.mangadex.network/report'
 export const MANGADEX_NETWORK_REPORT_HOST = new URL(MANGADEX_NETWORK_REPORT).hostname
 export const MANGADEX_NETWORK_REPORT_TIMEOUT_MS = 1500
 export const MANGADEX_IMAGE_RECOVERY_MAX_CYCLES = 5
 export const MANGADEX_IMAGE_RECOVERY_BACKOFF_MS = 250
-export const MANGADEX_TEST_DOMAIN = import.meta.env.TMD_TEST_MANGADEX_DOMAIN
-export const MANGADEX_SITE_BASE = MANGADEX_TEST_DOMAIN
-  ? `https://${MANGADEX_TEST_DOMAIN}`
-  : 'https://mangadex.org'
+export const MANGADEX_SITE_BASE = 'https://mangadex.org'
 
 type MangadexRetryConfig = {
   maxRetries: number

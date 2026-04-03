@@ -18,22 +18,14 @@
 
 import type { RateScopePolicy } from '../types/rate-policy';
 
-const normalizeEnvDomain = (value?: string): string | undefined => {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
 export interface SiteIntegrationUrlPatterns {
   domains: string[];
   seriesMatches: string[];
   excludeMatches?: string[];
 }
 
-const MANGADEX_TEST_DOMAIN = normalizeEnvDomain(import.meta.env.TMD_TEST_MANGADEX_DOMAIN);
-
 const MANGADEX_DOMAINS: string[] = Array.from(
-  new Set<string>(['mangadex.org', 'mangadex.test', ...(MANGADEX_TEST_DOMAIN ? [MANGADEX_TEST_DOMAIN] : [])])
+  new Set<string>(['mangadex.org'])
 );
 
 const PIXIV_COMIC_DOMAINS: string[] = ['comic.pixiv.net'];

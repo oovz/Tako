@@ -1,11 +1,10 @@
 import type { BrowserContext, Route } from '@playwright/test';
 import { Mangadex } from './mock-data';
 
-// Real-site defaults so E2E covers production behavior unless mocks are explicitly enabled.
-export const EXAMPLE_TEST_DOMAIN = process.env.TMD_TEST_EXAMPLE_DOMAIN ?? 'example.com';
+export const EXAMPLE_TEST_DOMAIN = 'example.com';
 export const EXAMPLE_BASE_URL = `https://${EXAMPLE_TEST_DOMAIN}`;
 
-export const MANGADEX_TEST_DOMAIN = process.env.TMD_TEST_MANGADEX_DOMAIN ?? 'mangadex.org';
+export const MANGADEX_TEST_DOMAIN = 'mangadex.org';
 export const MANGADEX_BASE_URL = `https://${MANGADEX_TEST_DOMAIN}`;
 export const MANGADEX_DEFAULT_SERIES_PATH = '/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter';
 export const MANGADEX_TEST_SERIES_URL = new URL(MANGADEX_DEFAULT_SERIES_PATH, MANGADEX_BASE_URL).toString();
@@ -18,7 +17,7 @@ export const MANGADEX_LOCKED_SELECTION_SERIES_ID = '55555555-5555-4555-8555-5555
 export const LIVE_MANGADEX_REFERENCE_URL = process.env.TMD_LIVE_MANGADEX_URL
   ?? 'https://mangadex.org/title/b28525ae-ef8a-47aa-a120-5917a351be2d/kemutai-hanashi';
 
-export const PIXIV_COMIC_TEST_DOMAIN = process.env.TMD_TEST_PIXIV_COMIC_DOMAIN ?? 'comic.pixiv.net';
+export const PIXIV_COMIC_TEST_DOMAIN = 'comic.pixiv.net';
 export const PIXIV_COMIC_BASE_URL = `https://${PIXIV_COMIC_TEST_DOMAIN}`;
 export const LIVE_PIXIV_COMIC_REFERENCE_URL = process.env.TMD_LIVE_PIXIV_COMIC_URL
   ?? 'https://comic.pixiv.net/works/9012';
@@ -27,12 +26,12 @@ export const LIVE_PIXIV_COMIC_DUPLICATE_TITLE_URL = process.env.TMD_LIVE_PIXIV_C
 export const LIVE_PIXIV_COMIC_DUAL_TITLE_URL = process.env.TMD_LIVE_PIXIV_COMIC_DUAL_TITLE_URL
   ?? 'https://comic.pixiv.net/works/6289';
 
-export const SHONENJUMPPLUS_TEST_DOMAIN = process.env.TMD_TEST_SHONENJUMPPLUS_DOMAIN ?? 'shonenjumpplus.com';
+export const SHONENJUMPPLUS_TEST_DOMAIN = 'shonenjumpplus.com';
 export const SHONENJUMPPLUS_BASE_URL = `https://${SHONENJUMPPLUS_TEST_DOMAIN}`;
 export const LIVE_SHONENJUMPPLUS_REFERENCE_URL = process.env.TMD_LIVE_SHONENJUMPPLUS_URL
   ?? 'https://shonenjumpplus.com/episode/3269754496649675685';
 
-const MANGADEX_API_BASE = process.env.TMD_TEST_MANGADEX_API_BASE ?? 'https://api.mangadex.org';
+const MANGADEX_API_BASE = 'https://api.mangadex.org';
 export const MANGADEX_API_DOMAIN = new URL(MANGADEX_API_BASE).hostname;
 
 type CustomMangadexFixtureChapter = {

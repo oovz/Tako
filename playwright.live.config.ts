@@ -4,8 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const MANGADEX_LIVE_DOMAIN = process.env.TMD_TEST_MANGADEX_DOMAIN ?? 'mangadex.org';
-process.env.TMD_TEST_MANGADEX_DOMAIN = MANGADEX_LIVE_DOMAIN;
 process.env.TMD_TEST_E2E_USE_MOCKS = 'false';
 process.env.TMD_TEST_E2E_ALLOW_NETWORK = 'true';
 

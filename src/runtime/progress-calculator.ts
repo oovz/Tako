@@ -19,6 +19,10 @@ export interface ChapterProgressInfo {
   totalImages?: number;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 export class IntelligentProgressCalculator {
   private readonly STARTUP_PERCENTAGE = 5;
   private readonly DOWNLOAD_PERCENTAGE = 90;
@@ -48,10 +52,17 @@ export class IntelligentProgressCalculator {
    */
   calculateDownloadProgress(chapterInfo: ChapterProgressInfo): number {
     const { chapterIndex, totalChapters, chapterPhase, imageIndex = 0, totalImages = 0 } = chapterInfo;
+
+    if (!Number.isFinite(totalChapters) || totalChapters <= 0) {
+      return this.STARTUP_PERCENTAGE;
+    }
+
+    const boundedTotalChapters = Math.max(1, Math.floor(totalChapters));
+    const boundedChapterIndex = clamp(chapterIndex, 0, boundedTotalChapters - 1);
     
     // Each chapter gets equal portion of the 90% download allocation
-    const chapterWeight = this.DOWNLOAD_PERCENTAGE / totalChapters;
-    const completedChaptersProgress = chapterIndex * chapterWeight;
+    const chapterWeight = this.DOWNLOAD_PERCENTAGE / boundedTotalChapters;
+    const completedChaptersProgress = boundedChapterIndex * chapterWeight;
     
     // Current chapter progress within its allocation
     let currentChapterProgress = 0;
@@ -68,7 +79,7 @@ export class IntelligentProgressCalculator {
       case 'downloading_images':
         if (totalImages > 0) {
           // 20% -> 90% of chapter (70% range for image downloading)
-          const imageProgress = imageIndex / totalImages;
+          const imageProgress = clamp(imageIndex / totalImages, 0, 1);
           currentChapterProgress = 0.2 + (imageProgress * 0.7);
         } else {
           currentChapterProgress = 0.2;
@@ -83,7 +94,11 @@ export class IntelligentProgressCalculator {
     const currentChapterContribution = currentChapterProgress * chapterWeight;
     const totalDownloadProgress = completedChaptersProgress + currentChapterContribution;
     
-    return Math.round(this.STARTUP_PERCENTAGE + totalDownloadProgress);
+    return clamp(
+      Math.round(this.STARTUP_PERCENTAGE + totalDownloadProgress),
+      this.STARTUP_PERCENTAGE,
+      this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE,
+    );
   }
 
   /**

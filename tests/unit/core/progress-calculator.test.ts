@@ -336,27 +336,23 @@ describe('Intelligent Progress Calculator', () => {
     });
 
     it('handles chapter index exceeding total chapters', () => {
-      // Note: Calculator doesn't clamp invalid inputs - consumers should validate
       const progress = calculator.calculateDownloadProgress({
         chapterIndex: 15,
         totalChapters: 10,
         chapterPhase: 'fetching_html',
       });
 
-      // This test documents current behavior - progress can exceed 100 with invalid input
-      expect(progress).toBeGreaterThan(100);
+      expect(progress).toBeLessThanOrEqual(95);
     });
 
     it('handles negative chapter index', () => {
-      // Note: Calculator doesn't clamp invalid inputs - consumers should validate
       const progress = calculator.calculateDownloadProgress({
         chapterIndex: -1,
         totalChapters: 10,
         chapterPhase: 'fetching_html',
       });
 
-      // This test documents current behavior - progress can be negative with invalid input
-      expect(progress).toBeLessThan(5);
+      expect(progress).toBeGreaterThanOrEqual(5);
     });
 
     it('handles image index exceeding total images', () => {
