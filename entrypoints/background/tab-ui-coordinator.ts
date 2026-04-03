@@ -96,23 +96,12 @@ export function createTabUiCoordinator() {
           await chrome.action.enable(tabId)
           await chrome.action.setTitle({ tabId, title: 'TMD: Supported site' })
           await setActionIcon(tabId, 'active')
-          try {
-            await chrome.action.setBadgeBackgroundColor({ tabId, color: '#10b981' })
-            await chrome.action.setBadgeText({ tabId, text: '✓' })
-          } catch (error) {
-            logger.debug('badge set failed', error)
-          }
           return
         }
 
         await chrome.action.enable(tabId)
         await chrome.action.setTitle({ tabId, title: 'TMD: Unsupported site' })
         await setActionIcon(tabId, 'inactive')
-        try {
-          await chrome.action.setBadgeText({ tabId, text: '' })
-        } catch (error) {
-          logger.debug('badge clear failed', error)
-        }
       } catch (error) {
         logger.debug('updateActionForTab noop/error', error)
       }
