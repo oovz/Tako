@@ -12,12 +12,6 @@ export default defineConfig({
   // Configure Vite
   vite: () => ({
     plugins: [tailwindcss()],
-    define: {
-      'import.meta.env.TMD_TEST_MANGADEX_DOMAIN': JSON.stringify(process.env.TMD_TEST_MANGADEX_DOMAIN ?? ''),
-      'import.meta.env.TMD_TEST_MANGADEX_API_BASE': JSON.stringify(process.env.TMD_TEST_MANGADEX_API_BASE ?? ''),
-      'import.meta.env.TMD_TEST_MANGADEX_UPLOADS_BASE': JSON.stringify(process.env.TMD_TEST_MANGADEX_UPLOADS_BASE ?? ''),
-      'import.meta.env.TMD_TEST_MANGADEX_NETWORK_REPORT': JSON.stringify(process.env.TMD_TEST_MANGADEX_NETWORK_REPORT ?? ''),
-    },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./"),
@@ -56,7 +50,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "Tako Manga Downloader",
-    version: "1.0.0",
+    version: "1.0.1",
     description: "Save chapters from supported manga sites into organized CBZ, ZIP, or image files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [

@@ -14,9 +14,7 @@ import {
   MANGADEX_IMAGE_RECOVERY_BACKOFF_MS,
   MANGADEX_IMAGE_RECOVERY_MAX_CYCLES,
   MANGADEX_NETWORK_REPORT,
-  MANGADEX_NETWORK_REPORT_HOST,
   MANGADEX_NETWORK_REPORT_TIMEOUT_MS,
-  MANGADEX_TEST_DOMAIN,
   MANGADEX_UPLOADS_BASE,
   parseChapterIdFromUrl,
 } from './api'
@@ -67,15 +65,7 @@ const getContextChapterId = (context?: Record<string, unknown>): string | undefi
 }
 
 async function reportToMangadexNetwork(report: MangadexAtHomeReport): Promise<void> {
-  if (MANGADEX_NETWORK_REPORT_HOST.endsWith('.test')) {
-    return
-  }
-
   if (report.url.includes('mangadex.org')) {
-    return
-  }
-
-  if (MANGADEX_TEST_DOMAIN && report.url.includes(MANGADEX_TEST_DOMAIN)) {
     return
   }
 
