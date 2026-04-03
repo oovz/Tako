@@ -14,12 +14,11 @@ concurrency:
 
 jobs:
   release:
-    runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAKO_CRX_PRIVATE_KEY_BASE64: ${{ secrets.TAKO_CRX_PRIVATE_KEY_BASE64 }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -29,49 +28,157 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build release bundle
         run: pnpm zip
-      - name: Pack CRX asset
+      - name: Prepare release asset and commit notes
+        id: prepare_release
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:TAKO_CRX_PRIVATE_KEY_BASE64)) {
-            throw 'TAKO_CRX_PRIVATE_KEY_BASE64 secret is required to create a stable .crx release asset.'
-          }
-
-          $chromePath = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-          if (-not (Test-Path $chromePath)) {
-            throw "Chrome executable not found at $chromePath"
-          }
-
-          $keyPath = Join-Path $env:RUNNER_TEMP 'tako-release.pem'
-          [System.IO.File]::WriteAllBytes($keyPath, [System.Convert]::FromBase64String($env:TAKO_CRX_PRIVATE_KEY_BASE64))
-
-          $unpackedPath = Resolve-Path '.output\chrome-mv3'
-          & $chromePath "--pack-extension=$unpackedPath" "--pack-extension-key=$keyPath"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Chrome failed to pack the extension.'
-          }
-      - name: Collect release assets
-        shell: pwsh
-        run: |
-          $tag = '${{ github.ref_name }}'
-          $assetDir = 'release-assets'
+          $tag = $env:GITHUB_REF_NAME
+          $assetDir = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
-          Copy-Item '.output\tako-manga-downloader-*-chrome.zip' $assetDir
-          Copy-Item '.output\chrome-mv3.crx' (Join-Path $assetDir "tako-manga-downloader-$tag.crx")
-      - name: Upload packaged assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-assets
-          path: release-assets
-      - name: Publish GitHub release
-        shell: pwsh
-        run: |
-          $tag = '${{ github.ref_name }}'
-          $assets = Get-ChildItem 'release-assets' | ForEach-Object { $_.FullName }
 
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $assets --clobber
-          } else {
-            gh release create $tag $assets --title "Tako $tag" --generate-notes --verify-tag
+          $zipAsset = Get-ChildItem '.output' -Filter '*-chrome.zip' |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $zipAsset) {
+            throw 'Could not find the packaged Chrome zip in .output after running pnpm zip.'
           }
+
+          $releaseAssetName = "tako-manga-downloader-$tag-chrome.zip"
+          $releaseAssetPath = Join-Path $assetDir $releaseAssetName
+          Copy-Item $zipAsset.FullName $releaseAssetPath
+
+          $releaseCommit = (git rev-list -n 1 $tag).Trim()
+          $previousTag = ''
+          try {
+            $previousTag = (git describe --tags --abbrev=0 "$releaseCommit^" --match 'v*' 2>$null).Trim()
+          } catch {
+            $previousTag = ''
+          }
+
+          $commitLog = if ($previousTag) {
+            git log --pretty=format:'- %h %s (%an)' "$previousTag..$tag"
+          } else {
+            git log --pretty=format:'- %h %s (%an)' -n 20 $tag
+          }
+
+          if ([string]::IsNullOrWhiteSpace(($commitLog | Out-String))) {
+            $commitLog = '- No commits found for this release range.'
+          }
+
+          $commitLogPath = Join-Path $env:RUNNER_TEMP 'recent-commits.md'
+          $commitLog | Set-Content -Path $commitLogPath -Encoding utf8
+
+          @(
+            "asset_path=$releaseAssetPath"
+            "asset_name=$releaseAssetName"
+            "commit_log_path=$commitLogPath"
+            "previous_tag=$previousTag"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Publish GitHub release
+        uses: actions/github-script@v8
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          RELEASE_ASSET_PATH: ${{ steps.prepare_release.outputs.asset_path }}
+          RELEASE_ASSET_NAME: ${{ steps.prepare_release.outputs.asset_name }}
+          COMMIT_LOG_PATH: ${{ steps.prepare_release.outputs.commit_log_path }}
+          PREVIOUS_TAG: ${{ steps.prepare_release.outputs.previous_tag }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.TAG_NAME;
+            const previousTag = process.env.PREVIOUS_TAG || '';
+            const assetPath = process.env.RELEASE_ASSET_PATH;
+            const assetName = process.env.RELEASE_ASSET_NAME;
+            const commitLog = fs.readFileSync(process.env.COMMIT_LOG_PATH, 'utf8').trim();
+
+            const generatedNotes = await github.request('POST /repos/{owner}/{repo}/releases/generate-notes', {
+              owner,
+              repo,
+              tag_name: tag,
+              ...(previousTag ? { previous_tag_name: previousTag } : {}),
+            });
+
+            const releaseName = generatedNotes.data.name || `Tako ${tag}`;
+            const bodySections = [
+              '## Recent commits',
+              previousTag ? `_Changes since ${previousTag}._` : '_Latest commits included in this release._',
+              '',
+              commitLog || '- No commits found in this release range.',
+            ];
+
+            if (generatedNotes.data.body?.trim()) {
+              bodySections.push('', '---', '', generatedNotes.data.body.trim());
+            }
+
+            const releaseBody = bodySections.join('\n');
+
+            let release;
+            try {
+              const existingRelease = await github.request('GET /repos/{owner}/{repo}/releases/tags/{tag}', {
+                owner,
+                repo,
+                tag,
+              });
+
+              release = (
+                await github.request('PATCH /repos/{owner}/{repo}/releases/{release_id}', {
+                  owner,
+                  repo,
+                  release_id: existingRelease.data.id,
+                  name: releaseName,
+                  body: releaseBody,
+                  draft: false,
+                  prerelease: false,
+                })
+              ).data;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+
+              release = (
+                await github.request('POST /repos/{owner}/{repo}/releases', {
+                  owner,
+                  repo,
+                  tag_name: tag,
+                  name: releaseName,
+                  body: releaseBody,
+                  draft: false,
+                  prerelease: false,
+                })
+              ).data;
+            }
+
+            const existingAssets = await github.request('GET /repos/{owner}/{repo}/releases/{release_id}/assets', {
+              owner,
+              repo,
+              release_id: release.id,
+            });
+
+            for (const asset of existingAssets.data) {
+              if (asset.name === assetName) {
+                await github.request('DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}', {
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                });
+              }
+            }
+
+            const assetData = fs.readFileSync(assetPath);
+            await github.request('POST /repos/{owner}/{repo}/releases/{release_id}/assets', {
+              owner,
+              repo,
+              release_id: release.id,
+              name: assetName,
+              headers: {
+                'content-type': 'application/zip',
+                'content-length': String(assetData.length),
+              },
+              data: assetData,
+            });
