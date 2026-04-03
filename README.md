@@ -66,7 +66,17 @@ See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy text.
 
 ## Quick start
 
-### Build and load in Chrome
+### Install from GitHub Releases
+
+1. Open the repository's **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip` asset.
+2. Extract the zip to a folder on your machine.
+3. Open `chrome://extensions`.
+4. Enable **Developer mode**.
+5. Choose **Load unpacked** and select the extracted extension folder.
+
+Chrome will load Tako from that folder, and you can pin it from the extensions menu if needed.
+
+### Build locally and load in Chrome
 
 ```powershell
 pnpm install
