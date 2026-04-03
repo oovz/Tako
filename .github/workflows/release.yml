@@ -1,9 +1,17 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      release_tag:
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to release
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,15 +23,24 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v') {
+            throw "Release tag must start with 'v'. Got: $env:RELEASE_TAG"
+          }
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build release bundle
@@ -32,7 +49,7 @@ jobs:
         id: prepare_release
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          $tag = $env:RELEASE_TAG
           $assetDir = Join-Path $env:RUNNER_TEMP 'release-assets'
           New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
 
@@ -78,7 +95,7 @@ jobs:
       - name: Publish GitHub release
         uses: actions/github-script@v8
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ env.RELEASE_TAG }}
           RELEASE_ASSET_PATH: ${{ steps.prepare_release.outputs.asset_path }}
           RELEASE_ASSET_NAME: ${{ steps.prepare_release.outputs.asset_name }}
           COMMIT_LOG_PATH: ${{ steps.prepare_release.outputs.commit_log_path }}
