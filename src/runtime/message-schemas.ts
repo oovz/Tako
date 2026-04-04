@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DownloadErrorCategorySchema, DownloadProgressStatusSchema } from '@/src/shared/download-contract'
 
 const ChapterPayloadSchema = z.object({
   id: z.string().min(1),
@@ -128,13 +129,13 @@ export const OffscreenMessageSchema = z.discriminatedUnion('type', [
     payload: z.object({
       taskId: z.string().min(1),
       chapterId: z.string().min(1),
-      status: z.enum(['downloading', 'completed', 'failed', 'partial_success']),
+      status: DownloadProgressStatusSchema,
       chapterTitle: z.string().min(1).optional(),
       imagesProcessed: z.number().int().min(0).optional(),
       imagesFailed: z.number().int().min(0).optional(),
       totalImages: z.number().int().min(0).optional(),
       error: z.string().optional(),
-      errorCategory: z.enum(['network', 'download', 'other']).optional(),
+      errorCategory: DownloadErrorCategorySchema.optional(),
       fsaFallbackTriggered: z.boolean().optional(),
     }).strict(),
   }),

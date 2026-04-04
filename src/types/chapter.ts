@@ -1,14 +1,10 @@
+import type { DownloadTaskChapterStatus } from '@/src/shared/download-contract';
 import type { ComicInfoV2 } from './comic-info';
 
 /**
  * Chapter status enumeration
  */
-export type ChapterStatus =
-  | 'queued'         // Enqueued for download
-  | 'downloading'    // In progress
-  | 'completed'      // Finished successfully (was 'downloaded')
-  | 'partial_success'// Some images failed but successful ones kept (NONE format only)
-  | 'failed';        // Finished with error (was 'error')
+export type ChapterStatus = DownloadTaskChapterStatus;
 
 /**
  * Minimal input needed to compose a Chapter (pre-composition stage).

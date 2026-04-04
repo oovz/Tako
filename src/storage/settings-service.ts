@@ -1,5 +1,6 @@
 // Centralized settings manager. Single persistent document under STORAGE_KEY.
 import logger, { applyAdvancedLoggerSettings } from '@/src/runtime/logger';
+import { ARCHIVE_FORMATS, ArchiveFormatSchema, DOWNLOAD_MODES, DownloadModeSchema, IMAGE_PADDING_DIGITS, ImagePaddingDigitsSchema, LOG_LEVELS, LogLevelSchema } from '@/src/shared/download-contract';
 import { isRecord } from '@/src/shared/type-guards';
 import { z } from 'zod';
 import type { RateScopePolicy } from '@/src/types/rate-policy';
@@ -29,11 +30,6 @@ export const SETTINGS_LIMITS = Object.freeze({
   MAX_RETRIES: 10,
 });
 
-// Enumeration allow-lists
-const DOWNLOAD_MODES = ['browser', 'custom'] as const;
-const ARCHIVE_FORMATS = ['cbz', 'zip', 'none'] as const;
-const LOG_LEVELS = ['error', 'warn', 'info', 'debug'] as const;
-
 // Light in-memory cache to avoid repeated deserialize + async call cost during SW hot paths.
 // Rationale (validated by research): chrome.storage.local access has non‑trivial latency (can be 1–5ms).
 // The cache is authoritative only for the current runtime; onChanged keeps it in sync across contexts.
@@ -60,23 +56,23 @@ const NullableStringOptionalSchema = z.preprocess(
 );
 
 const DownloadModeOptionalSchema = z.preprocess(
-  (value) => value === 'browser' || value === 'custom' ? value : undefined,
-  z.enum(DOWNLOAD_MODES).optional(),
+  (value) => typeof value === 'string' && DOWNLOAD_MODES.includes(value as typeof DOWNLOAD_MODES[number]) ? value : undefined,
+  DownloadModeSchema.optional(),
 );
 
 const ArchiveFormatOptionalSchema = z.preprocess(
-  (value) => value === 'cbz' || value === 'zip' || value === 'none' ? value : undefined,
-  z.enum(ARCHIVE_FORMATS).optional(),
+  (value) => typeof value === 'string' && ARCHIVE_FORMATS.includes(value as typeof ARCHIVE_FORMATS[number]) ? value : undefined,
+  ArchiveFormatSchema.optional(),
 );
 
 const ImagePaddingDigitsOptionalSchema = z.preprocess(
-  (value) => value === 'auto' || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined,
-  z.union([z.literal('auto'), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+  (value) => IMAGE_PADDING_DIGITS.some((candidate) => candidate === value) ? value : undefined,
+  ImagePaddingDigitsSchema.optional(),
 );
 
 const LogLevelOptionalSchema = z.preprocess(
-  (value) => value === 'error' || value === 'warn' || value === 'info' || value === 'debug' ? value : undefined,
-  z.enum(LOG_LEVELS).optional(),
+  (value) => typeof value === 'string' && LOG_LEVELS.includes(value as typeof LOG_LEVELS[number]) ? value : undefined,
+  LogLevelSchema.optional(),
 );
 
 const RateScopePolicyPatchSchema = z.preprocess(

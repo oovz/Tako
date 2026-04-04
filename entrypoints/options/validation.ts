@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ArchiveFormatSchema, DownloadModeSchema, ImagePaddingDigitsSchema, LogLevelSchema } from '@/src/shared/download-contract';
 
 // Validation schemas aligned with settings-types.ts structure
 
@@ -11,29 +12,23 @@ export const rateScopePolicySchema = z.object({
 // Download settings schema
 export const downloadSettingsSchema = z.object({
   maxConcurrentChapters: z.number().min(1).max(10),
-  downloadMode: z.enum(['browser', 'custom']),
+  downloadMode: DownloadModeSchema,
   customDirectoryEnabled: z.boolean(),
   customDirectoryHandleId: z.string().nullable(),
   pathTemplate: z.string().min(1, 'Path template is required'),
-  defaultFormat: z.enum(['cbz', 'zip', 'none']),
+  defaultFormat: ArchiveFormatSchema,
   fileNameTemplate: z.string().optional(),
   maxConcurrentDownloads: z.number().min(1).max(10),
   overwriteExisting: z.boolean(),
   includeComicInfo: z.boolean(),
   includeCoverImage: z.boolean(),
   normalizeImageFilenames: z.boolean(),
-  imagePaddingDigits: z.union([
-    z.literal('auto'), 
-    z.literal(2), 
-    z.literal(3), 
-    z.literal(4), 
-    z.literal(5)
-  ])
+  imagePaddingDigits: ImagePaddingDigitsSchema
 });
 
 // Advanced settings schema
 export const advancedSettingsSchema = z.object({
-  logLevel: z.enum(['error', 'warn', 'info', 'debug']),
+  logLevel: LogLevelSchema,
   storageCleanupDays: z.number().min(1).max(365),
 });
 
@@ -55,7 +50,7 @@ export const extensionSettingsSchema = z.object({
 // Site override record schema (matches SiteOverrideRecord from site-overrides-service.ts)
 // All fields optional - presence indicates override
 export const siteOverrideRecordSchema = z.object({
-  outputFormat: z.enum(['cbz', 'zip', 'none']).optional(),
+  outputFormat: ArchiveFormatSchema.optional(),
   pathTemplate: z.string().optional(),
   imagePolicy: rateScopePolicySchema.partial().optional(),
   chapterPolicy: rateScopePolicySchema.partial().optional(),
