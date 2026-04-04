@@ -12,18 +12,18 @@ import logger from '@/src/runtime/logger';
 export type DirHandle = FileSystemDirectoryHandle;
 export type FileHandle = FileSystemFileHandle;
 
-const DB_NAME = 'tako-fs';
-const STORE = 'handles';
-const KEY_ROOT = 'download-root';
+export const DOWNLOAD_ROOT_DB_NAME = 'tako-fs';
+export const DOWNLOAD_ROOT_STORE_NAME = 'handles';
+export const DOWNLOAD_ROOT_HANDLE_ID = 'download-root';
 
 // Open IndexedDB
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DOWNLOAD_ROOT_DB_NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(DOWNLOAD_ROOT_STORE_NAME)) {
+        db.createObjectStore(DOWNLOAD_ROOT_STORE_NAME);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -34,8 +34,8 @@ function openDB(): Promise<IDBDatabase> {
 async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const store = tx.objectStore(STORE);
+    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, 'readonly');
+    const store = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME);
     const req = store.get(key);
     req.onsuccess = () => resolve(req.result as T | undefined);
     req.onerror = () => reject(req.error ?? new Error('Failed to read IndexedDB'));
@@ -45,8 +45,8 @@ async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
 async function idbSet(key: string, value: unknown): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const req = tx.objectStore(STORE).put(value, key);
+    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, 'readwrite');
+    const req = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME).put(value, key);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error ?? new Error('Failed to write IndexedDB'));
   });
@@ -55,8 +55,8 @@ async function idbSet(key: string, value: unknown): Promise<void> {
 async function idbDelete(key: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const req = tx.objectStore(STORE).delete(key);
+    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, 'readwrite');
+    const req = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME).delete(key);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error ?? new Error('Failed to delete IndexedDB entry'));
   });
@@ -64,12 +64,12 @@ async function idbDelete(key: string): Promise<void> {
 
 export async function saveDownloadRootHandle(handle: DirHandle): Promise<void> {
   // FileSystem handles are serializable via structured cloning into IndexedDB
-  await idbSet(KEY_ROOT, handle);
+  await idbSet(DOWNLOAD_ROOT_HANDLE_ID, handle);
 }
 
 export async function loadDownloadRootHandle(): Promise<DirHandle | undefined> {
   try {
-    const h = await idbGet<DirHandle>(KEY_ROOT);
+    const h = await idbGet<DirHandle>(DOWNLOAD_ROOT_HANDLE_ID);
     return h;
   } catch {
     return undefined;
@@ -77,7 +77,7 @@ export async function loadDownloadRootHandle(): Promise<DirHandle | undefined> {
 }
 
 export async function clearDownloadRootHandle(): Promise<void> {
-  await idbDelete(KEY_ROOT);
+  await idbDelete(DOWNLOAD_ROOT_HANDLE_ID);
 }
 
 export async function verifyPermission(dir: DirHandle, writable = true): Promise<boolean> {

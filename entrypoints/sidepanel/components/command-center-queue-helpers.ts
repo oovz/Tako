@@ -42,7 +42,7 @@ export function getTaskStatusLabel(status: QueueTaskSummary['status']): string {
     case 'completed':
       return 'Completed'
     case 'partial_success':
-      return 'Partial'
+      return 'Partial success'
     case 'failed':
       return 'Failed'
     case 'canceled':

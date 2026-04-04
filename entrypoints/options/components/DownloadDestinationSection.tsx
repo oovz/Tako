@@ -56,7 +56,6 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
                 onDownloadsChange({
                   downloadMode: 'browser',
                   customDirectoryEnabled: false,
-                  customDirectoryHandleId: null,
                 })
               }}
             >

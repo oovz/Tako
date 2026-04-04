@@ -241,58 +241,78 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         expect(forwarded).toEqual({ cookieHeader: 'PHPSESSID=abc123' })
     })
 
-    it('keeps the leading-edge zero-progress heartbeat when subsequent downloading updates are throttled', async () => {
-        const processChapterStreamingMock = vi.fn().mockImplementation(async (opts: any) => {
-            await opts.onProgress(10, 'ready', { current: 0, total: 4 })
-            await opts.onProgress(20, undefined, { current: 1, total: 4 })
-            return { status: 'completed', imagesFailed: 0 }
-        })
+    it('keeps the leading-edge heartbeat and emits the latest cumulative progress after the throttle window', async () => {
+        vi.useFakeTimers()
+        try {
+            const processChapterStreamingMock = vi.fn().mockImplementation(async (opts: any) => {
+                await opts.onProgress(10, 'ready', { current: 0, total: 4 })
+                await opts.onProgress(20, undefined, { current: 1, total: 4 })
+                return { status: 'completed', imagesFailed: 0 }
+            })
 
-        worker.processChapterStreaming = processChapterStreamingMock
+            worker.processChapterStreaming = processChapterStreamingMock
 
-        await worker.processDownloadChapter({
-            taskId: 'task-initial-progress',
-            seriesKey: 'test-site:series-1',
-            book: {
-                siteIntegrationId: 'test-site',
-                seriesTitle: 'Test Book',
-                coverUrl: undefined,
-            },
-            chapter: {
-                id: 'c1',
-                title: 'Chapter 1',
-                url: 'http://example.com/c1',
-                index: 1,
-                chapterNumber: 1,
-                resolvedPath: 'Chapter 1',
-            },
-            settingsSnapshot: {
-                ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'test-site'),
-                archiveFormat: 'none',
-                includeComicInfo: true,
-            },
-            saveMode: 'downloads-api',
-        })
+            const downloadPromise = worker.processDownloadChapter({
+                taskId: 'task-initial-progress',
+                seriesKey: 'test-site:series-1',
+                book: {
+                    siteIntegrationId: 'test-site',
+                    seriesTitle: 'Test Book',
+                    coverUrl: undefined,
+                },
+                chapter: {
+                    id: 'c1',
+                    title: 'Chapter 1',
+                    url: 'http://example.com/c1',
+                    index: 1,
+                    chapterNumber: 1,
+                    resolvedPath: 'Chapter 1',
+                },
+                settingsSnapshot: {
+                    ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'test-site'),
+                    archiveFormat: 'none',
+                    includeComicInfo: true,
+                },
+                saveMode: 'downloads-api',
+            })
 
-        const initialHeartbeat = messages.find(
-            (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
-                && m.payload?.taskId === 'task-initial-progress'
-                && m.payload?.chapterId === 'c1'
-                && m.payload?.status === 'downloading'
-                && m.payload?.imagesProcessed === 0
-                && m.payload?.totalImages === 4
-        )
-        const throttledFollowUp = messages.find(
-            (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
-                && m.payload?.taskId === 'task-initial-progress'
-                && m.payload?.chapterId === 'c1'
-                && m.payload?.status === 'downloading'
-                && m.payload?.imagesProcessed === 1
-        )
+            await downloadPromise
 
-        expect(initialHeartbeat).toBeDefined()
-        expect(initialHeartbeat?.payload?.imagesFailed).toBe(0)
-        expect(throttledFollowUp).toBeUndefined()
+            const initialHeartbeat = messages.find(
+                (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
+                    && m.payload?.taskId === 'task-initial-progress'
+                    && m.payload?.chapterId === 'c1'
+                    && m.payload?.status === 'downloading'
+                    && m.payload?.imagesProcessed === 0
+                    && m.payload?.totalImages === 4
+            )
+            const immediateFollowUp = messages.find(
+                (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
+                    && m.payload?.taskId === 'task-initial-progress'
+                    && m.payload?.chapterId === 'c1'
+                    && m.payload?.status === 'downloading'
+                    && m.payload?.imagesProcessed === 1
+            )
+
+            expect(initialHeartbeat).toBeDefined()
+            expect(initialHeartbeat?.payload?.imagesFailed).toBe(0)
+            expect(immediateFollowUp).toBeUndefined()
+
+            await vi.advanceTimersByTimeAsync(250)
+
+            const throttledFollowUp = messages.find(
+                (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
+                    && m.payload?.taskId === 'task-initial-progress'
+                    && m.payload?.chapterId === 'c1'
+                    && m.payload?.status === 'downloading'
+                    && m.payload?.imagesProcessed === 1
+                    && m.payload?.totalImages === 4
+            )
+
+            expect(throttledFollowUp).toBeDefined()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 
     it('skips extension retry wrapper when integration declares handlesOwnRetries', async () => {

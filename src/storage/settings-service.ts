@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { RateScopePolicy } from '@/src/types/rate-policy';
 import type { AdvancedSettings, DownloadSettings, ExtensionSettings, RetryCounts } from './settings-types';
 import { DEFAULT_SETTINGS } from './default-settings';
+import { DOWNLOAD_ROOT_HANDLE_ID } from './fs-access';
 
 type ExtensionSettingsPatch = {
   downloads?: Partial<DownloadSettings>;
@@ -230,6 +231,12 @@ function normalizeSettings(settings: ExtensionSettings): ExtensionSettings {
   }
   if (typeof s.downloads.customDirectoryHandleId !== 'string' && s.downloads.customDirectoryHandleId !== null) {
     s.downloads.customDirectoryHandleId = DEFAULT_SETTINGS.downloads.customDirectoryHandleId;
+  }
+  if (
+    (s.downloads.downloadMode === 'custom' || s.downloads.customDirectoryEnabled)
+    && s.downloads.customDirectoryHandleId === null
+  ) {
+    s.downloads.customDirectoryHandleId = DOWNLOAD_ROOT_HANDLE_ID;
   }
   if (typeof s.downloads.overwriteExisting !== 'boolean') {
     s.downloads.overwriteExisting = DEFAULT_SETTINGS.downloads.overwriteExisting;

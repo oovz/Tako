@@ -1,4 +1,4 @@
-import { loadDownloadRootHandle, clearDownloadRootHandle } from '@/src/storage/fs-access';
+import { loadDownloadRootHandle, clearDownloadRootHandle, DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access';
 import { settingsService } from '@/src/storage/settings-service';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 import { addPersistentError } from './errors';
@@ -18,12 +18,14 @@ export class DestinationService {
      */
     async getEffectiveDestination(): Promise<EffectiveDestination> {
         const settings = await settingsService.getSettings();
+        const wantsCustomDirectory = settings.downloads.downloadMode === 'custom'
+            || settings.downloads.customDirectoryEnabled;
 
-        if (!settings.downloads.customDirectoryEnabled || !settings.downloads.customDirectoryHandleId) {
+        if (!wantsCustomDirectory) {
             return { kind: 'downloads' };
         }
 
-        const handleId = settings.downloads.customDirectoryHandleId;
+        const handleId = settings.downloads.customDirectoryHandleId ?? DOWNLOAD_ROOT_HANDLE_ID;
 
         try {
             // `loadDownloadRootHandle` resolves the persisted root handle if it is still available.

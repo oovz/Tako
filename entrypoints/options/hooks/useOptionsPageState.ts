@@ -5,7 +5,14 @@ import logger from '@/src/runtime/logger'
 import { initializeSiteIntegrationMetadataOnly } from '@/src/runtime/site-integration-initialization'
 import { isRecord, type StorageValue } from '@/src/shared/type-guards'
 import { chapterPersistenceService } from '@/src/storage/chapter-persistence-service'
-import { saveDownloadRootHandle, loadDownloadRootHandle, clearDownloadRootHandle, verifyPermission } from '@/src/storage/fs-access'
+import {
+  saveDownloadRootHandle,
+  loadDownloadRootHandle,
+  clearDownloadRootHandle,
+  verifyPermission,
+  DOWNLOAD_ROOT_HANDLE_ID,
+  type DirHandle,
+} from '@/src/storage/fs-access'
 import { siteIntegrationEnablementService, type SiteIntegrationEnablementMap } from '@/src/storage/site-integration-enablement-service'
 import { siteIntegrationSettingsService, type SiteIntegrationSettingsMap } from '@/src/storage/site-integration-settings-service'
 import { settingsService } from '@/src/storage/settings-service'
@@ -64,28 +71,20 @@ export function useOptionsPageState() {
   const [siteIntegrationSettingsByIntegration, setSiteIntegrationSettingsByIntegration] = useState<Record<string, Record<string, CustomSettingValue>>>({})
   const [historyStats, setHistoryStats] = useState<HistoryStats | null>(null)
   const [historySeries, setHistorySeries] = useState<SeriesHistory[]>([])
-  const [selectedFolderName, setSelectedFolderName] = useState<string | null>(null)
+  const [savedFolderHandle, setSavedFolderHandle] = useState<DirHandle | null>(null)
+  const [pendingFolderHandle, setPendingFolderHandle] = useState<DirHandle | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isPickingFolder, setIsPickingFolder] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const selectedFolderName = pendingFolderHandle?.name ?? savedFolderHandle?.name ?? null
 
   useEffect(() => {
     void loadConfiguration()
     void initializeSiteIntegrationMetadataOnly()
     void loadFolderHandle()
   }, [])
-
-  useEffect(() => {
-    if (settingsBuffer?.downloads.downloadMode === 'browser' && selectedFolderName) {
-      clearDownloadRootHandle().then(() => {
-        setSelectedFolderName(null)
-      }).catch((error) => {
-        logger.error('[OPTIONS] Failed to clear folder handle:', error)
-      })
-    }
-  }, [settingsBuffer?.downloads.downloadMode, selectedFolderName])
 
   async function loadConfiguration() {
     try {
@@ -121,10 +120,11 @@ export function useOptionsPageState() {
   async function loadFolderHandle() {
     try {
       const handle = await loadDownloadRootHandle()
-      if (handle) {
-        setSelectedFolderName(handle.name)
-      }
+      setSavedFolderHandle(handle ?? null)
+      setPendingFolderHandle(null)
     } catch {
+      setSavedFolderHandle(null)
+      setPendingFolderHandle(null)
       logger.debug('[OPTIONS] No custom folder configured')
     }
   }
@@ -134,6 +134,17 @@ export function useOptionsPageState() {
 
     try {
       setIsSaving(true)
+      const wantsCustomFolder = settingsBuffer.downloads.downloadMode === 'custom'
+      const handleToPersist = wantsCustomFolder ? (pendingFolderHandle ?? savedFolderHandle) : null
+
+      if (wantsCustomFolder && handleToPersist) {
+        await saveDownloadRootHandle(handleToPersist)
+      }
+
+      if (!wantsCustomFolder && (savedFolderHandle || pendingFolderHandle)) {
+        await clearDownloadRootHandle()
+      }
+
       const result = await settingsSyncService.updateSettingsWithSync(settingsBuffer)
 
       if (!result.success) {
@@ -148,10 +159,21 @@ export function useOptionsPageState() {
       setSavedOverrides(overrides)
       setSavedSiteIntegrationEnablement(siteIntegrationEnablement)
       setSavedSiteIntegrationSettingsByIntegration(siteIntegrationSettingsByIntegration)
+      setSavedFolderHandle(handleToPersist)
+      setPendingFolderHandle(null)
       setHasUnsavedChanges(false)
 
       toast.success('Settings saved successfully')
     } catch (error) {
+      try {
+        if (savedFolderHandle) {
+          await saveDownloadRootHandle(savedFolderHandle)
+        } else {
+          await clearDownloadRootHandle()
+        }
+      } catch (rollbackError) {
+        logger.error('[OPTIONS] Failed to restore saved folder handle after save error:', rollbackError)
+      }
       logger.error('[OPTIONS] Failed to save settings:', error)
       toast.error('Failed to save settings', {
         description: error instanceof Error ? error.message : 'Unknown error',
@@ -250,14 +272,15 @@ export function useOptionsPageState() {
         return
       }
 
-      await saveDownloadRootHandle(handle)
-      setSelectedFolderName(handle.name)
+      setPendingFolderHandle(handle)
 
       if (settingsBuffer) {
         handleSettingsChange({
           downloads: {
             ...settingsBuffer.downloads,
             downloadMode: 'custom',
+            customDirectoryEnabled: true,
+            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
           },
         })
       }
@@ -311,6 +334,7 @@ export function useOptionsPageState() {
     setOverrides(savedOverrides)
     setSiteIntegrationEnablement(savedSiteIntegrationEnablement)
     setSiteIntegrationSettingsByIntegration(savedSiteIntegrationSettingsByIntegration)
+    setPendingFolderHandle(null)
     setHasUnsavedChanges(false)
     toast.info('Changes discarded')
   }
