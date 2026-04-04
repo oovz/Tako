@@ -1,10 +1,20 @@
 # Tako Manga Downloader
 
-![Tako promo banner](assets/promo-1400x560.png)
-
 Tako is a Chrome extension that keeps chapter selection, queue management, and organized exports inside Chrome's Side Panel.
 
 Instead of juggling extra tabs, repeated save dialogs, or brittle one-off scripts, you can review supported chapters, queue work, watch progress, and export cleaner offline-reading files from one workflow.
+
+<p>
+  <a href="https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb">
+    <img
+      src="https://developer.chrome.com/static/docs/webstore/branding/image/tbyBjqi7Zu733AAKA5n4.png"
+      alt="Available in the Chrome Web Store"
+      width="170"
+    />
+  </a>
+</p>
+
+![Tako promo banner](assets/promo-1400x560.png)
 
 ## Why Tako
 
