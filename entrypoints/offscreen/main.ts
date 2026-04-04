@@ -65,6 +65,11 @@ type TaskControllerEntry = {
   createdAt: number
 }
 
+type PendingChapterProgressEntry = {
+  payload: OffscreenDownloadProgressMessage['payload']
+  timerId: ReturnType<typeof setTimeout>
+}
+
 /**
  * Offscreen Worker Manager
  */
@@ -78,6 +83,7 @@ export class OffscreenWorker {
   private currentRetries: { image: number; chapter: number } | undefined
   private currentHandlesOwnRetries = false
   private readonly chapterProgressLastSentAt = new Map<string, number>()
+  private readonly pendingChapterProgress = new Map<string, PendingChapterProgressEntry>()
   private readonly activeTaskControllers = new Map<string, TaskControllerEntry>()
 
   async initialize(): Promise<void> {
@@ -362,25 +368,80 @@ export class OffscreenWorker {
 
   private async sendChapterProgressMessage(payload: OffscreenDownloadProgressMessage['payload']): Promise<void> {
     try {
-      const chapterKey = `${payload.taskId}:${payload.chapterId}`;
-      const previousSentAt = this.chapterProgressLastSentAt.get(chapterKey) ?? 0;
-      if (payload.status === 'downloading' && previousSentAt > 0 && Date.now() - previousSentAt < 250) {
-        return;
+      const chapterKey = `${payload.taskId}:${payload.chapterId}`
+      if (payload.status !== 'downloading') {
+        this.clearPendingChapterProgress(chapterKey)
+        await this.dispatchChapterProgressMessage(chapterKey, payload)
+        return
       }
 
-      await this.sendMessageWithRetry(
-        {
-          type: 'OFFSCREEN_DOWNLOAD_PROGRESS',
-          payload,
-        } as OffscreenDownloadProgressMessage,
-        3,
-        250
-      );
-      this.chapterProgressLastSentAt.set(chapterKey, Date.now());
-      logger.debug(`📊 Sent chapter progress update ${payload.taskId}/${payload.chapterId}:`, payload);
+      const previousSentAt = this.chapterProgressLastSentAt.get(chapterKey) ?? 0
+      const elapsedMs = Date.now() - previousSentAt
+      const throttleWindowMs = 250
+      if (previousSentAt > 0 && elapsedMs < throttleWindowMs) {
+        this.schedulePendingChapterProgress(chapterKey, payload, throttleWindowMs - elapsedMs)
+        return
+      }
+
+      this.clearPendingChapterProgress(chapterKey)
+      await this.dispatchChapterProgressMessage(chapterKey, payload)
     } catch (error) {
-      logger.error('❌ Failed to send chapter progress update message:', error);
+      logger.error('❌ Failed to send chapter progress update message:', error)
     }
+  }
+
+  private clearPendingChapterProgress(chapterKey: string): void {
+    const pendingEntry = this.pendingChapterProgress.get(chapterKey)
+    if (!pendingEntry) {
+      return
+    }
+
+    clearTimeout(pendingEntry.timerId)
+    this.pendingChapterProgress.delete(chapterKey)
+  }
+
+  private schedulePendingChapterProgress(
+    chapterKey: string,
+    payload: OffscreenDownloadProgressMessage['payload'],
+    delayMs: number,
+  ): void {
+    const existingEntry = this.pendingChapterProgress.get(chapterKey)
+    if (existingEntry) {
+      clearTimeout(existingEntry.timerId)
+    }
+
+    const timerId = setTimeout(() => {
+      const pendingEntry = this.pendingChapterProgress.get(chapterKey)
+      if (!pendingEntry || pendingEntry.timerId !== timerId) {
+        return
+      }
+
+      this.pendingChapterProgress.delete(chapterKey)
+      void this.dispatchChapterProgressMessage(chapterKey, pendingEntry.payload).catch((error) => {
+        logger.error('❌ Failed to flush throttled chapter progress update:', error)
+      })
+    }, Math.max(0, delayMs))
+
+    this.pendingChapterProgress.set(chapterKey, {
+      payload,
+      timerId,
+    })
+  }
+
+  private async dispatchChapterProgressMessage(
+    chapterKey: string,
+    payload: OffscreenDownloadProgressMessage['payload'],
+  ): Promise<void> {
+    await this.sendMessageWithRetry(
+      {
+        type: 'OFFSCREEN_DOWNLOAD_PROGRESS',
+        payload,
+      } as OffscreenDownloadProgressMessage,
+      3,
+      250,
+    )
+    this.chapterProgressLastSentAt.set(chapterKey, Date.now())
+    logger.debug(`📊 Sent chapter progress update ${payload.taskId}/${payload.chapterId}:`, payload)
   }
 
 

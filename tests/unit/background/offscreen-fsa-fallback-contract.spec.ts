@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DestinationService } from '@/entrypoints/background/destination'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
+import { DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access'
 
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  loadDownloadRootHandle: vi.fn(),
   clearDownloadRootHandle: vi.fn(async () => undefined),
   emitError: vi.fn(async () => undefined),
 }))
@@ -19,8 +21,9 @@ vi.mock('@/src/storage/settings-service', () => ({
 }))
 
 vi.mock('@/src/storage/fs-access', () => ({
-  loadDownloadRootHandle: vi.fn(),
+  loadDownloadRootHandle: mocks.loadDownloadRootHandle,
   clearDownloadRootHandle: mocks.clearDownloadRootHandle,
+  DOWNLOAD_ROOT_HANDLE_ID: 'download-root',
 }))
 
 vi.mock('@/entrypoints/background/errors', () => ({
@@ -88,6 +91,28 @@ describe('DestinationService fallback behavior', () => {
         }),
       }),
     )
+  })
+
+  it('resolves the fixed persisted download-root handle when legacy settings omitted the handle id', async () => {
+    const handle = { name: 'Downloads' } as FileSystemDirectoryHandle
+
+    mocks.getSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      downloads: {
+        ...DEFAULT_SETTINGS.downloads,
+        downloadMode: 'custom',
+        customDirectoryEnabled: true,
+        customDirectoryHandleId: null,
+      },
+    })
+    mocks.loadDownloadRootHandle.mockResolvedValue(handle)
+
+    const service = new DestinationService()
+    await expect(service.getEffectiveDestination()).resolves.toEqual({
+      kind: 'custom',
+      handleId: DOWNLOAD_ROOT_HANDLE_ID,
+      handle,
+    })
   })
 
   it('is a no-op when custom destination is already disabled', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
+import { DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 import { SETTINGS_LIMITS, SETTINGS_STORAGE_KEY } from '@/src/storage/settings-service';
 import { mockStorageData, settingsService } from './settings-service-test-setup';
@@ -52,6 +53,21 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
       expect(settings.downloads.pathTemplate).toBe(DEFAULT_SETTINGS.downloads.pathTemplate);
       expect(settings.globalPolicy).toEqual(DEFAULT_SETTINGS.globalPolicy);
       expect(settings.notifications).toBe(DEFAULT_SETTINGS.notifications);
+    });
+
+    it('should recover the fixed persisted folder handle id for legacy custom-folder settings on reload', async () => {
+      mockStorageData[SETTINGS_STORAGE_KEY] = {
+        downloads: {
+          downloadMode: 'custom',
+          customDirectoryEnabled: true,
+          customDirectoryHandleId: null,
+        },
+      };
+
+      const settings = await settingsService.reload();
+
+      expect(settings.downloads.customDirectoryEnabled).toBe(true);
+      expect(settings.downloads.customDirectoryHandleId).toBe(DOWNLOAD_ROOT_HANDLE_ID);
     });
 
     it('should ignore malformed nested persisted branches while preserving valid typed leaves on reload', async () => {

@@ -12,9 +12,78 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures/extension';
 import { OptionsPageObject } from './pages/options';
+import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 
 let optionsPage: Page;
 let options: OptionsPageObject;
+
+const SETTINGS_STORAGE_KEY = 'settings:global';
+const DOWNLOAD_ROOT_DB_NAME = 'tako-fs';
+const DOWNLOAD_ROOT_STORE_NAME = 'handles';
+const DOWNLOAD_ROOT_HANDLE_ID = 'download-root';
+
+async function seedCustomDirectoryHandle(page: Page): Promise<string> {
+  return await page.evaluate(async ({ dbName, storeName, handleId }) => {
+    const directoryName = `settings-persistence-${Date.now()}`
+    const opfsRoot = await navigator.storage.getDirectory()
+    const seededDirectory = await opfsRoot.getDirectoryHandle(directoryName, { create: true })
+
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(dbName, 1)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        if (!db.objectStoreNames.contains(storeName)) {
+          db.createObjectStore(storeName)
+        }
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('Failed to open custom-folder IndexedDB'))
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(storeName, 'readwrite')
+      const store = transaction.objectStore(storeName)
+      store.put(seededDirectory, handleId)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error ?? new Error('Failed to seed persisted folder handle'))
+    })
+
+    return directoryName
+  }, {
+    dbName: DOWNLOAD_ROOT_DB_NAME,
+    storeName: DOWNLOAD_ROOT_STORE_NAME,
+    handleId: DOWNLOAD_ROOT_HANDLE_ID,
+  })
+}
+
+async function readPersistedDirectoryName(page: Page): Promise<string | null> {
+  return await page.evaluate(async ({ dbName, storeName, handleId }) => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(dbName, 1)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        if (!db.objectStoreNames.contains(storeName)) {
+          db.createObjectStore(storeName)
+        }
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('Failed to open custom-folder IndexedDB'))
+    })
+
+    const handle = await new Promise<FileSystemDirectoryHandle | undefined>((resolve, reject) => {
+      const transaction = database.transaction(storeName, 'readonly')
+      const request = transaction.objectStore(storeName).get(handleId)
+      request.onsuccess = () => resolve(request.result as FileSystemDirectoryHandle | undefined)
+      request.onerror = () => reject(request.error ?? new Error('Failed to read persisted folder handle'))
+    })
+
+    return handle?.name ?? null
+  }, {
+    dbName: DOWNLOAD_ROOT_DB_NAME,
+    storeName: DOWNLOAD_ROOT_STORE_NAME,
+    handleId: DOWNLOAD_ROOT_HANDLE_ID,
+  })
+}
 
 test.describe('Settings Persistence and Usage', () => {
   test.beforeEach(async ({ page, extensionId }) => {
@@ -159,6 +228,82 @@ test.describe('Settings Persistence and Usage', () => {
       await options.setDirectoryTemplate('TMD/<SERIES_TITLE>');
       await options.saveSettings();
       await optionsPage.waitForTimeout(500);
+    });
+
+    test('discarding an unsaved switch back to browser downloads preserves the stored custom folder handle', async () => {
+      await options.navigate();
+      await options.ensureInitialized();
+
+      const directoryName = await seedCustomDirectoryHandle(optionsPage);
+      await optionsPage.evaluate(async ({ storageKey, settings }) => {
+        await chrome.storage.local.set({ [storageKey]: settings });
+      }, {
+        storageKey: SETTINGS_STORAGE_KEY,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            downloadMode: 'custom',
+            customDirectoryEnabled: true,
+            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+          },
+        },
+      });
+
+      await options.navigate();
+      await options.ensureInitialized();
+      await options.switchToSection('Downloads');
+
+      await expect(optionsPage.getByText(`Current folder: ${directoryName}`)).toBeVisible();
+
+      await optionsPage.getByRole('button', { name: 'Use browser downloads' }).click();
+      await optionsPage.getByRole('button', { name: 'Discard' }).click();
+      await optionsPage.getByRole('button', { name: 'Discard Changes' }).click();
+
+      await options.navigate();
+      await options.ensureInitialized();
+      await options.switchToSection('Downloads');
+
+      await expect(optionsPage.getByText(`Current folder: ${directoryName}`)).toBeVisible();
+      await expect.poll(() => readPersistedDirectoryName(optionsPage)).toBe(directoryName);
+    });
+
+    test('saving browser mode clears the persisted custom folder handle', async () => {
+      await options.navigate();
+      await options.ensureInitialized();
+
+      const directoryName = await seedCustomDirectoryHandle(optionsPage);
+      await optionsPage.evaluate(async ({ storageKey, settings }) => {
+        await chrome.storage.local.set({ [storageKey]: settings });
+      }, {
+        storageKey: SETTINGS_STORAGE_KEY,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            downloadMode: 'custom',
+            customDirectoryEnabled: true,
+            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+          },
+        },
+      });
+
+      await options.navigate();
+      await options.ensureInitialized();
+      await options.switchToSection('Downloads');
+
+      await expect(optionsPage.getByText(`Current folder: ${directoryName}`)).toBeVisible();
+
+      await optionsPage.getByRole('button', { name: 'Use browser downloads' }).click();
+      await options.saveSettings();
+      await options.waitForSaveSuccess();
+
+      await options.navigate();
+      await options.ensureInitialized();
+      await options.switchToSection('Downloads');
+
+      await expect(optionsPage.getByText(`Current folder: ${directoryName}`)).toHaveCount(0);
+      await expect.poll(() => readPersistedDirectoryName(optionsPage)).toBeNull();
     });
   });
 
