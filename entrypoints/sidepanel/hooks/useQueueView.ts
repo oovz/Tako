@@ -1,28 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { DownloadErrorCategorySchema, DownloadTaskStatusSchema } from '@/src/shared/download-contract'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
 import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
 import { z } from 'zod'
 
 const SKELETON_TIMEOUT_MS = 500
-const QUEUE_TASK_STATUSES = [
-  'queued',
-  'downloading',
-  'completed',
-  'partial_success',
-  'failed',
-  'canceled',
-] as const satisfies ReadonlyArray<QueueTaskSummary['status']>
-
-const QUEUE_FAILURE_CATEGORIES = [
-  'network',
-  'download',
-  'other',
-] as const satisfies ReadonlyArray<NonNullable<QueueTaskSummary['failureCategory']>>
-
-const QueueTaskStatusSchema = z.enum(QUEUE_TASK_STATUSES)
-const QueueFailureCategorySchema = z.enum(QUEUE_FAILURE_CATEGORIES)
 
 const QueueTaskSummaryStorageSchema = z.object({
   id: z.string(),
@@ -30,7 +14,7 @@ const QueueTaskSummaryStorageSchema = z.object({
   seriesTitle: z.string(),
   siteIntegration: z.string(),
   coverUrl: z.unknown().optional(),
-  status: QueueTaskStatusSchema,
+  status: DownloadTaskStatusSchema,
   chapters: z.object({
     total: z.number(),
     completed: z.number(),
@@ -72,8 +56,8 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
       completed: data.timestamps.completed,
     },
     failureReason: typeof data.failureReason === 'string' ? data.failureReason : undefined,
-    failureCategory: QueueFailureCategorySchema.safeParse(data.failureCategory).success
-      ? QueueFailureCategorySchema.parse(data.failureCategory)
+    failureCategory: DownloadErrorCategorySchema.safeParse(data.failureCategory).success
+      ? DownloadErrorCategorySchema.parse(data.failureCategory)
       : undefined,
     isRetried: typeof data.isRetried === 'boolean' ? data.isRetried : undefined,
     isRetryTask: typeof data.isRetryTask === 'boolean' ? data.isRetryTask : undefined,

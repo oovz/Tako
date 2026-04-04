@@ -4,13 +4,14 @@
  *
  * Flat structure - presence equals enabled:
  *   { [siteId]: {
- *       outputFormat?: 'cbz' | 'zip',
+ *       outputFormat?: 'cbz' | 'zip' | 'none',
  *       pathTemplate?: string,
  *       rate?: { requestsPerMinute?: number },
  *       retries?: { maxAttempts?: number }
  *   } }
  */
 
+import { ArchiveFormatSchema } from '@/src/shared/download-contract';
 import { z } from 'zod';
 
 export type SiteOverrideRecord = {
@@ -40,7 +41,7 @@ const RetryOverridesSchema = z.object({
 });
 
 const SiteOverrideRecordSchema = z.object({
-  outputFormat: z.enum(['cbz', 'zip', 'none']).optional(),
+  outputFormat: ArchiveFormatSchema.optional(),
   pathTemplate: z.string().optional(),
   imagePolicy: RatePolicySchema.optional(),
   chapterPolicy: RatePolicySchema.optional(),

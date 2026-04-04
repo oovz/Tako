@@ -1,16 +1,13 @@
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
+import { ArchiveFormatSchema, DownloadErrorCategorySchema, DownloadTaskChapterStatusSchema, DownloadTaskStatusSchema, ImagePaddingDigitsSchema } from '@/src/shared/download-contract';
 import { isRecord } from '@/src/shared/type-guards';
 import { z } from 'zod';
 import type { DownloadTaskState, TaskChapter } from '@/src/types/queue-state';
 
-const TASK_CHAPTER_STATUSES = ['queued', 'downloading', 'completed', 'partial_success', 'failed'] as const;
-const TASK_STATUSES = ['queued', 'downloading', 'completed', 'partial_success', 'failed', 'canceled'] as const;
-const ERROR_CATEGORIES = ['network', 'download', 'other'] as const;
-
-const PersistedTaskChapterStatusSchema = z.enum(TASK_CHAPTER_STATUSES);
-const PersistedTaskStatusSchema = z.enum(TASK_STATUSES);
-const PersistedTaskErrorCategorySchema = z.enum(ERROR_CATEGORIES);
+const PersistedTaskChapterStatusSchema = DownloadTaskChapterStatusSchema;
+const PersistedTaskStatusSchema = DownloadTaskStatusSchema;
+const PersistedTaskErrorCategorySchema = DownloadErrorCategorySchema;
 
 const BooleanOptionalSchema = z.preprocess(
   (value) => typeof value === 'boolean' ? value : undefined,
@@ -23,13 +20,13 @@ const NonEmptyStringOptionalSchema = z.preprocess(
 );
 
 const ArchiveFormatOptionalSchema = z.preprocess(
-  (value) => value === 'cbz' || value === 'zip' || value === 'none' ? value : undefined,
-  z.enum(['cbz', 'zip', 'none']).optional(),
+  (value) => ArchiveFormatSchema.safeParse(value).success ? value : undefined,
+  ArchiveFormatSchema.optional(),
 );
 
 const ImagePaddingDigitsOptionalSchema = z.preprocess(
-  (value) => value === 'auto' || value === 2 || value === 3 || value === 4 || value === 5 ? value : undefined,
-  z.union([z.literal('auto'), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+  (value) => ImagePaddingDigitsSchema.safeParse(value).success ? value : undefined,
+  ImagePaddingDigitsSchema.optional(),
 );
 
 const UnknownRecordOptionalSchema = z.preprocess(

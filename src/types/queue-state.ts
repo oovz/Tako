@@ -1,4 +1,5 @@
 import type { ExtensionSettings } from '@/src/storage/settings-types';
+import type { DownloadErrorCategory, DownloadTaskStatus } from '@/src/shared/download-contract';
 import type { ChapterStatus } from '@/src/types/chapter';
 import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots';
 
@@ -27,9 +28,9 @@ export interface DownloadTaskState {
   seriesTitle: string;
   seriesCoverUrl?: string;
   chapters: TaskChapter[];
-  status: 'queued' | 'downloading' | 'completed' | 'partial_success' | 'failed' | 'canceled';
+  status: DownloadTaskStatus;
   errorMessage?: string;
-  errorCategory?: 'network' | 'download' | 'other';
+  errorCategory?: DownloadErrorCategory;
   created: number;
   started?: number;
   completed?: number;
@@ -45,7 +46,7 @@ export interface QueueTaskSummary {
   seriesTitle: string;
   siteIntegration: string;
   coverUrl?: string;
-  status: 'queued' | 'downloading' | 'completed' | 'partial_success' | 'failed' | 'canceled';
+  status: DownloadTaskStatus;
   chapters: {
     total: number;
     completed: number;
@@ -56,7 +57,7 @@ export interface QueueTaskSummary {
     completed?: number;
   };
   failureReason?: string;
-  failureCategory?: 'network' | 'download' | 'other';
+  failureCategory?: DownloadErrorCategory;
   isRetried?: boolean;
   isRetryTask?: boolean;
   lastSuccessfulDownloadId?: number;

@@ -1,8 +1,6 @@
 import { z } from 'zod'
+import { DownloadErrorCategorySchema, DownloadTaskStatusSchema } from '@/src/shared/download-contract'
 import { StateAction } from '@/src/types/state-actions'
-
-const ChapterStatusSchema = z.enum(['queued', 'downloading', 'completed', 'partial_success', 'failed', 'canceled'])
-const ErrorCategorySchema = z.enum(['network', 'download', 'other'])
 
 const InitializeTabChapterSchema = z.object({
   id: z.string().min(1),
@@ -44,9 +42,9 @@ export const InitializeTabPayloadSchema = z.discriminatedUnion('context', [
 export const UpdateDownloadTaskPayloadSchema = z.object({
   taskId: z.string().min(1),
   updates: z.object({
-    status: ChapterStatusSchema.optional(),
+    status: DownloadTaskStatusSchema.optional(),
     errorMessage: z.string().optional(),
-    errorCategory: ErrorCategorySchema.optional(),
+    errorCategory: DownloadErrorCategorySchema.optional(),
     started: z.number().optional(),
     completed: z.number().optional(),
     isRetried: z.boolean().optional(),

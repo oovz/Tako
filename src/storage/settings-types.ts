@@ -1,11 +1,12 @@
 // Shared types for settings to avoid circular imports
 import type { RateScopePolicy } from '@/src/types/rate-policy'
+import type { ArchiveFormat, DownloadMode, ImagePaddingDigits, LogLevel } from '@/src/shared/download-contract'
 
 export interface RetryCounts { image: number; chapter: number }
 
 export interface AdvancedSettings {
   /** Log verbosity level. 'debug' = most verbose, 'error' = least verbose */
-  logLevel: 'error' | 'warn' | 'info' | 'debug';
+  logLevel: LogLevel;
   storageCleanupDays: number;
 }
 
@@ -13,13 +14,13 @@ export interface AdvancedSettings {
 export interface DownloadSettings {
   // Engine settings
   maxConcurrentChapters: number;
-  downloadMode: 'browser' | 'custom';
+  downloadMode: DownloadMode;
   customDirectoryEnabled: boolean;
   customDirectoryHandleId: string | null;
   /** Directory path template for downloads. */
   pathTemplate: string;
   // Format and behavior settings
-  defaultFormat: 'cbz' | 'zip' | 'none';
+  defaultFormat: ArchiveFormat;
   /** Optional template for the final chapter filename (without extension when using archives; used as chapter directory name when format is 'none').
    * Supported macros are the same as pathTemplate plus numeric pads like <CHAPTER_NUMBER_PAD2>, <CHAPTER_NUMBER_PAD3>, <VOLUME_NUMBER_PAD2>.
    * Defaults to <CHAPTER_TITLE>.
@@ -31,7 +32,7 @@ export interface DownloadSettings {
   includeCoverImage: boolean; // whether to include series cover image in archives
   // Image filename normalization
   normalizeImageFilenames: boolean; // whether to rename images to numeric indices (001.jpg, 002.jpg, etc.)
-  imagePaddingDigits: 'auto' | 2 | 3 | 4 | 5; // zero-padding for image filenames ('auto' = based on total count)
+  imagePaddingDigits: ImagePaddingDigits; // zero-padding for image filenames ('auto' = based on total count)
 }
 
 export interface ExtensionSettings {
