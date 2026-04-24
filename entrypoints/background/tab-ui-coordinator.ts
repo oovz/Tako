@@ -1,6 +1,7 @@
 import logger from '@/src/runtime/logger'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
 import { shouldSkipContentScriptEnsure } from '@/entrypoints/background/content-script-ensure'
+import { isInternalUrl } from '@/src/shared/tab-url-helpers'
 
 const CONTENT_SCRIPT_FILE = 'content-scripts/content.js'
 const ICON_PATHS = {
@@ -8,26 +9,7 @@ const ICON_PATHS = {
   inactive: { 16: 'icon/inactive-16.png', 32: 'icon/inactive-32.png', 48: 'icon/inactive-48.png', 128: 'icon/inactive-128.png' },
 } as const
 
-export function isInternalUrl(url: string | undefined | null): boolean {
-  if (!url) {
-    return true
-  }
-
-  return (
-    url.startsWith('chrome-extension://') ||
-    url.startsWith('chrome://') ||
-    url.startsWith('edge://') ||
-    url.startsWith('about:') ||
-    url.startsWith('devtools://') ||
-    url.startsWith('blob:') ||
-    url.startsWith('data:') ||
-    url.startsWith('view-source:') ||
-    url.startsWith('file://') ||
-    url.startsWith('mailto:') ||
-    url.startsWith('tel:') ||
-    url.startsWith('javascript:')
-  )
-}
+export { isInternalUrl }
 
 function shouldHaveContentScript(url: string): boolean {
   try {
