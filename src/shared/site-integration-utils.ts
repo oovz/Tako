@@ -30,6 +30,25 @@ export function parseChapterNumber(label: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+/**
+ * Drop entries that cannot be parsed as absolute URLs.
+ *
+ * Every site integration's `processImageUrls` hook needs to discard malformed
+ * entries before they reach the downloader (which assumes valid absolute URLs
+ * when deriving filenames from pathnames). Centralizing this keeps the filter
+ * behavior identical across integrations.
+ */
+export function filterValidImageUrls(urls: string[]): string[] {
+  return urls.filter((url) => {
+    try {
+      new URL(url)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 export function parseVolumeInfo(text: string): { volumeLabel?: string; volumeNumber?: number } {
   const label = sanitizeLabel(text)
   if (!label) {

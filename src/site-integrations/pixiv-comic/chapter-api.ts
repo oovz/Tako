@@ -2,6 +2,7 @@ import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder'
+import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
 import { descramblePixivImage } from './descrambler'
 import { parseEpisodeIdFromUrl } from './page-context'
 import {
@@ -82,8 +83,7 @@ const parseBuildId = (homepageHtml: string): string => {
   return buildMatch[1]
 }
 
-const createPixivHeaders = (timestamp: string, salt: string, cookieHeader?: string): HeadersInit => {
-  void salt
+const createPixivHeaders = (timestamp: string, cookieHeader?: string): HeadersInit => {
   const headers: Record<string, string> = {
     'x-referer': PIXIV_BASE_URL,
     'x-requested-with': 'pixivcomic',
@@ -228,7 +228,7 @@ async function resolvePixivReadPages(
 
   const timestamp = new Date().toISOString().replace(/\.\d+Z$/, 'Z')
   const clientHash = await computeClientHash(timestamp, saltResult.salt)
-  const headers = createPixivHeaders(timestamp, saltResult.salt, context?.cookieHeader) as Record<string, string>
+  const headers = createPixivHeaders(timestamp, context?.cookieHeader) as Record<string, string>
   headers['x-client-hash'] = clientHash
 
   const response = await rateLimitedFetchByUrlScope(`${PIXIV_EPISODES_API_URL}/${storyId}/read_v4`, 'chapter', {
@@ -327,15 +327,7 @@ export function parsePixivImageUrlsFromHtml({ chapterHtml }: ParseImageUrlsFromH
 }
 
 export function processPixivImageUrls(urls: string[]): Promise<string[]> {
-  const filtered = urls.filter((url) => {
-    try {
-      new URL(url)
-      return true
-    } catch {
-      return false
-    }
-  })
-  return Promise.resolve(filtered)
+  return Promise.resolve(filterValidImageUrls(urls))
 }
 
 export async function downloadPixivChapterImage(

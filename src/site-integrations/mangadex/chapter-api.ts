@@ -1,5 +1,6 @@
 import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
+import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
 import {
   buildMangadexUploadsRecoveryImageUrl,
   buildPageUrls,
@@ -173,14 +174,7 @@ export async function parseMangadexImageUrlsFromHtml({ chapterUrl }: ParseImageU
 }
 
 export function processMangadexImageUrls(urls: string[]): Promise<string[]> {
-  return Promise.resolve(urls.filter((url) => {
-    try {
-      new URL(url)
-      return true
-    } catch {
-      return false
-    }
-  }))
+  return Promise.resolve(filterValidImageUrls(urls))
 }
 
 export async function downloadMangadexChapterImage(

@@ -1,0 +1,1 @@
+export { manhuaguiIntegration } from './index';
