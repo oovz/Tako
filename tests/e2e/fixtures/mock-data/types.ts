@@ -6,6 +6,7 @@
  * and shared generic data (download tasks, settings).
  */
 
+import type { BrowserContext } from '@playwright/test';
 import type { ChapterState } from '@/src/types/tab-state';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 
@@ -134,3 +135,45 @@ export type DeepPartial<T> = T extends object
  * Factory function type for creating mock data with overrides
  */
 export type MockDataFactory<T> = (overrides?: DeepPartial<T>) => T;
+
+// ============================================================================
+// Route Registrar Contract (Per-Integration E2E Mocks)
+// ============================================================================
+
+/**
+ * Options passed to every site-integration route registrar.
+ *
+ * - `useMocks`: when `true`, the registrar MUST install deterministic routes
+ *   for every host it owns and MUST NOT let requests escape to the real
+ *   network. When `false`, the registrar is a no-op.
+ * - `allowNetwork`: informational — indicates the top-level policy permits
+ *   live network calls for unmatched hosts. Registrars should not pass
+ *   requests through based on this flag; they should only mock or skip.
+ *
+ * Additional per-test overrides (response bodies, image bytes) belong on
+ * extended option shapes defined by each integration. Keep this type narrow
+ * so the top-level dispatcher can pass a single object to every registrar
+ * without coupling to integration-specific fields.
+ */
+export interface RouteRegistrarOptions {
+  useMocks: boolean;
+  allowNetwork: boolean;
+}
+
+/**
+ * Every site integration MUST export a function matching this signature from
+ * `tests/e2e/fixtures/mock-data/site-integrations/{id}/routes.ts`. The
+ * top-level dispatcher at `tests/e2e/fixtures/routes.ts` invokes every
+ * registered registrar in parallel for each test `BrowserContext`.
+ *
+ * Registrars must:
+ * - Be idempotent: the dispatcher may be called once per test.
+ * - Register routes only when `options.useMocks === true`.
+ * - Scope their `context.route(pattern, handler)` calls to hosts the
+ *   integration actually talks to; never match `**` or cross-host globs.
+ * - Never await real network I/O.
+ */
+export type RouteRegistrar = (
+  context: BrowserContext,
+  options: RouteRegistrarOptions,
+) => Promise<void>;
