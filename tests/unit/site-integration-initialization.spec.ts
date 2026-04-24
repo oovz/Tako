@@ -171,3 +171,63 @@ describe('site-integration-initialization singleton pattern', () => {
     })
 })
 
+describe('site-integration-initialization full integration lookup', () => {
+    afterEach(() => {
+        vi.clearAllMocks()
+        vi.resetModules()
+        vi.unstubAllGlobals()
+    })
+
+    it('upgrades metadata-only registrations when a full integration is requested', async () => {
+        vi.resetModules()
+
+        const registry = new Map<string, unknown>()
+        const registerSiteIntegration = vi.fn((info: { id: string }) => {
+            registry.set(info.id, info)
+        })
+
+        vi.doMock('@/src/runtime/site-integration-registry', () => ({
+            registerSiteIntegration,
+            siteIntegrationRegistry: {
+                findById: vi.fn((id: string) => registry.get(id) ?? null),
+            },
+        }))
+        vi.doMock('@/src/runtime/logger', () => ({
+            default: {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+            },
+        }))
+
+        vi.stubGlobal('chrome', {
+            storage: {
+                local: {
+                    get: vi.fn(async () => ({})),
+                },
+                onChanged: {
+                    addListener: vi.fn(),
+                },
+            },
+        })
+
+        const { getSiteIntegrationById } = await import('@/src/runtime/site-integration-initialization')
+
+        const integration = await getSiteIntegrationById('pixiv-comic')
+
+        expect(integration?.background.prepareDispatchContext).toEqual(expect.any(Function))
+        expect(registerSiteIntegration).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 'pixiv-comic',
+                integration: expect.objectContaining({
+                    id: 'pixiv-comic',
+                    background: expect.objectContaining({
+                        prepareDispatchContext: expect.any(Function),
+                    }),
+                }),
+            }),
+        )
+    })
+})
+
