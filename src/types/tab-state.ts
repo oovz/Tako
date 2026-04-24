@@ -13,8 +13,6 @@ export interface ChapterState {
   volumeNumber?: number;
   volumeLabel?: string;
   status: ChapterStatus;
-  progress?: number;
-  downloadId?: string;
   errorMessage?: string;
   totalImages?: number;
   imagesFailed?: number;

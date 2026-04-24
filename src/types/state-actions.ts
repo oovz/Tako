@@ -22,31 +22,18 @@
 
 export enum StateAction {
   // ===== Tab State Actions (require tabId parameter) =====
-  
+
   /** Initialize tab state with series/chapters */
   INITIALIZE_TAB,
-  
+
   /** Clear all state for tab (cleanup on tab close) */
   CLEAR_TAB_STATE,
 
   // ===== Download Task Actions =====
-  
-  /** Update download task state - Uses taskId, no tabId required */
-  UPDATE_DOWNLOAD_TASK,
-  
+
   /** Remove completed/failed task - Uses taskId, no tabId required */
   REMOVE_DOWNLOAD_TASK,
-  
+
   /** Cancel active download task - Uses taskId, no tabId required */
   CANCEL_DOWNLOAD_TASK,
-
-  // ===== Settings Actions (global state) =====
-  
-  /** Update extension settings */
-  UPDATE_SETTINGS,
-
-  // ===== Progress Actions =====
-  
-  /** Clear download history - Optional seriesId in payload */
-  CLEAR_DOWNLOAD_HISTORY,
 }

@@ -4,6 +4,10 @@
  */
 
 import type { Chapter } from '@/src/types/chapter'
+import type {
+  OffscreenDownloadChapterMessage,
+  OffscreenDownloadProgressMessage,
+} from '@/src/types/offscreen-messages'
 import {
   withRetries,
   fetchChapterHtml
@@ -19,12 +23,6 @@ import {
   processArchiveFormatChapter,
   processNoneFormatChapter,
 } from './chapter-processing'
-import type {
-  OffscreenDownloadChapterMessage,
-  OffscreenDownloadProgressMessage,
-} from '@/src/types/offscreen-messages'
-import { sendStateAction } from '@/src/runtime/state-actions'
-import { StateAction } from '@/src/types/state-actions'
 import { resolveEffectiveRetries } from '@/src/shared/settings-utils'
 import {
   prefetchOptionalCoverImage,
@@ -352,17 +350,6 @@ export class OffscreenWorker {
         logger.error('processChapterStreaming failed:', error)
       }
       return { status: 'failed', errorMessage: message, errorCategory: classifyOffscreenErrorCategory(error) }
-    }
-  }
-
-  private async updateDownloadTaskViaAction(taskId: string, updates: Partial<import('@/src/types/queue-state').DownloadTaskState>): Promise<void> {
-    try {
-      await sendStateAction(StateAction.UPDATE_DOWNLOAD_TASK, {
-        taskId,
-        updates,
-      });
-    } catch (error) {
-      logger.error('❌ Failed to send download task state action:', error);
     }
   }
 

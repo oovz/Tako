@@ -14,11 +14,8 @@ const mocks = vi.hoisted(() => ({
   loggerDebug: vi.fn(),
   handleInitializeTab: vi.fn(),
   handleClearTabState: vi.fn(),
-  handleUpdateDownloadTask: vi.fn(),
   handleRemoveDownloadTask: vi.fn(),
   handleCancelDownloadTask: vi.fn(),
-  handleUpdateSettings: vi.fn(),
-  handleClearDownloadHistory: vi.fn(),
 }))
 
 vi.mock('@/src/runtime/logger', () => ({
@@ -36,14 +33,8 @@ vi.mock('@/entrypoints/background/action-handlers/tab-state-handlers', () => ({
 }))
 
 vi.mock('@/entrypoints/background/action-handlers/download-task-handlers', () => ({
-  handleUpdateDownloadTask: mocks.handleUpdateDownloadTask,
   handleRemoveDownloadTask: mocks.handleRemoveDownloadTask,
   handleCancelDownloadTask: mocks.handleCancelDownloadTask,
-}))
-
-vi.mock('@/entrypoints/background/action-handlers/settings-handlers', () => ({
-  handleUpdateSettings: mocks.handleUpdateSettings,
-  handleClearDownloadHistory: mocks.handleClearDownloadHistory,
 }))
 
 describe('State discipline runtime guards', () => {
@@ -210,19 +201,6 @@ describe('State discipline runtime guards', () => {
 
       expect(result).toEqual({ success: false, error: 'Invalid payload for INITIALIZE_TAB' })
       expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
-    })
-
-    it('rejects malformed UPDATE_SETTINGS payloads before reaching the handler', async () => {
-      const message: StateActionMessage = {
-        type: 'STATE_ACTION',
-        action: StateAction.UPDATE_SETTINGS,
-        payload: {},
-      }
-
-      const result = await processStateAction(stateManager, message)
-
-      expect(result).toEqual({ success: false, error: 'Invalid payload for UPDATE_SETTINGS' })
-      expect(mocks.handleUpdateSettings).not.toHaveBeenCalled()
     })
 
     it('returns standardized unknown-action error for unsupported actions', async () => {

@@ -12,7 +12,6 @@ function makeChapter(id: string, status: ChapterState['status']): ChapterState {
     title: `Chapter ${id}`,
     index: 1,
     status,
-    progress: status === 'queued' ? 0 : 100,
     lastUpdated: Date.now(),
   }
 }

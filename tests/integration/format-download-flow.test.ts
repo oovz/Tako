@@ -4,7 +4,6 @@ import { resolveDownloadPlan } from '@/entrypoints/background/queue-helpers';
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state';
 import type { DownloadTaskState } from '@/src/types/queue-state';
 
 const getAllSiteOverrides = vi.fn(async () => ({}));
@@ -61,17 +60,6 @@ function createTask(snapshotSettings: ExtensionSettings = makeSettings('zip')): 
   };
 }
 
-function createStateManager(settings: ExtensionSettings): CentralizedStateManager {
-  return {
-    getTabState: vi.fn(async () => null),
-    getGlobalState: vi.fn(async () => ({
-      downloadQueue: [],
-      settings,
-      lastActivity: Date.now(),
-    })),
-  } as unknown as CentralizedStateManager;
-}
-
 describe('format resolution integration (resolveDownloadPlan)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -79,8 +67,7 @@ describe('format resolution integration (resolveDownloadPlan)', () => {
   });
 
   it('uses global default format when no site override exists', async () => {
-    const stateManager = createStateManager(makeSettings('zip'));
-    const plan = await resolveDownloadPlan(stateManager, createTask());
+    const plan = await resolveDownloadPlan(createTask());
 
     expect(plan.format).toBe('zip');
     expect(plan.chapters[0]?.resolvedPath).toContain('.zip');
@@ -93,20 +80,17 @@ describe('format resolution integration (resolveDownloadPlan)', () => {
       },
     });
 
-    const stateManager = createStateManager(makeSettings('cbz'));
-    const plan = await resolveDownloadPlan(stateManager, createTask(makeSettings('none')));
+    const plan = await resolveDownloadPlan(createTask(makeSettings('none')));
 
     expect(plan.format).toBe('none');
     expect(plan.chapters[0]?.resolvedPath?.endsWith('.none')).toBe(false);
   });
 
   it('resolves from the frozen task settings without consulting tab-scoped format state', async () => {
-    const stateManager = createStateManager(makeSettings('cbz'));
-    const plan = await resolveDownloadPlan(stateManager, createTask(makeSettings('cbz')));
+    const plan = await resolveDownloadPlan(createTask(makeSettings('cbz')));
 
     expect(plan.format).toBe('cbz');
     expect(plan.chapters[0]?.resolvedPath).toContain('.cbz');
-    expect(stateManager.getTabState).not.toHaveBeenCalled();
   });
 });
 

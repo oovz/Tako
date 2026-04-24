@@ -101,7 +101,7 @@ export async function startDownloadTask(
       },
     };
 
-    validateDownloadPathForTask(stateManager, taskId, {
+    validateDownloadPathForTask(taskId, {
       downloads: {
         pathTemplate: task.settingsSnapshot.pathTemplate,
       },
@@ -122,7 +122,7 @@ export async function startDownloadTask(
     const dispatchChapter = async (chapterIndex: number): Promise<void> => {
       const fallbackTaskChapter = task.chapters[chapterIndex];
       try {
-        const dispatchPlan = await resolveDownloadPlan(stateManager, task);
+        const dispatchPlan = await resolveDownloadPlan(task);
         const chapter = dispatchPlan.chapters[chapterIndex];
         if (!chapter) {
           chapterOutcomesByIndex[chapterIndex] = {

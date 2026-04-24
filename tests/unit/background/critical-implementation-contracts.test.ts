@@ -4,8 +4,6 @@ import { resolveDownloadPlan } from '@/entrypoints/background/queue-helpers'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { RuntimeMessageSchema } from '@/src/runtime/message-schemas'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { ExtensionSettings } from '@/src/storage/settings-types'
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
 const getAllSiteOverrides = vi.fn(async () => ({}))
@@ -25,7 +23,7 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-function makeSettings(defaultFormat: 'cbz' | 'zip' | 'none'): ExtensionSettings {
+function makeSettings(defaultFormat: 'cbz' | 'zip' | 'none') {
   return {
     ...DEFAULT_SETTINGS,
     downloads: {
@@ -65,16 +63,6 @@ function createTask(): DownloadTaskState {
   }
 }
 
-function createStateManager(settings: ExtensionSettings): CentralizedStateManager {
-  return {
-    getGlobalState: vi.fn(async () => ({
-      downloadQueue: [],
-      settings,
-      lastActivity: Date.now(),
-    })),
-  } as unknown as CentralizedStateManager
-}
-
 describe('critical runtime contracts (behavior-based)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -108,8 +96,7 @@ describe('critical runtime contracts (behavior-based)', () => {
       },
     })
 
-    const stateManager = createStateManager(makeSettings('cbz'))
-    const plan = await resolveDownloadPlan(stateManager, createTask())
+    const plan = await resolveDownloadPlan(createTask())
 
     expect(plan.format).toBe('none')
     expect(plan.chapters[0]?.resolvedPath?.endsWith('.none')).toBe(false)

@@ -24,14 +24,8 @@ function mockRouterDependencies(): void {
   }))
 
   vi.doMock('@/entrypoints/background/action-handlers/download-task-handlers', () => ({
-    handleUpdateDownloadTask: vi.fn(async () => ({ success: true })),
     handleRemoveDownloadTask: vi.fn(async () => ({ success: true })),
     handleCancelDownloadTask: vi.fn(async () => ({ success: true })),
-  }))
-
-  vi.doMock('@/entrypoints/background/action-handlers/settings-handlers', () => ({
-    handleUpdateSettings: vi.fn(async () => ({ success: true })),
-    handleClearDownloadHistory: vi.fn(async () => ({ success: true })),
   }))
 }
 

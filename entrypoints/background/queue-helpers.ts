@@ -12,9 +12,6 @@ import type { Book } from '@/src/types/book';
 import type { Chapter, ChapterInput } from '@/src/types/chapter';
 import type { DownloadTaskState } from '@/src/types/queue-state';
 import { buildSeriesComicInfoBase, composeChapterMetadata } from '@/src/shared/chapter-metadata';
-import { 
-  CentralizedStateManager
-} from '@/src/runtime/centralized-state';
 
 /**
  * Unified download plan resolver result
@@ -28,16 +25,13 @@ export interface DownloadPlan {
 
 /**
  * Resolves complete download plan with format, overwrite settings, and chapter paths
- * 
- * @param stateManager - Centralized state manager instance
+ *
  * @param task - Download task to resolve plan for
  * @returns Resolved download plan with all paths and settings
  */
 export function resolveDownloadPlan(
-  stateManager: CentralizedStateManager,
   task: DownloadTaskState
 ): Promise<DownloadPlan> {
-  void stateManager
   const isWireFormat = (value: unknown): value is 'cbz' | 'zip' | 'none' =>
     value === 'cbz' || value === 'zip' || value === 'none'
 
@@ -111,14 +105,12 @@ export function resolveDownloadPlan(
 
 /**
  * Validates download path from settings before task processing
- * 
- * @param stateManager - Centralized state manager instance
+ *
  * @param taskId - Task ID for error context
  * @param settings - Settings object containing download path
  * @throws Error if download path is missing or invalid
  */
 export function validateDownloadPathForTask(
-  stateManager: CentralizedStateManager,
   taskId: string,
   settings: { downloads?: { pathTemplate?: string } }
 ): void {

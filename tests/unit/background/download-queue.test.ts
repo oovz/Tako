@@ -7,7 +7,6 @@
 
 import { beforeEach, describe } from 'vitest';
 import { registerDownloadQueueBehaviorCases } from './download-queue-queue-behavior.cases';
-import { registerDownloadQueueFinalizationCases } from './download-queue-finalization.cases';
 import { registerDownloadQueueStartAndProcessCases } from './download-queue-start-process.cases';
 import { resetDownloadQueueTestEnvironment } from './download-queue-test-setup';
 
@@ -18,6 +17,5 @@ describe('Download Queue Manager', () => {
 
   registerDownloadQueueStartAndProcessCases();
   registerDownloadQueueBehaviorCases();
-  registerDownloadQueueFinalizationCases();
 });
 

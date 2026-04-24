@@ -299,43 +299,6 @@ export class CentralizedStateManager {
   }
 
   /**
-   * Update chapter state
-   */
-  async updateChapterState(
-    tabId: number,
-    chapterId: string,
-    newStatus: ChapterState['status'],
-    updates: Partial<ChapterState> = {}
-  ): Promise<void> {
-    const tabState = await this.getTabState(tabId);
-    if (!tabState) {
-      logger.warn(`⚠️ No state found for tab ${tabId}`);
-      return;
-    }
-
-    const chapterIndex = this.findChapterIndex(tabState.chapters, chapterId);
-    if (chapterIndex === -1) {
-      logger.warn(`⚠️ Chapter not found: ${chapterId}`);
-      return;
-    }
-
-    const prev = tabState.chapters[chapterIndex];
-    // Prevent downgrading completed unless explicitly requested
-    const nextStatus: ChapterState['status'] = (prev.status === 'completed' && newStatus !== 'completed') ? 'completed' : newStatus;
-    tabState.chapters[chapterIndex] = {
-      ...prev,
-      ...updates,
-      status: nextStatus,
-      lastUpdated: Date.now()
-    };
-
-    tabState.lastUpdated = Date.now();
-    await chrome.storage.session.set({ [`tab_${tabId}`]: tabState });
-    await this.syncActiveTabContext(tabId, tabState);
-    logger.debug(`📖 Chapter state updated: ${chapterId} → ${newStatus}`);
-  }
-
-  /**
    * Get global application state
    */
   async getGlobalState(): Promise<GlobalAppState> {
