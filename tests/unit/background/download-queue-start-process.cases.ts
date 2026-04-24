@@ -35,23 +35,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       );
       expect(mockEnsureOffscreenReady).toHaveBeenCalled();
       expect(mockStateManager.updateDownloadTaskChapter).toHaveBeenCalled();
-      expect(mockStateManager.updateChapterState).not.toHaveBeenCalled();
-    });
-
-    it('updates tab chapter state to failed when chapter dispatch fails', async () => {
-      mockRuntimeSendMessage.mockResolvedValueOnce({ success: true, status: 'failed', errorMessage: 'Dispatch failed' });
-
-      const task = makeTask({ id: 'task-failed-chapter' });
-
-      mockGlobalState.downloadQueue = [task];
-
-      await startDownloadTask(
-        mockStateManager,
-        'task-failed-chapter',
-        mockEnsureOffscreenReady,
-      );
-
-      expect(mockStateManager.updateChapterState).not.toHaveBeenCalled();
     });
 
     it('should allow multiple tasks from same tab', async () => {

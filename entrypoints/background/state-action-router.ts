@@ -6,7 +6,10 @@
  */
 
 import logger from '@/src/runtime/logger';
-import { markExternalTabInitialization } from '@/src/runtime/external-tab-init';
+import {
+  consumeRecentExternalTabInitialization,
+  markExternalTabInitialization,
+} from '@/src/runtime/external-tab-init';
 import { parseStateActionPayload } from '@/src/runtime/state-action-schemas';
 import { CentralizedStateManager } from '@/src/runtime/centralized-state';
 import { matchUrl } from '@/src/site-integrations/url-matcher';
@@ -19,14 +22,9 @@ import {
   handleClearTabState
 } from './action-handlers/tab-state-handlers';
 import {
-  handleUpdateDownloadTask,
   handleRemoveDownloadTask,
   handleCancelDownloadTask
 } from './action-handlers/download-task-handlers';
-import {
-  handleUpdateSettings,
-  handleClearDownloadHistory
-} from './action-handlers/settings-handlers';
 
 let stateManagerPromise: Promise<CentralizedStateManager> | null = null;
 
@@ -160,6 +158,26 @@ export async function processStateAction(
             }
           }
 
+          // Same-tab senders (content script on the target tab) must yield
+          // to a recent external INITIALIZE_TAB. The content script also
+          // performs this check before sending, but its data may have
+          // already been in flight when the mark was set. Rejecting the
+          // stale payload here prevents a content-script init that raced
+          // the external init from clobbering the authoritative state.
+          if (typeof senderTabId === 'number' && senderTabId === tabId) {
+            try {
+              if (await consumeRecentExternalTabInitialization(tabId)) {
+                logger.debug('Skipping same-tab INITIALIZE_TAB due to recent external init', {
+                  tabId,
+                  senderTabId,
+                })
+                return { success: true, data: { skipped: true, reason: 'external-init-recent' } }
+              }
+            } catch {
+              // Ignore mark-check failures and fall through to normal handling
+            }
+          }
+
           const result = await handleInitializeTab(stateManager, parsedPayload as Parameters<typeof handleInitializeTab>[1], tabId);
           if (result.success && typeof providedTabId === 'number' && typeof senderTabId === 'number' && senderTabId !== tabId) {
             try {
@@ -175,21 +193,12 @@ export async function processStateAction(
         if (typeof tabId !== 'number') throw new Error('Tab ID required for CLEAR_TAB_STATE');
         return await handleClearTabState(stateManager, tabId);
       
-      case StateAction.UPDATE_DOWNLOAD_TASK:
-        return await handleUpdateDownloadTask(stateManager, parsedPayload as Parameters<typeof handleUpdateDownloadTask>[1]);
-      
       case StateAction.REMOVE_DOWNLOAD_TASK:
         return await handleRemoveDownloadTask(stateManager, parsedPayload as Parameters<typeof handleRemoveDownloadTask>[1]);
-      
+
       case StateAction.CANCEL_DOWNLOAD_TASK:
         return await handleCancelDownloadTask(stateManager, parsedPayload as Parameters<typeof handleCancelDownloadTask>[1]);
-      
-      case StateAction.UPDATE_SETTINGS:
-        return await handleUpdateSettings(stateManager, parsedPayload as Parameters<typeof handleUpdateSettings>[1]);
-      
-      case StateAction.CLEAR_DOWNLOAD_HISTORY:
-        return await handleClearDownloadHistory(stateManager, parsedPayload as Parameters<typeof handleClearDownloadHistory>[1]);
-      
+
       default:
         logger.warn(`Unknown state action: ${String(action)}`);
         return { success: false, error: 'Unknown action' };

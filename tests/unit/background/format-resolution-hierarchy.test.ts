@@ -4,7 +4,6 @@ import { resolveDownloadPlan } from '@/entrypoints/background/queue-helpers'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
 const getAllSiteOverrides = vi.fn(async () => ({}))
@@ -62,17 +61,6 @@ function createTask(overrides: Partial<DownloadTaskState> = {}): DownloadTaskSta
   }
 }
 
-function createStateManager(settings: ExtensionSettings): CentralizedStateManager {
-  return {
-    getTabState: vi.fn(async () => null),
-    getGlobalState: vi.fn(async () => ({
-      downloadQueue: [],
-      settings,
-      lastActivity: Date.now(),
-    })),
-  } as unknown as CentralizedStateManager
-}
-
 describe('format resolution hierarchy (behavior-based)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -80,8 +68,7 @@ describe('format resolution hierarchy (behavior-based)', () => {
   })
 
   it('uses site override format over global default when override is valid', async () => {
-    const stateManager = createStateManager(makeSettings('cbz'))
-    const plan = await resolveDownloadPlan(stateManager, createTask({
+    const plan = await resolveDownloadPlan(createTask({
       settingsSnapshot: {
         ...createTaskSettingsSnapshot(makeSettings('cbz'), 'mangadex'),
         archiveFormat: 'zip',
@@ -93,8 +80,7 @@ describe('format resolution hierarchy (behavior-based)', () => {
   })
 
   it('falls back to cbz when the persisted snapshot format is invalid', async () => {
-    const stateManager = createStateManager(makeSettings('cbz'))
-    const plan = await resolveDownloadPlan(stateManager, createTask({
+    const plan = await resolveDownloadPlan(createTask({
       settingsSnapshot: {
         ...createTaskSettingsSnapshot(makeSettings('cbz'), 'mangadex'),
         archiveFormat: 'rar' as unknown as DownloadTaskState['settingsSnapshot']['archiveFormat'],
@@ -106,17 +92,14 @@ describe('format resolution hierarchy (behavior-based)', () => {
   })
 
   it('uses the frozen task snapshot without consulting tab-scoped format state', async () => {
-    const stateManager = createStateManager(makeSettings('cbz'))
-    const plan = await resolveDownloadPlan(stateManager, createTask())
+    const plan = await resolveDownloadPlan(createTask())
 
     expect(plan.format).toBe('cbz')
     expect(plan.chapters[0]?.resolvedPath).toContain('.cbz')
-    expect(stateManager.getTabState).not.toHaveBeenCalled()
   })
 
   it('produces folder-like path without archive extension for none format', async () => {
-    const stateManager = createStateManager(makeSettings('zip'))
-    const plan = await resolveDownloadPlan(stateManager, createTask({
+    const plan = await resolveDownloadPlan(createTask({
       settingsSnapshot: {
         ...createTaskSettingsSnapshot(makeSettings('zip'), 'mangadex'),
         archiveFormat: 'none',

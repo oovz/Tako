@@ -1,14 +1,13 @@
 /**
  * Download Task Action Handlers
- * 
- * Handlers for download task lifecycle (create, update, remove).
+ *
+ * Handlers for download task lifecycle (remove, cancel).
  */
 
 import {
   CentralizedStateManager,
 } from '@/src/runtime/centralized-state';
 import type {
-  UpdateDownloadTaskPayload,
   RemoveDownloadTaskPayload,
   CancelDownloadTaskPayload
 } from '@/src/types/state-action-download-payloads';
@@ -34,29 +33,6 @@ async function logQueueEvent(
   }
 
   logger[level](message, data);
-}
-
-/**
- * Update an existing download task's state
- * 
- * **User Stories**: 3.1 (Single Chapter Download), 3.2 (Batch Chapter Download)
- * 
- * @param stateManager - State manager instance
- * @param payload - Contains taskId and updates object
- * @returns Success confirmation
- */
-export async function handleUpdateDownloadTask(
-  stateManager: CentralizedStateManager,
-  payload: UpdateDownloadTaskPayload
-): Promise<{ success: boolean }> {
-  const { taskId, updates } = payload;
-  await stateManager.updateDownloadTask(taskId, updates);
-  await logQueueEvent(stateManager, 'info', '[Queue] TASK_UPDATED', {
-    event: 'TASK_UPDATED',
-    taskId,
-    updates,
-  });
-  return { success: true };
 }
 
 /**

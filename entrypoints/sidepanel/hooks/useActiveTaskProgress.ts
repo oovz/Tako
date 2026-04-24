@@ -19,8 +19,6 @@ export interface ActiveTaskProgress {
   status: 'downloading' | 'completed' | 'failed' | 'partial_success'
 }
 
-const DEFAULT_PROGRESS: ActiveTaskProgress | null = null
-
 const ACTIVE_TASK_PROGRESS_STATUSES = [
   'downloading',
   'completed',
@@ -133,7 +131,7 @@ export function useActiveTaskProgress(): UseActiveTaskProgressResult {
   const { value: progress, hydrated } = useChromeStorageValue<ActiveTaskProgress | null>({
     areaName: 'session',
     key: SESSION_STORAGE_KEYS.activeTaskProgress,
-    initialValue: DEFAULT_PROGRESS,
+    initialValue: null,
     parse: normalizeActiveTaskProgress,
   })
 

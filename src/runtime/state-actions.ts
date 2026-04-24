@@ -43,10 +43,9 @@ const VALID_STATE_ACTIONS = new Set(
  * 
  * 3. **Global Actions** (no tabId needed):
  * ```typescript
- * await sendStateAction(StateAction.UPDATE_SETTINGS, {
- *   settings: { downloads: { maxConcurrentChapters: 5 } }
- * });
+ * await sendStateAction(StateAction.REMOVE_DOWNLOAD_TASK, { taskId: 'abc' });
  * ```
+ *
  * 
  * **TabId Parameter**:
  * - Required for tab-specific actions (see StateAction enum JSDoc)

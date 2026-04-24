@@ -38,10 +38,6 @@ export function composeSeriesKey(siteId: string, seriesId: string): string {
   return `${siteId}#${seriesId}`
 }
 
-function buildSeriesKey(task: Pick<DownloadTaskState, 'siteIntegrationId' | 'mangaId'>): string {
-  return composeSeriesKey(task.siteIntegrationId, task.mangaId)
-}
-
 export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
   const totalChapters = task.chapters.length
   let completedChapters = 0
@@ -60,7 +56,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
 
   return {
     id: task.id,
-    seriesKey: buildSeriesKey(task),
+    seriesKey: composeSeriesKey(task.siteIntegrationId, task.mangaId),
     seriesTitle: task.seriesTitle,
     siteIntegration: task.siteIntegrationId,
     coverUrl: task.seriesCoverUrl,

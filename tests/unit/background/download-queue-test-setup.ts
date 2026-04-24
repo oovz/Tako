@@ -59,8 +59,6 @@ vi.mock('@/src/runtime/site-integration-initialization', () => ({
 }));
 
 export {
-  completeDownloadTask,
-  failDownloadTask,
   moveTaskToTop,
   processDownloadQueue,
   startDownloadTask,
@@ -176,7 +174,6 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
     getTabState: vi.fn().mockResolvedValue(mockTabState),
     updateDownloadTask: updateDownloadTaskMock,
     updateDownloadTaskChapter: updateDownloadTaskChapterMock,
-    updateChapterState: vi.fn().mockResolvedValue(undefined),
     updateGlobalState: vi.fn().mockImplementation(async (updates: Partial<GlobalAppState>) => {
       mockGlobalState = {
         ...mockGlobalState,

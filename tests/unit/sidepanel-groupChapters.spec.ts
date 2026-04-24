@@ -14,8 +14,6 @@ function makeChapter(partial: Partial<ChapterState> & { url: string; title: stri
     volumeNumber: partial.volumeNumber,
     volumeLabel: partial.volumeLabel,
     status: partial.status ?? 'queued',
-    progress: partial.progress,
-    downloadId: partial.downloadId,
     errorMessage: partial.errorMessage,
     lastUpdated: partial.lastUpdated ?? Date.now(),
   }

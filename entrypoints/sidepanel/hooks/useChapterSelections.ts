@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
+import { composeSeriesKey } from '@/src/runtime/queue-task-summary'
+
 export type ChapterSelectionsBySeries = Record<string, string[]>
 
 function normalizeSelections(chapterIds: string[]): string[] {
@@ -32,7 +34,7 @@ export function buildSeriesKey(siteId: string | undefined, seriesId: string | un
     return undefined
   }
 
-  return `${siteId}#${seriesId}`
+  return composeSeriesKey(siteId, seriesId)
 }
 
 export function getSelectionsForSeries(

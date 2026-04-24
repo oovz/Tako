@@ -48,7 +48,7 @@ function createTask(overrides?: Partial<DownloadTaskState>): DownloadTaskState {
 
 describe('resolveDownloadPlan', () => {
   it('preserves chapter-level language overrides in planned ComicInfo metadata', async () => {
-    const plan = await resolveDownloadPlan({} as never, createTask())
+    const plan = await resolveDownloadPlan(createTask())
 
     expect(plan.chapters).toHaveLength(1)
     expect(plan.chapters[0].language).toBe('en')
