@@ -3,7 +3,7 @@ import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, 
 import logger from '@/src/runtime/logger';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
+import { filterValidImageUrls, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import {
   extractImageUrlsFromEpisodeJsonScript,
   readEpisodeJsonSeriesMetadataFromDocument,
@@ -418,15 +418,7 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
     },
 
     processImageUrls(urls: string[]): Promise<string[]> {
-      const filtered = urls.filter((url) => {
-        try {
-          new URL(url);
-          return true;
-        } catch {
-          return false;
-        }
-      });
-      return Promise.resolve(filtered);
+      return Promise.resolve(filterValidImageUrls(urls));
     },
 
     async downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {

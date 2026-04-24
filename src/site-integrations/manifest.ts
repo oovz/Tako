@@ -30,6 +30,7 @@ const MANGADEX_DOMAINS: string[] = Array.from(
 
 const PIXIV_COMIC_DOMAINS: string[] = ['comic.pixiv.net'];
 const SHONEN_JUMP_PLUS_DOMAINS: string[] = ['shonenjumpplus.com'];
+const MANHUAGUI_DOMAINS: string[] = ['www.manhuagui.com', 'manhuagui.com'];
 
 export type SettingsFieldType = 'boolean' | 'string' | 'number' | 'select' | 'multiselect';
 
@@ -174,6 +175,23 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
     },
     importPath: '../site-integrations/shonenjumpplus/runtime',
     exportName: 'shonenJumpPlusIntegration',
+  },
+  {
+    id: 'manhuagui',
+    name: 'Manhuagui',
+    version: '1.0.0',
+    author: 'TMD Team',
+    patterns: {
+      domains: MANHUAGUI_DOMAINS,
+      seriesMatches: ['/comic/*'],
+      excludeMatches: ['/comic/*/*.html'],
+    },
+    policyDefaults: {
+      image: { concurrency: 2, delayMs: 1000 },
+      chapter: { concurrency: 1, delayMs: 1000 },
+    },
+    importPath: '../site-integrations/manhuagui/runtime',
+    exportName: 'manhuaguiIntegration',
   },
 
   // Keep literal types for site integration IDs

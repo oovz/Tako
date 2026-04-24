@@ -82,8 +82,8 @@ describe('site-integration-initialization singleton pattern', () => {
 
         await initializeSiteIntegrationMetadataOnly()
 
-        // Should have registered 3 site integrations (mangadex, pixiv-comic, shonenjumpplus)
-        expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(3)
+        // Should have registered 4 site integrations (mangadex, pixiv-comic, shonenjumpplus, manhuagui)
+        expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(4)
         expect(registerSiteIntegrationMock).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'mangadex' })
         )
@@ -92,6 +92,9 @@ describe('site-integration-initialization singleton pattern', () => {
         )
         expect(registerSiteIntegrationMock).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'shonenjumpplus' })
+        )
+        expect(registerSiteIntegrationMock).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'manhuagui' })
         )
     })
 
@@ -125,8 +128,8 @@ describe('site-integration-initialization singleton pattern', () => {
         // All should resolve successfully
         expect(results).toHaveLength(3)
 
-        // Should only register 3 site integrations total (not 9)
-        expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(3)
+        // Should only register 4 site integrations total (not 12)
+        expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(4)
     })
 
     it('normalizes malformed enablement storage changes through the shared parser', async () => {

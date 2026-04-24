@@ -61,6 +61,13 @@ describe('URL Pattern Matching', () => {
       expect(result?.role).toBe('series');
     });
 
+    it('matches manhuagui series pages', () => {
+      const result = matchUrl('https://www.manhuagui.com/comic/28004/');
+      expect(result).toBeDefined();
+      expect(result?.integrationId).toBe('manhuagui');
+      expect(result?.role).toBe('series');
+    });
+
     it('matches mangadex series pages', () => {
       const result = matchUrl('https://mangadex.org/title/abc123');
       expect(result).toBeDefined();
@@ -94,6 +101,11 @@ it('does not match unsupported domains with wildcards (e.g., e-hentai)', () => {
     it('excludes unsupported chapter paths', () => {
       const result = matchUrl('https://mangadex.org/chapter/98765');
       expect(result).toBeNull();
+    });
+
+    it('excludes manhuagui chapter viewer pages', () => {
+      expect(matchUrl('https://www.manhuagui.com/comic/28004/760110.html')).toBeNull();
+      expect(matchUrl('https://www.manhuagui.com/comic/28004/760110_p7.html')).toBeNull();
     });
 
 it('does not match manganelo domain (unsupported scope)', () => {
@@ -148,6 +160,7 @@ it('returns false for unsupported domains', () => {
       expect(matches.length).toBeGreaterThan(0);
       expect(matches.some(m => m.includes('comic.pixiv.net'))).toBe(true);
       expect(matches.some(m => m.includes('mangadex.org'))).toBe(true);
+      expect(matches.some(m => m.includes('www.manhuagui.com'))).toBe(true);
     });
 
     it('generates unique matches (no duplicates)', () => {
