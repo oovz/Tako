@@ -1,6 +1,11 @@
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
 import logger from '@/src/runtime/logger'
+import {
+  isExtensionUrl as isExtensionPageUrl,
+  isInternalUrl,
+  resolveTabUrlForSupportCheck,
+} from '@/src/shared/tab-url-helpers'
 import type { MangaPageState } from '@/src/types/tab-state'
 
 type TabContextError = { error: string }
@@ -13,42 +18,6 @@ interface TabCacheDependencies {
   writeSession: (values: Record<string, unknown>) => Promise<void>
   queryActiveTabs: () => Promise<Array<{ id?: number }>>
   getTab: (tabId: number) => Promise<Pick<chrome.tabs.Tab, 'url' | 'pendingUrl'> | undefined>
-}
-
-function isInternalUrl(url: string | undefined): boolean {
-  if (!url) {
-    return true
-  }
-
-  return (
-    url.startsWith('chrome-extension://')
-    || url.startsWith('chrome://')
-    || url.startsWith('edge://')
-    || url.startsWith('about:')
-    || url.startsWith('devtools://')
-    || url.startsWith('blob:')
-    || url.startsWith('data:')
-    || url.startsWith('view-source:')
-    || url.startsWith('file://')
-    || url.startsWith('mailto:')
-    || url.startsWith('tel:')
-    || url.startsWith('javascript:')
-  )
-}
-
-function resolveTabUrlForSupportCheck(tab: Pick<chrome.tabs.Tab, 'url' | 'pendingUrl'> | undefined): string {
-  const currentUrl = tab?.url
-  const pendingUrl = tab?.pendingUrl
-
-  if (isInternalUrl(currentUrl) && typeof pendingUrl === 'string' && pendingUrl.length > 0) {
-    return pendingUrl
-  }
-
-  return currentUrl ?? pendingUrl ?? ''
-}
-
-function isExtensionPageUrl(url: string | undefined): boolean {
-  return typeof url === 'string' && url.startsWith('chrome-extension://')
 }
 
 function hasResolvedTabUrl(url: string | undefined): boolean {
@@ -214,7 +183,14 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
           url: changeInfo.url,
         })
         cache.delete(tabId)
-        await dependencies.removeSession([`tab_${tabId}`, `seriesContextError_${tabId}`])
+        // Drop the external-init mark alongside tab state so a sticky
+        // mark from the previous URL cannot suppress the content-script
+        // initialization for the new page.
+        await dependencies.removeSession([
+          `tab_${tabId}`,
+          `seriesContextError_${tabId}`,
+          `${SESSION_STORAGE_KEYS.externalTabInitPrefix}${tabId}`,
+        ])
       }
 
       if (changeInfo.url || changeInfo.status === 'complete') {

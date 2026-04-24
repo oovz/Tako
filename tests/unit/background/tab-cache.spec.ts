@@ -239,7 +239,11 @@ describe('tab context cache', () => {
     await cache.handleTabUpdated(11, { url: 'https://mangadex.org/title/after' })
 
     const lastCall = writeSession.mock.calls[writeSession.mock.calls.length - 1]?.[0]
-    expect(removeSession).toHaveBeenCalledWith(['tab_11', 'seriesContextError_11'])
+    expect(removeSession).toHaveBeenCalledWith([
+      'tab_11',
+      'seriesContextError_11',
+      'externalTabInit_11',
+    ])
     expect(sessionStore.tab_11).toBeUndefined()
     expect(lastCall).toEqual({ [SESSION_STORAGE_KEYS.activeTabContext]: { loading: true } })
   })
