@@ -201,8 +201,6 @@ export function createMangadexChapter(overrides: Partial<SiteIntegrationChapterD
     volumeLabel: overrides.volumeLabel,
     status: overrides.status || 'queued',
     lastUpdated: overrides.lastUpdated || Date.now(),
-    progress: overrides.progress,
-    downloadId: overrides.downloadId,
     errorMessage: overrides.errorMessage,
   };
 }

@@ -650,6 +650,60 @@ export async function waitForTabStateById(
 }
 
 /**
+ * Wait for tab state's `seriesTitle` to equal `expectedTitle`. Convenience
+ * wrapper around {@link waitForTabStateById} for sidepanel-navigation specs
+ * that only need to confirm the series init ran end-to-end.
+ */
+export async function waitForTabSeriesTitle(
+  context: BrowserContext,
+  tabId: number,
+  expectedTitle: string,
+  options: { timeout?: number } = {},
+): Promise<void> {
+  const timeout = options.timeout ?? 15000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const state = await getSessionState<{ seriesTitle?: string }>(context, `tab_${tabId}`);
+    if (state?.seriesTitle === expectedTitle) {
+      return;
+    }
+    await context.pages()[0]?.waitForTimeout(150);
+  }
+
+  const finalState = await getSessionState(context, `tab_${tabId}`);
+  throw new Error(
+    `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)})`,
+  );
+}
+
+/**
+ * Wait for tab state to be cleared (e.g. after navigating to an unsupported
+ * page). Completes when `getSessionState('tab_{id}')` returns `undefined`.
+ */
+export async function waitForTabStateCleared(
+  context: BrowserContext,
+  tabId: number,
+  options: { timeout?: number } = {},
+): Promise<void> {
+  const timeout = options.timeout ?? 15000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const state = await getSessionState(context, `tab_${tabId}`);
+    if (!state) {
+      return;
+    }
+    await context.pages()[0]?.waitForTimeout(150);
+  }
+
+  const finalState = await getSessionState(context, `tab_${tabId}`);
+  throw new Error(
+    `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`,
+  );
+}
+
+/**
  * Wait for global state to match a condition
  */
 export async function waitForGlobalState(
