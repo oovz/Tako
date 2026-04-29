@@ -275,6 +275,72 @@ export function registerManhuaguiCases(): void {
       restoreBrowserGlobals(snapshot);
     });
 
+    it('resolves relative adult __VIEWSTATE chapter links against Manhuagui instead of about:blank', async () => {
+      const snapshot = captureBrowserGlobals();
+      const adultChapterMarkup = `
+        <h4>限制级</h4>
+        <div class="chapter-list" id="chapter-list-1">
+          <ul>
+            <li><a href="/comic/21243/900001.html">第1话 夜幕</a></li>
+          </ul>
+        </div>
+      `;
+
+      class MockDomParser {
+        parseFromString(_html: string) {
+          return {
+            querySelector: () => null,
+            querySelectorAll: (selector: string) => {
+              if (selector !== '.chapter-list') {
+                return [];
+              }
+
+              return [{
+                previousElementSibling: { textContent: '限制级' },
+                parentElement: null,
+                querySelectorAll: (nested: string) => (
+                  nested === 'li > a, a'
+                    ? [
+                      {
+                        href: 'about:blank/comic/21243/900001.html',
+                        getAttribute: (name: string) => (name === 'href' ? '/comic/21243/900001.html' : null),
+                        textContent: '第1话 夜幕',
+                      },
+                    ]
+                    : []
+                ),
+              }];
+            },
+          };
+        }
+      }
+
+      setTestWindow({ location: { pathname: '/comic/21243/', origin: 'https://www.manhuagui.com' } });
+      setTestDocument(buildAdultWarningDocument(compressToBase64(adultChapterMarkup)));
+      Object.defineProperty(globalThis, 'DOMParser', {
+        value: MockDomParser,
+        configurable: true,
+      });
+
+      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
+      expect(extractChapterList).toBeDefined();
+      if (!extractChapterList) {
+        throw new Error('Expected extractChapterList to be defined');
+      }
+
+      const chapterResult = await extractChapterList();
+      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
+
+      expect(chapters).toHaveLength(1);
+      expect(chapters[0]).toMatchObject({
+        id: '900001',
+        url: 'https://www.manhuagui.com/comic/21243/900001.html',
+      });
+
+      restoreBrowserGlobals(snapshot);
+    });
+
     it('parses packed viewer HTML into hamreus image URLs using the site config script', async () => {
       const compressedKeys = compressToBase64('');
       const chapterHtml = buildPackedChapterHtml(compressedKeys);
@@ -351,6 +417,22 @@ export function registerManhuaguiCases(): void {
       expect(requestInit.headers).toEqual({
         referer: 'https://www.manhuagui.com/',
       });
+    });
+
+    it('rejects non-raster image responses before returning downloaded image data', async () => {
+      mockRateLimitedFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: { get: (name: string) => (name === 'content-type' ? 'text/html; charset=utf-8' : null) },
+        arrayBuffer: async () => new TextEncoder().encode('<html>captcha</html>').buffer,
+      });
+
+      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+
+      await expect(
+        manhuaguiIntegration.background.chapter.downloadImage(
+          'https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456',
+        ),
+      ).rejects.toThrow('Unsupported MIME type: text/html');
     });
 
     describe('adult-gate cookie priming', () => {

@@ -70,6 +70,20 @@ export function registerShonenJumpPlusBackgroundImageCases(): void {
       expect(image.data.byteLength).toBe(4);
     });
 
+    it('rejects non-raster image responses before returning downloaded image data', async () => {
+      mockRateLimitedFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: (name: string) => (name === 'content-type' ? 'text/html; charset=utf-8' : null) },
+        arrayBuffer: async () => new TextEncoder().encode('<html>captcha</html>').buffer,
+      });
+
+      const { shonenJumpPlusIntegration } = await import('@/src/site-integrations/shonenjumpplus');
+
+      await expect(
+        shonenJumpPlusIntegration.background.chapter.downloadImage('https://cdn-ak.shonenjumpplus.com/pages/001.jpg'),
+      ).rejects.toThrow('Unsupported MIME type: text/html');
+    });
+
     it('resolveImageUrls uses episode-json script and does not call legacy JSON fallback', async () => {
       mockRateLimitedFetch.mockResolvedValue(makeHtmlResponse([
         '<script id="episode-json" type="text/json" data-value="',

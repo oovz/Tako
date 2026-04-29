@@ -50,7 +50,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "Tako Manga Downloader",
-    version: "1.1.0",
+    version: "1.1.1",
     description: "Save chapters from supported manga sites into organized CBZ, ZIP, or image files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [

@@ -157,7 +157,6 @@ describe('activeTabContext mapping', () => {
                     lastUpdated: 1,
                 },
             },
-            'CBZ',
         )
 
         expect(result.mangaState?.mangaId).toBe('series-ctx')
@@ -176,7 +175,7 @@ describe('activeTabContext mapping', () => {
     })
 
     it('derives loading state from a loading context', () => {
-        const result = deriveSeriesContextFromActiveTabContext({ kind: 'loading' }, 'CBZ')
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'loading' })
 
         expect(result.isLoading).toBe(true)
         expect(result.blockingMessage).toBeUndefined()
@@ -184,14 +183,14 @@ describe('activeTabContext mapping', () => {
     })
 
     it('normalizes no-manga errors into the canonical blocking message', () => {
-        const result = deriveSeriesContextFromActiveTabContext({ kind: 'error', error: 'No manga found on this page' }, 'CBZ')
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'error', error: 'No manga found on this page' })
 
         expect(result.isLoading).toBe(false)
         expect(result.blockingMessage).toBe(NO_MANGA_FOUND_MSG)
     })
 
     it('maps unsupported context to the generic no-series guidance state', () => {
-        const result = deriveSeriesContextFromActiveTabContext({ kind: 'unsupported' }, 'CBZ')
+        const result = deriveSeriesContextFromActiveTabContext({ kind: 'unsupported' })
 
         expect(result.isLoading).toBe(false)
         expect(result.blockingMessage).toBe(TAB_NOT_SUPPORTED_MSG)

@@ -45,6 +45,20 @@ export function registerPixivComicBackgroundImageCases(): void {
       expect(result.data.byteLength).toBe(3);
     });
 
+    it('rejects non-raster image responses before returning downloaded image data', async () => {
+      mockRateLimitedFetch.mockResolvedValue({
+        ok: true,
+        headers: { get: (name: string) => (name === 'content-type' ? 'text/html; charset=utf-8' : null) },
+        arrayBuffer: async () => new TextEncoder().encode('<html>captcha</html>').buffer,
+      });
+
+      const { pixivComicIntegration } = await import('@/src/site-integrations/pixiv-comic');
+
+      await expect(
+        pixivComicIntegration.background.chapter.downloadImage('https://img.pixiv.net/a/b/c/page01.webp'),
+      ).rejects.toThrow('Unsupported MIME type: text/html');
+    });
+
     it('resolves image urls via Pixiv API and refreshes stale build id on 404', async () => {
       mockRateLimitedFetch
         .mockResolvedValueOnce(makeHtmlResponse('<script src="/_next/static/build-old/_buildManifest.js"></script>'))

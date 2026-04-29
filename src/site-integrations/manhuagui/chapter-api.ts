@@ -1,7 +1,7 @@
 import type { ParseImageUrlsFromHtmlInput } from '@/src/types/site-integrations';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { filterValidImageUrls } from '@/src/shared/site-integration-utils';
+import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
 import { resolveImageUrlsFromChapterHtml } from './chapter-viewer';
 import { MANHUAGUI_BASE_URL } from './shared';
 
@@ -63,8 +63,8 @@ export async function downloadManhuaguiChapterImage(
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
+  const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
   const data = await response.arrayBuffer();
-  const mimeType = response.headers.get('content-type') || 'image/jpeg';
   const filename = new URL(imageUrl).pathname.split('/').filter(Boolean).pop() || 'image.jpg';
 
   return { data, filename, mimeType };
