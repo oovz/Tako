@@ -14,7 +14,7 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
   </a>
 </p>
 
-![Tako promo banner](assets/promo-1400x560.png)
+![Tako promo banner](assets/store/marquee-promo-1400x560.png)
 
 ## Why Tako
 
@@ -49,23 +49,23 @@ Tako is intended for pages the user can already access in their own browser sess
 
 ### Side Panel overview
 
-![Side Panel overview](assets/screenshot-01-sidepanel-overview-1280x800.png)
+![Side Panel overview](assets/store/screenshot-01-sidepanel-overview-1280x800.png)
 
 ### Inline chapter selection
 
-![Inline chapter selection](assets/screenshot-02-inline-selection-1280x800.png)
+![Inline chapter selection](assets/store/screenshot-02-inline-selection-1280x800.png)
 
 ### Queue and recent history
 
-![Queue and history](assets/screenshot-03-queue-history-1280x800.png)
+![Queue and history](assets/store/screenshot-03-queue-history-1280x800.png)
 
 ### Download settings
 
-![Options downloads tab](assets/screenshot-04-options-downloads-1280x800.png)
+![Options downloads tab](assets/store/screenshot-04-options-downloads-1280x800.png)
 
 ### Site integrations
 
-![Options integrations tab](assets/screenshot-05-options-integrations-1280x800.png)
+![Options integrations tab](assets/store/screenshot-05-options-integrations-1280x800.png)
 
 
 ## Privacy
