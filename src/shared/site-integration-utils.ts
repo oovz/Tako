@@ -49,6 +49,27 @@ export function filterValidImageUrls(urls: string[]): string[] {
   })
 }
 
+const ALLOWED_RASTER_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+])
+
+export function normalizeAllowedImageMimeType(rawContentType: string | null | undefined): string {
+  const mimeType = sanitizeLabel(rawContentType ?? '')
+    .split(';')[0]
+    ?.trim()
+    .toLowerCase() ?? ''
+
+  if (!ALLOWED_RASTER_IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new Error(`Unsupported MIME type: ${mimeType || 'missing'}`)
+  }
+
+  return mimeType
+}
+
 export function parseVolumeInfo(text: string): { volumeLabel?: string; volumeNumber?: number } {
   const label = sanitizeLabel(text)
   if (!label) {

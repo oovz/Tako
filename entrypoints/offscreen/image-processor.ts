@@ -8,6 +8,7 @@
 import { rateLimitedFetchByUrlScope, scheduleForIntegrationScope } from '@/src/runtime/rate-limit';
 import { HARD_TIMEOUT_MS, STALL_TIMEOUT_MS } from '@/src/constants/timeouts';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
+import { normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
 import logger from '@/src/runtime/logger';
 
 
@@ -54,12 +55,7 @@ export async function fetchImageWithStallDetection(
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const mimeTypeRaw = response.headers.get('content-type') ?? '';
-    const mimeType = mimeTypeRaw.split(';')[0]?.trim().toLowerCase() || 'application/octet-stream';
-
-    if (!mimeType.startsWith('image/')) {
-      throw new Error(`Unsupported MIME type: ${mimeType}`);
-    }
+    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
 
     if (!response.body) {
       const data = await response.arrayBuffer();
@@ -280,23 +276,16 @@ export async function downloadCoverImage(
       return null; // Graceful fallback
     }
 
+    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
+
     // Get data as ArrayBuffer
     const data = await response.arrayBuffer();
 
-    // Determine MIME type and extension
-    const rawType = response.headers.get('content-type');
-    const mimeType = rawType || 'image/jpeg';
+    const subtype = mimeType.split('/')[1];
     let extension: string;
-    if (!rawType) {
-      // No content-type header provided: default to jpg extension
-      extension = 'jpg';
-    } else {
-      const subtype = mimeType.split('/')[1]?.split(';')[0];
-      const lower = (subtype || '').toLowerCase();
-      if (lower === 'jpeg') extension = 'jpeg';
-      else if (lower === 'jpg') extension = 'jpg';
-      else extension = lower || 'jpg';
-    }
+    if (subtype === 'jpeg') extension = 'jpeg';
+    else if (subtype === 'jpg') extension = 'jpg';
+    else extension = subtype || 'jpg';
 
     logger.debug(`[COVER] Downloaded successfully: ${data.byteLength} bytes, type: ${mimeType}`);
     return { data, mimeType, extension };

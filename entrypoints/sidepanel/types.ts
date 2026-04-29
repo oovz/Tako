@@ -32,5 +32,3 @@ export interface StandaloneChapter extends SidePanelChapter {
 }
 
 export type VolumeOrChapter = Volume | StandaloneChapter
-
-export type FormatDisplay = 'CBZ' | 'ZIP' | 'NONE'

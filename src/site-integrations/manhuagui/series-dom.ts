@@ -27,11 +27,15 @@ function getAttribute(
 }
 
 function getHref(node: { href?: string; getAttribute?: (name: string) => string | null | undefined } | null | undefined): string {
+  const rawHref = getAttribute(node, 'href');
+  const absoluteRawHref = toAbsoluteUrl(rawHref);
+  if (absoluteRawHref) return absoluteRawHref;
+
   if (typeof node?.href === 'string' && sanitizeLabel(node.href)) {
     return node.href;
   }
 
-  return getAttribute(node, 'href');
+  return '';
 }
 
 /**

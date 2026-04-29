@@ -1,6 +1,6 @@
 import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
-import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
+import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
 import {
   buildMangadexUploadsRecoveryImageUrl,
   buildPageUrls,
@@ -104,12 +104,12 @@ async function fetchMangadexImageAsset(imageUrl: string, signal?: AbortSignal): 
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
+    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
     cached = response.headers.get('X-Cache')?.startsWith('HIT') ?? false
     const data = await response.arrayBuffer()
     bytes = data.byteLength
     success = true
 
-    const mimeType = response.headers.get('content-type') || 'image/jpeg'
     const urlParts = new URL(imageUrl).pathname.split('/')
     const filename = urlParts[urlParts.length - 1] || 'image.jpg'
 

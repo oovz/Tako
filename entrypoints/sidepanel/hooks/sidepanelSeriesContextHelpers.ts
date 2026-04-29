@@ -1,5 +1,4 @@
 import type {
-  FormatDisplay,
   SidePanelChapter,
   StandaloneChapter,
   Volume,
@@ -21,7 +20,6 @@ export interface DerivedSidepanelSeriesContextData {
   siteId: string | undefined
   author?: string
   coverUrl?: string
-  defaultFormat: FormatDisplay
 }
 
 export type ActiveTabContextValue =
@@ -69,7 +67,6 @@ function normalizeBlockingMessage(error: string): string {
 }
 
 function getEmptySeriesContext(
-  defaultFormat: FormatDisplay,
   blockingMessage?: string,
   isLoading: boolean = false,
 ): DerivedSidepanelSeriesContextData {
@@ -83,13 +80,11 @@ function getEmptySeriesContext(
     siteId: undefined,
     author: undefined,
     coverUrl: undefined,
-    defaultFormat,
   }
 }
 
 export function deriveSeriesContextFromActiveTabContext(
   context: ActiveTabContextValue,
-  defaultFormat: FormatDisplay,
   previousItems?: VolumeOrChapter[],
 ): DerivedSidepanelSeriesContextData {
   switch (context.kind) {
@@ -105,18 +100,17 @@ export function deriveSeriesContextFromActiveTabContext(
         siteId: mangaState.siteIntegrationId,
         author: mangaState.metadata?.author,
         coverUrl: mangaState.metadata?.coverUrl,
-        defaultFormat,
       }
     }
 
     case 'loading':
-      return getEmptySeriesContext(defaultFormat, undefined, true)
+      return getEmptySeriesContext(undefined, true)
 
     case 'error':
-      return getEmptySeriesContext(defaultFormat, normalizeBlockingMessage(context.error), false)
+      return getEmptySeriesContext(normalizeBlockingMessage(context.error), false)
 
     case 'unsupported':
-      return getEmptySeriesContext(defaultFormat, TAB_NOT_SUPPORTED_MSG, false)
+      return getEmptySeriesContext(TAB_NOT_SUPPORTED_MSG, false)
   }
 }
 

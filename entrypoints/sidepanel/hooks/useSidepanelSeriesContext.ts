@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
-import type { FormatDisplay, VolumeOrChapter } from '../types'
-import { useSidepanelDefaultFormat } from '@/entrypoints/sidepanel/hooks/useSidepanelDefaultFormat'
+import type { VolumeOrChapter } from '../types'
 import { useSidepanelTrackedTabId } from '@/entrypoints/sidepanel/hooks/useSidepanelTrackedTabId'
 import {
   deriveSeriesContextFromActiveTabContext,
@@ -23,11 +22,9 @@ export interface SidepanelSeriesContextData {
   siteId: string | undefined
   author?: string
   coverUrl?: string
-  defaultFormat: FormatDisplay
 }
 
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
-  const defaultFormat = useSidepanelDefaultFormat()
   const tabId = useSidepanelTrackedTabId()
   const storageKeys = useMemo(
     () => (
@@ -49,8 +46,8 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   })
 
   const data = useMemo(
-    () => deriveSeriesContextFromActiveTabContext(activeTabContext, defaultFormat),
-    [activeTabContext, defaultFormat],
+    () => deriveSeriesContextFromActiveTabContext(activeTabContext),
+    [activeTabContext],
   )
 
   return {

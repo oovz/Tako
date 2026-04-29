@@ -113,6 +113,27 @@ describe('downloadCoverImage', () => {
       ).rejects.toThrow('Unsupported MIME type')
     })
 
+    it('rejects SVG even though it is an image media type', async () => {
+      const mockResponse = {
+        ok: true,
+        headers: {
+          get: (key: string) => key === 'content-type' ? 'image/svg+xml' : null,
+        },
+        body: null,
+        arrayBuffer: () => Promise.resolve(new TextEncoder().encode('<svg />').buffer),
+      }
+
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      vi.mocked(rateLimitedFetchByUrlScope).mockResolvedValue(mockResponse as unknown as Response)
+
+      await expect(
+        fetchImageWithStallDetection('https://example.com/vector.svg', {
+          stallTimeoutMs: 20,
+          hardTimeoutMs: 50,
+        })
+      ).rejects.toThrow('Unsupported MIME type: image/svg+xml')
+    })
+
     it('aborts when stream stalls beyond stall timeout', async () => {
       const mockResponse = {
         ok: true,
@@ -198,7 +219,7 @@ describe('downloadCoverImage', () => {
       expect(result?.extension).toBe('webp')
     })
 
-    it('defaults to jpeg when content-type is missing', async () => {
+    it('returns null when content-type is missing', async () => {
       const mockArrayBuffer = new ArrayBuffer(1024)
       const mockResponse = {
         ok: true,
@@ -211,9 +232,7 @@ describe('downloadCoverImage', () => {
 
       const result = await downloadCoverImage(mockUrl, mockIntegrationId, mockFetchTimeoutMs)
 
-      expect(result).not.toBeNull()
-      expect(result?.mimeType).toBe('image/jpeg')
-      expect(result?.extension).toBe('jpg')
+      expect(result).toBeNull()
     })
 
     it('handles content-type with charset', async () => {

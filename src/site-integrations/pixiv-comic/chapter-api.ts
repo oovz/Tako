@@ -2,7 +2,7 @@ import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder'
-import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
+import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
 import { descramblePixivImage } from './descrambler'
 import { parseEpisodeIdFromUrl } from './page-context'
 import {
@@ -368,8 +368,8 @@ export async function downloadPixivChapterImage(
     throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
+  const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
   const rawData = await response.arrayBuffer()
-  const mimeType = response.headers.get('content-type') || 'image/jpeg'
   const data = pixivKey
     ? await descramblePixivImage(rawData, mimeType, pixivKey, sourceImageUrl)
     : rawData

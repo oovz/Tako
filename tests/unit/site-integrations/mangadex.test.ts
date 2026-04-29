@@ -1682,6 +1682,28 @@ describe('MangaDex site integration', () => {
             expect(result.filename).toBe('page1.jpg');
         });
 
+        it('rejects non-raster image responses before reporting a successful download', async () => {
+            (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+                ok: true,
+                arrayBuffer: async () => new TextEncoder().encode('<html>captcha</html>').buffer,
+                headers: {
+                    get: (name: string) => {
+                        if (name === 'content-type') return 'text/html; charset=utf-8';
+                        if (name === 'X-Cache') return 'MISS';
+                        return null;
+                    },
+                },
+            });
+
+            const { mangadexIntegration } = await import('@/src/site-integrations/mangadex');
+
+            await expect(
+                mangadexIntegration.background.chapter.downloadImage(
+                    'https://uploads.mangadex.org/data/abc123/page1.jpg'
+                )
+            ).rejects.toThrow('Unsupported MIME type: text/html');
+        });
+
         it('handles abort signal during download', async () => {
             const abortController = new AbortController();
             abortController.abort();

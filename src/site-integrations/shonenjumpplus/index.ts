@@ -3,7 +3,7 @@ import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, 
 import logger from '@/src/runtime/logger';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { filterValidImageUrls, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
+import { filterValidImageUrls, normalizeAllowedImageMimeType, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import {
   extractImageUrlsFromEpisodeJsonScript,
   readEpisodeJsonSeriesMetadataFromDocument,
@@ -438,8 +438,8 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
+      const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
       const rawData = await response.arrayBuffer();
-      const mimeType = response.headers.get('content-type') || 'image/jpeg';
       const shouldDescramble = typeof seed === 'number' || isShonenJumpPlusPageImageUrl(sourceUrl);
       const data = shouldDescramble
         ? await descrambleGigaviewerImage(rawData, mimeType)
