@@ -5,6 +5,7 @@ import {
   selectReaderHost,
   type ReaderConfig,
 } from './reader-config';
+import type { EffectivePolicy } from '@/src/runtime/rate-limit';
 import { DEFAULT_IMAGE_PROTOCOL } from './shared';
 
 /**
@@ -265,10 +266,13 @@ function extractImageUrlsFromPackedData(data: PackedImageData, readerConfig: Rea
  * {@link DEFAULT_READER_CONFIG} so the packed payload alone is enough to
  * produce URLs.
  */
-export async function resolveImageUrlsFromChapterHtml(chapterHtml: string): Promise<string[]> {
+export async function resolveImageUrlsFromChapterHtml(
+  chapterHtml: string,
+  chapterPolicy?: EffectivePolicy,
+): Promise<string[]> {
   const [packedImageData, readerConfig] = await Promise.all([
     Promise.resolve(parsePackedImageData(chapterHtml)),
-    fetchReaderConfig(chapterHtml),
+    fetchReaderConfig(chapterHtml, chapterPolicy),
   ]);
 
   return extractImageUrlsFromPackedData(packedImageData, readerConfig);

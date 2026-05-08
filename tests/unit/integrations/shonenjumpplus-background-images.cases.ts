@@ -102,7 +102,12 @@ export function registerShonenJumpPlusBackgroundImageCases(): void {
       expect(urls).toHaveLength(1);
       expect(urls?.[0]).toMatch(/^https:\/\/cdn-ak-img\.shonenjumpplus\.com\/public\/page\/2\/10834108156648241044-31ea188b967b3694d8fcda5d2fba3bec\?sjpSeed=/);
       expect(mockRateLimitedFetch).toHaveBeenCalledTimes(1);
-      expect(mockRateLimitedFetch).toHaveBeenCalledWith('https://shonenjumpplus.com/episode/10834108156648240735', 'chapter');
+      expect(mockRateLimitedFetch).toHaveBeenCalledWith(
+        'https://shonenjumpplus.com/episode/10834108156648240735',
+        'chapter',
+        undefined,
+        undefined,
+      );
     });
   });
 }

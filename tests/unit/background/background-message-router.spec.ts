@@ -190,4 +190,34 @@ describe('handleBackgroundMessage', () => {
 
     expect(response).toEqual({ success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_API_REQUEST payload' })
   })
+
+  it('rejects CLEAR_ALL_HISTORY from non-options senders before touching state', async () => {
+    vi.stubGlobal('chrome', {
+      runtime: {
+        getURL: vi.fn(() => 'chrome-extension://extension-id/options.html'),
+      },
+    })
+
+    const ensureStateManagerInitialized = vi.fn(async () => undefined)
+    mocks.isSenderFromOptionsPage.mockReturnValue(false)
+
+    const response = await handleBackgroundMessage(
+      {
+        type: 'CLEAR_ALL_HISTORY',
+        payload: {},
+      } as ExtensionMessage,
+      { url: 'chrome-extension://extension-id/sidepanel.html' } as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized,
+        getStateManager: () => ({} as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(response).toEqual({ success: false, error: 'CLEAR_ALL_HISTORY is only available from Options page' })
+    expect(ensureStateManagerInitialized).not.toHaveBeenCalled()
+    expect(mocks.clearAllHistory).not.toHaveBeenCalled()
+  })
 })

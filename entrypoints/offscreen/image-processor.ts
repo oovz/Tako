@@ -6,6 +6,7 @@
  */
 
 import { rateLimitedFetchByUrlScope, scheduleForIntegrationScope } from '@/src/runtime/rate-limit';
+import type { EffectivePolicy } from '@/src/runtime/rate-limit';
 import { HARD_TIMEOUT_MS, STALL_TIMEOUT_MS } from '@/src/constants/timeouts';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
 import { normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
@@ -17,6 +18,7 @@ interface FetchImageWithStallDetectionOptions {
   signal?: AbortSignal;
   stallTimeoutMs?: number;
   hardTimeoutMs?: number;
+  rateLimitPolicy?: EffectivePolicy;
 }
 
 /**
@@ -45,10 +47,10 @@ export async function fetchImageWithStallDetection(
       rateLimitedFetchByUrlScope(imageUrl, 'image', {
         signal: controller.signal,
         credentials: 'include',
-      });
+      }, options.rateLimitPolicy);
 
     const response = options.integrationId
-      ? await scheduleForIntegrationScope(options.integrationId, 'image', fetchImage)
+      ? await scheduleForIntegrationScope(options.integrationId, 'image', fetchImage, options.rateLimitPolicy)
       : await fetchImage();
 
     if (!response.ok) {
@@ -173,7 +175,12 @@ class PromiseQueue {
  * (BOM, Content-Type, or <meta charset>). Undeclared or mismatched encodings are
  * treated as hard failures instead of guessing fallback decoders.
  */
-async function fetchChapterHtml(chapterUrl: string, timeoutMs: number, integrationId?: string): Promise<string> {
+async function fetchChapterHtml(
+  chapterUrl: string,
+  timeoutMs: number,
+  integrationId?: string,
+  rateLimitPolicy?: EffectivePolicy,
+): Promise<string> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('fetch-html-timeout')), timeoutMs);
@@ -185,12 +192,12 @@ async function fetchChapterHtml(chapterUrl: string, timeoutMs: number, integrati
       });
 
       if (integrationId) {
-        response = await scheduleForIntegrationScope(integrationId, 'chapter', fetchFn);
+        response = await scheduleForIntegrationScope(integrationId, 'chapter', fetchFn, rateLimitPolicy);
       } else {
         response = await rateLimitedFetchByUrlScope(chapterUrl, 'chapter', {
           signal: controller.signal,
           credentials: 'include'
-        } as RequestInit);
+        } as RequestInit, rateLimitPolicy);
       }
     } finally {
       clearTimeout(timer);

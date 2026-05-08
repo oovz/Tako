@@ -33,8 +33,11 @@ const pixivComicBackgroundIntegration: BackgroundIntegration = {
     return preparePixivDispatchContext();
   },
   chapter: {
-    async resolveImageUrls(chapter, context): Promise<string[]> {
-      return resolvePixivChapterImageUrls(chapter, context as { taskId?: string; cookieHeader?: string } | undefined);
+    async resolveImageUrls(chapter, context, settingsSnapshot): Promise<string[]> {
+      return resolvePixivChapterImageUrls(chapter, {
+        ...(context as { taskId?: string; cookieHeader?: string } | undefined),
+        ...(settingsSnapshot ? { rateLimitSettings: settingsSnapshot.rateLimitSettings } : {}),
+      });
     },
 
     parseImageUrlsFromHtml(input: ParseImageUrlsFromHtmlInput): Promise<string[]> {

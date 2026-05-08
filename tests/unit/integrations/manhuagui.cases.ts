@@ -360,6 +360,8 @@ export function registerManhuaguiCases(): void {
       expect(mockRateLimitedFetch).toHaveBeenCalledWith(
         'https://cf.mhgui.com/scripts/config_TEST.js',
         'chapter',
+        undefined,
+        undefined,
       );
     });
 
@@ -383,11 +385,15 @@ export function registerManhuaguiCases(): void {
         1,
         'https://www.manhuagui.com/comic/28004/760111.html',
         'chapter',
+        undefined,
+        undefined,
       );
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         2,
         'https://cf.mhgui.com/scripts/config_TEST.js',
         'chapter',
+        undefined,
+        undefined,
       );
     });
 

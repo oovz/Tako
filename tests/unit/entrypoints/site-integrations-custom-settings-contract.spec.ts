@@ -9,7 +9,10 @@ vi.mock('@/components/ui/collapsible', () => ({
 }))
 
 import { SiteIntegrationCard } from '@/entrypoints/options/components/SiteIntegrationCard'
+import { SiteIntegrationManagementTab } from '@/entrypoints/options/tabs/SiteIntegrationManagementTab'
 import { getSiteIntegrationManifestById } from '@/src/site-integrations/manifest'
+import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
+import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 
 describe('Site integration custom settings contract', () => {
   it('defines manifest-level custom settings for MangaDex', () => {
@@ -84,5 +87,24 @@ describe('Site integration custom settings contract', () => {
     expect(html).toContain('data-testid="site-integration-card-mangadex"')
     expect(html).toContain('data-testid="configure-site-integration-mangadex"')
     expect(html).toContain('data-testid="reset-site-integration-overrides-mangadex"')
+  })
+
+  it('renders the Site Integrations tab from manifest data before registry initialization', () => {
+    siteIntegrationRegistry.clear()
+
+    const html = renderToStaticMarkup(
+      React.createElement(SiteIntegrationManagementTab, {
+        overrides: {},
+        siteIntegrationEnablement: {},
+        globalSettings: DEFAULT_SETTINGS,
+        siteIntegrationSettingsByIntegration: {},
+        onSiteIntegrationSettingsChange: vi.fn(),
+        onSiteIntegrationEnablementChange: vi.fn(),
+        onChange: vi.fn(),
+      }),
+    )
+
+    expect(html).toContain('data-testid="site-integration-card-mangadex"')
+    expect(html).toContain('data-testid="site-integration-card-manhuagui"')
   })
 })

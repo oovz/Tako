@@ -45,6 +45,8 @@ vi.mock('@/src/runtime/logger', () => ({
 
 vi.mock('@/src/runtime/rate-limit', () => ({
   rateLimitedFetchByUrlScope: (...args: unknown[]) => mockRateLimitedFetch(...args),
+  getRateLimitPolicyFromContext: vi.fn(() => undefined),
+  getRateLimitPolicyFromSnapshot: vi.fn(() => undefined),
 }));
 
 vi.mock('@/src/types/site-integrations', async importOriginal => {

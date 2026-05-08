@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import logger from '@/src/runtime/logger'
-import { initializeSiteIntegrationMetadataOnly } from '@/src/runtime/site-integration-initialization'
 import { isRecord, type StorageValue } from '@/src/shared/type-guards'
 import { chapterPersistenceService } from '@/src/storage/chapter-persistence-service'
 import {
@@ -82,7 +81,6 @@ export function useOptionsPageState() {
 
   useEffect(() => {
     void loadConfiguration()
-    void initializeSiteIntegrationMetadataOnly()
     void loadFolderHandle()
   }, [])
 

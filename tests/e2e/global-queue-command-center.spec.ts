@@ -776,9 +776,26 @@ test.describe('Global Command Center queue', () => {
       await expect(sp.locator('#root')).toBeVisible()
       await expect(sp.getByText('Retry Partial')).toBeVisible()
 
-      // Retry button should be available for partial_success tasks
-      // May or may not be visible depending on implementation
-      // Just verify the task is displayed correctly
+      await sp.getByRole('button', { name: 'Retry failed' }).click()
+
+      await waitForGlobalState(context, (state) => {
+        const original = state.downloadQueue.find((task) => task.id === 'retry-partial')
+        if (!original?.isRetried) {
+          return false
+        }
+
+        const retryTask = state.downloadQueue.find(
+          (task) => task.id !== 'retry-partial' && task.mangaId === original.mangaId,
+        )
+        if (!retryTask) {
+          return false
+        }
+
+        const retryUrls = retryTask.chapters.map((chapter) => chapter.url).sort()
+        return retryUrls.length === 2
+          && retryUrls[0] === buildExampleUrl('/rp2')
+          && retryUrls[1] === buildExampleUrl('/rp3')
+      })
 
       await sp.close()
     })
