@@ -65,6 +65,52 @@ describe('registerBackgroundNavigationListeners', () => {
     })
   })
 
+  it('does not fail startup when optional tab navigation events are unavailable', () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        query: tabsQuery,
+        get: tabsGet,
+      },
+      webNavigation: {
+        onCommitted: {
+          addListener: webNavigationOnCommittedAddListener,
+        },
+        onHistoryStateUpdated: {
+          addListener: webNavigationOnHistoryStateUpdatedAddListener,
+        },
+      },
+      storage: {
+        session: {
+          get: storageGet,
+          remove: storageRemove,
+        },
+      },
+    })
+
+    expect(() => registerBackgroundNavigationListeners({
+      ensureStateManagerInitialized: async () => undefined,
+      getStateManager: () => ({
+        clearTabState: vi.fn(async () => undefined),
+      }) as never,
+      tabContextCache: {
+        handleTabActivated: vi.fn(async () => undefined),
+        handleTabUpdated: vi.fn(async () => undefined),
+        setCachedContext: vi.fn(),
+        deleteCachedContext: vi.fn(),
+        syncActiveTabContext: vi.fn(async () => undefined),
+      },
+      tabUiCoordinator: {
+        ensureContentScriptPresent: vi.fn(async () => undefined),
+        updateActionForTab: vi.fn(async () => undefined),
+        updateSidePanelForTab: vi.fn(async () => undefined),
+      },
+    })).not.toThrow()
+
+    expect(webNavigationOnCommittedAddListener).toHaveBeenCalledTimes(1)
+    expect(webNavigationOnHistoryStateUpdatedAddListener).toHaveBeenCalledTimes(1)
+    expect(tabsQuery).toHaveBeenCalledWith({})
+  })
+
   it('treats supported SPA navigations as a no-op so refresh remains the recovery path', async () => {
     const clearTabState = vi.fn(async () => undefined)
     const deleteCachedContext = vi.fn()

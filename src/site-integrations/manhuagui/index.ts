@@ -52,8 +52,8 @@ const manhuaguiBackgroundIntegration: BackgroundIntegration = {
   name: 'Manhuagui Background',
   prepareDispatchContext: prepareManhuaguiDispatchContext,
   chapter: {
-    resolveImageUrls(chapter): Promise<string[]> {
-      return resolveManhuaguiChapterImageUrls(chapter);
+    resolveImageUrls(chapter, _context, settingsSnapshot): Promise<string[]> {
+      return resolveManhuaguiChapterImageUrls(chapter, settingsSnapshot);
     },
 
     parseImageUrlsFromHtml(input) {

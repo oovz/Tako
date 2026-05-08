@@ -29,29 +29,33 @@ interface RegisterBackgroundNavigationListenersDependencies {
 export function registerBackgroundNavigationListeners(
   deps: RegisterBackgroundNavigationListenersDependencies,
 ): void {
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url || changeInfo.status === 'complete') {
-      void (async () => {
-        await deps.ensureStateManagerInitialized()
-        await deps.tabContextCache.handleTabUpdated(tabId, changeInfo)
-        const url = changeInfo.url ?? tab.url ?? null
-        void deps.tabUiCoordinator.updateActionForTab(tabId, url)
-        void deps.tabUiCoordinator.updateSidePanelForTab(tabId)
+  try {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.url || changeInfo.status === 'complete') {
+        void (async () => {
+          await deps.ensureStateManagerInitialized()
+          await deps.tabContextCache.handleTabUpdated(tabId, changeInfo)
+          const url = changeInfo.url ?? tab.url ?? null
+          void deps.tabUiCoordinator.updateActionForTab(tabId, url)
+          void deps.tabUiCoordinator.updateSidePanelForTab(tabId)
 
-        if (url && !isInternalUrl(url) && !matchUrl(url)) {
-          try {
-            deps.tabContextCache.setCachedContext(tabId, null)
-            await deps.getStateManager().clearTabState(tabId)
-            deps.tabContextCache.deleteCachedContext(tabId)
-            await chrome.storage.session.remove(`seriesContextError_${tabId}`)
-            logger.info(`background: onUpdated unsupported URL detected, clearing tab state for tab ${tabId}`)
-          } catch (error) {
-            logger.debug('onUpdated navigation state cleanup failed (non-fatal):', error)
+          if (url && !isInternalUrl(url) && !matchUrl(url)) {
+            try {
+              deps.tabContextCache.setCachedContext(tabId, null)
+              await deps.getStateManager().clearTabState(tabId)
+              deps.tabContextCache.deleteCachedContext(tabId)
+              await chrome.storage.session.remove(`seriesContextError_${tabId}`)
+              logger.info(`background: onUpdated unsupported URL detected, clearing tab state for tab ${tabId}`)
+            } catch (error) {
+              logger.debug('onUpdated navigation state cleanup failed (non-fatal):', error)
+            }
           }
-        }
-      })()
-    }
-  })
+        })()
+      }
+    })
+  } catch (error) {
+    logger.debug('tabs.onUpdated listener unavailable; tab update navigation sync disabled', error)
+  }
 
   try {
     chrome.webNavigation.onCommitted.addListener((details) => {
@@ -129,32 +133,40 @@ export function registerBackgroundNavigationListeners(
     logger.debug('webNavigation.onHistoryStateUpdated not available', error)
   }
 
-  chrome.tabs.onActivated.addListener((activeInfo) => {
-    void (async () => {
-      try {
-        await deps.ensureStateManagerInitialized()
-        await deps.tabContextCache.handleTabActivated(activeInfo.tabId)
-        const tab = await chrome.tabs.get(activeInfo.tabId)
-        await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, tab?.url || null)
-        await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
-        void deps.tabUiCoordinator.ensureContentScriptPresent(activeInfo.tabId, tab?.url || null)
-      } catch {
-        await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, null)
-        await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
-      }
-    })()
-  })
-
-  chrome.tabs.query({})
-    .then((tabs) => {
-      for (const tab of tabs) {
-        if (typeof tab.id === 'number') {
-          void deps.tabUiCoordinator.updateActionForTab(tab.id, tab.url || null)
-          void deps.tabUiCoordinator.updateSidePanelForTab(tab.id)
-          void deps.tabUiCoordinator.ensureContentScriptPresent(tab.id, tab.url || null)
+  try {
+    chrome.tabs.onActivated.addListener((activeInfo) => {
+      void (async () => {
+        try {
+          await deps.ensureStateManagerInitialized()
+          await deps.tabContextCache.handleTabActivated(activeInfo.tabId)
+          const tab = await chrome.tabs.get(activeInfo.tabId)
+          await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, tab?.url || null)
+          await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
+          void deps.tabUiCoordinator.ensureContentScriptPresent(activeInfo.tabId, tab?.url || null)
+        } catch {
+          await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, null)
+          await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
         }
-      }
+      })()
     })
-    .catch(() => {})
+  } catch (error) {
+    logger.debug('tabs.onActivated listener unavailable; active tab navigation sync disabled', error)
+  }
+
+  try {
+    chrome.tabs.query({})
+      .then((tabs) => {
+        for (const tab of tabs) {
+          if (typeof tab.id === 'number') {
+            void deps.tabUiCoordinator.updateActionForTab(tab.id, tab.url || null)
+            void deps.tabUiCoordinator.updateSidePanelForTab(tab.id)
+            void deps.tabUiCoordinator.ensureContentScriptPresent(tab.id, tab.url || null)
+          }
+        }
+      })
+      .catch(() => {})
+  } catch (error) {
+    logger.debug('tabs.query unavailable; initial tab UI sync skipped', error)
+  }
 }
 

@@ -1,5 +1,6 @@
 import logger from '@/src/runtime/logger'
 import { scheduleForIntegrationScope } from '@/src/runtime/rate-limit'
+import type { RateLimitPolicySnapshot } from '@/src/runtime/rate-limit'
 import { PromiseQueue } from './image-processor'
 import type {
   ChapterDownloadImageFn,
@@ -26,6 +27,7 @@ type DownloadChapterImagesOptions = {
   integrationId: string
   chapterId: string
   integrationContext?: Record<string, unknown>
+  rateLimitSettings?: RateLimitPolicySnapshot
   abortSignal?: AbortSignal
   onProgress: (pct: number, label?: string, imageProgress?: { current: number; total: number }) => Promise<void>
   onImageDownloaded?: () => void
@@ -54,6 +56,7 @@ export async function downloadChapterImages(
     integrationId,
     chapterId,
     integrationContext,
+    rateLimitSettings,
     abortSignal,
     onProgress,
     onImageDownloaded,
@@ -72,6 +75,7 @@ export async function downloadChapterImages(
   const failedReasons: string[] = []
   const imageDownloadContext = {
     ...(integrationContext ?? {}),
+    ...(rateLimitSettings ? { rateLimitSettings } : {}),
     chapterId,
   }
 
@@ -86,7 +90,7 @@ export async function downloadChapterImages(
           () => scheduleForIntegrationScope(integrationId, 'image', () => downloadImage(url, {
             signal: abortSignal,
             context: imageDownloadContext,
-          })),
+          }), rateLimitSettings?.image),
         )
         onDownloaded({ url, index: imageIndex, result })
         succeeded++

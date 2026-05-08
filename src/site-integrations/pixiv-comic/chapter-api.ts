@@ -1,6 +1,6 @@
 import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
-import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
+import { getRateLimitPolicyFromContext, rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder'
 import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
 import { descramblePixivImage } from './descrambler'
@@ -121,14 +121,15 @@ const parseStoryId = (chapter: { id: string; url: string }): string => {
   throw new Error(`Unable to resolve Pixiv Comic story id from chapter: ${chapter.url}`)
 }
 
-async function fetchPixivBuildId(cookieHeader?: string): Promise<string> {
+async function fetchPixivBuildId(context?: PixivResolveContext): Promise<string> {
+  const cookieHeader = context?.cookieHeader
   logger.debug('[pixiv-comic] Fetching homepage to resolve Next.js build ID', {
     hasCookieHeader: Boolean(cookieHeader),
   })
   const response = await rateLimitedFetchByUrlScope(`${PIXIV_BASE_URL}/`, 'chapter', {
     credentials: 'include',
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-  })
+  }, context?.rateLimitSettings?.chapter)
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Pixiv homepage: HTTP ${response.status}`)
@@ -143,13 +144,14 @@ async function fetchPixivBuildId(cookieHeader?: string): Promise<string> {
 async function fetchPixivSalt(
   storyId: string,
   buildId: string,
-  cookieHeader?: string,
+  context?: PixivResolveContext,
 ): Promise<{ salt: string; pages: PixivReadV4Page[] }> {
+  const cookieHeader = context?.cookieHeader
   const saltUrl = `${PIXIV_BASE_URL}/_next/data/${buildId}/viewer/stories/${storyId}.json?id=${storyId}`
   const response = await rateLimitedFetchByUrlScope(saltUrl, 'chapter', {
     credentials: 'include',
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-  })
+  }, context?.rateLimitSettings?.chapter)
 
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as Error & { status?: number }
@@ -193,7 +195,7 @@ async function resolvePixivReadPages(
     buildIdCacheHit: Boolean(buildId),
   })
   if (!buildId) {
-    buildId = await fetchPixivBuildId(context?.cookieHeader)
+    buildId = await fetchPixivBuildId(context)
     if (taskId) {
       pixivBuildIdCacheByTask.set(taskId, buildId)
     }
@@ -201,7 +203,7 @@ async function resolvePixivReadPages(
 
   let saltResult: { salt: string; pages: PixivReadV4Page[] }
   try {
-    saltResult = await fetchPixivSalt(storyId, buildId, context?.cookieHeader)
+    saltResult = await fetchPixivSalt(storyId, buildId, context)
   } catch (error) {
     const statusCode = (error as { status?: number })?.status
     if (statusCode !== 404) {
@@ -214,13 +216,13 @@ async function resolvePixivReadPages(
       previousBuildId: buildId,
     })
 
-    const refreshedBuildId = await fetchPixivBuildId(context?.cookieHeader)
+    const refreshedBuildId = await fetchPixivBuildId(context)
     if (taskId) {
       pixivBuildIdCacheByTask.set(taskId, refreshedBuildId)
     }
 
     try {
-      saltResult = await fetchPixivSalt(storyId, refreshedBuildId, context?.cookieHeader)
+      saltResult = await fetchPixivSalt(storyId, refreshedBuildId, context)
     } catch {
       throw new Error('Pixiv Comic API may have changed (build ID stale)')
     }
@@ -234,7 +236,7 @@ async function resolvePixivReadPages(
   const response = await rateLimitedFetchByUrlScope(`${PIXIV_EPISODES_API_URL}/${storyId}/read_v4`, 'chapter', {
     credentials: 'include',
     headers,
-  })
+  }, context?.rateLimitSettings?.chapter)
 
   if (!response.ok) {
     throw new Error(`Pixiv Comic read_v4 failed: HTTP ${response.status}`)
@@ -363,7 +365,7 @@ export async function downloadPixivChapterImage(
     referrer: PIXIV_IMAGE_REFERRER,
     referrerPolicy: 'strict-origin-when-cross-origin',
     signal: opts?.signal,
-  })
+  }, getRateLimitPolicyFromContext(opts?.context, 'image'))
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }

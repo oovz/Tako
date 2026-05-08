@@ -6,16 +6,23 @@ import Bottleneck from 'bottleneck/light.js'
 import { settingsService, SETTINGS_STORAGE_KEY } from '@/src/storage/settings-service'
 import { findSiteIntegrationForUrl, siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 import { siteOverridesService, SITE_OVERRIDES_STORAGE_KEY } from '@/src/storage/site-overrides-service'
+import { isRecord } from '@/src/shared/type-guards'
+import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
 
 export type RateScope = 'image' | 'chapter'
 
-type EffectivePolicy = { concurrency: number; delayMs: number }
+export type EffectivePolicy = { concurrency: number; delayMs: number }
+export type RateLimitPolicySnapshot = TaskSettingsSnapshot['rateLimitSettings']
 
 // Maintain limiters per (integrationId + scope)
 const limiters = new Map<string, Bottleneck>()
 
-function limiterKey(integrationId: string, scope: RateScope): string {
-  return `${integrationId}:${scope}`
+function limiterKey(integrationId: string, scope: RateScope, policy?: EffectivePolicy): string {
+  if (!policy) {
+    return `${integrationId}:${scope}`
+  }
+
+  return `${integrationId}:${scope}:${policy.concurrency}:${policy.delayMs}`
 }
 
 function createLimiter(policy: EffectivePolicy): Bottleneck {
@@ -66,11 +73,12 @@ function normalizePolicy(p: { concurrency: number; delayMs: number }): Effective
   }
 }
 
-async function ensureLimiter(integrationId: string, scope: RateScope): Promise<Bottleneck> {
-  const key = limiterKey(integrationId, scope)
+async function ensureLimiter(integrationId: string, scope: RateScope, policyOverride?: EffectivePolicy): Promise<Bottleneck> {
+  const normalizedOverride = policyOverride ? normalizePolicy(policyOverride) : undefined
+  const key = limiterKey(integrationId, scope, normalizedOverride)
   let limiter = limiters.get(key)
   if (limiter) return limiter
-  const policy = await resolveEffectivePolicy(integrationId, scope)
+  const policy = normalizedOverride ?? await resolveEffectivePolicy(integrationId, scope)
   limiter = createLimiter(policy)
   limiters.set(key, limiter)
   return limiter
@@ -85,17 +93,56 @@ function resolveIntegrationIdFromUrl(url: string): string | null {
   }
 }
 
-export async function rateLimitedFetchByUrlScope(url: string, scope: RateScope, init?: RequestInit): Promise<Response> {
+export function getRateLimitPolicyFromSnapshot(
+  settingsSnapshot: TaskSettingsSnapshot | undefined,
+  scope: RateScope,
+): EffectivePolicy | undefined {
+  return settingsSnapshot?.rateLimitSettings?.[scope]
+}
+
+export function getRateLimitPolicyFromContext(
+  context: Record<string, unknown> | undefined,
+  scope: RateScope,
+): EffectivePolicy | undefined {
+  const rateLimitSettings = context?.rateLimitSettings
+  if (!isRecord(rateLimitSettings)) {
+    return undefined
+  }
+
+  const policy = rateLimitSettings[scope]
+  if (!isRecord(policy)) {
+    return undefined
+  }
+
+  const { concurrency, delayMs } = policy
+  if (typeof concurrency !== 'number' || typeof delayMs !== 'number') {
+    return undefined
+  }
+
+  return { concurrency, delayMs }
+}
+
+export async function rateLimitedFetchByUrlScope(
+  url: string,
+  scope: RateScope,
+  init?: RequestInit,
+  policyOverride?: EffectivePolicy,
+): Promise<Response> {
   // Ensure cookies are sent for authenticated flows; do not set custom headers by default
   const merged: RequestInit = { credentials: 'include', ...init };
   const integrationId = resolveIntegrationIdFromUrl(url)
   if (!integrationId) return fetch(url, merged)
-  const limiter = await ensureLimiter(integrationId, scope)
+  const limiter = await ensureLimiter(integrationId, scope, policyOverride)
   return limiter.schedule(() => fetch(url, merged))
 }
 
-export async function scheduleForIntegrationScope<T>(integrationId: string, scope: RateScope, task: () => Promise<T>): Promise<T> {
-  const limiter = await ensureLimiter(integrationId, scope)
+export async function scheduleForIntegrationScope<T>(
+  integrationId: string,
+  scope: RateScope,
+  task: () => Promise<T>,
+  policyOverride?: EffectivePolicy,
+): Promise<T> {
+  const limiter = await ensureLimiter(integrationId, scope, policyOverride)
   return limiter.schedule(task)
 }
 

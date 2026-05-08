@@ -129,8 +129,7 @@ export default defineBackground({
         return false;
       }
 
-      ensureStateManagerInitialized()
-        .then(() => handleMessage(message, sender))
+      handleMessage(message, sender)
         .then((response) => {
           if (response === null) {
             sendResponse({ success: false, error: `Unhandled message type in background: ${message.type}` });

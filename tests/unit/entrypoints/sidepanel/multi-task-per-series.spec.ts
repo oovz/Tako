@@ -41,7 +41,9 @@ function createStateManager(overrides: {
       getGlobalState: vi.fn(async () => ({
         downloadQueue: queue,
         settings: {
+          ...DEFAULT_SETTINGS,
           downloads: {
+            ...DEFAULT_SETTINGS.downloads,
             defaultFormat: 'cbz',
             overwriteExisting: false,
             pathTemplate: '{seriesTitle}/{chapterTitle}',
@@ -50,10 +52,11 @@ function createStateManager(overrides: {
             includeCoverImage: true,
           },
           globalPolicy: {
+            ...DEFAULT_SETTINGS.globalPolicy,
             image: { concurrency: 2, delayMs: 500 },
             chapter: { concurrency: 2, delayMs: 500 },
           },
-          advanced: { logLevel: 'debug' },
+          advanced: { ...DEFAULT_SETTINGS.advanced, logLevel: 'debug' },
         },
         lastActivity: Date.now(),
       })),

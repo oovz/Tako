@@ -1,5 +1,6 @@
 import logger from '@/src/runtime/logger';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
+import type { EffectivePolicy } from '@/src/runtime/rate-limit';
 import { sanitizeLabel } from '@/src/shared/site-integration-utils';
 import { toAbsoluteUrl } from './shared';
 
@@ -146,14 +147,14 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
  * {@link DEFAULT_READER_CONFIG} on any failure so image-URL construction can
  * still proceed with sensible defaults.
  */
-export async function fetchReaderConfig(chapterHtml: string): Promise<ReaderConfig> {
+export async function fetchReaderConfig(chapterHtml: string, chapterPolicy?: EffectivePolicy): Promise<ReaderConfig> {
   const configScriptUrl = extractConfigScriptUrl(chapterHtml);
   if (!configScriptUrl) {
     return DEFAULT_READER_CONFIG;
   }
 
   try {
-    const response = await rateLimitedFetchByUrlScope(configScriptUrl, 'chapter');
+    const response = await rateLimitedFetchByUrlScope(configScriptUrl, 'chapter', undefined, chapterPolicy);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }

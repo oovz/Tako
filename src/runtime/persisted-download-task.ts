@@ -66,6 +66,13 @@ const PersistedTaskSettingsSnapshotSchema = z.object({
       chapter: UnknownRecordOptionalSchema,
     }).partial().optional(),
   ),
+  retrySettings: z.preprocess(
+    (value) => isRecord(value) ? value : undefined,
+    z.object({
+      image: z.number().optional(),
+      chapter: z.number().optional(),
+    }).partial().optional(),
+  ),
   siteSettings: UnknownRecordOptionalSchema,
   normalizeImageFilenames: BooleanOptionalSchema,
   imagePaddingDigits: ImagePaddingDigitsOptionalSchema,
@@ -154,8 +161,12 @@ export function normalizePersistedDownloadTask(rawTask: unknown): DownloadTaskSt
           ...baseSnapshot.rateLimitSettings.chapter,
           ...(rawSnapshot.rateLimitSettings?.chapter
             ? rawSnapshot.rateLimitSettings.chapter
-            : {}),
+          : {}),
         },
+      },
+      retrySettings: {
+        image: rawSnapshot.retrySettings?.image ?? baseSnapshot.retrySettings.image,
+        chapter: rawSnapshot.retrySettings?.chapter ?? baseSnapshot.retrySettings.chapter,
       },
       siteSettings: rawSnapshot.siteSettings ?? baseSnapshot.siteSettings,
       normalizeImageFilenames: rawSnapshot.normalizeImageFilenames ?? baseSnapshot.normalizeImageFilenames,

@@ -33,8 +33,15 @@ export class SettingsSyncService {
     if (this.isInitialized) return;
 
     try {
+      const onStorageChanged = chrome.storage?.onChanged;
+      if (!onStorageChanged?.addListener) {
+        this.isInitialized = true;
+        logger.debug('Settings sync service skipped: chrome.storage.onChanged unavailable in this context');
+        return;
+      }
+
       // Listen for changes to the settings key in storage.local
-      chrome.storage.onChanged.addListener((changes, areaName) => {
+      onStorageChanged.addListener((changes, areaName) => {
         if (areaName === 'local' && changes[SETTINGS_STORAGE_KEY]) {
           const newSettings = canonicalizeSettingsDocument(changes[SETTINGS_STORAGE_KEY].newValue);
           const oldSettings = canonicalizeSettingsDocument(changes[SETTINGS_STORAGE_KEY].oldValue);

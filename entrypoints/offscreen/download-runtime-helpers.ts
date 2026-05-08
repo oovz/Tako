@@ -1,6 +1,7 @@
 import logger from '@/src/runtime/logger'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 import { scheduleForIntegrationScope } from '@/src/runtime/rate-limit'
+import type { RateLimitPolicySnapshot } from '@/src/runtime/rate-limit'
 import { loadDownloadRootHandle, verifyPermission } from '@/src/storage/fs-access'
 import { sendThrottledDownloadApiRequest } from './helpers'
 import type { ChapterDownloadImageResult } from './chapter-processing'
@@ -14,9 +15,10 @@ export async function prefetchCoverImage(input: {
   coverUrl?: string
   integrationId?: string
   integrationContext?: Record<string, unknown>
+  rateLimitSettings?: RateLimitPolicySnapshot
   withImageRetries: <T>(fn: () => Promise<T>) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { coverUrl, integrationId, integrationContext, withImageRetries } = input
+  const { coverUrl, integrationId, integrationContext, rateLimitSettings, withImageRetries } = input
   if (!coverUrl || !integrationId) {
     return undefined
   }
@@ -31,8 +33,12 @@ export async function prefetchCoverImage(input: {
     const result = await withImageRetries<ChapterDownloadImageResult>(() =>
       scheduleForIntegrationScope(integrationId, 'image', () =>
         backgroundIntegration.chapter.downloadImage(coverUrl, {
-          context: integrationContext,
+          context: {
+            ...(integrationContext ?? {}),
+            ...(rateLimitSettings ? { rateLimitSettings } : {}),
+          },
         }),
+        rateLimitSettings?.image,
       ),
     )
     return { data: result.data, mimeType: result.mimeType }
@@ -47,9 +53,10 @@ export async function prefetchOptionalCoverImage(input: {
   coverUrl?: string
   integrationId?: string
   integrationContext?: Record<string, unknown>
+  rateLimitSettings?: RateLimitPolicySnapshot
   withImageRetries: <T>(fn: () => Promise<T>) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { includeCoverImage = true, coverUrl, integrationId, integrationContext, withImageRetries } = input
+  const { includeCoverImage = true, coverUrl, integrationId, integrationContext, rateLimitSettings, withImageRetries } = input
   if (!includeCoverImage) {
     return undefined
   }
@@ -58,6 +65,7 @@ export async function prefetchOptionalCoverImage(input: {
     coverUrl,
     integrationId,
     integrationContext,
+    rateLimitSettings,
     withImageRetries,
   })
 }

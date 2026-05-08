@@ -49,7 +49,7 @@ export interface BackgroundIntegration {
     resolveImageUrls?: (
       chapter: { id: string; url: string },
       context?: Record<string, unknown>,
-      settings?: Record<string, unknown>
+      settings?: TaskSettingsSnapshot
     ) => Promise<string[]>;
     /**
      * Optional HTML fallback path used only when `resolveImageUrls` is not

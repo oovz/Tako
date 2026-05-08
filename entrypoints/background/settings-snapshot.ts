@@ -32,6 +32,10 @@ export function createTaskSettingsSnapshot(
         ...(siteOverride?.chapterPolicy ?? {}),
       },
     },
+    retrySettings: {
+      image: siteOverride?.retries?.image ?? settings.globalRetries.image,
+      chapter: siteOverride?.retries?.chapter ?? settings.globalRetries.chapter,
+    },
     normalizeImageFilenames: settings.downloads.normalizeImageFilenames,
     imagePaddingDigits: settings.downloads.imagePaddingDigits,
     comicInfo,

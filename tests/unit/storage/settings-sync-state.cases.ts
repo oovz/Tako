@@ -83,6 +83,20 @@ export function registerSettingsSyncStateCases(): void {
       )
     })
 
+    it('skips storage listener registration when chrome.storage.onChanged is unavailable', () => {
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mocks.runtimeSendMessage,
+        },
+        storage: {},
+      })
+
+      const service = new SettingsSyncService()
+
+      expect(() => service.initialize()).not.toThrow()
+      expect(mocks.storageOnChangedAddListener).not.toHaveBeenCalled()
+    })
+
     it('canonicalizes partial settings storage changes before notifying listeners and syncing state', () => {
       const service = new SettingsSyncService()
       const listener = vi.fn()

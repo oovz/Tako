@@ -15,6 +15,7 @@ export interface TaskSettingsSnapshot {
     image: ExtensionSettings['globalPolicy']['image'];
     chapter: ExtensionSettings['globalPolicy']['chapter'];
   };
+  retrySettings: ExtensionSettings['globalRetries'];
   normalizeImageFilenames: ExtensionSettings['downloads']['normalizeImageFilenames'];
   imagePaddingDigits: ExtensionSettings['downloads']['imagePaddingDigits'];
   comicInfo?: SeriesMetadataSnapshot;

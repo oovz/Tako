@@ -1,7 +1,11 @@
 import type { Chapter } from '../../types/chapter';
 import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, ParseImageUrlsFromHtmlInput } from '../../types/site-integrations';
 import logger from '@/src/runtime/logger';
-import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
+import {
+  getRateLimitPolicyFromContext,
+  getRateLimitPolicyFromSnapshot,
+  rateLimitedFetchByUrlScope,
+} from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
 import { filterValidImageUrls, normalizeAllowedImageMimeType, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import {
@@ -376,13 +380,18 @@ const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
 const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
   name: 'Shonen Jump+ Background',
   chapter: {
-    async resolveImageUrls(chapter): Promise<string[]> {
+    async resolveImageUrls(chapter, _context, settingsSnapshot): Promise<string[]> {
       const episodeId = parseEpisodeId(new URL(chapter.url).pathname);
       if (!episodeId) {
         throw new Error(`Invalid Shonen Jump+ chapter URL: ${chapter.url}`);
       }
 
-      const chapterResponse = await rateLimitedFetchByUrlScope(chapter.url, 'chapter');
+      const chapterResponse = await rateLimitedFetchByUrlScope(
+        chapter.url,
+        'chapter',
+        undefined,
+        getRateLimitPolicyFromSnapshot(settingsSnapshot, 'chapter'),
+      );
       if (!chapterResponse.ok) {
         throw new Error(`HTTP ${chapterResponse.status}: ${chapterResponse.statusText}`);
       }
@@ -433,7 +442,12 @@ const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
         hasSeed: typeof seed === 'number',
       });
 
-      const response = await rateLimitedFetchByUrlScope(sourceUrl, 'image');
+      const response = await rateLimitedFetchByUrlScope(
+        sourceUrl,
+        'image',
+        undefined,
+        getRateLimitPolicyFromContext(opts?.context, 'image'),
+      );
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }

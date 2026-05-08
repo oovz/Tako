@@ -54,6 +54,8 @@ export type ProcessDownloadChapterSettingsSnapshot = Partial<{
   overwriteExisting: boolean
   includeComicInfo: boolean
   includeCoverImage: boolean
+  rateLimitSettings: TaskSettingsSnapshot['rateLimitSettings']
+  retrySettings: TaskSettingsSnapshot['retrySettings']
 }>
 
 export type ChapterDownloadImageResult = {

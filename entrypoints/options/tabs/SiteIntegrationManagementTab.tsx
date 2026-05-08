@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { SiteIntegrationCard } from "../components/SiteIntegrationCard"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
-import { getAllPatternMetadata } from "@/src/site-integrations/url-matcher"
+import { SITE_INTEGRATION_MANIFESTS } from "@/src/site-integrations/manifest"
 import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { SiteIntegrationEnablementMap } from "@/src/storage/site-integration-enablement-service"
 import type { ExtensionSettings } from "@/src/storage/settings-types"
@@ -37,24 +36,18 @@ export function SiteIntegrationManagementTab({
 }: SiteIntegrationManagementTabProps) {
   const [search, setSearch] = useState('')
 
-  // Build site integration list from registry
+  // Build from the manifest SSOT so the tab is not coupled to async registry initialization.
   const integrations = useMemo(() => {
-    const allIntegrations = siteIntegrationRegistry.getAll()
-    const patterns = getAllPatternMetadata()
-
-    return allIntegrations
-      .filter(si => patterns.some(p => p.integrationId === si.id && !p.domains.some(d => d.includes('nosupport.tld'))))
-      .map(si => {
-        const pattern = patterns.find(p => p.integrationId === si.id)
-        return {
-          id: si.id,
-          name: si.name,
-          domains: pattern?.domains || [],
-          version: si.version,
-          customSettings: si.customSettings,
-          policyDefaults: si.policyDefaults
-        }
-      })
+    return SITE_INTEGRATION_MANIFESTS
+      .filter((manifest) => manifest.enabled !== false)
+      .map((manifest) => ({
+        id: manifest.id,
+        name: manifest.name,
+        domains: manifest.patterns.domains,
+        version: manifest.version,
+        customSettings: manifest.customSettings,
+        policyDefaults: manifest.policyDefaults,
+      }))
   }, [])
 
   // Filter integrations by search query (name or domain)

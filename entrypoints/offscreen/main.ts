@@ -20,10 +20,10 @@ import {
   type ChapterOutcome,
   type ChapterProcessingRuntime,
   type ProcessChapterStreamingOptions,
+  type ProcessDownloadChapterSettingsSnapshot,
   processArchiveFormatChapter,
   processNoneFormatChapter,
 } from './chapter-processing'
-import { resolveEffectiveRetries } from '@/src/shared/settings-utils'
 import {
   prefetchOptionalCoverImage,
   requestBrowserBlobDownload,
@@ -183,9 +183,12 @@ export class OffscreenWorker {
     return taskControllerEntry
   }
 
-  private async initializeCurrentIntegrationState(siteIntegrationId: string): Promise<void> {
+  private initializeCurrentIntegrationState(
+    siteIntegrationId: string,
+    settingsSnapshot: ProcessDownloadChapterSettingsSnapshot,
+  ): void {
     this.currentIntegrationId = siteIntegrationId
-    this.currentRetries = await resolveEffectiveRetries(this.currentIntegrationId)
+    this.currentRetries = settingsSnapshot.retrySettings ?? { image: 3, chapter: 3 }
     const integrationMeta = siteIntegrationRegistry.findById(this.currentIntegrationId)
     this.currentHandlesOwnRetries = integrationMeta?.handlesOwnRetries === true
   }
@@ -210,7 +213,7 @@ export class OffscreenWorker {
     const snapshot = readProcessDownloadChapterSettingsSnapshot(request.settingsSnapshot)
     const chapterForProcessing = createChapterForProcessing(request.chapter)
 
-    await this.initializeCurrentIntegrationState(request.book.siteIntegrationId)
+    this.initializeCurrentIntegrationState(request.book.siteIntegrationId, request.settingsSnapshot)
 
     await this.sendInitialDownloadHeartbeat(request)
 
@@ -219,6 +222,7 @@ export class OffscreenWorker {
       coverUrl: request.book.coverUrl,
       integrationId: this.currentIntegrationId,
       integrationContext: request.integrationContext,
+      rateLimitSettings: request.settingsSnapshot.rateLimitSettings,
       withImageRetries: <T>(fn: () => Promise<T>) => this.withImageRetries(fn),
     })
 
@@ -290,7 +294,12 @@ export class OffscreenWorker {
           let htmlFetchErrorMessage: string | undefined
           try {
             html = await withRetries(
-              () => fetchChapterHtml(chapter.url, OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS, integrationId),
+              () => fetchChapterHtml(
+                chapter.url,
+                OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
+                integrationId,
+                opts.settingsSnapshot?.rateLimitSettings.chapter,
+              ),
               chapterRetries,
             )
           } catch (error) {

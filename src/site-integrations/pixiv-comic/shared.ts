@@ -1,4 +1,5 @@
 import { sanitizeLabel } from '@/src/shared/site-integration-utils'
+import type { RateLimitPolicySnapshot } from '@/src/runtime/rate-limit'
 
 export const PIXIV_BASE_URL = 'https://comic.pixiv.net'
 export const PIXIV_EPISODES_API_URL = `${PIXIV_BASE_URL}/api/app/episodes`
@@ -11,6 +12,7 @@ export const pixivBuildIdCacheByTask = new Map<string, string>()
 export type PixivResolveContext = {
   taskId?: string
   cookieHeader?: string
+  rateLimitSettings?: RateLimitPolicySnapshot
 }
 
 export type PixivReadV4Page = {

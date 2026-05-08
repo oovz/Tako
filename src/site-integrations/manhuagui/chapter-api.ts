@@ -1,5 +1,11 @@
 import type { ParseImageUrlsFromHtmlInput } from '@/src/types/site-integrations';
-import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
+import {
+  getRateLimitPolicyFromContext,
+  getRateLimitPolicyFromSnapshot,
+  rateLimitedFetchByUrlScope,
+  type EffectivePolicy,
+} from '@/src/runtime/rate-limit';
+import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
 import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
 import { resolveImageUrlsFromChapterHtml } from './chapter-viewer';
@@ -10,14 +16,18 @@ import { MANHUAGUI_BASE_URL } from './shared';
  * Mirrors the background integration's `resolveImageUrls` contract: caller
  * receives absolute CDN URLs ready to be downloaded in order.
  */
-export async function resolveManhuaguiChapterImageUrls(chapter: { id: string; url: string }): Promise<string[]> {
-  const response = await rateLimitedFetchByUrlScope(chapter.url, 'chapter');
+export async function resolveManhuaguiChapterImageUrls(
+  chapter: { id: string; url: string },
+  settingsSnapshot?: TaskSettingsSnapshot,
+): Promise<string[]> {
+  const chapterPolicy = getRateLimitPolicyFromSnapshot(settingsSnapshot, 'chapter');
+  const response = await rateLimitedFetchByUrlScope(chapter.url, 'chapter', undefined, chapterPolicy);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
   const { html } = await decodeHtmlResponse(response);
-  return resolveImageUrlsFromChapterHtml(html);
+  return resolveImageUrlsFromChapterHtml(html, chapterPolicy);
 }
 
 /**
@@ -25,8 +35,11 @@ export async function resolveManhuaguiChapterImageUrls(chapter: { id: string; ur
  * body. Delegates to the same viewer decoder as
  * {@link resolveManhuaguiChapterImageUrls}.
  */
-export function parseManhuaguiImageUrlsFromHtml({ chapterHtml }: ParseImageUrlsFromHtmlInput): Promise<string[]> {
-  return resolveImageUrlsFromChapterHtml(chapterHtml);
+export function parseManhuaguiImageUrlsFromHtml(
+  { chapterHtml }: ParseImageUrlsFromHtmlInput,
+  chapterPolicy?: EffectivePolicy,
+): Promise<string[]> {
+  return resolveImageUrlsFromChapterHtml(chapterHtml, chapterPolicy);
 }
 
 /** Filter out malformed entries before download (shared URL validity check). */
@@ -57,7 +70,7 @@ export async function downloadManhuaguiChapterImage(
     referrer: `${MANHUAGUI_BASE_URL}/`,
     referrerPolicy: 'strict-origin-when-cross-origin',
     signal: opts?.signal,
-  });
+  }, getRateLimitPolicyFromContext(opts?.context, 'image'));
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);

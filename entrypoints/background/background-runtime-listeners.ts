@@ -29,125 +29,149 @@ interface RegisterBackgroundRuntimeListenersDependencies {
 export function registerBackgroundRuntimeListeners(
   deps: RegisterBackgroundRuntimeListenersDependencies,
 ): void {
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    void deps.ensureStateManagerInitialized()
-      .then(async () => {
-        if (areaName !== 'session') {
-          return
-        }
-
-        const globalStateChange = changes[SESSION_STORAGE_KEYS.globalState]
-        if (!globalStateChange?.newValue || typeof globalStateChange.newValue !== 'object') {
-          return
-        }
-
-        const maybeQueue = (globalStateChange.newValue as { downloadQueue?: unknown }).downloadQueue
-        if (!Array.isArray(maybeQueue)) {
-          return
-        }
-
-        try {
-          const normalizedQueue = maybeQueue
-            .map(normalizePersistedDownloadTask)
-            .filter((task) => task !== null)
-          const projection = projectToQueueView(normalizedQueue)
-          await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.queueView]: projection.queueView })
-          await updateActionBadge(projection.nonTerminalCount)
-        } catch (error) {
-          logger.debug('Failed to sync queue projection from storage change (non-fatal):', error)
-        }
-      })
-      .catch((error) => {
-        logger.error('Failed to process storage change with initialized state:', error)
-      })
-  })
-
-  chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
-    void (async () => {
-      try {
-        await deps.ensureStateManagerInitialized()
-        await deps.tabContextCache.handleTabReplaced(addedTabId, removedTabId)
-      } catch (error) {
-        logger.error('Failed to handle tab replacement for active context cache:', error)
-      }
-    })()
-  })
-
-  chrome.downloads.onChanged.addListener((delta) => {
-    void (async () => {
-      try {
-        if (typeof delta.id !== 'number') {
-          return
-        }
-
-        const downloadState = delta.state?.current
-        if (!downloadState || downloadState === 'in_progress') {
-          return
-        }
-
-        let blobUrl = deps.pendingDownloadsStore.get(delta.id)
-        if (!blobUrl) {
-          await deps.pendingDownloadsStore.hydrate()
-          blobUrl = deps.pendingDownloadsStore.get(delta.id)
-        }
-
-        if (!blobUrl) {
-          logger.debug(`Download ${delta.id} not tracked - likely from canceled/timed-out task`)
-          return
-        }
-
-        deps.pendingDownloadsStore.remove(delta.id)
-        void deps.requestBlobRevocation(blobUrl)
-      } catch (error) {
-        logger.error('Failed to process downloads.onChanged cleanup:', error)
-      }
-    })()
-  })
-
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name !== deps.livenessAlarmName) {
-      return
-    }
-
-    void deps.ensureStateManagerInitialized()
-      .then(() => recoverFromLivenessTimeout(deps.getStateManager(), deps.pendingDownloadsStore, async () => {
-        await processDownloadQueue(deps.getStateManager(), deps.ensureOffscreenDocumentReady)
-      }))
-      .catch((error) => {
-        logger.error('Error handling liveness alarm recovery:', error)
-      })
-  })
-
-  chrome.tabs.onRemoved.addListener((tabId) => {
-    void (async () => {
-      try {
-        await deps.ensureStateManagerInitialized()
-        await deps.getStateManager().clearTabState(tabId)
-        await deps.tabContextCache.handleTabRemoved(tabId)
-      } catch (error) {
-        logger.error(`Error clearing state for removed tab ${tabId}:`, error)
-      }
-    })()
-  })
-
-  chrome.runtime.onSuspend.addListener(() => {
-    logger.info('Service worker suspending - cleaning up resources')
-    try {
-      if (deps.isStateManagerReady()) {
-        void (async () => {
-          await deps.ensureStateManagerInitialized()
-          try {
-            await scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore)
-          } catch (error) {
-            logger.debug('Failed to schedule offscreen close on suspend:', error)
+  try {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      void deps.ensureStateManagerInitialized()
+        .then(async () => {
+          if (areaName !== 'session') {
+            return
           }
-        })()
+
+          const globalStateChange = changes[SESSION_STORAGE_KEYS.globalState]
+          if (!globalStateChange?.newValue || typeof globalStateChange.newValue !== 'object') {
+            return
+          }
+
+          const maybeQueue = (globalStateChange.newValue as { downloadQueue?: unknown }).downloadQueue
+          if (!Array.isArray(maybeQueue)) {
+            return
+          }
+
+          try {
+            const normalizedQueue = maybeQueue
+              .map(normalizePersistedDownloadTask)
+              .filter((task) => task !== null)
+            const projection = projectToQueueView(normalizedQueue)
+            await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.queueView]: projection.queueView })
+            await updateActionBadge(projection.nonTerminalCount)
+          } catch (error) {
+            logger.debug('Failed to sync queue projection from storage change (non-fatal):', error)
+          }
+        })
+        .catch((error) => {
+          logger.error('Failed to process storage change with initialized state:', error)
+        })
+    })
+  } catch (error) {
+    logger.debug('storage.onChanged listener unavailable; queue projection will sync through state writes', error)
+  }
+
+  try {
+    chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+      void (async () => {
+        try {
+          await deps.ensureStateManagerInitialized()
+          await deps.tabContextCache.handleTabReplaced(addedTabId, removedTabId)
+        } catch (error) {
+          logger.error('Failed to handle tab replacement for active context cache:', error)
+        }
+      })()
+    })
+  } catch (error) {
+    logger.debug('tabs.onReplaced listener unavailable; tab replacement cache sync disabled', error)
+  }
+
+  try {
+    chrome.downloads.onChanged.addListener((delta) => {
+      void (async () => {
+        try {
+          if (typeof delta.id !== 'number') {
+            return
+          }
+
+          const downloadState = delta.state?.current
+          if (!downloadState || downloadState === 'in_progress') {
+            return
+          }
+
+          let blobUrl = deps.pendingDownloadsStore.get(delta.id)
+          if (!blobUrl) {
+            await deps.pendingDownloadsStore.hydrate()
+            blobUrl = deps.pendingDownloadsStore.get(delta.id)
+          }
+
+          if (!blobUrl) {
+            logger.debug(`Download ${delta.id} not tracked - likely from canceled/timed-out task`)
+            return
+          }
+
+          deps.pendingDownloadsStore.remove(delta.id)
+          void deps.requestBlobRevocation(blobUrl)
+        } catch (error) {
+          logger.error('Failed to process downloads.onChanged cleanup:', error)
+        }
+      })()
+    })
+  } catch (error) {
+    logger.debug('downloads.onChanged listener unavailable; blob revocation will rely on explicit request paths', error)
+  }
+
+  try {
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name !== deps.livenessAlarmName) {
+        return
       }
 
-      logger.debug('Service worker cleanup complete')
-    } catch (error) {
-      logger.error('Error during service worker cleanup:', error)
-    }
-  })
+      void deps.ensureStateManagerInitialized()
+        .then(() => recoverFromLivenessTimeout(deps.getStateManager(), deps.pendingDownloadsStore, async () => {
+          await processDownloadQueue(deps.getStateManager(), deps.ensureOffscreenDocumentReady)
+        }))
+        .catch((error) => {
+          logger.error('Error handling liveness alarm recovery:', error)
+        })
+    })
+  } catch (error) {
+    logger.debug('alarms.onAlarm listener unavailable; liveness alarm recovery disabled', error)
+  }
+
+  try {
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      void (async () => {
+        try {
+          await deps.ensureStateManagerInitialized()
+          await deps.getStateManager().clearTabState(tabId)
+          await deps.tabContextCache.handleTabRemoved(tabId)
+        } catch (error) {
+          logger.error(`Error clearing state for removed tab ${tabId}:`, error)
+        }
+      })()
+    })
+  } catch (error) {
+    logger.debug('tabs.onRemoved listener unavailable; tab removal cleanup disabled', error)
+  }
+
+  try {
+    chrome.runtime.onSuspend.addListener(() => {
+      logger.info('Service worker suspending - cleaning up resources')
+      try {
+        if (deps.isStateManagerReady()) {
+          void (async () => {
+            await deps.ensureStateManagerInitialized()
+            try {
+              await scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore)
+            } catch (error) {
+              logger.debug('Failed to schedule offscreen close on suspend:', error)
+            }
+          })()
+        }
+
+        logger.debug('Service worker cleanup complete')
+      } catch (error) {
+        logger.error('Error during service worker cleanup:', error)
+      }
+    })
+  } catch (error) {
+    logger.debug('runtime.onSuspend listener unavailable; suspend cleanup disabled', error)
+  }
 }
 
