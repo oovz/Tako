@@ -23,6 +23,7 @@ Tako uses the term **Site Integration** everywhere in code and UI. Use `siteInte
 | `src/types/site-integrations.ts` | Shared integration interfaces |
 | `src/shared/site-integration-utils.ts` | Shared label and numeric parsing helpers |
 | `tests/unit/integrations/` | Integration-focused unit coverage |
+| `tests/e2e/fixtures/mock-data/site-integrations/` | Mock site data for deterministic Side Panel and download-workflow coverage |
 | `tests/live/` | Real-site validation for supported integrations |
 
 ## Integration shape
@@ -83,7 +84,8 @@ The manifest drives runtime loading and content-script match generation, so keep
 3. Create `src/site-integrations/<site>/runtime.ts` that re-exports the integration.
 4. Add any helper modules the site needs inside the same folder.
 5. Add unit coverage in `tests/unit/integrations/`.
-6. Add or update live coverage in `tests/live/` when the site is stable enough for it.
+6. Add mocked E2E coverage under `tests/e2e/` for Side Panel navigation and download workflows when the integration participates in the MVP UI flow.
+7. Add or update live coverage in `tests/live/` when the site is stable enough for it.
 
 ## Shared helper rules
 
@@ -163,6 +165,7 @@ Before you consider a site integration ready, verify all of the following.
 - Any integration-specific handoff data flows through `integrationContext`.
 - The integration works after `pnpm build` and appears in the generated extension manifest.
 - Unit coverage exists for parsing and integration-specific edge cases.
+- Mocked E2E coverage exists for supported user workflows when the site has UI-visible behavior.
 - Live coverage exists if the site is stable and publicly testable.
 
 ## Validation commands
@@ -183,6 +186,7 @@ After a build, inspect `.output/chrome-mv3/manifest.json` and confirm your domai
 | `mangadex` | Preference bridge, rich metadata, numeric metadata preservation |
 | `pixiv-comic` | Cookie-backed request context, build-ID refresh, image reconstruction |
 | `shonenjumpplus` | Episode JSON flow, DOM-backed metadata, image reconstruction |
+| `manhuagui` | DOM chapter grouping, adult-gate cookie priming, reader-config parsing, referrer-sensitive image fetches |
 
 ## Related docs
 

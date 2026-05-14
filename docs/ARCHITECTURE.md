@@ -60,6 +60,11 @@ flowchart LR
 | `downloadQueue` | Durable task history and queue state |
 | `settings:global` | Canonical persisted settings |
 | `fsaError` | Persistent File System Access fallback state |
+| `siteOverrides` | Per-site output format, path template, rate-limit, and retry overrides |
+| `siteIntegrationSettings` | Manifest-defined custom settings values by integration |
+| `siteIntegrationEnablement` | User-facing integration enablement overrides |
+| `downloadedChapters` | Canonical chapter-level download history |
+| `seriesDownloadHistory` | Series-grouped download history |
 
 ### Reactive session projections
 
@@ -67,6 +72,8 @@ flowchart LR
 
 | Key | Purpose |
 |---|---|
+| `globalState` | Service-worker-owned runtime state, including the queue and settings snapshot |
+| `tab_<tabId>` | Per-tab supported-page state for detected series and chapters |
 | `queueView` | Side-panel-friendly queue summary list |
 | `activeTabContext` | Current tracked tab's supported-page context |
 | `activeTaskProgress` | Lightweight progress state for the currently running task |
@@ -185,7 +192,7 @@ If a handler needs a tab ID and it can be called by an extension page, accept a 
   Start in `entrypoints/options/tabs/`, `entrypoints/options/components/`, and `entrypoints/options/hooks/`.
 
 - **Download pipeline or archive behavior**
-  Start in `entrypoints/offscreen/main.ts`, `entrypoints/offscreen/archive-creator.ts`, `entrypoints/offscreen/image-processor.ts`, and `entrypoints/background/destination.ts`.
+  Start in `entrypoints/offscreen/main.ts`, `entrypoints/offscreen/chapter-processing.ts`, `entrypoints/offscreen/chapter-image-downloads.ts`, `entrypoints/offscreen/zip.worker.ts`, `entrypoints/offscreen/image-processor.ts`, and `entrypoints/background/destination.ts`.
 
 - **Storage or settings behavior**
   Start in `src/storage/`, `src/runtime/storage-keys.ts`, and the relevant background action handlers.
@@ -200,6 +207,7 @@ If a handler needs a tab ID and it can be called by an extension page, accept a 
 | `mangadex` | Rich metadata, language and image-quality controls, preference bridge support |
 | `pixiv-comic` | Auth-aware requests, protected-viewer support, image reconstruction |
 | `shonenjumpplus` | Official episode-page support, image reconstruction, manga-oriented metadata defaults |
+| `manhuagui` | Series-page extraction, adult-gated chapter-list handling, reader-config image URL resolution, Manhuagui referrer/cookie handling |
 
 ## Validation commands
 
