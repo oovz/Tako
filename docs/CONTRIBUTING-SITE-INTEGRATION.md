@@ -99,6 +99,24 @@ Use `src/shared/site-integration-utils.ts` when you need common preprocessing.
 
 If an integration can derive numeric chapter or volume metadata, it should set those values itself. The enqueue path preserves provided numeric metadata; it does not invent it later.
 
+## Chapter volume grouping
+
+Use explicit volumes whenever the source site exposes chapter sections, arcs, books, single issues, extras, or similar chapter-list categories.
+
+The fields have separate responsibilities:
+
+| Field | Responsibility |
+|---|---|
+| `VolumeState.id` | Opaque, deterministic group key scoped to the current series state. It is not user-visible and does not need to be numeric. |
+| `VolumeState.title` / `VolumeState.label` | User-visible group text from the site. Prefer the site label when it exists, including localized labels such as Manhuagui `单行本`, `番外篇`, and `连载`. |
+| `Chapter.volumeId` | Reference to `VolumeState.id`; this is what the Side Panel uses for explicit grouping. |
+| `Chapter.volumeLabel` | Per-chapter copy of the source volume/category label for display fallback, debugging, templates, and downstream metadata. |
+| `Chapter.volumeNumber` | Parsed numeric volume metadata when available. This is useful for ComicInfo/template output and numeric fallback sorting, but it is not the group identity. |
+
+For sites like Manhuagui, each chapter-list heading should become one `VolumeState` entry. Chapters under that heading should set `volumeId` to the corresponding entry's `id` and should preserve the heading text as `volumeLabel`. The Side Panel displays the explicit `VolumeState.title` / `label` first and falls back to `Chapter.volumeLabel` or `Volume {volumeNumber}` only when the explicit label is absent.
+
+If a site only provides numeric volume metadata and no explicit `volumes[]`, the runtime may derive fallback groups such as `volume-1` with label `Volume 1`. New integrations should prefer explicit `volumes[]` when the site has meaningful category names.
+
 ## Dispatch-context handoff pattern
 
 When a site needs extra runtime data during chapter processing:

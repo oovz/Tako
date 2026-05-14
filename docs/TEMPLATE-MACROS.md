@@ -60,8 +60,10 @@ These macros are always available and use the user's local date at download time
 
 | Macro | Description | Example | Guaranteed |
 |---|---|---|---|
-| `<VOLUME_TITLE>` | Volume label/title, if available | `Volume 1` | No |
+| `<VOLUME_TITLE>` | Site-visible volume or category label, if available | `单行本` | No |
 | `<VOLUME_NUMBER_PAD2>` | Numeric volume number padded to 2 digits | `05` | No |
+
+`<VOLUME_TITLE>` comes from the preserved volume/category label (`Volume.title`, `Volume.label`, or `Chapter.volumeLabel`), not from `volumeId`. The `volumeId` field is an internal grouping key and is not exposed as a template macro. Use `<VOLUME_NUMBER_PAD2>` only when the site integration provides parsed numeric `volumeNumber` metadata.
 
 ## Missing Values
 

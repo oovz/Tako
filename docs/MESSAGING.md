@@ -132,8 +132,10 @@ See `entrypoints/background/sender-resolution.ts` for the current implementation
 
 - `sourceTabId` for extension-page initiated downloads
 - `siteIntegrationId`, `mangaId`, and `seriesTitle`
-- chapter-level label and numeric metadata
+- chapter-level labels, `volumeId`, and numeric metadata
 - optional `metadata` for the series snapshot that later feeds queue persistence and ComicInfo output
+
+`volumeId`, `volumeLabel`, and `volumeNumber` are intentionally separate. `volumeId` is the opaque grouping key copied from `MangaPageState.volumes[].id`; it is not displayed and is not parsed as a number. `volumeLabel` preserves the site's visible group/category label for display fallback and metadata. `volumeNumber` is parsed numeric metadata when the integration can derive it.
 
 ## Offscreen contracts
 
