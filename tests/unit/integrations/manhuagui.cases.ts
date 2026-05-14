@@ -125,6 +125,75 @@ function buildAdultWarningDocument(encodedViewState: string) {
   };
 }
 
+function buildCategorizedSeriesDocument() {
+  const chapterGroups = [
+    {
+      groupTitle: '单行本',
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/21243/378329.html',
+          textContent: '第03卷(完)144p',
+        },
+        {
+          href: 'https://www.manhuagui.com/comic/21243/378328.html',
+          textContent: '第02卷160p',
+        },
+        {
+          href: 'https://www.manhuagui.com/comic/21243/378327.html',
+          textContent: '第01卷142p',
+        },
+      ],
+    },
+    {
+      groupTitle: '番外篇',
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/21243/308995.html',
+          textContent: '第3卷单行…25p',
+        },
+        {
+          href: 'https://www.manhuagui.com/comic/21243/284921.html',
+          textContent: '番外篇239p',
+        },
+      ],
+    },
+    {
+      groupTitle: '单话',
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/21243/307984.html',
+          textContent: '新篇088p',
+        },
+        {
+          href: 'https://www.manhuagui.com/comic/21243/284923.html',
+          textContent: '新篇0731p',
+        },
+      ],
+    },
+  ];
+
+  return {
+    querySelector: (selector: string) => {
+      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
+        return null;
+      }
+
+      return null;
+    },
+    querySelectorAll: (selector: string) => {
+      if (selector === '.chapter-list') {
+        return chapterGroups.map((group) => ({
+          previousElementSibling: { textContent: group.groupTitle },
+          parentElement: null,
+          querySelectorAll: (nested: string) => (nested === 'li > a, a' ? group.links : []),
+        }));
+      }
+
+      return [];
+    },
+  };
+}
+
 const readerConfigScript = `
   pVars={page:1,curServ:0,priServ:3,curHost:3,curFunc:0,curFile:"",manga:{preLoadNumber:1}};
   SMH.picserv=function(){var t=[{name:"自动",hosts:[{h:"i",w:.1},{h:"eu",w:4},{h:"eu1",w:4},{h:"eu2",w:4},{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]},{name:"电信",hosts:[{h:"eu",w:1},{h:"eu1",w:1},{h:"eu2",w:1}]},{name:"联通",hosts:[{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]}],n=[],i=[],r=0;return{}}();
@@ -208,6 +277,49 @@ export function registerManhuaguiCases(): void {
         chapterNumber: 1,
         volumeLabel: '单行本',
       });
+
+      restoreBrowserGlobals(snapshot);
+    });
+
+    it('returns Manhuagui series category headings as explicit volumes', async () => {
+      const snapshot = captureBrowserGlobals();
+      setTestWindow({ location: { pathname: '/comic/21243/', origin: 'https://www.manhuagui.com' } });
+      setTestDocument(buildCategorizedSeriesDocument());
+
+      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
+      expect(extractChapterList).toBeDefined();
+      if (!extractChapterList) {
+        throw new Error('Expected extractChapterList to be defined');
+      }
+
+      const chapterResult = await extractChapterList();
+      expect(Array.isArray(chapterResult)).toBe(false);
+      if (Array.isArray(chapterResult)) {
+        throw new Error('Expected Manhuagui extractChapterList to return chapters with volumes');
+      }
+
+      expect(chapterResult.volumes).toEqual([
+        { id: 'manhuagui-volume-1', title: '单行本', label: '单行本' },
+        { id: 'manhuagui-volume-2', title: '番外篇', label: '番外篇' },
+        { id: 'manhuagui-volume-3', title: '单话', label: '单话' },
+      ]);
+      expect(chapterResult.chapters).toHaveLength(7);
+      expect(
+        chapterResult.chapters.map((chapter) => ({
+          id: chapter.id,
+          volumeLabel: chapter.volumeLabel,
+          volumeNumber: chapter.volumeNumber,
+        })),
+      ).toEqual([
+        { id: '378327', volumeLabel: '单行本', volumeNumber: 1 },
+        { id: '378328', volumeLabel: '单行本', volumeNumber: 1 },
+        { id: '378329', volumeLabel: '单行本', volumeNumber: 1 },
+        { id: '308995', volumeLabel: '番外篇', volumeNumber: 2 },
+        { id: '284921', volumeLabel: '番外篇', volumeNumber: 2 },
+        { id: '307984', volumeLabel: '单话', volumeNumber: 3 },
+        { id: '284923', volumeLabel: '单话', volumeNumber: 3 },
+      ]);
 
       restoreBrowserGlobals(snapshot);
     });
