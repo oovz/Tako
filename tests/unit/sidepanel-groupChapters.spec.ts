@@ -121,6 +121,35 @@ describe('groupChapters (Side Panel)', () => {
     expect(v2?.collapsed).toBe(false)
   })
 
+  it('uses chapter volume labels as volume group titles when available', () => {
+    const chapters: ChapterState[] = [
+      makeChapter({
+        url: 'extra-1',
+        title: 'Extra 1',
+        chapterNumber: 1,
+        volumeNumber: 2,
+        volumeLabel: '番外篇',
+        status: 'queued',
+      }),
+      makeChapter({
+        url: 'extra-2',
+        title: 'Extra 2',
+        chapterNumber: 2,
+        volumeNumber: 2,
+        volumeLabel: '番外篇',
+        status: 'queued',
+      }),
+    ]
+
+    const grouped = groupChapters(chapters)
+
+    expect(grouped).toHaveLength(1)
+    expect('chapters' in grouped[0]).toBe(true)
+    if ('chapters' in grouped[0]) {
+      expect(grouped[0].title).toBe('番外篇')
+    }
+  })
+
   it('creates separate volume groups for disjoint runs of the same volume number', () => {
     const chapters: ChapterState[] = [
       makeChapter({

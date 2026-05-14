@@ -1,7 +1,8 @@
 import logger from '@/src/runtime/logger';
 import type { Chapter } from '@/src/types/chapter';
 import type { SeriesMetadata } from '@/src/types/series-metadata';
-import { parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
+import type { VolumeState } from '@/src/types/tab-state';
+import { parseChapterNumber, parseVolumeInfo, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import { decompressFromBase64 } from './lz-string';
 import { parseChapterIdFromUrl, toAbsoluteUrl } from './shared';
 
@@ -12,6 +13,8 @@ import { parseChapterIdFromUrl, toAbsoluteUrl } from './shared';
  */
 type ChapterGroup = {
   title?: string;
+  volumeId: string;
+  volumeNumber: number;
   links: Array<{ href: string; title: string }>;
 };
 
@@ -127,12 +130,13 @@ function extractChapterGroupsFromDocument(documentLike: Document): ChapterGroup[
   }
 
   return chapterLists
-    .map((list) => {
+    .map((list, listIndex) => {
       const headingText = sanitizeLabel(
         list.previousElementSibling?.textContent
         || list.parentElement?.querySelector('h4')?.textContent
         || '',
       ) || undefined;
+      const volumeInfo = parseVolumeInfo(headingText ?? '');
 
       const links = Array.from(list.querySelectorAll('li > a, a'))
         .map((anchor) => ({
@@ -143,6 +147,8 @@ function extractChapterGroupsFromDocument(documentLike: Document): ChapterGroup[
 
       return {
         title: headingText,
+        volumeId: `manhuagui-volume-${listIndex + 1}`,
+        volumeNumber: volumeInfo.volumeNumber ?? listIndex + 1,
         links,
       } satisfies ChapterGroup;
     })
@@ -175,9 +181,11 @@ function mapChapterGroupToChapters(group: ChapterGroup, groupIndex: number): Cha
         title: chapterTitle,
         chapterLabel: chapterTitle,
         chapterNumber,
+        volumeNumber: group.volumeNumber,
         volumeLabel: group.title,
         comicInfo: {
           Title: chapterTitle,
+          Volume: group.volumeNumber,
           LanguageISO: 'zh',
           Manga: 'YesAndRightToLeft',
         },
@@ -210,12 +218,21 @@ function mapChapterGroupToChapters(group: ChapterGroup, groupIndex: number): Cha
   });
 }
 
+function mapChapterGroupsToVolumes(groups: ChapterGroup[]): VolumeState[] {
+  return groups.map((group) => ({
+    id: group.volumeId,
+    title: group.title,
+    label: group.title,
+  }));
+}
+
 /**
  * Walk every `.chapter-list` group on the (possibly adult-gated) series page
- * and return a de-duplicated chapter list. Duplicate chapter IDs across groups
- * are logged as errors since Manhuagui should not emit them.
+ * and return a de-duplicated chapter list plus explicit volume groups.
+ * Duplicate chapter IDs across groups are logged as errors since Manhuagui
+ * should not emit them.
  */
-export function extractChaptersFromDocument(documentLike: Document): Chapter[] {
+export function extractChapterListFromDocument(documentLike: Document): { chapters: Chapter[]; volumes: VolumeState[] } {
   const chapterDocument = resolveAdultChapterDocument(documentLike) ?? documentLike;
   const groups = extractChapterGroupsFromDocument(chapterDocument);
   const duplicateChapterIds = new Set<string>();
@@ -238,7 +255,14 @@ export function extractChaptersFromDocument(documentLike: Document): Chapter[] {
     });
   }
 
-  return Array.from(chapterById.values());
+  return {
+    chapters: Array.from(chapterById.values()),
+    volumes: mapChapterGroupsToVolumes(groups),
+  };
+}
+
+export function extractChaptersFromDocument(documentLike: Document): Chapter[] {
+  return extractChapterListFromDocument(documentLike).chapters;
 }
 
 /**

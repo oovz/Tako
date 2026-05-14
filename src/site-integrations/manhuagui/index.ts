@@ -1,8 +1,8 @@
-import type { Chapter } from '@/src/types/chapter';
 import type { SeriesMetadata } from '@/src/types/series-metadata';
 import type {
   BackgroundIntegration,
   ContentScriptIntegration,
+  SeriesChapterListResult,
   SiteIntegration,
 } from '@/src/types/site-integrations';
 import {
@@ -12,7 +12,7 @@ import {
   resolveManhuaguiChapterImageUrls,
 } from './chapter-api';
 import { prepareManhuaguiDispatchContext } from './dispatch-context';
-import { extractChaptersFromDocument, extractSeriesMetadataFromDocument } from './series-dom';
+import { extractChapterListFromDocument, extractSeriesMetadataFromDocument } from './series-dom';
 import { parseSeriesIdFromPath } from './shared';
 
 /**
@@ -37,8 +37,8 @@ const manhuaguiContentIntegration: ContentScriptIntegration = {
       return extractSeriesMetadataFromDocument(document);
     },
 
-    extractChapterList(): Chapter[] {
-      return extractChaptersFromDocument(document);
+    extractChapterList(): SeriesChapterListResult {
+      return extractChapterListFromDocument(document);
     },
   },
 };

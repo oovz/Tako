@@ -13,6 +13,7 @@ export interface SidePanelChapter {
   chapterLabel?: string
   chapterNumber?: number
   volumeNumber?: number
+  volumeLabel?: string
   locked?: boolean
   selected: boolean
   url: string

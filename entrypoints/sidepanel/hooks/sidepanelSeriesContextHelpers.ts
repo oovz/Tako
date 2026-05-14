@@ -161,6 +161,7 @@ function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {
     chapterLabel: chapter.chapterLabel,
     chapterNumber: chapter.chapterNumber,
     volumeNumber: chapter.volumeNumber,
+    volumeLabel: chapter.volumeLabel,
     locked: chapter.locked === true,
     selected: false,
     url: chapter.url,
@@ -213,13 +214,14 @@ export function groupChapters(
 
   nodes.forEach((node) => {
     if (node.kind === 'volume') {
+      const title = node.chapters.find((chapter) => chapter.volumeLabel)?.volumeLabel ?? `Volume ${node.volumeNumber}`
       const nextSelected = node.chapters
         .filter((chapter) => chapter.selected && chapter.locked !== true)
         .map((chapter) => chapter.id)
 
       result.push({
         number: node.volumeNumber,
-        title: `Volume ${node.volumeNumber}`,
+        title,
         chapters: node.chapters.map((chapter) => ({
           ...chapter,
           selected: chapter.locked === true ? false : nextSelected.includes(chapter.id),
