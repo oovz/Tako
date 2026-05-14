@@ -89,13 +89,12 @@ The current actions are:
 
 - `INITIALIZE_TAB`
 - `CLEAR_TAB_STATE`
-- `UPDATE_DOWNLOAD_TASK`
 - `REMOVE_DOWNLOAD_TASK`
 - `CANCEL_DOWNLOAD_TASK`
-- `UPDATE_SETTINGS`
-- `CLEAR_DOWNLOAD_HISTORY`
 
 `StateAction` is a numeric enum at runtime, so callers should use the shared types and helpers instead of hand-writing raw values.
+
+Other queue and settings operations use explicit runtime commands rather than `STATE_ACTION`. For example, `START_DOWNLOAD`, `RETRY_FAILED_CHAPTERS`, `RESTART_TASK`, `MOVE_TASK_TO_TOP`, and `CLEAR_ALL_HISTORY` are routed directly by `entrypoints/background/background-message-router.ts`.
 
 ## Sender rules
 
@@ -165,6 +164,8 @@ The side panel and options page react to projected state instead of relying on u
 
 The main reactive keys are:
 
+- `globalState`
+- `tab_<tabId>`
 - `queueView`
 - `activeTabContext`
 - `activeTaskProgress`
