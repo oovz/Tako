@@ -4,6 +4,7 @@
 import type { ComicInfoV2 } from "@/src/types/comic-info";
 import {
   LIVE_MANGADEX_REFERENCE_URL,
+  LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
 } from '../e2e/fixtures/test-domains';
@@ -18,6 +19,7 @@ const LIVE_REFERENCE_URLS = {
   mangadex: LIVE_MANGADEX_REFERENCE_URL,
   pixivComic: LIVE_PIXIV_COMIC_REFERENCE_URL,
   shonenjumpplus: LIVE_SHONENJUMPPLUS_REFERENCE_URL,
+  manhuagui: LIVE_MANHUAGUI_REFERENCE_URL,
 } as const;
 
 export const testCases: LiveTestCase[] = [
@@ -40,6 +42,13 @@ export const testCases: LiveTestCase[] = [
     integration: 'shonenjumpplus',
     expectedMetadata: {
       Series: 'エクソシストを堕とせない',
+    }
+  },
+  {
+    url: LIVE_REFERENCE_URLS.manhuagui,
+    integration: 'manhuagui',
+    expectedMetadata: {
+      Series: '八田百田',
     }
   },
 ];

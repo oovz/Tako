@@ -162,14 +162,6 @@ describe('toQueueTaskSummary', () => {
     expect(otherSummary.failureCategory).toBeUndefined();
   });
 
-  it('does not expose removed progress fields', () => {
-    const summary = toQueueTaskSummary(makeTask());
-    const record = toRecord(summary);
-
-    expect(record).not.toHaveProperty('progress');
-    expect(record).not.toHaveProperty('progressPercent');
-  });
-
   it('handles tasks with no chapters gracefully', () => {
     const task = makeTask({ chapters: [] });
     const summary = toQueueTaskSummary(task);

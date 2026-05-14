@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { groupChapters } from '@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers'
-import type { ChapterState } from '@/src/types/tab-state'
+import type { ChapterState, VolumeState } from '@/src/types/tab-state'
 
 function makeChapter(partial: Partial<ChapterState> & { url: string; title: string }): ChapterState {
   return {
@@ -12,6 +12,7 @@ function makeChapter(partial: Partial<ChapterState> & { url: string; title: stri
     index: partial.index ?? 1,
     chapterNumber: partial.chapterNumber,
     volumeNumber: partial.volumeNumber,
+    volumeId: partial.volumeId,
     volumeLabel: partial.volumeLabel,
     status: partial.status ?? 'queued',
     errorMessage: partial.errorMessage,
@@ -148,6 +149,52 @@ describe('groupChapters (Side Panel)', () => {
     if ('chapters' in grouped[0]) {
       expect(grouped[0].title).toBe('番外篇')
     }
+  })
+
+  it('groups explicit volumes by volumeId instead of synthetic volume numbers', () => {
+    const volumes: VolumeState[] = [
+      { id: 'single-issues', title: '单行本', label: '单行本' },
+      { id: 'extras', title: '番外篇', label: '番外篇' },
+      { id: 'chapters', title: '单话', label: '单话' },
+    ]
+    const chapters: ChapterState[] = [
+      makeChapter({
+        url: 'single-1',
+        title: '第01卷142p',
+        chapterNumber: 1,
+        volumeId: 'single-issues',
+        volumeLabel: '单行本',
+      }),
+      makeChapter({
+        url: 'extra-1',
+        title: '番外篇239p',
+        chapterNumber: 239,
+        volumeId: 'extras',
+        volumeLabel: '番外篇',
+      }),
+      makeChapter({
+        url: 'chapter-1',
+        title: '新篇088p',
+        chapterNumber: 88,
+        volumeId: 'chapters',
+        volumeLabel: '单话',
+      }),
+    ]
+
+    const grouped = groupChapters(chapters, volumes)
+
+    expect(grouped).toHaveLength(3)
+    expect(grouped.every((item) => 'chapters' in item)).toBe(true)
+    expect(grouped.map((item) => ('chapters' in item ? item.groupId : 'standalone'))).toEqual([
+      'single-issues',
+      'extras',
+      'chapters',
+    ])
+    expect(grouped.map((item) => ('chapters' in item ? item.title : item.title))).toEqual([
+      '单行本',
+      '番外篇',
+      '单话',
+    ])
   })
 
   it('creates separate volume groups for disjoint runs of the same volume number', () => {

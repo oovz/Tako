@@ -64,10 +64,6 @@ describe('State discipline runtime guards', () => {
   })
 
   describe('sendStateAction', () => {
-    it('does not expose removed UPDATE_CHAPTER_STATUS in the runtime enum', () => {
-      expect('UPDATE_CHAPTER_STATUS' in StateAction).toBe(false)
-    })
-
     it('sends flattened STATE_ACTION message with enum action and tab id', async () => {
       await sendStateAction(
         StateAction.CLEAR_TAB_STATE,

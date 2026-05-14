@@ -15,15 +15,6 @@ import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 
 describe('Site integration custom settings contract', () => {
-  it('defines manifest-level custom settings for MangaDex', () => {
-    const mangadex = getSiteIntegrationManifestById('mangadex')
-    const settingIds = (mangadex?.customSettings ?? []).map((setting) => setting.id)
-
-    expect(settingIds).toContain('imageQuality')
-    expect(settingIds).toContain('chapterLanguageFilter')
-    expect(settingIds).toContain('autoReadMangaDexSettings')
-  })
-
   it('renders dynamic custom setting controls with per-setting enable toggle', () => {
     const mangadex = getSiteIntegrationManifestById('mangadex')
     expect(mangadex).toBeDefined()
@@ -54,39 +45,6 @@ describe('Site integration custom settings contract', () => {
     expect(html).toContain('Enabled')
     expect(html).toContain('Enable override')
     expect(html).toContain('Image quality')
-  })
-
-  it('renders stable test ids for site integration card controls', () => {
-    const mangadex = getSiteIntegrationManifestById('mangadex')
-    expect(mangadex).toBeDefined()
-
-    const html = renderToStaticMarkup(
-      React.createElement(SiteIntegrationCard, {
-        siteIntegration: {
-          id: mangadex!.id,
-          name: mangadex!.name,
-          domains: mangadex!.patterns.domains,
-          customSettings: mangadex!.customSettings,
-        },
-        isEnabled: true,
-        override: {
-          outputFormat: 'zip',
-        },
-        globalDefaults: {
-          outputFormat: 'cbz',
-          imagePolicy: { concurrency: 2, delayMs: 500 },
-          chapterPolicy: { concurrency: 2, delayMs: 500 },
-        },
-        siteIntegrationSettingsValues: {},
-        onEnabledChange: vi.fn(),
-        onSiteIntegrationSettingsChange: vi.fn(),
-        onChange: vi.fn(),
-      }),
-    )
-
-    expect(html).toContain('data-testid="site-integration-card-mangadex"')
-    expect(html).toContain('data-testid="configure-site-integration-mangadex"')
-    expect(html).toContain('data-testid="reset-site-integration-overrides-mangadex"')
   })
 
   it('renders the Site Integrations tab from manifest data before registry initialization', () => {

@@ -15,6 +15,7 @@ function buildChapterUrl(seriesId: string, chapterId: string): string {
 const BASIC_SERIES_ID = '55555';
 const ADULT_SERIES_ID = '77777';
 const MINIMAL_SERIES_ID = '66666';
+const CATEGORY_SERIES_ID = '21243';
 
 export const BASIC_CHAPTERS: SiteIntegrationChapterDataset = {
   id: 'MANHUAGUI_BASIC',
@@ -102,6 +103,78 @@ export const SMALL_SERIES: SiteIntegrationChapterDataset = {
       title: '第1话',
       index: 1,
       chapterNumber: 1,
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+  ],
+};
+
+export const CATEGORY_CHAPTERS: SiteIntegrationChapterDataset = {
+  id: 'MANHUAGUI_CATEGORY',
+  description: 'Manhuagui reference-style series grouped by category headings instead of numeric volumes',
+  chapters: [
+    {
+      id: '378327',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '378327'),
+      title: '第03卷',
+      index: 1,
+      chapterNumber: 3,
+      volumeId: 'manhuagui-volume-1',
+      volumeLabel: '单行本',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '378326',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '378326'),
+      title: '第02卷',
+      index: 2,
+      chapterNumber: 2,
+      volumeId: 'manhuagui-volume-1',
+      volumeLabel: '单行本',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '378325',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '378325'),
+      title: '第01卷',
+      index: 3,
+      chapterNumber: 1,
+      volumeId: 'manhuagui-volume-1',
+      volumeLabel: '单行本',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '363932',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '363932'),
+      title: '番外篇',
+      index: 4,
+      volumeId: 'manhuagui-volume-2',
+      volumeLabel: '番外篇',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '357843',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '357843'),
+      title: '第32话',
+      index: 5,
+      chapterNumber: 32,
+      volumeId: 'manhuagui-volume-3',
+      volumeLabel: '单话',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '357842',
+      url: buildChapterUrl(CATEGORY_SERIES_ID, '357842'),
+      title: '第31话',
+      index: 6,
+      chapterNumber: 31,
+      volumeId: 'manhuagui-volume-3',
+      volumeLabel: '单话',
       status: 'queued',
       lastUpdated: Date.now(),
     },

@@ -93,6 +93,7 @@ export interface StartDownloadMessage {
       index: number;
       chapterLabel?: string;
       chapterNumber?: number;
+      volumeId?: string;
       volumeLabel?: string;
       volumeNumber?: number;
       language?: string;

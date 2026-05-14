@@ -18,6 +18,7 @@ export interface ChapterInput {
   language?: string;       // Chapter-level language override when the site provides per-chapter language
   chapterLabel?: string;   // Raw chapter number string as seen on site (e.g., '12.5')
   chapterNumber?: number;  // Parsed numeric chapter number
+  volumeId?: string;       // Reference to VolumeState.id for UI grouping
   volumeNumber?: number;   // Parsed volume number
   volumeLabel?: string;    // Raw volume label (e.g., 'Vol. 01')
 }
@@ -35,6 +36,7 @@ export interface Chapter {
   /** Original string representation of chapter number (e.g., '12.5') */
   chapterLabel?: string;
   chapterNumber?: number;
+  volumeId?: string;
   volumeNumber?: number;
   volumeLabel?: string;
   resolvedPath?: string;        // Filled in by download planning

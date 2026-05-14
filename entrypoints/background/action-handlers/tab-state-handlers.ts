@@ -84,6 +84,7 @@ export async function handleInitializeTab(
     chapterLabel: ch.chapterLabel,
     language: ch.language,
     chapterNumber: typeof ch.chapterNumber === 'number' ? ch.chapterNumber : undefined,
+    volumeId: ch.volumeId,
     volumeNumber: typeof ch.volumeNumber === 'number' ? ch.volumeNumber : undefined,
     volumeLabel: ch.volumeLabel
   })) || [];

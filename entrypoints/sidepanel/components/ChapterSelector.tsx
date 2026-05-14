@@ -24,7 +24,7 @@ type SelectorRow =
     kind: 'volume-header'
     key: string
     groupKey: string
-    number: number
+    title: string
     chapterCount: number
     selectableChapterCount: number
     allSelected: boolean
@@ -76,7 +76,7 @@ function flattenRows(items: VolumeOrChapter[], viewMode: 'volumes' | 'chapters',
         kind: 'volume-header',
         key: `${groupKey}-header`,
         groupKey,
-        number: item.number,
+        title: item.title,
         chapterCount: item.chapters.length,
         selectableChapterCount: selectableChapters.length,
         allSelected,
@@ -201,9 +201,7 @@ export function ChapterSelector({
           />
           <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
             <span className="truncate">
-              Volume
-              {' '}
-              {row.number}
+              {row.title}
             </span>
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">{row.chapterCount}</span>

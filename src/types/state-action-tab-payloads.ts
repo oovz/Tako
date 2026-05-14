@@ -13,6 +13,7 @@ export interface InitializeTabReadyPayload {
     locked?: boolean;
     chapterLabel?: string;
     chapterNumber?: number;
+    volumeId?: string;
     volumeNumber?: number;
     volumeLabel?: string;
     language?: string;

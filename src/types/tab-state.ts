@@ -10,6 +10,7 @@ export interface ChapterState {
   language?: string;
   chapterLabel?: string;
   chapterNumber?: number;
+  volumeId?: string;
   volumeNumber?: number;
   volumeLabel?: string;
   status: ChapterStatus;

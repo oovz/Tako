@@ -63,6 +63,7 @@ describe('message-schemas', () => {
             url: 'https://example.com/ch/1',
             index: 1,
             chapterLabel: '1',
+            volumeId: 'volume-1',
             volumeLabel: 'Vol. 1',
             language: 'en',
           },
@@ -80,6 +81,7 @@ describe('message-schemas', () => {
       throw new Error('Expected START_DOWNLOAD message')
     }
     expect(parsed.payload.chapters[0].chapterLabel).toBe('1')
+    expect(parsed.payload.chapters[0].volumeId).toBe('volume-1')
     expect(parsed.payload.metadata).toEqual({
       author: 'Author Name',
       publisher: 'Test Publisher',

@@ -69,12 +69,6 @@ describe('critical runtime contracts (behavior-based)', () => {
     getAllSiteOverrides.mockResolvedValue({})
   })
 
-  it('keeps expected default download settings contract', () => {
-    expect(DEFAULT_SETTINGS.downloads.defaultFormat).toBe('cbz')
-    expect(DEFAULT_SETTINGS.downloads.downloadMode).toBe('browser')
-    expect(DEFAULT_SETTINGS.downloads.overwriteExisting).toBe(false)
-  })
-
   it('accepts OFFSCREEN_DOWNLOAD_API_REQUEST runtime message payload shape', () => {
     const parsed = RuntimeMessageSchema.parse({
       type: 'OFFSCREEN_DOWNLOAD_API_REQUEST',

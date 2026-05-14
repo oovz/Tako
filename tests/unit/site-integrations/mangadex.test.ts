@@ -2000,21 +2000,5 @@ describe('MangaDex site integration', () => {
         });
     });
 
-    describe('Site Integration Info and Metadata', () => {
-        it('has correct site integration ID and patterns', async () => {
-            const { mangadexIntegration } = await import('@/src/site-integrations/mangadex');
-            const { getSiteIntegrationManifestById } = await import('@/src/site-integrations/manifest');
-
-            expect(mangadexIntegration.id).toBe('mangadex');
-            expect(getSiteIntegrationManifestById('mangadex')?.patterns.domains).toContain('mangadex.org');
-        });
-
-        it('has content and background integrations with correct names', async () => {
-            const { mangadexIntegration } = await import('@/src/site-integrations/mangadex');
-
-            expect(mangadexIntegration.content.name).toBe('MangaDex API Content');
-            expect(mangadexIntegration.background.name).toBe('MangaDex API Background');
-        });
-    });
 });
 

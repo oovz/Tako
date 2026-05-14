@@ -12,6 +12,7 @@ export interface SidePanelChapter {
   index: number // 1-based index from site integration extraction order
   chapterLabel?: string
   chapterNumber?: number
+  volumeId?: string
   volumeNumber?: number
   volumeLabel?: string
   locked?: boolean
@@ -21,7 +22,7 @@ export interface SidePanelChapter {
 }
 
 export interface Volume {
-  number: number
+  number?: number
   title: string
   chapters: SidePanelChapter[]
   collapsed: boolean

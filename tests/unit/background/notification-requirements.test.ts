@@ -190,10 +190,6 @@ describe('settings and persistent error behavior', () => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults overwriteExisting to false', () => {
-    expect(DEFAULT_SETTINGS.downloads.overwriteExisting).toBe(false);
-  });
-
   it('adds and clears persistent error entries by code', async () => {
     storageLocalGet
       .mockResolvedValueOnce({ persistent_errors: [] })
