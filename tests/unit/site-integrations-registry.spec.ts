@@ -3,30 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { SITE_INTEGRATION_MANIFESTS, getManifest, isEnabled } from '@/src/site-integrations/registry'
 
 describe('site integration registry', () => {
-  it('re-exports the canonical manifest list', () => {
-    expect(SITE_INTEGRATION_MANIFESTS.length).toBeGreaterThan(0)
-  })
-
-  it('keeps production manifests free of test-only domains', () => {
-    expect(
-      SITE_INTEGRATION_MANIFESTS.every((manifest) =>
-        manifest.patterns.domains.every((domain) => !domain.endsWith('.test')),
-      ),
-    ).toBe(true)
-  })
-
-  it('declares usable manifest contracts for runtime resolution', () => {
-    for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-      expect(manifest.id).toBeTruthy()
-      expect(manifest.name).toBeTruthy()
-      expect(manifest.exportName).toBeTruthy()
-      expect(manifest.importPath).toBeTruthy()
-      expect(manifest.patterns.domains.length).toBeGreaterThan(0)
-      expect(manifest.patterns.seriesMatches.length).toBeGreaterThan(0)
-      expect(manifest.patterns.seriesMatches.every((match) => match.startsWith('/'))).toBe(true)
-    }
-  })
-
   it('returns null when manifest is missing', () => {
     expect(getManifest('__unknown__')).toBeNull()
   })

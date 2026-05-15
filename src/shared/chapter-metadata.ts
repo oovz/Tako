@@ -91,6 +91,7 @@ export function composeChapterMetadata(book: Book, input: ChapterInput): Chapter
     language: input.language,
     chapterLabel: input.chapterLabel || base.Number,
     chapterNumber: input.chapterNumber,
+    volumeId: input.volumeId,
     volumeNumber: input.volumeNumber,
     volumeLabel: input.volumeLabel,
     comicInfo: base

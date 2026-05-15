@@ -48,6 +48,7 @@ export interface OffscreenDownloadChapterMessage {
       index: number;
       chapterLabel?: string;
       chapterNumber?: number;
+      volumeId?: string;
       volumeNumber?: number;
       volumeLabel?: string;
       language?: string;

@@ -2,6 +2,7 @@ import { test, expect } from '../e2e/fixtures/extension'
 import { getTabId, getSessionState } from '../e2e/fixtures/state-helpers'
 import {
   LIVE_MANGADEX_REFERENCE_URL,
+  LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_PIXIV_COMIC_DUPLICATE_TITLE_URL,
   LIVE_PIXIV_COMIC_DUAL_TITLE_URL,
@@ -14,8 +15,15 @@ type LiveChapter = {
   title?: string
   chapterLabel?: string
   chapterNumber?: number
+  volumeId?: string
   volumeLabel?: string
   volumeNumber?: number
+}
+
+type LiveVolume = {
+  id?: string
+  title?: string
+  label?: string
 }
 
 type LiveTabState = {
@@ -23,6 +31,7 @@ type LiveTabState = {
   mangaId?: string
   seriesTitle?: string
   chapters?: LiveChapter[]
+  volumes?: LiveVolume[]
 }
 
 function extractNumericValue(value: string | undefined): number | undefined {
@@ -251,8 +260,8 @@ test.describe('Live numeric metadata extraction', () => {
 
     assertNumericChapterProjection(state.chapters ?? [], {
       minNumberedChapters: 3,
-      expectedSampleNumber: 34,
-      expectedSampleLabel: /第\s*34\s*話/,
+      expectedSampleNumber: 35,
+      expectedSampleLabel: /第\s*35\s*話/,
       expectAnyVolumeNumbers: false,
     })
 
@@ -304,6 +313,31 @@ test.describe('Live numeric metadata extraction', () => {
       expectedSampleLabel: /(?:^|\[|第)\s*1\s*話(?:$|\])?/,
       expectAnyVolumeNumbers: false,
     })
+
+    await page.close()
+  })
+
+  test('preserves Manhuagui category headings as explicit live volumes', async ({ context, extensionId }) => {
+    const page = await context.newPage()
+    await page.goto(LIVE_MANHUAGUI_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
+
+    const state = await loadLiveTabState(context, extensionId, page, 'manhuagui')
+    expect(state.siteIntegrationId).toBe('manhuagui')
+    expect(Array.isArray(state.chapters)).toBe(true)
+    expect(Array.isArray(state.volumes)).toBe(true)
+
+    const volumes = state.volumes ?? []
+    const volumeTitles = volumes.map((volume) => volume.title ?? volume.label)
+    expect(volumeTitles).toEqual(expect.arrayContaining(['单行本', '番外篇', '单话']))
+
+    for (const title of ['单行本', '番外篇', '单话']) {
+      const volume = volumes.find((candidate) => candidate.title === title || candidate.label === title)
+      expect(volume?.id).toBeTruthy()
+      const chaptersInVolume = (state.chapters ?? []).filter((chapter) => chapter.volumeId === volume?.id)
+      expect(chaptersInVolume.length).toBeGreaterThan(0)
+      expect(chaptersInVolume.every((chapter) => chapter.volumeLabel === title)).toBe(true)
+      expect(chaptersInVolume.every((chapter) => chapter.volumeNumber === undefined)).toBe(true)
+    }
 
     await page.close()
   })

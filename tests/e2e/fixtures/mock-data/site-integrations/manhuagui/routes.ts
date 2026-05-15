@@ -25,12 +25,13 @@ import {
 import {
   ADULT_SERIES_PAGE_HTML,
   BASIC_SERIES_PAGE_HTML,
+  CATEGORY_SERIES_PAGE_HTML,
   HOME_PAGE_HTML,
   MINIMAL_SERIES_PAGE_HTML,
   buildManhuaguiChapterPageHtml,
   buildManhuaguiSeriesPageHtml,
 } from './html-fixtures';
-import { ADULT_SERIES, BASIC_SERIES, MINIMAL_SERIES } from './series-data';
+import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, MINIMAL_SERIES } from './series-data';
 
 export const registerManhuaguiRoutes: RouteRegistrar = async (context, options) => {
   if (!options.useMocks) {
@@ -66,6 +67,7 @@ export const registerManhuaguiRoutes: RouteRegistrar = async (context, options) 
       if (seriesId === BASIC_SERIES.series.seriesId) return html(BASIC_SERIES_PAGE_HTML);
       if (seriesId === ADULT_SERIES.series.seriesId) return html(ADULT_SERIES_PAGE_HTML);
       if (seriesId === MINIMAL_SERIES.series.seriesId) return html(MINIMAL_SERIES_PAGE_HTML);
+      if (seriesId === CATEGORY_SERIES.series.seriesId) return html(CATEGORY_SERIES_PAGE_HTML);
       // Unknown series id: synthesize a bare series page so the content
       // script still resolves an id. Chapter list will be empty.
       return html(buildManhuaguiSeriesPageHtml({

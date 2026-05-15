@@ -26,9 +26,9 @@ import {
   buildManhuaguiPackedPayloadScript,
   type ManhuaguiPackedImageData,
 } from './api-fixtures';
-import { ADULT_CHAPTERS, BASIC_CHAPTERS, SMALL_SERIES } from './chapter-data';
+import { ADULT_CHAPTERS, BASIC_CHAPTERS, CATEGORY_CHAPTERS, SMALL_SERIES } from './chapter-data';
 import { buildManhuaguiImageFilenames } from './image-fixtures';
-import { ADULT_SERIES, BASIC_SERIES, MINIMAL_SERIES } from './series-data';
+import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, MINIMAL_SERIES } from './series-data';
 
 interface SeriesPageChapterGroup {
   volumeLabel: string;
@@ -170,6 +170,16 @@ export const MINIMAL_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   seriesTitle: MINIMAL_SERIES.series.seriesTitle,
   status: MINIMAL_SERIES.series.status,
   groups: groupChaptersByVolume(SMALL_SERIES.chapters),
+});
+
+export const CATEGORY_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
+  seriesId: CATEGORY_SERIES.series.seriesId,
+  seriesTitle: CATEGORY_SERIES.series.seriesTitle,
+  author: CATEGORY_SERIES.series.author,
+  description: CATEGORY_SERIES.series.description,
+  coverUrl: CATEGORY_SERIES.series.coverUrl,
+  status: CATEGORY_SERIES.series.status,
+  groups: groupChaptersByVolume(CATEGORY_CHAPTERS.chapters),
 });
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>

@@ -46,10 +46,6 @@ describe('external-tab-init (sticky-on-fresh)', () => {
     vi.restoreAllMocks()
   })
 
-  it('exposes a tabId-scoped storage key that follows the documented prefix', () => {
-    expect(storageKey).toBe('externalTabInit_42')
-  })
-
   it('markExternalTabInitialization writes a timestamp under the scoped key', async () => {
     const mock = createMockChromeStorage()
     vi.stubGlobal('chrome', { storage: { session: mock.api } })

@@ -21,6 +21,7 @@ export function createChapterForProcessing(
     title: chapter.title,
     chapterLabel: chapter.chapterLabel,
     chapterNumber: chapter.chapterNumber,
+    volumeId: chapter.volumeId,
     volumeNumber: chapter.volumeNumber,
     volumeLabel: chapter.volumeLabel,
     language: chapter.language,

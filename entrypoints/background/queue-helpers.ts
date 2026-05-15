@@ -70,6 +70,7 @@ export function resolveDownloadPlan(
       language: ch.language,
       chapterLabel: ch.chapterLabel,
       chapterNumber: ch.chapterNumber,
+      volumeId: ch.volumeId,
       volumeNumber: ch.volumeNumber,
       volumeLabel: ch.volumeLabel
     };

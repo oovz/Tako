@@ -8,7 +8,7 @@ import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '../messages'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 import { isMangaPageState } from '@/src/runtime/state-shapes'
 import { isRecord } from '@/src/shared/type-guards'
-import type { ChapterState, MangaPageState } from '@/src/types/tab-state'
+import type { ChapterState, MangaPageState, VolumeState } from '@/src/types/tab-state'
 
 export interface DerivedSidepanelSeriesContextData {
   mangaState?: MangaPageState
@@ -92,7 +92,7 @@ export function deriveSeriesContextFromActiveTabContext(
       const { mangaState } = context
       return {
         mangaState,
-        items: groupChapters(mangaState.chapters, previousItems),
+        items: groupChapters(mangaState.chapters, mangaState.volumes, previousItems),
         mangaTitle: mangaState.seriesTitle,
         seriesId: mangaState.mangaId,
         isLoading: false,
@@ -160,6 +160,7 @@ function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {
     index: chapter.index,
     chapterLabel: chapter.chapterLabel,
     chapterNumber: chapter.chapterNumber,
+    volumeId: chapter.volumeId,
     volumeNumber: chapter.volumeNumber,
     volumeLabel: chapter.volumeLabel,
     locked: chapter.locked === true,
@@ -171,21 +172,77 @@ function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {
 
 export function groupChapters(
   chapters: ChapterState[],
+  volumesOrPreviousItems: VolumeState[] | VolumeOrChapter[] = [],
   previousItems?: VolumeOrChapter[],
 ): VolumeOrChapter[] {
+  const firstSecondaryItem = volumesOrPreviousItems[0]
+  const receivedPreviousItems = firstSecondaryItem
+    && (('chapters' in firstSecondaryItem) || ('isStandalone' in firstSecondaryItem))
+  const volumes = receivedPreviousItems ? [] : volumesOrPreviousItems as VolumeState[]
+  const collapsedStateSource = receivedPreviousItems
+    ? volumesOrPreviousItems as VolumeOrChapter[]
+    : previousItems
   const sidePanelChapters = chapters.map(convertToSidePanelChapter)
 
   const previousCollapsedState = new Map<string, boolean>()
-  if (previousItems) {
-    previousItems.forEach((item) => {
+  if (collapsedStateSource) {
+    collapsedStateSource.forEach((item) => {
       if ('chapters' in item) {
         previousCollapsedState.set(item.groupId, item.collapsed)
       }
     })
   }
 
-  type VolumeNode = { kind: 'volume'; volumeNumber: number; groupId: string; chapters: SidePanelChapter[] }
+  type VolumeNode = { kind: 'volume'; volumeNumber?: number; title: string; groupId: string; chapters: SidePanelChapter[] }
   type StandaloneNode = { kind: 'standalone'; chapter: SidePanelChapter }
+
+  const explicitVolumeIds = new Set(volumes.map((volume) => volume.id))
+  const hasExplicitVolumeMembership = sidePanelChapters.some((chapter) => (
+    typeof chapter.volumeId === 'string' && explicitVolumeIds.has(chapter.volumeId)
+  ))
+
+  if (volumes.length > 0 && hasExplicitVolumeMembership) {
+    const result: VolumeOrChapter[] = []
+    for (const volume of volumes) {
+      const volumeChapters = sidePanelChapters.filter((chapter) => chapter.volumeId === volume.id)
+      if (volumeChapters.length === 0) {
+        continue
+      }
+
+      const firstNumberedChapter = volumeChapters.find((chapter) => chapter.volumeNumber !== undefined)
+      const volumeNumber = firstNumberedChapter?.volumeNumber
+      const title = volume.title
+        ?? volume.label
+        ?? volumeChapters.find((chapter) => chapter.volumeLabel)?.volumeLabel
+        ?? (volumeNumber !== undefined ? `Volume ${volumeNumber}` : 'Volume')
+      const nextSelected = volumeChapters
+        .filter((chapter) => chapter.selected && chapter.locked !== true)
+        .map((chapter) => chapter.id)
+
+      result.push({
+        number: volumeNumber,
+        title,
+        chapters: volumeChapters.map((chapter) => ({
+          ...chapter,
+          selected: chapter.locked === true ? false : nextSelected.includes(chapter.id),
+        })),
+        collapsed: previousCollapsedState.get(volume.id) ?? true,
+        groupId: volume.id,
+      } as Volume)
+    }
+
+    sidePanelChapters
+      .filter((chapter) => typeof chapter.volumeId !== 'string' || !explicitVolumeIds.has(chapter.volumeId))
+      .forEach((chapter) => {
+        result.push({
+          ...chapter,
+          isStandalone: true,
+          selected: chapter.locked === true ? false : chapter.selected,
+        } as StandaloneChapter)
+      })
+
+    return result
+  }
 
   const nodes: Array<VolumeNode | StandaloneNode> = []
   let currentVolumeNode: VolumeNode | null = null
@@ -194,9 +251,11 @@ export function groupChapters(
     if (chapter.volumeNumber !== undefined) {
       if (!currentVolumeNode || currentVolumeNode.volumeNumber !== chapter.volumeNumber) {
         const groupId = `${chapter.volumeNumber}:${chapter.url}`
+        const title = chapter.volumeLabel ?? `Volume ${chapter.volumeNumber}`
         currentVolumeNode = {
           kind: 'volume',
           volumeNumber: chapter.volumeNumber,
+          title,
           groupId,
           chapters: [chapter],
         }
@@ -214,14 +273,13 @@ export function groupChapters(
 
   nodes.forEach((node) => {
     if (node.kind === 'volume') {
-      const title = node.chapters.find((chapter) => chapter.volumeLabel)?.volumeLabel ?? `Volume ${node.volumeNumber}`
       const nextSelected = node.chapters
         .filter((chapter) => chapter.selected && chapter.locked !== true)
         .map((chapter) => chapter.id)
 
       result.push({
         number: node.volumeNumber,
-        title,
+        title: node.title,
         chapters: node.chapters.map((chapter) => ({
           ...chapter,
           selected: chapter.locked === true ? false : nextSelected.includes(chapter.id),

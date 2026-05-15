@@ -1,5 +1,7 @@
 import type { Chapter } from '../../types/chapter'
 import type { SeriesMetadata } from '../../types/series-metadata'
+import type { SeriesChapterListResult } from '../../types/site-integrations'
+import type { VolumeState } from '../../types/tab-state'
 import logger from '@/src/runtime/logger'
 import {
   fetchChapterFeed,
@@ -100,6 +102,10 @@ function mapMangadexReadingDirection(tags: string[] | undefined): string | undef
   return undefined
 }
 
+function buildMangadexVolumeId(volumeLabel: string): string {
+  return `mangadex-volume-${volumeLabel.trim().toLowerCase().replace(/\s+/g, '-')}`
+}
+
 export async function fetchMangadexSeriesMetadata(seriesId: string): Promise<SeriesMetadata> {
   const [data, statisticsResult] = await Promise.all([
     fetchMangaMetadata(seriesId),
@@ -171,8 +177,10 @@ function mapFeedChapterToChapter(
   const isUnavailable = pageCount === 0
 
   const chapterNum = attrs.chapter ? parseFloat(attrs.chapter) : undefined
-  const volumeNum = attrs.volume ? parseInt(attrs.volume, 10) : undefined
-  const volumeLabel = attrs.volume ? `Vol. ${attrs.volume}` : undefined
+  const rawVolume = typeof attrs.volume === 'string' ? attrs.volume.trim() : ''
+  const volumeNum = rawVolume ? parseInt(rawVolume, 10) : undefined
+  const volumeLabel = rawVolume ? `Vol. ${rawVolume}` : undefined
+  const volumeId = rawVolume ? buildMangadexVolumeId(rawVolume) : undefined
 
   let title = attrs.title || ''
   if (!title && attrs.chapter) {
@@ -190,6 +198,7 @@ function mapFeedChapterToChapter(
     language: attrs.translatedLanguage,
     chapterLabel: typeof attrs.chapter === 'string' && attrs.chapter.trim().length > 0 ? attrs.chapter.trim() : undefined,
     chapterNumber: Number.isNaN(chapterNum) ? undefined : chapterNum,
+    volumeId,
     volumeNumber: Number.isNaN(volumeNum) ? undefined : volumeNum,
     volumeLabel,
     comicInfo: {
@@ -209,7 +218,44 @@ function mapFeedChapterToChapter(
   return chapter
 }
 
-export async function fetchMangadexChapterList(seriesId: string, language?: string): Promise<Chapter[]> {
+function buildMangadexVolumes(chapters: Chapter[]): VolumeState[] {
+  const volumeById = new Map<string, VolumeState & { volumeNumber?: number; firstIndex: number }>()
+
+  chapters.forEach((chapter, index) => {
+    if (!chapter.volumeId) {
+      return
+    }
+
+    const existing = volumeById.get(chapter.volumeId)
+    if (existing) {
+      return
+    }
+
+    volumeById.set(chapter.volumeId, {
+      id: chapter.volumeId,
+      title: chapter.volumeLabel,
+      label: chapter.volumeLabel,
+      volumeNumber: chapter.volumeNumber,
+      firstIndex: index,
+    })
+  })
+
+  return Array.from(volumeById.values())
+    .sort((left, right) => {
+      if (left.volumeNumber !== undefined && right.volumeNumber !== undefined && left.volumeNumber !== right.volumeNumber) {
+        return left.volumeNumber - right.volumeNumber
+      }
+
+      return left.firstIndex - right.firstIndex
+    })
+    .map((volume) => ({
+      id: volume.id,
+      title: volume.title,
+      label: volume.label,
+    }))
+}
+
+export async function fetchMangadexChapterList(seriesId: string, language?: string): Promise<SeriesChapterListResult> {
   const chapterById = new Map<string, Chapter>()
   const duplicateChapterIds = new Set<string>()
   let offset = 0
@@ -250,5 +296,9 @@ export async function fetchMangadexChapterList(seriesId: string, language?: stri
     })
   }
 
-  return Array.from(chapterById.values())
+  const chapters = Array.from(chapterById.values())
+  return {
+    chapters,
+    volumes: buildMangadexVolumes(chapters),
+  }
 }

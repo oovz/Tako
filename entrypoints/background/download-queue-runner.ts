@@ -186,6 +186,7 @@ export async function startDownloadTask(
               index: fallbackTaskChapter?.index ?? chapterIndex + 1,
               chapterLabel: chapter.chapterLabel,
               chapterNumber: chapter.chapterNumber,
+              volumeId: chapter.volumeId,
               volumeNumber: chapter.volumeNumber,
               volumeLabel: chapter.volumeLabel,
               language:

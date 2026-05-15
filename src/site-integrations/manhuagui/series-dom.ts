@@ -14,7 +14,7 @@ import { parseChapterIdFromUrl, toAbsoluteUrl } from './shared';
 type ChapterGroup = {
   title?: string;
   volumeId: string;
-  volumeNumber: number;
+  volumeNumber?: number;
   links: Array<{ href: string; title: string }>;
 };
 
@@ -148,7 +148,7 @@ function extractChapterGroupsFromDocument(documentLike: Document): ChapterGroup[
       return {
         title: headingText,
         volumeId: `manhuagui-volume-${listIndex + 1}`,
-        volumeNumber: volumeInfo.volumeNumber ?? listIndex + 1,
+        volumeNumber: volumeInfo.volumeNumber,
         links,
       } satisfies ChapterGroup;
     })
@@ -181,6 +181,7 @@ function mapChapterGroupToChapters(group: ChapterGroup, groupIndex: number): Cha
         title: chapterTitle,
         chapterLabel: chapterTitle,
         chapterNumber,
+        volumeId: group.volumeId,
         volumeNumber: group.volumeNumber,
         volumeLabel: group.title,
         comicInfo: {

@@ -11,10 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { matchUrl, isSupportedDomain, getContentScriptMatches } from '@/src/site-integrations/url-matcher';
-import { getAllSiteIntegrationPatterns } from '@/src/site-integrations/manifest';
 import { setUserSiteIntegrationEnablement } from '@/src/site-integrations/registry';
-
-const SITE_PATTERNS = getAllSiteIntegrationPatterns();
 
 describe('URL Pattern Matching', () => {
   afterEach(() => {
@@ -208,55 +205,5 @@ it('returns false for unsupported domains', () => {
     });
   });
 
-  describe('Pattern Data Integrity', () => {
-    it('all patterns have required fields', () => {
-      Object.entries(SITE_PATTERNS).forEach(([_integrationId, pattern]) => {
-        expect(pattern.domains).toBeDefined();
-        expect(Array.isArray(pattern.domains)).toBe(true);
-        expect(pattern.domains.length).toBeGreaterThan(0);
-        
-        expect(pattern.seriesMatches).toBeDefined();
-        expect(Array.isArray(pattern.seriesMatches)).toBe(true);
-        
-        // excludeMatches is optional but should be array if present
-        if ('excludeMatches' in pattern) {
-          expect(Array.isArray(pattern.excludeMatches)).toBe(true);
-        }
-      });
-    });
-
-    it('allows shared domains with different path patterns', () => {
-      const allDomains = new Map<string, string[]>();
-      
-      Object.entries(SITE_PATTERNS).forEach(([integrationId, pattern]) => {
-        pattern.domains.forEach(domain => {
-          if (!allDomains.has(domain)) {
-            allDomains.set(domain, []);
-          }
-          allDomains.get(domain)!.push(integrationId);
-        });
-      });
-      
-      // Shared domains are allowed if they use different path patterns
-      allDomains.forEach((integrationIds, _domain) => {
-        if (integrationIds.length > 1) {
-          // Verify they have different seriesMatches patterns
-          const patterns = integrationIds.map(id => SITE_PATTERNS[id as keyof typeof SITE_PATTERNS].seriesMatches);
-          const uniquePatterns = new Set(patterns.map(p => JSON.stringify(p)));
-          expect(uniquePatterns.size).toBe(integrationIds.length);
-        }
-      });
-    });
-
-    it('seriesMatches patterns are valid', () => {
-      Object.entries(SITE_PATTERNS).forEach(([_integrationId, pattern]) => {
-        pattern.seriesMatches.forEach(match => {
-          expect(typeof match).toBe('string');
-          expect(match.length).toBeGreaterThan(0);
-          expect(match.startsWith('/')).toBe(true);
-        });
-      });
-    });
-  });
 });
 

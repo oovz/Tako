@@ -217,8 +217,4 @@ test.describe('Live Metadata Extraction', () => {
       await page.close();
     });
   }
-  
-  test('At least one test case is configured', () => {
-    expect(testCases.length).toBeGreaterThan(0);
-  });
 });

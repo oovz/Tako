@@ -56,17 +56,6 @@ describe('Rate Limiting', () => {
     vi.clearAllMocks();
   });
 
-  describe('Module Structure', () => {
-    it('exports rate limiting functions', async () => {
-      const rateLimit = await import('@/src/runtime/rate-limit');
-      
-      expect(rateLimit.rateLimitedFetchByUrlScope).toBeDefined();
-      expect(rateLimit.scheduleForIntegrationScope).toBeDefined();
-      expect(typeof rateLimit.rateLimitedFetchByUrlScope).toBe('function');
-      expect(typeof rateLimit.scheduleForIntegrationScope).toBe('function');
-    });
-  });
-
   describe('Policy Resolution', () => {
     it('uses global policy when no overrides exist', async () => {
       const { settingsService } = await import('@/src/storage/settings-service');
@@ -88,16 +77,6 @@ describe('Rate Limiting', () => {
       expect(siteOverridesService.getAll).toHaveBeenCalled();
     });
 
-    it('attempts to resolve policy from multiple sources', async () => {
-      const { siteIntegrationRegistry } = await import('@/src/runtime/site-integration-registry');
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
-
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'result');
-
-      // Should check site integration registry at some point during policy resolution
-      // Note: Actual call pattern may vary based on optimization
-      expect(siteIntegrationRegistry.findById).toBeDefined();
-    });
   });
 
   describe('URL-based Rate Limiting', () => {

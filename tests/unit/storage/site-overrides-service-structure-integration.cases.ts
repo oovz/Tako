@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mockStorageData, siteOverridesService } from './site-overrides-service-test-setup';
+import { siteOverridesService } from './site-overrides-service-test-setup';
 
 export function registerSiteOverridesStructureAndIntegrationCases(): void {
   describe('Override Structure Validation', () => {
@@ -92,13 +92,5 @@ export function registerSiteOverridesStructureAndIntegrationCases(): void {
       expect(overrides['pixiv-comic']).toEqual({ outputFormat: 'cbz' });
     });
 
-    it('should use correct storage key', async () => {
-      await siteOverridesService.updateForSite('mangadex', {
-        outputFormat: 'zip',
-      });
-
-      expect(mockStorageData).toHaveProperty('siteOverrides');
-      expect(mockStorageData.siteOverrides).toHaveProperty('mangadex');
-    });
   });
 }

@@ -18,6 +18,7 @@ export interface StartDownloadPayload {
     index: number
     chapterLabel?: string
     chapterNumber?: number
+    volumeId?: string
     volumeLabel?: string
     volumeNumber?: number
     language?: string
@@ -66,6 +67,7 @@ export async function enqueueStartDownloadTask(
       language: chapter.language,
       chapterLabel: normalizedChapterLabel,
       chapterNumber: typeof chapter.chapterNumber === 'number' ? chapter.chapterNumber : undefined,
+      volumeId: chapter.volumeId ? sanitizeLabel(chapter.volumeId) : undefined,
       volumeNumber: typeof chapter.volumeNumber === 'number' ? chapter.volumeNumber : undefined,
       volumeLabel: normalizedVolumeLabel,
       status: 'queued',

@@ -57,6 +57,9 @@ function normalizeRawChapter(value: unknown): InitializeTabRawChapter | null {
       ? value.chapterLabel.trim()
       : undefined,
     chapterNumber: typeof value.chapterNumber === 'number' ? value.chapterNumber : undefined,
+    volumeId: typeof value.volumeId === 'string' && value.volumeId.trim().length > 0
+      ? value.volumeId.trim()
+      : undefined,
     volumeNumber: typeof value.volumeNumber === 'number' ? value.volumeNumber : undefined,
     volumeLabel: typeof value.volumeLabel === 'string' && value.volumeLabel.trim().length > 0
       ? value.volumeLabel.trim()
@@ -206,6 +209,7 @@ export function resolveInitializeTabPayload(
       locked: chapter.locked === true,
       chapterLabel: chapter.chapterLabel,
       chapterNumber: chapter.chapterNumber,
+      volumeId: chapter.volumeId,
       volumeNumber: chapter.volumeNumber,
       volumeLabel: chapter.volumeLabel,
       language: chapter.language,

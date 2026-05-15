@@ -27,6 +27,7 @@ export function buildStartDownloadMessage(input: {
         index: chapter.index,
         chapterLabel: chapter.chapterLabel,
         chapterNumber: chapter.chapterNumber,
+        volumeId: chapter.volumeId,
         volumeLabel: chapter.volumeLabel,
         volumeNumber: chapter.volumeNumber,
         language: chapter.language,

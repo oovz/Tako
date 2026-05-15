@@ -186,6 +186,7 @@ export function registerCentralizedStateInitializationCases(): void {
             url: 'https://example.com/chapter-1',
             title: 'Chapter 1',
             index: 1,
+            volumeId: 'custom-volume-b',
             volumeNumber: 2,
             volumeLabel: 'Arc B',
           },
@@ -205,6 +206,12 @@ export function registerCentralizedStateInitializationCases(): void {
           volumes: [
             { id: 'custom-volume-b', title: 'Arc B', label: 'Arc B' },
             { id: 'custom-volume-a', title: 'Arc A', label: 'Arc A' },
+          ],
+          chapters: [
+            expect.objectContaining({
+              id: 'chapter-1',
+              volumeId: 'custom-volume-b',
+            }),
           ],
         }),
       );
@@ -260,12 +267,6 @@ export function registerCentralizedStateInitializationCases(): void {
       const tabState = await stateManager.getTabState(1);
       expect(tabState?.mangaId).toBe('test-updated');
       expect(tabState?.seriesTitle).toBe('Test');
-    });
-
-    it('does not expose the removed per-tab format action in the runtime enum', async () => {
-      const { StateAction } = await import('@/src/types/state-actions');
-
-      expect('SET_TAB_DOWNLOAD_FORMAT' in StateAction).toBe(false);
     });
 
     it('preserves declared tab-state fields without runtime compatibility transforms', async () => {

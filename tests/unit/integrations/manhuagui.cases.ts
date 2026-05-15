@@ -308,17 +308,18 @@ export function registerManhuaguiCases(): void {
       expect(
         chapterResult.chapters.map((chapter) => ({
           id: chapter.id,
+          volumeId: chapter.volumeId,
           volumeLabel: chapter.volumeLabel,
           volumeNumber: chapter.volumeNumber,
         })),
       ).toEqual([
-        { id: '378327', volumeLabel: '单行本', volumeNumber: 1 },
-        { id: '378328', volumeLabel: '单行本', volumeNumber: 1 },
-        { id: '378329', volumeLabel: '单行本', volumeNumber: 1 },
-        { id: '308995', volumeLabel: '番外篇', volumeNumber: 2 },
-        { id: '284921', volumeLabel: '番外篇', volumeNumber: 2 },
-        { id: '307984', volumeLabel: '单话', volumeNumber: 3 },
-        { id: '284923', volumeLabel: '单话', volumeNumber: 3 },
+        { id: '378327', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
+        { id: '378328', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
+        { id: '378329', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
+        { id: '308995', volumeId: 'manhuagui-volume-2', volumeLabel: '番外篇', volumeNumber: undefined },
+        { id: '284921', volumeId: 'manhuagui-volume-2', volumeLabel: '番外篇', volumeNumber: undefined },
+        { id: '307984', volumeId: 'manhuagui-volume-3', volumeLabel: '单话', volumeNumber: undefined },
+        { id: '284923', volumeId: 'manhuagui-volume-3', volumeLabel: '单话', volumeNumber: undefined },
       ]);
 
       restoreBrowserGlobals(snapshot);

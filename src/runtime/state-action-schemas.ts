@@ -8,6 +8,7 @@ const InitializeTabChapterSchema = z.object({
   locked: z.boolean().optional(),
   chapterLabel: z.string().min(1).optional(),
   chapterNumber: z.number().optional(),
+  volumeId: z.string().min(1).optional(),
   volumeNumber: z.number().optional(),
   volumeLabel: z.string().min(1).optional(),
   language: z.string().min(1).optional(),
