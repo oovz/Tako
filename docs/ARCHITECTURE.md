@@ -49,6 +49,9 @@ flowchart LR
 - **Site integrations stay integration-agnostic at the contract boundary**
   Shared message types stay generic. Integration-specific runtime data travels through `integrationContext`.
 
+- **Volume grouping is explicit**
+  Site integrations that know the source site's chapter categories should provide `MangaPageState.volumes[]` and set `Chapter.volumeId` to those opaque IDs. `Volume.title` / `label` and `Chapter.volumeLabel` preserve the site-visible label; `volumeNumber` is numeric metadata and fallback ordering, not identity.
+
 ## Storage model
 
 ### Durable storage
