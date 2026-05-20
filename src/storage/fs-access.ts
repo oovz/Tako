@@ -176,6 +176,12 @@ export async function checkPermissionBeforeWrite(dir: DirHandle): Promise<void> 
   }
 }
 
+const MAX_UNIQUE_FILENAME_COLLISIONS = 999;
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'NotFoundError';
+}
+
 /**
  * Generate unique filename by appending (1), (2), etc. if file exists
  * Example: "Chapter 001.cbz" → "Chapter 001 (1).cbz" → "Chapter 001 (2).cbz"
@@ -195,15 +201,18 @@ export async function generateUniqueFilename(dir: DirHandle, baseFilename: strin
       // Try to get file handle (throws if doesn't exist)
       await dir.getFileHandle(uniqueName);
       // File exists, try next number
+      if (counter > MAX_UNIQUE_FILENAME_COLLISIONS) {
+        // Safety limit to prevent infinite loop
+        throw new Error(`Cannot generate unique filename after ${MAX_UNIQUE_FILENAME_COLLISIONS} attempts for: ${baseFilename}`);
+      }
       uniqueName = `${name} (${counter})${ext}`;
       counter++;
-      if (counter > 999) {
-        // Safety limit to prevent infinite loop
-        throw new Error(`Cannot generate unique filename after 999 attempts for: ${baseFilename}`);
-      }
-    } catch {
+    } catch (error) {
       // File doesn't exist - this name is unique
-      return uniqueName;
+      if (isNotFoundError(error)) {
+        return uniqueName;
+      }
+      throw error;
     }
   }
 }
