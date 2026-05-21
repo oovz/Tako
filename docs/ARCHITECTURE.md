@@ -28,7 +28,7 @@ flowchart LR
 |---|---|---|---|
 | Background service worker | `entrypoints/background/` | Queue lifecycle, startup, storage projection, sender resolution, offscreen lifecycle, notifications | DOM-heavy work, long-lived in-memory truth |
 | Content script | `entrypoints/content/` | Supported-page detection, chapter extraction, page-scoped metadata, page-originated preference bridges when required | Global queue state, privileged Chrome download work |
-| Offscreen document | `entrypoints/offscreen/` | Image resolution, downloads, archive creation, descrambling, ComicInfo assembly, browser-download handoff | Direct storage access, global queue mutation |
+| Offscreen document | `entrypoints/offscreen/` | Image resolution, downloads, archive creation, descrambling, DOM/web-API-assisted processing, ComicInfo assembly, browser-download handoff | Direct storage access, global queue mutation, live page DOM access |
 | Side panel | `entrypoints/sidepanel/` | Command center UI, chapter selection state, active-task and history display, user-triggered commands | Direct queue mutation in storage |
 | Options page | `entrypoints/options/` | Settings editor, full history UI, maintenance flows, FSA folder coordination | Direct queue mutation in storage |
 
@@ -43,8 +43,11 @@ flowchart LR
 - **Session storage powers reactive UI**
   The side panel and options page subscribe to projected state instead of waiting for ad hoc push messages.
 
-- **Offscreen handles heavy work**
-  Archive creation, image transforms, and similar work belong in the offscreen document, not the service worker.
+- **Offscreen handles heavy document work**
+  Archive creation, image transforms, DOMParser/iframe-based scraping, and similar web-API work belong in the offscreen document, not the service worker. Chrome offscreen documents are hidden extension documents with DOM access, but their Chrome extension API surface is limited to `chrome.runtime`, so storage and privileged Chrome API work still routes through the service worker.
+
+- **Site integration runtimes are context-scoped**
+  The manifest is metadata-only. Runtime implementations are statically imported through generated context registries under `src/runtime/generated/`: `site-integration-content-registry.ts`, `site-integration-background-registry.ts`, and `site-integration-offscreen-registry.ts`. Content scripts load only `content-runtime.ts`, the service worker loads only `background-runtime.ts` for series API calls and dispatch-context preparation, and offscreen loads only `offscreen-runtime.ts` for chapter image resolution, DOM/web-API-assisted scraping, descrambling, and image downloads. Chrome MV3 service workers do not support dynamic `import()`, and manifest content scripts are statically injected only for matching URLs. If a content script needs API-backed series data, it sends `FETCH_SERIES_DATA` to the service worker instead of importing background or offscreen runtime modules directly. `scripts/generate-site-integration-registries.mjs`, ESLint rules, and `tests/unit/site-integration-context-boundaries.spec.ts` guard these boundaries.
 
 - **Site integrations stay integration-agnostic at the contract boundary**
   Shared message types stay generic. Integration-specific runtime data travels through `integrationContext`.
@@ -201,7 +204,7 @@ If a handler needs a tab ID and it can be called by an extension page, accept a 
   Start in `src/storage/`, `src/runtime/storage-keys.ts`, and the relevant background action handlers.
 
 - **Site detection or supported-site extraction**
-  Start in `src/site-integrations/`, `entrypoints/content/`, and `src/runtime/site-integration-initialization.ts`.
+  Start in `src/site-integrations/`, `entrypoints/content/`, `src/runtime/site-integration-initialization.ts`, and the generated static site-integration context registries.
 
 ## Current integration profile
 

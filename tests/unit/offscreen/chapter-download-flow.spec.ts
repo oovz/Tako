@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
-import type { BackgroundIntegration } from '@/src/types/site-integrations'
+import type { OffscreenIntegration } from '@/src/types/site-integrations'
 import { loadDownloadRootHandle, verifyPermission, writeBlobToPath } from '@/src/storage/fs-access'
 
 // Mock dependencies
@@ -112,7 +112,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
             }
         })
 
-        const mockBackgroundIntegration = {
+        const mockOffscreenIntegration = {
             id: 'test-site',
             scope: 'test',
             chapter: {
@@ -124,11 +124,11 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
                 parseImageUrlsFromHtml: async () => ['img1.jpg', 'img2.jpg'],
                 processImageUrls: async (raw: any) => raw
             }
-        } as unknown as BackgroundIntegration
+        } as unknown as OffscreenIntegration
 
         // Fix mock return value structure for findById
         vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
-            integration: { background: mockBackgroundIntegration }
+            integration: { offscreen: mockOffscreenIntegration }
         } as any)
     })
 
@@ -322,7 +322,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
             author: 'test',
             handlesOwnRetries: true,
             integration: {
-                background: {
+                offscreen: {
                     chapter: {
                         downloadImage: mockDownloadImage,
                         parseImageUrlsFromHtml: async () => ['img1.jpg'],

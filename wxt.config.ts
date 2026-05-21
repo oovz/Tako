@@ -12,6 +12,11 @@ export default defineConfig({
   // Configure Vite
   vite: () => ({
     plugins: [tailwindcss()],
+    build: {
+      // Vite's modulepreload helper touches document/window. Extension service
+      // workers have neither, and background runtimes are lazy-loaded there.
+      modulePreload: false,
+    },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./"),

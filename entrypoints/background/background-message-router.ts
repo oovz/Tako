@@ -17,6 +17,7 @@ import {
 } from '@/entrypoints/background/download-queue'
 import { processStateAction } from '@/entrypoints/background/state-action-router'
 import { handleOffscreenDownloadProgress } from '@/entrypoints/background/offscreen-progress-handler'
+import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-integration-initialization'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import {
   resolveGetTabIdResponse,
@@ -45,6 +46,7 @@ export const backgroundHandledMessages = new Set<ExtensionMessage['type']>([
   'STATE_ACTION',
   'ACKNOWLEDGE_ERROR',
   'GET_SETTINGS',
+  'FETCH_SERIES_DATA',
   'SYNC_SETTINGS_TO_STATE',
   'OFFSCREEN_DOWNLOAD_API_REQUEST',
   'RETRY_FAILED_CHAPTERS',
@@ -173,6 +175,42 @@ export async function handleBackgroundMessage(
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : 'Failed to load settings'
           return { success: false, error: message }
+        }
+      }
+      case 'FETCH_SERIES_DATA': {
+        const parsedMessage = parseActionMessage(message, 'FETCH_SERIES_DATA')
+        if (!parsedMessage) {
+          return { success: false, error: 'Invalid FETCH_SERIES_DATA payload' }
+        }
+
+        try {
+          const { siteIntegrationId, seriesId, language } = parsedMessage.payload
+          const integration = await getBackgroundSiteAdapterById(siteIntegrationId)
+          const series = integration?.background.series
+          if (!series) {
+            return { success: false, error: `Site integration ${siteIntegrationId} does not provide background series loaders` }
+          }
+
+          const [metadataResult, chapterListResult] = await Promise.allSettled([
+            series.fetchSeriesMetadata(seriesId, language),
+            series.fetchChapterList(seriesId, language),
+          ])
+
+          return {
+            success: true,
+            seriesMetadata: metadataResult.status === 'fulfilled' ? metadataResult.value : undefined,
+            chapterList: chapterListResult.status === 'fulfilled' ? chapterListResult.value : undefined,
+            metadataError: metadataResult.status === 'rejected'
+              ? metadataResult.reason instanceof Error ? metadataResult.reason.message : String(metadataResult.reason)
+              : undefined,
+            chapterListError: chapterListResult.status === 'rejected'
+              ? chapterListResult.reason instanceof Error ? chapterListResult.reason.message : String(chapterListResult.reason)
+              : undefined,
+          }
+        } catch (e: unknown) {
+          const errorMessage = e instanceof Error ? e.message : 'Failed to fetch series data'
+          logger.error('Error handling FETCH_SERIES_DATA:', e)
+          return { success: false, error: errorMessage }
         }
       }
       case 'SYNC_SETTINGS_TO_STATE': {

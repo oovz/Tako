@@ -66,6 +66,81 @@ export default defineConfig(
       ],
     },
   },
+  {
+    files: [
+      'entrypoints/background/**/*.{ts,tsx}',
+      'src/runtime/background-*.{ts,tsx}',
+      'src/runtime/site-integration-background-*.{ts,tsx}',
+      'src/runtime/generated/site-integration-background-registry.ts',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '@/src/runtime/site-integration-content-*',
+              '@/src/runtime/site-integration-offscreen-*',
+              '@/src/runtime/generated/site-integration-content-registry',
+              '@/src/runtime/generated/site-integration-offscreen-registry',
+              '@/src/site-integrations/*/content-runtime',
+              '@/src/site-integrations/*/offscreen-runtime',
+            ],
+            message: 'Background code must only import metadata and background site-integration runtimes.',
+          },
+        ],
+      }],
+    },
+  },
+  {
+    files: [
+      'entrypoints/content/**/*.{ts,tsx}',
+      'src/runtime/site-integration-content-*.{ts,tsx}',
+      'src/runtime/generated/site-integration-content-registry.ts',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '@/src/runtime/background-site-integration-initialization',
+              '@/src/runtime/site-integration-background-*',
+              '@/src/runtime/site-integration-offscreen-*',
+              '@/src/runtime/generated/site-integration-background-registry',
+              '@/src/runtime/generated/site-integration-offscreen-registry',
+              '@/src/site-integrations/*/background-runtime',
+              '@/src/site-integrations/*/offscreen-runtime',
+            ],
+            message: 'Content code must only import content site-integration runtimes.',
+          },
+        ],
+      }],
+    },
+  },
+  {
+    files: [
+      'entrypoints/offscreen/**/*.{ts,tsx}',
+      'src/runtime/site-integration-offscreen-*.{ts,tsx}',
+      'src/runtime/generated/site-integration-offscreen-registry.ts',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '@/src/runtime/background-site-integration-initialization',
+              '@/src/runtime/site-integration-background-*',
+              '@/src/runtime/site-integration-content-*',
+              '@/src/runtime/generated/site-integration-background-registry',
+              '@/src/runtime/generated/site-integration-content-registry',
+              '@/src/site-integrations/*/background-runtime',
+              '@/src/site-integrations/*/content-runtime',
+            ],
+            message: 'Offscreen code must only import offscreen site-integration runtimes.',
+          },
+        ],
+      }],
+    },
+  },
   ...typeCheckedConfigs,
   // Scripts: Node.js environment with relaxed rules
   {

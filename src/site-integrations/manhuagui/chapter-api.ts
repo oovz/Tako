@@ -7,9 +7,9 @@ import {
 } from '@/src/runtime/rate-limit';
 import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
 import { resolveImageUrlsFromChapterHtml } from './chapter-viewer';
 import { MANHUAGUI_BASE_URL } from './shared';
+import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
 
 /**
  * Fetch the chapter viewer HTML and reconstruct the signed image URL list.

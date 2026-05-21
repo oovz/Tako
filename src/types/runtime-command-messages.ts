@@ -1,5 +1,6 @@
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots';
+import type { SeriesMetadata } from '@/src/types/series-metadata';
 import type { ErrorResponse } from '@/src/types/message-common';
 
 export interface AcknowledgeErrorMessage {
@@ -35,6 +36,23 @@ export interface SyncSettingsToStateMessage {
 }
 
 export type SyncSettingsToStateResponse = { success: true } | ErrorResponse;
+
+export interface FetchSeriesDataMessage {
+  type: 'FETCH_SERIES_DATA';
+  payload: {
+    siteIntegrationId: string;
+    seriesId: string;
+    language?: string;
+  };
+}
+
+export type FetchSeriesDataResponse = ({
+  success: true;
+  seriesMetadata?: SeriesMetadata;
+  chapterList?: unknown;
+  metadataError?: string;
+  chapterListError?: string;
+}) | ErrorResponse;
 
 export interface RetryFailedChaptersMessage {
   type: 'RETRY_FAILED_CHAPTERS';

@@ -13,7 +13,7 @@ import {
 } from './download-queue-finalization';
 import { destinationService } from './destination';
 import { resolveEffectivePolicy, scheduleForIntegrationScope } from '@/src/runtime/rate-limit';
-import { getSiteIntegrationById } from '@/src/runtime/site-integration-initialization';
+import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-integration-initialization';
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 
@@ -149,10 +149,10 @@ export async function startDownloadTask(
         const seriesKey = composeSeriesKey(dispatchPlan.book.siteId, dispatchPlan.book.seriesId);
         let integrationContext: Record<string, unknown> | undefined;
         try {
-          const integration = await getSiteIntegrationById(dispatchPlan.book.siteId);
-          const backgroundIntegration = integration?.background;
-          if (backgroundIntegration?.prepareDispatchContext) {
-            integrationContext = await backgroundIntegration.prepareDispatchContext({
+          const integration = await getBackgroundSiteAdapterById(dispatchPlan.book.siteId);
+          const backgroundSiteAdapter = integration?.background;
+          if (backgroundSiteAdapter?.prepareDispatchContext) {
+            integrationContext = await backgroundSiteAdapter.prepareDispatchContext({
               taskId,
               seriesKey,
               chapter,

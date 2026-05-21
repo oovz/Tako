@@ -29,10 +29,13 @@ export async function prefetchCoverImage(input: {
       return undefined
     }
 
-    const backgroundIntegration = integrationInfo.integration.background
+    const OffscreenIntegration = integrationInfo.integration.offscreen
+    if (!OffscreenIntegration) {
+      return undefined
+    }
     const result = await withImageRetries<ChapterDownloadImageResult>(() =>
       scheduleForIntegrationScope(integrationId, 'image', () =>
-        backgroundIntegration.chapter.downloadImage(coverUrl, {
+        OffscreenIntegration.chapter.downloadImage(coverUrl, {
           context: {
             ...(integrationContext ?? {}),
             ...(rateLimitSettings ? { rateLimitSettings } : {}),

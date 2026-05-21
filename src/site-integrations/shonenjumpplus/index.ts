@@ -7,11 +7,11 @@ import {
   rateLimitedFetchByUrlScope,
 } from '@/src/runtime/rate-limit';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { filterValidImageUrls, normalizeAllowedImageMimeType, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import {
   extractImageUrlsFromEpisodeJsonScript,
   readEpisodeJsonSeriesMetadataFromDocument,
 } from './episode-json';
+import { filterValidImageUrls, normalizeAllowedImageMimeType, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 
 const encodeSeed = (seed: number): string => {
   const seedText = String(seed);
@@ -276,7 +276,7 @@ function readTextBySelectors(selectors: string[]): string | undefined {
   return undefined;
 }
 
-const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
+export const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
   name: 'Shonen Jump+ Content',
   series: {
     getSeriesId(): string {
@@ -377,7 +377,7 @@ const shonenJumpPlusContentIntegration: ContentScriptIntegration = {
   },
 };
 
-const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
+export const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
   name: 'Shonen Jump+ Background',
   chapter: {
     async resolveImageUrls(chapter, _context, settingsSnapshot): Promise<string[]> {

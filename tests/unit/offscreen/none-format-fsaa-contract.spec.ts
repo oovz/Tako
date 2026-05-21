@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
-import type { BackgroundIntegration } from '@/src/types/site-integrations'
+import type { OffscreenIntegration } from '@/src/types/site-integrations'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { loadDownloadRootHandle, verifyPermission, writeBlobToPath } from '@/src/storage/fs-access'
 
@@ -106,7 +106,7 @@ describe('NONE format + FSAA custom folder contract (behavior-based)', () => {
       mimeType: 'image/jpeg',
     }))
 
-    const mockBackgroundIntegration = {
+    const mockOffscreenIntegration = {
       id: 'test-site',
       scope: 'test',
       chapter: {
@@ -115,10 +115,10 @@ describe('NONE format + FSAA custom folder contract (behavior-based)', () => {
         parseImageUrlsFromHtml: async () => ['img1.jpg', 'img2.jpg'],
         processImageUrls: async (raw: unknown) => raw,
       },
-    } as unknown as BackgroundIntegration
+    } as unknown as OffscreenIntegration
 
     vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
-      integration: { background: mockBackgroundIntegration },
+      integration: { offscreen: mockOffscreenIntegration },
     } as never)
   })
 

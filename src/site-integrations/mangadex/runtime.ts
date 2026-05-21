@@ -1,1 +1,0 @@
-export { mangadexIntegration } from './index'

@@ -178,7 +178,7 @@ describe('site-integration-initialization full integration lookup', () => {
         vi.unstubAllGlobals()
     })
 
-    it('upgrades metadata-only registrations when a full integration is requested', async () => {
+    it('upgrades metadata-only registrations when a background integration is requested', async () => {
         vi.resetModules()
 
         const registry = new Map<string, unknown>()
@@ -212,22 +212,98 @@ describe('site-integration-initialization full integration lookup', () => {
             },
         })
 
-        const { getSiteIntegrationById } = await import('@/src/runtime/site-integration-initialization')
+        const { getBackgroundSiteAdapterById } = await import('@/src/runtime/background-site-integration-initialization')
 
-        const integration = await getSiteIntegrationById('pixiv-comic')
+        const integration = await getBackgroundSiteAdapterById('pixiv-comic')
 
         expect(integration?.background.prepareDispatchContext).toEqual(expect.any(Function))
-        expect(registerSiteIntegration).toHaveBeenCalledWith(
+        expect('chapter' in (integration?.background ?? {})).toBe(false)
+        const backgroundRegistration = registerSiteIntegration.mock.calls
+            .map(([info]) => info)
+            .find((info: { id?: string; integration?: unknown }) => info.id === 'pixiv-comic' && info.integration)
+        expect(backgroundRegistration).toEqual(
             expect.objectContaining({
                 id: 'pixiv-comic',
                 integration: expect.objectContaining({
                     id: 'pixiv-comic',
-                    background: expect.objectContaining({
-                        prepareDispatchContext: expect.any(Function),
+                    background: expect.not.objectContaining({
+                        chapter: expect.anything(),
                     }),
                 }),
             }),
         )
+        expect((backgroundRegistration as { integration?: { content?: unknown } }).integration?.content).toBeUndefined()
+    })
+
+    it('registers offscreen chapter runtimes separately from service-worker runtimes', async () => {
+        vi.resetModules()
+
+        const registry = new Map<string, unknown>()
+        const registerSiteIntegration = vi.fn((info: { id: string; integration?: unknown }) => {
+            const existing = registry.get(info.id) as { integration?: Record<string, unknown> } | undefined
+            registry.set(info.id, existing && info.integration
+                ? {
+                    ...existing,
+                    ...info,
+                    integration: {
+                        ...(existing.integration ?? {}),
+                        ...(info.integration as Record<string, unknown>),
+                    },
+                }
+                : info)
+        })
+
+        vi.doMock('@/src/runtime/site-integration-registry', () => ({
+            registerSiteIntegration,
+            siteIntegrationRegistry: {
+                findById: vi.fn((id: string) => registry.get(id) ?? null),
+            },
+        }))
+        vi.doMock('@/src/runtime/logger', () => ({
+            default: {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+            },
+        }))
+
+        vi.stubGlobal('chrome', {
+            runtime: {},
+        })
+
+        const {
+            initializeOffscreenSiteIntegrations,
+        } = await import('@/src/runtime/site-integration-offscreen-initialization')
+
+        await initializeOffscreenSiteIntegrations()
+
+        const pixivRegistration = registry.get('pixiv-comic') as {
+            integration?: {
+                background?: unknown
+                offscreen?: { chapter?: unknown }
+            }
+        }
+        expect(pixivRegistration.integration?.offscreen?.chapter).toEqual(expect.any(Object))
+        expect(pixivRegistration.integration?.background).toBeUndefined()
+    })
+
+    it('all enabled manifests stay metadata-only', async () => {
+        const { SITE_INTEGRATION_MANIFESTS } = await import('@/src/site-integrations/manifest')
+
+        for (const manifest of SITE_INTEGRATION_MANIFESTS) {
+            if (manifest.enabled === false) {
+                continue
+            }
+
+            expect('runtimePath' in manifest).toBe(false)
+            expect('contentImportPath' in manifest).toBe(false)
+            expect('contentExportName' in manifest).toBe(false)
+            expect('backgroundImportPath' in manifest).toBe(false)
+            expect('backgroundExportName' in manifest).toBe(false)
+            expect('offscreenImportPath' in manifest).toBe(false)
+            expect('offscreenExportName' in manifest).toBe(false)
+        }
     })
 })
 

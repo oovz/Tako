@@ -1,12 +1,15 @@
 import logger from '@/src/runtime/logger'
 import { findSiteIntegrationForUrl } from '@/src/runtime/site-integration-registry'
+import { initializeContentSiteIntegrations } from '@/src/runtime/site-integration-content-initialization'
 import { sendStateAction } from '@/src/runtime/centralized-state'
 import { consumeRecentExternalTabInitialization } from '@/src/runtime/external-tab-init'
 import type { SeriesMetadata } from '@/src/types/series-metadata'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
-import type { SiteIntegration } from '@/src/types/site-integrations'
+import type { ContentSiteAdapter } from '@/src/types/site-integrations'
+import type { FetchSeriesDataMessage, FetchSeriesDataResponse } from '@/src/types/runtime-command-messages'
 import { StateAction } from '@/src/types/state-actions'
 import type {
+  BackgroundSeriesDataResponse,
   ContentScriptGlobal,
   InitializeTabRawChapter,
   InitializeTabRawVolume,
@@ -21,6 +24,28 @@ import {
 } from '@/entrypoints/content/content-helpers'
 
 const contentScriptGlobal = globalThis as ContentScriptGlobal
+
+async function requestBackgroundSeriesData(
+  siteIntegrationId: string,
+  seriesId: string,
+  language?: string,
+): Promise<BackgroundSeriesDataResponse> {
+  const response = await chrome.runtime.sendMessage<FetchSeriesDataMessage, FetchSeriesDataResponse>({
+    type: 'FETCH_SERIES_DATA',
+    payload: {
+      siteIntegrationId,
+      seriesId,
+      language,
+    },
+  })
+
+  if (!response?.success) {
+    const message = typeof response?.error === 'string' ? response.error : 'Failed to fetch series data'
+    throw new Error(message)
+  }
+
+  return response as BackgroundSeriesDataResponse
+}
 
 export function initializeContentScript() {
   const existingInstance = contentScriptGlobal.__takoContentScriptInstance
@@ -42,7 +67,7 @@ export function initializeContentScript() {
   class MangaDownloaderContent {
     private initialized = false
     private tabId: number | null = null
-    private activeIntegration: SiteIntegration | null = null
+    private activeIntegration: ContentSiteAdapter | null = null
     private activeIntegrationId: string | null = null
     private isInitializing = false
     private isPageHidden = false
@@ -61,17 +86,19 @@ export function initializeContentScript() {
         return false
       }
 
-      const { initializeSiteIntegrations } = await import('@/src/runtime/site-integration-initialization')
-      await initializeSiteIntegrations()
+      await initializeContentSiteIntegrations()
 
       const integrationInfo = findSiteIntegrationForUrl(url)
-      if (!integrationInfo?.integration) {
+      if (!integrationInfo?.integration?.content) {
         this.activeIntegration = null
         this.activeIntegrationId = null
         return false
       }
 
-      this.activeIntegration = integrationInfo.integration
+      this.activeIntegration = {
+        id: integrationInfo.integration.id,
+        content: integrationInfo.integration.content,
+      }
       this.activeIntegrationId = integrationInfo.id
       return true
     }
@@ -156,7 +183,7 @@ export function initializeContentScript() {
         let extractionError: unknown
 
         if (rawMangaId) {
-          const seriesDataStrategy = resolveSeriesDataStrategy(this.activeIntegration)
+          const seriesDataStrategy = resolveSeriesDataStrategy(this.activeIntegration, requestBackgroundSeriesData)
 
           if (seriesDataStrategy.kind !== 'content-dom') {
             logger.debug('content: using non-DOM series loader', {
@@ -164,21 +191,22 @@ export function initializeContentScript() {
               strategy: seriesDataStrategy.kind,
             })
             try {
-              seriesMetadata = await seriesDataStrategy.fetchSeriesMetadata(rawMangaId)
-              logger.debug('content: API metadata', seriesMetadata)
-            } catch (error) {
-              extractionError ??= error
-              logger.warn('content: fetchSeriesMetadata failed', error)
-            }
-            try {
-              const fetchedChapters = await seriesDataStrategy.fetchChapterList(rawMangaId)
-              const normalizedSeriesData = normalizeFetchedSeriesData(fetchedChapters)
+              const fetchedSeriesData = await seriesDataStrategy.fetchSeriesData(rawMangaId)
+              seriesMetadata = fetchedSeriesData.seriesMetadata
+              if (!seriesMetadata && fetchedSeriesData.metadataError) {
+                extractionError ??= new Error(fetchedSeriesData.metadataError)
+              }
+              if (fetchedSeriesData.chapterListError) {
+                extractionError ??= new Error(fetchedSeriesData.chapterListError)
+              }
+              const normalizedSeriesData = normalizeFetchedSeriesData(fetchedSeriesData.chapterList)
               chapters = normalizedSeriesData.chapters
               volumes = normalizedSeriesData.volumes
+              logger.debug('content: API metadata', seriesMetadata)
               logger.debug('content: API chapters count', chapters.length)
             } catch (error) {
               extractionError ??= error
-              logger.warn('content: fetchChapterList failed', error)
+              logger.warn('content: fetchSeriesData failed', error)
             }
           } else {
             logger.debug('content: using DOM-based site integration', siteIntegrationId)

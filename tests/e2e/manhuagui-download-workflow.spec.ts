@@ -19,6 +19,7 @@
  */
 
 import { test, expect } from './fixtures/extension';
+import type { BrowserContext } from '@playwright/test';
 import {
   getTabId,
   waitForTabSeriesTitle,
@@ -36,8 +37,50 @@ import {
   waitForTerminalTask,
 } from './fixtures/download-workflow-helpers';
 
+async function readExtensionSessionRules(context: BrowserContext, extensionId: string) {
+  const worker = context.serviceWorkers().find((candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`))
+    ?? await context.waitForEvent('serviceworker', {
+      timeout: 10_000,
+      predicate: (candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`),
+    });
+
+  return await worker.evaluate(async () => chrome.declarativeNetRequest.getSessionRules());
+}
+
 test.describe('Manhuagui download workflow (mocked)', () => {
   test.describe.configure({ timeout: 120_000 });
+
+  test('installs the Hamreus image referer rewrite needed by extension-context downloads', async ({ context, extensionId }) => {
+    const rules = await readExtensionSessionRules(context, extensionId);
+    const manhuaguiRule = rules.find((rule) => rule.id === 41002);
+
+    expect(manhuaguiRule).toEqual(
+      expect.objectContaining({
+        action: expect.objectContaining({
+          requestHeaders: [
+            {
+              header: 'referer',
+              operation: 'set',
+              value: 'https://www.manhuagui.com/',
+            },
+          ],
+        }),
+        condition: expect.objectContaining({
+          requestDomains: expect.arrayContaining([
+            'i.hamreus.com',
+            'eu.hamreus.com',
+            'eu1.hamreus.com',
+            'eu2.hamreus.com',
+            'us.hamreus.com',
+            'us1.hamreus.com',
+            'us2.hamreus.com',
+            'us3.hamreus.com',
+          ]),
+          resourceTypes: expect.arrayContaining(['xmlhttprequest', 'other']),
+        }),
+      }),
+    );
+  });
 
   test('completes a single-chapter download through the packed-payload pipeline', async ({ context, extensionId, page }) => {
     const series = Manhuagui.BASIC_SERIES.series;

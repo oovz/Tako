@@ -4,6 +4,8 @@ import type {
   AcknowledgeErrorResponse,
   ClearAllHistoryMessage,
   ClearAllHistoryResponse,
+  FetchSeriesDataMessage,
+  FetchSeriesDataResponse,
   GetSettingsMessage,
   GetSettingsResponse,
   GetTabIdMessage,
@@ -39,6 +41,7 @@ import type { StateActionMessage, StateActionResponse } from '@/src/types/state-
 export type ExtensionMessage =
   | GetTabIdMessage
   | GetSettingsMessage
+  | FetchSeriesDataMessage
   | SyncSettingsToStateMessage
   | AcknowledgeErrorMessage
   | OffscreenStatusMessage
@@ -58,6 +61,7 @@ export type ExtensionMessage =
 export type ExtensionMessageResponse =
   | GetTabIdResponse
   | GetSettingsResponse
+  | FetchSeriesDataResponse
   | SyncSettingsToStateResponse
   | AcknowledgeErrorResponse
   | OffscreenStatusResponse

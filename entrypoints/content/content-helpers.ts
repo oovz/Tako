@@ -7,6 +7,7 @@ import type {
   InitializeTabRawChapter,
   InitializeTabRawVolume,
   NormalizedSeriesData,
+  RequestBackgroundSeriesData,
   ResolveInitializeTabPayloadInput,
   SeriesDataStrategy,
 } from '@/entrypoints/content/content-types'
@@ -19,17 +20,21 @@ export function resolvePageReadyHook(
 
 export function resolveSeriesDataStrategy(
   integration: ContentSiteIntegration,
+  requestBackgroundSeriesData?: RequestBackgroundSeriesData,
 ): SeriesDataStrategy {
-  const backgroundSeries = integration.background.series
+  const contentSeries = integration.content.series
   if (
-    backgroundSeries
-    && typeof backgroundSeries.fetchSeriesMetadata === 'function'
-    && typeof backgroundSeries.fetchChapterList === 'function'
+    typeof contentSeries.extractChapterList === 'function'
+    || typeof contentSeries.extractSeriesMetadata === 'function'
   ) {
+    return { kind: 'content-dom' }
+  }
+
+  if (requestBackgroundSeriesData) {
     return {
-      kind: 'background',
-      fetchSeriesMetadata: (seriesId, language) => backgroundSeries.fetchSeriesMetadata(seriesId, language),
-      fetchChapterList: (seriesId, language) => backgroundSeries.fetchChapterList(seriesId, language),
+      kind: 'background-message',
+      fetchSeriesData: (seriesId, language) =>
+        requestBackgroundSeriesData(integration.id, seriesId, language),
     }
   }
 

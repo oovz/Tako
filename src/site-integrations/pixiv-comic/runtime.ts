@@ -1,1 +1,0 @@
-export { pixivComicIntegration } from './index'

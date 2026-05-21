@@ -25,7 +25,7 @@ export {
   setCachedMangadexPreferences,
 } from './preferences'
 
-const mangadexContentIntegration: ContentScriptIntegration = {
+export const mangadexContentIntegration: ContentScriptIntegration = {
   name: 'MangaDex API Content',
   series: {
     getSeriesId(): string {
@@ -42,7 +42,7 @@ const mangadexContentIntegration: ContentScriptIntegration = {
   },
 }
 
-const mangadexBackgroundIntegration: BackgroundIntegration = {
+export const mangadexBackgroundIntegration: BackgroundIntegration = {
   name: 'MangaDex API Background',
   series: {
     fetchSeriesMetadata: fetchMangadexSeriesMetadata,

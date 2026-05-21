@@ -9,11 +9,11 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/runtime/site-integration-initialization', () => ({
-  initializeSiteIntegrations: vi.fn(),
+vi.mock('@/src/runtime/site-integration-offscreen-initialization', () => ({
+  initializeOffscreenSiteIntegrations: vi.fn(),
 }))
 
-import { initializeSiteIntegrations } from '@/src/runtime/site-integration-initialization'
+import { initializeOffscreenSiteIntegrations } from '@/src/runtime/site-integration-offscreen-initialization'
 
 describe('offscreen entrypoint initialization failure handling', () => {
   const addListener = vi.fn()
@@ -57,7 +57,7 @@ describe('offscreen entrypoint initialization failure handling', () => {
   })
 
   it('flushes queued responses and fails closed after offscreen initialization fails', async () => {
-    vi.mocked(initializeSiteIntegrations).mockRejectedValueOnce(new Error('registry init failed'))
+    vi.mocked(initializeOffscreenSiteIntegrations).mockRejectedValueOnce(new Error('registry init failed'))
 
     await import('@/entrypoints/offscreen/main')
 

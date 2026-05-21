@@ -27,7 +27,7 @@ export interface ContentScriptIntegration {
   };
 }
 
-export interface BackgroundIntegration {
+export interface ServiceWorkerIntegration {
   name: string;
   series?: {
     fetchSeriesMetadata(seriesId: string, language?: string): Promise<SeriesMetadata>;
@@ -39,6 +39,9 @@ export interface BackgroundIntegration {
     chapter: Chapter;
     settingsSnapshot: TaskSettingsSnapshot;
   }) => Promise<Record<string, unknown> | undefined>;
+}
+
+export interface ChapterImageIntegration {
   chapter: {
     /**
      * Canonical image-resolution path.
@@ -66,8 +69,34 @@ export interface BackgroundIntegration {
   };
 }
 
-export interface SiteIntegration {
+export type BackgroundIntegration = ServiceWorkerIntegration & ChapterImageIntegration;
+
+export interface OffscreenIntegration extends ChapterImageIntegration {
+  name: string;
+}
+
+export interface ContentSiteAdapter {
   id: string;
   content: ContentScriptIntegration;
+}
+
+export interface BackgroundSiteAdapter {
+  id: string;
+  background: ServiceWorkerIntegration;
+}
+
+export interface OffscreenSiteAdapter {
+  id: string;
+  offscreen: OffscreenIntegration;
+}
+
+export interface SiteIntegration extends ContentSiteAdapter {
   background: BackgroundIntegration;
 }
+
+export type RuntimeSiteIntegration = {
+  id: string;
+  content?: ContentScriptIntegration;
+  background?: ServiceWorkerIntegration;
+  offscreen?: OffscreenIntegration;
+};

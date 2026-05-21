@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { BackgroundIntegration } from '@/src/types/site-integrations'
+import type { OffscreenIntegration } from '@/src/types/site-integrations'
 import { writeBlobToPath } from '@/src/storage/fs-access'
 
 vi.mock('@/src/runtime/site-integration-registry', () => ({
@@ -107,7 +107,7 @@ describe('NONE format + browser downloads contract (behavior-based)', () => {
       mimeType: 'image/jpeg',
     }))
 
-    const mockBackgroundIntegration = {
+    const mockOffscreenIntegration = {
       id: 'test-site',
       scope: 'test',
       chapter: {
@@ -116,10 +116,10 @@ describe('NONE format + browser downloads contract (behavior-based)', () => {
         parseImageUrlsFromHtml: async () => ['img1.jpg', 'img2.jpg'],
         processImageUrls: async (raw: unknown) => raw,
       },
-    } as unknown as BackgroundIntegration
+    } as unknown as OffscreenIntegration
 
     vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
-      integration: { background: mockBackgroundIntegration },
+      integration: { offscreen: mockOffscreenIntegration },
     } as never)
   })
 

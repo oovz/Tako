@@ -1,4 +1,3 @@
-import { sanitizeLabel } from '@/src/shared/site-integration-utils';
 import { decompressFromBase64 } from './lz-string';
 import {
   fetchReaderConfig,
@@ -7,6 +6,7 @@ import {
 } from './reader-config';
 import type { EffectivePolicy } from '@/src/runtime/rate-limit';
 import { DEFAULT_IMAGE_PROTOCOL } from './shared';
+import { sanitizeLabel } from '@/src/shared/site-integration-utils';
 
 /**
  * The subset of `SMH.imgData({...})` fields the viewer URL builder consumes.

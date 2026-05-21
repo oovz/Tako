@@ -13,6 +13,7 @@ import {
   fetchChapterHtml
 } from './image-processor'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
+import { initializeOffscreenSiteIntegrations } from '@/src/runtime/site-integration-offscreen-initialization'
 import logger from '@/src/runtime/logger'
 import {
   type ArchiveNormalizationSettings,
@@ -43,8 +44,9 @@ import { classifyOffscreenErrorCategory } from './error-categories'
 import { registerOffscreenRuntime } from './runtime-bridge'
 import { createOffscreenStatusController } from './status-ui'
 
-// Chrome extension offscreen document: Only chrome.runtime API is available
-// All storage operations must be requested from the service worker via messaging
+// Chrome extension offscreen document: DOM/web APIs are available here, but
+// chrome.runtime is the only Chrome extension API exposed to this context.
+// All storage operations must be requested from the service worker via messaging.
 
 // Performance memory API types (Chrome-specific)
 interface PerformanceMemory {
@@ -90,8 +92,7 @@ export class OffscreenWorker {
 
       // Initialize site integration registry first (required for findSiteIntegrationForUrl)
       logger.debug('🔌 Initializing site integration registry in offscreen...')
-      const { initializeSiteIntegrations } = await import('@/src/runtime/site-integration-initialization')
-      await initializeSiteIntegrations()
+      await initializeOffscreenSiteIntegrations()
 
       logger.debug('✅ Offscreen worker initialized - ready for centralized processing')
 
@@ -266,26 +267,26 @@ export class OffscreenWorker {
       }
 
       const integrationInfo = siteIntegrationRegistry.findById(integrationId)
-      if (!integrationInfo || !integrationInfo.integration) {
+      if (!integrationInfo || !integrationInfo.integration?.offscreen) {
         throw new Error(`No site integration found for ID: ${integrationId}`)
       }
 
-      const backgroundIntegration = integrationInfo.integration.background
-      const downloadImage: ChapterDownloadImageFn = (url, options) => backgroundIntegration.chapter.downloadImage(url, options)
+      const OffscreenIntegration = integrationInfo.integration.offscreen
+      const downloadImage: ChapterDownloadImageFn = (url, options) => OffscreenIntegration.chapter.downloadImage(url, options)
 
       await onProgress(5, 'fetching')
       if (abortSignal?.aborted) throw new Error('job-cancelled')
 
       const chapterRetries = this.currentRetries?.chapter ?? 1
       await onProgress(10, 'parsing')
-      const urls = backgroundIntegration.chapter.resolveImageUrls
-        ? await backgroundIntegration.chapter.resolveImageUrls(
+      const urls = OffscreenIntegration.chapter.resolveImageUrls
+        ? await OffscreenIntegration.chapter.resolveImageUrls(
           { id: chapter.id, url: chapter.url },
           opts.integrationContext,
           opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
         )
         : await (async () => {
-          const parseImageUrlsFromHtml = backgroundIntegration.chapter.parseImageUrlsFromHtml
+          const parseImageUrlsFromHtml = OffscreenIntegration.chapter.parseImageUrlsFromHtml
           if (!parseImageUrlsFromHtml) {
             throw new Error(`Site integration ${integrationId} does not implement resolveImageUrls or parseImageUrlsFromHtml`)
           }
@@ -316,7 +317,7 @@ export class OffscreenWorker {
             throw new Error(`Failed to fetch chapter HTML: ${htmlFetchErrorMessage}`)
           }
 
-          return backgroundIntegration.chapter.processImageUrls(raw, chapter)
+          return OffscreenIntegration.chapter.processImageUrls(raw, chapter)
         })()
 
       if (urls.length === 0) {
@@ -498,7 +499,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })
 
-// NOTE: Offscreen documents can ONLY use chrome.runtime API, NOT chrome.storage
+// NOTE: Offscreen documents can use DOM/web APIs, but from the Chrome extension
+// API surface they can ONLY use chrome.runtime, NOT chrome.storage.
 // The previous chrome.storage.session listener caused TypeError because chrome.storage is undefined in offscreen context
 // All work dispatch happens via chrome.runtime.sendMessage handled in processMessage() above
 

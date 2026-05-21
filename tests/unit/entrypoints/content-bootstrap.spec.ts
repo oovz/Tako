@@ -69,41 +69,34 @@ describe('resolvePageReadyHook', () => {
 })
 
 describe('resolveSeriesDataStrategy', () => {
-  it('uses canonical background.series loaders when available', async () => {
+  it('uses a background message loader when content extraction hooks are absent', async () => {
     const { resolveSeriesDataStrategy } = await import('@/entrypoints/content')
 
-    const backgroundFetchSeriesMetadata = vi.fn(async () => ({ title: 'Series' }))
-    const backgroundFetchChapterList = vi.fn(async () => ({ chapters: [], volumes: [] }))
+    const requestBackgroundSeriesData = vi.fn(async () => ({
+      seriesMetadata: { title: 'Series' },
+      chapterList: { chapters: [], volumes: [] },
+    }))
 
     const strategy = resolveSeriesDataStrategy({
+      id: 'test-site',
       content: {
         name: 'Test Content',
         series: {
           getSeriesId: () => 'series-1',
         },
       },
-      background: {
-        name: 'Test Background',
-        series: {
-          fetchSeriesMetadata: backgroundFetchSeriesMetadata,
-          fetchChapterList: backgroundFetchChapterList,
-        },
-        chapter: {
-          processImageUrls: async (urls: string[]) => urls,
-          downloadImage: async () => ({ data: new ArrayBuffer(0), filename: 'file', mimeType: 'image/png' }),
-        },
-      },
-    } as never)
+    }, requestBackgroundSeriesData)
 
-    expect(strategy.kind).toBe('background')
-    if (strategy.kind !== 'background') {
-      throw new Error('Expected canonical background strategy')
+    expect(strategy.kind).toBe('background-message')
+    if (strategy.kind !== 'background-message') {
+      throw new Error('Expected background message strategy')
     }
 
-    await expect(strategy.fetchSeriesMetadata('series-1')).resolves.toEqual({ title: 'Series' })
-    await expect(strategy.fetchChapterList('series-1')).resolves.toEqual({ chapters: [], volumes: [] })
-    expect(backgroundFetchSeriesMetadata).toHaveBeenCalledWith('series-1', undefined)
-    expect(backgroundFetchChapterList).toHaveBeenCalledWith('series-1', undefined)
+    await expect(strategy.fetchSeriesData('series-1')).resolves.toEqual({
+      seriesMetadata: { title: 'Series' },
+      chapterList: { chapters: [], volumes: [] },
+    })
+    expect(requestBackgroundSeriesData).toHaveBeenCalledWith('test-site', 'series-1', undefined)
   })
 })
 

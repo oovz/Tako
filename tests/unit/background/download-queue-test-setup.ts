@@ -53,8 +53,8 @@ vi.mock('@/src/runtime/site-integration-registry', () => ({
   },
 }));
 
-vi.mock('@/src/runtime/site-integration-initialization', () => ({
-  getSiteIntegrationById: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/src/runtime/background-site-integration-initialization', () => ({
+  getBackgroundSiteAdapterById: vi.fn().mockResolvedValue(undefined),
 }));
 
 export {

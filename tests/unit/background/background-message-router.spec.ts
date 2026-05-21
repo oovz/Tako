@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   clearAllHistory: vi.fn(),
   processStateAction: vi.fn(),
   handleOffscreenDownloadProgress: vi.fn(),
+  getBackgroundSiteAdapterById: vi.fn(),
   resolveGetTabIdResponse: vi.fn(),
   resolveSourceTabId: vi.fn(),
   isSenderFromOptionsPage: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock('@/entrypoints/background/offscreen-progress-handler', () => ({
   handleOffscreenDownloadProgress: mocks.handleOffscreenDownloadProgress,
 }))
 
+vi.mock('@/src/runtime/background-site-integration-initialization', () => ({
+  getBackgroundSiteAdapterById: mocks.getBackgroundSiteAdapterById,
+}))
+
 vi.mock('@/entrypoints/background/sender-resolution', () => ({
   resolveGetTabIdResponse: mocks.resolveGetTabIdResponse,
   resolveSourceTabId: mocks.resolveSourceTabId,
@@ -86,6 +91,7 @@ describe('handleBackgroundMessage', () => {
     vi.clearAllMocks()
     mocks.settingsGetSettings.mockResolvedValue(DEFAULT_SETTINGS)
     mocks.canonicalizeSettingsDocument.mockImplementation((value: unknown) => value)
+    mocks.getBackgroundSiteAdapterById.mockResolvedValue(undefined)
   })
 
   it('syncs centralized state from the authoritative payload without re-reading settings', async () => {
@@ -165,6 +171,55 @@ describe('handleBackgroundMessage', () => {
 
     expect(response).toEqual({ success: false, error: 'Invalid STATE_ACTION message shape' })
     expect(mocks.processStateAction).not.toHaveBeenCalled()
+  })
+
+  it('fetches API-backed series data through the background integration runtime', async () => {
+    const fetchSeriesMetadata = vi.fn(async () => ({ title: 'Series Title' }))
+    const fetchChapterList = vi.fn(async () => ({ chapters: [{ id: 'ch-1', url: 'https://example.com/ch-1', title: 'Chapter 1' }] }))
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      id: 'mangadex',
+      background: {
+        name: 'MangaDex Background',
+        series: {
+          fetchSeriesMetadata,
+          fetchChapterList,
+        },
+        chapter: {
+          processImageUrls: async (urls: string[]) => urls,
+          downloadImage: async () => ({ data: new ArrayBuffer(0), filename: 'image.png', mimeType: 'image/png' }),
+        },
+      },
+    })
+
+    const response = await handleBackgroundMessage(
+      {
+        type: 'FETCH_SERIES_DATA',
+        payload: {
+          siteIntegrationId: 'mangadex',
+          seriesId: 'series-1',
+          language: 'en',
+        },
+      } as ExtensionMessage,
+      {} as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        getStateManager: () => ({} as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(response).toEqual({
+      success: true,
+      seriesMetadata: { title: 'Series Title' },
+      chapterList: { chapters: [{ id: 'ch-1', url: 'https://example.com/ch-1', title: 'Chapter 1' }] },
+      metadataError: undefined,
+      chapterListError: undefined,
+    })
+    expect(mocks.getBackgroundSiteAdapterById).toHaveBeenCalledWith('mangadex')
+    expect(fetchSeriesMetadata).toHaveBeenCalledWith('series-1', 'en')
+    expect(fetchChapterList).toHaveBeenCalledWith('series-1', 'en')
   })
 
   it('rejects malformed OFFSCREEN_DOWNLOAD_API_REQUEST payloads before touching downloads', async () => {

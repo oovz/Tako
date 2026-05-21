@@ -23,6 +23,7 @@ Tako uses two channels:
 ```mermaid
 flowchart LR
   CS["Content Script"] -->|STATE_ACTION| SW["Service Worker"]
+  CS -->|FETCH_SERIES_DATA| SW
   SP["Side Panel"] -->|runtime commands| SW
   OP["Options Page"] -->|runtime commands| SW
   SW -->|OFFSCREEN_DOWNLOAD_CHAPTER / OFFSCREEN_CONTROL / REVOKE_BLOB_URL| OS["Offscreen Document"]
@@ -38,6 +39,7 @@ flowchart LR
 
 - `GET_TAB_ID`
 - `GET_SETTINGS`
+- `FETCH_SERIES_DATA`
 - `SYNC_SETTINGS_TO_STATE`
 - `ACKNOWLEDGE_ERROR`
 - `OFFSCREEN_STATUS`
@@ -71,6 +73,7 @@ All async handlers should resolve with a structured success or error payload.
 - `STATE_ACTION`
 - `ACKNOWLEDGE_ERROR`
 - `GET_SETTINGS`
+- `FETCH_SERIES_DATA`
 - `SYNC_SETTINGS_TO_STATE`
 - `OFFSCREEN_DOWNLOAD_API_REQUEST`
 - `RETRY_FAILED_CHAPTERS`
@@ -114,9 +117,30 @@ See `entrypoints/background/sender-resolution.ts` for the current implementation
 ### Settings and recovery
 
 - `GET_SETTINGS`
+- `FETCH_SERIES_DATA`
 - `SYNC_SETTINGS_TO_STATE`
 - `ACKNOWLEDGE_ERROR`
 - `OPEN_OPTIONS`
+
+### `FETCH_SERIES_DATA` payload and response
+
+`FETCH_SERIES_DATA` lets content scripts request service-worker-owned background-runtime series data without importing background or offscreen modules into the content bundle.
+
+The payload carries:
+
+- `siteIntegrationId`
+- `seriesId`
+- optional `language`
+
+The service worker uses the matching statically imported `background-runtime.ts`, calls `series.fetchSeriesMetadata()` and `series.fetchChapterList()` when those hooks exist, and responds with:
+
+- `success: true`
+- optional `seriesMetadata`
+- optional `chapterList`
+- optional `metadataError` when metadata fetch fails but chapter-list fetch can still run
+- optional `chapterListError` when chapter-list fetch fails but metadata fetch can still run
+
+Callers should treat missing `seriesMetadata` or `chapterList` as "not supplied by this integration or this request," not as a transport failure. A transport-level or routing failure returns `success: false` with `error`.
 
 ### Queue and task actions
 
@@ -142,7 +166,7 @@ See `entrypoints/background/sender-resolution.ts` for the current implementation
 ### Service worker to offscreen
 
 - `OFFSCREEN_DOWNLOAD_CHAPTER`
-  Sends one chapter dispatch at a time with book metadata, chapter metadata, `settingsSnapshot`, `saveMode`, and optional `integrationContext`.
+  Sends one chapter dispatch at a time with book metadata, chapter metadata, `settingsSnapshot`, `saveMode`, and optional `integrationContext`. The offscreen document resolves the matching `offscreen-runtime.ts` and uses its chapter/image hooks for the actual download work.
 
 - `OFFSCREEN_CONTROL`
   Currently used for task cancellation.

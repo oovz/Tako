@@ -1,5 +1,5 @@
-import { sanitizeLabel } from '@/src/shared/site-integration-utils'
 import type { RateLimitPolicySnapshot } from '@/src/runtime/rate-limit'
+import { sanitizeLabel } from '@/src/shared/site-integration-utils'
 
 export const PIXIV_BASE_URL = 'https://comic.pixiv.net'
 export const PIXIV_EPISODES_API_URL = `${PIXIV_BASE_URL}/api/app/episodes`

@@ -31,6 +31,14 @@ export const ActionMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('GET_SETTINGS'),
   }),
   z.object({
+    type: z.literal('FETCH_SERIES_DATA'),
+    payload: z.object({
+      siteIntegrationId: z.string().min(1),
+      seriesId: z.string().min(1),
+      language: z.string().min(1).optional(),
+    }),
+  }),
+  z.object({
     type: z.literal('SYNC_SETTINGS_TO_STATE'),
     payload: z.object({
       settings: z.record(z.string(), z.unknown()),

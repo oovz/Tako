@@ -22,7 +22,7 @@ import { parseSeriesIdFromPath } from './shared';
  * callers can compare to the other integrations (`pixiv-comic`,
  * `shonenjumpplus`, `mangadex`) without awaiting.
  */
-const manhuaguiContentIntegration: ContentScriptIntegration = {
+export const manhuaguiContentIntegration: ContentScriptIntegration = {
   name: 'Manhuagui Content',
   series: {
     getSeriesId(): string {
@@ -48,7 +48,7 @@ const manhuaguiContentIntegration: ContentScriptIntegration = {
  * around `chapter-api.ts` so message handlers and offscreen fallbacks share a
  * single implementation.
  */
-const manhuaguiBackgroundIntegration: BackgroundIntegration = {
+export const manhuaguiBackgroundIntegration: BackgroundIntegration = {
   name: 'Manhuagui Background',
   prepareDispatchContext: prepareManhuaguiDispatchContext,
   chapter: {

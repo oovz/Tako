@@ -1,8 +1,8 @@
 import logger from '@/src/runtime/logger';
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 import type { EffectivePolicy } from '@/src/runtime/rate-limit';
-import { sanitizeLabel } from '@/src/shared/site-integration-utils';
 import { toAbsoluteUrl } from './shared';
+import { sanitizeLabel } from '@/src/shared/site-integration-utils';
 
 /**
  * Weighted image host (e.g. `eu`, `us1`) used to build `{host}.hamreus.com`

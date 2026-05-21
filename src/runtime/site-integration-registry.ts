@@ -6,10 +6,12 @@
  * - Resolves SiteIntegrationInfo by URL via centralized UrlMatcher metadata.
  * - Validates site integration shape when full implementations are registered.
  *
- * Note: Initialization/loading of site integrations is performed by site-integration-initialization.ts.
+ * Note: Metadata initialization is performed by site-integration-initialization.ts.
+ * Runtime registration is performed by the context-specific initialization
+ * modules and static registries.
  */
 
-import type { SiteIntegration } from '../types/site-integrations';
+import type { RuntimeSiteIntegration } from '../types/site-integrations';
 import type { SettingsFieldSchema } from '@/src/site-integrations/manifest';
 import { matchUrl } from '../site-integrations/url-matcher'
 import logger from '@/src/runtime/logger';
@@ -18,7 +20,7 @@ export interface SiteIntegrationInfo {
   id: string;
   name: string;
   author: string;
-  integration?: SiteIntegration; // Optional for metadata-only registration in background context
+  integration?: RuntimeSiteIntegration; // Optional for metadata-only registration in background context
   // Optional site integration-level default policy (second tier after site override)
   policyDefaults?: {
     image?: { concurrency?: number; delayMs?: number };
@@ -50,14 +52,23 @@ class SiteIntegrationRegistry {
   register(info: SiteIntegrationInfo): void {
     const existing = this.integrations.get(info.id);
 
-    // Skip if already fully registered.
-    if (existing && existing.integration) {
+    const existingIntegration = existing?.integration;
+    const incomingIntegration = info.integration;
+    const existingHasContent = !!existingIntegration?.content;
+    const existingHasBackground = !!existingIntegration?.background;
+    const existingHasOffscreen = !!existingIntegration?.offscreen;
+    const incomingAddsContent = !!incomingIntegration?.content && !existingHasContent;
+    const incomingAddsBackground = !!incomingIntegration?.background && !existingHasBackground;
+    const incomingAddsOffscreen = !!incomingIntegration?.offscreen && !existingHasOffscreen;
+
+    // Skip if the incoming registration adds no new runtime surface.
+    if (existing && incomingIntegration && !incomingAddsContent && !incomingAddsBackground && !incomingAddsOffscreen) {
       logger.debug(`⏭️ Site integration ${info.id} already registered, skipping`);
       return;
     }
 
-    // Skip if re-registering metadata-only when we already have it
-    if (existing && !info.integration && !existing.integration) {
+    // Skip if re-registering metadata-only when any registration already exists.
+    if (existing && !incomingIntegration) {
       logger.debug(`⏭️ Site integration metadata ${info.id} already registered, skipping`);
       return;
     }
@@ -67,8 +78,21 @@ class SiteIntegrationRegistry {
     // Validate site integration structure
     this.validateIntegration(info);
 
+    const mergedInfo: SiteIntegrationInfo = existing && incomingIntegration
+      ? {
+          ...existing,
+          ...info,
+          integration: {
+            id: incomingIntegration.id || existing.integration?.id || info.id,
+            content: incomingIntegration.content ?? existing.integration?.content,
+            background: incomingIntegration.background ?? existing.integration?.background,
+            offscreen: incomingIntegration.offscreen ?? existing.integration?.offscreen,
+          },
+        }
+      : info;
+
     // Register site integration (URL patterns handled separately via constants)
-    this.integrations.set(info.id, info);
+    this.integrations.set(info.id, mergedInfo);
 
     logger.info(`✅ Site integration ${info.id} registered successfully`);
   }
@@ -118,18 +142,17 @@ class SiteIntegrationRegistry {
       return;
     }
     // Validate full site integration if present
-    if (!info.integration.content || !info.integration.background) {
-      throw new Error('Site integration must have both content and background implementations');
+    if (!info.integration.content && !info.integration.background && !info.integration.offscreen) {
+      throw new Error('Site integration must have content, background, or offscreen implementation');
     }
     // Validate content integration
     const content = info.integration.content;
-    if (!content.series) {
+    if (content && !content.series) {
       throw new Error('Content integration must have series implementation');
     }
-    // Validate background integration
-    const background = info.integration.background;
-    if (!background.chapter) {
-      throw new Error('Background integration must have chapter implementation');
+    const offscreen = info.integration.offscreen;
+    if (offscreen && !offscreen.chapter) {
+      throw new Error('Offscreen integration must have chapter implementation');
     }
   }
 

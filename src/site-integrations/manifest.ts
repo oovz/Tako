@@ -7,13 +7,13 @@
  * - Rate limit policies
  * - Behavioral flags (handlesOwnRetries)
  * 
- * All other systems (site-integration-initialization, url-matcher, WXT content scripts)
+ * All other systems (site-integration initialization, url-matcher, WXT content scripts)
  * derive their configuration from this manifest.
  * 
  * To add a new site integration:
  * 1. Add entry to SITE_INTEGRATION_MANIFESTS below
  * 2. Create implementation in src/site-integrations/
- * 3. Add dynamic import in site-integration-initialization.ts
+ * 3. Add the site runtime exports to the static per-context registries under src/runtime/
  */
 
 import type { RateScopePolicy } from '../types/rate-policy';
@@ -79,10 +79,17 @@ export interface SiteIntegrationManifest {
    */
   customSettings?: SettingsFieldSchema[];
 
-  // Dynamic import path for the site integration implementation
-  // Used by site-integration-initialization to lazily load site integrations
-  importPath: string;
-  exportName: string;
+  /**
+   * Runtime surfaces implemented by this integration.
+   *
+   * Generated static registries use these flags to import only the site
+   * runtime files required by each browser extension context.
+   */
+  runtimes: {
+    content: boolean;
+    background: boolean;
+    offscreen: boolean;
+  };
 }
 
 /**
@@ -139,8 +146,11 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
         defaultValue: true,
       },
     ],
-    importPath: '../site-integrations/mangadex/runtime',
-    exportName: 'mangadexIntegration',
+    runtimes: {
+      content: true,
+      background: true,
+      offscreen: true,
+    },
   },
   {
     id: 'pixiv-comic',
@@ -154,8 +164,11 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 2000 },
     },
-    importPath: '../site-integrations/pixiv-comic/runtime',
-    exportName: 'pixivComicIntegration',
+    runtimes: {
+      content: true,
+      background: true,
+      offscreen: true,
+    },
   },
   {
     id: 'shonenjumpplus',
@@ -169,8 +182,11 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 2000 },
     },
-    importPath: '../site-integrations/shonenjumpplus/runtime',
-    exportName: 'shonenJumpPlusIntegration',
+    runtimes: {
+      content: true,
+      background: true,
+      offscreen: true,
+    },
   },
   {
     id: 'manhuagui',
@@ -185,8 +201,11 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 1000 },
     },
-    importPath: '../site-integrations/manhuagui/runtime',
-    exportName: 'manhuaguiIntegration',
+    runtimes: {
+      content: true,
+      background: true,
+      offscreen: true,
+    },
   },
 
   // Keep literal types for site integration IDs

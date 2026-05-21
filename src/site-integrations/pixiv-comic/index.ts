@@ -2,14 +2,14 @@ import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, 
 import {
   downloadPixivChapterImage,
   parsePixivImageUrlsFromHtml,
-  preparePixivDispatchContext,
   processPixivImageUrls,
   resolvePixivChapterImageUrls,
 } from './chapter-api';
+import { preparePixivDispatchContext } from './background-context';
 import { resolvePixivWorkIdFromPage, waitForPixivWorkPageReady } from './page-context';
 import { fetchPixivChapterList, fetchPixivSeriesMetadata } from './series-api';
 
-const pixivComicContentIntegration: ContentScriptIntegration = {
+export const pixivComicContentIntegration: ContentScriptIntegration = {
   name: 'Pixiv Comic Content',
   series: {
     waitForPageReady: waitForPixivWorkPageReady,
@@ -23,7 +23,7 @@ const pixivComicContentIntegration: ContentScriptIntegration = {
   },
 };
 
-const pixivComicBackgroundIntegration: BackgroundIntegration = {
+export const pixivComicBackgroundIntegration: BackgroundIntegration = {
   name: 'Pixiv Comic Background',
   series: {
     fetchSeriesMetadata: fetchPixivSeriesMetadata,

@@ -1,5 +1,5 @@
 import type { SeriesMetadata } from '@/src/types/series-metadata'
-import type { SiteIntegration } from '@/src/types/site-integrations'
+import type { ContentSiteAdapter } from '@/src/types/site-integrations'
 import type { VolumeState } from '@/src/types/tab-state'
 
 export type ContentScriptInstance = {
@@ -42,12 +42,24 @@ export type ContentScriptGlobal = typeof globalThis & {
 
 export type SeriesDataStrategy =
   | {
-      kind: 'background'
-      fetchSeriesMetadata: (seriesId: string, language?: string) => Promise<SeriesMetadata>
-      fetchChapterList: (seriesId: string, language?: string) => Promise<unknown>
+      kind: 'background-message'
+      fetchSeriesData: (seriesId: string, language?: string) => Promise<BackgroundSeriesDataResponse>
     }
   | {
       kind: 'content-dom'
     }
 
-export type ContentSiteIntegration = SiteIntegration
+export type BackgroundSeriesDataResponse = {
+  seriesMetadata?: SeriesMetadata
+  chapterList?: unknown
+  metadataError?: string
+  chapterListError?: string
+}
+
+export type RequestBackgroundSeriesData = (
+  siteIntegrationId: string,
+  seriesId: string,
+  language?: string,
+) => Promise<BackgroundSeriesDataResponse>
+
+export type ContentSiteIntegration = ContentSiteAdapter

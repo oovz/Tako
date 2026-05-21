@@ -2,9 +2,9 @@ import logger from '@/src/runtime/logger';
 import type { Chapter } from '@/src/types/chapter';
 import type { SeriesMetadata } from '@/src/types/series-metadata';
 import type { VolumeState } from '@/src/types/tab-state';
-import { parseChapterNumber, parseVolumeInfo, sanitizeLabel } from '@/src/shared/site-integration-utils';
 import { decompressFromBase64 } from './lz-string';
 import { parseChapterIdFromUrl, toAbsoluteUrl } from './shared';
+import { parseChapterNumber, parseVolumeInfo, sanitizeLabel } from '@/src/shared/site-integration-utils';
 
 /**
  * A single volume/chapter-list section as rendered on the series page.

@@ -1,6 +1,5 @@
 import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
-import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
 import {
   buildMangadexUploadsRecoveryImageUrl,
   buildPageUrls,
@@ -20,6 +19,7 @@ import {
   parseChapterIdFromUrl,
 } from './api'
 import { getContextMangadexPreferences, resolveMangadexImageQuality } from './preferences'
+import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
 
 type MangadexAtHomeReport = {
   url: string
