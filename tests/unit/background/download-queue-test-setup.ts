@@ -46,7 +46,6 @@ vi.mock('@/src/runtime/site-integration-registry', () => ({
   findSiteIntegrationForUrl: vi.fn(() => ({
     id: 'test-integration',
     name: 'Test Integration',
-    version: '1.0.0',
     author: 'tester',
   })),
   siteIntegrationRegistry: {

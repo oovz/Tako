@@ -17,7 +17,6 @@ import logger from '@/src/runtime/logger';
 export interface SiteIntegrationInfo {
   id: string;
   name: string;
-  version: string;
   author: string;
   integration?: SiteIntegration; // Optional for metadata-only registration in background context
   // Optional site integration-level default policy (second tier after site override)
@@ -44,15 +43,15 @@ class SiteIntegrationRegistry {
   /**
    * Register a new site integration
    * 
-   * Idempotent: If site integration with same ID is already registered with full implementation,
+   * Idempotent: If a full site integration with the same ID is already registered,
    * skip re-registration to avoid duplicate logs. If existing is metadata-only and new
    * registration has full implementation, upgrade the registration.
    */
   register(info: SiteIntegrationInfo): void {
     const existing = this.integrations.get(info.id);
 
-    // Skip if already fully registered with same version
-    if (existing && existing.integration && existing.version === info.version) {
+    // Skip if already fully registered.
+    if (existing && existing.integration) {
       logger.debug(`⏭️ Site integration ${info.id} already registered, skipping`);
       return;
     }
@@ -63,7 +62,7 @@ class SiteIntegrationRegistry {
       return;
     }
 
-    logger.info(`📝 Registering site integration: ${info.name} v${info.version}`);
+    logger.info(`📝 Registering site integration: ${info.name}`);
 
     // Validate site integration structure
     this.validateIntegration(info);

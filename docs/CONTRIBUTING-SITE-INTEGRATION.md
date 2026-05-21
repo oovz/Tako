@@ -63,7 +63,6 @@ Each manifest entry should define:
 
 - `id`
 - `name`
-- `version`
 - `author`
 - `patterns.domains`
 - `patterns.seriesMatches`

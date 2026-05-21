@@ -78,7 +78,6 @@ async function registerSiteIntegrationMetadata(): Promise<void> {
     registerSiteIntegration({
       id: manifest.id,
       name: manifest.name,
-      version: manifest.version,
       author: manifest.author,
       policyDefaults: manifest.policyDefaults,
       handlesOwnRetries: manifest.handlesOwnRetries,
@@ -148,7 +147,6 @@ export async function getSiteIntegrationById(siteId: string): Promise<SiteIntegr
   registerSiteIntegration({
     id: manifest.id,
     name: manifest.name,
-    version: manifest.version,
     author: manifest.author,
     policyDefaults: manifest.policyDefaults,
     handlesOwnRetries: manifest.handlesOwnRetries,
@@ -207,7 +205,6 @@ export async function initializeSiteIntegrations(): Promise<void> {
       registerSiteIntegration({
         id: manifest.id,
         name: manifest.name,
-        version: manifest.version,
         author: manifest.author,
         policyDefaults: manifest.policyDefaults,
         handlesOwnRetries: manifest.handlesOwnRetries,

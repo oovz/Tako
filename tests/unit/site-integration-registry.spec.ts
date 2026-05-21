@@ -72,12 +72,11 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
         })
 
         expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration: Test Integration v1.0.0'
+            '📝 Registering site integration: Test Integration'
         )
         expect(loggerMock.info).toHaveBeenCalledWith(
             '✅ Site integration test-integration registered successfully'
@@ -89,7 +88,6 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
         })
 
@@ -99,7 +97,6 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
         })
 
@@ -112,25 +109,23 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         )
     })
 
-    it('skips duplicate full site integration registration with same version', () => {
+    it('skips duplicate full site integration registration for the same id', () => {
         const mockIntegration = createMockSiteIntegration('test-integration')
 
         // First registration
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
             integration: mockIntegration,
         })
 
         vi.clearAllMocks()
 
-        // Second registration (same version)
+        // Second registration (same id)
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
             integration: mockIntegration,
         })
@@ -149,7 +144,6 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
         })
 
@@ -161,14 +155,13 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
             integration: mockIntegration,
         })
 
         // Should log info because it's upgrading from metadata-only to full
         expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration: Test Integration v1.0.0'
+            '📝 Registering site integration: Test Integration'
         )
 
         // Verify the integration was updated
@@ -176,33 +169,34 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         expect(info?.integration).toBeDefined()
     })
 
-    it('re-registers when version changes', () => {
+    it('keeps an existing full integration when duplicate metadata differs', () => {
         const mockIntegration = createMockSiteIntegration('test-integration')
 
         // First registration
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
-            version: '1.0.0',
             author: 'Test',
             integration: mockIntegration,
         })
 
         vi.clearAllMocks()
 
-        // Second registration with new version
+        // Second registration with different display metadata
         siteIntegrationRegistry.register({
             id: 'test-integration',
-            name: 'Test Integration',
-            version: '1.1.0', // Version changed
+            name: 'Renamed Test Integration',
             author: 'Test',
             integration: mockIntegration,
         })
 
-        // Should log registration because version changed
-        expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration: Test Integration v1.1.0'
+        expect(loggerMock.debug).toHaveBeenCalledWith(
+            '⏭️ Site integration test-integration already registered, skipping'
         )
+        expect(loggerMock.info).not.toHaveBeenCalledWith(
+            expect.stringContaining('Registering site integration')
+        )
+        expect(siteIntegrationRegistry.findById('test-integration')?.name).toBe('Test Integration')
     })
 })
 

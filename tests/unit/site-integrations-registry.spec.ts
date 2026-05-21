@@ -16,6 +16,13 @@ describe('site integration registry', () => {
     expect(getManifest(manifest.id)?.id).toBe(manifest.id)
   })
 
+  it('does not expose site integration versions from manifests', () => {
+    expect(SITE_INTEGRATION_MANIFESTS).not.toHaveLength(0)
+    for (const manifest of SITE_INTEGRATION_MANIFESTS) {
+      expect(manifest).not.toHaveProperty('version')
+    }
+  })
+
   it('treats integration as enabled by default', () => {
     const manifest = SITE_INTEGRATION_MANIFESTS.find((item) => item.enabled !== false)
     expect(manifest).toBeDefined()

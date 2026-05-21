@@ -319,7 +319,6 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
             id: 'test-site',
             name: 'Test',
-            version: '1.0',
             author: 'test',
             handlesOwnRetries: true,
             integration: {

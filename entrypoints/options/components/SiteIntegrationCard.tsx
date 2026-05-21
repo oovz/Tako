@@ -24,7 +24,6 @@ interface SiteIntegrationInfo {
   id: string
   name: string
   domains: string[]
-  version?: string
   customSettings?: SettingsFieldSchema[]
   policyDefaults?: {
     image?: Partial<RateScopePolicy>
@@ -117,11 +116,6 @@ export function SiteIntegrationCard({
                 {hasOverrides && (
                   <Badge variant="outline" className="h-5 border-yellow-500/50 bg-yellow-500/10 px-2 text-[10px] font-medium text-yellow-700">
                     Override
-                  </Badge>
-                )}
-                {siteIntegration.version && (
-                  <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
-                    v{siteIntegration.version}
                   </Badge>
                 )}
               </div>

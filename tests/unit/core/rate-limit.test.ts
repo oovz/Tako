@@ -130,7 +130,6 @@ describe('Rate Limiting', () => {
       vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce({ 
         id: 'mangadex', 
         name: 'MangaDex API',
-        version: '1.0.0',
         author: 'test'
       });
 

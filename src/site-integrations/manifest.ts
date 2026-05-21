@@ -2,7 +2,7 @@
  * Unified Site Integration Manifest - Single Source of Truth (SSOT)
  * 
  * This file is the authoritative source for all site integration metadata including:
- * - Site integration identification (id, name, version, author)
+ * - Site integration identification (id, name, author)
  * - URL patterns (domains, seriesMatches, excludeMatches)
  * - Rate limit policies
  * - Behavioral flags (handlesOwnRetries)
@@ -50,7 +50,6 @@ export interface SiteIntegrationManifest {
   // Identity
   id: string;
   name: string;
-  version: string;
   author: string;
 
   // URL Patterns
@@ -96,7 +95,6 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
     id: 'mangadex',
     name: 'MangaDex API',
-    version: '1.0.0',
     author: 'TMD Team',
     patterns: {
       domains: MANGADEX_DOMAINS,
@@ -147,7 +145,6 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
     id: 'pixiv-comic',
     name: 'Pixiv Comic',
-    version: '1.0.0',
     author: 'TMD Team',
     patterns: {
       domains: PIXIV_COMIC_DOMAINS,
@@ -163,7 +160,6 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
     id: 'shonenjumpplus',
     name: 'Shonen Jump+',
-    version: '1.0.0',
     author: 'TMD Team',
     patterns: {
       domains: SHONEN_JUMP_PLUS_DOMAINS,
@@ -179,7 +175,6 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
     id: 'manhuagui',
     name: 'Manhuagui',
-    version: '1.0.0',
     author: 'TMD Team',
     patterns: {
       domains: MANHUAGUI_DOMAINS,

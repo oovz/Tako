@@ -44,7 +44,6 @@ export function SiteIntegrationManagementTab({
         id: manifest.id,
         name: manifest.name,
         domains: manifest.patterns.domains,
-        version: manifest.version,
         customSettings: manifest.customSettings,
         policyDefaults: manifest.policyDefaults,
       }))
