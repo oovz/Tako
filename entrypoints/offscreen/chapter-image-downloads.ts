@@ -78,45 +78,57 @@ export async function downloadChapterImages(
     ...(rateLimitSettings ? { rateLimitSettings } : {}),
     chapterId,
   }
+  const cancelPendingDownloads = () => {
+    downloadQueue.cancelPending(new Error('job-cancelled'))
+  }
 
   const tasks: Promise<void>[] = []
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i]
-    const imageIndex = mapImageIndex ? mapImageIndex(i) : i
-    tasks.push(downloadQueue.add(async () => {
-      try {
-        if (abortSignal?.aborted) throw new Error('job-cancelled')
-        const result = await runtime.withImageRetries<ChapterDownloadImageResult>(
-          () => scheduleForIntegrationScope(integrationId, 'image', () => downloadImage(url, {
-            signal: abortSignal,
-            context: imageDownloadContext,
-          }), rateLimitSettings?.image),
-        )
-        onDownloaded({ url, index: imageIndex, result })
-        succeeded++
-        onImageDownloaded?.()
-      } catch (error) {
-        failed++
-        failedUrls.push(url)
-        if (collectFailureReasons && failedReasons.length < 3) {
-          const reason = error instanceof Error ? error.message : String(error)
-          failedReasons.push(`${url} => ${reason}`)
-        }
-        onDownloadFailed({
-          url,
-          index: imageIndex,
-          error,
-          failedCount: failed,
-          total,
-        })
-      } finally {
-        processed++
-        const pct = Math.max(10, Math.round((processed / total) * 100))
-        await onProgress(pct, undefined, { current: processed, total })
+  abortSignal?.addEventListener('abort', cancelPendingDownloads, { once: true })
+  try {
+    for (let i = 0; i < urls.length; i++) {
+      if (abortSignal?.aborted) {
+        break
       }
-    }))
+
+      const url = urls[i]
+      const imageIndex = mapImageIndex ? mapImageIndex(i) : i
+      tasks.push(downloadQueue.add(async () => {
+        try {
+          if (abortSignal?.aborted) throw new Error('job-cancelled')
+          const result = await runtime.withImageRetries<ChapterDownloadImageResult>(
+            () => scheduleForIntegrationScope(integrationId, 'image', () => downloadImage(url, {
+              signal: abortSignal,
+              context: imageDownloadContext,
+            }), rateLimitSettings?.image),
+          )
+          onDownloaded({ url, index: imageIndex, result })
+          succeeded++
+          onImageDownloaded?.()
+        } catch (error) {
+          failed++
+          failedUrls.push(url)
+          if (collectFailureReasons && failedReasons.length < 3) {
+            const reason = error instanceof Error ? error.message : String(error)
+            failedReasons.push(`${url} => ${reason}`)
+          }
+          onDownloadFailed({
+            url,
+            index: imageIndex,
+            error,
+            failedCount: failed,
+            total,
+          })
+        } finally {
+          processed++
+          const pct = Math.max(10, Math.round((processed / total) * 100))
+          await onProgress(pct, undefined, { current: processed, total })
+        }
+      }))
+    }
+    await Promise.allSettled(tasks)
+  } finally {
+    abortSignal?.removeEventListener('abort', cancelPendingDownloads)
   }
-  await Promise.allSettled(tasks)
 
   logger.debug('chapter image download batch complete', { total, processed, succeeded, failed })
 

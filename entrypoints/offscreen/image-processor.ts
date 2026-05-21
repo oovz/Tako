@@ -152,6 +152,14 @@ class PromiseQueue {
     });
   }
 
+  cancelPending(reason: unknown = new Error('queue-cancelled')): number {
+    const pending = this.queue.splice(0, this.queue.length);
+    for (const item of pending) {
+      item.reject(reason);
+    }
+    return pending.length;
+  }
+
   private _runNext(): void {
     if (this.running >= this.maxConcurrent || this.queue.length === 0) {
       return;
@@ -230,11 +238,27 @@ function getHttpStatusFromError(error: unknown): number | null {
   return Number.isNaN(code) ? null : code;
 }
 
+function isCancellationError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === 'AbortError') {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return message === 'aborted' || message.includes('job-cancelled');
+}
+
 async function withRetries<T>(fn: () => Promise<T>, attempts: number, baseDelayMs = 1000): Promise<T> {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       return await fn();
     } catch (error) {
+      if (isCancellationError(error)) {
+        throw error;
+      }
       if (attempt === attempts) throw error;
       const status = getHttpStatusFromError(error);
       if (status !== null && status >= 400 && status < 500 && status !== 429) {

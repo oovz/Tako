@@ -512,7 +512,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       );
 
       expect(mockedResolvePolicy).toHaveBeenCalledWith('test-site', 'chapter');
-      expect(mockedSchedule).toHaveBeenCalledWith('test-site', 'chapter', expect.any(Function));
+      expect(mockedSchedule).not.toHaveBeenCalled();
 
       expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
         'task-rate-limited',
@@ -520,6 +520,37 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       );
 
       vi.useRealTimers();
+    });
+
+    it('marks the replacement task downloading without waiting for a stale chapter limiter slot', async () => {
+      const task = makeTask({
+        id: 'replacement-task',
+        seriesTitle: 'Replacement Series',
+        chapters: [createChapter({ url: 'https://example.com/replacement-1', title: 'Chapter 1', chapterNumber: 1 })],
+      });
+
+      mockGlobalState.downloadQueue = [task];
+
+      const rateLimit = await import('@/src/runtime/rate-limit');
+      vi.mocked(rateLimit.resolveEffectivePolicy).mockResolvedValueOnce({
+        concurrency: 1,
+        delayMs: 0,
+      });
+      vi.mocked(rateLimit.scheduleForIntegrationScope).mockImplementationOnce(
+        () => new Promise(() => undefined),
+      );
+
+      void processDownloadQueue(
+        mockStateManager,
+        mockEnsureOffscreenReady,
+      );
+
+      await vi.waitFor(() => {
+        expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
+          'replacement-task',
+          expect.objectContaining({ status: 'downloading' }),
+        );
+      });
     });
   });
 }

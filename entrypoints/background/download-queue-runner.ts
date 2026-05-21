@@ -12,7 +12,7 @@ import {
   type ChapterDispatchOutcome,
 } from './download-queue-finalization';
 import { destinationService } from './destination';
-import { resolveEffectivePolicy, scheduleForIntegrationScope } from '@/src/runtime/rate-limit';
+import { resolveEffectivePolicy } from '@/src/runtime/rate-limit';
 import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-integration-initialization';
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
@@ -417,15 +417,10 @@ export async function processDownloadQueue(
           });
           continue;
         }
+      }
 
-        await scheduleForIntegrationScope(integrationId, 'chapter', async () => {
-          const currentTask = (await stateManager.getGlobalState()).downloadQueue.find(currentQueuedTask => currentQueuedTask.id === latestTask.id);
-          if (currentTask && currentTask.status === 'queued') {
-            await startDownloadTask(stateManager, latestTask.id, ensureOffscreenReady);
-            startedTask = true;
-          }
-        });
-      } else {
+      const currentTask = (await stateManager.getGlobalState()).downloadQueue.find(currentQueuedTask => currentQueuedTask.id === latestTask.id);
+      if (currentTask && currentTask.status === 'queued') {
         await startDownloadTask(stateManager, latestTask.id, ensureOffscreenReady);
         startedTask = true;
       }

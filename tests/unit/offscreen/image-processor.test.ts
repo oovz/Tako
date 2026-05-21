@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { downloadCoverImage, fetchImageWithStallDetection, fetchChapterHtml } from '@/entrypoints/offscreen/image-processor'
+import { downloadCoverImage, fetchImageWithStallDetection, fetchChapterHtml, withRetries } from '@/entrypoints/offscreen/image-processor'
 
 // Mock rate-limited fetch
 vi.mock('@/src/runtime/rate-limit', () => ({
@@ -331,6 +331,15 @@ describe('downloadCoverImage', () => {
   })
 
   describe('Retry Logic', () => {
+    it('does not retry cancellation errors', async () => {
+      const operation = vi.fn(async () => {
+        throw new Error('job-cancelled')
+      })
+
+      await expect(withRetries(operation, 3, 1)).rejects.toThrow('job-cancelled')
+      expect(operation).toHaveBeenCalledTimes(1)
+    })
+
     it('retries on failure (default 3 times)', async () => {
       const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
       vi.mocked(rateLimitedFetchByUrlScope)
