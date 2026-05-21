@@ -5,6 +5,7 @@ import { test, expect } from '../e2e/fixtures/extension'
 import { getSessionState, getTabId, waitForGlobalState } from '../e2e/fixtures/state-helpers'
 import {
   MANGADEX_TEST_SERIES_URL,
+  LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
 } from '../e2e/fixtures/test-domains'
@@ -52,6 +53,8 @@ type SeededDirectoryFile = {
 }
 
 const LIVE_MANGADEX_KEMUTAI_URL = 'https://mangadex.org/title/b28525ae-ef8a-47aa-a120-5917a351be2d/kemutai-hanashi'
+const LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_DOWNLOAD_URL
+  ?? 'https://www.manhuagui.com/comic/19430/'
 
 const browserWorkflowCases: BrowserWorkflowCase[] = [
   {
@@ -77,6 +80,11 @@ const browserWorkflowCases: BrowserWorkflowCase[] = [
     name: 'shonenjumpplus default',
     integrationId: 'shonenjumpplus',
     url: LIVE_SHONENJUMPPLUS_REFERENCE_URL,
+  },
+  {
+    name: 'manhuagui kimetsu-no-yaiba',
+    integrationId: 'manhuagui',
+    url: LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL || LIVE_MANHUAGUI_REFERENCE_URL,
   },
 ]
 

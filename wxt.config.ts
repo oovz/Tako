@@ -55,7 +55,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "Tako Manga Downloader",
-    version: "1.1.5",
+    version: "1.2.1",
     description: "Save chapters from supported manga sites into organized CBZ, ZIP, or image files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [
@@ -69,7 +69,7 @@ export default defineConfig({
       "webNavigation",
       "notifications",
       "alarms",
-      "declarativeNetRequest", // Required for Pixiv-only session DNR referer rewrite on img-comic.pximg.net image fetches
+      "declarativeNetRequest", // Required for session DNR referer rewrites on image CDN fetches
       "cookies"  // Required for chrome.cookies.getAll() — Pixiv Comic auth cookie forwarding
     ],
     background: {

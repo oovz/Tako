@@ -17,7 +17,7 @@ import logger from '@/src/runtime/logger';
 // Import focused modules
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state';
 import {
-  configurePixivImageRefererRewriteRule,
+  configureImageRefererRewriteRules,
   initializeBackgroundRuntime,
 } from '@/entrypoints/background/background-startup';
 import {
@@ -100,7 +100,7 @@ export default defineBackground({
       logger.error('Failed to initialize architecture:', error);
     });
 
-    void configurePixivImageRefererRewriteRule();
+    void configureImageRefererRewriteRules();
 
     // Configure side panel behavior: open on action click
     try {

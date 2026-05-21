@@ -12,8 +12,8 @@
  * `local-mock-server.ts` serves.
  *
  * Rule IDs are sourced from a dedicated test-only range (9_000 – 9_999) so
- * they never collide with production rules (e.g. the Pixiv referer-rewrite
- * rule in `background-startup.ts` uses id=1).
+ * they never collide with production rules (e.g. image referer-rewrite
+ * rules in `background-startup.ts` use ids outside this range).
  */
 
 import type { Worker } from '@playwright/test';

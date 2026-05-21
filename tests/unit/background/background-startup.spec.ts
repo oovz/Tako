@@ -6,7 +6,7 @@ import type { DownloadTaskState } from '@/src/types/queue-state'
 import type { PendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
 
 const mocks = vi.hoisted(() => ({
-  initializeSiteIntegrations: vi.fn(async () => undefined),
+  initializeBackgroundSiteIntegrations: vi.fn(async () => undefined),
   getSettings: vi.fn(async () => ({ downloads: { defaultFormat: 'cbz' } })),
   settingsSyncInitialize: vi.fn(),
   validateCustomFolderAccess: vi.fn(async () => ({ isValid: true, shouldFallback: false })),
@@ -27,8 +27,8 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/runtime/site-integration-initialization', () => ({
-  initializeSiteIntegrations: mocks.initializeSiteIntegrations,
+vi.mock('@/src/runtime/background-site-integration-initialization', () => ({
+  initializeBackgroundSiteIntegrations: mocks.initializeBackgroundSiteIntegrations,
 }))
 
 vi.mock('@/src/storage/settings-service', () => ({
@@ -164,6 +164,71 @@ describe('initializeBackgroundRuntime', () => {
       pendingDownloadsStore,
       ensureLivenessAlarm: async () => undefined,
       ensureOffscreenDocumentReady: async () => undefined,
+    })
+  })
+})
+
+describe('configureImageRefererRewriteRules', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('configures referer rewrite rules for image CDNs that reject extension-origin fetches', async () => {
+    const updateSessionRules = vi.fn(async () => undefined)
+    vi.stubGlobal('chrome', {
+      declarativeNetRequest: {
+        updateSessionRules,
+        RuleActionType: {
+          MODIFY_HEADERS: 'modifyHeaders',
+        },
+        HeaderOperation: {
+          SET: 'set',
+        },
+        ResourceType: {
+          XMLHTTPREQUEST: 'xmlhttprequest',
+          OTHER: 'other',
+        },
+      },
+    })
+
+    const { configureImageRefererRewriteRules } = await import('@/entrypoints/background/background-startup')
+
+    await configureImageRefererRewriteRules()
+
+    expect(updateSessionRules).toHaveBeenCalledWith({
+      removeRuleIds: [41001, 41002],
+      addRules: expect.arrayContaining([
+        expect.objectContaining({
+          id: 41001,
+          condition: expect.objectContaining({
+            requestDomains: ['img-comic.pximg.net'],
+          }),
+        }),
+        expect.objectContaining({
+          id: 41002,
+          action: expect.objectContaining({
+            requestHeaders: [
+              {
+                header: 'referer',
+                operation: 'set',
+                value: 'https://www.manhuagui.com/',
+              },
+            ],
+          }),
+          condition: expect.objectContaining({
+            requestDomains: [
+              'i.hamreus.com',
+              'eu.hamreus.com',
+              'eu1.hamreus.com',
+              'eu2.hamreus.com',
+              'us.hamreus.com',
+              'us1.hamreus.com',
+              'us2.hamreus.com',
+              'us3.hamreus.com',
+            ],
+          }),
+        }),
+      ]),
     })
   })
 })

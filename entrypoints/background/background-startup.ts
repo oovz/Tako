@@ -1,5 +1,5 @@
 import logger from '@/src/runtime/logger'
-import { initializeSiteIntegrations } from '@/src/runtime/site-integration-initialization'
+import { initializeBackgroundSiteIntegrations } from '@/src/runtime/background-site-integration-initialization'
 import { settingsService } from '@/src/storage/settings-service'
 import { settingsSyncService } from '@/src/storage/settings-sync-service'
 import { createStateManager } from '@/entrypoints/background/state-action-router'
@@ -13,6 +13,17 @@ import type { PendingDownloadsStore } from '@/entrypoints/background/pending-dow
 import type { DownloadTaskState } from '@/src/types/queue-state'
 
 const PIXIV_REFERER_REWRITE_RULE_ID = 41001
+const MANHUAGUI_REFERER_REWRITE_RULE_ID = 41002
+const MANHUAGUI_IMAGE_DOMAINS = [
+  'i.hamreus.com',
+  'eu.hamreus.com',
+  'eu1.hamreus.com',
+  'eu2.hamreus.com',
+  'us.hamreus.com',
+  'us1.hamreus.com',
+  'us2.hamreus.com',
+  'us3.hamreus.com',
+]
 
 async function readPersistedDownloadQueue(): Promise<DownloadTaskState[]> {
   const result = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.downloadQueue) as Record<string, unknown>
@@ -42,7 +53,7 @@ async function resumeRecoveredQueue(
 
 async function initializeSiteIntegrationsSafely(): Promise<void> {
   try {
-    await initializeSiteIntegrations()
+    await initializeBackgroundSiteIntegrations()
   } catch (error) {
     logger.warn('Warning during site integration initialization (continuing anyway):', error)
   }
@@ -59,15 +70,15 @@ async function syncSettingsToState(stateManager: CentralizedStateManager): Promi
   }
 }
 
-export async function configurePixivImageRefererRewriteRule(): Promise<void> {
+export async function configureImageRefererRewriteRules(): Promise<void> {
   if (!chrome.declarativeNetRequest?.updateSessionRules) {
-    logger.debug('declarativeNetRequest API unavailable; skipping Pixiv referer rewrite rule setup')
+    logger.debug('declarativeNetRequest API unavailable; skipping image referer rewrite rule setup')
     return
   }
 
   try {
     await chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [PIXIV_REFERER_REWRITE_RULE_ID],
+      removeRuleIds: [PIXIV_REFERER_REWRITE_RULE_ID, MANHUAGUI_REFERER_REWRITE_RULE_ID],
       addRules: [
         {
           id: PIXIV_REFERER_REWRITE_RULE_ID,
@@ -90,11 +101,32 @@ export async function configurePixivImageRefererRewriteRule(): Promise<void> {
             ],
           },
         },
+        {
+          id: MANHUAGUI_REFERER_REWRITE_RULE_ID,
+          priority: 1,
+          action: {
+            type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+            requestHeaders: [
+              {
+                header: 'referer',
+                operation: chrome.declarativeNetRequest.HeaderOperation.SET,
+                value: 'https://www.manhuagui.com/',
+              },
+            ],
+          },
+          condition: {
+            requestDomains: MANHUAGUI_IMAGE_DOMAINS,
+            resourceTypes: [
+              chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
+              chrome.declarativeNetRequest.ResourceType.OTHER,
+            ],
+          },
+        },
       ],
     })
-    logger.debug('Configured Pixiv image referer rewrite session rule')
+    logger.debug('Configured image referer rewrite session rules')
   } catch (error) {
-    logger.warn('Failed to configure Pixiv image referer rewrite rule (non-fatal)', error)
+    logger.warn('Failed to configure image referer rewrite rules (non-fatal)', error)
   }
 }
 
