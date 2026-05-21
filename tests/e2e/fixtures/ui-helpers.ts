@@ -7,7 +7,7 @@ export async function robustSelect(page: Page, triggerSelector: string, optionNa
     const option = page.getByRole('option', { name: optionName }).first();
     try { await option.waitFor({ state: 'visible', timeout: 3000 }); } catch { if (attempt === 2) throw new Error(`Option '${optionName}' not visible for ${triggerSelector}`); continue; }
     await option.click({ force: true });
-    await page.waitForTimeout(100);
+    await expect(option).toBeHidden({ timeout: 3000 });
     return;
   }
 }

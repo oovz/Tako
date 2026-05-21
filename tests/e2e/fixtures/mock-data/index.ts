@@ -31,7 +31,8 @@ export * as Manhuagui from './site-integrations/manhuagui';
 
 // ============================================================================
 // Shared mock data utilities and types
-// (Download tasks and settings removed - only used by skipped tests)
+// Shared settings fixtures live under ./shared; download task state is built
+// in the workflow-specific specs that need it.
 
 // ============================================================================
 // Types

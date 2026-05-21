@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 
 export class OptionsPageObject {
   readonly page: Page;
@@ -12,8 +12,7 @@ export class OptionsPageObject {
   async navigate(): Promise<void> {
     await this.page.goto(`chrome-extension://${this.extensionId}/options.html`);
     await this.page.waitForLoadState('domcontentloaded');
-    // Wait for root content to be ready so main controls are present
-    await this.page.waitForSelector('[data-testid="archive-format-radiogroup"]', { timeout: 5000 }).catch(() => {});
+    await expect(this.page.locator('[data-testid="archive-format-radiogroup"]')).toBeVisible({ timeout: 5000 });
   }
 
   // Sidebar navigation (Options page uses sidebar, not tabs)
@@ -23,8 +22,7 @@ export class OptionsPageObject {
 
   // Ensure settings are initialized (test helper)
   async ensureInitialized(): Promise<void> {
-    // Wait for known elements to appear; fallback to no-op
-    await this.page.waitForSelector('[data-testid="archive-format-radiogroup"]', { timeout: 5000 }).catch(() => {});
+    await expect(this.page.locator('[data-testid="archive-format-radiogroup"]')).toBeVisible({ timeout: 5000 });
   }
 
   // General Settings - Using Accessible Selectors
@@ -140,8 +138,9 @@ export class OptionsPageObject {
   async saveSettings(): Promise<void> {
     // Click the save button if there are unsaved changes
     const saveButton = this.page.getByRole('button', { name: 'Save Changes' });
-    if (await saveButton.count()) {
+    if (await saveButton.isVisible().catch(() => false)) {
       await saveButton.click();
+      await this.waitForSaveSuccess();
     }
   }
 
@@ -160,12 +159,7 @@ export class OptionsPageObject {
   }
 
   async waitForSaveSuccess(): Promise<void> {
-    // After saving, the button label should change to "Saved"
-    const savedButton = this.page.getByRole('button', { name: 'Saved' });
-    await savedButton.waitFor({ state: 'visible', timeout: 5000 }).catch(async () => {
-      // Fallback: ensure no pending "Save Changes" button is visible
-      await this.page.getByRole('button', { name: 'Save Changes' }).waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
-    });
+    await expect(this.page.getByRole('button', { name: 'Save Changes' })).toBeHidden({ timeout: 5000 });
   }
 
   // ============================================================================
@@ -185,7 +179,7 @@ export class OptionsPageObject {
     const searchInput = this.page.getByPlaceholder('Search site integrations by name or domain...');
     await searchInput.clear();
     await searchInput.fill(query);
-    await this.page.waitForTimeout(300); // Debounce delay + filter time
+    await expect.poll(async () => this.getSiteIntegrationCount()).toBeGreaterThan(0);
   }
 
   /**
@@ -208,14 +202,12 @@ export class OptionsPageObject {
    */
   async enableSiteIntegrationOverride(siteIntegrationName: string): Promise<void> {
     // Wait for site integrations to load
-    await this.page.waitForTimeout(500);
-    
     const card = await this.selectSiteIntegration(siteIntegrationName);
     
     // Expand the card if collapsed (Radix Collapsible)
     const expandButton = card.getByRole('button').first();
     await expandButton.click();
-    await this.page.waitForTimeout(200); // Wait for expansion animation
+    await expect(card.getByText(/override active|enable override/i).first()).toBeVisible();
   }
 
   /**
@@ -449,7 +441,7 @@ export async function openOptions(page: Page, extensionId: string) {
   
   // Wait for options page to be ready
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('[data-testid="archive-format-radiogroup"]', { timeout: 5000 }).catch(() => {});
+  await expect(page.locator('[data-testid="archive-format-radiogroup"]')).toBeVisible({ timeout: 5000 });
   
   return {
     page,

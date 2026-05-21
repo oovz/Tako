@@ -5,9 +5,9 @@
  * Tests the state management behavior during page navigation scenarios:
  * - State clearing when navigating away from a supported page
  * - Race condition prevention (INITIALIZE_TAB after CLEAR_TAB_STATE)
- * - State restoration on bfcache restoration
+ * - State restoration after a supported page explicitly reinitializes
  * 
- * These tests complement the E2E tests in bfcache-navigation.spec.ts
+ * These tests complement the E2E tests in navigation-state-clear.spec.ts
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

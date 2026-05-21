@@ -13,6 +13,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures/extension';
 import { OptionsPageObject } from './pages/options';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
+import { getGlobalState } from './fixtures/state-helpers';
 
 let optionsPage: Page;
 let options: OptionsPageObject;
@@ -107,7 +108,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Change to zip
       await options.setArchiveFormat('zip');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       // Reload page and verify persistence
       await options.navigate();
@@ -124,7 +124,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Change to cbz
       await options.setArchiveFormat('cbz');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       // Reload and verify
       await options.navigate();
@@ -141,7 +140,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Change to none
       await options.setArchiveFormat('none');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       // Reload and verify
       await options.navigate();
@@ -153,7 +151,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset to cbz for other tests
       await options.setArchiveFormat('cbz');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 
@@ -168,7 +165,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Toggle
       await options.toggleComicInfo();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       // Reload and verify
       await options.navigate();
@@ -180,7 +176,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset
       await options.toggleComicInfo();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 
@@ -193,7 +188,6 @@ test.describe('Settings Persistence and Usage', () => {
       
       await options.toggleImageNormalization();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       await options.navigate();
       await options.ensureInitialized();
@@ -204,7 +198,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset
       await options.toggleImageNormalization();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 
@@ -216,7 +209,6 @@ test.describe('Settings Persistence and Usage', () => {
       const customPath = 'CustomFolder/<SERIES_TITLE>/<CHAPTER_TITLE>';
       await options.setDirectoryTemplate(customPath);
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       await options.navigate();
       await options.ensureInitialized();
@@ -227,7 +219,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset to default
       await options.setDirectoryTemplate('TMD/<SERIES_TITLE>');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
 
     test('discarding an unsaved switch back to browser downloads preserves the stored custom folder handle', async () => {
@@ -315,7 +306,6 @@ test.describe('Settings Persistence and Usage', () => {
       const customTemplate = '<SERIES_TITLE> - Chapter <CHAPTER_NUMBER>';
       await options.setFileNameTemplate(customTemplate);
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       await options.navigate();
       await options.ensureInitialized();
@@ -326,7 +316,6 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset to default
       await options.setFileNameTemplate('<CHAPTER_TITLE>');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 
@@ -339,7 +328,6 @@ test.describe('Settings Persistence and Usage', () => {
       
       await options.toggleNotifications();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
       
       await options.navigate();
       await options.ensureInitialized();
@@ -350,29 +338,26 @@ test.describe('Settings Persistence and Usage', () => {
       // Reset
       await options.toggleNotifications();
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 
   test.describe('Settings Sync to Centralized State', () => {
-    test('should sync format setting to background state', async () => {
+    test('should sync format setting to background state', async ({ context }) => {
       await options.navigate();
       await options.ensureInitialized();
       
       // Set zip format
       await options.setArchiveFormat('zip');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(1000); // Wait for sync message
-      
-      // Verify via extension storage (if accessible)
-      // This test verifies the sync mechanism is working
-      const format = await options.getArchiveFormat();
-      expect(format).toBe('zip');
+
+      await expect.poll(async () => {
+        const state = await getGlobalState(context);
+        return state?.settings.downloads.defaultFormat;
+      }).toBe('zip');
       
       // Reset
       await options.setArchiveFormat('cbz');
       await options.saveSettings();
-      await optionsPage.waitForTimeout(500);
     });
   });
 });
@@ -392,8 +377,6 @@ test.describe('Settings Cross-Page Consistency', () => {
 
     await opts1.setArchiveFormat('zip');
     await opts1.saveSettings();
-    await opts1.waitForSaveSuccess();
-    await page1.waitForTimeout(500);
 
     // Open second options page and verify
     const page2 = await context.newPage();
@@ -407,8 +390,6 @@ test.describe('Settings Cross-Page Consistency', () => {
     // Reset
     await opts2.setArchiveFormat('cbz');
     await opts2.saveSettings();
-    await opts2.waitForSaveSuccess();
-    await page2.waitForTimeout(500);
 
     await page1.close();
     await page2.close();

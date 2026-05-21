@@ -13,6 +13,10 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { matchUrl, isSupportedDomain, getContentScriptMatches } from '@/src/site-integrations/url-matcher';
 import { setUserSiteIntegrationEnablement } from '@/src/site-integrations/registry';
 
+function expectMatchedUrl(url: string, expected: { integrationId: string; role?: string }) {
+  expect(matchUrl(url)).toMatchObject(expected);
+}
+
 describe('URL Pattern Matching', () => {
   afterEach(() => {
     setUserSiteIntegrationEnablement({})
@@ -20,30 +24,30 @@ describe('URL Pattern Matching', () => {
 
   describe('Basic Pattern Matching', () => {
     it('matches exact domain', () => {
-      const result = matchUrl('https://comic.pixiv.net/works/9012');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('pixiv-comic');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://comic.pixiv.net/works/9012', {
+        integrationId: 'pixiv-comic',
+        role: 'series',
+      });
     });
 
     it('matches pixiv viewer story route', () => {
-      const result = matchUrl('https://comic.pixiv.net/viewer/stories/44495');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('pixiv-comic');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://comic.pixiv.net/viewer/stories/44495', {
+        integrationId: 'pixiv-comic',
+        role: 'series',
+      });
     });
 
     it('matches pixiv episode route', () => {
-      const result = matchUrl('https://comic.pixiv.net/episodes/9999');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('pixiv-comic');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://comic.pixiv.net/episodes/9999', {
+        integrationId: 'pixiv-comic',
+        role: 'series',
+      });
     });
 
     it('matches domain with www', () => {
-      const result = matchUrl('https://www.mangadex.org/title/abc123');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('mangadex');
+      expectMatchedUrl('https://www.mangadex.org/title/abc123', {
+        integrationId: 'mangadex',
+      });
     });
 
     it('returns null for unsupported domain', () => {
@@ -52,24 +56,24 @@ describe('URL Pattern Matching', () => {
     });
 
     it('matches shonenjumpplus episode paths', () => {
-      const result = matchUrl('https://shonenjumpplus.com/episode/10834108156648240735');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('shonenjumpplus');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://shonenjumpplus.com/episode/10834108156648240735', {
+        integrationId: 'shonenjumpplus',
+        role: 'series',
+      });
     });
 
     it('matches manhuagui series pages', () => {
-      const result = matchUrl('https://www.manhuagui.com/comic/28004/');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('manhuagui');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://www.manhuagui.com/comic/28004/', {
+        integrationId: 'manhuagui',
+        role: 'series',
+      });
     });
 
     it('matches mangadex series pages', () => {
-      const result = matchUrl('https://mangadex.org/title/abc123');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('mangadex');
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://mangadex.org/title/abc123', {
+        integrationId: 'mangadex',
+        role: 'series',
+      });
     });
 
     it('does not match a user-disabled integration', () => {
@@ -83,12 +87,12 @@ describe('URL Pattern Matching', () => {
   describe('Wildcard Pattern Matching', () => {
     it('matches single wildcard (*) for one segment', () => {
       // /episode/* should match /episode/123
-      const result1 = matchUrl('https://shonenjumpplus.com/episode/123');
-      expect(result1).toBeDefined();
-      expect(result1?.integrationId).toBe('shonenjumpplus');
+      expectMatchedUrl('https://shonenjumpplus.com/episode/123', {
+        integrationId: 'shonenjumpplus',
+      });
     });
 
-it('does not match unsupported domains with wildcards (e.g., e-hentai)', () => {
+    it('does not match unsupported domains with wildcards (e.g., e-hentai)', () => {
       const result = matchUrl('https://e-hentai.org/g/12345/test-token');
       expect(result).toBeNull();
     });
@@ -111,15 +115,15 @@ it('does not match manganelo domain (unsupported scope)', () => {
     });
 
     it('allows title paths (mangadex series pages)', () => {
-      const result = matchUrl('https://mangadex.org/title/12345-test-manga');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('mangadex');
+      expectMatchedUrl('https://mangadex.org/title/12345-test-manga', {
+        integrationId: 'mangadex',
+      });
     });
 
     it('allows series pages', () => {
-      const result = matchUrl('https://comic.pixiv.net/works/9012');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('pixiv-comic');
+      expectMatchedUrl('https://comic.pixiv.net/works/9012', {
+        integrationId: 'pixiv-comic',
+      });
     });
   });
 
@@ -130,9 +134,10 @@ it('does not match manganelo domain (unsupported scope)', () => {
     });
 
     it('matches series page paths', () => {
-      const result = matchUrl('https://comic.pixiv.net/works/123');
-      expect(result).toBeDefined();
-      expect(result?.role).toBe('series');
+      expectMatchedUrl('https://comic.pixiv.net/works/123', {
+        integrationId: 'pixiv-comic',
+        role: 'series',
+      });
     });
   });
 
@@ -143,7 +148,7 @@ it('does not match manganelo domain (unsupported scope)', () => {
       expect(isSupportedDomain('https://mangadex.org/anything')).toBe(true);
     });
 
-it('returns false for unsupported domains', () => {
+    it('returns false for unsupported domains', () => {
       expect(isSupportedDomain('https://mangadex.org/title/abc')).toBe(true);
       expect(isSupportedDomain('https://unsupported.com/manga/123')).toBe(false);
       expect(isSupportedDomain('https://google.com')).toBe(false);
@@ -170,20 +175,21 @@ it('returns false for unsupported domains', () => {
 
   describe('Edge Cases', () => {
     it('handles URL with query parameters', () => {
-      const result = matchUrl('https://mangadex.org/title/123?page=2');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('mangadex');
+      expectMatchedUrl('https://mangadex.org/title/123?page=2', {
+        integrationId: 'mangadex',
+      });
     });
 
     it('handles URL with hash fragment', () => {
-      const result = matchUrl('https://mangadex.org/title/123#comments');
-      expect(result).toBeDefined();
-      expect(result?.integrationId).toBe('mangadex');
+      expectMatchedUrl('https://mangadex.org/title/123#comments', {
+        integrationId: 'mangadex',
+      });
     });
 
     it('handles URL with port number', () => {
-      const result = matchUrl('https://mangadex.org:443/title/123');
-      expect(result).toBeDefined();
+      expectMatchedUrl('https://mangadex.org:443/title/123', {
+        integrationId: 'mangadex',
+      });
     });
 
     it('handles malformed URLs gracefully', () => {

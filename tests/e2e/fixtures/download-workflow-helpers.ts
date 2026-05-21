@@ -334,15 +334,12 @@ export async function waitForCbzArtifact(
   directoryName: string,
   timeoutMs = 30_000,
 ): Promise<SeededDirectoryFile[]> {
-  const startedAt = Date.now();
   let files: SeededDirectoryFile[] = [];
-  while (Date.now() - startedAt < timeoutMs) {
-    files = await listSeededDirectoryFiles(optionsPage, directoryName);
-    if (files.some((file) => file.path.toLowerCase().endsWith('.cbz') && file.size > 0)) {
-      return files;
-    }
-    await optionsPage.waitForTimeout(500);
-  }
 
-  throw new Error(`Timed out waiting for a .cbz artifact in OPFS ${directoryName}. Files found: ${JSON.stringify(files)}`);
+  await expect.poll(async () => {
+    files = await listSeededDirectoryFiles(optionsPage, directoryName);
+    return files.some((file) => file.path.toLowerCase().endsWith('.cbz') && file.size > 0);
+  }, { timeout: timeoutMs }).toBe(true);
+
+  return files;
 }
