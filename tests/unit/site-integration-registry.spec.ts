@@ -68,19 +68,20 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
         siteIntegrationRegistry.clear() // Clear any existing registrations
     })
 
-    it('logs registration on first call', () => {
+    it('logs metadata-only registration at debug level on first call', () => {
         siteIntegrationRegistry.register({
             id: 'test-integration',
             name: 'Test Integration',
             author: 'Test',
         })
 
-        expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration: Test Integration'
+        expect(loggerMock.debug).toHaveBeenCalledWith(
+            '📋 Registering site integration metadata: Test Integration'
         )
-        expect(loggerMock.info).toHaveBeenCalledWith(
-            '✅ Site integration test-integration registered successfully'
+        expect(loggerMock.debug).toHaveBeenCalledWith(
+            '📋 Site integration metadata test-integration registered'
         )
+        expect(loggerMock.info).not.toHaveBeenCalled()
     })
 
     it('skips duplicate metadata-only registration without logging info', () => {
@@ -159,14 +160,39 @@ describe('SiteIntegrationRegistry idempotent registration', () => {
             integration: mockIntegration,
         })
 
-        // Should log info because it's upgrading from metadata-only to full
+        // Should log info because it's upgrading from metadata-only to full runtime registration
         expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration: Test Integration'
+            '📝 Registering site integration runtime: Test Integration'
         )
 
         // Verify the integration was updated
         const info = siteIntegrationRegistry.findById('test-integration')
         expect(info?.integration).toBeDefined()
+    })
+
+    it('does not log metadata-only registration as a completed runtime registration', () => {
+        siteIntegrationRegistry.register({
+            id: 'test-integration',
+            name: 'Test Integration',
+            author: 'Test',
+        })
+
+        const mockIntegration = createMockSiteIntegration('test-integration')
+
+        siteIntegrationRegistry.register({
+            id: 'test-integration',
+            name: 'Test Integration',
+            author: 'Test',
+            integration: mockIntegration,
+        })
+
+        const successfulRegistrationLogs = vi.mocked(loggerMock.info).mock.calls
+            .map(([message]) => message)
+            .filter(message => String(message).includes('registered successfully'))
+
+        expect(successfulRegistrationLogs).toEqual([
+            '✅ Site integration test-integration registered successfully',
+        ])
     })
 
     it('keeps an existing full integration when duplicate metadata differs', () => {

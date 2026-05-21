@@ -73,7 +73,11 @@ class SiteIntegrationRegistry {
       return;
     }
 
-    logger.info(`📝 Registering site integration: ${info.name}`);
+    if (incomingIntegration) {
+      logger.info(`📝 Registering site integration runtime: ${info.name}`);
+    } else {
+      logger.debug(`📋 Registering site integration metadata: ${info.name}`);
+    }
 
     // Validate site integration structure
     this.validateIntegration(info);
@@ -94,7 +98,11 @@ class SiteIntegrationRegistry {
     // Register site integration (URL patterns handled separately via constants)
     this.integrations.set(info.id, mergedInfo);
 
-    logger.info(`✅ Site integration ${info.id} registered successfully`);
+    if (incomingIntegration) {
+      logger.info(`✅ Site integration ${info.id} registered successfully`);
+    } else {
+      logger.debug(`📋 Site integration metadata ${info.id} registered`);
+    }
   }
 
   /**

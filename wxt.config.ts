@@ -55,7 +55,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "Tako Manga Downloader",
-    version: "1.2.2",
+    version: "1.2.3",
     description: "Save chapters from supported manga sites into organized CBZ, ZIP, or image files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [
@@ -100,7 +100,7 @@ export default defineConfig({
     },
     // offscreen.html removed from web_accessible_resources (2026-02-06):
     // Offscreen docs are loaded internally via chrome.offscreen.createDocument(),
-    // not accessed by web pages. Exposing to <all_urls> was unnecessary and violated least privilege.
+    // not accessed by web pages.
     web_accessible_resources: [],
   },
 
