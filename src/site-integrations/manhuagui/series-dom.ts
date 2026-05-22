@@ -29,6 +29,31 @@ function getAttribute(
   return sanitizeLabel(node?.getAttribute?.(attributeName) ?? '');
 }
 
+function getDirectTextContent(node: { childNodes?: ArrayLike<{ nodeType?: number; textContent?: string | null }> } | null | undefined): string {
+  const directText = Array.from(node?.childNodes ?? [])
+    .filter((child) => child.nodeType === 3)
+    .map((child) => child.textContent ?? '')
+    .join(' ');
+
+  return sanitizeLabel(directText);
+}
+
+function getChapterTitle(
+  node: {
+    childNodes?: ArrayLike<{ nodeType?: number; textContent?: string | null }>;
+    getAttribute?: (name: string) => string | null | undefined;
+    querySelector?: (selector: string) => { childNodes?: ArrayLike<{ nodeType?: number; textContent?: string | null }> } | null;
+    textContent?: string | null;
+  } | null | undefined,
+): string {
+  const titleAttribute = getAttribute(node, 'title');
+  if (titleAttribute) {
+    return titleAttribute;
+  }
+
+  return getDirectTextContent(node?.querySelector?.('span') ?? node) || getTextContent(node);
+}
+
 function getHref(node: { href?: string; getAttribute?: (name: string) => string | null | undefined } | null | undefined): string {
   const rawHref = getAttribute(node, 'href');
   const absoluteRawHref = toAbsoluteUrl(rawHref);
@@ -141,7 +166,7 @@ function extractChapterGroupsFromDocument(documentLike: Document): ChapterGroup[
       const links = Array.from(list.querySelectorAll('li > a, a'))
         .map((anchor) => ({
           href: getHref(anchor),
-          title: getTextContent(anchor),
+          title: getChapterTitle(anchor),
         }))
         .filter((link) => link.href && link.title);
 

@@ -194,6 +194,67 @@ function buildCategorizedSeriesDocument() {
   };
 }
 
+function buildPageCountSeriesDocument() {
+  const makeChapterAnchor = (
+    href: string,
+    chapterTitle: string,
+    pageCountText: string,
+    titleAttribute: string | null = chapterTitle,
+  ) => ({
+    href,
+    textContent: `${chapterTitle}${pageCountText}`,
+    getAttribute: (name: string) => {
+      if (name === 'href') return href;
+      if (name === 'title') return titleAttribute;
+      return null;
+    },
+    querySelector: (selector: string) => {
+      if (selector !== 'span') {
+        return null;
+      }
+
+      return {
+        textContent: `${chapterTitle}${pageCountText}`,
+        childNodes: [
+          { nodeType: 3, textContent: chapterTitle },
+          { nodeType: 1, textContent: pageCountText },
+        ],
+      };
+    },
+  });
+
+  const chapterGroups = [
+    {
+      groupTitle: '单话',
+      links: [
+        makeChapterAnchor('https://www.manhuagui.com/comic/19430/100002.html', '第02回', '25p', null),
+        makeChapterAnchor('https://www.manhuagui.com/comic/19430/100001.html', '第01回', '54p'),
+      ],
+    },
+  ];
+
+  return {
+    querySelector: (selector: string) => {
+      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
+        return null;
+      }
+
+      return null;
+    },
+    querySelectorAll: (selector: string) => {
+      if (selector === '.chapter-list') {
+        return chapterGroups.map((group) => ({
+          previousElementSibling: { textContent: group.groupTitle },
+          parentElement: null,
+          querySelectorAll: (nested: string) => (nested === 'li > a, a' ? group.links : []),
+        }));
+      }
+
+      return [];
+    },
+  };
+}
+
 const readerConfigScript = `
   pVars={page:1,curServ:0,priServ:3,curHost:3,curFunc:0,curFile:"",manga:{preLoadNumber:1}};
   SMH.picserv=function(){var t=[{name:"自动",hosts:[{h:"i",w:.1},{h:"eu",w:4},{h:"eu1",w:4},{h:"eu2",w:4},{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]},{name:"电信",hosts:[{h:"eu",w:1},{h:"eu1",w:1},{h:"eu2",w:1}]},{name:"联通",hosts:[{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]}],n=[],i=[],r=0;return{}}();
@@ -276,6 +337,40 @@ export function registerManhuaguiCases(): void {
         title: '第1卷',
         chapterNumber: 1,
         volumeLabel: '单行本',
+      });
+
+      restoreBrowserGlobals(snapshot);
+    });
+
+    it('removes Manhuagui page-count suffixes from chapter titles and labels', async () => {
+      const snapshot = captureBrowserGlobals();
+      setTestWindow({ location: { pathname: '/comic/19430/', origin: 'https://www.manhuagui.com' } });
+      setTestDocument(buildPageCountSeriesDocument());
+
+      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
+      expect(extractChapterList).toBeDefined();
+      if (!extractChapterList) {
+        throw new Error('Expected extractChapterList to be defined');
+      }
+
+      const chapterResult = await extractChapterList();
+      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
+
+      expect(chapters).toHaveLength(2);
+      expect(chapters[0]).toMatchObject({
+        id: '100001',
+        title: '第01回',
+        chapterLabel: '第01回',
+        chapterNumber: 1,
+        volumeLabel: '单话',
+      });
+      expect(chapters[0]?.comicInfo.Title).toBe('第01回');
+      expect(chapters[1]).toMatchObject({
+        id: '100002',
+        title: '第02回',
+        chapterLabel: '第02回',
+        chapterNumber: 2,
       });
 
       restoreBrowserGlobals(snapshot);
