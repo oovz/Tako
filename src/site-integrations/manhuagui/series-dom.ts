@@ -66,6 +66,40 @@ function getHref(node: { href?: string; getAttribute?: (name: string) => string 
   return '';
 }
 
+type ManhuaguiElementLike = {
+  tagName?: string;
+  className?: string;
+  children?: ArrayLike<ManhuaguiElementLike>;
+  childNodes?: ArrayLike<{ nodeType?: number; textContent?: string | null }>;
+  textContent?: string | null;
+  href?: string;
+  getAttribute?: (name: string) => string | null | undefined;
+  matches?: (selector: string) => boolean;
+  querySelector?: (selector: string) => ManhuaguiElementLike | null;
+  querySelectorAll?: (selector: string) => ArrayLike<ManhuaguiElementLike>;
+}
+
+function isHeadingElement(node: { matches?: (selector: string) => boolean; tagName?: string } | null | undefined): boolean {
+  return node?.matches?.('h4') === true || node?.tagName?.toLowerCase() === 'h4';
+}
+
+function hasClassName(node: ManhuaguiElementLike, className: string): boolean {
+  return node.matches?.(`.${className}`) === true || ` ${node.className ?? ''} `.includes(` ${className} `);
+}
+
+function getChapterContainers(documentLike: Document): ManhuaguiElementLike[] {
+  return Array.from(documentLike.querySelectorAll('.chapter'));
+}
+
+function getChapterLinks(list: ManhuaguiElementLike): Array<{ href: string; title: string }> {
+  return Array.from(list.querySelectorAll?.('li > a, a') ?? [])
+    .map((anchor) => ({
+      href: getHref(anchor),
+      title: getChapterTitle(anchor),
+    }))
+    .filter((link) => link.href && link.title);
+}
+
 /**
  * Read the N-th `.detail-list span` item's values. Each detail item may either
  * wrap its values in `<a>` tags (genre/author/etc.) or inline them as text.
@@ -149,35 +183,32 @@ export function resolveAdultChapterDocument(documentLike: Document): Document | 
 }
 
 function extractChapterGroupsFromDocument(documentLike: Document): ChapterGroup[] {
-  const chapterLists = Array.from(documentLike.querySelectorAll('.chapter-list'));
-  if (chapterLists.length === 0) {
-    return [];
+  const groups: ChapterGroup[] = [];
+
+  for (const container of getChapterContainers(documentLike)) {
+    let currentGroup: ChapterGroup | undefined;
+
+    for (const child of Array.from(container.children ?? [])) {
+      if (isHeadingElement(child)) {
+        const headingText = getTextContent(child);
+        const volumeInfo = parseVolumeInfo(headingText);
+        currentGroup = {
+          title: headingText || undefined,
+          volumeId: `manhuagui-volume-${groups.length + 1}`,
+          volumeNumber: volumeInfo.volumeNumber,
+          links: [],
+        };
+        groups.push(currentGroup);
+        continue;
+      }
+
+      if (currentGroup && hasClassName(child, 'chapter-list')) {
+        currentGroup.links.push(...getChapterLinks(child));
+      }
+    }
   }
 
-  return chapterLists
-    .map((list, listIndex) => {
-      const headingText = sanitizeLabel(
-        list.previousElementSibling?.textContent
-        || list.parentElement?.querySelector('h4')?.textContent
-        || '',
-      ) || undefined;
-      const volumeInfo = parseVolumeInfo(headingText ?? '');
-
-      const links = Array.from(list.querySelectorAll('li > a, a'))
-        .map((anchor) => ({
-          href: getHref(anchor),
-          title: getChapterTitle(anchor),
-        }))
-        .filter((link) => link.href && link.title);
-
-      return {
-        title: headingText,
-        volumeId: `manhuagui-volume-${listIndex + 1}`,
-        volumeNumber: volumeInfo.volumeNumber,
-        links,
-      } satisfies ChapterGroup;
-    })
-    .filter((group) => group.links.length > 0);
+  return groups.filter((group) => group.links.length > 0);
 }
 
 /**

@@ -11,6 +11,34 @@ import {
   setTestWindow,
 } from './manhuagui-test-setup';
 
+type MockChapterGroup = {
+  groupTitle: string;
+  links: Array<Record<string, unknown>>;
+  beforeList?: Array<Record<string, unknown>>;
+};
+
+function buildMockChapterContainer(chapterGroups: MockChapterGroup[]) {
+  const children = chapterGroups.flatMap((group) => [
+    { tagName: 'H4', textContent: group.groupTitle },
+    ...(group.beforeList ?? []),
+    {
+      tagName: 'DIV',
+      className: 'chapter-list cf mt10',
+      querySelectorAll: (selector: string) => (selector === 'li > a, a' ? group.links : []),
+    },
+  ]);
+
+  return { children };
+}
+
+function queryChapterContainers(selector: string, chapterContainer: unknown) {
+  if (selector === '.chapter') {
+    return [chapterContainer];
+  }
+
+  return [];
+}
+
 function buildSeriesDocument() {
   const detailSpans = [
     { textContent: '2024', querySelectorAll: () => [] },
@@ -48,6 +76,7 @@ function buildSeriesDocument() {
       ],
     },
   ];
+  const chapterContainer = buildMockChapterContainer(chapterGroups);
 
   return {
     querySelector: (selector: string) => {
@@ -85,19 +114,7 @@ function buildSeriesDocument() {
         return detailSpans;
       }
 
-      if (selector === '.chapter h4, .chapter > h4') {
-        return chapterGroups.map((group) => ({ textContent: group.groupTitle }));
-      }
-
-      if (selector === '.chapter-list') {
-        return chapterGroups.map((group, index) => ({
-          previousElementSibling: { textContent: group.groupTitle },
-          querySelectorAll: (nested: string) => (nested === 'li > a, a' ? group.links : []),
-          getAttribute: (name: string) => (name === 'id' ? `chapter-list-${index + 1}` : null),
-        }));
-      }
-
-      return [];
+      return queryChapterContainers(selector, chapterContainer);
     },
   };
 }
@@ -171,6 +188,7 @@ function buildCategorizedSeriesDocument() {
       ],
     },
   ];
+  const chapterContainer = buildMockChapterContainer(chapterGroups);
 
   return {
     querySelector: (selector: string) => {
@@ -181,15 +199,7 @@ function buildCategorizedSeriesDocument() {
       return null;
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '.chapter-list') {
-        return chapterGroups.map((group) => ({
-          previousElementSibling: { textContent: group.groupTitle },
-          parentElement: null,
-          querySelectorAll: (nested: string) => (nested === 'li > a, a' ? group.links : []),
-        }));
-      }
-
-      return [];
+      return queryChapterContainers(selector, chapterContainer);
     },
   };
 }
@@ -232,6 +242,7 @@ function buildPageCountSeriesDocument() {
       ],
     },
   ];
+  const chapterContainer = buildMockChapterContainer(chapterGroups);
 
   return {
     querySelector: (selector: string) => {
@@ -242,15 +253,67 @@ function buildPageCountSeriesDocument() {
       return null;
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '.chapter-list') {
-        return chapterGroups.map((group) => ({
-          previousElementSibling: { textContent: group.groupTitle },
-          parentElement: null,
-          querySelectorAll: (nested: string) => (nested === 'li > a, a' ? group.links : []),
-        }));
+      return queryChapterContainers(selector, chapterContainer);
+    },
+  };
+}
+
+function buildPaginatedCategorySeriesDocument() {
+  const singleTalkPager = {
+    tagName: 'DIV',
+    className: 'chapter-page cf mt10',
+    textContent: '1-26 27-116 117-206',
+  };
+
+  const chapterGroups = [
+    {
+      groupTitle: '单行本',
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/19430/585094.html',
+          textContent: '第01卷190p',
+          getAttribute: (name: string) => (name === 'href' ? 'https://www.manhuagui.com/comic/19430/585094.html' : null),
+        },
+      ],
+    },
+    {
+      groupTitle: '单话',
+      beforeList: [singleTalkPager],
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/19430/219425.html',
+          textContent: '第01回54p',
+          getAttribute: (name: string) => {
+            if (name === 'href') return 'https://www.manhuagui.com/comic/19430/219425.html';
+            if (name === 'title') return '第01回';
+            return null;
+          },
+        },
+      ],
+    },
+    {
+      groupTitle: '番外篇',
+      links: [
+        {
+          href: 'https://www.manhuagui.com/comic/19430/494877.html',
+          textContent: '20卷附录8p',
+          getAttribute: (name: string) => (name === 'href' ? 'https://www.manhuagui.com/comic/19430/494877.html' : null),
+        },
+      ],
+    },
+  ];
+  const chapterContainer = buildMockChapterContainer(chapterGroups);
+
+  return {
+    querySelector: (selector: string) => {
+      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
+        return null;
       }
 
-      return [];
+      return null;
+    },
+    querySelectorAll: (selector: string) => {
+      return queryChapterContainers(selector, chapterContainer);
     },
   };
 }
@@ -420,6 +483,39 @@ export function registerManhuaguiCases(): void {
       restoreBrowserGlobals(snapshot);
     });
 
+    it('uses the nearest preceding category heading when pagination controls sit before a chapter list', async () => {
+      const snapshot = captureBrowserGlobals();
+      setTestWindow({ location: { pathname: '/comic/19430/', origin: 'https://www.manhuagui.com' } });
+      setTestDocument(buildPaginatedCategorySeriesDocument());
+
+      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
+      expect(extractChapterList).toBeDefined();
+      if (!extractChapterList) {
+        throw new Error('Expected extractChapterList to be defined');
+      }
+
+      const chapterResult = await extractChapterList();
+      expect(Array.isArray(chapterResult)).toBe(false);
+      if (Array.isArray(chapterResult)) {
+        throw new Error('Expected Manhuagui extractChapterList to return chapters with volumes');
+      }
+
+      const volumes = chapterResult.volumes ?? [];
+      expect(volumes.map((volume) => volume.title)).toEqual(['单行本', '单话', '番外篇']);
+      expect(chapterResult.chapters.map((chapter) => ({
+        id: chapter.id,
+        title: chapter.title,
+        volumeLabel: chapter.volumeLabel,
+      }))).toEqual([
+        { id: '585094', title: '第01卷190p', volumeLabel: '单行本' },
+        { id: '219425', title: '第01回', volumeLabel: '单话' },
+        { id: '494877', title: '20卷附录8p', volumeLabel: '番外篇' },
+      ]);
+
+      restoreBrowserGlobals(snapshot);
+    });
+
     it('decodes adult chapter lists from __VIEWSTATE content when the warning page is shown', async () => {
       const snapshot = captureBrowserGlobals();
       const adultChapterMarkup = `
@@ -434,25 +530,18 @@ export function registerManhuaguiCases(): void {
 
       class MockDomParser {
         parseFromString(_html: string) {
+          const chapterContainer = buildMockChapterContainer([{
+            groupTitle: '限制级',
+            links: [
+              { href: 'https://www.manhuagui.com/comic/21243/900001.html', textContent: '第1话 夜幕' },
+              { href: 'https://www.manhuagui.com/comic/21243/900002.html', textContent: '第2话 余烬' },
+            ],
+          }]);
+
           return {
             querySelector: () => null,
             querySelectorAll: (selector: string) => {
-              if (selector === '.chapter-list') {
-                return [{
-                  previousElementSibling: { textContent: '限制级' },
-                  parentElement: null,
-                  querySelectorAll: (nested: string) => (
-                    nested === 'li > a, a'
-                      ? [
-                        { href: 'https://www.manhuagui.com/comic/21243/900001.html', textContent: '第1话 夜幕' },
-                        { href: 'https://www.manhuagui.com/comic/21243/900002.html', textContent: '第2话 余烬' },
-                      ]
-                      : []
-                  ),
-                }];
-              }
-
-              return [];
+              return queryChapterContainers(selector, chapterContainer);
             },
           };
         }
@@ -496,28 +585,21 @@ export function registerManhuaguiCases(): void {
 
       class MockDomParser {
         parseFromString(_html: string) {
+          const chapterContainer = buildMockChapterContainer([{
+            groupTitle: '限制级',
+            links: [
+              {
+                href: 'about:blank/comic/21243/900001.html',
+                getAttribute: (name: string) => (name === 'href' ? '/comic/21243/900001.html' : null),
+                textContent: '第1话 夜幕',
+              },
+            ],
+          }]);
+
           return {
             querySelector: () => null,
             querySelectorAll: (selector: string) => {
-              if (selector !== '.chapter-list') {
-                return [];
-              }
-
-              return [{
-                previousElementSibling: { textContent: '限制级' },
-                parentElement: null,
-                querySelectorAll: (nested: string) => (
-                  nested === 'li > a, a'
-                    ? [
-                      {
-                        href: 'about:blank/comic/21243/900001.html',
-                        getAttribute: (name: string) => (name === 'href' ? '/comic/21243/900001.html' : null),
-                        textContent: '第1话 夜幕',
-                      },
-                    ]
-                    : []
-                ),
-              }];
+              return queryChapterContainers(selector, chapterContainer);
             },
           };
         }

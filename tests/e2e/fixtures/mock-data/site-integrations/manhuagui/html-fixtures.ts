@@ -117,7 +117,9 @@ function renderSeriesPageFrame(options: BuildSeriesPageHtmlOptions, chapterSecti
     </ul>
     ${options.description ? `<div id="intro-all">${escapeHtml(options.description)}</div>` : ''}
   </div>
-  ${chapterSection}
+  <div class="chapter cf mt16">
+    ${chapterSection}
+  </div>
 </body>
 </html>`;
 }
