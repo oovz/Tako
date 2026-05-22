@@ -16,7 +16,10 @@ import {
   MANGADEX_NETWORK_REPORT,
   MANGADEX_NETWORK_REPORT_TIMEOUT_MS,
   MANGADEX_UPLOADS_BASE,
+  createMangadexHttpError,
   parseChapterIdFromUrl,
+  getMangadexHttpErrorStatus,
+  isMangadexTransientHttpStatus,
 } from './api'
 import { getContextMangadexPreferences, resolveMangadexImageQuality } from './preferences'
 import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
@@ -29,8 +32,9 @@ type MangadexAtHomeReport = {
   cached: boolean
 }
 
-const isMangadexImageNotFoundError = (error: unknown): boolean => {
-  return error instanceof Error && error.message.startsWith('HTTP 404')
+const isMangadexImageRecoveryRetryableError = (error: unknown): boolean => {
+  const status = getMangadexHttpErrorStatus(error)
+  return status === 404 || (typeof status === 'number' && isMangadexTransientHttpStatus(status))
 }
 
 const waitForMangadexImageRecoveryWindow = async (signal?: AbortSignal): Promise<void> => {
@@ -101,7 +105,7 @@ async function fetchMangadexImageAsset(imageUrl: string, signal?: AbortSignal): 
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      throw createMangadexHttpError(response)
     }
 
     const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
@@ -232,7 +236,7 @@ export async function downloadMangadexChapterImage(
         failedOfficialBaseUrl = refreshedAtHome.baseUrl
       }
 
-      if (!isMangadexImageNotFoundError(lastRecoveryError) || cycle >= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES) {
+      if (!isMangadexImageRecoveryRetryableError(lastRecoveryError) || cycle >= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES) {
         break
       }
 

@@ -22,6 +22,12 @@ const MANGADEX_RETRY_CONFIG: MangadexRetryConfig = {
   maxRetryDelayMs: 60000,
 }
 
+const MANGADEX_TRANSIENT_HTTP_STATUSES = new Set([500, 502, 503, 504])
+
+export type MangadexHttpError = Error & {
+  status: number
+}
+
 export type MangadexStatisticsResponse = {
   statistics?: Record<string, {
     rating?: {
@@ -76,18 +82,66 @@ export type MangadexChapterFeedResponse = {
   limit: number
 }
 
-const parseRetryAfterHeader = (response: Response): number | null => {
+const clampRetryDelay = (delayMs: number): number => {
+  return Math.min(
+    Math.max(delayMs, 100),
+    MANGADEX_RETRY_CONFIG.maxRetryDelayMs,
+  )
+}
+
+const parseStandardRetryAfterHeader = (response: Response): number | null => {
+  const retryAfter = response.headers.get('Retry-After')
+  if (!retryAfter) return null
+
+  const seconds = Number(retryAfter)
+  if (Number.isFinite(seconds)) {
+    return clampRetryDelay(seconds * 1000)
+  }
+
+  const timestamp = Date.parse(retryAfter)
+  if (Number.isNaN(timestamp)) return null
+
+  return clampRetryDelay(timestamp - Date.now())
+}
+
+const parseMangadexRateLimitRetryAfterHeader = (response: Response): number | null => {
   const retryAfter = response.headers.get('X-RateLimit-Retry-After')
   if (!retryAfter) return null
 
   const timestamp = parseInt(retryAfter, 10)
   if (Number.isNaN(timestamp)) return null
 
-  const delayMs = (timestamp * 1000) - Date.now()
-  return Math.min(
-    Math.max(delayMs, 100),
-    MANGADEX_RETRY_CONFIG.maxRetryDelayMs,
-  )
+  return clampRetryDelay((timestamp * 1000) - Date.now())
+}
+
+const parseRetryAfterHeader = (response: Response): number | null => {
+  return parseStandardRetryAfterHeader(response) ?? parseMangadexRateLimitRetryAfterHeader(response)
+}
+
+export function createMangadexHttpError(response: Response, message?: string): MangadexHttpError {
+  const error = new Error(message ?? `HTTP ${response.status}: ${response.statusText}`) as MangadexHttpError
+  error.status = response.status
+  return error
+}
+
+export function isMangadexTransientHttpStatus(status: number): boolean {
+  return MANGADEX_TRANSIENT_HTTP_STATUSES.has(status)
+}
+
+export function getMangadexHttpErrorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error)) return undefined
+  const status = (error as Partial<MangadexHttpError>).status
+  return typeof status === 'number' ? status : undefined
+}
+
+const shouldRetryTransientResponse = (url: string, response: Response): boolean => {
+  if (!isMangadexTransientHttpStatus(response.status)) return false
+
+  try {
+    return new URL(url).hostname === new URL(MANGADEX_API_BASE).hostname
+  } catch {
+    return false
+  }
 }
 
 export async function fetchWithMangadexRetry(
@@ -96,10 +150,12 @@ export async function fetchWithMangadexRetry(
   retryCount = 0,
 ): Promise<Response> {
   const response = await fetch(url, options)
+  const shouldRetryRateLimit = response.status === 429
+  const shouldRetryTransient = shouldRetryTransientResponse(url, response)
 
-  if (response.status === 429 && retryCount < MANGADEX_RETRY_CONFIG.maxRetries) {
+  if ((shouldRetryRateLimit || shouldRetryTransient) && retryCount < MANGADEX_RETRY_CONFIG.maxRetries) {
     const retryDelay = parseRetryAfterHeader(response) ?? MANGADEX_RETRY_CONFIG.defaultRetryDelayMs
-    logger.warn(`[mangadex] Rate limited (429), retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${MANGADEX_RETRY_CONFIG.maxRetries})`)
+    logger.warn(`[mangadex] HTTP ${response.status}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${MANGADEX_RETRY_CONFIG.maxRetries})`)
     await new Promise((resolve) => setTimeout(resolve, retryDelay))
     return fetchWithMangadexRetry(url, options, retryCount + 1)
   }
@@ -132,9 +188,9 @@ export async function fetchMangaMetadata(mangaId: string): Promise<MangadexManga
 
   if (!response.ok) {
     if (response.status === 429) {
-      throw new Error('MangaDex rate limit exceeded. Please wait and try again.')
+      throw createMangadexHttpError(response, 'MangaDex rate limit exceeded. Please wait and try again.')
     }
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw createMangadexHttpError(response)
   }
 
   return (await response.json()) as MangadexMangaResponse
@@ -145,7 +201,7 @@ export async function fetchMangaStatistics(mangaId: string): Promise<MangadexSta
   const response = await fetchWithMangadexRetry(url, { credentials: 'omit' })
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw createMangadexHttpError(response)
   }
 
   return (await response.json()) as MangadexStatisticsResponse
@@ -189,9 +245,9 @@ export async function fetchChapterFeed(
 
   if (!response.ok) {
     if (response.status === 429) {
-      throw new Error('MangaDex rate limit exceeded. Please wait and try again.')
+      throw createMangadexHttpError(response, 'MangaDex rate limit exceeded. Please wait and try again.')
     }
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw createMangadexHttpError(response)
   }
 
   return (await response.json()) as MangadexChapterFeedResponse
@@ -203,9 +259,9 @@ export async function fetchAtHomeServer(chapterId: string): Promise<AtHomeRespon
 
   if (!response.ok) {
     if (response.status === 429) {
-      throw new Error('MangaDex at-home rate limit exceeded (40/min). Please wait.')
+      throw createMangadexHttpError(response, 'MangaDex at-home rate limit exceeded (40/min). Please wait.')
     }
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw createMangadexHttpError(response)
   }
 
   return (await response.json()) as AtHomeResponse

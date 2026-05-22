@@ -113,7 +113,7 @@ async function seedMangadexWebsitePreferences(page: Page): Promise<void> {
   await page.evaluate(() => {
     localStorage.setItem('md', JSON.stringify({
       settings: {
-        dataSaver: false,
+        dataSaver: true,
         filteredLanguages: ['en'],
       },
     }))
@@ -130,7 +130,7 @@ async function seedMangadexSessionPreferences(optionsPage: Page, seriesId: strin
       : {}
 
     bySeries[`mangadex#${mangaId}`] = {
-      dataSaver: false,
+      dataSaver: true,
       filteredLanguages: ['en'],
     }
 
@@ -362,10 +362,26 @@ async function waitForTerminalTask(context: BrowserContext, taskId: string): Pro
   return task
 }
 
-function assertTaskSucceeded(task: DownloadTaskState): void {
+const MANGADEX_TRANSIENT_FAILURE_TOKENS = ['HTTP 500', 'HTTP 502', 'HTTP 503', 'HTTP 504']
+
+function isTransientMangadexDownloadFailure(task: DownloadTaskState): boolean {
+  const failureText = JSON.stringify({
+    errorMessage: task.errorMessage,
+    chapters: task.chapters.map((chapter) => chapter.errorMessage),
+  })
+
+  return MANGADEX_TRANSIENT_FAILURE_TOKENS.some((token) => failureText.includes(token))
+}
+
+function assertTaskSucceeded(task: DownloadTaskState, options: { allowTransientMangadexSkip?: boolean } = {}): void {
   if (task.status === 'completed' || task.status === 'partial_success') {
     return
   }
+
+  test.skip(
+    options.allowTransientMangadexSkip === true && isTransientMangadexDownloadFailure(task),
+    `MangaDex live download returned a transient upstream HTTP failure after retries for task ${task.id}`,
+  )
 
   throw new Error(`Download task ${task.id} finished with status ${task.status}: ${JSON.stringify({
     errorMessage: task.errorMessage,
@@ -533,7 +549,7 @@ test.describe('Live download workflows', () => {
             ? {
                 mangadex: {
                   autoReadMangaDexSettings: true,
-                  imageQuality: 'data',
+                  imageQuality: 'data-saver',
                 },
               }
             : undefined,
@@ -542,7 +558,7 @@ test.describe('Live download workflows', () => {
         const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
         const task = await waitForTerminalTask(context, taskId)
 
-        assertTaskSucceeded(task)
+        assertTaskSucceeded(task, { allowTransientMangadexSkip: workflowCase.integrationId === 'mangadex' })
         expect(typeof task.lastSuccessfulDownloadId).toBe('number')
 
         const downloadItem = await waitForBrowserDownload(optionsPage, task.lastSuccessfulDownloadId as number)
@@ -580,7 +596,7 @@ test.describe('Live download workflows', () => {
         {
           mangadex: {
             autoReadMangaDexSettings: true,
-            imageQuality: 'data',
+            imageQuality: 'data-saver',
           },
         },
       )
@@ -588,7 +604,7 @@ test.describe('Live download workflows', () => {
       const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
       const task = await waitForTerminalTask(context, taskId)
 
-      assertTaskSucceeded(task)
+      assertTaskSucceeded(task, { allowTransientMangadexSkip: true })
       expect(task.lastSuccessfulDownloadId).toBeUndefined()
 
       const startedAt = Date.now()

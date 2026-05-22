@@ -671,6 +671,46 @@ describe('MangaDex site integration', () => {
             
             vi.useRealTimers();
         });
+
+        it('retries transient server errors with the default delay', async () => {
+            let callCount = 0;
+            (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        ok: false,
+                        status: 503,
+                        statusText: 'Service Unavailable',
+                        headers: {
+                            get: () => null,
+                        },
+                    };
+                }
+                return {
+                    ok: true,
+                    json: async () => ({
+                        result: 'ok',
+                        data: { id: 'test', type: 'manga', attributes: { title: { en: 'Retried 503' } }, relationships: [] },
+                    }),
+                };
+            });
+
+            vi.useFakeTimers();
+
+            try {
+                const metadataPromise = fetchMangadexMetadata('test-id');
+
+                await vi.advanceTimersByTimeAsync(6000);
+
+                const metadata = await metadataPromise;
+                expect(metadata.title).toBe('Retried 503');
+                const mangaRequestCount = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+                    .filter(([url]) => String(url).includes('/manga/test-id?')).length;
+                expect(mangaRequestCount).toBe(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
     });
 
     describe('User preferences', () => {
@@ -1258,16 +1298,33 @@ describe('MangaDex site integration', () => {
             ).rejects.toThrow('404');
         });
 
-        it('handles 500 server errors', async () => {
+        it('throws after exhausting 500 server error retries', async () => {
+            let callCount = 0;
             (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: false,
                 status: 500,
                 statusText: 'Internal Server Error',
+                headers: {
+                    get: () => null,
+                },
             });
 
-            await expect(
-                fetchMangadexMetadata('test-id')
-            ).rejects.toThrow('500');
+            vi.useFakeTimers();
+
+            try {
+                const metadataPromise = fetchMangadexMetadata('test-id');
+                const expectation = expect(metadataPromise).rejects.toThrow('500');
+                callCount = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.length;
+
+                await vi.advanceTimersByTimeAsync(20_000);
+
+                await expectation;
+                callCount = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+                    .filter(([url]) => String(url).includes('/manga/test-id?')).length;
+                expect(callCount).toBe(4);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it('handles network errors during fetch', async () => {
@@ -1958,6 +2015,95 @@ describe('MangaDex site integration', () => {
             expect(result.data.byteLength).toBe(4);
             expect(atHomeFetchCount).toBe(2);
             expect(uploadsFetchCount).toBe(2);
+        });
+
+        it('retries a later recovery cycle when the uploads fallback initially 503s', async () => {
+            const mockImageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47]).buffer;
+            const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+            let atHomeFetchCount = 0;
+            let uploadsFetchCount = 0;
+
+            fetchMock.mockImplementation(async (url: string) => {
+                if (url === 'https://same-node.mangadex.network/data/hash123/1-old.png') {
+                    return {
+                        ok: false,
+                        status: 503,
+                        statusText: 'Service Unavailable',
+                        headers: { get: () => null },
+                    };
+                }
+
+                if (url === 'https://api.mangadex.org/at-home/server/ch-1') {
+                    atHomeFetchCount += 1;
+                    return {
+                        ok: true,
+                        json: async () => ({
+                            baseUrl: 'https://same-node.mangadex.network',
+                            chapter: {
+                                hash: 'hash123',
+                                data: ['1-old.png'],
+                                dataSaver: ['1-saver.jpg'],
+                            },
+                        }),
+                        headers: { get: () => null },
+                    };
+                }
+
+                if (url === 'https://uploads.mangadex.org/data/hash123/1-old.png') {
+                    uploadsFetchCount += 1;
+                    if (uploadsFetchCount === 1) {
+                        return {
+                            ok: false,
+                            status: 503,
+                            statusText: 'Service Unavailable',
+                            headers: { get: () => null },
+                        };
+                    }
+
+                    return {
+                        ok: true,
+                        arrayBuffer: async () => mockImageData,
+                        headers: {
+                            get: (name: string) => {
+                                if (name === 'content-type') return 'image/png';
+                                if (name === 'X-Cache') return 'MISS';
+                                return null;
+                            },
+                        },
+                    };
+                }
+
+                if (url.includes('mangadex.network/report')) {
+                    return { ok: true, headers: { get: () => null } };
+                }
+
+                throw new Error(`Unexpected fetch URL: ${url}`);
+            });
+
+            vi.useFakeTimers();
+
+            try {
+                const { mangadexIntegration } = await import('@/src/site-integrations/mangadex');
+                const resultPromise = mangadexIntegration.background.chapter.downloadImage(
+                    'https://same-node.mangadex.network/data/hash123/1-old.png',
+                    {
+                        context: {
+                            chapterId: 'ch-1',
+                        },
+                    },
+                );
+
+                await vi.advanceTimersByTimeAsync(20_000);
+
+                const result = await resultPromise;
+                expect(result.filename).toBe('1-old.png');
+                expect(result.mimeType).toBe('image/png');
+                expect(result.data.byteLength).toBe(4);
+                expect(atHomeFetchCount).toBe(2);
+                expect(uploadsFetchCount).toBe(2);
+            } finally {
+                vi.useRealTimers();
+            }
         });
 
         it('reports cache HIT correctly to network', async () => {

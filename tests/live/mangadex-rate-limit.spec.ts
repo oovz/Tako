@@ -1,22 +1,67 @@
 import { test, expect } from '@playwright/test';
+import type { APIRequestContext, APIResponse } from '@playwright/test';
 
 const MANGA_ID = process.env.TMD_LIVE_MANGADEX_MANGA_ID ?? 'f98660a1-d2e2-461c-960d-7bd13df8b76d';
 const CHAPTER_ID = process.env.TMD_LIVE_MANGADEX_CHAPTER_ID ?? 'a54c491c-8e4c-4e97-8873-5b79e59da210';
+const MANGADEX_TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
+const MANGADEX_LIVE_REQUEST_RETRIES = 3;
+const MANGADEX_LIVE_RETRY_DELAY_MS = 5_000;
+
+async function waitForMangadexLiveRetry(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, MANGADEX_LIVE_RETRY_DELAY_MS));
+}
+
+async function getMangadexWithTransientRetry(
+  request: APIRequestContext,
+  url: string,
+): Promise<APIResponse> {
+  let response: APIResponse | undefined;
+
+  for (let attempt = 0; attempt <= MANGADEX_LIVE_REQUEST_RETRIES; attempt++) {
+    response = await request.get(url, { timeout: 20_000 });
+    if (response.ok() || response.status() === 429 || !MANGADEX_TRANSIENT_STATUSES.has(response.status())) {
+      return response;
+    }
+
+    if (attempt < MANGADEX_LIVE_REQUEST_RETRIES) {
+      await response.dispose();
+      await waitForMangadexLiveRetry();
+    }
+  }
+
+  if (!response) {
+    throw new Error(`MangaDex live request was not attempted: ${url}`);
+  }
+
+  return response;
+}
+
+function assertMangadexResponseIsUsable(response: APIResponse, endpointName: string): void {
+  if (response.status() === 429) {
+    const retryAfter = response.headers()['x-ratelimit-retry-after'];
+    expect(retryAfter).toBeDefined();
+    return;
+  }
+
+  test.skip(
+    MANGADEX_TRANSIENT_STATUSES.has(response.status()),
+    `MangaDex ${endpointName} returned transient HTTP ${response.status()} after retries`,
+  );
+
+  expect(response.ok()).toBe(true);
+}
 
 test.describe('MangaDex live API contracts', () => {
   test('manga endpoint returns expected core fields', async ({ request }) => {
-    const response = await request.get(
+    const response = await getMangadexWithTransientRetry(
+      request,
       `https://api.mangadex.org/manga/${MANGA_ID}?includes[]=author&includes[]=cover_art`,
-      { timeout: 20_000 },
     );
 
-    if (response.status() === 429) {
-      const retryAfter = response.headers()['x-ratelimit-retry-after'];
-      expect(retryAfter).toBeDefined();
+    assertMangadexResponseIsUsable(response, 'manga endpoint');
+    if (!response.ok()) {
       return;
     }
-
-    expect(response.ok()).toBe(true);
 
     const data = await response.json();
     expect(data).toHaveProperty('result', 'ok');
@@ -35,18 +80,15 @@ test.describe('MangaDex live API contracts', () => {
   });
 
   test('manga feed endpoint returns chapter payload shape', async ({ request }) => {
-    const response = await request.get(
+    const response = await getMangadexWithTransientRetry(
+      request,
       `https://api.mangadex.org/manga/${MANGA_ID}/feed?translatedLanguage[]=en&limit=5`,
-      { timeout: 20_000 },
     );
 
-    if (response.status() === 429) {
-      const retryAfter = response.headers()['x-ratelimit-retry-after'];
-      expect(retryAfter).toBeDefined();
+    assertMangadexResponseIsUsable(response, 'feed endpoint');
+    if (!response.ok()) {
       return;
     }
-
-    expect(response.ok()).toBe(true);
 
     const data = await response.json();
     expect(data).toHaveProperty('result', 'ok');
@@ -66,17 +108,15 @@ test.describe('MangaDex live API contracts', () => {
   });
 
   test('at-home endpoint returns server data or rate-limit headers', async ({ request }) => {
-    const response = await request.get(`https://api.mangadex.org/at-home/server/${CHAPTER_ID}`, {
-      timeout: 20_000,
-    });
+    const response = await getMangadexWithTransientRetry(
+      request,
+      `https://api.mangadex.org/at-home/server/${CHAPTER_ID}`,
+    );
 
-    if (response.status() === 429) {
-      const retryAfter = response.headers()['x-ratelimit-retry-after'];
-      expect(retryAfter).toBeDefined();
+    assertMangadexResponseIsUsable(response, 'at-home endpoint');
+    if (!response.ok()) {
       return;
     }
-
-    expect(response.ok()).toBe(true);
 
     const data = await response.json();
     expect(data).toHaveProperty('result');
