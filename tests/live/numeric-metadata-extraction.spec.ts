@@ -2,7 +2,7 @@ import { test, expect } from '../e2e/fixtures/extension'
 import { getTabId, getSessionState } from '../e2e/fixtures/state-helpers'
 import {
   LIVE_MANGADEX_REFERENCE_URL,
-  LIVE_MANHUAGUI_REFERENCE_URL,
+  LIVE_MANHUAGUI_KIMETSU_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_PIXIV_COMIC_DUPLICATE_TITLE_URL,
   LIVE_PIXIV_COMIC_DUAL_TITLE_URL,
@@ -319,7 +319,7 @@ test.describe('Live numeric metadata extraction', () => {
 
   test('preserves Manhuagui category headings as explicit live volumes', async ({ context, extensionId }) => {
     const page = await context.newPage()
-    await page.goto(LIVE_MANHUAGUI_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(LIVE_MANHUAGUI_KIMETSU_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
 
     const state = await loadLiveTabState(context, extensionId, page, 'manhuagui')
     expect(state.siteIntegrationId).toBe('manhuagui')
