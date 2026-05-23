@@ -26,13 +26,14 @@ import {
   buildManhuaguiPackedPayloadScript,
   type ManhuaguiPackedImageData,
 } from './api-fixtures';
-import { ADULT_CHAPTERS, BASIC_CHAPTERS, CATEGORY_CHAPTERS, SMALL_SERIES } from './chapter-data';
+import { ADULT_CHAPTERS, BASIC_CHAPTERS, CATEGORY_CHAPTERS, KIMETSU_CHAPTERS, SMALL_SERIES } from './chapter-data';
 import { buildManhuaguiImageFilenames } from './image-fixtures';
-import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, MINIMAL_SERIES } from './series-data';
+import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, KIMETSU_SERIES, MINIMAL_SERIES } from './series-data';
 
 interface SeriesPageChapterGroup {
   volumeLabel: string;
-  chapters: Array<{ id: string; url: string; title: string }>;
+  chapters: Array<{ id: string; url: string; title: string; displayTitle?: string }>;
+  beforeListHtml?: string;
 }
 
 interface BuildSeriesPageHtmlOptions {
@@ -58,12 +59,13 @@ function renderChapterListBlocks(groups: SeriesPageChapterGroup[]): string {
   return groups
     .map((group) => `
       <h4>${escapeHtml(group.volumeLabel)}</h4>
+      ${group.beforeListHtml ?? ''}
       <div class="chapter-list">
         <ul>
           ${group.chapters
             .map(
               (chapter) =>
-                `<li><a href="${escapeHtml(new URL(chapter.url).pathname)}" title="${escapeHtml(chapter.title)}">${escapeHtml(chapter.title)}</a></li>`,
+                `<li><a href="${escapeHtml(new URL(chapter.url).pathname)}" title="${escapeHtml(chapter.title)}"><span>${chapter.displayTitle ?? escapeHtml(chapter.title)}</span></a></li>`,
             )
             .join('\n          ')}
         </ul>
@@ -182,6 +184,45 @@ export const CATEGORY_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   coverUrl: CATEGORY_SERIES.series.coverUrl,
   status: CATEGORY_SERIES.series.status,
   groups: groupChaptersByVolume(CATEGORY_CHAPTERS.chapters),
+});
+
+export const KIMETSU_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
+  seriesId: KIMETSU_SERIES.series.seriesId,
+  seriesTitle: KIMETSU_SERIES.series.seriesTitle,
+  author: KIMETSU_SERIES.series.author,
+  description: KIMETSU_SERIES.series.description,
+  coverUrl: KIMETSU_SERIES.series.coverUrl,
+  status: KIMETSU_SERIES.series.status,
+  groups: [
+    {
+      volumeLabel: '单行本',
+      chapters: [{
+        id: '585094',
+        url: KIMETSU_CHAPTERS.chapters[0]!.url,
+        title: '第01卷',
+        displayTitle: '第01卷<i>190p</i>',
+      }],
+    },
+    {
+      volumeLabel: '单话',
+      beforeListHtml: '<div class="chapter-page cf mt10"><a>1-26</a><a>27-116</a><a>117-206</a></div>',
+      chapters: [{
+        id: '219425',
+        url: KIMETSU_CHAPTERS.chapters[1]!.url,
+        title: '第01回',
+        displayTitle: '第01回<i>54p</i>',
+      }],
+    },
+    {
+      volumeLabel: '番外篇',
+      chapters: [{
+        id: '494877',
+        url: KIMETSU_CHAPTERS.chapters[2]!.url,
+        title: '20卷附录',
+        displayTitle: '20卷附录<i>8p</i>',
+      }],
+    },
+  ],
 });
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>

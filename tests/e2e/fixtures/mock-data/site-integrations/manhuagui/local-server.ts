@@ -34,12 +34,14 @@ import {
 import {
   ADULT_SERIES_PAGE_HTML,
   BASIC_SERIES_PAGE_HTML,
+  CATEGORY_SERIES_PAGE_HTML,
   HOME_PAGE_HTML,
+  KIMETSU_SERIES_PAGE_HTML,
   MINIMAL_SERIES_PAGE_HTML,
   buildManhuaguiChapterPageHtml,
   buildManhuaguiSeriesPageHtml,
 } from './html-fixtures';
-import { ADULT_SERIES, BASIC_SERIES, MINIMAL_SERIES } from './series-data';
+import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, KIMETSU_SERIES, MINIMAL_SERIES } from './series-data';
 
 /**
  * Pathname prefixes under which the local server mounts Manhuagui
@@ -93,6 +95,8 @@ const manhuaguiMainHandler: MockRouteHandler = (req) => {
     if (seriesId === BASIC_SERIES.series.seriesId) return html(BASIC_SERIES_PAGE_HTML);
     if (seriesId === ADULT_SERIES.series.seriesId) return html(ADULT_SERIES_PAGE_HTML);
     if (seriesId === MINIMAL_SERIES.series.seriesId) return html(MINIMAL_SERIES_PAGE_HTML);
+    if (seriesId === CATEGORY_SERIES.series.seriesId) return html(CATEGORY_SERIES_PAGE_HTML);
+    if (seriesId === KIMETSU_SERIES.series.seriesId) return html(KIMETSU_SERIES_PAGE_HTML);
     return html(
       buildManhuaguiSeriesPageHtml({ seriesId, seriesTitle: `Series ${seriesId}`, groups: [] }),
     );

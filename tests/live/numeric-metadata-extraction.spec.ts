@@ -328,7 +328,7 @@ test.describe('Live numeric metadata extraction', () => {
 
     const volumes = state.volumes ?? []
     const volumeTitles = volumes.map((volume) => volume.title ?? volume.label)
-    expect(volumeTitles).toEqual(expect.arrayContaining(['单行本', '番外篇', '单话']))
+    expect(volumeTitles).toEqual(['单行本', '单话', '番外篇'])
 
     for (const title of ['单行本', '番外篇', '单话']) {
       const volume = volumes.find((candidate) => candidate.title === title || candidate.label === title)
@@ -338,6 +338,15 @@ test.describe('Live numeric metadata extraction', () => {
       expect(chaptersInVolume.every((chapter) => chapter.volumeLabel === title)).toBe(true)
       expect(chaptersInVolume.every((chapter) => chapter.volumeNumber === undefined)).toBe(true)
     }
+
+    const singleTalkVolume = volumes.find((volume) => volume.title === '单话' || volume.label === '单话')
+    const firstSingleTalkChapter = (state.chapters ?? []).find((chapter) => chapter.volumeId === singleTalkVolume?.id)
+    expect(firstSingleTalkChapter).toMatchObject({
+      title: '第01回',
+      chapterLabel: '第01回',
+      volumeLabel: '单话',
+    })
+    expect(firstSingleTalkChapter?.title).not.toContain('54p')
 
     await page.close()
   })

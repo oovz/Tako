@@ -65,6 +65,21 @@ export const CATEGORY_SERIES: SiteIntegrationSeriesDataset = {
   chapterDatasetId: 'MANHUAGUI_CATEGORY',
 };
 
+export const KIMETSU_SERIES: SiteIntegrationSeriesDataset = {
+  id: 'MANHUAGUI_KIMETSU_SERIES',
+  description: 'Manhuagui 19430 reference series with single-book, single-chapter, and extra category headings',
+  series: {
+    siteId: 'manhuagui',
+    seriesId: '19430',
+    seriesTitle: '鬼灭之刃',
+    author: '吾峠呼世晴',
+    description: 'Reference-style Manhuagui fixture matching https://www.manhuagui.com/comic/19430/.',
+    coverUrl: 'https://cf.mhgui.test/cpic/b/19430.jpg',
+    status: '已完结',
+  },
+  chapterDatasetId: 'MANHUAGUI_KIMETSU',
+};
+
 export function createManhuaguiSeries(
   overrides: Partial<SiteIntegrationSeriesData>,
 ): SiteIntegrationSeriesData {

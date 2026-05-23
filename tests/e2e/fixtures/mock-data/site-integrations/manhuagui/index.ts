@@ -9,6 +9,7 @@ export {
   ADULT_CHAPTERS,
   SMALL_SERIES,
   CATEGORY_CHAPTERS,
+  KIMETSU_CHAPTERS,
 } from './chapter-data';
 
 // Series data
@@ -17,6 +18,7 @@ export {
   ADULT_SERIES,
   MINIMAL_SERIES,
   CATEGORY_SERIES,
+  KIMETSU_SERIES,
   createManhuaguiSeries,
 } from './series-data';
 
@@ -26,6 +28,7 @@ export {
   ADULT_SERIES_PAGE_HTML,
   MINIMAL_SERIES_PAGE_HTML,
   CATEGORY_SERIES_PAGE_HTML,
+  KIMETSU_SERIES_PAGE_HTML,
   HOME_PAGE_HTML,
   CHAPTER_PAGE_PLACEHOLDER_HTML,
   buildManhuaguiChapterPageHtml,

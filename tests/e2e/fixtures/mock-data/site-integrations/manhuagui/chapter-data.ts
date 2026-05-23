@@ -16,6 +16,7 @@ const BASIC_SERIES_ID = '55555';
 const ADULT_SERIES_ID = '77777';
 const MINIMAL_SERIES_ID = '66666';
 const CATEGORY_SERIES_ID = '21243';
+const KIMETSU_SERIES_ID = '19430';
 
 export const BASIC_CHAPTERS: SiteIntegrationChapterDataset = {
   id: 'MANHUAGUI_BASIC',
@@ -175,6 +176,46 @@ export const CATEGORY_CHAPTERS: SiteIntegrationChapterDataset = {
       chapterNumber: 31,
       volumeId: 'manhuagui-volume-3',
       volumeLabel: '单话',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+  ],
+};
+
+export const KIMETSU_CHAPTERS: SiteIntegrationChapterDataset = {
+  id: 'MANHUAGUI_KIMETSU',
+  description: 'Manhuagui 19430-style page with category headings, pagination controls, and visible page counts',
+  chapters: [
+    {
+      id: '585094',
+      url: buildChapterUrl(KIMETSU_SERIES_ID, '585094'),
+      title: '第01卷',
+      index: 1,
+      chapterNumber: 1,
+      volumeId: 'manhuagui-volume-1',
+      volumeLabel: '单行本',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '219425',
+      url: buildChapterUrl(KIMETSU_SERIES_ID, '219425'),
+      title: '第01回',
+      index: 2,
+      chapterNumber: 1,
+      volumeId: 'manhuagui-volume-2',
+      volumeLabel: '单话',
+      status: 'queued',
+      lastUpdated: Date.now(),
+    },
+    {
+      id: '494877',
+      url: buildChapterUrl(KIMETSU_SERIES_ID, '494877'),
+      title: '20卷附录',
+      index: 3,
+      chapterNumber: 20,
+      volumeId: 'manhuagui-volume-3',
+      volumeLabel: '番外篇',
       status: 'queued',
       lastUpdated: Date.now(),
     },

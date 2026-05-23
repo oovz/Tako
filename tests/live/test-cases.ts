@@ -48,7 +48,7 @@ export const testCases: LiveTestCase[] = [
     url: LIVE_REFERENCE_URLS.manhuagui,
     integration: 'manhuagui',
     expectedMetadata: {
-      Series: '八田百田',
+      Series: '鬼灭之刃',
     }
   },
 ];

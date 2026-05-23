@@ -42,7 +42,7 @@ export const LIVE_SHONENJUMPPLUS_REFERENCE_URL = process.env.TMD_LIVE_SHONENJUMP
 export const MANHUAGUI_TEST_DOMAIN = 'www.manhuagui.com';
 export const MANHUAGUI_BASE_URL = `https://${MANHUAGUI_TEST_DOMAIN}`;
 export const LIVE_MANHUAGUI_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_URL
-  ?? 'https://www.manhuagui.com/comic/21243/';
+  ?? 'https://www.manhuagui.com/comic/19430/';
 export const MANHUAGUI_CONFIG_SCRIPT_DOMAIN = 'cf.mhgui.com';
 export const MANHUAGUI_IMAGE_HOSTS = ['i.hamreus.com', 'eu.hamreus.com', 'eu1.hamreus.com', 'eu2.hamreus.com', 'us.hamreus.com', 'us1.hamreus.com', 'us2.hamreus.com', 'us3.hamreus.com'] as const;
 
