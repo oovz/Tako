@@ -1,10 +1,9 @@
 import type { Chapter } from '../../types/chapter'
 import type { SeriesMetadata } from '../../types/series-metadata'
 import type { SeriesChapterListResult } from '../../types/site-integrations'
-import type { VolumeState } from '../../types/tab-state'
 import logger from '@/src/runtime/logger'
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
-import { normalizeNumericText, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils'
+import { parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils'
 import {
   createPixivAppHeaders,
   PIXIV_BASE_URL,
@@ -50,32 +49,6 @@ async function fetchPixivEpisodesV2(workId: string, order: 'asc' | 'desc' = 'asc
   return payload.data?.episodes ?? []
 }
 
-function parsePixivVolumeInfo(chapterTitle: string): { volumeLabel?: string; volumeNumber?: number } {
-  const normalized = sanitizeLabel(chapterTitle)
-  if (!normalized) {
-    return {}
-  }
-
-  const explicitVolumeMatch = normalizeNumericText(normalized).match(/(?:vol(?:ume)?\.?\s*|第\s*)(\d+)(?:\s*巻)/i)
-  if (!explicitVolumeMatch) {
-    return {}
-  }
-
-  const parsed = Number(explicitVolumeMatch[1])
-  if (!Number.isFinite(parsed)) {
-    return {}
-  }
-
-  return {
-    volumeLabel: explicitVolumeMatch[0],
-    volumeNumber: parsed,
-  }
-}
-
-function buildPixivVolumeId(volumeNumber: number): string {
-  return `pixiv-comic-volume-${volumeNumber}`
-}
-
 function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
   const episode = entry.episode
   if (!episode || typeof episode.id !== 'number') {
@@ -90,8 +63,6 @@ function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
   const subtitle = sanitizeLabel(episode.sub_title || '')
   const chapterTitle = sanitizeLabel([numberingTitle, subtitle].filter((part) => part.length > 0).join(' ')) || `Chapter ${id}`
   const chapterNumber = parseChapterNumber(chapterTitle)
-  const { volumeLabel, volumeNumber } = parsePixivVolumeInfo(chapterTitle)
-  const volumeId = typeof volumeNumber === 'number' ? buildPixivVolumeId(volumeNumber) : undefined
 
   const state = sanitizeLabel(entry.state || episode.state || '').toLowerCase()
   const locked = state.length > 0 ? state !== 'readable' : false
@@ -103,9 +74,6 @@ function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
     locked,
     chapterLabel: numberingTitle || undefined,
     chapterNumber,
-    volumeId,
-    volumeLabel,
-    volumeNumber,
     comicInfo: { Title: chapterTitle },
   }
 }
@@ -125,37 +93,6 @@ export async function fetchPixivSeriesMetadata(seriesId: string): Promise<Series
     language: 'ja',
     readingDirection: 'rtl',
   }
-}
-
-function buildPixivVolumes(chapters: Chapter[]): VolumeState[] {
-  const volumeById = new Map<string, VolumeState & { volumeNumber: number; firstIndex: number }>()
-
-  chapters.forEach((chapter, index) => {
-    if (!chapter.volumeId || typeof chapter.volumeNumber !== 'number') {
-      return
-    }
-
-    if (volumeById.has(chapter.volumeId)) {
-      return
-    }
-
-    const title = chapter.volumeLabel ?? `Volume ${chapter.volumeNumber}`
-    volumeById.set(chapter.volumeId, {
-      id: chapter.volumeId,
-      title,
-      label: title,
-      volumeNumber: chapter.volumeNumber,
-      firstIndex: index,
-    })
-  })
-
-  return Array.from(volumeById.values())
-    .sort((left, right) => left.volumeNumber - right.volumeNumber || left.firstIndex - right.firstIndex)
-    .map((volume) => ({
-      id: volume.id,
-      title: volume.title,
-      label: volume.label,
-    }))
 }
 
 export async function fetchPixivChapterList(seriesId: string): Promise<SeriesChapterListResult> {
@@ -194,6 +131,6 @@ export async function fetchPixivChapterList(seriesId: string): Promise<SeriesCha
   const chapters = Array.from(chapterById.values())
   return {
     chapters,
-    volumes: buildPixivVolumes(chapters),
+    volumes: [],
   }
 }

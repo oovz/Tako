@@ -157,6 +157,44 @@ export function registerPixivComicSeriesApiCases(): void {
       });
     });
 
+    it('does not infer Pixiv volume metadata from chapter title text without an explicit API volume field', async () => {
+      mockRateLimitedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            episodes: [
+              {
+                state: 'readable',
+                episode: {
+                  id: 80001,
+                  numbering_title: '第1巻',
+                  sub_title: '第1話',
+                  viewer_path: '/viewer/stories/80001',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+      const { pixivComicIntegration } = await import('@/src/site-integrations/pixiv-comic');
+      const chapterResult = await pixivComicIntegration.background.series!.fetchChapterList('9012');
+      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
+      const volumes = Array.isArray(chapterResult) ? [] : chapterResult.volumes ?? [];
+
+      expect(chapters).toHaveLength(1);
+      expect(chapters[0]).toMatchObject({
+        id: '80001',
+        title: '第1巻 第1話',
+        chapterLabel: '第1巻',
+        chapterNumber: 1,
+      });
+      expect(chapters[0].volumeId).toBeUndefined();
+      expect(chapters[0].volumeLabel).toBeUndefined();
+      expect(chapters[0].volumeNumber).toBeUndefined();
+      expect(volumes).toEqual([]);
+    });
+
     it('requests chapter list using ascending order to match 最初から order', async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,

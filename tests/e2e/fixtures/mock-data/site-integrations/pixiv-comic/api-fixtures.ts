@@ -60,11 +60,17 @@ export function buildPixivEpisodesV2Response(workId: string): Record<string, unk
     episode: {
       id: Number(chapter.id) || index + 1,
       numbering_title: `第${chapter.chapterNumber ?? index + 1}話`,
-      sub_title: chapter.title,
+      sub_title: stripNumberingTitle(chapter.title, `第${chapter.chapterNumber ?? index + 1}話`),
       viewer_path: `/viewer/stories/${chapter.id}`,
       state: 'readable',
     },
   }));
 
   return { data: { episodes } };
+}
+
+function stripNumberingTitle(title: string, numberingTitle: string): string {
+  return title.startsWith(numberingTitle)
+    ? title.slice(numberingTitle.length).trim()
+    : title;
 }
