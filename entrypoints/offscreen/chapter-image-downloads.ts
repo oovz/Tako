@@ -47,6 +47,15 @@ type DownloadChapterImagesResult = {
   failedReasons: string[]
 }
 
+function normalizeQueueConcurrency(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) {
+    return 16
+  }
+
+  return Math.min(16, Math.max(1, Math.trunc(numeric)))
+}
+
 export async function downloadChapterImages(
   runtime: ChapterProcessingRuntime,
   input: DownloadChapterImagesOptions,
@@ -66,7 +75,8 @@ export async function downloadChapterImages(
     mapImageIndex,
     collectFailureReasons = false,
   } = input
-  const downloadQueue = new PromiseQueue(16)
+  const imageConcurrency = normalizeQueueConcurrency(rateLimitSettings?.image.concurrency)
+  const downloadQueue = new PromiseQueue(imageConcurrency)
   let processed = 0
   let succeeded = 0
   let failed = 0

@@ -16,12 +16,12 @@ export function registerSettingsServiceCacheAndErrorCases(): void {
         ...DEFAULT_SETTINGS,
         downloads: {
           ...DEFAULT_SETTINGS.downloads,
-          maxConcurrentChapters: 7,
+          defaultFormat: 'zip',
         },
       };
 
       const settings = await settingsService.reload();
-      expect(settings.downloads.maxConcurrentChapters).toBe(7);
+      expect(settings.downloads.defaultFormat).toBe('zip');
     });
 
     it('should sync cache when storage changes externally', async () => {
@@ -31,7 +31,7 @@ export function registerSettingsServiceCacheAndErrorCases(): void {
         ...DEFAULT_SETTINGS,
         downloads: {
           ...DEFAULT_SETTINGS.downloads,
-          maxConcurrentChapters: 8,
+          defaultFormat: 'zip',
         },
       };
 
@@ -45,7 +45,7 @@ export function registerSettingsServiceCacheAndErrorCases(): void {
       mockOnChangedListeners.forEach(listener => listener(changes, 'local'));
 
       const settings = await settingsService.getSettings();
-      expect(settings.downloads.maxConcurrentChapters).toBe(8);
+      expect(settings.downloads.defaultFormat).toBe('zip');
     });
   });
 

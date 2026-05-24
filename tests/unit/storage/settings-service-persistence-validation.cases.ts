@@ -29,7 +29,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
         ...DEFAULT_SETTINGS,
         downloads: {
           ...DEFAULT_SETTINGS.downloads,
-          maxConcurrentChapters: 5,
+          defaultFormat: 'zip',
         },
       };
 
@@ -37,7 +37,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
 
       const settings = await settingsService.reload();
 
-      expect(settings.downloads.maxConcurrentChapters).toBe(5);
+      expect(settings.downloads.defaultFormat).toBe('zip');
     });
 
     it('should canonicalize partial persisted settings documents on reload', async () => {
@@ -93,7 +93,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
 
       expect(settings.downloads).toEqual(DEFAULT_SETTINGS.downloads);
       expect(settings.globalPolicy.image).toEqual(DEFAULT_SETTINGS.globalPolicy.image);
-      expect(settings.globalPolicy.chapter).toEqual({ concurrency: 7, delayMs: 250 });
+      expect(settings.globalPolicy.chapter).toEqual({ concurrency: 1, delayMs: 250 });
       expect(settings.globalRetries.image).toBe(4);
       expect(settings.globalRetries.chapter).toBe(DEFAULT_SETTINGS.globalRetries.chapter);
       expect(settings.notifications).toBe(false);
@@ -104,52 +104,30 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
     it('should persist settings updates to storage', async () => {
       await settingsService.updateSettings({
         downloads: {
-          maxConcurrentChapters: 4,
+          defaultFormat: 'zip',
         },
       });
 
-      expect(mockStorageData[SETTINGS_STORAGE_KEY].downloads.maxConcurrentChapters).toBe(4);
+      expect(mockStorageData[SETTINGS_STORAGE_KEY].downloads.defaultFormat).toBe('zip');
     });
 
     it('should merge partial updates with existing settings', async () => {
       await settingsService.updateSettings({
         downloads: {
-          maxConcurrentChapters: 3,
+          overwriteExisting: true,
         },
       });
 
       const settings = await settingsService.getSettings();
 
-      expect(settings.downloads.maxConcurrentChapters).toBe(3);
+      expect(settings.downloads.overwriteExisting).toBe(true);
       expect(settings.downloads.defaultFormat).toBe(DEFAULT_SETTINGS.downloads.defaultFormat);
       expect(settings.globalPolicy).toEqual(DEFAULT_SETTINGS.globalPolicy);
     });
   });
 
   describe('Settings Validation and Normalization', () => {
-    it('should clamp concurrency within limits', async () => {
-      await settingsService.updateSettings({
-        downloads: {
-          maxConcurrentChapters: 999,
-        },
-      });
-
-      const settings = await settingsService.getSettings();
-      expect(settings.downloads.maxConcurrentChapters).toBe(SETTINGS_LIMITS.MAX_CONCURRENCY);
-    });
-
-    it('should enforce minimum concurrency', async () => {
-      await settingsService.updateSettings({
-        downloads: {
-          maxConcurrentChapters: 0,
-        },
-      });
-
-      const settings = await settingsService.getSettings();
-      expect(settings.downloads.maxConcurrentChapters).toBe(SETTINGS_LIMITS.MIN_CONCURRENCY);
-    });
-
-    it('should clamp global policy concurrency', async () => {
+    it('should clamp global policy concurrency within limits', async () => {
       await settingsService.updateSettings({
         globalPolicy: {
           image: { concurrency: 999, delayMs: 100 },
@@ -158,6 +136,30 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
 
       const settings = await settingsService.getSettings();
       expect(settings.globalPolicy.image.concurrency).toBe(SETTINGS_LIMITS.MAX_CONCURRENCY);
+    });
+
+    it('should enforce minimum global policy concurrency', async () => {
+      await settingsService.updateSettings({
+        globalPolicy: {
+          image: { concurrency: 0, delayMs: 100 },
+        },
+      });
+
+      const settings = await settingsService.getSettings();
+      expect(settings.globalPolicy.image.concurrency).toBe(SETTINGS_LIMITS.MIN_CONCURRENCY);
+    });
+
+    it('should ignore stale download-level concurrency settings', async () => {
+      await settingsService.updateSettings({
+        downloads: {
+          maxConcurrentChapters: 999,
+          maxConcurrentDownloads: 999,
+        } as any,
+      });
+
+      const settings = await settingsService.getSettings();
+      expect('maxConcurrentChapters' in settings.downloads).toBe(false);
+      expect('maxConcurrentDownloads' in settings.downloads).toBe(false);
     });
 
     it('should enforce minimum delay', async () => {

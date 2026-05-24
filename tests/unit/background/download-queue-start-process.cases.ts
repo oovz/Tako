@@ -325,7 +325,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(chapterDispatchCalls[0]?.[0]?.payload?.seriesKey).toBe('test-site#series-1');
     });
 
-    it('dispatches chapters sequentially according to frozen task settings', async () => {
+    it('dispatches chapters sequentially even when stale task settings contain chapter concurrency above one', async () => {
       const dispatchOrder: string[] = [];
       let inFlightDispatches = 0;
       let maxInFlightDispatches = 0;
@@ -375,6 +375,10 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, 'test-site'),
           archiveFormat: 'cbz',
+          rateLimitSettings: {
+            image: { concurrency: 2, delayMs: 0 },
+            chapter: { concurrency: 2, delayMs: 0 },
+          },
         },
       });
 
@@ -392,9 +396,8 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     });
   });
 
-  describe('processDownloadQueue', () => {
+    describe('processDownloadQueue', () => {
     it('should start at most one queued task when none are active', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const tasks: DownloadTaskState[] = [
         makeTask({ id: 'task-1', mangaId: 'series-1', seriesTitle: 'Test Manga 1' }),
         makeTask({ id: 'task-2', mangaId: 'series-2', seriesTitle: 'Test Manga 2' }),
@@ -416,7 +419,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     });
 
     it('should not start new tasks when an active task exists', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const tasks: DownloadTaskState[] = [
         makeTask({ id: 'task-1', mangaId: 'series-1', seriesTitle: 'Test Manga 1', status: 'downloading' }),
         makeTask({ id: 'task-3', mangaId: 'series-3', seriesTitle: 'Test Manga 3' }),
@@ -434,9 +436,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled();
     });
 
-    it('starts only one queued task even when stale maxConcurrentDownloads exceeds 1', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 2;
-
+    it('starts only one queued task even when multiple tasks are queued', async () => {
       const tasks: DownloadTaskState[] = [
         makeTask({ id: 'task-1', siteIntegrationId: 'test-site-a', mangaId: 'series-1', seriesTitle: 'Test Manga 1', created: Date.now() }),
         makeTask({ id: 'task-2', siteIntegrationId: 'test-site-b', mangaId: 'series-2', seriesTitle: 'Test Manga 2', chapters: [createChapter({ url: 'https://example.com/ch2', title: 'Chapter 2', chapterNumber: 2 })], created: Date.now() + 1 }),
@@ -444,12 +444,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       ];
 
       mockGlobalState.downloadQueue = tasks;
-
-      const rateLimit = await import('@/src/runtime/rate-limit');
-      vi.mocked(rateLimit.resolveEffectivePolicy).mockImplementation(async (integrationId: string) => ({
-        concurrency: integrationId === 'test-site-a' || integrationId === 'test-site-b' || integrationId === 'test-site-c' ? 1 : 1,
-        delayMs: 0,
-      }));
 
       await processDownloadQueue(
         mockStateManager,
@@ -484,17 +478,12 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled();
     });
 
-    it('should start queued task even when site integration policy has delay', async () => {
-      vi.useFakeTimers();
-      const now = 1_000_000;
-      vi.setSystemTime(now);
-
+    it('starts queued task without consulting stale chapter task limiter policy', async () => {
       const tasks: DownloadTaskState[] = [
         makeTask({
           id: 'task-rate-limited',
           seriesTitle: 'Rate Limited',
           chapters: [createChapter({ url: 'https://example.com/wait-1', title: 'Chapter 1', chapterNumber: 1 })],
-          created: now - 1000,
         }),
       ];
 
@@ -504,25 +493,21 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       const mockedResolvePolicy = vi.mocked(rateLimit.resolveEffectivePolicy);
       const mockedSchedule = vi.mocked(rateLimit.scheduleForIntegrationScope);
 
-      mockedResolvePolicy.mockResolvedValueOnce({ concurrency: 1, delayMs: 5000 });
-
       await processDownloadQueue(
         mockStateManager,
         mockEnsureOffscreenReady,
       );
 
-      expect(mockedResolvePolicy).toHaveBeenCalledWith('test-site', 'chapter');
+      expect(mockedResolvePolicy).not.toHaveBeenCalled();
       expect(mockedSchedule).not.toHaveBeenCalled();
 
       expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
         'task-rate-limited',
         expect.objectContaining({ status: 'downloading' }),
       );
-
-      vi.useRealTimers();
     });
 
-    it('marks the replacement task downloading without waiting for a stale chapter limiter slot', async () => {
+    it('marks the replacement task downloading without waiting for stale limiter scaffolding', async () => {
       const task = makeTask({
         id: 'replacement-task',
         seriesTitle: 'Replacement Series',
@@ -532,25 +517,21 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       mockGlobalState.downloadQueue = [task];
 
       const rateLimit = await import('@/src/runtime/rate-limit');
-      vi.mocked(rateLimit.resolveEffectivePolicy).mockResolvedValueOnce({
-        concurrency: 1,
-        delayMs: 0,
-      });
       vi.mocked(rateLimit.scheduleForIntegrationScope).mockImplementationOnce(
         () => new Promise(() => undefined),
       );
 
-      void processDownloadQueue(
+      await processDownloadQueue(
         mockStateManager,
         mockEnsureOffscreenReady,
       );
 
-      await vi.waitFor(() => {
-        expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-          'replacement-task',
-          expect.objectContaining({ status: 'downloading' }),
-        );
-      });
+      expect(vi.mocked(rateLimit.resolveEffectivePolicy)).not.toHaveBeenCalled();
+      expect(vi.mocked(rateLimit.scheduleForIntegrationScope)).not.toHaveBeenCalled();
+      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
+        'replacement-task',
+        expect.objectContaining({ status: 'downloading' }),
+      );
     });
   });
 }

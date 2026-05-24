@@ -3,16 +3,22 @@ import type { SiteOverrideRecord } from '@/src/storage/site-overrides-service'
 import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
 import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
 
+type SitePolicyDefaults = {
+  image?: Partial<ExtensionSettings['globalPolicy']['image']>
+  chapter?: Partial<ExtensionSettings['globalPolicy']['chapter']>
+}
+
 export function createTaskSettingsSnapshot(
   settings: ExtensionSettings,
   siteIntegrationId: string,
   options: {
     siteSettings?: Record<string, unknown>
     siteOverride?: SiteOverrideRecord
+    sitePolicyDefaults?: SitePolicyDefaults
     comicInfo?: SeriesMetadataSnapshot
   } = {},
 ): TaskSettingsSnapshot {
-  const { siteSettings = {}, siteOverride, comicInfo } = options
+  const { siteSettings = {}, siteOverride, sitePolicyDefaults, comicInfo } = options
 
   return {
     archiveFormat: siteOverride?.outputFormat ?? settings.downloads.defaultFormat,
@@ -25,11 +31,16 @@ export function createTaskSettingsSnapshot(
     rateLimitSettings: {
       image: {
         ...settings.globalPolicy.image,
+        ...(sitePolicyDefaults?.image ?? {}),
         ...(siteOverride?.imagePolicy ?? {}),
       },
       chapter: {
         ...settings.globalPolicy.chapter,
-        ...(siteOverride?.chapterPolicy ?? {}),
+        ...(sitePolicyDefaults?.chapter ?? {}),
+        delayMs: siteOverride?.chapterPolicy?.delayMs
+          ?? sitePolicyDefaults?.chapter?.delayMs
+          ?? settings.globalPolicy.chapter.delayMs,
+        concurrency: 1,
       },
     },
     retrySettings: {

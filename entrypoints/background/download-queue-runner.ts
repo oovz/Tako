@@ -12,12 +12,10 @@ import {
   type ChapterDispatchOutcome,
 } from './download-queue-finalization';
 import { destinationService } from './destination';
-import { resolveEffectivePolicy } from '@/src/runtime/rate-limit';
 import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-integration-initialization';
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 
-const MAX_CONCURRENT_CHAPTER_DISPATCHES_PER_TASK = 1;
 const MAX_CONCURRENT_QUEUED_TASKS = 1;
 
 async function clearActiveTaskProgress(): Promise<void> {
@@ -111,7 +109,6 @@ export async function startDownloadTask(
       effectiveSettings.downloads.downloadMode === 'custom' ? 'fsa' : 'downloads-api';
     const settingsSnapshot = task.settingsSnapshot;
     const chapterDelayMs = Math.max(0, settingsSnapshot.rateLimitSettings.chapter.delayMs);
-    const maxConcurrentChapters = MAX_CONCURRENT_CHAPTER_DISPATCHES_PER_TASK;
     const totalChapters = task.chapters.length;
     const chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined> = Array.from(
       { length: totalChapters },
@@ -271,30 +268,18 @@ export async function startDownloadTask(
       }
     };
 
-    const inFlightDispatches = new Set<Promise<void>>();
-    const allDispatches: Promise<void>[] = [];
     for (let i = 0; i < totalChapters; i++) {
       if (shouldStopDispatch) {
         break;
       }
 
-      const chapterDispatch = dispatchChapter(i);
-      allDispatches.push(chapterDispatch);
-      inFlightDispatches.add(chapterDispatch);
-      void chapterDispatch.finally(() => {
-        inFlightDispatches.delete(chapterDispatch);
-      });
-
-      if (inFlightDispatches.size >= maxConcurrentChapters) {
-        await Promise.race(inFlightDispatches);
-      }
+      await dispatchChapter(i);
 
       if (i < totalChapters - 1 && chapterDelayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, chapterDelayMs));
       }
     }
 
-    await Promise.allSettled(allDispatches);
     if (shouldStopDispatch) {
       await clearActiveTaskProgress();
       scheduleQueueContinuation(stateManager, ensureOffscreenReady);
@@ -338,7 +323,6 @@ export async function startDownloadTask(
       taskId,
       jobId: `dispatch_loop_${taskId}`,
       mode: effectiveSettings.downloads.downloadMode,
-      maxConcurrentChapters,
       chapters: task.chapters.length,
     });
 
@@ -400,24 +384,7 @@ export async function processDownloadQueue(
         break;
       }
 
-      const integrationId: string | null = latestTask.siteIntegrationId || null;
       let startedTask = false;
-
-      if (integrationId) {
-        const policy = await resolveEffectivePolicy(integrationId, 'chapter');
-        const activeForIntegration = latestActiveTasks.filter(currentTask => currentTask.siteIntegrationId === integrationId).length;
-
-        if (activeForIntegration >= policy.concurrency) {
-          logger.debug('[Queue]', {
-            event: 'SKIPPED_FOR_INTEGRATION_CAPACITY',
-            taskId: latestTask.id,
-            integrationId,
-            activeForIntegration,
-            concurrency: policy.concurrency,
-          });
-          continue;
-        }
-      }
 
       const currentTask = (await stateManager.getGlobalState()).downloadQueue.find(currentQueuedTask => currentQueuedTask.id === latestTask.id);
       if (currentTask && currentTask.status === 'queued') {

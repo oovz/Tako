@@ -56,9 +56,9 @@ export function GlobalSettingsTab({
 
       {/* Section 2: Performance & limits */}
       <GlobalPerformanceSection
-        downloads={settings.downloads}
+        chapterPolicy={settings.globalPolicy.chapter}
         imagePolicy={settings.globalPolicy.image}
-        onDownloadsChange={updateDownloads}
+        onChapterPolicyChange={(policy) => updateGlobalPolicy('chapter', policy)}
         onImagePolicyChange={(policy) => updateGlobalPolicy('image', policy)}
       />
 

@@ -21,14 +21,12 @@ import type { ExtensionSettings } from '@/src/storage/settings-types';
  */
 export const BASE_DEFAULT_SETTINGS: ExtensionSettings = {
   downloads: {
-    maxConcurrentChapters: 2,
     downloadMode: 'browser',
     customDirectoryEnabled: false,
     customDirectoryHandleId: null,
     pathTemplate: '<SERIES_TITLE>/<VOLUME_LABEL>',
     defaultFormat: 'cbz',
     fileNameTemplate: 'Chapter <CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>',
-    maxConcurrentDownloads: 3,
     overwriteExisting: false,
     suppressSaveAsDialog: true,
     includeComicInfo: true,
@@ -38,7 +36,7 @@ export const BASE_DEFAULT_SETTINGS: ExtensionSettings = {
   },
   globalPolicy: {
     image: { concurrency: 5, delayMs: 100 },
-    chapter: { concurrency: 2, delayMs: 500 },
+    chapter: { concurrency: 1, delayMs: 500 },
   },
   globalRetries: {
     image: 3,
@@ -133,12 +131,10 @@ export const FAST_RATE_LIMIT_SETTINGS = {
   settings: {
     globalPolicy: {
       image: { concurrency: 10, delayMs: 0 }, // Fast: 10 concurrent, no delay
-      chapter: { concurrency: 5, delayMs: 0 }, // Fast: 5 concurrent, no delay
+      chapter: { concurrency: 1, delayMs: 0 },
     },
     downloads: {
       ...BASE_DEFAULT_SETTINGS.downloads,
-      maxConcurrentChapters: 5,
-      maxConcurrentDownloads: 10,
     },
   },
 } as const;
@@ -154,8 +150,6 @@ export const BALANCED_RATE_LIMIT_SETTINGS = {
     globalPolicy: BASE_DEFAULT_SETTINGS.globalPolicy,
     downloads: {
       ...BASE_DEFAULT_SETTINGS.downloads,
-      maxConcurrentChapters: 2,
-      maxConcurrentDownloads: 3,
     },
   },
 } as const;
@@ -274,14 +268,12 @@ export const POWER_USER_SETTINGS = {
   settings: {
     downloads: {
       ...BASE_DEFAULT_SETTINGS.downloads,
-      maxConcurrentChapters: 5,
-      maxConcurrentDownloads: 10,
       downloadMode: 'custom',
       overwriteExisting: true,
     },
     globalPolicy: {
       image: { concurrency: 10, delayMs: 0 },
-      chapter: { concurrency: 5, delayMs: 0 },
+      chapter: { concurrency: 1, delayMs: 0 },
     },
     advanced: {
       ...BASE_DEFAULT_SETTINGS.advanced,
@@ -300,8 +292,6 @@ export const MINIMAL_SETTINGS = {
   settings: {
     downloads: {
       ...BASE_DEFAULT_SETTINGS.downloads,
-      maxConcurrentChapters: 1,
-      maxConcurrentDownloads: 1,
       overwriteExisting: false,
     },
     globalPolicy: {

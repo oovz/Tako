@@ -21,7 +21,7 @@ export type SiteOverrideRecord = {
   pathTemplate?: string;
   // Per-scope rate policies (preferred new shape)
   imagePolicy?: { concurrency?: number; delayMs?: number };
-  chapterPolicy?: { concurrency?: number; delayMs?: number };
+  chapterPolicy?: { delayMs?: number };
   // Retry overrides (preferred new shape)
   retries?: { image?: number; chapter?: number };
 };
@@ -35,6 +35,10 @@ const RatePolicySchema = z.object({
   delayMs: z.number().optional(),
 });
 
+const ChapterPolicySchema = z.object({
+  delayMs: z.number().optional(),
+});
+
 const RetryOverridesSchema = z.object({
   image: z.number().optional(),
   chapter: z.number().optional(),
@@ -44,7 +48,7 @@ const SiteOverrideRecordSchema = z.object({
   outputFormat: ArchiveFormatSchema.optional(),
   pathTemplate: z.string().optional(),
   imagePolicy: RatePolicySchema.optional(),
-  chapterPolicy: RatePolicySchema.optional(),
+  chapterPolicy: ChapterPolicySchema.optional(),
   retries: RetryOverridesSchema.optional(),
 });
 

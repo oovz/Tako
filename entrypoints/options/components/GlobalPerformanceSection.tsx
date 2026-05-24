@@ -4,17 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import type { ExtensionSettings } from '@/src/storage/settings-types'
 import type { RateScopePolicy } from '@/src/types/rate-policy'
 
 interface GlobalPerformanceSectionProps {
-  downloads: ExtensionSettings['downloads']
+  chapterPolicy: RateScopePolicy
   imagePolicy: RateScopePolicy
-  onDownloadsChange: (updates: Partial<ExtensionSettings['downloads']>) => void
+  onChapterPolicyChange: (policy: Partial<RateScopePolicy>) => void
   onImagePolicyChange: (policy: Partial<RateScopePolicy>) => void
 }
 
-export function GlobalPerformanceSection({ downloads, imagePolicy, onDownloadsChange, onImagePolicyChange }: GlobalPerformanceSectionProps) {
+export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapterPolicyChange, onImagePolicyChange }: GlobalPerformanceSectionProps) {
   return (
     <Card>
       <CardHeader className="pb-4">
@@ -26,27 +25,6 @@ export function GlobalPerformanceSection({ downloads, imagePolicy, onDownloadsCh
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <Label>Concurrent Chapters</Label>
-              <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-foreground font-medium">
-                {downloads.maxConcurrentChapters} tasks
-              </span>
-            </div>
-            <Slider
-              data-testid="concurrent-chapters-slider"
-              value={[downloads.maxConcurrentChapters]}
-              min={1}
-              max={10}
-              step={1}
-              onValueChange={([value]) => onDownloadsChange({ maxConcurrentChapters: value })}
-              className="py-4"
-            />
-            <p className="text-xs text-muted-foreground">
-              Simultaneous chapter downloads.
-            </p>
-          </div>
-
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <Label>Image Concurrency</Label>
@@ -69,7 +47,7 @@ export function GlobalPerformanceSection({ downloads, imagePolicy, onDownloadsCh
           </div>
 
           <div className="space-y-4">
-            <Label>Request Delay (ms)</Label>
+            <Label>Image Request Delay (ms)</Label>
             <Input
               data-testid="request-delay-input"
               type="number"
@@ -82,6 +60,23 @@ export function GlobalPerformanceSection({ downloads, imagePolicy, onDownloadsCh
             />
             <p className="text-xs text-muted-foreground">
               Wait time between image requests.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <Label>Chapter Delay (ms)</Label>
+            <Input
+              data-testid="chapter-delay-input"
+              type="number"
+              min={0}
+              max={10000}
+              step={100}
+              value={chapterPolicy.delayMs}
+              onChange={(e) => onChapterPolicyChange({ delayMs: parseInt(e.target.value) || 0 })}
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Wait time between chapter dispatches.
             </p>
           </div>
         </div>

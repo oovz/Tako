@@ -77,6 +77,31 @@ describe('Rate Limiting', () => {
       expect(siteOverridesService.getAll).toHaveBeenCalled();
     });
 
+    it('merges partial site overrides over site integration defaults before global defaults', async () => {
+      const { siteOverridesService } = await import('@/src/storage/site-overrides-service');
+      const { siteIntegrationRegistry } = await import('@/src/runtime/site-integration-registry');
+      const { resolveEffectivePolicy } = await import('@/src/runtime/rate-limit');
+
+      vi.mocked(siteOverridesService.getAll).mockResolvedValueOnce({
+        'test-integration': {
+          imagePolicy: { concurrency: 8 },
+        },
+      });
+      vi.mocked(siteIntegrationRegistry.findById).mockReturnValueOnce({
+        id: 'test-integration',
+        name: 'Test Integration',
+        author: 'test',
+        policyDefaults: {
+          image: { concurrency: 3, delayMs: 250 },
+        },
+      });
+
+      await expect(resolveEffectivePolicy('test-integration', 'image')).resolves.toEqual({
+        concurrency: 8,
+        delayMs: 250,
+      });
+    });
+
   });
 
   describe('URL-based Rate Limiting', () => {

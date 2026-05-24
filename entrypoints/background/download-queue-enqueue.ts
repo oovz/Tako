@@ -3,6 +3,7 @@ import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-sn
 import { siteIntegrationSettingsService } from '@/src/storage/site-integration-settings-service'
 import { siteOverridesService } from '@/src/storage/site-overrides-service'
 import { sanitizeLabel } from '@/src/shared/site-integration-utils'
+import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
@@ -48,9 +49,11 @@ export async function enqueueStartDownloadTask(
   const siteOverrides = await siteOverridesService.getAll()
   const siteOverride = siteOverrides[payload.siteIntegrationId]
   const siteSettings = await siteIntegrationSettingsService.getForSite(payload.siteIntegrationId) as Record<string, unknown>
+  const sitePolicyDefaults = siteIntegrationRegistry.findById(payload.siteIntegrationId)?.policyDefaults
   const settingsSnapshot = createTaskSettingsSnapshot(globalState.settings, payload.siteIntegrationId, {
     siteSettings,
     siteOverride,
+    sitePolicyDefaults,
     comicInfo: payload.metadata,
   })
 

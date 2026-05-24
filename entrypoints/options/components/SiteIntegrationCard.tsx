@@ -219,11 +219,12 @@ export function SiteIntegrationCard({
                 scope="chapter"
                 value={override?.chapterPolicy || {}}
                 onChange={(value) => updateOverride({
-                  chapterPolicy: (value.concurrency || value.delayMs) ? value : undefined
+                  chapterPolicy: value.delayMs != null ? { delayMs: value.delayMs } : undefined
                 })}
                 globalValue={globalDefaults.chapterPolicy}
                 siteIntegrationDefault={siteIntegration.policyDefaults?.chapter}
                 showHierarchy={true}
+                showConcurrency={false}
               />
             </div>
 

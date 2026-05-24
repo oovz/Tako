@@ -5,6 +5,7 @@ import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-sn
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
+import { registerSiteIntegration, siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 
 vi.mock('@/src/runtime/logger', () => ({
   default: {
@@ -78,6 +79,7 @@ const START_PAYLOAD = {
 describe('settings snapshot isolation (behavior-based)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    siteIntegrationRegistry.clear()
   })
 
   it('captures enqueue-time task settings snapshot for created task', async () => {
@@ -192,6 +194,51 @@ describe('settings snapshot isolation (behavior-based)', () => {
     expect(secondTaskSnapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 250 })
   })
 
+  it('uses registered site policy defaults when enqueueing a task', async () => {
+    registerSiteIntegration({
+      id: 'custom-site',
+      name: 'Custom Site',
+      author: 'test',
+      policyDefaults: {
+        image: { concurrency: 5, delayMs: 350 },
+        chapter: { concurrency: 4, delayMs: 450 },
+      },
+    })
+
+    const settingsRef = {
+      current: makeSettings({
+        globalPolicy: {
+          image: { concurrency: 2, delayMs: 100 },
+          chapter: { concurrency: 3, delayMs: 200 },
+        },
+      }),
+    }
+    const addDownloadTask = vi.fn(async (_task: unknown) => {})
+    const stateManager = createStateManager(settingsRef, addDownloadTask)
+
+    const result = await enqueueStartDownloadTask(stateManager, {
+      ...START_PAYLOAD,
+      siteIntegrationId: 'custom-site',
+    }, 42)
+
+    expect(result.success).toBe(true)
+    const addCalls = (addDownloadTask as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const createdTaskRaw = addCalls[0]?.[0]
+    expect(createdTaskRaw).toBeDefined()
+
+    const snapshot = (createdTaskRaw as {
+      settingsSnapshot: {
+        rateLimitSettings: {
+          image: { concurrency: number; delayMs: number }
+          chapter: { concurrency: number; delayMs: number }
+        }
+      }
+    }).settingsSnapshot
+
+    expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 5, delayMs: 350 })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 450 })
+  })
+
   it('createTaskSettingsSnapshot returns policy objects independent from subsequent source mutations', () => {
     const settings = makeSettings({
       globalPolicy: {
@@ -207,6 +254,46 @@ describe('settings snapshot isolation (behavior-based)', () => {
 
     expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 4, delayMs: 100 })
     expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 500 })
+  })
+
+  it('freezes chapter concurrency at one while applying configured chapter delay', () => {
+    const settings = makeSettings({
+      globalPolicy: {
+        image: { concurrency: 4, delayMs: 100 },
+        chapter: { concurrency: 7, delayMs: 500 },
+      },
+    })
+
+    const snapshot = createTaskSettingsSnapshot(settings, 'mangadex', {
+      siteOverride: {
+        chapterPolicy: { concurrency: 9, delayMs: 1250 } as unknown as { delayMs: number },
+      },
+    })
+
+    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 1250 })
+  })
+
+  it('applies site policy defaults between global settings and explicit site overrides', () => {
+    const settings = makeSettings({
+      globalPolicy: {
+        image: { concurrency: 2, delayMs: 100 },
+        chapter: { concurrency: 3, delayMs: 200 },
+      },
+    })
+
+    const snapshot = createTaskSettingsSnapshot(settings, 'custom-site', {
+      sitePolicyDefaults: {
+        image: { concurrency: 6, delayMs: 700 },
+        chapter: { concurrency: 4, delayMs: 800 },
+      },
+      siteOverride: {
+        imagePolicy: { delayMs: 900 },
+        chapterPolicy: { delayMs: 1000 },
+      },
+    })
+
+    expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 6, delayMs: 900 })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 1000 })
   })
 })
 

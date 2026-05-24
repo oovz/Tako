@@ -14,7 +14,6 @@ import {
 export function registerDownloadQueueBehaviorCases(): void {
   describe('unlimited queue behavior', () => {
     it('accepts unlimited tasks without capacity enforcement', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const tasks: DownloadTaskState[] = Array.from({ length: 50 }, (_, i) => makeTask({
         id: `task-${i}`,
         mangaId: `series-${i}`,
@@ -38,7 +37,6 @@ export function registerDownloadQueueBehaviorCases(): void {
     });
 
     it('does not block new tasks based on queue size', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const tasks: DownloadTaskState[] = Array.from({ length: 100 }, (_, i) => makeTask({
         id: `task-${i}`,
         mangaId: `series-${i}`,
@@ -68,7 +66,6 @@ export function registerDownloadQueueBehaviorCases(): void {
 
   describe('FIFO queue processing', () => {
     it('processes tasks in creation order (FIFO)', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const now = Date.now();
       const tasks: DownloadTaskState[] = [
         makeTask({ id: 'task-old', mangaId: 'series-1', seriesTitle: 'Old Task', created: now - 10000 }),
@@ -93,7 +90,6 @@ export function registerDownloadQueueBehaviorCases(): void {
     });
 
     it('maintains queue order when first task completes', async () => {
-      mockGlobalState.settings.downloads.maxConcurrentDownloads = 1;
       const now = Date.now();
       const tasks: DownloadTaskState[] = [
         makeTask({ id: 'task-1', mangaId: 'series-1', seriesTitle: 'First Task', status: 'completed', created: now - 20000, completed: now - 1000 }),
@@ -225,7 +221,7 @@ export function registerDownloadQueueBehaviorCases(): void {
   });
 
   describe('queue status vocabulary excludes waiting/cooldown', () => {
-    it('does not use waiting/cooldown fields even when site integration policy has delay', async () => {
+    it('does not use waiting/cooldown fields when starting the single queued task', async () => {
       vi.useFakeTimers();
       const now = Date.now();
       vi.setSystemTime(now);
@@ -233,12 +229,6 @@ export function registerDownloadQueueBehaviorCases(): void {
       const task = makeTask({ id: 'rate-limited-task', seriesTitle: 'Rate Limited', created: now - 1000 });
 
       mockGlobalState.downloadQueue = [task];
-
-      const rateLimit = await import('@/src/runtime/rate-limit');
-      vi.mocked(rateLimit.resolveEffectivePolicy).mockResolvedValueOnce({
-        concurrency: 1,
-        delayMs: 10000,
-      });
 
       await processDownloadQueue(
         mockStateManager,

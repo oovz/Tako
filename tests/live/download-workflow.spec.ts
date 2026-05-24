@@ -542,7 +542,6 @@ test.describe('Live download workflows', () => {
             customDirectoryEnabled: false,
             customDirectoryHandleId: null,
             defaultFormat: 'cbz',
-            maxConcurrentChapters: 1,
             overwriteExisting: true,
           },
           workflowCase.integrationId === 'mangadex'
@@ -590,7 +589,6 @@ test.describe('Live download workflows', () => {
           customDirectoryEnabled: true,
           customDirectoryHandleId: 'download-root',
           defaultFormat: 'cbz',
-          maxConcurrentChapters: 1,
           overwriteExisting: true,
         },
         {

@@ -10,7 +10,7 @@
  * 3. Seed an OPFS directory + `tako-fs/handles[download-root]` IndexedDB
  *    handle so custom-folder downloads land in a test-scoped sandbox
  *    instead of the user's Downloads.
- * 4. Apply custom-mode settings (defaultFormat `cbz`, single concurrency)
+ * 4. Apply custom-mode settings (defaultFormat `cbz`)
  *    so the archive writer goes through the OPFS path.
  * 5. Dispatch `START_DOWNLOAD` for one chapter and wait for the task to
  *    reach a terminal state.
@@ -173,7 +173,6 @@ export async function persistCustomModeDownloadSettings(
           customDirectoryEnabled: true,
           customDirectoryHandleId: 'download-root',
           defaultFormat: 'cbz',
-          maxConcurrentChapters: 1,
           overwriteExisting: true,
         },
       };

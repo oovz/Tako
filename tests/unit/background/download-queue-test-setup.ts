@@ -74,7 +74,6 @@ export const testSettings = {
   downloads: {
     ...DEFAULT_SETTINGS.downloads,
     pathTemplate: '/downloads',
-    maxConcurrentChapters: 3,
   },
 };
 

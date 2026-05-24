@@ -13,7 +13,7 @@ export function registerSettingsServiceUpdatesAndHelpersCases(): void {
 
       const settings = await settingsService.getSettings();
       expect(settings.downloads.pathTemplate).toBe('custom/path');
-      expect(settings.downloads.maxConcurrentChapters).toBe(DEFAULT_SETTINGS.downloads.maxConcurrentChapters);
+      expect(settings.downloads.defaultFormat).toBe(DEFAULT_SETTINGS.downloads.defaultFormat);
     });
 
     it('should update nested globalPolicy image settings', async () => {
@@ -37,7 +37,7 @@ export function registerSettingsServiceUpdatesAndHelpersCases(): void {
       });
 
       const settings = await settingsService.getSettings();
-      expect(settings.globalPolicy.chapter.concurrency).toBe(3);
+      expect(settings.globalPolicy.chapter.concurrency).toBe(1);
       expect(settings.globalPolicy.chapter.delayMs).toBe(300);
       expect(settings.globalPolicy.image).toEqual(DEFAULT_SETTINGS.globalPolicy.image);
     });
@@ -93,7 +93,7 @@ export function registerSettingsServiceUpdatesAndHelpersCases(): void {
   describe('Complex Update Scenarios', () => {
     it('should handle multiple sequential updates', async () => {
       await settingsService.updateSettings({
-        downloads: { maxConcurrentChapters: 3 },
+        downloads: { pathTemplate: 'custom/path' },
       });
 
       await settingsService.updateSettings({
@@ -105,14 +105,14 @@ export function registerSettingsServiceUpdatesAndHelpersCases(): void {
       });
 
       const settings = await settingsService.getSettings();
-      expect(settings.downloads.maxConcurrentChapters).toBe(3);
+      expect(settings.downloads.pathTemplate).toBe('custom/path');
       expect(settings.downloads.defaultFormat).toBe('zip');
       expect(settings.globalRetries.image).toBe(5);
     });
 
     it('should handle updating all top-level sections', async () => {
       await settingsService.updateSettings({
-        downloads: { maxConcurrentChapters: 4 },
+        downloads: { overwriteExisting: true },
       });
 
       await settingsService.updateSettings({
@@ -135,7 +135,7 @@ export function registerSettingsServiceUpdatesAndHelpersCases(): void {
       });
 
       const settings = await settingsService.getSettings();
-      expect(settings.downloads.maxConcurrentChapters).toBe(4);
+      expect(settings.downloads.overwriteExisting).toBe(true);
       expect(settings.globalPolicy.image.concurrency).toBe(3);
       expect(settings.globalRetries.image).toBe(4);
       expect(settings.notifications).toBe(false);

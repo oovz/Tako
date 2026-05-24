@@ -17,6 +17,40 @@ vi.mock('@/src/runtime/rate-limit', () => ({
 }))
 
 describe('downloadChapterImages', () => {
+  it('uses the image concurrency from the task rate-limit snapshot', async () => {
+    const urls = Array.from({ length: 5 }, (_, index) => `https://example.com/${index + 1}.jpg`)
+    const downloadImage = vi.fn(() => new Promise<{ data: ArrayBuffer; filename: string; mimeType: string }>(() => undefined))
+    const runtime: ChapterProcessingRuntime = {
+      withImageRetries: async (fn) => fn(),
+      resolveWritableDownloadRoot: vi.fn(),
+      emitFsaFallbackProgress: vi.fn(),
+      requestBrowserBlobDownload: vi.fn(),
+      retryWithBrowserDownloads: vi.fn(),
+      getMemoryStats: vi.fn(() => null),
+    }
+
+    void downloadChapterImages(runtime, {
+      urls,
+      integrationId: 'test-site',
+      chapterId: 'chapter-1',
+      rateLimitSettings: {
+        image: { concurrency: 2, delayMs: 0 },
+        chapter: { concurrency: 2, delayMs: 0 },
+      },
+      onProgress: vi.fn(async () => undefined),
+      downloadImage,
+      onDownloaded: vi.fn(),
+      onDownloadFailed: vi.fn(),
+    })
+
+    await vi.waitFor(() => {
+      expect(downloadImage).toHaveBeenCalledTimes(2)
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(downloadImage).toHaveBeenCalledTimes(2)
+  })
+
   it('drops queued image jobs when the chapter abort signal fires', async () => {
     const controller = new AbortController()
     const urls = Array.from({ length: 20 }, (_, index) => `https://example.com/${index + 1}.jpg`)

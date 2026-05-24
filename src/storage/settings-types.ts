@@ -13,7 +13,6 @@ export interface AdvancedSettings {
 // All download-related settings (both engine and behavior)
 export interface DownloadSettings {
   // Engine settings
-  maxConcurrentChapters: number;
   downloadMode: DownloadMode;
   customDirectoryEnabled: boolean;
   customDirectoryHandleId: string | null;
@@ -26,7 +25,6 @@ export interface DownloadSettings {
    * Defaults to <CHAPTER_TITLE>.
    */
   fileNameTemplate?: string;
-  maxConcurrentDownloads: number;
   overwriteExisting: boolean;
   /** When true, chrome.downloads.download runs without Chrome's file chooser. */
   suppressSaveAsDialog: boolean;

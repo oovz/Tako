@@ -32,7 +32,7 @@ describe('Site integration custom settings contract', () => {
         globalDefaults: {
           outputFormat: 'cbz',
           imagePolicy: { concurrency: 2, delayMs: 500 },
-          chapterPolicy: { concurrency: 2, delayMs: 500 },
+          chapterPolicy: { concurrency: 1, delayMs: 500 },
         },
         siteIntegrationSettingsValues: {},
         onEnabledChange: vi.fn(),

@@ -34,36 +34,32 @@ function createLimiter(policy: EffectivePolicy): Bottleneck {
 }
 
 export async function resolveEffectivePolicy(integrationId: string, scope: RateScope): Promise<EffectivePolicy> {
-  // 1) Site override (if exists)
+  let overridePolicy: Partial<EffectivePolicy> | undefined
+
   try {
     const overrides = await siteOverridesService.getAll()
     const o = overrides[integrationId]
     if (o) {
-      const policy = (scope === 'image' ? o.imagePolicy : o.chapterPolicy)
-      if (policy && (policy.concurrency != null || policy.delayMs != null)) {
-        return normalizePolicy({
-          concurrency: policy.concurrency ?? 2,
-          delayMs: policy.delayMs ?? 500,
-        })
-      }
+      overridePolicy = scope === 'image' ? o.imagePolicy : o.chapterPolicy
     }
   } catch {
     // Optional: site overrides may not be available; proceed with defaults
   }
 
-  // 2) Site integration policy defaults (if provided)
   const info = siteIntegrationRegistry.findById(integrationId)
-  const defaults = info?.policyDefaults?.[scope]
-  if (defaults) {
-    return normalizePolicy({
-      concurrency: defaults.concurrency ?? 2,
-      delayMs: defaults.delayMs ?? 500,
-    })
+  const siteDefaults = info?.policyDefaults?.[scope]
+  const global = await settingsService.getGlobalPolicy()
+  const mergedPolicy = {
+    ...global[scope],
+    ...(siteDefaults ?? {}),
+    ...(overridePolicy ?? {}),
   }
 
-  // 3) Global defaults
-  const global = await settingsService.getGlobalPolicy()
-  return normalizePolicy(global[scope])
+  if (scope === 'chapter') {
+    mergedPolicy.concurrency = 1
+  }
+
+  return normalizePolicy(mergedPolicy)
 }
 
 function normalizePolicy(p: { concurrency: number; delayMs: number }): EffectivePolicy {

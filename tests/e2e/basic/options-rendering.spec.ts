@@ -40,6 +40,42 @@ test.describe('Options Page', () => {
     await expect(page.getByText('No archive + default downloads can clutter the download shelf')).toHaveCount(0);
   });
 
+  test('persists chapter delay without exposing chapter concurrency', async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
+
+    await expect(page.locator('[data-testid="concurrent-chapters-slider"]')).toHaveCount(0);
+    const input = page.locator('[data-testid="chapter-delay-input"]');
+    await input.fill('1250');
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+
+    await expect
+      .poll(async () => {
+        const settings = await page.evaluate(async () => {
+          const result = await chrome.storage.local.get('settings:global');
+          return result['settings:global'] as {
+            downloads: Record<string, unknown>;
+            globalPolicy: { chapter: { concurrency: number; delayMs: number } };
+          };
+        });
+        return settings.globalPolicy.chapter.delayMs;
+      })
+      .toBe(1250);
+
+    const settings = await page.evaluate(async () => {
+      const result = await chrome.storage.local.get('settings:global');
+      return result['settings:global'] as {
+        downloads: Record<string, unknown>;
+        globalPolicy: { chapter: { concurrency: number; delayMs: number } };
+      };
+    });
+    expect('maxConcurrentChapters' in settings.downloads).toBe(false);
+    expect('maxConcurrentDownloads' in settings.downloads).toBe(false);
+    expect(settings.globalPolicy.chapter.concurrency).toBe(1);
+  });
+
   test('keeps download destination controls in Downloads instead of General', async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await page.waitForLoadState('domcontentloaded');

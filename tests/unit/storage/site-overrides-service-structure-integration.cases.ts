@@ -36,12 +36,11 @@ export function registerSiteOverridesStructureAndIntegrationCases(): void {
 
     it('should store chapter policy override', async () => {
       await siteOverridesService.updateForSite('pixiv-comic', {
-        chapterPolicy: { concurrency: 2, delayMs: 500 },
+        chapterPolicy: { delayMs: 500 },
       });
 
       const overrides = await siteOverridesService.getAll();
       expect(overrides['pixiv-comic'].chapterPolicy).toEqual({
-        concurrency: 2,
         delayMs: 500,
       });
     });
@@ -63,7 +62,7 @@ export function registerSiteOverridesStructureAndIntegrationCases(): void {
         outputFormat: 'cbz',
         pathTemplate: '/manga/{series_title}',
         imagePolicy: { concurrency: 5, delayMs: 200 },
-        chapterPolicy: { concurrency: 3 },
+        chapterPolicy: { delayMs: 300 },
         retries: { image: 4, chapter: 2 },
       });
 
@@ -72,7 +71,7 @@ export function registerSiteOverridesStructureAndIntegrationCases(): void {
         outputFormat: 'cbz',
         pathTemplate: '/manga/{series_title}',
         imagePolicy: { concurrency: 5, delayMs: 200 },
-        chapterPolicy: { concurrency: 3 },
+        chapterPolicy: { delayMs: 300 },
         retries: { image: 4, chapter: 2 },
       });
     });

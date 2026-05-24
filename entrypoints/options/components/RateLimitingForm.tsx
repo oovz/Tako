@@ -15,6 +15,7 @@ interface RateLimitingFormProps {
   globalValue?: RateScopePolicy
   siteIntegrationDefault?: Partial<RateScopePolicy>
   showHierarchy?: boolean
+  showConcurrency?: boolean
   disabled?: boolean
 }
 
@@ -25,6 +26,7 @@ export function RateLimitingForm({
   globalValue,
   siteIntegrationDefault,
   showHierarchy = false,
+  showConcurrency = true,
   disabled = false
 }: RateLimitingFormProps) {
   const capitalizedScope = scope.charAt(0).toUpperCase() + scope.slice(1)
@@ -50,31 +52,33 @@ export function RateLimitingForm({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <div className="flex items-center">
-          <Label htmlFor={`${scope}-concurrency`}>
-            {capitalizedScope} Concurrency
-          </Label>
-          {showHierarchy && getSourceBadge(concurrencySource)}
+      {showConcurrency && (
+        <div className="space-y-2">
+          <div className="flex items-center">
+            <Label htmlFor={`${scope}-concurrency`}>
+              {capitalizedScope} Concurrency
+            </Label>
+            {showHierarchy && getSourceBadge(concurrencySource)}
+          </div>
+          <Input
+            id={`${scope}-concurrency`}
+            type="number"
+            min={1}
+            max={10}
+            value={value.concurrency ?? ''}
+            onChange={(e) => onChange({
+              ...value,
+              concurrency: e.target.value ? parseInt(e.target.value) : undefined
+            })}
+            placeholder={showHierarchy ? `Default: ${effectiveConcurrency}` : undefined}
+            disabled={disabled}
+          />
+          <p className="text-xs text-muted-foreground">
+            Maximum concurrent {scope} downloads (1-10)
+            {showHierarchy && value.concurrency == null && ` • Using: ${effectiveConcurrency}`}
+          </p>
         </div>
-        <Input
-          id={`${scope}-concurrency`}
-          type="number"
-          min={1}
-          max={10}
-          value={value.concurrency ?? ''}
-          onChange={(e) => onChange({
-            ...value,
-            concurrency: e.target.value ? parseInt(e.target.value) : undefined
-          })}
-          placeholder={showHierarchy ? `Default: ${effectiveConcurrency}` : undefined}
-          disabled={disabled}
-        />
-        <p className="text-xs text-muted-foreground">
-          Maximum concurrent {scope} downloads (1-10)
-          {showHierarchy && value.concurrency == null && ` • Using: ${effectiveConcurrency}`}
-        </p>
-      </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex items-center">
@@ -111,10 +115,14 @@ export function RateLimitingForm({
               <li>✓ <strong>Override</strong>: Active (this form)</li>
             ) : null}
             {siteIntegrationDefault && (
-              <li>• <strong>Site Integration Default</strong>: {siteIntegrationDefault.concurrency} concurrent, {siteIntegrationDefault.delayMs}ms delay</li>
+              <li>
+                • <strong>Site Integration Default</strong>: {showConcurrency ? `${siteIntegrationDefault.concurrency} concurrent, ` : ''}{siteIntegrationDefault.delayMs}ms delay
+              </li>
             )}
             {globalValue && (
-              <li>• <strong>Global Default</strong>: {globalValue.concurrency} concurrent, {globalValue.delayMs}ms delay</li>
+              <li>
+                • <strong>Global Default</strong>: {showConcurrency ? `${globalValue.concurrency} concurrent, ` : ''}{globalValue.delayMs}ms delay
+              </li>
             )}
           </ul>
         </div>

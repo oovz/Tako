@@ -133,14 +133,12 @@ const AdvancedSettingsPatchSchema = z.preprocess(
 const DownloadSettingsPatchSchema = z.preprocess(
   (value) => isRecord(value) ? value : {},
   z.object({
-    maxConcurrentChapters: NumberOptionalSchema,
     downloadMode: DownloadModeOptionalSchema,
     customDirectoryEnabled: BooleanOptionalSchema,
     customDirectoryHandleId: NullableStringOptionalSchema,
     pathTemplate: StringOptionalSchema,
     defaultFormat: ArchiveFormatOptionalSchema,
     fileNameTemplate: StringOptionalSchema,
-    maxConcurrentDownloads: NumberOptionalSchema,
     overwriteExisting: BooleanOptionalSchema,
     suppressSaveAsDialog: BooleanOptionalSchema,
     includeComicInfo: BooleanOptionalSchema,
@@ -150,14 +148,12 @@ const DownloadSettingsPatchSchema = z.preprocess(
   }).transform((value) => {
     const patch: Partial<DownloadSettings> = {};
 
-    if (value.maxConcurrentChapters !== undefined) patch.maxConcurrentChapters = value.maxConcurrentChapters;
     if (value.downloadMode !== undefined) patch.downloadMode = value.downloadMode;
     if (value.customDirectoryEnabled !== undefined) patch.customDirectoryEnabled = value.customDirectoryEnabled;
     if (value.customDirectoryHandleId !== undefined) patch.customDirectoryHandleId = value.customDirectoryHandleId;
     if (value.pathTemplate !== undefined) patch.pathTemplate = value.pathTemplate;
     if (value.defaultFormat !== undefined) patch.defaultFormat = value.defaultFormat;
     if (value.fileNameTemplate !== undefined) patch.fileNameTemplate = value.fileNameTemplate;
-    if (value.maxConcurrentDownloads !== undefined) patch.maxConcurrentDownloads = value.maxConcurrentDownloads;
     if (value.overwriteExisting !== undefined) patch.overwriteExisting = value.overwriteExisting;
     if (value.suppressSaveAsDialog !== undefined) patch.suppressSaveAsDialog = value.suppressSaveAsDialog;
     if (value.includeComicInfo !== undefined) patch.includeComicInfo = value.includeComicInfo;
@@ -225,8 +221,6 @@ function isChromeLocalStorageAvailable(): boolean {
 function normalizeSettings(settings: ExtensionSettings): ExtensionSettings {
   const s = settings;
   const L = SETTINGS_LIMITS;
-  // Concurrency limits
-  s.downloads.maxConcurrentChapters = Math.min(L.MAX_CONCURRENCY, Math.max(L.MIN_CONCURRENCY, s.downloads.maxConcurrentChapters));
   // Ensure boolean flags
   if (typeof s.downloads.customDirectoryEnabled !== 'boolean') {
     s.downloads.customDirectoryEnabled = DEFAULT_SETTINGS.downloads.customDirectoryEnabled;
@@ -272,7 +266,7 @@ function normalizeSettings(settings: ExtensionSettings): ExtensionSettings {
   }
   // Global policies
   s.globalPolicy.image.concurrency = Math.min(L.MAX_CONCURRENCY, Math.max(L.MIN_CONCURRENCY, s.globalPolicy.image.concurrency));
-  s.globalPolicy.chapter.concurrency = Math.min(L.MAX_CONCURRENCY, Math.max(L.MIN_CONCURRENCY, s.globalPolicy.chapter.concurrency));
+  s.globalPolicy.chapter.concurrency = 1;
   s.globalPolicy.image.delayMs = Math.max(L.MIN_DELAY_MS, s.globalPolicy.image.delayMs);
   s.globalPolicy.chapter.delayMs = Math.max(L.MIN_DELAY_MS, s.globalPolicy.chapter.delayMs);
   // Retry counts
