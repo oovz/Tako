@@ -246,6 +246,89 @@ describe('handleBackgroundMessage', () => {
     expect(response).toEqual({ success: false, error: 'Invalid OFFSCREEN_DOWNLOAD_API_REQUEST payload' })
   })
 
+  it('suppresses the Save As dialog by default for browser download requests', async () => {
+    const download = vi.fn(async () => 123)
+    const pendingDownloadsStore = createPendingDownloadsStoreStub()
+    const updateDownloadTask = vi.fn(async () => undefined)
+
+    mocks.settingsGetSettings.mockReset()
+    mocks.settingsGetSettings.mockResolvedValue(DEFAULT_SETTINGS)
+
+    vi.stubGlobal('chrome', {
+      downloads: { download },
+    })
+
+    const response = await handleBackgroundMessage(
+      {
+        type: 'OFFSCREEN_DOWNLOAD_API_REQUEST',
+        payload: {
+          taskId: 'task-1',
+          chapterId: 'chapter-1',
+          fileUrl: 'blob:chrome-extension://abc/file',
+          filename: 'Series/Chapter 1.cbz',
+        },
+      } as ExtensionMessage,
+      {} as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        getStateManager: () => ({ updateDownloadTask } as unknown as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore,
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(response).toEqual({ success: true, id: 123 })
+    expect(download).toHaveBeenCalledWith(expect.objectContaining({
+      filename: 'Series/Chapter 1.cbz',
+      saveAs: false,
+    }))
+    expect(pendingDownloadsStore.set).toHaveBeenCalledWith(123, 'blob:chrome-extension://abc/file')
+  })
+
+  it('uses Chrome file chooser when Save As suppression is disabled', async () => {
+    const download = vi.fn(async () => 124)
+    const updateDownloadTask = vi.fn(async () => undefined)
+
+    mocks.settingsGetSettings.mockReset()
+    mocks.settingsGetSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      downloads: {
+        ...DEFAULT_SETTINGS.downloads,
+        suppressSaveAsDialog: false,
+      },
+    })
+
+    vi.stubGlobal('chrome', {
+      downloads: { download },
+    })
+
+    const response = await handleBackgroundMessage(
+      {
+        type: 'OFFSCREEN_DOWNLOAD_API_REQUEST',
+        payload: {
+          taskId: 'task-2',
+          chapterId: 'chapter-2',
+          fileUrl: 'blob:chrome-extension://abc/file-2',
+          filename: 'Series/Chapter 2.zip',
+        },
+      } as ExtensionMessage,
+      {} as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        getStateManager: () => ({ updateDownloadTask } as unknown as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(response).toEqual({ success: true, id: 124 })
+    expect(download).toHaveBeenCalledWith(expect.objectContaining({
+      saveAs: true,
+    }))
+  })
+
   it('rejects CLEAR_ALL_HISTORY from non-options senders before touching state', async () => {
     vi.stubGlobal('chrome', {
       runtime: {

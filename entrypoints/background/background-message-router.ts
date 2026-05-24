@@ -252,11 +252,12 @@ export async function handleBackgroundMessage(
 
           const settings = await settingsService.getSettings()
           const conflictAction = settings.downloads.overwriteExisting ? 'overwrite' : 'uniquify'
+          const saveAs = settings.downloads.suppressSaveAsDialog === false
           const downloadId = await chrome.downloads.download({
             url: fileUrl,
             filename,
             conflictAction,
-            saveAs: false,
+            saveAs,
           })
 
           if (typeof downloadId !== 'number') {

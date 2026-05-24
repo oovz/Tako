@@ -23,6 +23,7 @@ test.describe('Options Page', () => {
     // Check for archive format RadioGroup (CBZ/ZIP/None options)
     await expect(page.locator('[data-testid="archive-format-radiogroup"]')).toBeVisible();
     await expect(page.getByText('CBZ Archive')).toBeVisible();
+    await expect(page.locator('[data-testid="suppress-save-as-switch"]')).toBeVisible();
   });
 
   test('shows the no-archive shelf warning alongside archive format settings', async ({ page, extensionId }) => {

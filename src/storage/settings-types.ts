@@ -28,6 +28,8 @@ export interface DownloadSettings {
   fileNameTemplate?: string;
   maxConcurrentDownloads: number;
   overwriteExisting: boolean;
+  /** When true, chrome.downloads.download runs without Chrome's file chooser. */
+  suppressSaveAsDialog: boolean;
   includeComicInfo: boolean; // whether to embed ComicInfo.xml in archives
   includeCoverImage: boolean; // whether to include series cover image in archives
   // Image filename normalization

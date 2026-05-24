@@ -50,6 +50,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
       const settings = await settingsService.reload();
 
       expect(settings.downloads.defaultFormat).toBe('zip');
+      expect(settings.downloads.suppressSaveAsDialog).toBe(DEFAULT_SETTINGS.downloads.suppressSaveAsDialog);
       expect(settings.downloads.pathTemplate).toBe(DEFAULT_SETTINGS.downloads.pathTemplate);
       expect(settings.globalPolicy).toEqual(DEFAULT_SETTINGS.globalPolicy);
       expect(settings.notifications).toBe(DEFAULT_SETTINGS.notifications);
@@ -235,6 +236,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
           overwriteExisting: 'not-a-boolean' as any,
           pathTemplate: '' as any,
           fileNameTemplate: '' as any,
+          suppressSaveAsDialog: 'not-a-boolean' as any,
           normalizeImageFilenames: 'not-a-boolean' as any,
           imagePaddingDigits: 'invalid-padding' as any,
         },
@@ -242,6 +244,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
 
       const settings = await settingsService.getSettings();
       expect(settings.downloads.overwriteExisting).toBe(DEFAULT_SETTINGS.downloads.overwriteExisting);
+      expect(settings.downloads.suppressSaveAsDialog).toBe(DEFAULT_SETTINGS.downloads.suppressSaveAsDialog);
       expect(settings.downloads.pathTemplate).toBe(DEFAULT_SETTINGS.downloads.pathTemplate);
       expect(settings.downloads.fileNameTemplate).toBe(DEFAULT_SETTINGS.downloads.fileNameTemplate);
       expect(settings.downloads.normalizeImageFilenames).toBe(DEFAULT_SETTINGS.downloads.normalizeImageFilenames);

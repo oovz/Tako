@@ -93,6 +93,21 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
                 onCheckedChange={(checked) => onDownloadsChange({ overwriteExisting: checked })}
               />
             </div>
+
+            <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
+              <div className="space-y-1">
+                <Label htmlFor="suppress-save-as">Suppress Save As Dialog</Label>
+                <p className="text-xs text-muted-foreground pr-4">
+                  Save to the configured browser download path without opening Chrome&apos;s file chooser
+                </p>
+              </div>
+              <Switch
+                id="suppress-save-as"
+                data-testid="suppress-save-as-switch"
+                checked={downloads.suppressSaveAsDialog}
+                onCheckedChange={(checked) => onDownloadsChange({ suppressSaveAsDialog: checked })}
+              />
+            </div>
           </div>
 
           <div className="space-y-4">

@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     fileNameTemplate: '<CHAPTER_TITLE>',
     maxConcurrentDownloads: 3,
     overwriteExisting: false,
+    suppressSaveAsDialog: true,
     includeComicInfo: true,
     includeCoverImage: true, // Cover image inclusion enabled by default
     // Image filename normalization defaults

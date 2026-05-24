@@ -30,6 +30,7 @@ export const BASE_DEFAULT_SETTINGS: ExtensionSettings = {
     fileNameTemplate: 'Chapter <CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>',
     maxConcurrentDownloads: 3,
     overwriteExisting: false,
+    suppressSaveAsDialog: true,
     includeComicInfo: true,
     includeCoverImage: true,
     normalizeImageFilenames: true,

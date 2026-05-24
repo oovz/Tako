@@ -142,6 +142,7 @@ const DownloadSettingsPatchSchema = z.preprocess(
     fileNameTemplate: StringOptionalSchema,
     maxConcurrentDownloads: NumberOptionalSchema,
     overwriteExisting: BooleanOptionalSchema,
+    suppressSaveAsDialog: BooleanOptionalSchema,
     includeComicInfo: BooleanOptionalSchema,
     includeCoverImage: BooleanOptionalSchema,
     normalizeImageFilenames: BooleanOptionalSchema,
@@ -158,6 +159,7 @@ const DownloadSettingsPatchSchema = z.preprocess(
     if (value.fileNameTemplate !== undefined) patch.fileNameTemplate = value.fileNameTemplate;
     if (value.maxConcurrentDownloads !== undefined) patch.maxConcurrentDownloads = value.maxConcurrentDownloads;
     if (value.overwriteExisting !== undefined) patch.overwriteExisting = value.overwriteExisting;
+    if (value.suppressSaveAsDialog !== undefined) patch.suppressSaveAsDialog = value.suppressSaveAsDialog;
     if (value.includeComicInfo !== undefined) patch.includeComicInfo = value.includeComicInfo;
     if (value.includeCoverImage !== undefined) patch.includeCoverImage = value.includeCoverImage;
     if (value.normalizeImageFilenames !== undefined) patch.normalizeImageFilenames = value.normalizeImageFilenames;
@@ -240,6 +242,9 @@ function normalizeSettings(settings: ExtensionSettings): ExtensionSettings {
   }
   if (typeof s.downloads.overwriteExisting !== 'boolean') {
     s.downloads.overwriteExisting = DEFAULT_SETTINGS.downloads.overwriteExisting;
+  }
+  if (typeof s.downloads.suppressSaveAsDialog !== 'boolean') {
+    s.downloads.suppressSaveAsDialog = DEFAULT_SETTINGS.downloads.suppressSaveAsDialog;
   }
   if (typeof s.downloads.includeComicInfo !== 'boolean') {
     s.downloads.includeComicInfo = DEFAULT_SETTINGS.downloads.includeComicInfo;
