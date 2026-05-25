@@ -21,6 +21,7 @@ export type SiteOverrideRecord = {
   pathTemplate?: string;
   // Per-scope rate policies (preferred new shape)
   imagePolicy?: { concurrency?: number; delayMs?: number };
+  // Chapter concurrency is not accepted as a site override in the current scheduler.
   chapterPolicy?: { delayMs?: number };
   // Retry overrides (preferred new shape)
   retries?: { image?: number; chapter?: number };

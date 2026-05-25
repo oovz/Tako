@@ -266,6 +266,8 @@ function normalizeSettings(settings: ExtensionSettings): ExtensionSettings {
   }
   // Global policies
   s.globalPolicy.image.concurrency = Math.min(L.MAX_CONCURRENCY, Math.max(L.MIN_CONCURRENCY, s.globalPolicy.image.concurrency));
+  // Retain the shared chapter policy shape for snapshots, but keep dispatch
+  // concurrency fixed until scheduler/offscreen reentrancy work is done.
   s.globalPolicy.chapter.concurrency = 1;
   s.globalPolicy.image.delayMs = Math.max(L.MIN_DELAY_MS, s.globalPolicy.image.delayMs);
   s.globalPolicy.chapter.delayMs = Math.max(L.MIN_DELAY_MS, s.globalPolicy.chapter.delayMs);

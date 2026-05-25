@@ -16,6 +16,10 @@ import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-inte
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 
+// Current queue scheduling is intentionally single-task and single-chapter dispatch.
+// Re-enable chapter concurrency only after the scheduler, offscreen request
+// handling, progress state, cancellation, and archive memory behavior are made
+// reentrant.
 const MAX_CONCURRENT_QUEUED_TASKS = 1;
 
 async function clearActiveTaskProgress(): Promise<void> {
@@ -268,6 +272,8 @@ export async function startDownloadTask(
       }
     };
 
+    // Deliberately await each chapter before starting the next one. Parallel
+    // chapter dispatch is future scheduler work, not a dormant setting.
     for (let i = 0; i < totalChapters; i++) {
       if (shouldStopDispatch) {
         break;
