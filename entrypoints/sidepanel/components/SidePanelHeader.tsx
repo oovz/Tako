@@ -7,10 +7,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 interface SidePanelHeaderProps {
   activeCount: number
   queuedCount: number
+  hasOptionsActionItems: boolean
   onOpenSettings: () => void | Promise<void>
 }
 
-export function SidePanelHeader({ activeCount, queuedCount, onOpenSettings }: SidePanelHeaderProps) {
+export function SidePanelHeader({
+  activeCount,
+  queuedCount,
+  hasOptionsActionItems,
+  onOpenSettings,
+}: SidePanelHeaderProps) {
+  const settingsLabel = hasOptionsActionItems
+    ? 'Open Options (Action item available)'
+    : 'Open Options (Advanced Settings)'
+
   return (
     <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background shadow-sm z-30">
       <div className="flex items-center gap-2">
@@ -31,15 +41,22 @@ export function SidePanelHeader({ activeCount, queuedCount, onOpenSettings }: Si
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9"
+            className="relative h-9 w-9"
             onClick={onOpenSettings}
-            aria-label="Open Options (Advanced Settings)"
+            aria-label={settingsLabel}
           >
             <Settings className="h-5 w-5" />
+            {hasOptionsActionItems && (
+              <span
+                aria-hidden="true"
+                data-testid="options-action-indicator"
+                className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
+              />
+            )}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-sm">
-          Settings
+          {hasOptionsActionItems ? 'Settings need attention' : 'Settings'}
         </TooltipContent>
       </Tooltip>
     </header>

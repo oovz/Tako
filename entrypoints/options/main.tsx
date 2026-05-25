@@ -31,6 +31,7 @@ const DownloadsTab = lazy(() => import('./tabs/DownloadsTab').then(m => ({ defau
 
 // Debug settings component (imported directly since it's small)
 import { DebugSettingsSection } from './components/DebugSettingsSection'
+import { ExtensionUpdateSection } from './components/ExtensionUpdateSection'
 import { OptionsSidebar } from './components/OptionsSidebar'
 import { SectionLoadingSkeleton } from './components/SectionLoadingSkeleton'
 import { UnsavedChangesFooter } from './components/UnsavedChangesFooter'
@@ -164,6 +165,8 @@ function onRenderCallback(
             {activeSection === 'debug' && (
               <section className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex flex-col gap-6">
+                  <ExtensionUpdateSection />
+
                   {/* Debug Settings Section */}
                   <DebugSettingsSection
                     settings={settingsBuffer}

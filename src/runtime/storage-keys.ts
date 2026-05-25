@@ -8,6 +8,7 @@ export const SESSION_STORAGE_KEYS = {
   pendingDownloads: 'pendingDownloads',
   initFailed: 'initFailed',
   initError: 'error',
+  optionsActionItems: 'optionsActionItems',
 } as const
 
 export const SETTINGS_STORAGE_KEYS = {

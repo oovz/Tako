@@ -6,6 +6,7 @@ import {
   scheduleOffscreenCloseIfIdle,
 } from '@/entrypoints/background/offscreen-lifecycle'
 import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
+import { markExtensionUpdateActionItemAvailable } from '@/src/runtime/options-action-items'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { PendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
@@ -148,6 +149,17 @@ export function registerBackgroundRuntimeListeners(
     })
   } catch (error) {
     logger.debug('tabs.onRemoved listener unavailable; tab removal cleanup disabled', error)
+  }
+
+  try {
+    chrome.runtime.onUpdateAvailable.addListener((details) => {
+      void markExtensionUpdateActionItemAvailable({ version: details.version })
+        .catch((error) => {
+          logger.debug('Failed to mark extension update action item:', error)
+        })
+    })
+  } catch (error) {
+    logger.debug('runtime.onUpdateAvailable listener unavailable; update action indicator disabled', error)
   }
 
   try {

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/extension';
-import { getTabId, initializeTabViaAction, openSidepanelHarness } from './fixtures/state-helpers';
+import { getTabId, initializeTabViaAction, openSidepanelHarness, setSessionState } from './fixtures/state-helpers';
+import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 import { MANGADEX_TEST_SERIES_URL, buildExampleUrl } from './fixtures/test-domains';
 
 async function getActionTitle(context: import('@playwright/test').BrowserContext, tabId: number): Promise<string> {
@@ -178,6 +179,25 @@ test.describe('Side Panel activation and enable/disable behavior', () => {
     await expect(sp.getByText(/No series detected/i)).toBeVisible();
     // The shared "Select chapters" entry point is still rendered as part of the Command Center
     await expect(sp.getByRole('button', { name: /Select chapters/i })).toBeVisible();
+    await sp.close();
+  });
+
+  test('shows an indicator on the settings gear when Options has an update action item', async ({ context, extensionId, page }) => {
+    await page.goto(buildExampleUrl('/'), { waitUntil: 'domcontentloaded' });
+    await getTabId(page, context);
+    await setSessionState(context, SESSION_STORAGE_KEYS.optionsActionItems, {
+      extensionUpdate: {
+        status: 'available',
+        version: '1.2.8',
+        detectedAt: Date.now(),
+      },
+    });
+
+    const sp = await openSidepanelHarness(context, extensionId, page);
+    await expect(sp.locator('#root')).toBeVisible();
+    await expect(sp.getByRole('button', { name: 'Open Options (Action item available)' })).toBeVisible();
+    await expect(sp.locator('[data-testid="options-action-indicator"]')).toBeVisible();
+    await expect(sp.getByRole('button', { name: 'Apply Update' })).toHaveCount(0);
     await sp.close();
   });
 

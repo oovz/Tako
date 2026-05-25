@@ -5,6 +5,7 @@ import {
   shouldMountInlineSelection,
   useInlineSelectionState,
 } from '@/entrypoints/sidepanel/hooks/useInlineSelectionState'
+import { useOptionsActionItems } from '@/entrypoints/sidepanel/hooks/useOptionsActionItems'
 import { useQueueView } from '@/entrypoints/sidepanel/hooks/useQueueView'
 import { useSidepanelSeriesContext, type SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -39,6 +40,7 @@ export function SidePanelApp() {
   const seriesData: SidepanelSeriesContextData = useSidepanelSeriesContext()
   const { activeTasks, queuedTasks, historyTasks, activeCount, queuedCount, isLoading } = useQueueView()
   const { progress: activeTaskProgress } = useActiveTaskProgress()
+  const hasOptionsActionItems = useOptionsActionItems()
 
   const showActiveProgress = activeTaskProgress !== null
 
@@ -53,6 +55,7 @@ export function SidePanelApp() {
         <SidePanelHeader
           activeCount={activeCount}
           queuedCount={queuedCount}
+          hasOptionsActionItems={hasOptionsActionItems}
           onOpenSettings={openSettings}
         />
 

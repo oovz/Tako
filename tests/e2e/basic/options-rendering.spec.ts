@@ -125,4 +125,16 @@ test.describe('Options Page', () => {
     await expect(page.getByRole('button', { name: 'About / Debug' })).toBeVisible();
     await expect(page.getByText(/Clearing history will reset "New" chapter indicators\./i)).toHaveCount(0);
   });
+
+  test('shows Chrome Web Store update controls in About / Debug', async ({ page, extensionId }) => {
+    await page.goto(`chrome-extension://${extensionId}/options.html?tab=debug`);
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Chrome Web Store Updates' })).toBeVisible();
+    const installedVersion = await page.evaluate(() => chrome.runtime.getManifest().version);
+    await expect(page.getByText(new RegExp(`Installed version ${installedVersion.replaceAll('.', '\\.')}`, 'i'))).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Check for Updates' })).toBeVisible();
+  });
+
 });

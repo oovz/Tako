@@ -28,10 +28,13 @@ describe('registerBackgroundRuntimeListeners', () => {
   const downloadsOnChangedAddListener = vi.fn()
   const alarmsOnAlarmAddListener = vi.fn()
   const tabsOnRemovedAddListener = vi.fn()
+  const runtimeOnUpdateAvailableAddListener = vi.fn()
+  const storageSessionGet = vi.fn(async () => ({}))
   const storageSessionSet = vi.fn(async () => undefined)
 
   beforeEach(() => {
     vi.clearAllMocks()
+    storageSessionGet.mockResolvedValue({})
 
     vi.stubGlobal('chrome', {
       storage: {
@@ -39,6 +42,7 @@ describe('registerBackgroundRuntimeListeners', () => {
           addListener: storageOnChangedAddListener,
         },
         session: {
+          get: storageSessionGet,
           set: storageSessionSet,
         },
       },
@@ -61,9 +65,52 @@ describe('registerBackgroundRuntimeListeners', () => {
         },
       },
       runtime: {
+        onUpdateAvailable: {
+          addListener: runtimeOnUpdateAvailableAddListener,
+        },
         onSuspend: {
           addListener: vi.fn(),
         },
+      },
+    })
+  })
+
+  it('marks an Options action item when Chrome reports an extension update is available', async () => {
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized: vi.fn(async () => undefined),
+      isStateManagerReady: () => true,
+      getStateManager: vi.fn() as never,
+      pendingDownloadsStore: {
+        hydrate: vi.fn(async () => undefined),
+        get: vi.fn(),
+        set: vi.fn(),
+        remove: vi.fn(),
+        clear: vi.fn(),
+        snapshot: vi.fn(() => new Map()),
+      },
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      livenessAlarmName: 'offscreen-liveness',
+    })
+
+    const updateAvailableListener = runtimeOnUpdateAvailableAddListener.mock.calls[0]?.[0] as (
+      details: chrome.runtime.UpdateAvailableDetails,
+    ) => void
+
+    updateAvailableListener({ version: '1.2.8' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(storageSessionSet).toHaveBeenCalledWith({
+      [SESSION_STORAGE_KEYS.optionsActionItems]: {
+        extensionUpdate: expect.objectContaining({
+          status: 'available',
+          version: '1.2.8',
+        }),
       },
     })
   })
