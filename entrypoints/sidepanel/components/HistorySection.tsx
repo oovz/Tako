@@ -25,11 +25,17 @@ export function HistorySection({
   }
 
   return (
-    <div className="max-h-56 flex-shrink-0 overflow-y-auto border-t border-border/60">
+    <section
+      aria-labelledby="sidepanel-recent-history-title"
+      className="min-h-0 flex-shrink overflow-y-auto border-t border-border/60"
+    >
       <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2
+          id="sidepanel-recent-history-title"
+          className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        >
           Recent history
-        </div>
+        </h2>
         {!isInlineSelectionOpen && (
           <button
             type="button"
@@ -46,7 +52,7 @@ export function HistorySection({
         onRestartTask={onRestartTask}
         onRemoveTask={onRemoveTask}
       />
-    </div>
+    </section>
   )
 }
 
