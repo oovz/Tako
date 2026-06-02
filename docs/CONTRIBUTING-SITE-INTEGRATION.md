@@ -6,12 +6,12 @@ This guide explains how to add or maintain a supported-site integration for Tako
 
 A site integration is responsible for four things:
 
-1. **URL matching** through the manifest
-2. **Series and chapter extraction** in the content-script context or through background-side APIs
-3. **Chapter image resolution and download behavior** in the offscreen pipeline
-4. **Optional site-specific settings and runtime handoff data**
+1. **URL matching** through the manifest.
+2. **Series and chapter extraction** in the content-script context or through background-side APIs.
+3. **Chapter image resolution and download behavior** in the offscreen pipeline.
+4. **Optional site-specific settings and runtime handoff data.**
 
-Tako uses the term **Site Integration** everywhere in code and UI. Use `siteIntegrationId` for identifiers.
+Tako uses the term **site integration** everywhere in code and UI. Use `siteIntegrationId` for identifiers.
 
 ## The main files
 
@@ -28,13 +28,17 @@ Tako uses the term **Site Integration** everywhere in code and UI. Use `siteInte
 | `scripts/generate-site-integration-registries.mjs` | Build-time generator for context-scoped static registries |
 | `src/types/site-integrations.ts` | Shared integration interfaces |
 | `src/shared/site-integration-utils.ts` | Shared label and numeric parsing helpers |
-| `tests/unit/integrations/` | Integration-focused unit coverage |
+| `tests/unit/integrations/` or `tests/unit/site-integrations/` | Integration-focused unit coverage |
 | `tests/e2e/fixtures/mock-data/site-integrations/` | Mock site data for deterministic Side Panel and download-workflow coverage |
 | `tests/live/` | Real-site validation for supported integrations |
 
 ## Integration shape
 
-Every integration exports a `SiteIntegration` with `content` and `background` sections.
+Every integration implements three runtime contexts, each exported through its own file:
+
+- `content-runtime.ts` — content-script side
+- `background-runtime.ts` — service-worker side
+- `offscreen-runtime.ts` — offscreen-document side
 
 ### Content integration
 
@@ -66,7 +70,7 @@ The offscreen side runs in the hidden offscreen document. It can:
 - normalize candidate image URLs with `chapter.processImageUrls()`
 - download final image bytes with `chapter.downloadImage()`
 
-Use the offscreen side for chapter/image work, DOMParser, iframe-assisted scraping, canvas, `createImageBitmap`, `OffscreenCanvas`, Blob/object URL work, and other web APIs unavailable to the service worker. Offscreen documents have DOM/web APIs but only `chrome.runtime` from the Chrome extension API surface, so storage and downloads API calls must still route through the service worker by message.
+Use the offscreen side for chapter/image work, DOMParser, iframe-assisted scraping, canvas, `createImageBitmap`, `OffscreenCanvas`, Blob/object URL work, and other web APIs unavailable to the service worker. Offscreen documents have DOM/web APIs but only the `chrome.runtime` extension API, so storage and downloads API calls still route through the service worker by message.
 
 ## Manifest-first registration
 
@@ -107,7 +111,7 @@ If a site has no custom runtime for a context, set that flag to `false`. For exa
 3. Create `src/site-integrations/<site>/content-runtime.ts`, `src/site-integrations/<site>/background-runtime.ts`, and `src/site-integrations/<site>/offscreen-runtime.ts` runtime exports.
 4. Run `pnpm generate:site-integrations` or rely on `pnpm type-check` / `pnpm build` to regenerate static registries.
 5. Add any helper modules the site needs inside the same folder.
-6. Add unit coverage in `tests/unit/integrations/`.
+6. Add unit coverage in `tests/unit/integrations/` or `tests/unit/site-integrations/`.
 7. Add mocked E2E coverage under `tests/e2e/` for Side Panel navigation and download workflows when the integration participates in the MVP UI flow.
 8. Add or update live coverage in `tests/live/` when the site is stable enough for it.
 
@@ -161,26 +165,22 @@ Examples in the current codebase:
 
 Keep content, service-worker, and offscreen responsibilities separable even when they share helper modules.
 
-- Content runtime code may read `window`, `document`, page DOM, and page-scoped state.
-- Background runtime code runs in the service worker and may use service-worker-safe extension APIs. Because Chrome MV3 service workers do not support dynamic `import()`, background runtimes are statically imported into the service-worker graph; keep them free of offscreen-only chapter/image code.
-- Offscreen runtime code may use DOM and web APIs such as `DOMParser`, iframe scripting, canvas, and document APIs for advanced JavaScript page processing. It still cannot read the live tab DOM directly; pass page-derived data from content scripts or fetch/embed source documents explicitly. It also cannot read `chrome.storage` directly, so storage-dependent data must be passed in `integrationContext` or requested from the service worker.
-- API-backed series loading should be exposed through the background runtime and requested from content via `FETCH_SERIES_DATA`; content scripts should not import background runtime modules directly.
-- User enablement is currently a runtime processing toggle. Disabling an integration does not remove static content-script matches or broad host permissions during the MVP phase.
-- ESLint restrictions and `tests/unit/site-integration-context-boundaries.spec.ts` enforce that content, background, and offscreen entrypoints cannot reach wrong-context site runtime files.
+- **Content runtime code** may read `window`, `document`, page DOM, and page-scoped state.
+- **Background runtime code** runs in the service worker and may use service-worker-safe extension APIs. Because MV3 service workers do not support dynamic `import()`, background runtimes are statically imported into the service-worker graph. Keep them free of offscreen-only chapter/image code.
+- **Offscreen runtime code** may use DOM and web APIs such as `DOMParser`, iframe scripting, canvas, and document APIs. It cannot read the live tab DOM directly; pass page-derived data from content scripts or fetch/embed source documents explicitly. It also cannot read `chrome.storage` directly, so storage-dependent data must be passed in `integrationContext` or requested from the service worker.
+- **API-backed series loading** should be exposed through the background runtime and requested from content via `FETCH_SERIES_DATA`. Content scripts should not import background runtime modules directly.
+- **User enablement** is currently a runtime processing toggle. Disabling an integration does not remove static content-script matches or broad host permissions.
+- **ESLint restrictions** and `tests/unit/site-integration-context-boundaries.spec.ts` enforce that content, background, and offscreen entrypoints cannot reach wrong-context site runtime files.
 
 ## Rate limiting and download rules
 
-All integrations should use the shared rate limiter for network work.
-
-Use:
+All integrations must use the shared rate limiter for network work:
 
 ```typescript
 import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
 ```
 
-Do not bypass it with raw `fetch(...)` for chapter or image traffic unless you are deliberately delegating to a helper that already applies the shared limiter.
-
-Even when an integration handles its own retry strategy, it should still respect the shared concurrency and delay rules.
+Do not bypass it with raw `fetch(...)` for chapter or image traffic unless you are deliberately delegating to a helper that already applies the shared limiter. Even when an integration handles its own retry strategy, it must still respect the shared concurrency and delay rules.
 
 ## Site-specific settings
 
@@ -204,10 +204,10 @@ Use Declarative Net Request only when regular request options are not enough.
 
 Rules:
 
-- keep the scope site-specific
-- prefer session rules over broad persistent rules
-- document the reason in the integration code and guide reviewers to the affected hostnames
-- avoid rules that could affect unrelated integrations
+- Keep the scope site-specific.
+- Prefer session rules over broad persistent rules.
+- Document the reason in the integration code and guide reviewers to the affected hostnames.
+- Avoid rules that could affect unrelated integrations.
 
 ## Validation checklist
 
@@ -246,6 +246,5 @@ After a build, inspect `.output/chrome-mv3/manifest.json` and confirm your domai
 
 ## Related docs
 
-- `ARCHITECTURE.md` - broader runtime ownership and storage model
-- `MESSAGING.md` - runtime message reference
+- `ARCHITECTURE.md` - core runtime, storage, messaging, and state flow
 - `TEMPLATE-MACROS.md` - path and filename template reference

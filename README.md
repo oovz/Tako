@@ -2,7 +2,7 @@
 
 Tako is a Chrome extension that keeps chapter selection, queue management, and organized exports inside Chrome's Side Panel.
 
-Instead of juggling extra tabs, repeated save dialogs, or brittle one-off scripts, you can review supported chapters, queue work, watch progress, and export cleaner offline-reading files from one workflow.
+Instead of juggling extra tabs, repeated save dialogs, or brittle one-off scripts, you can review chapters, queue downloads, watch progress, and export cleaner offline-reading files from one workflow.
 
 <p>
   <a href="https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb">
@@ -18,14 +18,14 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
 
 ## Why Tako
 
-- **Stay in the current reading flow**  
-  The side panel keeps chapter selection and queue controls next to the page you are already using.
+- **Stay in your reading flow**  
+  The Side Panel keeps chapter selection and queue controls next to the page you are already on.
 - **Use a real queue instead of one-off saves**  
   Active work, queued jobs, retries, and recent results stay together in one command center.
 - **Export cleaner files**  
   Save as CBZ, ZIP, or image folders with path and filename templates that work better with reader apps and library tools.
 - **Rely on supported-site logic instead of generic scraping**  
-  Integrations can apply site-specific metadata, image handling, and queue behavior where the extension explicitly supports a site.
+  Integrations apply site-specific metadata, image handling, and queue behavior where the extension explicitly supports a site.
 - **Tune everything from one settings page**  
   Global defaults and per-site overrides live in the options page instead of scattered browser prompts.
 
@@ -36,14 +36,15 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
 | MangaDex | Supported | Rich series metadata, chapter discovery, language-aware flows, and image quality preferences. |
 | Pixiv Comic | Supported | Reader-page downloads with site-specific handling for protected image flows and metadata. |
 | Shonen Jump+ | Supported | Episode downloads with cleaner defaults for offline reading and organized exports. |
+| Manhuagui | Supported | Series-page downloads with volume-grouped chapters, reader-config image resolution, and R18-gate handling. |
 | Comic Nettai | Supported | Book-page downloads with PUBLUS viewer image reconstruction and DOM-based series metadata. |
 
 ## Rights and site access
 
-Tako is intended for pages the user can already access in their own browser session on supported sites.
+Tako is intended for pages you can already access in your own browser session on supported sites.
 
-- It is **not** positioned as a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
-- It does **not** grant access rights the user does not already have.
+- It is **not** a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
+- It does **not** grant access rights you do not already have.
 - Store assets and README screenshots in this repository use **synthetic data** rather than third-party manga artwork.
 
 ## Screenshots
@@ -79,13 +80,13 @@ See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy text.
 
 ### Install from GitHub Releases
 
-1. Open the repository's **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip` asset.
+1. Open the repository **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip` asset.
 2. Extract the zip to a folder on your machine.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.
 5. Choose **Load unpacked** and select the extracted extension folder.
 
-Chrome will load Tako from that folder, and you can pin it from the extensions menu if needed.
+Chrome will load Tako from that folder. You can pin it from the extensions menu if needed.
 
 ### Build locally and load in Chrome
 
@@ -116,9 +117,9 @@ pnpm test:e2e
 
 Start with the guide that matches the area you are changing:
 
-- `docs/ARCHITECTURE.md` — core runtime, UI, storage, and state flow
+- `CONTRIBUTING.md` — general setup, workflow, code style, and PR expectations
+- `docs/ARCHITECTURE.md` — core runtime, storage, messaging, and state flow
 - `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
-- `docs/MESSAGING.md` — runtime message reference and sender rules
 - `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
 
 ## Contributing

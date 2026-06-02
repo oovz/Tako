@@ -4,12 +4,12 @@ This document describes the production-supported macros for customizing download
 
 ## Overview
 
-Macros are placeholders in directory and filename templates. They are written in angle brackets like `<SERIES_TITLE>`.
+Macros are placeholders in directory and filename templates, written in angle brackets like `<SERIES_TITLE>`.
 
-Tako resolves two templates for each chapter:
+Tako resolves two templates per chapter:
 
-- **Directory template** (`pathTemplate`) resolves to a folder path.
-- **Filename template** (`fileNameTemplate`) resolves to the chapter archive name, or the loose-image chapter folder name when the format is `none`.
+- **Directory template** (`pathTemplate`) — resolves to a folder path.
+- **Filename template** (`fileNameTemplate`) — resolves to the chapter archive name, or the loose-image chapter folder name when the format is `none`.
 
 **Directory template**:
 
@@ -67,7 +67,7 @@ These macros are always available and use the user's local date at download time
 
 ## Missing Values
 
-When an optional macro is not available, it resolves to an empty string. Empty directory segments are discarded, but empty pieces inside a filename remain.
+When an optional macro is unavailable, it resolves to an empty string. Empty directory segments are discarded, but empty pieces inside a filename remain.
 
 Example filename template:
 
@@ -75,9 +75,9 @@ Example filename template:
 Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
 ```
 
-If the site does not provide a numeric chapter number, the filename can start with `Ch. - ...`.
+If the site does not provide a numeric chapter number, the filename starts with `Ch. - ...`.
 
-Use numeric macros only for integrations and page types that are known to provide numeric chapter or volume metadata.
+Use numeric macros only for integrations and page types known to provide numeric chapter or volume metadata.
 
 ## Recommended Patterns
 
@@ -113,9 +113,9 @@ Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
 
 ## Directory vs Filename Semantics
 
-`pathTemplate` is directory-only. If a directory template contains an extension-like suffix such as `.cbz`, Tako treats that suffix as part of the folder name rather than as the final archive filename.
+`pathTemplate` is directory-only. If a directory template contains an extension-like suffix such as `.cbz`, Tako treats it as part of the folder name, not the final archive filename.
 
-Use `fileNameTemplate` for the final chapter name. Tako appends `.cbz` or `.zip` for archive formats. For `none`, Tako uses the filename template as the chapter folder under the resolved directory.
+Use `fileNameTemplate` for the final chapter name. Tako appends `.cbz` or `.zip` for archive formats. For `none`, the filename template becomes the chapter folder under the resolved directory.
 
 ## Invalid Characters
 
@@ -141,4 +141,4 @@ The Options page preview uses sample data to show the resolved directory and fil
 
 `src/shared/template-macros.ts` contains registry metadata used for validation and previews. `src/shared/template-resolver.ts` is the production resolver used during queue dispatch.
 
-Do not document a macro as user-facing until both files support it. Registry metadata currently includes a few compatibility tokens, including raw numeric, chapter-index, and language macros, that the production resolver does not populate in final paths.
+Do not document a macro as user-facing until both files support it. The registry currently includes a few compatibility tokens — raw numeric, chapter-index, and language macros — that the production resolver does not populate in final paths.
