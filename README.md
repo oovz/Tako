@@ -1,3 +1,5 @@
+![Tako promo banner](assets/store/marquee-promo-1400x560.png)
+
 # Tako Manga Downloader
 
 Tako is a Chrome extension that keeps chapter selection, queue management, and organized exports inside Chrome's Side Panel.
@@ -14,7 +16,7 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
   </a>
 </p>
 
-![Tako promo banner](assets/store/marquee-promo-1400x560.png)
+
 
 ## Why Tako
 
@@ -24,20 +26,20 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
   Active work, queued jobs, retries, and recent results stay together in one command center.
 - **Export cleaner files**  
   Save as CBZ, ZIP, or image folders with path and filename templates that work better with reader apps and library tools.
-- **Rely on supported-site logic instead of generic scraping**  
+- **Optimized site-support instead of generic scraping**  
   Integrations apply site-specific metadata, image handling, and queue behavior where the extension explicitly supports a site.
 - **Tune everything from one settings page**  
   Global defaults and per-site overrides live in the options page instead of scattered browser prompts.
 
 ## Supported sites
 
-| Site | Status | What Tako supports |
-|---|---|---|
-| MangaDex | Supported | Rich series metadata, chapter discovery, language-aware flows, and image quality preferences. |
-| Pixiv Comic | Supported | Reader-page downloads with site-specific handling for protected image flows and metadata. |
-| Shonen Jump+ | Supported | Episode downloads with cleaner defaults for offline reading and organized exports. |
-| Manhuagui | Supported | Series-page downloads with volume-grouped chapters, reader-config image resolution, and R18-gate handling. |
-| Comic Nettai | Supported | Book-page downloads with PUBLUS viewer image reconstruction and DOM-based series metadata. |
+| Site | Status |
+|---|---|
+| MangaDex | Supported |
+| Pixiv Comic | Supported |
+| Shonen Jump+ | Supported |
+| Manhuagui | Supported |
+| Comic Nettai | Supported |
 
 ## Rights and site access
 
@@ -45,36 +47,6 @@ Tako is intended for pages you can already access in your own browser session on
 
 - It is **not** a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
 - It does **not** grant access rights you do not already have.
-- Store assets and README screenshots in this repository use **synthetic data** rather than third-party manga artwork.
-
-## Screenshots
-
-### Side Panel overview
-
-![Side Panel overview](assets/store/screenshot-01-sidepanel-overview-1280x800.png)
-
-### Inline chapter selection
-
-![Inline chapter selection](assets/store/screenshot-02-inline-selection-1280x800.png)
-
-### Queue and recent history
-
-![Queue and history](assets/store/screenshot-03-queue-history-1280x800.png)
-
-### Download settings
-
-![Options downloads tab](assets/store/screenshot-04-options-downloads-1280x800.png)
-
-### Site integrations
-
-![Options integrations tab](assets/store/screenshot-05-options-integrations-1280x800.png)
-
-
-## Privacy
-
-Tako stores settings, queue state, and history locally in the browser so the extension can function. Network requests are made directly to supported sites and related infrastructure needed for the user's requested workflow; the extension does not run a developer analytics backend for browsing history or downloaded chapter contents.
-
-See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy text.
 
 ## Quick start
 
@@ -103,25 +75,19 @@ Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpack
 pnpm dev
 ```
 
-### Validation
-
-```powershell
-pnpm lint
-pnpm type-check
-pnpm test:unit
-pnpm test:integration
-pnpm test:e2e
-```
-
 ## Documentation
-
-Start with the guide that matches the area you are changing:
 
 - `CONTRIBUTING.md` — general setup, workflow, code style, and PR expectations
 - `docs/ARCHITECTURE.md` — core runtime, storage, messaging, and state flow
 - `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
 - `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
 
+## Privacy
+
+Tako stores settings, queue state, and history locally in the browser so the extension can function. Network requests are made directly to supported sites and related infrastructure needed for the user's requested workflow; the extension does not run a developer analytics backend for browsing history or downloaded chapter contents.
+
+See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy text.
+
 ## Contributing
 
-Follow the existing code style and test patterns in the area you are changing. If behavior, contributor workflow, or submission assets change, update the relevant docs in the same pull request.
+We welcome contributions from the community. Please read the [`contributing guidelines`](CONTRIBUTING.md) before submitting a pull request.
