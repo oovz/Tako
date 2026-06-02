@@ -4,6 +4,7 @@ import type { BrowserContext, Page } from '@playwright/test'
 import { test, expect } from '../e2e/fixtures/extension'
 import { getSessionState, getTabId, waitForGlobalState } from '../e2e/fixtures/state-helpers'
 import {
+  LIVE_COMICNETTAI_REFERENCE_URL,
   MANGADEX_TEST_SERIES_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
@@ -85,6 +86,13 @@ const browserWorkflowCases: BrowserWorkflowCase[] = [
     name: 'manhuagui kimetsu-no-yaiba',
     integrationId: 'manhuagui',
     url: LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL || LIVE_MANHUAGUI_REFERENCE_URL,
+  },
+  {
+    name: 'comicnettai kemutai-hanashi',
+    integrationId: 'comicnettai',
+    url: LIVE_COMICNETTAI_REFERENCE_URL,
+    expectedMangaId: '9',
+    expectedSeriesTitle: '煙たい話',
   },
 ]
 

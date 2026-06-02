@@ -3,6 +3,7 @@
 
 import type { ComicInfoV2 } from "@/src/types/comic-info";
 import {
+  LIVE_COMICNETTAI_REFERENCE_URL,
   LIVE_MANGADEX_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
@@ -20,6 +21,7 @@ const LIVE_REFERENCE_URLS = {
   pixivComic: LIVE_PIXIV_COMIC_REFERENCE_URL,
   shonenjumpplus: LIVE_SHONENJUMPPLUS_REFERENCE_URL,
   manhuagui: LIVE_MANHUAGUI_REFERENCE_URL,
+  comicnettai: LIVE_COMICNETTAI_REFERENCE_URL,
 } as const;
 
 export const testCases: LiveTestCase[] = [
@@ -49,6 +51,13 @@ export const testCases: LiveTestCase[] = [
     integration: 'manhuagui',
     expectedMetadata: {
       Series: '八田百田',
+    }
+  },
+  {
+    url: LIVE_REFERENCE_URLS.comicnettai,
+    integration: 'comicnettai',
+    expectedMetadata: {
+      Series: '煙たい話',
     }
   },
 ];

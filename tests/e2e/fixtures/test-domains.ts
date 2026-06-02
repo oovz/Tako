@@ -39,11 +39,15 @@ export {
   MANHUAGUI_BASE_URL,
   MANHUAGUI_CONFIG_SCRIPT_DOMAIN,
   MANHUAGUI_IMAGE_HOSTS,
+  COMICNETTAI_TEST_DOMAIN,
+  COMICNETTAI_BASE_URL,
+  LIVE_COMICNETTAI_REFERENCE_URL,
   buildMangadexUrl,
   buildExampleUrl,
   buildPixivComicUrl,
   buildShonenJumpPlusUrl,
   buildManhuaguiUrl,
+  buildComicNettaiUrl,
 } from './test-domains-constants';
 
 export { registerTestRoutes } from './routes';

@@ -242,6 +242,7 @@ After a build, inspect `.output/chrome-mv3/manifest.json` and confirm your domai
 | `pixiv-comic` | Cookie-backed request context, build-ID refresh, image reconstruction |
 | `shonenjumpplus` | Episode JSON flow, DOM-backed metadata, image reconstruction |
 | `manhuagui` | DOM chapter grouping, adult-gate cookie priming, reader-config parsing, referrer-sensitive image fetches |
+| `comicnettai` | PUBLUS viewer API flow, tile-based image reconstruction, DOM chapter list extraction |
 
 ## Related docs
 

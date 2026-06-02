@@ -36,6 +36,7 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
 | MangaDex | Supported | Rich series metadata, chapter discovery, language-aware flows, and image quality preferences. |
 | Pixiv Comic | Supported | Reader-page downloads with site-specific handling for protected image flows and metadata. |
 | Shonen Jump+ | Supported | Episode downloads with cleaner defaults for offline reading and organized exports. |
+| Comic Nettai | Supported | Book-page downloads with PUBLUS viewer image reconstruction and DOM-based series metadata. |
 
 ## Rights and site access
 

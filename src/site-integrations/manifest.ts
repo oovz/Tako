@@ -31,6 +31,7 @@ const MANGADEX_DOMAINS: string[] = Array.from(
 const PIXIV_COMIC_DOMAINS: string[] = ['comic.pixiv.net'];
 const SHONEN_JUMP_PLUS_DOMAINS: string[] = ['shonenjumpplus.com'];
 const MANHUAGUI_DOMAINS: string[] = ['www.manhuagui.com', 'manhuagui.com'];
+const COMICNETTAI_DOMAINS: string[] = ['www.comicnettai.com'];
 
 export type SettingsFieldType = 'boolean' | 'string' | 'number' | 'select' | 'multiselect';
 
@@ -196,6 +197,25 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       domains: MANHUAGUI_DOMAINS,
       seriesMatches: ['/comic/*'],
       excludeMatches: ['/comic/*/*.html'],
+    },
+    policyDefaults: {
+      image: { concurrency: 2, delayMs: 1000 },
+      chapter: { concurrency: 1, delayMs: 1000 },
+    },
+    runtimes: {
+      content: true,
+      background: true,
+      offscreen: true,
+    },
+  },
+  {
+    id: 'comicnettai',
+    name: 'Comic Nettai',
+    author: 'TMD Team',
+    patterns: {
+      domains: COMICNETTAI_DOMAINS,
+      seriesMatches: ['/book/*'],
+      excludeMatches: ['/publus/*'],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 1000 },

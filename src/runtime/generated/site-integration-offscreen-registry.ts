@@ -5,12 +5,14 @@ import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-int
 import { offscreenSiteAdapter as pixivComicOffscreenAdapter } from '@/src/site-integrations/pixiv-comic/offscreen-runtime'
 import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/site-integrations/shonenjumpplus/offscreen-runtime'
 import { offscreenSiteAdapter as manhuaguiOffscreenAdapter } from '@/src/site-integrations/manhuagui/offscreen-runtime'
+import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
 
 export const offscreenSiteAdapters = [
   mangadexOffscreenAdapter,
   pixivComicOffscreenAdapter,
   shonenjumpplusOffscreenAdapter,
   manhuaguiOffscreenAdapter,
+  comicnettaiOffscreenAdapter,
 ] as const satisfies readonly OffscreenSiteAdapter[]
 
 export const offscreenSiteAdaptersById = Object.fromEntries(

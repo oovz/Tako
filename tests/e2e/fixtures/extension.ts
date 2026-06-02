@@ -9,6 +9,7 @@ import { registerMangadexLocalServerHandlers } from './mock-data/site-integratio
 import { registerManhuaguiLocalServerHandlers } from './mock-data/site-integrations/manhuagui/local-server';
 import { registerPixivComicLocalServerHandlers } from './mock-data/site-integrations/pixiv-comic/local-server';
 import { registerShonenJumpPlusLocalServerHandlers } from './mock-data/site-integrations/shonenjumpplus/local-server';
+import { registerComicNettaiLocalServerHandlers } from './mock-data/site-integrations/comicnettai/local-server';
 import { registerTestRoutes } from './routes';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -86,6 +87,7 @@ async function setupExtensionContext(testInfoHeadless: boolean): Promise<Extensi
       ...registerManhuaguiLocalServerHandlers(localMockServer),
       ...registerPixivComicLocalServerHandlers(localMockServer),
       ...registerShonenJumpPlusLocalServerHandlers(localMockServer),
+      ...registerComicNettaiLocalServerHandlers(localMockServer),
     ];
   }
 

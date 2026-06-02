@@ -28,6 +28,7 @@ export * as Mangadex from './site-integrations/mangadex';
 export * as PixivComic from './site-integrations/pixiv-comic';
 export * as ShonenJumpPlus from './site-integrations/shonenjumpplus';
 export * as Manhuagui from './site-integrations/manhuagui';
+export * as ComicNettai from './site-integrations/comicnettai';
 
 // ============================================================================
 // Shared mock data utilities and types

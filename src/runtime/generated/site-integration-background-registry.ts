@@ -5,12 +5,14 @@ import { backgroundSiteAdapter as mangadexBackgroundAdapter } from '@/src/site-i
 import { backgroundSiteAdapter as pixivComicBackgroundAdapter } from '@/src/site-integrations/pixiv-comic/background-runtime'
 import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/site-integrations/shonenjumpplus/background-runtime'
 import { backgroundSiteAdapter as manhuaguiBackgroundAdapter } from '@/src/site-integrations/manhuagui/background-runtime'
+import { backgroundSiteAdapter as comicnettaiBackgroundAdapter } from '@/src/site-integrations/comicnettai/background-runtime'
 
 export const backgroundSiteAdapters = [
   mangadexBackgroundAdapter,
   pixivComicBackgroundAdapter,
   shonenjumpplusBackgroundAdapter,
   manhuaguiBackgroundAdapter,
+  comicnettaiBackgroundAdapter,
 ] as const satisfies readonly BackgroundSiteAdapter[]
 
 export const backgroundSiteAdaptersById = Object.fromEntries(

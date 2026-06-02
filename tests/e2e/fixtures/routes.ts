@@ -24,6 +24,7 @@ import { registerMangadexRoutes } from './mock-data/site-integrations/mangadex';
 import { registerManhuaguiRoutes } from './mock-data/site-integrations/manhuagui';
 import { registerPixivComicRoutes } from './mock-data/site-integrations/pixiv-comic';
 import { registerShonenJumpPlusRoutes } from './mock-data/site-integrations/shonenjumpplus';
+import { registerComicNettaiRoutes } from './mock-data/site-integrations/comicnettai';
 import { EXAMPLE_TEST_DOMAIN } from './test-domains-constants';
 
 const DEFAULT_HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>Test Page</body></html>';
@@ -33,6 +34,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerManhuaguiRoutes,
   registerPixivComicRoutes,
   registerShonenJumpPlusRoutes,
+  registerComicNettaiRoutes,
 ];
 
 async function registerExampleCatchAll(

@@ -5,12 +5,14 @@ import { contentSiteAdapter as mangadexContentAdapter } from '@/src/site-integra
 import { contentSiteAdapter as pixivComicContentAdapter } from '@/src/site-integrations/pixiv-comic/content-runtime'
 import { contentSiteAdapter as shonenjumpplusContentAdapter } from '@/src/site-integrations/shonenjumpplus/content-runtime'
 import { contentSiteAdapter as manhuaguiContentAdapter } from '@/src/site-integrations/manhuagui/content-runtime'
+import { contentSiteAdapter as comicnettaiContentAdapter } from '@/src/site-integrations/comicnettai/content-runtime'
 
 export const contentSiteAdapters = [
   mangadexContentAdapter,
   pixivComicContentAdapter,
   shonenjumpplusContentAdapter,
   manhuaguiContentAdapter,
+  comicnettaiContentAdapter,
 ] as const satisfies readonly ContentSiteAdapter[]
 
 export const contentSiteAdaptersById = Object.fromEntries(

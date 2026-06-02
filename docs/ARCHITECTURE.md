@@ -214,6 +214,7 @@ If a handler needs a tab ID and it can be called by an extension page, accept a 
 | `pixiv-comic` | Auth-aware requests, protected-viewer support, image reconstruction |
 | `shonenjumpplus` | Official episode-page support, image reconstruction, manga-oriented metadata defaults |
 | `manhuagui` | Series-page extraction, adult-gated chapter-list handling, reader-config image URL resolution, Manhuagui referrer/cookie handling |
+| `comicnettai` | PUBLUS viewer support, tile-based image reconstruction, DOM-backed series and chapter extraction |
 
 ## Validation commands
 

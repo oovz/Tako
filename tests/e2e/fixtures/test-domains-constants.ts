@@ -48,6 +48,11 @@ export const LIVE_MANHUAGUI_KIMETSU_REFERENCE_URL = process.env.TMD_LIVE_MANHUAG
 export const MANHUAGUI_CONFIG_SCRIPT_DOMAIN = 'cf.mhgui.com';
 export const MANHUAGUI_IMAGE_HOSTS = ['i.hamreus.com', 'eu.hamreus.com', 'eu1.hamreus.com', 'eu2.hamreus.com', 'us.hamreus.com', 'us1.hamreus.com', 'us2.hamreus.com', 'us3.hamreus.com'] as const;
 
+export const COMICNETTAI_TEST_DOMAIN = 'www.comicnettai.com';
+export const COMICNETTAI_BASE_URL = `https://${COMICNETTAI_TEST_DOMAIN}`;
+export const LIVE_COMICNETTAI_REFERENCE_URL = process.env.TMD_LIVE_COMICNETTAI_URL
+  ?? 'https://www.comicnettai.com/book/9';
+
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   return new URL(normalized, MANGADEX_BASE_URL).toString();
@@ -71,4 +76,9 @@ export function buildShonenJumpPlusUrl(path: string): string {
 export function buildManhuaguiUrl(path: string): string {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   return new URL(normalized, MANHUAGUI_BASE_URL).toString();
+}
+
+export function buildComicNettaiUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return new URL(normalized, COMICNETTAI_BASE_URL).toString();
 }
