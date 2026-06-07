@@ -9,7 +9,6 @@ import {
   resolveSeriesDataStrategy,
   scheduleInitialContentInitialization,
 } from '@/entrypoints/content/content-helpers'
-import { initializeContentScript } from '@/entrypoints/content/content-runtime'
 import { getContentScriptExcludeMatches, getContentScriptMatches } from '@/src/site-integrations/url-matcher'
 import { settingsService } from '@/src/storage/settings-service'
 
@@ -36,7 +35,11 @@ export default defineContentScript({
 
           await bootstrapContentScript(
             () => {
-              initializeContentScript()
+              void import('@/entrypoints/content/content-runtime')
+                .then(({ initializeContentScript }) => initializeContentScript())
+                .catch((error) => {
+                  logger.error('content: failed to load content runtime', error)
+                })
             },
             () => settingsService.getSettings(),
           )
