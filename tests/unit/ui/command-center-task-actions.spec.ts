@@ -9,7 +9,7 @@ describe('CommandCenterTaskActions accessibility', () => {
     const html = renderToStaticMarkup(
       React.createElement(CommandCenterTaskActions, {
         taskId: 'task-1',
-        status: 'running',
+        status: 'downloading',
         isRetried: false,
         isCanceling: true,
         canCancel: false,
