@@ -35,11 +35,11 @@ Instead of juggling extra tabs, repeated save dialogs, or brittle one-off script
 
 | Site | Status |
 |---|---|
-| MangaDex | Supported |
-| Pixiv Comic | Supported |
-| Shonen Jump+ | Supported |
-| Manhuagui | Supported |
-| Comic Nettai | Supported |
+| MangaDex | ✅ |
+| Pixiv Comic | ✅ |
+| Shonen Jump+ | ✅ |
+| Manhuagui | ✅ |
+| Comic Nettai | ✅ |
 
 ## Rights and site access
 
