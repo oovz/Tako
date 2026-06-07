@@ -40,18 +40,18 @@ export function CommandCenterTaskActions({
   return (
     <div className="flex items-center gap-0.5">
       {isCanceling ? (
-        <Button variant="ghost" size="icon" className="h-6 w-6" disabled>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Button aria-label="Canceling download" variant="ghost" size="icon" className="size-6" disabled>
+          <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin" />
         </Button>
       ) : canCancel ? (
         <Button
           aria-label="Cancel"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           onClick={() => onBeginCancel(taskId)}
         >
-          <XCircle className="h-3.5 w-3.5" />
+          <XCircle aria-hidden="true" data-icon="inline-start" />
         </Button>
       ) : null}
 
@@ -62,11 +62,11 @@ export function CommandCenterTaskActions({
               aria-label="Retry failed"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => onRetryFailed?.(taskId)}
               disabled={!canRetryFailed}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <RotateCcw aria-hidden="true" data-icon="inline-start" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
@@ -82,10 +82,10 @@ export function CommandCenterTaskActions({
               aria-label="Restart task"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
               onClick={() => onRestartTask?.(taskId)}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <RotateCcw aria-hidden="true" data-icon="inline-start" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
@@ -99,10 +99,10 @@ export function CommandCenterTaskActions({
           aria-label="Move task to top"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
+          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={() => onMoveTaskToTop?.(taskId)}
         >
-          <ArrowUp className="h-3.5 w-3.5" />
+          <ArrowUp aria-hidden="true" data-icon="inline-start" />
         </Button>
       )}
 
@@ -113,10 +113,10 @@ export function CommandCenterTaskActions({
               aria-label="Remove"
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
               onClick={() => onRemoveTask?.(taskId)}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 aria-hidden="true" data-icon="inline-start" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
