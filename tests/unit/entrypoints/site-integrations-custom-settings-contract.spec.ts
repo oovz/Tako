@@ -44,6 +44,8 @@ describe('Site integration custom settings contract', () => {
     expect(html).toContain('Custom settings')
     expect(html).toContain('Enabled')
     expect(html).toContain('Enable override')
+    expect(html).toContain('for="mangadex-custom-imageQuality-enabled"')
+    expect(html).toContain('id="mangadex-custom-imageQuality-enabled"')
     expect(html).toContain('Image quality')
   })
 

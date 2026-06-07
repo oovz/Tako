@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { RateLimitingForm } from "./RateLimitingForm"
+import { cn } from "@/src/shared/utils"
 import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
@@ -94,13 +95,14 @@ export function SiteIntegrationCard({
   return (
     <Card
       data-testid={`site-integration-card-${siteIntegration.id}`}
-      className={
+      className={cn(
+        "overflow-hidden border-border/70 transition-colors duration-150",
         !isEnabled
-          ? "overflow-hidden border-border/70 bg-muted/15 transition-colors duration-150"
+          ? "bg-muted/15"
           : hasOverrides
-            ? "overflow-hidden border-yellow-500/35 bg-yellow-500/5 transition-colors duration-150"
-            : "overflow-hidden border-border/70 transition-colors duration-150 hover:border-border"
-      }
+            ? "border-yellow-500/35 bg-yellow-500/5"
+            : "hover:border-border",
+      )}
     >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CardHeader className="gap-0 px-5 py-4">
@@ -123,7 +125,7 @@ export function SiteIntegrationCard({
                 {siteIntegration.domains.join(', ')}
               </CardDescription>
             </div>
-            <div className="shrink-0 flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-3">
               <div className="flex items-center gap-2">
                 <Label htmlFor={`${siteIntegration.id}-integration-enabled`} className="text-xs text-muted-foreground">Enabled</Label>
                 <Switch
@@ -171,9 +173,11 @@ export function SiteIntegrationCard({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cbz">CBZ (Comic Book Archive)</SelectItem>
-                    <SelectItem value="zip">ZIP</SelectItem>
-                    <SelectItem value="none">No Archive (Individual Files)</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="cbz">CBZ (Comic Book Archive)</SelectItem>
+                      <SelectItem value="zip">ZIP</SelectItem>
+                      <SelectItem value="none">No Archive (Individual Files)</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
@@ -284,6 +288,8 @@ export function SiteIntegrationCard({
                     const multiselectValues = Array.isArray(effectiveValue)
                       ? effectiveValue.filter((value): value is string => typeof value === 'string')
                       : []
+                    const customSettingControlId = `${siteIntegration.id}-custom-${schema.id}`
+                    const customSettingOverrideId = `${customSettingControlId}-enabled`
 
                     return (
                       <div
@@ -292,7 +298,7 @@ export function SiteIntegrationCard({
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-1">
-                            <Label htmlFor={`${siteIntegration.id}-custom-${schema.id}`} className="font-medium">
+                            <Label htmlFor={customSettingControlId} className="font-medium">
                               {schema.label}
                             </Label>
                             {schema.description && (
@@ -300,8 +306,9 @@ export function SiteIntegrationCard({
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Label className="text-[11px] text-muted-foreground">Enable override</Label>
+                            <Label htmlFor={customSettingOverrideId} className="text-[11px] text-muted-foreground">Enable override</Label>
                             <Switch
+                              id={customSettingOverrideId}
                               checked={enabled}
                               onCheckedChange={(checked) => {
                                 updateCustomSetting(schema, checked, effectiveValue)
@@ -312,7 +319,7 @@ export function SiteIntegrationCard({
 
                         {schema.type === 'boolean' && (
                           <Switch
-                            id={`${siteIntegration.id}-custom-${schema.id}`}
+                            id={customSettingControlId}
                             checked={Boolean(effectiveValue)}
                             disabled={!enabled}
                             className="data-[state=unchecked]:bg-muted-foreground/25"
@@ -322,7 +329,7 @@ export function SiteIntegrationCard({
 
                         {schema.type === 'string' && (
                           <Input
-                            id={`${siteIntegration.id}-custom-${schema.id}`}
+                            id={customSettingControlId}
                             value={textValue}
                             disabled={!enabled}
                             className="font-medium"
@@ -332,7 +339,7 @@ export function SiteIntegrationCard({
 
                         {schema.type === 'number' && (
                           <Input
-                            id={`${siteIntegration.id}-custom-${schema.id}`}
+                            id={customSettingControlId}
                             type="number"
                             value={numberValue}
                             disabled={!enabled}
@@ -347,15 +354,17 @@ export function SiteIntegrationCard({
                             disabled={!enabled}
                             onValueChange={(nextValue) => updateCustomSetting(schema, enabled, nextValue)}
                           >
-                            <SelectTrigger id={`${siteIntegration.id}-custom-${schema.id}`} className="font-medium">
+                            <SelectTrigger id={customSettingControlId} className="font-medium">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(schema.options ?? []).map((option) => (
-                                <SelectItem key={`${schema.id}-${option.value}`} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
+                              <SelectGroup>
+                                {(schema.options ?? []).map((option) => (
+                                  <SelectItem key={`${schema.id}-${option.value}`} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
                             </SelectContent>
                           </Select>
                         )}
@@ -367,7 +376,12 @@ export function SiteIntegrationCard({
                               return (
                                 <label
                                   key={`${schema.id}-ms-${option.value}`}
-                                  className={`flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm ${enabled ? 'cursor-pointer hover:bg-muted/40' : 'cursor-not-allowed bg-muted/20 text-muted-foreground/70'}`}
+                                  className={cn(
+                                    'flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm',
+                                    enabled
+                                      ? 'cursor-pointer hover:bg-muted/40'
+                                      : 'cursor-not-allowed bg-muted/20 text-muted-foreground/70',
+                                  )}
                                 >
                                   <Checkbox
                                     checked={isChecked}
@@ -387,7 +401,7 @@ export function SiteIntegrationCard({
                         )}
                         {schema.type === 'multiselect' && (!schema.options || schema.options.length === 0) && (
                           <Input
-                            id={`${siteIntegration.id}-custom-${schema.id}`}
+                            id={customSettingControlId}
                             value={multiselectValues.join(', ')}
                             disabled={!enabled}
                             placeholder="Comma-separated values"
