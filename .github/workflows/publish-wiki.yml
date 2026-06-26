@@ -1,0 +1,82 @@
+name: Publish Wiki
+
+# Publishes the contents of wiki/ to the repository's GitHub Wiki tab.
+#
+# Uses the auto-provided GITHUB_TOKEN (no PAT needed). The token is scoped
+# to this repository, masked in logs, and never available to forked PRs.
+# Requires `permissions: contents: write` (set below).
+#
+# Prerequisite:
+#   The wiki must be initialized via the GitHub web UI (create at least one
+#   page). If it hasn't been, the workflow will attempt to bootstrap it.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wiki/**'
+      - '.github/workflows/publish-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: true
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Publish wiki
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          repo="${GITHUB_REPOSITORY}"
+          wiki_url="https://x-access-token:${GH_TOKEN}@github.com/${repo}.wiki.git"
+
+          tmp_dir="$(mktemp -d)"
+          echo "Cloning wiki into $tmp_dir"
+
+          # Try cloning. If the wiki has never been initialized, bootstrap it.
+          if ! git clone --depth 1 "$wiki_url" "$tmp_dir" 2>/dev/null; then
+            echo "::warning::Wiki repo not yet initialized. Bootstrapping it."
+            cd "$tmp_dir"
+            git init -b master
+            echo "# ${repo##*/}" > Home.md
+            git add Home.md
+            git -c user.name="github-actions[bot]" \
+                -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                commit -m "init wiki"
+            git remote add origin "$wiki_url"
+            git push -u origin master
+            cd -
+          fi
+
+          # Remove all tracked files (keep .git) so deletions propagate.
+          cd "$tmp_dir"
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cd -
+
+          # Copy current wiki content.
+          cp -r wiki/* "$tmp_dir/"
+
+          # Commit and push if there are changes.
+          cd "$tmp_dir"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+          git commit -m "chore: sync wiki from ${{ github.sha }}"
+          git push origin master
