@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { t } from '@/src/shared/i18n'
 
 interface UnsavedChangesFooterProps {
   isSaving: boolean
@@ -15,7 +16,7 @@ export function UnsavedChangesFooter({ isSaving, onDiscard, onSave }: UnsavedCha
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <div className="size-2 rounded-full bg-destructive animate-pulse" />
-            You have unsaved changes
+            {t('options_unsavedChanges')}
           </div>
           <div className="flex gap-2">
             <Button
@@ -24,7 +25,7 @@ export function UnsavedChangesFooter({ isSaving, onDiscard, onSave }: UnsavedCha
               disabled={isSaving}
               className="transition-colors"
             >
-              Discard
+              {t('options_discard')}
             </Button>
             <Button
               onClick={onSave}
@@ -32,7 +33,7 @@ export function UnsavedChangesFooter({ isSaving, onDiscard, onSave }: UnsavedCha
               className="shadow-sm transition-all"
             >
               {isSaving && <Loader2 data-icon="inline-start" className="size-4 animate-spin" />}
-              Save Changes
+              {t('options_saveChanges')}
             </Button>
           </div>
         </div>

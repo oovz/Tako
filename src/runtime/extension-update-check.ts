@@ -1,3 +1,5 @@
+import { t } from '@/src/shared/i18n'
+
 export type ChromeWebStoreUpdateStatus = chrome.runtime.RequestUpdateCheckStatus
 
 export interface ExtensionUpdateRuntime {
@@ -115,32 +117,32 @@ export function getChromeWebStoreUpdateStatusCopy(
   if (!result.ok) {
     return {
       tone: 'error',
-      title: result.status === 'unsupported' ? 'Update Check Unavailable' : 'Update Check Failed',
+      title: result.status === 'unsupported' ? t('options_updateCheckUnavailable') : t('options_updateCheckFailed'),
       description: result.error,
     }
   }
 
   if (result.status === 'update_available') {
-    const version = result.availableVersion ? `Version ${result.availableVersion}` : 'An update'
+    const version = result.availableVersion ? t('options_version', [result.availableVersion]) : t('options_anUpdate')
     return {
       tone: 'warning',
-      title: 'Update Ready',
-      description: `${version} has been downloaded. Apply it when current extension work can be interrupted.`,
+      title: t('options_updateReady'),
+      description: t('options_updateReadyDesc', [version]),
     }
   }
 
   if (result.status === 'throttled') {
     return {
       tone: 'warning',
-      title: 'Check Throttled',
-      description: 'Chrome limited repeated update checks. Try again later.',
+      title: t('options_checkThrottled'),
+      description: t('options_checkThrottledDesc'),
     }
   }
 
   return {
     tone: 'neutral',
-    title: 'No Update Available',
-    description: `Chrome did not return an installable update for version ${result.currentVersion}. This does not compare unpacked or locally modified builds against the public Web Store listing.`,
+    title: t('options_noUpdateAvailable'),
+    description: t('options_noUpdateAvailableDesc', [result.currentVersion]),
   }
 }
 

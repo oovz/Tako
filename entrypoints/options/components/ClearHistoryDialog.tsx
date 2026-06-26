@@ -8,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { t } from '@/src/shared/i18n'
 
 interface ClearHistoryDialogProps {
   open: boolean
@@ -20,13 +21,13 @@ export function ClearHistoryDialog({ open, onOpenChange, onConfirm }: ClearHisto
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Clear all download history?</AlertDialogTitle>
+          <AlertDialogTitle>{t('options_clearHistoryTitle')}</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete all download history. Downloaded files are not affected.
+            {t('options_clearHistoryDesc')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>No, Keep History</AlertDialogCancel>
+          <AlertDialogCancel>{t('options_keepHistory')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               void onConfirm().then((didClear) => {
@@ -37,7 +38,7 @@ export function ClearHistoryDialog({ open, onOpenChange, onConfirm }: ClearHisto
             }}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Yes, Clear All
+            {t('options_clearAll')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

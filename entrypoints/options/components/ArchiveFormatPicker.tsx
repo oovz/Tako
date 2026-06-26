@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, FileArchive, Files, FileType } from 'lucid
 
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { t } from '@/src/shared/i18n'
 
 interface ArchiveFormatPickerProps {
   showNoArchiveWarning: boolean
@@ -12,7 +13,7 @@ interface ArchiveFormatPickerProps {
 export function ArchiveFormatPicker({ showNoArchiveWarning, value, onValueChange }: ArchiveFormatPickerProps) {
   return (
     <div className="flex flex-col gap-3">
-      <Label className="text-base font-medium">Archive Format</Label>
+      <Label className="text-base font-medium">{t('options_archiveFormat')}</Label>
       <RadioGroup
         data-testid="archive-format-radiogroup"
         value={value}
@@ -30,8 +31,8 @@ export function ArchiveFormatPicker({ showNoArchiveWarning, value, onValueChange
               <CheckCircle2 className="size-4 opacity-0 peer-data-[state=checked]:opacity-100 text-primary" />
             </div>
             <div className="flex flex-col gap-1">
-              <div className="font-medium leading-none">CBZ Archive</div>
-              <div className="text-xs text-muted-foreground">Best for comic readers</div>
+              <div className="font-medium leading-none">{t('options_cbzArchive')}</div>
+              <div className="text-xs text-muted-foreground">{t('options_cbzArchiveDesc')}</div>
             </div>
           </Label>
         </div>
@@ -47,8 +48,8 @@ export function ArchiveFormatPicker({ showNoArchiveWarning, value, onValueChange
               <CheckCircle2 className="size-4 opacity-0 peer-data-[state=checked]:opacity-100 text-primary" />
             </div>
             <div className="flex flex-col gap-1">
-              <div className="font-medium leading-none">ZIP Archive</div>
-              <div className="text-xs text-muted-foreground">Standard compressed folder</div>
+              <div className="font-medium leading-none">{t('options_zipArchive')}</div>
+              <div className="text-xs text-muted-foreground">{t('options_zipArchiveDesc')}</div>
             </div>
           </Label>
         </div>
@@ -64,8 +65,8 @@ export function ArchiveFormatPicker({ showNoArchiveWarning, value, onValueChange
               <CheckCircle2 className="size-4 opacity-0 peer-data-[state=checked]:opacity-100 text-primary" />
             </div>
             <div className="flex flex-col gap-1">
-              <div className="font-medium leading-none">No Archive</div>
-              <div className="text-xs text-muted-foreground">Individual image files</div>
+              <div className="font-medium leading-none">{t('options_noArchive')}</div>
+              <div className="text-xs text-muted-foreground">{t('options_noArchiveDesc')}</div>
             </div>
           </Label>
         </div>
@@ -76,9 +77,9 @@ export function ArchiveFormatPicker({ showNoArchiveWarning, value, onValueChange
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 size-4 text-muted-foreground" />
             <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-foreground">No archive + default downloads can clutter the download shelf</p>
+              <p className="text-sm font-medium text-foreground">{t('options_noArchiveWarningTitle')}</p>
               <p className="text-xs text-muted-foreground">
-                Using &quot;No archive&quot; format with the default download location will create a separate Chrome download entry for every image. Consider enabling a custom download folder to avoid download shelf clutter.
+                {t('options_noArchiveWarningDesc')}
               </p>
             </div>
           </div>

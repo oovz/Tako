@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useErrors } from '../hooks/useErrors';
 import { useInitFailure } from '../hooks/useInitFailure';
+import { t } from '@/src/shared/i18n';
 
 export function ErrorBanner() {
     const { errors, acknowledgeError } = useErrors();
@@ -16,16 +17,16 @@ export function ErrorBanner() {
             {initFailed && (
                 <Alert variant="destructive">
                     <AlertCircle className="size-4" />
-                    <AlertTitle>Error</AlertTitle>
+                    <AlertTitle>{t('common_error')}</AlertTitle>
                     <AlertDescription>
-                        {initFailureError || 'Extension initialization failed'}
+                        {initFailureError || t('sidepanel_initFailed')}
                     </AlertDescription>
                 </Alert>
             )}
             {errors.map((error) => (
                 <Alert key={error.code} variant={error.severity === 'error' ? 'destructive' : 'default'}>
                     <AlertCircle className="size-4" />
-                    <AlertTitle>{error.severity === 'error' ? 'Error' : 'Warning'}</AlertTitle>
+                    <AlertTitle>{error.severity === 'error' ? t('common_error') : t('common_warning')}</AlertTitle>
                     <AlertDescription className="flex items-center justify-between gap-2">
                         <span>{error.message}</span>
                         <Button
@@ -35,7 +36,7 @@ export function ErrorBanner() {
                             onClick={() => acknowledgeError(error.code)}
                         >
                             <X className="size-4" />
-                            <span className="sr-only">Dismiss</span>
+                            <span className="sr-only">{t('common_dismiss')}</span>
                         </Button>
                     </AlertDescription>
                 </Alert>

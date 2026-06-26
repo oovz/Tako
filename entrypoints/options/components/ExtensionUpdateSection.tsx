@@ -17,6 +17,7 @@ import {
   markExtensionUpdateActionItemAvailable,
 } from '@/src/runtime/options-action-items'
 import { cn } from '@/src/shared/utils'
+import { t } from '@/src/shared/i18n'
 
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb'
 
@@ -95,15 +96,15 @@ export function ExtensionUpdateSection() {
         <div className="flex items-center gap-2">
           <RefreshCw aria-hidden="true" className="size-5 text-muted-foreground" />
           <CardTitle role="heading" aria-level={2} className="text-base">
-            Chrome Web Store Updates
+            {t('options_chromeWebStoreUpdates')}
           </CardTitle>
         </div>
-        <CardDescription>Manual update check through Chrome&apos;s extension update service.</CardDescription>
+        <CardDescription>{t('options_chromeWebStoreUpdatesDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground" translate="no">
-            Installed version {currentVersion}
+            {t('options_installedVersion', [currentVersion])}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -113,18 +114,18 @@ export function ExtensionUpdateSection() {
               disabled={isChecking}
             >
               <RotateCw aria-hidden="true" className={cn(isChecking && 'animate-spin')} />
-              {isChecking ? 'Checking...' : 'Check for Updates'}
+              {isChecking ? t('options_checking') : t('options_checkForUpdates')}
             </Button>
             {canApplyUpdate && (
               <Button type="button" onClick={handleApplyUpdate}>
                 <RefreshCw aria-hidden="true" />
-                Apply Update
+                {t('options_applyUpdate')}
               </Button>
             )}
             <Button asChild variant="ghost">
               <a href={CHROME_WEB_STORE_URL} target="_blank" rel="noreferrer">
                 <ExternalLink aria-hidden="true" />
-                Open Store Listing
+                {t('options_openStoreListing')}
               </a>
             </Button>
           </div>
@@ -138,7 +139,7 @@ export function ExtensionUpdateSection() {
           </Alert>
         ) : (
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            Chrome also checks installed extensions automatically every few hours.
+            {t('options_autoUpdateNote')}
           </p>
         )}
       </CardContent>

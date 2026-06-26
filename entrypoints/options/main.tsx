@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import logger from '@/src/runtime/logger'
+import { t } from '@/src/shared/i18n'
 import { getInitialOptionsSection, type OptionsSection } from './tab-routing'
 import { useOptionsPageState } from './hooks/useOptionsPageState'
 
@@ -107,7 +108,7 @@ function onRenderCallback(
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center flex flex-col gap-4">
           <Loader2 className="size-8 animate-spin mx-auto text-primary" />
-          <p className="text-sm text-muted-foreground">Loading settings...</p>
+          <p className="text-sm text-muted-foreground">{t('options_loadingSettings')}</p>
         </div>
       </div>
     )
@@ -202,20 +203,20 @@ function onRenderCallback(
         <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+              <AlertDialogTitle>{t('options_discardUnsavedChanges')}</AlertDialogTitle>
               <AlertDialogDescription>
-                All unsaved changes will be lost. This action cannot be undone.
+                {t('options_discardWarning')}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t('common_cancel')}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
                   discardChanges()
                   setShowDiscardDialog(false)
                 }}
               >
-                Discard Changes
+                {t('options_discardChanges')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

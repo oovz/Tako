@@ -17,6 +17,7 @@ import {
   syncInlineSelectionItems,
 } from '@/entrypoints/sidepanel/components/series-inline-selection-helpers'
 import { Check, Download } from 'lucide-react'
+import { t } from '@/src/shared/i18n'
 
 interface SeriesInlineSelectionProps {
   data: SidepanelSeriesContextData
@@ -141,11 +142,11 @@ export function SeriesInlineSelection({
                   onCheckedChange={selection.handleSelectAll}
                   disabled={download.isEnqueuing || selectableCount === 0}
                 />
-                <span>Select chapters</span>
+                <span>{t('sidepanel_selectChaptersLabel')}</span>
               </label>
             </div>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {selectedCount > 0 ? `${selectedCount} selected` : `${selectableCount} available`}
+              {selectedCount > 0 ? t('sidepanel_selectedCount', [String(selectedCount)]) : t('sidepanel_availableCount', [String(selectableCount)])}
             </span>
           </div>
 
@@ -160,17 +161,17 @@ export function SeriesInlineSelection({
             >
               <ToggleGroupItem
                 value="volumes"
-                aria-label="Group by Volume"
+                aria-label={t('sidepanel_volumes')}
                 className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
-                Volumes
+                {t('sidepanel_volumes')}
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="chapters"
-                aria-label="Show All Chapters"
+                aria-label={t('sidepanel_allChapters')}
                 className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
-                All chapters
+                {t('sidepanel_allChapters')}
               </ToggleGroupItem>
             </ToggleGroup>
           )}
@@ -203,12 +204,12 @@ export function SeriesInlineSelection({
             {download.showSuccess ? (
               <>
                 <Check className="size-4" />
-                Added to Queue!
+                {t('sidepanel_addedToQueue')}
               </>
             ) : (
               <>
                 <Download className="size-4" />
-                Download ({selectedCount})
+                {t('sidepanel_downloadCount', [String(selectedCount)])}
               </>
             )}
           </Button>

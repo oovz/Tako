@@ -12,6 +12,7 @@ import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { SiteIntegrationEnablementMap } from "@/src/storage/site-integration-enablement-service"
 import type { ExtensionSettings } from "@/src/storage/settings-types"
 import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
+import { t } from '@/src/shared/i18n'
 
 type CustomSettingValue = SiteIntegrationSettingValue
 
@@ -87,14 +88,13 @@ export function SiteIntegrationManagementTab({
       <div className="min-w-0 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold text-foreground">Site Integrations</h2>
+            <h2 className="text-2xl font-semibold text-foreground">{t('options_siteIntegrations')}</h2>
             <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
-              {sortedIntegrations.length}
-              {' integrations'}
+              {t('options_integrationsCount', [String(sortedIntegrations.length)])}
             </Badge>
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Tune site-specific defaults, custom settings, and enablement without touching the global download profile.
+            {t('options_siteIntegrationsDesc')}
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export function SiteIntegrationManagementTab({
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search site integrations by name or domain..."
+            placeholder={t('options_searchSiteIntegrations')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-10 border-border/70 bg-background pl-9 text-sm"
@@ -113,9 +113,9 @@ export function SiteIntegrationManagementTab({
         {overrideCount > 0 && (
           <div className="rounded-md border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-foreground">
             <Badge variant="outline" className="mr-2 border-primary/40 bg-transparent text-[10px] font-medium text-current">
-              Overrides
+              {t('options_overrides')}
             </Badge>
-            You have active overrides for {overrideCount} {overrideCount !== 1 ? 'integrations' : 'integration'}.
+            {t('options_activeOverrides', [String(overrideCount), overrideCount !== 1 ? t('options_integrationsPlural') : t('options_integrationSingular')])}
           </div>
         )}
 
@@ -126,11 +126,11 @@ export function SiteIntegrationManagementTab({
               <div className="text-muted-foreground">
                 {search ? (
                   <>
-                    <p className="font-medium text-foreground">No integrations found</p>
-                    <p className="mt-1 text-sm">Try searching for something else</p>
+                    <p className="font-medium text-foreground">{t('options_noIntegrationsFound')}</p>
+                    <p className="mt-1 text-sm">{t('options_trySearchingElse')}</p>
                   </>
                 ) : (
-                  <p>No integrations available</p>
+                  <p>{t('options_noIntegrationsAvailable')}</p>
                 )}
               </div>
             </div>

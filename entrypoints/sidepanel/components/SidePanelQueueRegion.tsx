@@ -8,6 +8,7 @@ import { HistorySection } from '@/entrypoints/sidepanel/components/HistorySectio
 import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 interface SidePanelQueueRegionProps {
   activeTasks: QueueTaskSummary[]
@@ -130,7 +131,7 @@ export function SidePanelQueueRegion({
       {!isLoading && isInlineSelectionOpen && !hasAnyTask && (
         <div className="px-3 py-3 bg-muted/20 border-t border-border/50">
           <p className="text-xs text-muted-foreground text-center">
-            Select chapters above and click Download to add to queue
+            {t('sidepanel_selectChaptersHint')}
           </p>
         </div>
       )}
@@ -138,9 +139,9 @@ export function SidePanelQueueRegion({
       {!isLoading && !isInlineSelectionOpen && !hasAnyTask && (
         <div className="p-6 text-center">
           <Download className="size-8 mx-auto mb-2 text-muted-foreground/50" aria-hidden="true" />
-          <h3 className="font-medium text-sm mb-1">No downloads yet</h3>
+          <h3 className="font-medium text-sm mb-1">{t('sidepanel_noDownloadsYet')}</h3>
           <p className="text-xs text-muted-foreground">
-            Use "Select Chapters" above to start downloading
+            {t('sidepanel_useSelectChapters')}
           </p>
         </div>
       )}

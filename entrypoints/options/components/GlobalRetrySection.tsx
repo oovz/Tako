@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
+import { t } from '@/src/shared/i18n'
 
 interface GlobalRetrySectionProps {
   retries: ExtensionSettings['globalRetries']
@@ -16,14 +17,14 @@ export function GlobalRetrySection({ retries, onChange }: GlobalRetrySectionProp
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <RotateCcw className="size-5 text-muted-foreground" />
-          <CardTitle className="text-base">Retry Settings</CardTitle>
+          <CardTitle className="text-base">{t('options_retrySettings')}</CardTitle>
         </div>
-        <CardDescription>Configure automatic retry behavior for failed downloads.</CardDescription>
+        <CardDescription>{t('options_retrySettingsDesc')}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-6">
           <div className="flex flex-col gap-3">
-            <Label htmlFor="image-retries">Image Retries</Label>
+            <Label htmlFor="image-retries">{t('options_imageRetries')}</Label>
             <Input
               id="image-retries"
               data-testid="image-retries-input"
@@ -35,12 +36,12 @@ export function GlobalRetrySection({ retries, onChange }: GlobalRetrySectionProp
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Number of retry attempts for failed image downloads.
+              {t('options_imageRetriesDesc')}
             </p>
           </div>
 
           <div className="flex flex-col gap-3">
-            <Label htmlFor="chapter-retries">Chapter Retries</Label>
+            <Label htmlFor="chapter-retries">{t('options_chapterRetries')}</Label>
             <Input
               id="chapter-retries"
               data-testid="chapter-retries-input"
@@ -52,7 +53,7 @@ export function GlobalRetrySection({ retries, onChange }: GlobalRetrySectionProp
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Number of retry attempts for failed chapter downloads.
+              {t('options_chapterRetriesDesc')}
             </p>
           </div>
         </div>

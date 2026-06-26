@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { t } from '@/src/shared/i18n'
 
 interface HistoryStats {
   totalChapters: number
@@ -91,30 +92,30 @@ export function HistoryTab({
       <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Total Series</CardDescription>
+              <CardDescription>{t('options_totalSeries')}</CardDescription>
               <CardTitle className="text-4xl">{stats?.totalSeries ?? 0}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xs text-muted-foreground">Tracked in history</div>
+              <div className="text-xs text-muted-foreground">{t('options_trackedInHistory')}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Total Chapters</CardDescription>
+              <CardDescription>{t('options_totalChapters')}</CardDescription>
               <CardTitle className="text-4xl">{stats?.totalChapters ?? 0}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xs text-muted-foreground">Downloads recorded</div>
+              <div className="text-xs text-muted-foreground">{t('options_downloadsRecorded')}</div>
             </CardContent>
           </Card>
           {storageBytes !== undefined && (
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>Storage Used</CardDescription>
+                <CardDescription>{t('options_storageUsed')}</CardDescription>
                 <CardTitle className="text-4xl">{formatBytes(storageBytes)}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-xs text-muted-foreground">Local storage usage</div>
+                <div className="text-xs text-muted-foreground">{t('options_localStorageUsage')}</div>
               </CardContent>
             </Card>
           )}
@@ -123,18 +124,18 @@ export function HistoryTab({
         {/* Clear History Actions */}
         <Card className="border-destructive/20 bg-destructive/5">
           <CardHeader>
-            <CardTitle className="text-destructive">Manage History Data</CardTitle>
+            <CardTitle className="text-destructive">{t('options_manageHistoryData')}</CardTitle>
             <CardDescription className="text-destructive/80">
-              Remove stored chapter history records without affecting files already saved on disk.
+              {t('options_manageHistoryDataDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
             {/* Clear All History */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
-                <Label className="text-base font-medium">Clear All History</Label>
+                <Label className="text-base font-medium">{t('options_clearAllHistory')}</Label>
                 <p className="text-sm text-muted-foreground">
-                  Remove all download history for all series
+                  {t('options_clearAllHistoryDesc')}
                 </p>
               </div>
               <Dialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
@@ -144,19 +145,19 @@ export function HistoryTab({
                     disabled={isClearing || (stats?.totalChapters ?? 0) === 0}
                   >
                     <Trash2 data-icon="inline-start" className="size-4" />
-                    Clear Everything
+                    {t('options_clearEverything')}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Clear All Download History?</DialogTitle>
+                    <DialogTitle>{t('options_clearAllDownloadHistory')}</DialogTitle>
                   </DialogHeader>
                   <div className="flex flex-col gap-4">
                     <p className="text-sm">
-                      This will permanently delete records for <strong>{stats?.totalChapters ?? 0} chapters</strong> across <strong>{stats?.totalSeries ?? 0} series</strong>.
+                      {t('options_clearAllWarning', [String(stats?.totalChapters ?? 0), String(stats?.totalSeries ?? 0)])}
                     </p>
                     <p className="text-sm font-medium text-destructive">
-                      This action cannot be undone.
+                      {t('options_cannotBeUndone')}
                     </p>
                     <div className="flex gap-2 justify-end">
                       <Button
@@ -164,7 +165,7 @@ export function HistoryTab({
                         onClick={() => setClearAllDialogOpen(false)}
                         disabled={isClearing}
                       >
-                        Cancel
+                        {t('common_cancel')}
                       </Button>
                       <Button
                         variant="destructive"
@@ -172,7 +173,7 @@ export function HistoryTab({
                         disabled={isClearing}
                       >
                         {isClearing && <Loader2 data-icon="inline-start" className="size-4 animate-spin" />}
-                        Yes, Clear All
+                        {t('options_clearAll')}
                       </Button>
                     </div>
                   </div>
@@ -185,9 +186,9 @@ export function HistoryTab({
             {/* Clear Series History */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col gap-1">
-                <Label className="text-base font-medium">Clear Specific Series</Label>
+                <Label className="text-base font-medium">{t('options_clearSpecificSeries')}</Label>
                 <p className="text-sm text-muted-foreground">
-                  Remove download history for a single series
+                  {t('options_clearSpecificSeriesDesc')}
                 </p>
               </div>
               <Dialog open={clearSeriesDialogOpen} onOpenChange={handleOpenSeriesDialog}>
@@ -196,27 +197,27 @@ export function HistoryTab({
                     variant="outline"
                     disabled={isClearing || (stats?.totalSeries ?? 0) === 0}
                   >
-                    Select Series...
+                    {t('options_selectSeriesDots')}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Clear Series History</DialogTitle>
+                    <DialogTitle>{t('options_clearSeriesHistory')}</DialogTitle>
                   </DialogHeader>
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
-                      <Label htmlFor="series-select">Select Series</Label>
+                      <Label htmlFor="series-select">{t('options_selectSeries')}</Label>
                       <Select
                         value={selectedSeriesToClear}
                         onValueChange={setSelectedSeriesToClear}
                       >
                         <SelectTrigger id="series-select">
-                          <SelectValue placeholder="Choose a series..." />
+                          <SelectValue placeholder={t('options_chooseSeries')} />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px]">
                           {localSeries.length === 0 ? (
                             <div className="text-sm text-muted-foreground p-2 text-center">
-                              No download history found
+                              {t('options_noHistoryFound')}
                             </div>
                           ) : (
                             localSeries.map((s) => (
@@ -224,7 +225,7 @@ export function HistoryTab({
                                 <span className="flex items-center justify-between w-full gap-4">
                                   <span className="truncate max-w-[200px]">{s.seriesTitle}</span>
                                   <Badge variant="secondary" className="ml-auto text-xs">
-                                    {s.chapterCount} ch
+                                    {t('options_chCount', [String(s.chapterCount)])}
                                   </Badge>
                                 </span>
                               </SelectItem>
@@ -242,7 +243,7 @@ export function HistoryTab({
                         }}
                         disabled={isClearing}
                       >
-                        Cancel
+                        {t('common_cancel')}
                       </Button>
                       <Button
                         variant="destructive"
@@ -250,7 +251,7 @@ export function HistoryTab({
                         disabled={isClearing || !selectedSeriesToClear}
                       >
                         {isClearing && <Loader2 data-icon="inline-start" className="size-4 animate-spin" />}
-                        Clear Selected
+                        {t('options_clearSelected')}
                       </Button>
                     </div>
                   </div>

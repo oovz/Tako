@@ -14,6 +14,7 @@ import type {
   RetryFailedChaptersMessage,
   RetryFailedChaptersResponse,
 } from '@/src/types/runtime-command-messages'
+import { t } from '@/src/shared/i18n'
 
 export function useCommandCenterActions() {
   const [cancelingTaskIds, setCancelingTaskIds] = useState<Set<string>>(new Set())
@@ -50,11 +51,11 @@ export function useCommandCenterActions() {
       })
 
       if (!response || response.success === false) {
-        toast.error(response?.error || 'Failed to retry failed chapters')
+        toast.error(response?.error || t('sidepanel_toastRetryFailed'))
       }
     } catch (error) {
       logger.error('[CommandCenter] Failed to retry failed chapters:', error)
-      toast.error('Failed to retry failed chapters')
+      toast.error(t('sidepanel_toastRetryFailed'))
     }
   }, [])
 
@@ -74,11 +75,11 @@ export function useCommandCenterActions() {
       })
 
       if (!response || response.success === false) {
-        toast.error(response?.error || 'Failed to restart task')
+        toast.error(response?.error || t('sidepanel_toastRestartFailed'))
       }
     } catch (error) {
       logger.error('[CommandCenter] Failed to restart task:', error)
-      toast.error('Failed to restart task')
+      toast.error(t('sidepanel_toastRestartFailed'))
     }
   }, [])
 
@@ -90,11 +91,11 @@ export function useCommandCenterActions() {
       })
 
       if (!response || response.success === false) {
-        toast.error(response?.error || 'Failed to move task to top')
+        toast.error(response?.error || t('sidepanel_toastMoveTopFailed'))
       }
     } catch (error) {
       logger.error('[CommandCenter] Failed to move task to top:', error)
-      toast.error('Failed to move task to top')
+      toast.error(t('sidepanel_toastMoveTopFailed'))
     }
   }, [])
 

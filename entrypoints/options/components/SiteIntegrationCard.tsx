@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { RateLimitingForm } from "./RateLimitingForm"
 import { cn } from "@/src/shared/utils"
+import { t } from '@/src/shared/i18n'
 import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
@@ -112,12 +113,12 @@ export function SiteIntegrationCard({
                 <CardTitle className="text-base font-semibold">{siteIntegration.name}</CardTitle>
                 {!isEnabled && (
                   <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
-                    Disabled
+                    {t('options_disabled')}
                   </Badge>
                 )}
                 {hasOverrides && (
                   <Badge variant="outline" className="h-5 border-primary/40 bg-primary/10 px-2 text-[10px] font-medium text-foreground">
-                    Override
+                    {t('options_override')}
                   </Badge>
                 )}
               </div>
@@ -127,11 +128,11 @@ export function SiteIntegrationCard({
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <div className="flex items-center gap-2">
-                <Label htmlFor={`${siteIntegration.id}-integration-enabled`} className="text-xs text-muted-foreground">Enabled</Label>
+                <Label htmlFor={`${siteIntegration.id}-integration-enabled`} className="text-xs text-muted-foreground">{t('options_enabled')}</Label>
                 <Switch
                   id={`${siteIntegration.id}-integration-enabled`}
                   checked={isEnabled}
-                  aria-label={`Enable ${siteIntegration.name}`}
+                  aria-label={t('options_enableIntegration', [siteIntegration.name])}
                   onCheckedChange={(checked) => onEnabledChange?.(siteIntegration.id, checked)}
                 />
               </div>
@@ -142,7 +143,7 @@ export function SiteIntegrationCard({
                   size="sm"
                   className="h-8 gap-1.5 px-2 text-xs font-medium"
                 >
-                  {isExpanded ? 'Hide' : 'Configure'}
+                  {isExpanded ? t('options_hide') : t('options_configure')}
                 </Button>
               </CollapsibleTrigger>
             </div>
@@ -153,12 +154,12 @@ export function SiteIntegrationCard({
           <CardContent className="flex flex-col gap-6 px-5 py-5">
             {/* Download Settings */}
             <div className="flex flex-col gap-3">
-              <h4 className="text-sm font-semibold">Download Settings</h4>
+              <h4 className="text-sm font-semibold">{t('options_downloadSettings')}</h4>
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${siteIntegration.id}-format`}>
-                  Archive Format
+                  {t('options_archiveFormat')}
                   {override?.outputFormat !== undefined && (
-                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">Override</Badge>
+                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">{t('options_override')}</Badge>
                   )}
                 </Label>
                 <Select
@@ -174,9 +175,9 @@ export function SiteIntegrationCard({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="cbz">CBZ (Comic Book Archive)</SelectItem>
-                      <SelectItem value="zip">ZIP</SelectItem>
-                      <SelectItem value="none">No Archive (Individual Files)</SelectItem>
+                      <SelectItem value="cbz">{t('options_cbzFull')}</SelectItem>
+                      <SelectItem value="zip">{t('options_zip')}</SelectItem>
+                      <SelectItem value="none">{t('options_noArchiveFull')}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -184,26 +185,26 @@ export function SiteIntegrationCard({
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${siteIntegration.id}-path`}>
-                  Download Path Template
+                  {t('options_downloadPathTemplate')}
                   {override?.pathTemplate !== undefined && (
-                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">Override</Badge>
+                    <Badge variant="outline" className="ml-2 text-[10px] font-medium">{t('options_override')}</Badge>
                   )}
                 </Label>
                 <Input
                   id={`${siteIntegration.id}-path`}
                   value={override?.pathTemplate ?? ''}
                   onChange={(e) => updateOverride({ pathTemplate: e.target.value || undefined })}
-                  placeholder="Leave empty to use global path"
+                  placeholder={t('options_leaveEmptyGlobalPath')}
                 />
                 <p className="text-[11px] font-medium text-muted-foreground">
-                  Use macros like &lt;SERIES_TITLE&gt;, &lt;CHAPTER_NUMBER&gt;
+                  {t('options_useMacros')}
                 </p>
               </div>
             </div>
 
             {/* Rate Limiting - Image */}
             <div className="flex flex-col gap-3">
-              <h4 className="text-sm font-semibold">Rate Limiting - Images</h4>
+              <h4 className="text-sm font-semibold">{t('options_rateLimitingImages')}</h4>
               <RateLimitingForm
                 scope="image"
                 value={override?.imagePolicy || {}}
@@ -218,7 +219,7 @@ export function SiteIntegrationCard({
 
             {/* Rate Limiting - Chapter */}
             <div className="flex flex-col gap-3">
-              <h4 className="text-sm font-semibold">Rate Limiting - Chapters</h4>
+              <h4 className="text-sm font-semibold">{t('options_rateLimitingChapters')}</h4>
               <RateLimitingForm
                 scope="chapter"
                 value={override?.chapterPolicy || {}}
@@ -234,10 +235,10 @@ export function SiteIntegrationCard({
 
             {/* Retry Settings */}
             <div className="flex flex-col gap-3">
-              <h4 className="text-sm font-semibold">Retry Settings</h4>
+              <h4 className="text-sm font-semibold">{t('options_retrySettings')}</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor={`${siteIntegration.id}-image-retries`}>Image Retries</Label>
+                  <Label htmlFor={`${siteIntegration.id}-image-retries`}>{t('options_imageRetries')}</Label>
                   <Input
                     id={`${siteIntegration.id}-image-retries`}
                     type="number"
@@ -250,11 +251,11 @@ export function SiteIntegrationCard({
                         image: e.target.value ? parseInt(e.target.value) : undefined
                       }
                     })}
-                    placeholder="Default: 3"
+                    placeholder={t('options_default3')}
                   />
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor={`${siteIntegration.id}-chapter-retries`}>Chapter Retries</Label>
+                  <Label htmlFor={`${siteIntegration.id}-chapter-retries`}>{t('options_chapterRetries')}</Label>
                   <Input
                     id={`${siteIntegration.id}-chapter-retries`}
                     type="number"
@@ -267,7 +268,7 @@ export function SiteIntegrationCard({
                         chapter: e.target.value ? parseInt(e.target.value) : undefined
                       }
                     })}
-                    placeholder="Default: 3"
+                    placeholder={t('options_default3')}
                   />
                 </div>
               </div>
@@ -275,7 +276,7 @@ export function SiteIntegrationCard({
 
             {customSettings.length > 0 && (
               <div className="flex flex-col gap-3">
-                <h4 className="text-sm font-semibold">Custom settings</h4>
+                <h4 className="text-sm font-semibold">{t('options_customSettings')}</h4>
                 <div className="flex flex-col gap-3">
                   {customSettings.map((schema) => {
                     const enabled = isCustomSettingEnabled(schema)
@@ -306,7 +307,7 @@ export function SiteIntegrationCard({
                             )}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Label htmlFor={customSettingOverrideId} className="text-[11px] text-muted-foreground">Enable override</Label>
+                            <Label htmlFor={customSettingOverrideId} className="text-[11px] text-muted-foreground">{t('options_enableOverride')}</Label>
                             <Switch
                               id={customSettingOverrideId}
                               checked={enabled}
@@ -404,7 +405,7 @@ export function SiteIntegrationCard({
                             id={customSettingControlId}
                             value={multiselectValues.join(', ')}
                             disabled={!enabled}
-                            placeholder="Comma-separated values"
+                            placeholder={t('options_commaSeparatedValues')}
                             className="font-medium"
                             onChange={(e) => {
                               const nextValues = e.target.value
@@ -432,7 +433,7 @@ export function SiteIntegrationCard({
                   onClick={handleReset}
                   className="w-full"
                 >
-                  Reset to Global Defaults
+                  {t('options_resetToGlobalDefaults')}
                 </Button>
               </div>
             )}

@@ -4,6 +4,7 @@ import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoint
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CommandCenterTaskRow } from '@/entrypoints/sidepanel/components/CommandCenterTaskRow'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 export interface CommandCenterQueueProps {
   tasks: QueueTaskSummary[]
@@ -42,7 +43,7 @@ export function CommandCenterQueue({
   if (tasks.length === 0) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        {emptyState ?? 'No downloads yet. Start a download from any supported series tab to see it here.'}
+        {emptyState ?? t('sidepanel_emptyQueue')}
       </div>
     )
   }
@@ -60,7 +61,7 @@ export function CommandCenterQueue({
               {isHistoryStart && (
                 <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Recent history
+                    {t('sidepanel_recentHistory')}
                   </div>
                   {onViewFullHistory && (
                     <button
@@ -68,7 +69,7 @@ export function CommandCenterQueue({
                       onClick={onViewFullHistory}
                       className="text-[10px] text-muted-foreground hover:text-foreground"
                     >
-                      View All
+                      {t('sidepanel_viewAll')}
                     </button>
                   )}
                 </div>

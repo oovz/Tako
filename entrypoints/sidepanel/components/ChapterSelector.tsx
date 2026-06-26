@@ -5,6 +5,7 @@ import { ChevronRight } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/src/shared/utils'
 import type { SidePanelChapter, VolumeOrChapter } from '@/entrypoints/sidepanel/types'
+import { t } from '@/src/shared/i18n'
 
 const MAX_NON_VIRTUALIZED_ROWS = 28
 
@@ -165,7 +166,7 @@ export function ChapterSelector({
               {row.chapter.title}
             </span>
             {row.chapter.locked === true && (
-              <span className="shrink-0 text-[11px] text-muted-foreground">Locked</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">{t('common_locked')}</span>
             )}
           </div>
         </div>

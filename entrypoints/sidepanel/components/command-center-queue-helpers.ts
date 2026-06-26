@@ -4,6 +4,7 @@ import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react'
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 export interface CommandCenterTaskActionAvailability {
   canCancel: boolean
@@ -36,17 +37,17 @@ export function getRetryAvailability(
 export function getTaskStatusLabel(status: QueueTaskSummary['status']): string {
   switch (status) {
     case 'downloading':
-      return 'Downloading'
+      return t('status_downloading')
     case 'queued':
-      return 'Queued'
+      return t('status_queued')
     case 'completed':
-      return 'Completed'
+      return t('status_completed')
     case 'partial_success':
-      return 'Partial success'
+      return t('status_partialSuccess')
     case 'failed':
-      return 'Failed'
+      return t('status_failed')
     case 'canceled':
-      return 'Canceled'
+      return t('status_canceled')
     default:
       return status
   }
@@ -130,9 +131,9 @@ export function getTaskProgressPresentation(
 export function getTaskFailureMessage(task: QueueTaskSummary): string | undefined {
   const failurePrefix =
     task.failureCategory === 'network'
-      ? 'Network: '
+      ? t('failureCategory_network')
       : task.failureCategory === 'download'
-        ? 'Download: '
+        ? t('failureCategory_download')
         : ''
 
   return task.failureReason

@@ -8,6 +8,7 @@ import { openOptionsPage } from '@/src/runtime/open-options'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
 import logger from '@/src/runtime/logger'
+import { t } from '@/src/shared/i18n'
 
 interface FsaErrorState {
   active?: boolean
@@ -64,18 +65,18 @@ export function FsaBanner({ className }: FsaBannerProps) {
   return (
     <Alert variant="destructive" className={className}>
       <AlertTriangle className="size-4" />
-      <AlertTitle>Custom download folder requires attention</AlertTitle>
+      <AlertTitle>{t('sidepanel_fsaBannerTitle')}</AlertTitle>
       <AlertDescription className="flex items-start justify-between gap-3">
         <span>
-          {fsaError.message || 'Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode.'}
+          {fsaError.message || t('sidepanel_fsaBannerDefault')}
         </span>
         <div className="flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={openOptions}>
             <Folder data-icon="inline-start" className="size-3.5" />
-            Re-select
+            {t('sidepanel_reSelect')}
           </Button>
           <Button variant="ghost" size="sm" onClick={dismiss}>
-            Dismiss
+            {t('common_dismiss')}
           </Button>
         </div>
       </AlertDescription>

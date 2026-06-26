@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { t } from '@/src/shared/i18n'
 
 interface SidePanelHeaderProps {
   activeCount: number
@@ -18,8 +19,8 @@ export function SidePanelHeader({
   onOpenSettings,
 }: SidePanelHeaderProps) {
   const settingsLabel = hasOptionsActionItems
-    ? 'Open Options (Action item available)'
-    : 'Open Options (Advanced Settings)'
+    ? t('sidepanel_openOptionsActionItem')
+    : t('sidepanel_openOptionsAdvanced')
 
   return (
     <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background shadow-sm z-30">
@@ -29,11 +30,11 @@ export function SidePanelHeader({
           className="h-6 px-2.5 text-xs font-semibold gap-1"
         >
           <span className="tabular-nums">{activeCount}</span>
-          <span>active</span>
+          <span>{t('common_active')}</span>
         </Badge>
         <Badge variant="secondary" className="h-6 px-2.5 text-xs font-semibold gap-1">
           <span className="tabular-nums">{queuedCount}</span>
-          <span>queued</span>
+          <span>{t('common_queued')}</span>
         </Badge>
       </div>
       <Tooltip>
@@ -56,7 +57,7 @@ export function SidePanelHeader({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-sm">
-          {hasOptionsActionItems ? 'Settings need attention' : 'Settings'}
+          {hasOptionsActionItems ? t('sidepanel_settingsNeedAttention') : t('sidepanel_settingsTooltip')}
         </TooltipContent>
       </Tooltip>
     </header>

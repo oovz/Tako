@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle, Clock, Download, XCircle } from 'lucide-react
 import { Card, CardContent } from '@/components/ui/card'
 import { DownloadTaskSection } from '@/entrypoints/options/components/DownloadTaskSection'
 import type { DownloadTaskState } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 interface DownloadTaskGroupsProps {
   tasks: DownloadTaskState[]
@@ -34,7 +35,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Download className="size-4" />}
         tasks={activeTasks}
-        title="Active Downloads"
+        title={t('options_activeDownloads')}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -44,7 +45,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Clock className="size-4" />}
         tasks={queuedTasks}
-        title="Queued"
+        title={t('options_queued')}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -54,7 +55,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<CheckCircle className="size-4" />}
         tasks={completedTasks}
-        title="Completed"
+        title={t('options_completed')}
         titleClassName="text-primary"
         onCancel={onCancel}
         onRetry={onRetry}
@@ -65,7 +66,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<XCircle className="size-4" />}
         tasks={failedTasks}
-        title="Failed / Partial"
+        title={t('options_failedPartial')}
         titleClassName="text-destructive"
         onCancel={onCancel}
         onRetry={onRetry}
@@ -76,7 +77,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<AlertCircle className="size-4" />}
         tasks={canceledTasks}
-        title="Canceled"
+        title={t('options_canceled')}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -87,9 +88,9 @@ export function DownloadTaskGroups({
         <Card>
           <CardContent className="p-12 text-center">
             <Download className="size-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">No downloads yet</h3>
+            <h3 className="text-lg font-medium mb-2">{t('sidepanel_noDownloadsYet')}</h3>
             <p className="text-sm text-muted-foreground">
-              Open a manga series page to start downloading.
+              {t('options_openMangaToDownload')}
             </p>
           </CardContent>
         </Card>

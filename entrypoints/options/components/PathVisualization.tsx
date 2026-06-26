@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 
 import { createMockContext, expandTemplate, validateTemplate } from '@/src/shared/template-expander'
+import { t } from '@/src/shared/i18n'
 
 interface PathVisualizationProps {
   template: string
@@ -46,7 +47,7 @@ export function PathVisualization({ template, filenameTemplate }: PathVisualizat
         )}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium mb-1">
-            {hasErrors ? 'Invalid Template' : 'Preview Output'}
+            {hasErrors ? t('options_invalidTemplate') : t('options_previewOutput')}
           </p>
           {fullPath ? (
             <p className="text-xs font-mono text-muted-foreground break-all">

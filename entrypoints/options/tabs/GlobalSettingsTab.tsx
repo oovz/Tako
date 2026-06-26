@@ -6,6 +6,7 @@
 import React from 'react'
 import type { ExtensionSettings } from "@/src/storage/settings-types"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
+import { t } from '@/src/shared/i18n'
 import { GlobalNotificationsSection } from '@/entrypoints/options/components/GlobalNotificationsSection'
 import { GlobalPerformanceSection } from '@/entrypoints/options/components/GlobalPerformanceSection'
 import { GlobalRetrySection } from '@/entrypoints/options/components/GlobalRetrySection'
@@ -48,8 +49,8 @@ export function GlobalSettingsTab({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">General Settings</h1>
-        <p className="text-sm text-muted-foreground">Configure download formats, performance, retries, and notifications.</p>
+        <h1 className="text-2xl font-semibold text-foreground">{t('options_generalSettings')}</h1>
+        <p className="text-sm text-muted-foreground">{t('options_generalSettingsDesc')}</p>
       </div>
 
       {/* Section 1: Storage & Formats */}

@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
 import { ArchiveFormatPicker } from '@/entrypoints/options/components/ArchiveFormatPicker'
 import { PathVisualization } from '@/entrypoints/options/components/PathVisualization'
+import { t } from '@/src/shared/i18n'
 
 interface GlobalStorageFormatSectionProps {
   downloads: ExtensionSettings['downloads']
@@ -21,9 +22,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <FolderOpen className="size-5 text-muted-foreground" />
-          <CardTitle className="text-base">Storage & Formats</CardTitle>
+          <CardTitle className="text-base">{t('options_storageFormats')}</CardTitle>
         </div>
-        <CardDescription>Choose archive format and file organization options.</CardDescription>
+        <CardDescription>{t('options_storageFormatsDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <div className="grid gap-6">
@@ -36,9 +37,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
           <div className="grid md:grid-cols-2 gap-4">
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="comicinfo">Include ComicInfo.xml</Label>
+                <Label htmlFor="comicinfo">{t('options_includeComicInfo')}</Label>
                 <p className="text-xs text-muted-foreground pr-4">
-                  Embed metadata for comic readers
+                  {t('options_includeComicInfoDesc')}
                 </p>
               </div>
               <Switch
@@ -51,9 +52,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="cover-image">Include Series Cover</Label>
+                <Label htmlFor="cover-image">{t('options_includeCover')}</Label>
                 <p className="text-xs text-muted-foreground pr-4">
-                  Save cover image inside archive
+                  {t('options_includeCoverDesc')}
                 </p>
               </div>
               <Switch
@@ -66,9 +67,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="normalize">Normalize Filenames</Label>
+                <Label htmlFor="normalize">{t('options_normalizeFilenames')}</Label>
                 <p className="text-xs text-muted-foreground pr-4">
-                  Rename images to 001.jpg, 002.jpg...
+                  {t('options_normalizeFilenamesDesc')}
                 </p>
               </div>
               <Switch
@@ -81,9 +82,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="overwrite">Overwrite Existing</Label>
+                <Label htmlFor="overwrite">{t('options_overwriteExisting')}</Label>
                 <p className="text-xs text-muted-foreground pr-4">
-                  Replace files if they already exist
+                  {t('options_overwriteExistingDesc')}
                 </p>
               </div>
               <Switch
@@ -96,9 +97,9 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
               <div className="flex flex-col gap-1">
-                <Label htmlFor="suppress-save-as">Suppress Save As Dialog</Label>
+                <Label htmlFor="suppress-save-as">{t('options_suppressSaveAs')}</Label>
                 <p className="text-xs text-muted-foreground pr-4">
-                  Save to the configured browser download path without opening Chrome&apos;s file chooser
+                  {t('options_suppressSaveAsDesc')}
                 </p>
               </div>
               <Switch
@@ -112,7 +113,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-3">
-              <Label htmlFor="download-path" className="text-sm font-medium">Directory Path Template</Label>
+              <Label htmlFor="download-path" className="text-sm font-medium">{t('options_directoryPathTemplate')}</Label>
               <Input
                 id="download-path"
                 data-testid="download-path-input"
@@ -122,12 +123,12 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Use macros: &lt;SERIES_TITLE&gt;, &lt;CHAPTER_NUMBER&gt;, &lt;CHAPTER_TITLE&gt;, &lt;VOLUME_NUMBER&gt;
+                {t('options_pathTemplateMacros')}
               </p>
             </div>
 
             <div className="flex flex-col gap-3">
-              <Label htmlFor="filename-template" className="text-sm font-medium">Filename Template</Label>
+              <Label htmlFor="filename-template" className="text-sm font-medium">{t('options_filenameTemplate')}</Label>
               <Input
                 id="filename-template"
                 data-testid="filename-template-input"
@@ -137,7 +138,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Template for the archive/folder name. Supports same macros plus &lt;CHAPTER_NUMBER_PAD2&gt;, &lt;CHAPTER_NUMBER_PAD3&gt;.
+                {t('options_filenameTemplateDesc')}
               </p>
             </div>
 
@@ -148,7 +149,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
           </div>
 
           <div className="flex flex-col gap-3">
-            <Label htmlFor="image-padding" className="text-sm font-medium">Image Filename Padding</Label>
+            <Label htmlFor="image-padding" className="text-sm font-medium">{t('options_imagePadding')}</Label>
             <Select
               value={String(downloads.imagePaddingDigits ?? 'auto')}
               onValueChange={(value) => onDownloadsChange({ imagePaddingDigits: value === 'auto' ? 'auto' : parseInt(value) as 2 | 3 | 4 | 5 })}
@@ -157,15 +158,15 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Auto (based on total images)</SelectItem>
-                <SelectItem value="2">2 digits (01-99)</SelectItem>
-                <SelectItem value="3">3 digits (001-999)</SelectItem>
-                <SelectItem value="4">4 digits (0001-9999)</SelectItem>
-                <SelectItem value="5">5 digits (00001-99999)</SelectItem>
+                <SelectItem value="auto">{t('options_paddingAuto')}</SelectItem>
+                <SelectItem value="2">{t('options_padding2')}</SelectItem>
+                <SelectItem value="3">{t('options_padding3')}</SelectItem>
+                <SelectItem value="4">{t('options_padding4')}</SelectItem>
+                <SelectItem value="5">{t('options_padding5')}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Zero-padding for normalized image filenames (e.g., 001.jpg, 002.jpg).
+              {t('options_imagePaddingDesc')}
             </p>
           </div>
         </div>

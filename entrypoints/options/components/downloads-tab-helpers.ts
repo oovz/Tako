@@ -1,4 +1,5 @@
 import type { DownloadTaskState, TaskChapter } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 export interface DownloadTaskBuckets {
   activeTasks: DownloadTaskState[]
@@ -20,11 +21,11 @@ export function getTerminalTimestampLabel(status: DownloadTaskState['status']): 
   switch (status) {
     case 'completed':
     case 'partial_success':
-      return 'Completed at'
+      return t('options_completedAt')
     case 'failed':
-      return 'Failed at'
+      return t('options_failedAt')
     case 'canceled':
-      return 'Canceled at'
+      return t('options_canceledAt')
     default:
       return null
   }
@@ -40,19 +41,19 @@ export function getTaskStatusSummaryLabel(task: Pick<DownloadTaskState, 'status'
 
   switch (task.status) {
     case 'completed':
-      return `✅ Completed (${totalChapters} chapter${totalChapters !== 1 ? 's' : ''})`
+      return t('options_taskCompleted', [String(totalChapters)])
     case 'failed':
-      return `❌ Failed (${completedChapters} of ${totalChapters} chapters saved)`
+      return t('options_taskFailed', [String(completedChapters), String(totalChapters)])
     case 'canceled':
-      return `⚠ Canceled (${completedChapters} of ${totalChapters} chapters saved)`
+      return t('options_taskCanceled', [String(completedChapters), String(totalChapters)])
     case 'queued':
-      return `${totalChapters} chapters queued`
+      return t('options_taskQueued', [String(totalChapters)])
     case 'downloading':
-      return `Downloading ${completedChapters} of ${totalChapters} chapters`
+      return t('options_taskDownloading', [String(completedChapters), String(totalChapters)])
     case 'partial_success':
-      return `⚠ Partial (${completedChapters} of ${totalChapters} chapters saved)`
+      return t('options_taskPartial', [String(completedChapters), String(totalChapters)])
     default:
-      return `${totalChapters} chapters`
+      return t('options_taskDefaultChapters', [String(totalChapters)])
   }
 }
 
@@ -67,17 +68,17 @@ export function chapterStatusBadgeClass(status: string): string {
 export function getTaskStatusBadge(status: DownloadTaskState['status']): { label: string; className: string } {
   switch (status) {
     case 'downloading':
-      return { label: 'Downloading', className: 'bg-primary text-primary-foreground' }
+      return { label: t('status_downloading'), className: 'bg-primary text-primary-foreground' }
     case 'queued':
-      return { label: 'Queued', className: 'bg-secondary text-secondary-foreground' }
+      return { label: t('status_queued'), className: 'bg-secondary text-secondary-foreground' }
     case 'completed':
-      return { label: 'Completed', className: 'bg-primary/10 text-primary' }
+      return { label: t('status_completed'), className: 'bg-primary/10 text-primary' }
     case 'partial_success':
-      return { label: 'Partial', className: 'bg-amber-500/20 text-amber-700' }
+      return { label: t('options_partial'), className: 'bg-amber-500/20 text-amber-700' }
     case 'failed':
-      return { label: 'Failed', className: 'bg-destructive text-destructive-foreground' }
+      return { label: t('status_failed'), className: 'bg-destructive text-destructive-foreground' }
     case 'canceled':
-      return { label: 'Canceled', className: 'bg-muted text-muted-foreground' }
+      return { label: t('status_canceled'), className: 'bg-muted text-muted-foreground' }
     default:
       return { label: status, className: 'bg-muted text-muted-foreground' }
   }
@@ -97,10 +98,10 @@ export function getChapterImageSummary(chapter: Pick<TaskChapter, 'status' | 'to
   }
 
   if (chapter.status === 'partial_success') {
-    return `${imagesSucceeded}/${totalImages} images (${imagesFailed} failed)`
+    return t('options_imagesFailed', [String(imagesSucceeded), String(totalImages), String(imagesFailed)])
   }
 
-  return `${imagesSucceeded}/${totalImages} images`
+  return t('options_imagesSummary', [String(imagesSucceeded), String(totalImages)])
 }
 
 export function shouldShowChapterError(status: TaskChapter['status']): boolean {
@@ -108,7 +109,20 @@ export function shouldShowChapterError(status: TaskChapter['status']): boolean {
 }
 
 export function formatChapterStatusLabel(status: TaskChapter['status']): string {
-  return status.replace('_', ' ')
+  switch (status) {
+    case 'completed':
+      return t('status_completed')
+    case 'partial_success':
+      return t('status_partialSuccess')
+    case 'failed':
+      return t('status_failed')
+    case 'downloading':
+      return t('status_downloading')
+    case 'queued':
+      return t('status_queued')
+    default:
+      return status
+  }
 }
 
 export function partitionDownloadTasks(tasks: DownloadTaskState[]): DownloadTaskBuckets {

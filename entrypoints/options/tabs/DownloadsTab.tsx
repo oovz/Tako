@@ -20,6 +20,7 @@ import {
   partitionDownloadTasks,
 } from '@/entrypoints/options/components/downloads-tab-helpers'
 import { useDownloadsTabState } from '@/entrypoints/options/hooks/useDownloadsTabState'
+import { t } from '@/src/shared/i18n'
 
 interface DownloadsTabProps {
   settings: ExtensionSettings
@@ -69,7 +70,7 @@ export function DownloadsTab({
       <Card>
         <CardContent className="p-12 text-center">
           <Loader2 className="size-8 mx-auto mb-4 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading downloads...</p>
+          <p className="text-sm text-muted-foreground">{t('options_loadingDownloads')}</p>
         </CardContent>
       </Card>
     )
@@ -78,8 +79,8 @@ export function DownloadsTab({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">Downloads</h1>
-        <p className="text-sm text-muted-foreground">Manage download destination and monitor active tasks.</p>
+        <h1 className="text-2xl font-semibold text-foreground">{t('options_downloads')}</h1>
+        <p className="text-sm text-muted-foreground">{t('options_downloadsDesc')}</p>
       </div>
 
       {fsaError?.active && (

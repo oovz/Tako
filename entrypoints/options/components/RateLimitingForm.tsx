@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
+import { t } from '@/src/shared/i18n'
 
 interface RateLimitingFormProps {
   scope: 'image' | 'chapter'
@@ -43,9 +44,9 @@ export function RateLimitingForm({
 
   const getSourceBadge = (source: string) => {
     switch (source) {
-      case 'override': return <Badge variant="default" className="ml-2 text-xs">Override</Badge>
-      case 'siteIntegration': return <Badge variant="secondary" className="ml-2 text-xs">Site Integration</Badge>
-      case 'global': return <Badge variant="outline" className="ml-2 text-xs">Global</Badge>
+      case 'override': return <Badge variant="default" className="ml-2 text-xs">{t('options_override')}</Badge>
+      case 'siteIntegration': return <Badge variant="secondary" className="ml-2 text-xs">{t('options_siteIntegrationBadge')}</Badge>
+      case 'global': return <Badge variant="outline" className="ml-2 text-xs">{t('options_global')}</Badge>
       default: return null
     }
   }
@@ -56,7 +57,7 @@ export function RateLimitingForm({
         <div className="flex flex-col gap-2">
           <div className="flex items-center">
             <Label htmlFor={`${scope}-concurrency`}>
-              {capitalizedScope} Concurrency
+              {t('options_concurrencyLabel', [capitalizedScope])}
             </Label>
             {showHierarchy && getSourceBadge(concurrencySource)}
           </div>
@@ -70,12 +71,12 @@ export function RateLimitingForm({
               ...value,
               concurrency: e.target.value ? parseInt(e.target.value) : undefined
             })}
-            placeholder={showHierarchy ? `Default: ${effectiveConcurrency}` : undefined}
+            placeholder={showHierarchy ? t('options_defaultValue', [String(effectiveConcurrency)]) : undefined}
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            Maximum concurrent {scope} downloads (1-10)
-            {showHierarchy && value.concurrency == null && ` • Using: ${effectiveConcurrency}`}
+            {t('options_maxConcurrencyDesc', [scope])}
+            {showHierarchy && value.concurrency == null && t('options_usingValue', [String(effectiveConcurrency)])}
           </p>
         </div>
       )}
@@ -83,7 +84,7 @@ export function RateLimitingForm({
       <div className="flex flex-col gap-2">
         <div className="flex items-center">
           <Label htmlFor={`${scope}-delay`}>
-            {capitalizedScope} Delay (ms)
+            {t('options_delayLabel', [capitalizedScope])}
           </Label>
           {showHierarchy && getSourceBadge(delaySource)}
         </div>
@@ -98,30 +99,30 @@ export function RateLimitingForm({
             ...value,
             delayMs: e.target.value ? parseInt(e.target.value) : undefined
           })}
-          placeholder={showHierarchy ? `Default: ${effectiveDelay}` : undefined}
+          placeholder={showHierarchy ? t('options_defaultValue', [String(effectiveDelay)]) : undefined}
           disabled={disabled}
         />
         <p className="text-xs text-muted-foreground">
-          Minimum delay between {scope} requests (0-10000 ms)
-          {showHierarchy && value.delayMs == null && ` • Using: ${effectiveDelay}ms`}
+          {t('options_minDelayDesc', [scope])}
+          {showHierarchy && value.delayMs == null && t('options_usingMs', [String(effectiveDelay)])}
         </p>
       </div>
 
       {showHierarchy && (globalValue || siteIntegrationDefault) && (
         <div className="rounded-md bg-muted p-3 text-sm">
-          <p className="font-medium mb-2">Policy Hierarchy:</p>
+          <p className="font-medium mb-2">{t('options_policyHierarchy')}</p>
           <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
             {value.concurrency != null || value.delayMs != null ? (
-              <li>✓ <strong>Override</strong>: Active (this form)</li>
+              <li>✓ <strong>{t('options_override')}</strong>: {t('options_activeThisForm')}</li>
             ) : null}
             {siteIntegrationDefault && (
               <li>
-                • <strong>Site Integration Default</strong>: {showConcurrency ? `${siteIntegrationDefault.concurrency} concurrent, ` : ''}{siteIntegrationDefault.delayMs}ms delay
+                • <strong>{t('options_siteIntegrationDefault')}</strong>: {showConcurrency ? t('options_concurrentDelay', [String(siteIntegrationDefault.concurrency), String(siteIntegrationDefault.delayMs)]) : t('options_msDelay', [String(siteIntegrationDefault.delayMs)])}
               </li>
             )}
             {globalValue && (
               <li>
-                • <strong>Global Default</strong>: {showConcurrency ? `${globalValue.concurrency} concurrent, ` : ''}{globalValue.delayMs}ms delay
+                • <strong>{t('options_globalDefault')}</strong>: {showConcurrency ? t('options_concurrentDelay', [String(globalValue.concurrency), String(globalValue.delayMs)]) : t('options_msDelay', [String(globalValue.delayMs)])}
               </li>
             )}
           </ul>

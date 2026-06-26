@@ -2,6 +2,7 @@ import { Bug, Download, Puzzle, Settings } from 'lucide-react'
 
 import { cn } from '@/src/shared/utils'
 import type { OptionsSection } from '../tab-routing'
+import { t } from '@/src/shared/i18n'
 
 interface OptionsSidebarProps {
   activeSection: OptionsSection
@@ -40,37 +41,37 @@ export function OptionsSidebar({ activeSection, onSectionChange }: OptionsSideba
     <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-border/40 bg-sidebar">
       <div className="flex h-14 items-center gap-2 border-b border-border/40 px-4">
         <img aria-hidden="true" alt="" className="size-6 shrink-0" src="icon/32.png" />
-        <span className="text-base font-semibold">Tako Settings</span>
+        <span className="text-base font-semibold">{t('options_takoSettings')}</span>
       </div>
 
       <nav className="flex-1 flex flex-col gap-1 p-3">
         <NavItem
           icon={Settings}
-          label="General"
+          label={t('options_general')}
           active={activeSection === 'global'}
           onClick={() => onSectionChange('global')}
         />
         <NavItem
           icon={Puzzle}
-          label="Site Integrations"
+          label={t('options_siteIntegrations')}
           active={activeSection === 'integrations'}
           onClick={() => onSectionChange('integrations')}
         />
         <NavItem
           icon={Download}
-          label="Downloads"
+          label={t('options_downloads')}
           active={activeSection === 'downloads'}
           onClick={() => onSectionChange('downloads')}
         />
         <NavItem
           icon={Bug}
-          label="About / Debug"
+          label={t('options_aboutDebug')}
           active={activeSection === 'debug'}
           onClick={() => onSectionChange('debug')}
         />
       </nav>
       <div className="border-t border-border/40 px-4 py-3">
-        <span className="text-xs text-muted-foreground">Tako v{chrome.runtime.getManifest().version}</span>
+        <span className="text-xs text-muted-foreground">{t('options_takoVersion', [chrome.runtime.getManifest().version])}</span>
       </div>
     </aside>
   )

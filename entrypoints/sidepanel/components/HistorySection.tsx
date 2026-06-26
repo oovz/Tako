@@ -2,6 +2,7 @@ import React from 'react'
 
 import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 export interface HistorySectionProps {
   tasks: QueueTaskSummary[]
@@ -34,7 +35,7 @@ export function HistorySection({
           id="sidepanel-recent-history-title"
           className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
         >
-          Recent history
+          {t('sidepanel_recentHistory')}
         </h2>
         {!isInlineSelectionOpen && (
           <button
@@ -42,7 +43,7 @@ export function HistorySection({
             onClick={onViewFullHistory}
             className="text-[10px] text-muted-foreground hover:text-foreground"
           >
-            View Full History
+            {t('sidepanel_viewFullHistory')}
           </button>
         )}
       </div>

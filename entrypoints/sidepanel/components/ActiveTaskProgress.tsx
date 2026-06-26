@@ -4,6 +4,7 @@ import { Progress } from '@/components/ui/progress'
 import { cn } from '@/src/shared/utils'
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 interface ActiveTaskProgressProps {
   task: QueueTaskSummary
@@ -58,8 +59,8 @@ export function ActiveTaskProgress({ task, progress, inline = false }: ActiveTas
   const activeChapterCount = Math.max(0, progress?.activeChapterCount ?? progress?.activeChapters?.length ?? 0)
   const effectiveDownloadingChapterCount = Math.max(1, activeChapterCount)
   const chapterLabel = totalChapters > 1
-    ? `${effectiveDownloadingChapterCount} ${effectiveDownloadingChapterCount === 1 ? 'chapter' : 'chapters'} downloading`
-    : `Chapter ${chapterPosition}/${totalChapters}`
+    ? t('sidepanel_chapterDownloading', [String(effectiveDownloadingChapterCount), effectiveDownloadingChapterCount === 1 ? t('common_chapter') : t('common_chapters')])
+    : t('sidepanel_chapterPosition', [String(chapterPosition), String(totalChapters)])
   const singleChapterTitle = totalChapters <= 1 && activeChapterCount <= 1
     ? typeof progress?.chapterTitle === 'string'
       ? progress.chapterTitle.trim()
@@ -78,7 +79,7 @@ export function ActiveTaskProgress({ task, progress, inline = false }: ActiveTas
       )}
     >
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Progress</span>
+        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t('common_progress')}</span>
         <span className="text-[11px] font-semibold tabular-nums text-foreground">{progressPercentLabel}</span>
       </div>
 
@@ -92,7 +93,7 @@ export function ActiveTaskProgress({ task, progress, inline = false }: ActiveTas
         <span
           className="inline-flex shrink-0 items-center bg-muted px-1.5 py-0.5 tabular-nums transition-all duration-300 ease-out"
         >
-          {processedImages}/{totalImages} images
+          {processedImages}/{totalImages} {t('common_images')}
         </span>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { t } from '@/src/shared/i18n'
 
 interface GlobalNotificationsSectionProps {
   enabled: boolean
@@ -15,16 +16,16 @@ export function GlobalNotificationsSection({ enabled, onChange }: GlobalNotifica
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <Bell className="size-5 text-muted-foreground" />
-          <CardTitle className="text-base">Notifications</CardTitle>
+          <CardTitle className="text-base">{t('options_notifications')}</CardTitle>
         </div>
-        <CardDescription>Control browser notification behavior.</CardDescription>
+        <CardDescription>{t('options_notificationsDesc')}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <Label htmlFor="notifications">Enable Notifications</Label>
+            <Label htmlFor="notifications">{t('options_enableNotifications')}</Label>
             <p className="text-sm text-muted-foreground">
-              Show browser notifications for download completion and errors.
+              {t('options_enableNotificationsDesc')}
             </p>
           </div>
           <Switch

@@ -3,6 +3,7 @@ import { ArrowUp, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 interface CommandCenterTaskActionsProps {
   taskId: string
@@ -40,14 +41,14 @@ export function CommandCenterTaskActions({
   return (
     <div className="flex items-center gap-0.5">
       {isCanceling ? (
-        <Button aria-label="Canceling download" variant="ghost" size="icon" className="size-6" disabled>
+        <Button aria-label={t('sidepanel_cancelingDownload')} variant="ghost" size="icon" className="size-6" disabled>
           <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin" />
         </Button>
       ) : canCancel ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label="Cancel"
+              aria-label={t('common_cancel')}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -57,7 +58,7 @@ export function CommandCenterTaskActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            Cancel download
+            {t('sidepanel_cancelDownload')}
           </TooltipContent>
         </Tooltip>
       ) : null}
@@ -66,7 +67,7 @@ export function CommandCenterTaskActions({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label="Retry failed"
+              aria-label={t('sidepanel_retryFailed')}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -77,7 +78,7 @@ export function CommandCenterTaskActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            Retry failed chapters
+            {t('sidepanel_retryFailedChapters')}
           </TooltipContent>
         </Tooltip>
       )}
@@ -86,7 +87,7 @@ export function CommandCenterTaskActions({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label="Restart task"
+              aria-label={t('sidepanel_restartTask')}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -96,7 +97,7 @@ export function CommandCenterTaskActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            Restart all chapters
+            {t('sidepanel_restartAllChapters')}
           </TooltipContent>
         </Tooltip>
       )}
@@ -105,7 +106,7 @@ export function CommandCenterTaskActions({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label="Move task to top"
+              aria-label={t('sidepanel_moveTaskToTop')}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -115,7 +116,7 @@ export function CommandCenterTaskActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            Move to top
+            {t('sidepanel_moveToTop')}
           </TooltipContent>
         </Tooltip>
       )}
@@ -124,7 +125,7 @@ export function CommandCenterTaskActions({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label="Remove"
+              aria-label={t('common_remove')}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -134,7 +135,7 @@ export function CommandCenterTaskActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="left" className="text-xs">
-            Remove
+            {t('common_remove')}
           </TooltipContent>
         </Tooltip>
       )}

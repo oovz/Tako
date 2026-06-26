@@ -8,6 +8,7 @@ import type { SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/u
 import { getSiteIntegrationDisplayName } from '@/src/site-integrations/manifest'
 import type { Volume } from '@/entrypoints/sidepanel/types'
 import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '@/entrypoints/sidepanel/messages'
+import { t } from '@/src/shared/i18n'
 
 interface SeriesContextCardProps {
   data: SidepanelSeriesContextData
@@ -27,20 +28,20 @@ export function resolveSeriesCardMessage(blockingMessage: string | undefined): S
 
   if (blockingMessage === TAB_NOT_SUPPORTED_MSG) {
     return {
-      title: 'No series detected',
-      description: 'Open a supported manga series page to get started.',
+      title: t('sidepanel_noSeriesDetected'),
+      description: t('sidepanel_openSupportedPage'),
     }
   }
 
   if (blockingMessage === NO_MANGA_FOUND_MSG) {
     return {
-      title: 'This page is not recognized as a manga series',
-      description: 'Open a supported manga series page to get started.',
+      title: t('sidepanel_pageNotRecognized'),
+      description: t('sidepanel_openSupportedPage'),
     }
   }
 
   return {
-    title: 'This page is not recognized as a manga series',
+    title: t('sidepanel_pageNotRecognized'),
     description: blockingMessage,
   }
 }
@@ -93,7 +94,7 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
             onClick={onToggleInlineSelection}
           >
             <List className="size-4" />
-            Select Chapters
+            {t('sidepanel_selectChapters')}
           </Button>
         </div>
       </div>
@@ -107,9 +108,9 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
           <BookOpen className="size-8" />
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
-          <h2 className="font-bold text-base leading-tight">No series detected</h2>
+          <h2 className="font-bold text-base leading-tight">{t('sidepanel_noSeriesDetected')}</h2>
           <p className="text-sm text-muted-foreground mt-1.5">
-            Open a supported manga series page to get started.
+            {t('sidepanel_openSupportedPage')}
           </p>
         </div>
       </div>
@@ -164,18 +165,18 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
             {hasNoChapters ? (
               <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground">
                 <AlertCircle className="size-3" />
-                No chapters found
+                {t('sidepanel_noChaptersFound')}
               </Badge>
             ) : (
               <>
                 <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 shadow-sm">
                   <BookOpen className="size-3" />
-                  {chaptersCount} Chapters
+                  {t('sidepanel_chaptersCount', [String(chaptersCount)])}
                 </Badge>
                 {volumeCount > 0 && (
                   <Badge variant="outline" className="text-[10px] h-5 px-2 py-0 gap-1">
                     <Layers className="size-3" />
-                    {volumeCount} Volumes
+                    {t('sidepanel_volumesCount', [String(volumeCount)])}
                   </Badge>
                 )}
               </>
@@ -200,17 +201,17 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
           {hasNoChapters ? (
             <>
               <List className="size-4" />
-              No chapters
+              {t('sidepanel_noChapters')}
             </>
           ) : isExpanded ? (
             <>
               <ChevronDown className="size-4" />
-              Close Selection
+              {t('sidepanel_closeSelection')}
             </>
           ) : (
             <>
               <List className="size-4" />
-              Select Chapters
+              {t('sidepanel_selectChapters')}
             </>
           )}
         </Button>

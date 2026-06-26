@@ -54,9 +54,10 @@ export default defineConfig({
 
   // Configure manifest
   manifest: {
-    name: "Tako Manga Downloader",
-    version: "1.4.4",
-    description: "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel.",
+    name: "__MSG_extName__",
+    version: "1.5.0",
+    description: "__MSG_extDescription__",
+    default_locale: "en",
     minimum_chrome_version: "122",
     permissions: [
       "storage",
@@ -82,7 +83,7 @@ export default defineConfig({
       "<all_urls>" // needed for cross-origin fetches; no per-host entries
     ],
     action: {
-      default_title: "Tako Manga Downloader",
+      default_title: "__MSG_extName__",
       default_icon: {
         "16": "icon/16.png",
         "32": "icon/32.png",

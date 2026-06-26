@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
+import { t } from '@/src/shared/i18n'
 
 interface DownloadDestinationSectionProps {
   downloads: ExtensionSettings['downloads']
@@ -18,17 +19,17 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Download destination</CardTitle>
+        <CardTitle className="text-base">{t('options_downloadDestination')}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-center justify-between rounded-md border p-3">
           <div className="flex flex-col gap-1 pr-4">
-            <Label htmlFor="custom-folder-switch">Use custom folder (File System Access)</Label>
+            <Label htmlFor="custom-folder-switch">{t('options_useCustomFolder')}</Label>
             <p className="text-xs text-muted-foreground">
-              {selectedFolderName ? `Current folder: ${selectedFolderName}` : 'No custom folder selected. Uses default browser downloads.'}
+              {selectedFolderName ? t('options_currentFolder', [selectedFolderName]) : t('options_noCustomFolder')}
             </p>
             <p className="text-xs text-muted-foreground">
-              Custom folder mode always overwrites existing files with the same name.
+              {t('options_customFolderOverwrite')}
             </p>
           </div>
           <Switch
@@ -46,7 +47,7 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onPickFolder} disabled={isPickingFolder}>
             <Folder data-icon="inline-start" className="size-3.5" />
-            {selectedFolderName ? 'Change folder' : 'Select folder'}
+            {selectedFolderName ? t('options_changeFolder') : t('options_selectFolder')}
           </Button>
           {selectedFolderName && (
             <Button
@@ -59,14 +60,14 @@ export function DownloadDestinationSection({ downloads, selectedFolderName, isPi
                 })
               }}
             >
-              Use browser downloads
+              {t('options_useBrowserDownloads')}
             </Button>
           )}
         </div>
 
         {downloads.downloadMode === 'custom' && (
           <p className="rounded-md border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-            Custom folder mode ignores the overwrite setting and always replaces same-name files in the selected folder.
+            {t('options_customFolderIgnoresOverwrite')}
           </p>
         )}
       </CardContent>

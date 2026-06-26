@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineConfirmation } from '@/src/ui/shared/components/InlineConfirmation'
 import { getSiteIntegrationDisplayName } from '@/src/site-integrations/manifest'
 import type { DownloadTaskState } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 import {
   chapterStatusBadgeClass,
   formatChapterStatusLabel,
@@ -45,8 +46,8 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
     <Card className="relative">
       {confirmingCancel && (task.status === 'downloading' || task.status === 'queued') && (
         <InlineConfirmation
-          title="Cancel this download?"
-          description="Progress for in-flight chapter may be lost."
+          title={t('sidepanel_cancelThisDownload')}
+          description={t('sidepanel_cancelProgressWarning')}
           onConfirm={() => {
             void onCancel(task.id)
             setConfirmingCancel(false)
@@ -59,7 +60,7 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
           <div className="flex-1">
             <CardTitle className="text-base">{task.seriesTitle}</CardTitle>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              <span>{completedChapters}/{totalChapters} chapters</span>
+              <span>{t('options_chaptersCount', [String(completedChapters), String(totalChapters)])}</span>
               <span>•</span>
               <span>{siteIntegrationName}</span>
               {terminalTimestampLabel && typeof task.completed === 'number' && (
@@ -73,13 +74,13 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
               {!(terminalTimestampLabel && typeof task.completed === 'number') && (
                 <>
                   <span>•</span>
-                  <span>Created at {formatTaskTimestamp(task.created)}</span>
+                  <span>{t('options_createdAt', [formatTaskTimestamp(task.created)])}</span>
                 </>
               )}
               {isRetried && (
                 <>
                   <span>•</span>
-                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">retried</Badge>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{t('options_retried')}</Badge>
                 </>
               )}
             </div>
@@ -107,10 +108,10 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
           {isChapterListExpanded && (
             <div className="mt-2 overflow-hidden rounded-md border">
               <div className="grid grid-cols-[minmax(0,1fr)_90px_100px_minmax(0,1fr)] bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                <span>Chapter</span>
-                <span>Status</span>
-                <span>Images</span>
-                <span>Error</span>
+                <span>{t('options_chapter')}</span>
+                <span>{t('options_status')}</span>
+                <span>{t('options_images')}</span>
+                <span>{t('options_error')}</span>
               </div>
               <div className="max-h-56 overflow-y-auto">
                 {task.chapters.map((chapter, index) => {
@@ -134,27 +135,27 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
           )}
         </div>
 
-        {task.errorMessage && <p className="text-sm text-destructive">Error: {task.errorMessage}</p>}
+        {task.errorMessage && <p className="text-sm text-destructive">{t('common_error')}: {task.errorMessage}</p>}
 
         <div className="flex gap-2 pt-2">
           {task.status === 'downloading' && (
             <Button variant="outline" size="sm" onClick={() => setConfirmingCancel(true)}>
               <XCircle data-icon="inline-start" className="size-4" />
-              Cancel
+              {t('common_cancel')}
             </Button>
           )}
 
           {task.status === 'queued' && (
             <Button variant="outline" size="sm" onClick={() => setConfirmingCancel(true)}>
               <XCircle data-icon="inline-start" className="size-4" />
-              Cancel
+              {t('common_cancel')}
             </Button>
           )}
 
           {task.status === 'completed' && (
             <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
               <Trash2 data-icon="inline-start" className="size-4" />
-              Remove
+              {t('common_remove')}
             </Button>
           )}
 
@@ -162,15 +163,15 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
             <>
               <Button variant="outline" size="sm" onClick={() => void onRetry(task.id)}>
                 <RotateCcw data-icon="inline-start" className="size-4" />
-                Retry failed chapters
+                {t('sidepanel_retryFailedChapters')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => void onRestart(task.id)}>
                 <RotateCcw data-icon="inline-start" className="size-4" />
-                Restart
+                {t('sidepanel_restartTask')}
               </Button>
               <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
                 <Trash2 data-icon="inline-start" className="size-4" />
-                Remove
+                {t('common_remove')}
               </Button>
             </>
           )}
@@ -180,12 +181,12 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
               {!isRetried && (
                 <Button variant="outline" size="sm" onClick={() => void onRestart(task.id)}>
                   <RotateCcw data-icon="inline-start" className="size-4" />
-                  Restart
+                  {t('sidepanel_restartTask')}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
                 <Trash2 data-icon="inline-start" className="size-4" />
-                Remove
+                {t('common_remove')}
               </Button>
             </>
           )}

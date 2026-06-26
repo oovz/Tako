@@ -1,0 +1,579 @@
+{
+  "extName": {
+    "message": "Tako Manga Downloader"
+  },
+  "extDescription": {
+    "message": "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel."
+  },
+
+  "common_active": { "message": "active" },
+  "common_queued": { "message": "queued" },
+  "common_cancel": { "message": "Cancel" },
+  "common_dismiss": { "message": "Dismiss" },
+  "common_remove": { "message": "Remove" },
+  "common_restart": { "message": "Restart" },
+  "common_error": { "message": "Error" },
+  "common_warning": { "message": "Warning" },
+  "common_loading": { "message": "Loading..." },
+  "common_chapters": { "message": "chapters" },
+  "common_chapter": { "message": "chapter" },
+  "common_chaptersShort": { "message": "ch" },
+  "common_images": { "message": "images" },
+  "common_locked": { "message": "Locked" },
+  "common_progress": { "message": "Progress" },
+  "common_retried": { "message": "retried" },
+  "common_enabled": { "message": "Enabled" },
+  "common_overrides": { "message": "Overrides" },
+  "common_override": { "message": "Override" },
+  "common_disabled": { "message": "Disabled" },
+  "common_configure": { "message": "Configure" },
+  "common_hide": { "message": "Hide" },
+  "common_yes": { "message": "Yes" },
+  "common_no": { "message": "No" },
+
+  "sidepanel_settingsTooltip": { "message": "Settings" },
+  "sidepanel_settingsNeedAttention": { "message": "Settings need attention" },
+  "sidepanel_openOptionsAdvanced": { "message": "Open Options (Advanced Settings)" },
+  "sidepanel_openOptionsActionItem": { "message": "Open Options (Action item available)" },
+
+  "sidepanel_noSeriesDetected": { "message": "No series detected" },
+  "sidepanel_openSupportedPage": { "message": "Open a supported manga series page to get started." },
+  "sidepanel_pageNotRecognized": { "message": "This page is not recognized as a manga series" },
+  "sidepanel_selectChapters": { "message": "Select Chapters" },
+  "sidepanel_closeSelection": { "message": "Close Selection" },
+  "sidepanel_noChapters": { "message": "No chapters" },
+  "sidepanel_noChaptersFound": { "message": "No chapters found" },
+  "sidepanel_chaptersCount": {
+    "message": "$COUNT$ Chapters",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_volumesCount": {
+    "message": "$COUNT$ Volumes",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+
+  "sidepanel_selectChaptersLabel": { "message": "Select chapters" },
+  "sidepanel_selectedCount": {
+    "message": "$COUNT$ selected",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_availableCount": {
+    "message": "$COUNT$ available",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_volumes": { "message": "Volumes" },
+  "sidepanel_allChapters": { "message": "All chapters" },
+  "sidepanel_addedToQueue": { "message": "Added to Queue!" },
+  "sidepanel_downloadCount": {
+    "message": "Download ($COUNT$)",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_selectChaptersHint": { "message": "Select chapters above and click Download to add to queue" },
+  "sidepanel_noDownloadsYet": { "message": "No downloads yet" },
+  "sidepanel_useSelectChapters": { "message": "Use \"Select Chapters\" above to start downloading" },
+  "sidepanel_recentHistory": { "message": "Recent history" },
+  "sidepanel_viewFullHistory": { "message": "View Full History" },
+  "sidepanel_viewAll": { "message": "View All" },
+  "sidepanel_emptyQueue": { "message": "No downloads yet. Start a download from any supported series tab to see it here." },
+
+  "sidepanel_cancelDownload": { "message": "Cancel download" },
+  "sidepanel_cancelingDownload": { "message": "Canceling download" },
+  "sidepanel_retryFailed": { "message": "Retry failed" },
+  "sidepanel_retryFailedChapters": { "message": "Retry failed chapters" },
+  "sidepanel_restartTask": { "message": "Restart task" },
+  "sidepanel_restartAllChapters": { "message": "Restart all chapters" },
+  "sidepanel_moveToTop": { "message": "Move to top" },
+  "sidepanel_moveTaskToTop": { "message": "Move task to top" },
+  "sidepanel_cancelThisDownload": { "message": "Cancel this download?" },
+  "sidepanel_cancelProgressWarning": { "message": "Progress for in-flight chapter may be lost." },
+
+  "sidepanel_chapterDownloading": {
+    "message": "$COUNT$ $UNIT$ downloading",
+    "placeholders": { "count": { "content": "$1" }, "unit": { "content": "$2" } }
+  },
+  "sidepanel_chapterPosition": {
+    "message": "Chapter $POS$/$TOTAL$",
+    "placeholders": { "pos": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+
+  "sidepanel_tabNotSupported": { "message": "This tab is not supported (e.g., browser/extension internal pages or policy-blocked)." },
+  "sidepanel_noMangaFound": { "message": "No manga found on this page." },
+  "sidepanel_siteNotSupported": { "message": "This site is not supported yet." },
+
+  "sidepanel_fsaBannerTitle": { "message": "Custom download folder requires attention" },
+  "sidepanel_fsaBannerDefault": { "message": "Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode." },
+  "sidepanel_reSelect": { "message": "Re-select" },
+
+  "sidepanel_initFailed": { "message": "Extension initialization failed" },
+
+  "sidepanel_toastRetryFailed": { "message": "Failed to retry failed chapters" },
+  "sidepanel_toastRestartFailed": { "message": "Failed to restart task" },
+  "sidepanel_toastMoveTopFailed": { "message": "Failed to move task to top" },
+
+  "status_downloading": { "message": "Downloading" },
+  "status_queued": { "message": "Queued" },
+  "status_completed": { "message": "Completed" },
+  "status_partialSuccess": { "message": "Partial success" },
+  "status_failed": { "message": "Failed" },
+  "status_canceled": { "message": "Canceled" },
+
+  "failureCategory_network": { "message": "Network: " },
+  "failureCategory_download": { "message": "Download: " },
+
+  "options_takoSettings": { "message": "Tako Settings" },
+  "options_takoVersion": {
+    "message": "Tako v$VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_general": { "message": "General" },
+  "options_siteIntegrations": { "message": "Site Integrations" },
+  "options_downloads": { "message": "Downloads" },
+  "options_aboutDebug": { "message": "About / Debug" },
+
+  "options_loadingSettings": { "message": "Loading settings..." },
+  "options_loadingDownloads": { "message": "Loading downloads..." },
+
+  "options_generalSettings": { "message": "General Settings" },
+  "options_generalSettingsDesc": { "message": "Configure download formats, performance, retries, and notifications." },
+
+  "options_storageFormats": { "message": "Storage & Formats" },
+  "options_storageFormatsDesc": { "message": "Choose archive format and file organization options." },
+  "options_includeComicInfo": { "message": "Include ComicInfo.xml" },
+  "options_includeComicInfoDesc": { "message": "Embed metadata for comic readers" },
+  "options_includeCoverImage": { "message": "Include Series Cover" },
+  "options_includeCoverImageDesc": { "message": "Save cover image inside archive" },
+  "options_normalizeFilenames": { "message": "Normalize Filenames" },
+  "options_normalizeFilenamesDesc": { "message": "Rename images to 001.jpg, 002.jpg..." },
+  "options_overwriteExisting": { "message": "Overwrite Existing" },
+  "options_overwriteExistingDesc": { "message": "Replace files if they already exist" },
+  "options_suppressSaveAs": { "message": "Suppress Save As Dialog" },
+  "options_suppressSaveAsDesc": { "message": "Save to the configured browser download path without opening Chrome's file chooser" },
+  "options_directoryPathTemplate": { "message": "Directory Path Template" },
+  "options_directoryPathTemplateDesc": { "message": "Use macros: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>" },
+  "options_filenameTemplate": { "message": "Filename Template" },
+  "options_filenameTemplateDesc": { "message": "Template for the archive/folder name. Supports same macros plus <CHAPTER_NUMBER_PAD2>, <CHAPTER_NUMBER_PAD3>." },
+  "options_imageFilenamePadding": { "message": "Image Filename Padding" },
+  "options_imagePaddingAuto": { "message": "Auto (based on total images)" },
+  "options_imagePadding2": { "message": "2 digits (01-99)" },
+  "options_imagePadding3": { "message": "3 digits (001-999)" },
+  "options_imagePadding4": { "message": "4 digits (0001-9999)" },
+  "options_imagePadding5": { "message": "5 digits (00001-99999)" },
+  "options_imagePaddingDesc": { "message": "Zero-padding for normalized image filenames (e.g., 001.jpg, 002.jpg)." },
+
+  "options_archiveFormat": { "message": "Archive Format" },
+  "options_cbzArchive": { "message": "CBZ Archive" },
+  "options_cbzArchiveDesc": { "message": "Best for comic readers" },
+  "options_zipArchive": { "message": "ZIP Archive" },
+  "options_zipArchiveDesc": { "message": "Standard compressed folder" },
+  "options_noArchive": { "message": "No Archive" },
+  "options_noArchiveDesc": { "message": "Individual image files" },
+  "options_noArchiveWarningTitle": { "message": "No archive + default downloads can clutter the download shelf" },
+  "options_noArchiveWarningDesc": { "message": "Using \"No archive\" format with the default download location will create a separate Chrome download entry for every image. Consider enabling a custom download folder to avoid download shelf clutter." },
+
+  "options_performance": { "message": "Performance" },
+  "options_performanceDesc": { "message": "Control download speed and concurrency limits." },
+  "options_imageConcurrency": { "message": "Image Concurrency" },
+  "options_streams": { "message": "streams" },
+  "options_imageConcurrencyDesc": { "message": "Parallel image requests per chapter." },
+  "options_imageRequestDelay": { "message": "Image Request Delay (ms)" },
+  "options_imageRequestDelayDesc": { "message": "Wait time between image requests." },
+  "options_chapterDelay": { "message": "Chapter Delay (ms)" },
+  "options_chapterDelayDesc": { "message": "Wait time between chapter dispatches." },
+
+  "options_retrySettings": { "message": "Retry Settings" },
+  "options_retrySettingsDesc": { "message": "Configure automatic retry behavior for failed downloads." },
+  "options_imageRetries": { "message": "Image Retries" },
+  "options_imageRetriesDesc": { "message": "Number of retry attempts for failed image downloads." },
+  "options_chapterRetries": { "message": "Chapter Retries" },
+  "options_chapterRetriesDesc": { "message": "Number of retry attempts for failed chapter downloads." },
+
+  "options_notifications": { "message": "Notifications" },
+  "options_notificationsDesc": { "message": "Control browser notification behavior." },
+  "options_enableNotifications": { "message": "Enable Notifications" },
+  "options_enableNotificationsDesc": { "message": "Show browser notifications for download completion and errors." },
+
+  "options_downloadsTitle": { "message": "Downloads" },
+  "options_downloadsDesc": { "message": "Manage download destination and monitor active tasks." },
+
+  "options_downloadDestination": { "message": "Download destination" },
+  "options_useCustomFolder": { "message": "Use custom folder (File System Access)" },
+  "options_currentFolder": {
+    "message": "Current folder: $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_noCustomFolder": { "message": "No custom folder selected. Uses default browser downloads." },
+  "options_customFolderOverwrite": { "message": "Custom folder mode always overwrites existing files with the same name." },
+  "options_changeFolder": { "message": "Change folder" },
+  "options_selectFolder": { "message": "Select folder" },
+  "options_useBrowserDownloads": { "message": "Use browser downloads" },
+  "options_customFolderIgnoresOverwrite": { "message": "Custom folder mode ignores the overwrite setting and always replaces same-name files in the selected folder." },
+
+  "options_fsaBannerTitle": { "message": "Custom download folder requires attention" },
+  "options_fsaBannerDefault": { "message": "Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode." },
+
+  "options_historyStorageUsage": {
+    "message": "Approximate history storage usage: $SIZE$",
+    "placeholders": { "size": { "content": "$1" } }
+  },
+  "options_clearAllHistory": { "message": "Clear All History" },
+
+  "options_activeDownloads": { "message": "Active Downloads" },
+  "options_queued": { "message": "Queued" },
+  "options_completed": { "message": "Completed" },
+  "options_failedPartial": { "message": "Failed / Partial" },
+  "options_canceled": { "message": "Canceled" },
+  "options_noDownloadsYet": { "message": "No downloads yet" },
+  "options_openMangaPage": { "message": "Open a manga series page to start downloading." },
+
+  "options_cancelThisDownload": { "message": "Cancel this download?" },
+  "options_cancelProgressWarning": { "message": "Progress for in-flight chapter may be lost." },
+  "options_chaptersCount": {
+    "message": "$COMPLETED$/$TOTAL$ chapters",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_createdAt": {
+    "message": "Created at $TIMESTAMP$",
+    "placeholders": { "timestamp": { "content": "$1" } }
+  },
+  "options_retryFailedChapters": { "message": "Retry failed chapters" },
+
+  "options_chapterColumn": { "message": "Chapter" },
+  "options_statusColumn": { "message": "Status" },
+  "options_imagesColumn": { "message": "Images" },
+  "options_errorColumn": { "message": "Error" },
+  "options_errorPrefix": {
+    "message": "Error: $MESSAGE$",
+    "placeholders": { "message": { "content": "$1" } }
+  },
+
+  "options_completedAt": { "message": "Completed at" },
+  "options_failedAt": { "message": "Failed at" },
+  "options_canceledAt": { "message": "Canceled at" },
+
+  "options_taskSummaryCompleted": {
+    "message": "✅ Completed ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": { "total": { "content": "$1" }, "plural": { "content": "$2" } }
+  },
+  "options_taskSummaryFailed": {
+    "message": "❌ Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryCanceled": {
+    "message": "⚠ Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryQueued": {
+    "message": "$TOTAL$ chapters queued",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskSummaryDownloading": {
+    "message": "Downloading $COMPLETED$ of $TOTAL$ chapters",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryPartial": {
+    "message": "⚠ Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryDefault": {
+    "message": "$TOTAL$ chapters",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+
+  "options_chapterImagesSummary": {
+    "message": "$SUCCEEDED$/$TOTAL$ images",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_chapterImagesPartial": {
+    "message": "$SUCCEEDED$/$TOTAL$ images ($FAILED$ failed)",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+  },
+
+  "options_clearHistoryTitle": { "message": "Clear all download history?" },
+  "options_clearHistoryDesc": { "message": "This will permanently delete all download history. Downloaded files are not affected." },
+  "options_noKeepHistory": { "message": "No, Keep History" },
+  "options_yesClearAll": { "message": "Yes, Clear All" },
+
+  "options_totalSeries": { "message": "Total Series" },
+  "options_trackedInHistory": { "message": "Tracked in history" },
+  "options_totalChapters": { "message": "Total Chapters" },
+  "options_downloadsRecorded": { "message": "Downloads recorded" },
+  "options_storageUsed": { "message": "Storage Used" },
+  "options_localStorageUsage": { "message": "Local storage usage" },
+  "options_manageHistoryData": { "message": "Manage History Data" },
+  "options_manageHistoryDesc": { "message": "Remove stored chapter history records without affecting files already saved on disk." },
+  "options_clearAllHistoryLabel": { "message": "Clear All History" },
+  "options_clearAllHistorySubtext": { "message": "Remove all download history for all series" },
+  "options_clearEverything": { "message": "Clear Everything" },
+  "options_clearAllDownloadHistory": { "message": "Clear All Download History?" },
+  "options_clearAllConfirm": {
+    "message": "This will permanently delete records for $CHAPTERS$ chapters across $SERIES$ series.",
+    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+  },
+  "options_actionCannotBeUndone": { "message": "This action cannot be undone." },
+  "options_clearSpecificSeries": { "message": "Clear Specific Series" },
+  "options_clearSeriesSubtext": { "message": "Remove download history for a single series" },
+  "options_selectSeriesDots": { "message": "Select Series..." },
+  "options_clearSeriesHistory": { "message": "Clear Series History" },
+  "options_selectSeries": { "message": "Select Series" },
+  "options_chooseSeries": { "message": "Choose a series..." },
+  "options_noDownloadHistory": { "message": "No download history found" },
+  "options_clearSelected": { "message": "Clear Selected" },
+
+  "options_siteIntegrationsTitle": { "message": "Site Integrations" },
+  "options_integrationsCount": {
+    "message": "$COUNT$ integrations",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "options_siteIntegrationsDesc": { "message": "Tune site-specific defaults, custom settings, and enablement without touching the global download profile." },
+  "options_searchIntegrations": { "message": "Search site integrations by name or domain..." },
+  "options_activeOverrides": {
+    "message": "You have active overrides for $COUNT$ $WORD$.",
+    "placeholders": { "count": { "content": "$1" }, "word": { "content": "$2" } }
+  },
+  "options_noIntegrationsFound": { "message": "No integrations found" },
+  "options_trySearchingElse": { "message": "Try searching for something else" },
+  "options_noIntegrationsAvailable": { "message": "No integrations available" },
+
+  "options_downloadSettings": { "message": "Download Settings" },
+  "options_archiveFormatLabel": { "message": "Archive Format" },
+  "options_cbzComicBookArchive": { "message": "CBZ (Comic Book Archive)" },
+  "options_zipFormat": { "message": "ZIP" },
+  "options_noArchiveIndividualFiles": { "message": "No Archive (Individual Files)" },
+  "options_downloadPathTemplate": { "message": "Download Path Template" },
+  "options_leaveEmptyGlobal": { "message": "Leave empty to use global path" },
+  "options_useMacrosLike": { "message": "Use macros like <SERIES_TITLE>, <CHAPTER_NUMBER>" },
+  "options_rateLimitingImages": { "message": "Rate Limiting - Images" },
+  "options_rateLimitingChapters": { "message": "Rate Limiting - Chapters" },
+  "options_retrySettingsLabel": { "message": "Retry Settings" },
+  "options_imageRetriesLabel": { "message": "Image Retries" },
+  "options_chapterRetriesLabel": { "message": "Chapter Retries" },
+  "options_defaultPlaceholder": {
+    "message": "Default: $VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_customSettings": { "message": "Custom settings" },
+  "options_enableOverride": { "message": "Enable override" },
+  "options_resetToGlobalDefaults": { "message": "Reset to Global Defaults" },
+
+  "options_concurrencyLabel": {
+    "message": "$SCOPE$ Concurrency",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_delayLabel": {
+    "message": "$SCOPE$ Delay (ms)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_maxConcurrentDesc": {
+    "message": "Maximum concurrent $SCOPE$ downloads (1-10)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_usingValue": {
+    "message": " • Using: $VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_minDelayDesc": {
+    "message": "Minimum delay between $SCOPE$ requests (0-10000 ms)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_usingMs": {
+    "message": " • Using: $VALUE$ms",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_policyHierarchy": { "message": "Policy Hierarchy:" },
+  "options_overrideActive": { "message": "✓ Override: Active (this form)" },
+  "options_siteIntegrationDefault": { "message": "Site Integration Default" },
+  "options_globalDefault": { "message": "Global Default" },
+  "options_siteIntegrationBadge": { "message": "Site Integration" },
+  "options_globalBadge": { "message": "Global" },
+  "options_concurrentDelay": {
+    "message": "$CONCURRENCY$ concurrent, $DELAY$ms delay",
+    "placeholders": { "concurrency": { "content": "$1" }, "delay": { "content": "$2" } }
+  },
+
+  "options_aboutDebug": { "message": "About & Debug" },
+  "options_aboutDebugDesc": { "message": "Extension updates, logging, and history management." },
+  "options_debugSettings": { "message": "Debug Settings" },
+  "options_debugSettingsDesc": { "message": "Debugging options." },
+  "options_logLevel": { "message": "Log Level" },
+  "options_logLevelDesc": { "message": "Console verbosity. Use \"debug\" for troubleshooting." },
+  "options_logLevelError": { "message": "Error" },
+  "options_logLevelWarn": { "message": "Warning" },
+  "options_logLevelInfo": { "message": "Info" },
+  "options_logLevelDebug": { "message": "Debug" },
+
+  "options_chromeWebStoreUpdates": { "message": "Chrome Web Store Updates" },
+  "options_webStoreUpdateDesc": { "message": "Manual update check through Chrome's extension update service." },
+  "options_installedVersion": {
+    "message": "Installed version $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_checking": { "message": "Checking..." },
+  "options_checkForUpdates": { "message": "Check for Updates" },
+  "options_applyUpdate": { "message": "Apply Update" },
+  "options_openStoreListing": { "message": "Open Store Listing" },
+  "options_autoUpdateNote": { "message": "Chrome also checks installed extensions automatically every few hours." },
+
+  "updateCheck_unavailable": { "message": "Update Check Unavailable" },
+  "updateCheck_failed": { "message": "Update Check Failed" },
+  "updateCheck_ready": { "message": "Update Ready" },
+  "updateCheck_readyDesc": {
+    "message": "$VERSION$ has been downloaded. Apply it when current extension work can be interrupted.",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "updateCheck_versionLabel": {
+    "message": "Version $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "updateCheck_anUpdate": { "message": "An update" },
+  "updateCheck_throttled": { "message": "Check Throttled" },
+  "updateCheck_throttledDesc": { "message": "Chrome limited repeated update checks. Try again later." },
+  "updateCheck_noUpdate": { "message": "No Update Available" },
+  "updateCheck_noUpdateDesc": {
+    "message": "Chrome did not return an installable update for version $VERSION$. This does not compare unpacked or locally modified builds against the public Web Store listing.",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+
+  "options_unsavedChanges": { "message": "You have unsaved changes" },
+  "options_discard": { "message": "Discard" },
+  "options_saveChanges": { "message": "Save Changes" },
+  "options_discardUnsavedChanges": { "message": "Discard unsaved changes?" },
+  "options_discardWarning": { "message": "All unsaved changes will be lost. This action cannot be undone." },
+  "options_discardChanges": { "message": "Discard Changes" },
+
+  "options_invalidTemplate": { "message": "Invalid Template" },
+  "options_previewOutput": { "message": "Preview Output" },
+
+  "options_toastLoadFailed": { "message": "Failed to load settings" },
+  "options_toastSavedSuccessfully": { "message": "Settings saved successfully" },
+  "options_toastSaveFailed": { "message": "Failed to save settings" },
+  "options_toastUnknownError": { "message": "Unknown error" },
+  "options_toastFsaNotSupported": { "message": "File System Access API not supported" },
+  "options_toastPermissionDenied": { "message": "Permission denied" },
+  "options_toastCustomFolderSet": {
+    "message": "Custom download folder set: $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_toastSetFolderFailed": { "message": "Failed to set download folder" },
+  "options_toastAllHistoryCleared": { "message": "All download history cleared" },
+  "options_toastClearHistoryFailed": { "message": "Failed to clear history" },
+  "options_toastSeriesHistoryCleared": { "message": "Series history cleared" },
+  "options_toastClearSeriesFailed": { "message": "Failed to clear series history" },
+  "options_toastChangesDiscarded": { "message": "Changes discarded" },
+
+  "options_includeCover": { "message": "Include Series Cover" },
+  "options_includeCoverDesc": { "message": "Save cover image inside archive" },
+  "options_pathTemplateMacros": { "message": "Use macros: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>" },
+  "options_imagePadding": { "message": "Image Filename Padding" },
+  "options_paddingAuto": { "message": "Auto (based on total images)" },
+  "options_padding2": { "message": "2 digits (01-99)" },
+  "options_padding3": { "message": "3 digits (001-999)" },
+  "options_padding4": { "message": "4 digits (0001-9999)" },
+  "options_padding5": { "message": "5 digits (00001-99999)" },
+  "options_openMangaToDownload": { "message": "Open a manga series page to start downloading." },
+  "options_keepHistory": { "message": "No, Keep History" },
+  "options_clearAll": { "message": "Yes, Clear All" },
+  "options_chromeWebStoreUpdatesDesc": { "message": "Manual update check through Chrome's extension update service." },
+  "options_updateCheckUnavailable": { "message": "Update Check Unavailable" },
+  "options_updateCheckFailed": { "message": "Update Check Failed" },
+  "options_version": {
+    "message": "Version $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_anUpdate": { "message": "An update" },
+  "options_updateReady": { "message": "Update Ready" },
+  "options_updateReadyDesc": {
+    "message": "$VERSION$ has been downloaded. Apply it when current extension work can be interrupted.",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_checkThrottled": { "message": "Check Throttled" },
+  "options_checkThrottledDesc": { "message": "Chrome limited repeated update checks. Try again later." },
+  "options_noUpdateAvailable": { "message": "No Update Available" },
+  "options_noUpdateAvailableDesc": {
+    "message": "Chrome did not return an installable update for version $VERSION$. This does not compare unpacked or locally modified builds against the public Web Store listing.",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_retried": { "message": "retried" },
+  "options_chapter": { "message": "Chapter" },
+  "options_status": { "message": "Status" },
+  "options_images": { "message": "Images" },
+  "options_error": { "message": "Error" },
+  "options_partial": { "message": "Partial" },
+  "options_taskCompleted": {
+    "message": "✅ Completed ($TOTAL$ chapters)",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskFailed": {
+    "message": "❌ Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskCanceled": {
+    "message": "⚠ Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskQueued": {
+    "message": "$TOTAL$ chapters queued",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskDownloading": {
+    "message": "Downloading $COMPLETED$ of $TOTAL$ chapters",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskPartial": {
+    "message": "⚠ Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskDefaultChapters": {
+    "message": "$TOTAL$ chapters",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_imagesFailed": {
+    "message": "$SUCCEEDED$/$TOTAL$ images ($FAILED$ failed)",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+  },
+  "options_imagesSummary": {
+    "message": "$SUCCEEDED$/$TOTAL$ images",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_manageHistoryDataDesc": { "message": "Remove stored chapter history records without affecting files already saved on disk." },
+  "options_clearAllHistoryDesc": { "message": "Remove all download history for all series" },
+  "options_clearAllWarning": {
+    "message": "This will permanently delete records for $CHAPTERS$ chapters across $SERIES$ series.",
+    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+  },
+  "options_cannotBeUndone": { "message": "This action cannot be undone." },
+  "options_clearSpecificSeriesDesc": { "message": "Remove download history for a single series" },
+  "options_noHistoryFound": { "message": "No download history found" },
+  "options_chCount": {
+    "message": "$COUNT$ ch",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "options_searchSiteIntegrations": { "message": "Search site integrations by name or domain..." },
+  "options_overrides": { "message": "Overrides" },
+  "options_integrationsPlural": { "message": "integrations" },
+  "options_integrationSingular": { "message": "integration" },
+  "options_cbzFull": { "message": "CBZ (Comic Book Archive)" },
+  "options_zip": { "message": "ZIP" },
+  "options_noArchiveFull": { "message": "No Archive (Individual Files)" },
+  "options_useMacros": { "message": "Use macros like <SERIES_TITLE>, <CHAPTER_NUMBER>" },
+  "options_disabled": { "message": "Disabled" },
+  "options_override": { "message": "Override" },
+  "options_enabled": { "message": "Enabled" },
+  "options_enableIntegration": {
+    "message": "Enable $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_hide": { "message": "Hide" },
+  "options_configure": { "message": "Configure" },
+  "options_default3": { "message": "Default: 3" },
+  "options_commaSeparatedValues": { "message": "Comma-separated values" },
+  "options_activeThisForm": { "message": "Active (this form)" },
+  "options_global": { "message": "Global" },
+  "options_msDelay": {
+    "message": "$DELAY$ms delay",
+    "placeholders": { "delay": { "content": "$1" } }
+  },
+  "options_defaultValue": {
+    "message": "Default: $VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  }
+}

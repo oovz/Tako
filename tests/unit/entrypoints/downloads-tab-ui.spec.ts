@@ -43,7 +43,7 @@ describe('DownloadsTab status summary behavior', () => {
   it('renders single-chapter completed summary for one chapter', () => {
     const label = getTaskStatusSummaryLabel(makeTask('completed', [makeChapter({ status: 'completed' })]))
 
-    expect(label).toBe('✅ Completed (1 chapter)')
+    expect(label).toBe('✅ Completed (1 chapters)')
   })
 
   it('uses completed chapter count in failed/partial summaries', () => {

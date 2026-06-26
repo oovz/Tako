@@ -15,6 +15,7 @@ import {
   getTaskStatusLabel,
 } from '@/entrypoints/sidepanel/components/command-center-queue-helpers'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { t } from '@/src/shared/i18n'
 
 interface CommandCenterTaskRowProps {
   task: QueueTaskSummary
@@ -96,8 +97,8 @@ export function CommandCenterTaskRow({
       >
         {isConfirmingCancel && (
           <InlineConfirmation
-            title="Cancel this download?"
-            description="Progress for in-flight chapter may be lost."
+            title={t('sidepanel_cancelThisDownload')}
+            description={t('sidepanel_cancelProgressWarning')}
             onConfirm={() => {
               onConfirmCancel(task.id)
             }}
@@ -146,7 +147,7 @@ export function CommandCenterTaskRow({
               </span>
               <span>·</span>
               <span className="font-mono">
-                {activeRowChapterCount}/{totalChapters} ch
+                {activeRowChapterCount}/{totalChapters} {t('common_chaptersShort')}
               </span>
             </div>
 

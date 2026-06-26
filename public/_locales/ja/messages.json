@@ -1,0 +1,579 @@
+{
+  "extName": {
+    "message": "Tako 漫画ダウンローダー"
+  },
+  "extDescription": {
+    "message": "MangaDex、Pixiv Comic、少年ジャンプ+などから漫画章を一括ダウンロード。Chromeのサイドパネルからキュー、リトライ、CBZ/ZIP書き出しが可能。"
+  },
+
+  "common_active": { "message": "実行中" },
+  "common_queued": { "message": "待機中" },
+  "common_cancel": { "message": "キャンセル" },
+  "common_dismiss": { "message": "閉じる" },
+  "common_remove": { "message": "削除" },
+  "common_restart": { "message": "やり直し" },
+  "common_error": { "message": "エラー" },
+  "common_warning": { "message": "警告" },
+  "common_loading": { "message": "読み込み中..." },
+  "common_chapters": { "message": "章" },
+  "common_chapter": { "message": "章" },
+  "common_chaptersShort": { "message": "話" },
+  "common_images": { "message": "画像" },
+  "common_locked": { "message": "ロック済み" },
+  "common_progress": { "message": "進行状況" },
+  "common_retried": { "message": "再試行済み" },
+  "common_enabled": { "message": "有効" },
+  "common_overrides": { "message": "オーバーライド" },
+  "common_override": { "message": "オーバーライド" },
+  "common_disabled": { "message": "無効" },
+  "common_configure": { "message": "設定" },
+  "common_hide": { "message": "非表示" },
+  "common_yes": { "message": "はい" },
+  "common_no": { "message": "いいえ" },
+
+  "sidepanel_settingsTooltip": { "message": "設定" },
+  "sidepanel_settingsNeedAttention": { "message": "設定の確認が必要です" },
+  "sidepanel_openOptionsAdvanced": { "message": "オプションを開く（詳細設定）" },
+  "sidepanel_openOptionsActionItem": { "message": "オプションを開く（要対応項目あり）" },
+
+  "sidepanel_noSeriesDetected": { "message": "シリーズが検出されません" },
+  "sidepanel_openSupportedPage": { "message": "対応している漫画シリーズページを開いて始めてください。" },
+  "sidepanel_pageNotRecognized": { "message": "このページは漫画シリーズとして認識されません" },
+  "sidepanel_selectChapters": { "message": "章を選択" },
+  "sidepanel_closeSelection": { "message": "選択を閉じる" },
+  "sidepanel_noChapters": { "message": "章なし" },
+  "sidepanel_noChaptersFound": { "message": "章が見つかりません" },
+  "sidepanel_chaptersCount": {
+    "message": "$COUNT$ 章",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_volumesCount": {
+    "message": "$COUNT$ 巻",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+
+  "sidepanel_selectChaptersLabel": { "message": "章を選択" },
+  "sidepanel_selectedCount": {
+    "message": "$COUNT$ 件選択中",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_availableCount": {
+    "message": "$COUNT$ 件選択可能",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_volumes": { "message": "巻別" },
+  "sidepanel_allChapters": { "message": "全章" },
+  "sidepanel_addedToQueue": { "message": "キューに追加しました！" },
+  "sidepanel_downloadCount": {
+    "message": "ダウンロード ($COUNT$)",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "sidepanel_selectChaptersHint": { "message": "上で章を選択し、ダウンロードをクリックしてキューに追加" },
+  "sidepanel_noDownloadsYet": { "message": "ダウンロードなし" },
+  "sidepanel_useSelectChapters": { "message": "上の「章を選択」を使用してダウンロードを開始" },
+  "sidepanel_recentHistory": { "message": "最近の履歴" },
+  "sidepanel_viewFullHistory": { "message": "全履歴を表示" },
+  "sidepanel_viewAll": { "message": "すべて表示" },
+  "sidepanel_emptyQueue": { "message": "ダウンロードなし。対応しているシリーズタブからダウンロードを開始するとここに表示されます。" },
+
+  "sidepanel_cancelDownload": { "message": "ダウンロードをキャンセル" },
+  "sidepanel_cancelingDownload": { "message": "ダウンロードをキャンセル中" },
+  "sidepanel_retryFailed": { "message": "失敗分を再試行" },
+  "sidepanel_retryFailedChapters": { "message": "失敗した章を再試行" },
+  "sidepanel_restartTask": { "message": "タスクをやり直し" },
+  "sidepanel_restartAllChapters": { "message": "全章をやり直し" },
+  "sidepanel_moveToTop": { "message": "先頭に移動" },
+  "sidepanel_moveTaskToTop": { "message": "タスクを先頭に移動" },
+  "sidepanel_cancelThisDownload": { "message": "このダウンロードをキャンセルしますか？" },
+  "sidepanel_cancelProgressWarning": { "message": "ダウンロード中の章の進行状況が失われる可能性があります。" },
+
+  "sidepanel_chapterDownloading": {
+    "message": "$COUNT$ $UNIT$ ダウンロード中",
+    "placeholders": { "count": { "content": "$1" }, "unit": { "content": "$2" } }
+  },
+  "sidepanel_chapterPosition": {
+    "message": "第 $POS$/$TOTAL$ 章",
+    "placeholders": { "pos": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+
+  "sidepanel_tabNotSupported": { "message": "このタブは対応していません（ブラウザ/拡張機能の内部ページやポリシーでブロックされたページなど）。" },
+  "sidepanel_noMangaFound": { "message": "このページに漫画は見つかりませんでした。" },
+  "sidepanel_siteNotSupported": { "message": "このサイトはまだ対応していません。" },
+
+  "sidepanel_fsaBannerTitle": { "message": "カスタムダウンロードフォルダの確認が必要です" },
+  "sidepanel_fsaBannerDefault": { "message": "カスタムフォルダのハンドルが無効です。カスタム保存先モードを続行するにはフォルダを再選択してください。" },
+  "sidepanel_reSelect": { "message": "再選択" },
+
+  "sidepanel_initFailed": { "message": "拡張機能の初期化に失敗しました" },
+
+  "sidepanel_toastRetryFailed": { "message": "失敗した章の再試行に失敗しました" },
+  "sidepanel_toastRestartFailed": { "message": "タスクのやり直しに失敗しました" },
+  "sidepanel_toastMoveTopFailed": { "message": "先頭への移動に失敗しました" },
+
+  "status_downloading": { "message": "ダウンロード中" },
+  "status_queued": { "message": "待機中" },
+  "status_completed": { "message": "完了" },
+  "status_partialSuccess": { "message": "一部成功" },
+  "status_failed": { "message": "失敗" },
+  "status_canceled": { "message": "キャンセル済み" },
+
+  "failureCategory_network": { "message": "ネットワーク：" },
+  "failureCategory_download": { "message": "ダウンロード：" },
+
+  "options_takoSettings": { "message": "Tako 設定" },
+  "options_takoVersion": {
+    "message": "Tako v$VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_general": { "message": "一般" },
+  "options_siteIntegrations": { "message": "サイト統合" },
+  "options_downloads": { "message": "ダウンロード" },
+  "options_aboutDebug": { "message": "情報 / デバッグ" },
+
+  "options_loadingSettings": { "message": "設定を読み込み中..." },
+  "options_loadingDownloads": { "message": "ダウンロードを読み込み中..." },
+
+  "options_generalSettings": { "message": "一般設定" },
+  "options_generalSettingsDesc": { "message": "ダウンロード形式、パフォーマンス、再試行、通知を設定します。" },
+
+  "options_storageFormats": { "message": "ストレージと形式" },
+  "options_storageFormatsDesc": { "message": "アーカイブ形式とファイル整理オプションを選択。" },
+  "options_includeComicInfo": { "message": "ComicInfo.xml を含める" },
+  "options_includeComicInfoDesc": { "message": "コミックリーダー用のメタデータを埋め込む" },
+  "options_includeCoverImage": { "message": "シリーズ表紙を含める" },
+  "options_includeCoverImageDesc": { "message": "表紙画像をアーカイブ内に保存" },
+  "options_normalizeFilenames": { "message": "ファイル名を正規化" },
+  "options_normalizeFilenamesDesc": { "message": "画像を 001.jpg, 002.jpg... にリネーム" },
+  "options_overwriteExisting": { "message": "既存ファイルを上書き" },
+  "options_overwriteExistingDesc": { "message": "同名ファイルが存在する場合は置換" },
+  "options_suppressSaveAs": { "message": "名前を付けて保存ダイアログを抑制" },
+  "options_suppressSaveAsDesc": { "message": "Chrome のファイル選択ダイアログを開かず、設定済みのダウンロードパスに保存" },
+  "options_directoryPathTemplate": { "message": "ディレクトリパステンプレート" },
+  "options_directoryPathTemplateDesc": { "message": "マクロを使用：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>" },
+  "options_filenameTemplate": { "message": "ファイル名テンプレート" },
+  "options_filenameTemplateDesc": { "message": "アーカイブ/フォルダ名のテンプレート。同じマクロと <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3> をサポート。" },
+  "options_imageFilenamePadding": { "message": "画像ファイル名のゼロ埋め" },
+  "options_imagePaddingAuto": { "message": "自動（画像総数に基づく）" },
+  "options_imagePadding2": { "message": "2 桁 (01-99)" },
+  "options_imagePadding3": { "message": "3 桁 (001-999)" },
+  "options_imagePadding4": { "message": "4 桁 (0001-9999)" },
+  "options_imagePadding5": { "message": "5 桁 (00001-99999)" },
+  "options_imagePaddingDesc": { "message": "正規化された画像ファイル名のゼロ埋め（例：001.jpg, 002.jpg）。" },
+
+  "options_archiveFormat": { "message": "アーカイブ形式" },
+  "options_cbzArchive": { "message": "CBZ アーカイブ" },
+  "options_cbzArchiveDesc": { "message": "コミックリーダーに最適" },
+  "options_zipArchive": { "message": "ZIP アーカイブ" },
+  "options_zipArchiveDesc": { "message": "標準圧縮フォルダ" },
+  "options_noArchive": { "message": "アーカイブなし" },
+  "options_noArchiveDesc": { "message": "個別画像ファイル" },
+  "options_noArchiveWarningTitle": { "message": "アーカイブなし + デフォルトダウンロードはダウンロードバーが煩雑になります" },
+  "options_noArchiveWarningDesc": { "message": "「アーカイブなし」形式をデフォルトのダウンロード先で使用すると、画像ごとに個別の Chrome ダウンロードエントリが作成されます。ダウンロードバーの雑雑さを避けるため、カスタムダウンロードフォルダの有効化を検討してください。" },
+
+  "options_performance": { "message": "パフォーマンス" },
+  "options_performanceDesc": { "message": "ダウンロード速度と並行制限を制御。" },
+  "options_imageConcurrency": { "message": "画像並行数" },
+  "options_streams": { "message": "ストリーム" },
+  "options_imageConcurrencyDesc": { "message": "章あたりの並行画像リクエスト数。" },
+  "options_imageRequestDelay": { "message": "画像リクエスト遅延 (ms)" },
+  "options_imageRequestDelayDesc": { "message": "画像リクエスト間の待機時間。" },
+  "options_chapterDelay": { "message": "章遅延 (ms)" },
+  "options_chapterDelayDesc": { "message": "章ディスパッチ間の待機時間。" },
+
+  "options_retrySettings": { "message": "再試行設定" },
+  "options_retrySettingsDesc": { "message": "失敗したダウンロードの自動再試行動作を設定。" },
+  "options_imageRetries": { "message": "画像再試行回数" },
+  "options_imageRetriesDesc": { "message": "画像ダウンロード失敗時の再試行回数。" },
+  "options_chapterRetries": { "message": "章再試行回数" },
+  "options_chapterRetriesDesc": { "message": "章ダウンロード失敗時の再試行回数。" },
+
+  "options_notifications": { "message": "通知" },
+  "options_notificationsDesc": { "message": "ブラウザ通知の動作を制御。" },
+  "options_enableNotifications": { "message": "通知を有効化" },
+  "options_enableNotificationsDesc": { "message": "ダウンロード完了時とエラー時にブラウザ通知を表示。" },
+
+  "options_downloadsTitle": { "message": "ダウンロード" },
+  "options_downloadsDesc": { "message": "ダウンロード先を管理しアクティブタスクを監視。" },
+
+  "options_downloadDestination": { "message": "ダウンロード先" },
+  "options_useCustomFolder": { "message": "カスタムフォルダを使用（File System Access）" },
+  "options_currentFolder": {
+    "message": "現在のフォルダ：$NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_noCustomFolder": { "message": "カスタムフォルダ未選択。デフォルトのブラウザダウンロードを使用。" },
+  "options_customFolderOverwrite": { "message": "カスタムフォルダモードは常に同名ファイルを上書きします。" },
+  "options_changeFolder": { "message": "フォルダを変更" },
+  "options_selectFolder": { "message": "フォルダを選択" },
+  "options_useBrowserDownloads": { "message": "ブラウザダウンロードを使用" },
+  "options_customFolderIgnoresOverwrite": { "message": "カスタムフォルダモードは上書き設定を無視し、選択したフォルダ内の同名ファイルを常に置換します。" },
+
+  "options_fsaBannerTitle": { "message": "カスタムダウンロードフォルダの確認が必要です" },
+  "options_fsaBannerDefault": { "message": "カスタムフォルダのハンドルが無効です。カスタム保存先モードを続行するにはフォルダを再選択してください。" },
+
+  "options_historyStorageUsage": {
+    "message": "履歴ストレージ使用量（概算）：$SIZE$",
+    "placeholders": { "size": { "content": "$1" } }
+  },
+  "options_clearAllHistory": { "message": "全履歴を消去" },
+
+  "options_activeDownloads": { "message": "アクティブダウンロード" },
+  "options_queued": { "message": "待機中" },
+  "options_completed": { "message": "完了" },
+  "options_failedPartial": { "message": "失敗 / 一部" },
+  "options_canceled": { "message": "キャンセル済み" },
+  "options_noDownloadsYet": { "message": "ダウンロードなし" },
+  "options_openMangaPage": { "message": "漫画シリーズページを開いてダウンロードを開始。" },
+
+  "options_cancelThisDownload": { "message": "このダウンロードをキャンセルしますか？" },
+  "options_cancelProgressWarning": { "message": "ダウンロード中の章の進行状況が失われる可能性があります。" },
+  "options_chaptersCount": {
+    "message": "$COMPLETED$/$TOTAL$ 章",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_createdAt": {
+    "message": "作成日時 $TIMESTAMP$",
+    "placeholders": { "timestamp": { "content": "$1" } }
+  },
+  "options_retryFailedChapters": { "message": "失敗した章を再試行" },
+
+  "options_chapterColumn": { "message": "章" },
+  "options_statusColumn": { "message": "状態" },
+  "options_imagesColumn": { "message": "画像" },
+  "options_errorColumn": { "message": "エラー" },
+  "options_errorPrefix": {
+    "message": "エラー：$MESSAGE$",
+    "placeholders": { "message": { "content": "$1" } }
+  },
+
+  "options_completedAt": { "message": "完了日時" },
+  "options_failedAt": { "message": "失敗日時" },
+  "options_canceledAt": { "message": "キャンセル日時" },
+
+  "options_taskSummaryCompleted": {
+    "message": "✅ 完了（$TOTAL$ 章）",
+    "placeholders": { "total": { "content": "$1" }, "plural": { "content": "$2" } }
+  },
+  "options_taskSummaryFailed": {
+    "message": "❌ 失敗（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryCanceled": {
+    "message": "⚠ キャンセル（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryQueued": {
+    "message": "$TOTAL$ 章が待機中",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskSummaryDownloading": {
+    "message": "$COMPLETED$/$TOTAL$ 章をダウンロード中",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryPartial": {
+    "message": "⚠ 一部完了（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskSummaryDefault": {
+    "message": "$TOTAL$ 章",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+
+  "options_chapterImagesSummary": {
+    "message": "$SUCCEEDED$/$TOTAL$ 画像",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_chapterImagesPartial": {
+    "message": "$SUCCEEDED$/$TOTAL$ 画像（$FAILED$ 件失敗）",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+  },
+
+  "options_clearHistoryTitle": { "message": "すべてのダウンロード履歴を消去しますか？" },
+  "options_clearHistoryDesc": { "message": "すべてのダウンロード履歴が永久に削除されます。ダウンロード済みのファイルには影響しません。" },
+  "options_noKeepHistory": { "message": "いいえ、履歴を保持" },
+  "options_yesClearAll": { "message": "はい、すべて消去" },
+
+  "options_totalSeries": { "message": "シリーズ総数" },
+  "options_trackedInHistory": { "message": "履歴で追跡中" },
+  "options_totalChapters": { "message": "章総数" },
+  "options_downloadsRecorded": { "message": "記録されたダウンロード" },
+  "options_storageUsed": { "message": "使用ストレージ" },
+  "options_localStorageUsage": { "message": "ローカルストレージ使用量" },
+  "options_manageHistoryData": { "message": "履歴データを管理" },
+  "options_manageHistoryDesc": { "message": "ディスクに保存済みのファイルに影響を与えずに、保存された章履歴レコードを削除。" },
+  "options_clearAllHistoryLabel": { "message": "全履歴を消去" },
+  "options_clearAllHistorySubtext": { "message": "すべてのシリーズのすべてのダウンロード履歴を削除" },
+  "options_clearEverything": { "message": "すべて消去" },
+  "options_clearAllDownloadHistory": { "message": "すべてのダウンロード履歴を消去しますか？" },
+  "options_clearAllConfirm": {
+    "message": "$SERIES$ シリーズの $CHAPTERS$ 章のレコードを永久に削除します。",
+    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+  },
+  "options_actionCannotBeUndone": { "message": "この操作は取り消せません。" },
+  "options_clearSpecificSeries": { "message": "特定シリーズを消去" },
+  "options_clearSeriesSubtext": { "message": "単一シリーズのダウンロード履歴を削除" },
+  "options_selectSeriesDots": { "message": "シリーズを選択..." },
+  "options_clearSeriesHistory": { "message": "シリーズ履歴を消去" },
+  "options_selectSeries": { "message": "シリーズを選択" },
+  "options_chooseSeries": { "message": "シリーズを選択..." },
+  "options_noDownloadHistory": { "message": "ダウンロード履歴が見つかりません" },
+  "options_clearSelected": { "message": "選択を消去" },
+
+  "options_siteIntegrationsTitle": { "message": "サイト統合" },
+  "options_integrationsCount": {
+    "message": "$COUNT$ 件の統合",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "options_siteIntegrationsDesc": { "message": "グローバルダウンロードプロファイルに影響を与えずに、サイト固有のデフォルト、カスタム設定、有効化を調整。" },
+  "options_searchIntegrations": { "message": "名前またはドメインでサイト統合を検索..." },
+  "options_activeOverrides": {
+    "message": "$COUNT$ 件の$WORD$にアクティブなオーバーライドがあります。",
+    "placeholders": { "count": { "content": "$1" }, "word": { "content": "$2" } }
+  },
+  "options_noIntegrationsFound": { "message": "統合が見つかりません" },
+  "options_trySearchingElse": { "message": "別のキーワードで検索してみてください" },
+  "options_noIntegrationsAvailable": { "message": "利用可能な統合がありません" },
+
+  "options_downloadSettings": { "message": "ダウンロード設定" },
+  "options_archiveFormatLabel": { "message": "アーカイブ形式" },
+  "options_cbzComicBookArchive": { "message": "CBZ（コミックブックアーカイブ）" },
+  "options_zipFormat": { "message": "ZIP" },
+  "options_noArchiveIndividualFiles": { "message": "アーカイブなし（個別ファイル）" },
+  "options_downloadPathTemplate": { "message": "ダウンロードパステンプレート" },
+  "options_leaveEmptyGlobal": { "message": "グローバルパスを使用する場合は空欄" },
+  "options_useMacrosLike": { "message": "<SERIES_TITLE>、<CHAPTER_NUMBER> などのマクロを使用" },
+  "options_rateLimitingImages": { "message": "レート制限 - 画像" },
+  "options_rateLimitingChapters": { "message": "レート制限 - 章" },
+  "options_retrySettingsLabel": { "message": "再試行設定" },
+  "options_imageRetriesLabel": { "message": "画像再試行回数" },
+  "options_chapterRetriesLabel": { "message": "章再試行回数" },
+  "options_defaultPlaceholder": {
+    "message": "デフォルト：$VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_customSettings": { "message": "カスタム設定" },
+  "options_enableOverride": { "message": "オーバーライドを有効化" },
+  "options_resetToGlobalDefaults": { "message": "グローバルデフォルトにリセット" },
+
+  "options_concurrencyLabel": {
+    "message": "$SCOPE$ 並行数",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_delayLabel": {
+    "message": "$SCOPE$ 遅延 (ms)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_maxConcurrentDesc": {
+    "message": "最大並行 $SCOPE$ ダウンロード (1-10)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_usingValue": {
+    "message": " • 使用中：$VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_minDelayDesc": {
+    "message": "$SCOPE$ リクエスト間の最小遅延 (0-10000 ms)",
+    "placeholders": { "scope": { "content": "$1" } }
+  },
+  "options_usingMs": {
+    "message": " • 使用中：$VALUE$ms",
+    "placeholders": { "value": { "content": "$1" } }
+  },
+  "options_policyHierarchy": { "message": "ポリシー階層：" },
+  "options_overrideActive": { "message": "✓ オーバーライド：アクティブ（このフォーム）" },
+  "options_siteIntegrationDefault": { "message": "サイト統合デフォルト" },
+  "options_globalDefault": { "message": "グローバルデフォルト" },
+  "options_siteIntegrationBadge": { "message": "サイト統合" },
+  "options_globalBadge": { "message": "グローバル" },
+  "options_concurrentDelay": {
+    "message": "$CONCURRENCY$ 並行、$DELAY$ms 遅延",
+    "placeholders": { "concurrency": { "content": "$1" }, "delay": { "content": "$2" } }
+  },
+
+  "options_aboutDebug": { "message": "情報 & デバッグ" },
+  "options_aboutDebugDesc": { "message": "拡張機能の更新、ログ、履歴管理。" },
+  "options_debugSettings": { "message": "デバッグ設定" },
+  "options_debugSettingsDesc": { "message": "デバッグオプション。" },
+  "options_logLevel": { "message": "ログレベル" },
+  "options_logLevelDesc": { "message": "コンソールの詳細度。トラブルシューティングには \"debug\" を使用。" },
+  "options_logLevelError": { "message": "エラー" },
+  "options_logLevelWarn": { "message": "警告" },
+  "options_logLevelInfo": { "message": "情報" },
+  "options_logLevelDebug": { "message": "デバッグ" },
+
+  "options_chromeWebStoreUpdates": { "message": "Chrome ウェブストア更新" },
+  "options_webStoreUpdateDesc": { "message": "Chrome の拡張機能更新サービスで手動更新チェック。" },
+  "options_installedVersion": {
+    "message": "インストール済みバージョン $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_checking": { "message": "確認中..." },
+  "options_checkForUpdates": { "message": "更新を確認" },
+  "options_applyUpdate": { "message": "更新を適用" },
+  "options_openStoreListing": { "message": "ストアページを開く" },
+  "options_autoUpdateNote": { "message": "Chrome は数時間ごとにインストール済み拡張機能の更新を自動確認します。" },
+
+  "updateCheck_unavailable": { "message": "更新確認不可" },
+  "updateCheck_failed": { "message": "更新確認に失敗" },
+  "updateCheck_ready": { "message": "更新の準備完了" },
+  "updateCheck_readyDesc": {
+    "message": "$VERSION$ がダウンロードされました。現在の拡張機能の作業が中断可能なときに適用してください。",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "updateCheck_versionLabel": {
+    "message": "バージョン $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "updateCheck_anUpdate": { "message": "更新" },
+  "updateCheck_throttled": { "message": "確認が制限されました" },
+  "updateCheck_throttledDesc": { "message": "Chrome が繰り返しの更新確認を制限しました。後でもう一度お試しください。" },
+  "updateCheck_noUpdate": { "message": "利用可能な更新なし" },
+  "updateCheck_noUpdateDesc": {
+    "message": "Chrome はバージョン $VERSION$ のインストール可能な更新を返しませんでした。これは未パッケージまたはローカル変更ビルドと公開ウェブストアのリストを比較するものではありません。",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+
+  "options_unsavedChanges": { "message": "未保存の変更があります" },
+  "options_discard": { "message": "破棄" },
+  "options_saveChanges": { "message": "変更を保存" },
+  "options_discardUnsavedChanges": { "message": "未保存の変更を破棄しますか？" },
+  "options_discardWarning": { "message": "未保存の変更はすべて失われます。この操作は取り消せません。" },
+  "options_discardChanges": { "message": "変更を破棄" },
+
+  "options_invalidTemplate": { "message": "無効なテンプレート" },
+  "options_previewOutput": { "message": "プレビュー出力" },
+
+  "options_toastLoadFailed": { "message": "設定の読み込みに失敗しました" },
+  "options_toastSavedSuccessfully": { "message": "設定が保存されました" },
+  "options_toastSaveFailed": { "message": "設定の保存に失敗しました" },
+  "options_toastUnknownError": { "message": "不明なエラー" },
+  "options_toastFsaNotSupported": { "message": "File System Access API はサポートされていません" },
+  "options_toastPermissionDenied": { "message": "権限が拒否されました" },
+  "options_toastCustomFolderSet": {
+    "message": "カスタムダウンロードフォルダを設定しました：$NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_toastSetFolderFailed": { "message": "ダウンロードフォルダの設定に失敗しました" },
+  "options_toastAllHistoryCleared": { "message": "すべてのダウンロード履歴を消去しました" },
+  "options_toastClearHistoryFailed": { "message": "履歴の消去に失敗しました" },
+  "options_toastSeriesHistoryCleared": { "message": "シリーズ履歴を消去しました" },
+  "options_toastClearSeriesFailed": { "message": "シリーズ履歴の消去に失敗しました" },
+  "options_toastChangesDiscarded": { "message": "変更を破棄しました" },
+
+  "options_includeCover": { "message": "シリーズカバーを含める" },
+  "options_includeCoverDesc": { "message": "カバー画像をアーカイブ内に保存" },
+  "options_pathTemplateMacros": { "message": "マクロを使用：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>" },
+  "options_imagePadding": { "message": "画像ファイル名のパディング" },
+  "options_paddingAuto": { "message": "自動（画像総数に基づく）" },
+  "options_padding2": { "message": "2桁（01-99）" },
+  "options_padding3": { "message": "3桁（001-999）" },
+  "options_padding4": { "message": "4桁（0001-9999）" },
+  "options_padding5": { "message": "5桁（00001-99999）" },
+  "options_openMangaToDownload": { "message": "漫画シリーズのページを開いてダウンロードを開始してください。" },
+  "options_keepHistory": { "message": "いいえ、履歴を保持" },
+  "options_clearAll": { "message": "はい、すべて消去" },
+  "options_chromeWebStoreUpdatesDesc": { "message": "Chromeの拡張機能更新サービスを通じて手動で更新確認を行います。" },
+  "options_updateCheckUnavailable": { "message": "更新確認が利用不可" },
+  "options_updateCheckFailed": { "message": "更新確認に失敗" },
+  "options_version": {
+    "message": "バージョン $VERSION$",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_anUpdate": { "message": "アップデート" },
+  "options_updateReady": { "message": "更新の準備完了" },
+  "options_updateReadyDesc": {
+    "message": "$VERSION$ がダウンロードされました。現在の拡張機能の作業を中断できるときに適用してください。",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_checkThrottled": { "message": "確認が制限されました" },
+  "options_checkThrottledDesc": { "message": "Chromeが頻繁な更新確認を制限しました。後でもう一度お試しください。" },
+  "options_noUpdateAvailable": { "message": "利用可能な更新はありません" },
+  "options_noUpdateAvailableDesc": {
+    "message": "Chromeはバージョン $VERSION$ のインストール可能な更新を返しませんでした。これは展開済みまたはローカルで変更されたビルドと公開Web Storeリストを比較するものではありません。",
+    "placeholders": { "version": { "content": "$1" } }
+  },
+  "options_retried": { "message": "再試行済み" },
+  "options_chapter": { "message": "章" },
+  "options_status": { "message": "ステータス" },
+  "options_images": { "message": "画像" },
+  "options_error": { "message": "エラー" },
+  "options_partial": { "message": "部分" },
+  "options_taskCompleted": {
+    "message": "✅ 完了（$TOTAL$ 章）",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskFailed": {
+    "message": "❌ 失敗（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskCanceled": {
+    "message": "⚠ キャンセル（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskQueued": {
+    "message": "$TOTAL$ 章がキューに入りました",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_taskDownloading": {
+    "message": "$COMPLETED$/$TOTAL$ 章をダウンロード中",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskPartial": {
+    "message": "⚠ 部分的（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_taskDefaultChapters": {
+    "message": "$TOTAL$ 章",
+    "placeholders": { "total": { "content": "$1" } }
+  },
+  "options_imagesFailed": {
+    "message": "$SUCCEEDED$/$TOTAL$ 画像（$FAILED$ 件失敗）",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+  },
+  "options_imagesSummary": {
+    "message": "$SUCCEEDED$/$TOTAL$ 画像",
+    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+  },
+  "options_manageHistoryDataDesc": { "message": "ディスクに保存済みのファイルに影響を与えずに、保存された章の履歴記録を削除します。" },
+  "options_clearAllHistoryDesc": { "message": "すべてのシリーズのダウンロード履歴を削除" },
+  "options_clearAllWarning": {
+    "message": "$SERIES$ シリーズにわたる $CHAPTERS$ 章の記録を完全に削除します。",
+    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+  },
+  "options_cannotBeUndone": { "message": "この操作は取り消せません。" },
+  "options_clearSpecificSeriesDesc": { "message": "単一シリーズのダウンロード履歴を削除" },
+  "options_noHistoryFound": { "message": "ダウンロード履歴が見つかりません" },
+  "options_chCount": {
+    "message": "$COUNT$ 章",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "options_searchSiteIntegrations": { "message": "名前またはドメインでサイト統合を検索..." },
+  "options_overrides": { "message": "オーバーライド" },
+  "options_integrationsPlural": { "message": "統合" },
+  "options_integrationSingular": { "message": "統合" },
+  "options_cbzFull": { "message": "CBZ（コミックブックアーカイブ）" },
+  "options_zip": { "message": "ZIP" },
+  "options_noArchiveFull": { "message": "アーカイブなし（個別ファイル）" },
+  "options_useMacros": { "message": "<SERIES_TITLE>、<CHAPTER_NUMBER> などのマクロを使用" },
+  "options_disabled": { "message": "無効" },
+  "options_override": { "message": "オーバーライド" },
+  "options_enabled": { "message": "有効" },
+  "options_enableIntegration": {
+    "message": "$NAME$ を有効化",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_hide": { "message": "非表示" },
+  "options_configure": { "message": "設定" },
+  "options_default3": { "message": "デフォルト：3" },
+  "options_commaSeparatedValues": { "message": "カンマ区切りの値" },
+  "options_activeThisForm": { "message": "アクティブ（このフォーム）" },
+  "options_global": { "message": "グローバル" },
+  "options_msDelay": {
+    "message": "$DELAY$ミリ秒遅延",
+    "placeholders": { "delay": { "content": "$1" } }
+  },
+  "options_defaultValue": {
+    "message": "デフォルト：$VALUE$",
+    "placeholders": { "value": { "content": "$1" } }
+  }
+}
