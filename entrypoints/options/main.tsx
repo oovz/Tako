@@ -105,8 +105,8 @@ function onRenderCallback(
   if (isLoading || !settings || !settingsBuffer) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+        <div className="text-center flex flex-col gap-4">
+          <Loader2 className="size-8 animate-spin mx-auto text-primary" />
           <p className="text-sm text-muted-foreground">Loading settings...</p>
         </div>
       </div>
@@ -122,7 +122,7 @@ function onRenderCallback(
 
         {/* Main Content - following shadcn/ui dashboard patterns */}
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col p-8 pb-24">
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col p-8 pb-24">
             {activeSection === 'global' && (
               <section className="animate-in fade-in slide-in-from-right-4 duration-300">
                 <GlobalSettingsTab

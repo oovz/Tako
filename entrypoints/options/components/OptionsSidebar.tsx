@@ -23,10 +23,10 @@ function NavItem({
     <button
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all',
         active
-          ? 'bg-primary text-primary-foreground'
-          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          ? 'bg-accent text-accent-foreground font-medium border-l-2 border-l-primary'
+          : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
       )}
     >
       <Icon className="size-4" />
@@ -43,7 +43,7 @@ export function OptionsSidebar({ activeSection, onSectionChange }: OptionsSideba
         <span className="text-base font-semibold">Tako Settings</span>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 flex flex-col gap-1 p-3">
         <NavItem
           icon={Settings}
           label="General"
@@ -69,6 +69,9 @@ export function OptionsSidebar({ activeSection, onSectionChange }: OptionsSideba
           onClick={() => onSectionChange('debug')}
         />
       </nav>
+      <div className="border-t border-border/40 px-4 py-3">
+        <span className="text-xs text-muted-foreground">Tako v{chrome.runtime.getManifest().version}</span>
+      </div>
     </aside>
   )
 }

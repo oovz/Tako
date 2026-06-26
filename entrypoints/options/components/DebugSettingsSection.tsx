@@ -24,7 +24,13 @@ export function DebugSettingsSection({
   }
 
   return (
-    <Card>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold text-foreground">About &amp; Debug</h1>
+        <p className="text-sm text-muted-foreground">Extension updates, logging, and history management.</p>
+      </div>
+
+      <Card>
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <Bug className="size-5 text-muted-foreground" />
@@ -32,11 +38,11 @@ export function DebugSettingsSection({
         </div>
         <CardDescription>Debugging options.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="flex flex-col gap-6">
         <div className="grid md:grid-cols-2 gap-6">
           {/* Log Level Selector (replaces debugMode toggle) */}
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="flex flex-col gap-0.5">
               <Label htmlFor="log-level">Log Level</Label>
               <p className="text-sm text-muted-foreground">
                 Console verbosity. Use "debug" for troubleshooting.
@@ -60,5 +66,6 @@ export function DebugSettingsSection({
         </div>
       </CardContent>
     </Card>
+    </div>
   )
 }

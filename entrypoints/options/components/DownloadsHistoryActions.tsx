@@ -18,7 +18,7 @@ export function DownloadsHistoryActions({ historyStorageBytes, showClearHistory,
       <div className="flex justify-end gap-2">
         {showClearHistory && (
           <Button variant="outline" size="sm" onClick={onClearHistory}>
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 data-icon="inline-start" className="size-4" />
             Clear All History
           </Button>
         )}

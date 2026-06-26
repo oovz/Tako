@@ -21,7 +21,7 @@ export function GlobalNotificationsSection({ enabled, onChange }: GlobalNotifica
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
+          <div className="flex flex-col gap-0.5">
             <Label htmlFor="notifications">Enable Notifications</Label>
             <p className="text-sm text-muted-foreground">
               Show browser notifications for download completion and errors.

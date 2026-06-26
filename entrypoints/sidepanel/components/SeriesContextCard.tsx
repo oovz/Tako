@@ -54,7 +54,7 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
       <div className="flex gap-4">
         <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted animate-pulse" />
         <div className="flex flex-1 flex-col justify-between min-w-0">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <div className="h-5 w-36 bg-muted rounded animate-pulse" />
             <div className="h-4 w-28 bg-muted rounded animate-pulse" />
             <div className="flex gap-2">
@@ -72,7 +72,7 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
     return (
       <div className="flex gap-4">
         <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted flex items-center justify-center text-muted-foreground">
-          <BookOpen className="h-8 w-8" />
+          <BookOpen className="size-8" />
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
           <h2 className="font-bold text-base leading-tight">{messageState.title}</h2>
@@ -92,7 +92,7 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
             aria-controls="inline-selection-panel"
             onClick={onToggleInlineSelection}
           >
-            <List className="h-4 w-4" />
+            <List className="size-4" />
             Select Chapters
           </Button>
         </div>
@@ -104,7 +104,7 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
     return (
       <div className="flex gap-4">
         <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted flex items-center justify-center text-muted-foreground">
-          <BookOpen className="h-8 w-8" />
+          <BookOpen className="size-8" />
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
           <h2 className="font-bold text-base leading-tight">No series detected</h2>
@@ -163,18 +163,18 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {hasNoChapters ? (
               <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground">
-                <AlertCircle className="h-3 w-3" />
+                <AlertCircle className="size-3" />
                 No chapters found
               </Badge>
             ) : (
               <>
                 <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 shadow-sm">
-                  <BookOpen className="h-3 w-3" />
+                  <BookOpen className="size-3" />
                   {chaptersCount} Chapters
                 </Badge>
                 {volumeCount > 0 && (
                   <Badge variant="outline" className="text-[10px] h-5 px-2 py-0 gap-1">
-                    <Layers className="h-3 w-3" />
+                    <Layers className="size-3" />
                     {volumeCount} Volumes
                   </Badge>
                 )}
@@ -199,17 +199,17 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
         >
           {hasNoChapters ? (
             <>
-              <List className="h-4 w-4" />
+              <List className="size-4" />
               No chapters
             </>
           ) : isExpanded ? (
             <>
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="size-4" />
               Close Selection
             </>
           ) : (
             <>
-              <List className="h-4 w-4" />
+              <List className="size-4" />
               Select Chapters
             </>
           )}

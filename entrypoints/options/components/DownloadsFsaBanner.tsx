@@ -16,7 +16,7 @@ export function DownloadsFsaBanner({ fsaError, isPickingFolder, onPickFolder, on
     <Card className="border-destructive/40 bg-destructive/5">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <p className="text-sm font-medium text-destructive">Custom download folder requires attention</p>
             <p className="text-xs text-muted-foreground">
               {fsaError.message || 'Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode.'}
@@ -24,7 +24,7 @@ export function DownloadsFsaBanner({ fsaError, isPickingFolder, onPickFolder, on
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onPickFolder} disabled={isPickingFolder}>
-              <Folder className="mr-1 h-3.5 w-3.5" />
+              <Folder data-icon="inline-start" className="size-3.5" />
               Re-select
             </Button>
             <Button variant="ghost" size="sm" onClick={() => void onDismiss()}>

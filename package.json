@@ -1,6 +1,6 @@
 {
   "name": "tako-manga-downloader",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel.",
   "type": "module",
   "scripts": {
@@ -70,6 +70,8 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toggle": "^1.1.12",
+    "@radix-ui/react-toggle-group": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-virtual": "^3.13.19",
     "bottleneck": "^2.19.5",

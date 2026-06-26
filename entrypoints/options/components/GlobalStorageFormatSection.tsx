@@ -25,7 +25,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
         </div>
         <CardDescription>Choose archive format and file organization options.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="flex flex-col gap-6">
         <div className="grid gap-6">
           <ArchiveFormatPicker
             showNoArchiveWarning={showNoArchiveWarning}
@@ -35,7 +35,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="comicinfo">Include ComicInfo.xml</Label>
                 <p className="text-xs text-muted-foreground pr-4">
                   Embed metadata for comic readers
@@ -50,7 +50,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             </div>
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="cover-image">Include Series Cover</Label>
                 <p className="text-xs text-muted-foreground pr-4">
                   Save cover image inside archive
@@ -65,7 +65,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             </div>
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="normalize">Normalize Filenames</Label>
                 <p className="text-xs text-muted-foreground pr-4">
                   Rename images to 001.jpg, 002.jpg...
@@ -80,7 +80,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             </div>
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="overwrite">Overwrite Existing</Label>
                 <p className="text-xs text-muted-foreground pr-4">
                   Replace files if they already exist
@@ -95,7 +95,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             </div>
 
             <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label htmlFor="suppress-save-as">Suppress Save As Dialog</Label>
                 <p className="text-xs text-muted-foreground pr-4">
                   Save to the configured browser download path without opening Chrome&apos;s file chooser
@@ -110,8 +110,8 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="space-y-3">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               <Label htmlFor="download-path" className="text-sm font-medium">Directory Path Template</Label>
               <Input
                 id="download-path"
@@ -126,7 +126,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <Label htmlFor="filename-template" className="text-sm font-medium">Filename Template</Label>
               <Input
                 id="filename-template"
@@ -147,7 +147,7 @@ export function GlobalStorageFormatSection({ downloads, showNoArchiveWarning, on
             />
           </div>
 
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <Label htmlFor="image-padding" className="text-sm font-medium">Image Filename Padding</Label>
             <Select
               value={String(downloads.imagePaddingDigits ?? 'auto')}

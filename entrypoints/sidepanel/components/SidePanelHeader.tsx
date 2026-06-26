@@ -24,28 +24,28 @@ export function SidePanelHeader({
   return (
     <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background shadow-sm z-30">
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-2.5 py-1.5">
-          <Badge
-            variant={activeCount > 0 ? 'default' : 'secondary'}
-            className="h-6 px-2.5 text-xs font-semibold"
-          >
-            <span className="tabular-nums">{activeCount}</span>&nbsp;active
-          </Badge>
-          <Badge variant="secondary" className="h-6 px-2.5 text-xs font-semibold">
-            <span className="tabular-nums">{queuedCount}</span>&nbsp;queued
-          </Badge>
-        </div>
+        <Badge
+          variant={activeCount > 0 ? 'default' : 'secondary'}
+          className="h-6 px-2.5 text-xs font-semibold gap-1"
+        >
+          <span className="tabular-nums">{activeCount}</span>
+          <span>active</span>
+        </Badge>
+        <Badge variant="secondary" className="h-6 px-2.5 text-xs font-semibold gap-1">
+          <span className="tabular-nums">{queuedCount}</span>
+          <span>queued</span>
+        </Badge>
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="relative h-9 w-9"
+            className="relative size-9"
             onClick={onOpenSettings}
             aria-label={settingsLabel}
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="size-5" />
             {hasOptionsActionItems && (
               <span
                 aria-hidden="true"

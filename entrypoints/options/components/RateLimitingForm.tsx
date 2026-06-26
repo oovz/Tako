@@ -51,9 +51,9 @@ export function RateLimitingForm({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {showConcurrency && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center">
             <Label htmlFor={`${scope}-concurrency`}>
               {capitalizedScope} Concurrency
@@ -80,7 +80,7 @@ export function RateLimitingForm({
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <div className="flex items-center">
           <Label htmlFor={`${scope}-delay`}>
             {capitalizedScope} Delay (ms)
@@ -110,7 +110,7 @@ export function RateLimitingForm({
       {showHierarchy && (globalValue || siteIntegrationDefault) && (
         <div className="rounded-md bg-muted p-3 text-sm">
           <p className="font-medium mb-2">Policy Hierarchy:</p>
-          <ul className="space-y-1 text-xs text-muted-foreground">
+          <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
             {value.concurrency != null || value.delayMs != null ? (
               <li>✓ <strong>Override</strong>: Active (this form)</li>
             ) : null}

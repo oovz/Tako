@@ -84,8 +84,8 @@ export function SiteIntegrationManagementTab({
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <div className="min-w-0 space-y-6">
-        <div className="space-y-2">
+      <div className="min-w-0 flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold text-foreground">Site Integrations</h2>
             <Badge variant="secondary" className="h-5 px-2 text-[10px] font-medium text-muted-foreground">
@@ -100,7 +100,7 @@ export function SiteIntegrationManagementTab({
 
         {/* Search Input */}
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search site integrations by name or domain..."
             value={search}
@@ -111,8 +111,8 @@ export function SiteIntegrationManagementTab({
 
         {/* Override Summary Banner */}
         {overrideCount > 0 && (
-          <div className="rounded-md border border-yellow-500/25 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400">
-            <Badge variant="outline" className="mr-2 border-yellow-500/40 bg-transparent text-[10px] font-medium text-current">
+          <div className="rounded-md border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-foreground">
+            <Badge variant="outline" className="mr-2 border-primary/40 bg-transparent text-[10px] font-medium text-current">
               Overrides
             </Badge>
             You have active overrides for {overrideCount} {overrideCount !== 1 ? 'integrations' : 'integration'}.
@@ -120,7 +120,7 @@ export function SiteIntegrationManagementTab({
         )}
 
         {/* Site Integration List */}
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0 flex flex-col gap-4">
           {sortedIntegrations.length === 0 ? (
             <div className="rounded-md border border-dashed border-border/80 bg-muted/10 py-12 text-center">
               <div className="text-muted-foreground">

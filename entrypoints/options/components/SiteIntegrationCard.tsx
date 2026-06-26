@@ -100,14 +100,14 @@ export function SiteIntegrationCard({
         !isEnabled
           ? "bg-muted/15"
           : hasOverrides
-            ? "border-yellow-500/35 bg-yellow-500/5"
+            ? "border-primary/30 bg-primary/5"
             : "hover:border-border",
       )}
     >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CardHeader className="gap-0 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1.5">
+            <div className="min-w-0 flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <CardTitle className="text-base font-semibold">{siteIntegration.name}</CardTitle>
                 {!isEnabled && (
@@ -116,7 +116,7 @@ export function SiteIntegrationCard({
                   </Badge>
                 )}
                 {hasOverrides && (
-                  <Badge variant="outline" className="h-5 border-yellow-500/50 bg-yellow-500/10 px-2 text-[10px] font-medium text-yellow-700">
+                  <Badge variant="outline" className="h-5 border-primary/40 bg-primary/10 px-2 text-[10px] font-medium text-foreground">
                     Override
                   </Badge>
                 )}
@@ -150,11 +150,11 @@ export function SiteIntegrationCard({
         </CardHeader>
 
         <CollapsibleContent className="border-t border-border/60">
-          <CardContent className="space-y-6 px-5 py-5">
+          <CardContent className="flex flex-col gap-6 px-5 py-5">
             {/* Download Settings */}
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold">Download Settings</h4>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor={`${siteIntegration.id}-format`}>
                   Archive Format
                   {override?.outputFormat !== undefined && (
@@ -182,7 +182,7 @@ export function SiteIntegrationCard({
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor={`${siteIntegration.id}-path`}>
                   Download Path Template
                   {override?.pathTemplate !== undefined && (
@@ -202,7 +202,7 @@ export function SiteIntegrationCard({
             </div>
 
             {/* Rate Limiting - Image */}
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold">Rate Limiting - Images</h4>
               <RateLimitingForm
                 scope="image"
@@ -217,7 +217,7 @@ export function SiteIntegrationCard({
             </div>
 
             {/* Rate Limiting - Chapter */}
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold">Rate Limiting - Chapters</h4>
               <RateLimitingForm
                 scope="chapter"
@@ -233,10 +233,10 @@ export function SiteIntegrationCard({
             </div>
 
             {/* Retry Settings */}
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               <h4 className="text-sm font-semibold">Retry Settings</h4>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor={`${siteIntegration.id}-image-retries`}>Image Retries</Label>
                   <Input
                     id={`${siteIntegration.id}-image-retries`}
@@ -253,7 +253,7 @@ export function SiteIntegrationCard({
                     placeholder="Default: 3"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor={`${siteIntegration.id}-chapter-retries`}>Chapter Retries</Label>
                   <Input
                     id={`${siteIntegration.id}-chapter-retries`}
@@ -274,9 +274,9 @@ export function SiteIntegrationCard({
             </div>
 
             {customSettings.length > 0 && (
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3">
                 <h4 className="text-sm font-semibold">Custom settings</h4>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   {customSettings.map((schema) => {
                     const enabled = isCustomSettingEnabled(schema)
                     const effectiveValue = getEffectiveCustomValue(schema)
@@ -294,10 +294,10 @@ export function SiteIntegrationCard({
                     return (
                       <div
                         key={`${siteIntegration.id}-${schema.id}`}
-                        className="space-y-3 rounded-md border border-border/70 p-4"
+                        className="flex flex-col gap-3 rounded-md border border-border/70 p-4"
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
+                          <div className="flex flex-col gap-1">
                             <Label htmlFor={customSettingControlId} className="font-medium">
                               {schema.label}
                             </Label>

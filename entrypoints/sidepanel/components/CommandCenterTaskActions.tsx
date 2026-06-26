@@ -44,15 +44,22 @@ export function CommandCenterTaskActions({
           <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin" />
         </Button>
       ) : canCancel ? (
-        <Button
-          aria-label="Cancel"
-          variant="ghost"
-          size="icon"
-          className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onBeginCancel(taskId)}
-        >
-          <XCircle aria-hidden="true" data-icon="inline-start" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label="Cancel"
+              variant="ghost"
+              size="icon"
+              className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => onBeginCancel(taskId)}
+            >
+              <XCircle aria-hidden="true" data-icon="inline-start" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">
+            Cancel download
+          </TooltipContent>
+        </Tooltip>
       ) : null}
 
       {status === 'partial_success' && !isRetried && (
@@ -95,15 +102,22 @@ export function CommandCenterTaskActions({
       )}
 
       {canMoveToTop && (
-        <Button
-          aria-label="Move task to top"
-          variant="ghost"
-          size="icon"
-          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
-          onClick={() => onMoveTaskToTop?.(taskId)}
-        >
-          <ArrowUp aria-hidden="true" data-icon="inline-start" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label="Move task to top"
+              variant="ghost"
+              size="icon"
+              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => onMoveTaskToTop?.(taskId)}
+            >
+              <ArrowUp aria-hidden="true" data-icon="inline-start" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="text-xs">
+            Move to top
+          </TooltipContent>
+        </Tooltip>
       )}
 
       {canRemove && (

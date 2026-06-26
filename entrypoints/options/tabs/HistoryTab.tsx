@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 
 interface HistoryStats {
   totalChapters: number
@@ -85,7 +86,7 @@ export function HistoryTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Statistics Card */}
       <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -127,10 +128,10 @@ export function HistoryTab({
               Remove stored chapter history records without affecting files already saved on disk.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="flex flex-col gap-6">
             {/* Clear All History */}
             <div className="flex items-center justify-between">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label className="text-base font-medium">Clear All History</Label>
                 <p className="text-sm text-muted-foreground">
                   Remove all download history for all series
@@ -142,7 +143,7 @@ export function HistoryTab({
                     variant="destructive"
                     disabled={isClearing || (stats?.totalChapters ?? 0) === 0}
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
+                    <Trash2 data-icon="inline-start" className="size-4" />
                     Clear Everything
                   </Button>
                 </DialogTrigger>
@@ -150,7 +151,7 @@ export function HistoryTab({
                   <DialogHeader>
                     <DialogTitle>Clear All Download History?</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4">
+                  <div className="flex flex-col gap-4">
                     <p className="text-sm">
                       This will permanently delete records for <strong>{stats?.totalChapters ?? 0} chapters</strong> across <strong>{stats?.totalSeries ?? 0} series</strong>.
                     </p>
@@ -170,7 +171,7 @@ export function HistoryTab({
                         onClick={handleClearAll}
                         disabled={isClearing}
                       >
-                        {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isClearing && <Loader2 data-icon="inline-start" className="size-4 animate-spin" />}
                         Yes, Clear All
                       </Button>
                     </div>
@@ -179,11 +180,11 @@ export function HistoryTab({
               </Dialog>
             </div>
 
-            <div className="h-px bg-border/10 w-full" />
+            <Separator />
 
             {/* Clear Series History */}
             <div className="flex items-center justify-between">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label className="text-base font-medium">Clear Specific Series</Label>
                 <p className="text-sm text-muted-foreground">
                   Remove download history for a single series
@@ -202,8 +203,8 @@ export function HistoryTab({
                   <DialogHeader>
                     <DialogTitle>Clear Series History</DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
                       <Label htmlFor="series-select">Select Series</Label>
                       <Select
                         value={selectedSeriesToClear}
@@ -248,7 +249,7 @@ export function HistoryTab({
                         onClick={handleClearSeries}
                         disabled={isClearing || !selectedSeriesToClear}
                       >
-                        {isClearing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isClearing && <Loader2 data-icon="inline-start" className="size-4 animate-spin" />}
                         Clear Selected
                       </Button>
                     </div>

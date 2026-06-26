@@ -91,7 +91,7 @@ export function CommandCenterTaskRow({
           'group relative flex items-center gap-2.5 px-3 py-2 border-b border-border/50',
           'transition-colors duration-100',
           'hover:bg-muted/30',
-          isActive && 'bg-muted/40 border-l-2 border-l-foreground',
+          isActive && 'bg-muted/40 border-l-2 border-l-primary',
         )}
       >
         {isConfirmingCancel && (
@@ -106,7 +106,7 @@ export function CommandCenterTaskRow({
         )}
 
         {/* Thumbnail */}
-        <div className="h-10 w-7 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50">
+        <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50">
           <img
             src={coverSrc}
             alt=""
@@ -129,12 +129,12 @@ export function CommandCenterTaskRow({
           )}
         >
           {/* Content */}
-          <div className="flex-1 min-w-0 space-y-0.5">
+          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
             <div className="flex items-center gap-1.5">
               <h3 className="font-semibold text-sm truncate" title={task.seriesTitle}>
                 {task.seriesTitle}
               </h3>
-              <Badge variant="outline" className="text-[9px] h-4 px-1.5 py-0 font-normal shrink-0">
+              <Badge variant="outline" className="text-[11px] h-4 px-1.5 py-0 font-normal shrink-0">
                 {getSiteIntegrationDisplayName(task.siteIntegration)}
               </Badge>
             </div>
@@ -152,14 +152,14 @@ export function CommandCenterTaskRow({
 
             {/* Failure message */}
             {failureMessage && (
-              <div className="text-[9px] text-destructive truncate select-text" title={task.failureReason}>
+              <div className="text-[11px] text-destructive truncate select-text" title={task.failureReason}>
                 {failureMessage}
               </div>
             )}
 
             {/* Retry blocked message for failed tasks */}
             {retryBlockedMessage && (
-              <div className="text-[9px] text-muted-foreground">
+              <div className="text-[11px] text-muted-foreground">
                 {retryBlockedMessage}
               </div>
             )}

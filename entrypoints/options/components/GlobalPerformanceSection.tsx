@@ -25,7 +25,7 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-8">
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <div className="flex justify-between items-center">
               <Label>Image Concurrency</Label>
               <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-foreground font-medium">
@@ -46,7 +46,7 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <Label>Image Request Delay (ms)</Label>
             <Input
               data-testid="request-delay-input"
@@ -63,7 +63,7 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <Label>Chapter Delay (ms)</Label>
             <Input
               data-testid="chapter-delay-input"

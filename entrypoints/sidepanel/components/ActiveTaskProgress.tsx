@@ -84,7 +84,7 @@ export function ActiveTaskProgress({ task, progress, inline = false }: ActiveTas
 
       <Progress
         value={progressDisplayValue}
-        className={cn('bg-border/70 [&>div]:bg-primary/85 [&>div]:rounded-none rounded-none', inline ? 'h-1' : 'h-1.5')}
+        className={cn('bg-border/70 [&>div]:bg-primary [&>div]:rounded-none rounded-none', inline ? 'h-1' : 'h-2')}
       />
 
       <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">

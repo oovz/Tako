@@ -22,7 +22,7 @@ export function GlobalRetrySection({ retries, onChange }: GlobalRetrySectionProp
       </CardHeader>
       <CardContent>
         <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <Label htmlFor="image-retries">Image Retries</Label>
             <Input
               id="image-retries"
@@ -39,7 +39,7 @@ export function GlobalRetrySection({ retries, onChange }: GlobalRetrySectionProp
             </p>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <Label htmlFor="chapter-retries">Chapter Retries</Label>
             <Input
               id="chapter-retries"

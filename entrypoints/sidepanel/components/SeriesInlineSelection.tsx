@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/src/shared/utils'
 import type { SidePanelChapter } from '@/entrypoints/sidepanel/types'
 import type { ChapterSelectionsBySeries } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
@@ -101,7 +102,7 @@ export function SeriesInlineSelection({
         <div className="px-3 py-2 bg-muted/50 border-b border-border">
           <div className="h-4 w-24 bg-muted rounded animate-pulse" />
         </div>
-        <div className="flex-1 p-3 space-y-2">
+        <div className="flex-1 p-3 flex flex-col gap-2">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="h-8 bg-muted rounded animate-pulse" />
           ))}
@@ -127,7 +128,7 @@ export function SeriesInlineSelection({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="sticky top-0 z-10 border-b border-border bg-background">
-        <div className="space-y-2 px-3 py-2.5">
+        <div className="flex flex-col gap-2 px-3 py-2.5">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <label
@@ -149,45 +150,29 @@ export function SeriesInlineSelection({
           </div>
 
           {viewSummary.canToggleView && (
-            <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
-              <Button
-                type="button"
-                variant={viewMode === 'volumes' ? 'secondary' : 'ghost'}
-                size="sm"
-                className={cn(
-                  'h-8 justify-center rounded-sm px-2 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none',
-                  viewMode === 'volumes'
-                    ? 'bg-background text-foreground shadow-none hover:bg-background'
-                    : 'text-muted-foreground hover:bg-background hover:text-foreground',
-                )}
-                aria-pressed={viewMode === 'volumes'}
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(value) => {
+                if (value === 'volumes' || value === 'chapters') setViewMode(value)
+              }}
+              className="rounded-md bg-muted p-1"
+            >
+              <ToggleGroupItem
+                value="volumes"
                 aria-label="Group by Volume"
-                onClick={() => {
-                  if (viewMode !== 'volumes') setViewMode('volumes')
-                }}
+                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
                 Volumes
-              </Button>
-
-              <Button
-                type="button"
-                variant={viewMode === 'chapters' ? 'secondary' : 'ghost'}
-                size="sm"
-                className={cn(
-                  'h-8 justify-center rounded-sm px-2 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none',
-                  viewMode === 'chapters'
-                    ? 'bg-background text-foreground shadow-none hover:bg-background'
-                    : 'text-muted-foreground hover:bg-background hover:text-foreground',
-                )}
-                aria-pressed={viewMode === 'chapters'}
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="chapters"
                 aria-label="Show All Chapters"
-                onClick={() => {
-                  if (viewMode !== 'chapters') setViewMode('chapters')
-                }}
+                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
                 All chapters
-              </Button>
-            </div>
+              </ToggleGroupItem>
+            </ToggleGroup>
           )}
         </div>
       </div>
@@ -217,12 +202,12 @@ export function SeriesInlineSelection({
           >
             {download.showSuccess ? (
               <>
-                <Check className="h-4 w-4" />
+                <Check className="size-4" />
                 Added to Queue!
               </>
             ) : (
               <>
-                <Download className="h-4 w-4" />
+                <Download className="size-4" />
                 Download ({selectedCount})
               </>
             )}

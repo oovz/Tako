@@ -2,8 +2,8 @@ import React, { useCallback } from 'react'
 
 import { AlertTriangle, Folder } from 'lucide-react'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { openOptionsPage } from '@/src/runtime/open-options'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
@@ -62,28 +62,24 @@ export function FsaBanner({ className }: FsaBannerProps) {
   }
 
   return (
-    <Card className={className ?? 'border-destructive/40 bg-destructive/5'}>
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-destructive">Custom download folder requires attention</p>
-            <p className="text-xs text-muted-foreground">
-              {fsaError.message || 'Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode.'}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={openOptions}>
-              <Folder className="mr-1 h-3.5 w-3.5" />
-              Re-select
-            </Button>
-            <Button variant="ghost" size="sm" onClick={dismiss}>
-              <AlertTriangle className="mr-1 h-3.5 w-3.5" />
-              Dismiss
-            </Button>
-          </div>
+    <Alert variant="destructive" className={className}>
+      <AlertTriangle className="size-4" />
+      <AlertTitle>Custom download folder requires attention</AlertTitle>
+      <AlertDescription className="flex items-start justify-between gap-3">
+        <span>
+          {fsaError.message || 'Your custom folder handle is invalid. Re-select a folder to continue using custom destination mode.'}
+        </span>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={openOptions}>
+            <Folder data-icon="inline-start" className="size-3.5" />
+            Re-select
+          </Button>
+          <Button variant="ghost" size="sm" onClick={dismiss}>
+            Dismiss
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      </AlertDescription>
+    </Alert>
   )
 }
 

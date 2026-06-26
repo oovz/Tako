@@ -30,9 +30,9 @@ export function DownloadTaskGroups({
   onRemove,
 }: DownloadTaskGroupsProps) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <DownloadTaskSection
-        icon={<Download className="h-4 w-4" />}
+        icon={<Download className="size-4" />}
         tasks={activeTasks}
         title="Active Downloads"
         onCancel={onCancel}
@@ -42,7 +42,7 @@ export function DownloadTaskGroups({
       />
 
       <DownloadTaskSection
-        icon={<Clock className="h-4 w-4" />}
+        icon={<Clock className="size-4" />}
         tasks={queuedTasks}
         title="Queued"
         onCancel={onCancel}
@@ -52,7 +52,7 @@ export function DownloadTaskGroups({
       />
 
       <DownloadTaskSection
-        icon={<CheckCircle className="h-4 w-4" />}
+        icon={<CheckCircle className="size-4" />}
         tasks={completedTasks}
         title="Completed"
         titleClassName="text-primary"
@@ -63,7 +63,7 @@ export function DownloadTaskGroups({
       />
 
       <DownloadTaskSection
-        icon={<XCircle className="h-4 w-4" />}
+        icon={<XCircle className="size-4" />}
         tasks={failedTasks}
         title="Failed / Partial"
         titleClassName="text-destructive"
@@ -74,7 +74,7 @@ export function DownloadTaskGroups({
       />
 
       <DownloadTaskSection
-        icon={<AlertCircle className="h-4 w-4" />}
+        icon={<AlertCircle className="size-4" />}
         tasks={canceledTasks}
         title="Canceled"
         onCancel={onCancel}
@@ -86,7 +86,7 @@ export function DownloadTaskGroups({
       {tasks.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
-            <Download className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+            <Download className="size-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-medium mb-2">No downloads yet</h3>
             <p className="text-sm text-muted-foreground">
               Open a manga series page to start downloading.

@@ -55,7 +55,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "Tako Manga Downloader",
-    version: "1.4.3",
+    version: "1.4.4",
     description: "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel.",
     minimum_chrome_version: "122",
     permissions: [

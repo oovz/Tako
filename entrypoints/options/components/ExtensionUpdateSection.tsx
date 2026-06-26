@@ -22,7 +22,7 @@ const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/tako-mang
 
 function statusClasses(tone: ReturnType<typeof getChromeWebStoreUpdateStatusCopy>['tone']): string {
   if (tone === 'success') return 'border-primary/30 bg-primary/5 text-foreground'
-  if (tone === 'warning') return 'border-amber-500/40 bg-amber-500/10 text-foreground'
+  if (tone === 'warning') return 'border-primary/30 bg-primary/5 text-foreground'
   if (tone === 'error') return 'border-destructive/40 bg-destructive/10 text-foreground'
   return 'border-border bg-muted/40 text-foreground'
 }
@@ -32,7 +32,7 @@ function StatusIcon({ tone }: { tone: ReturnType<typeof getChromeWebStoreUpdateS
     return <CheckCircle2 aria-hidden="true" className="size-4 text-primary" />
   }
 
-  return <TriangleAlert aria-hidden="true" className={cn('size-4', tone === 'error' ? 'text-destructive' : 'text-amber-600')} />
+  return <TriangleAlert aria-hidden="true" className={cn('size-4', tone === 'error' ? 'text-destructive' : 'text-primary')} />
 }
 
 export function ExtensionUpdateSection() {
@@ -100,7 +100,7 @@ export function ExtensionUpdateSection() {
         </div>
         <CardDescription>Manual update check through Chrome&apos;s extension update service.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground" translate="no">
             Installed version {currentVersion}

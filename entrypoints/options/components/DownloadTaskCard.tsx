@@ -88,8 +88,8 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={() => setIsChapterListExpanded((currentValue) => !currentValue)}
@@ -97,9 +97,9 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
             aria-expanded={isChapterListExpanded}
           >
             {isChapterListExpanded ? (
-              <ChevronDown className="h-4 w-4 shrink-0" />
+              <ChevronDown className="size-4 shrink-0" />
             ) : (
-              <ChevronRight className="h-4 w-4 shrink-0" />
+              <ChevronRight className="size-4 shrink-0" />
             )}
             <span>{getTaskStatusSummaryLabel(task)}</span>
           </button>
@@ -139,21 +139,21 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
         <div className="flex gap-2 pt-2">
           {task.status === 'downloading' && (
             <Button variant="outline" size="sm" onClick={() => setConfirmingCancel(true)}>
-              <XCircle className="mr-1 h-4 w-4" />
+              <XCircle data-icon="inline-start" className="size-4" />
               Cancel
             </Button>
           )}
 
           {task.status === 'queued' && (
             <Button variant="outline" size="sm" onClick={() => setConfirmingCancel(true)}>
-              <XCircle className="mr-1 h-4 w-4" />
+              <XCircle data-icon="inline-start" className="size-4" />
               Cancel
             </Button>
           )}
 
           {task.status === 'completed' && (
             <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
-              <Trash2 className="mr-1 h-4 w-4" />
+              <Trash2 data-icon="inline-start" className="size-4" />
               Remove
             </Button>
           )}
@@ -161,15 +161,15 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
           {task.status === 'partial_success' && !isRetried && (
             <>
               <Button variant="outline" size="sm" onClick={() => void onRetry(task.id)}>
-                <RotateCcw className="mr-1 h-4 w-4" />
+                <RotateCcw data-icon="inline-start" className="size-4" />
                 Retry failed chapters
               </Button>
               <Button variant="outline" size="sm" onClick={() => void onRestart(task.id)}>
-                <RotateCcw className="mr-1 h-4 w-4" />
+                <RotateCcw data-icon="inline-start" className="size-4" />
                 Restart
               </Button>
               <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
-                <Trash2 className="mr-1 h-4 w-4" />
+                <Trash2 data-icon="inline-start" className="size-4" />
                 Remove
               </Button>
             </>
@@ -179,12 +179,12 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
             <>
               {!isRetried && (
                 <Button variant="outline" size="sm" onClick={() => void onRestart(task.id)}>
-                  <RotateCcw className="mr-1 h-4 w-4" />
+                  <RotateCcw data-icon="inline-start" className="size-4" />
                   Restart
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => void onRemove(task.id)}>
-                <Trash2 className="mr-1 h-4 w-4" />
+                <Trash2 data-icon="inline-start" className="size-4" />
                 Remove
               </Button>
             </>

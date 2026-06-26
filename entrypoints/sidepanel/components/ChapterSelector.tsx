@@ -2,7 +2,6 @@ import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronRight } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/src/shared/utils'
 import type { SidePanelChapter, VolumeOrChapter } from '@/entrypoints/sidepanel/types'
@@ -189,7 +188,7 @@ export function ChapterSelector({
         >
           <ChevronRight
             className={cn(
-              'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
+              'size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out motion-reduce:transition-none',
               row.isExpanded && 'rotate-90',
             )}
           />
@@ -205,18 +204,6 @@ export function ChapterSelector({
             </span>
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">{row.chapterCount}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
-            onClick={(event) => {
-              event.stopPropagation()
-              onVolumeSelectAll(row.groupId)
-            }}
-            disabled={row.selectableChapterCount === 0 || isEnqueuing}
-          >
-            Select All
-          </Button>
         </div>
       </div>
     )

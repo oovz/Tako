@@ -47,6 +47,11 @@ export function GlobalSettingsTab({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold text-foreground">General Settings</h1>
+        <p className="text-sm text-muted-foreground">Configure download formats, performance, retries, and notifications.</p>
+      </div>
+
       {/* Section 1: Storage & Formats */}
       <GlobalStorageFormatSection
         downloads={settings.downloads}

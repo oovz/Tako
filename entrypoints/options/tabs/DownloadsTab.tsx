@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
 import { DownloadDestinationSection } from '@/entrypoints/options/components/DownloadDestinationSection'
@@ -67,7 +68,7 @@ export function DownloadsTab({
     return (
       <Card>
         <CardContent className="p-12 text-center">
-          <div className="h-8 w-8 mx-auto mb-4 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <Loader2 className="size-8 mx-auto mb-4 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Loading downloads...</p>
         </CardContent>
       </Card>
@@ -76,6 +77,11 @@ export function DownloadsTab({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold text-foreground">Downloads</h1>
+        <p className="text-sm text-muted-foreground">Manage download destination and monitor active tasks.</p>
+      </div>
+
       {fsaError?.active && (
         <DownloadsFsaBanner
           fsaError={fsaError}

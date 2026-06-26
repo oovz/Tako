@@ -37,12 +37,12 @@ export function PathVisualization({ template, filenameTemplate }: PathVisualizat
   const hasWarnings = pathResult.warnings.length > 0 || filenameResult.warnings.length > 0
 
   return (
-    <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
+    <div className="rounded-md border border-border/50 bg-muted/20 p-3 flex flex-col gap-2">
       <div className="flex items-start gap-2">
         {hasErrors ? (
-          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+          <AlertCircle className="size-4 text-destructive mt-0.5 flex-shrink-0" />
         ) : (
-          <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+          <CheckCircle2 className="size-4 text-primary mt-0.5 flex-shrink-0" />
         )}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium mb-1">
@@ -58,7 +58,7 @@ export function PathVisualization({ template, filenameTemplate }: PathVisualizat
             </p>
           )}
           {hasWarnings && (
-            <p className="text-xs text-yellow-600 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               ⚠️ {pathResult.warnings.concat(filenameResult.warnings).join('; ')}
             </p>
           )}

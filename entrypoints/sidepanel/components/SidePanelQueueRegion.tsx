@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { Download } from 'lucide-react'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 
@@ -55,7 +56,7 @@ export function SidePanelQueueRegion({
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col bg-background', isInlineSelectionOpen && 'flex-shrink-0')}>
       {isLoading && (
-        <div className="space-y-2 p-3" aria-label="queue-loading-skeleton">
+        <div className="flex flex-col gap-2 p-3" aria-label="queue-loading-skeleton">
           <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
           <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
           <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
@@ -136,6 +137,7 @@ export function SidePanelQueueRegion({
 
       {!isLoading && !isInlineSelectionOpen && !hasAnyTask && (
         <div className="p-6 text-center">
+          <Download className="size-8 mx-auto mb-2 text-muted-foreground/50" aria-hidden="true" />
           <h3 className="font-medium text-sm mb-1">No downloads yet</h3>
           <p className="text-xs text-muted-foreground">
             Use "Select Chapters" above to start downloading
