@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/oovz/Tako/discussions
+    about: Use Discussions for questions, usage help, and general chat.
+  - name: Read the docs
+    url: https://github.com/oovz/Tako/wiki/Quick-Start
+    about: Check the quick-start guide before opening an issue.
