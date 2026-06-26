@@ -7,8 +7,9 @@ name: Publish Wiki
 # Requires `permissions: contents: write` (set below).
 #
 # Prerequisite:
-#   The wiki must be initialized via the GitHub web UI (create at least one
-#   page). If it hasn't been, the workflow will attempt to bootstrap it.
+#   The wiki must be initialized via the GitHub web UI first — go to the
+#   repo's Wiki tab and create at least one page. This creates the *.wiki.git
+#   remote that this workflow pushes to. Without it, the clone will fail.
 
 on:
   push:
@@ -46,19 +47,12 @@ jobs:
           tmp_dir="$(mktemp -d)"
           echo "Cloning wiki into $tmp_dir"
 
-          # Try cloning. If the wiki has never been initialized, bootstrap it.
+          # Clone the wiki repo. This fails if the wiki hasn't been initialized
+          # via the GitHub web UI (the *.wiki.git remote doesn't exist until the
+          # first page is created there). Bootstrapping via git push is not possible.
           if ! git clone --depth 1 "$wiki_url" "$tmp_dir" 2>/dev/null; then
-            echo "::warning::Wiki repo not yet initialized. Bootstrapping it."
-            cd "$tmp_dir"
-            git init -b master
-            echo "# ${repo##*/}" > Home.md
-            git add Home.md
-            git -c user.name="github-actions[bot]" \
-                -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-                commit -m "init wiki"
-            git remote add origin "$wiki_url"
-            git push -u origin master
-            cd -
+            echo "::error::Wiki repo not found. Go to https://github.com/${repo}/wiki and create at least one page to initialize it, then re-run this workflow."
+            exit 1
           fi
 
           # Remove all tracked files (keep .git) so deletions propagate.
