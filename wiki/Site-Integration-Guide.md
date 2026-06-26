@@ -1,6 +1,6 @@
 # Contributing a Site Integration
 
-This guide explains how to add or maintain a supported-site integration for Tako.
+This guide covers how to add or maintain a supported-site integration for Tako.
 
 ## What a site integration owns
 
@@ -137,11 +137,11 @@ The fields have separate responsibilities:
 
 | Field | Responsibility |
 |---|---|
-| `VolumeState.id` | Opaque, deterministic group key scoped to the current series state. It is not user-visible and does not need to be numeric. |
+| `VolumeState.id` | Opaque, deterministic group key scoped to the current series state. Not user-visible, not numeric. |
 | `VolumeState.title` / `VolumeState.label` | User-visible group text from the site. Prefer the site label when it exists, including localized labels such as Manhuagui `单行本`, `番外篇`, and `连载`. |
 | `Chapter.volumeId` | Reference to `VolumeState.id`; this is what the Side Panel uses for explicit grouping. |
 | `Chapter.volumeLabel` | Per-chapter copy of the source volume/category label for display fallback, debugging, templates, and downstream metadata. |
-| `Chapter.volumeNumber` | Parsed numeric volume metadata when available. This is useful for ComicInfo/template output and numeric fallback sorting, but it is not the group identity. |
+| `Chapter.volumeNumber` | Parsed numeric volume metadata when available. Useful for ComicInfo/template output and numeric fallback sorting, but not the group identity. |
 
 For sites like Manhuagui, each chapter-list heading should become one `VolumeState` entry. Chapters under that heading should set `volumeId` to the corresponding entry's `id` and should preserve the heading text as `volumeLabel`. The Side Panel displays the explicit `VolumeState.title` / `label` first and falls back to `Chapter.volumeLabel` or `Volume {volumeNumber}` only when the explicit label is absent.
 
@@ -246,5 +246,5 @@ After a build, inspect `.output/chrome-mv3/manifest.json` and confirm your domai
 
 ## Related docs
 
-- `ARCHITECTURE.md` - core runtime, storage, messaging, and state flow
-- `TEMPLATE-MACROS.md` - path and filename template reference
+- [Architecture](Architecture) — core runtime, storage, messaging, and state flow
+- [Template Macros](Template-Macros) — path and filename template reference

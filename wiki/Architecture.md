@@ -1,14 +1,10 @@
-# Tako Architecture Guide
+# Architecture
 
-This is the main contributor guide for Tako's core extension architecture.
+Tako is a Chrome Manifest V3 extension built around a service-worker-first architecture. The service worker owns all queue mutations and durable runtime orchestration. The Side Panel and options page are reactive clients. Heavy chapter work moves into a single offscreen document. Content scripts handle supported-page detection and extraction.
 
 If you are changing queue behavior, background state, side panel UX, options flows, storage, or test infrastructure, start here.
 
 ## System overview
-
-Tako is a Chrome Manifest V3 extension built around a service-worker-first architecture.
-
-The service worker owns all queue mutations and durable runtime orchestration. The Side Panel and options page are reactive clients. Heavy chapter work moves into a single offscreen document. Content scripts stay focused on supported-page detection and extraction.
 
 ```mermaid
 flowchart LR
@@ -24,7 +20,7 @@ flowchart LR
 
 ## Runtime surfaces
 
-| Surface | Main location | What it owns | What it must not own |
+| Surface | Location | Owns | Must not own |
 |---|---|---|---|
 | Background service worker | `entrypoints/background/` | Queue lifecycle, startup, storage projection, sender resolution, offscreen lifecycle, notifications | DOM-heavy work, long-lived in-memory truth |
 | Content script | `entrypoints/content/` | Supported-page detection, chapter extraction, page-scoped metadata, preference bridges | Global queue state, privileged Chrome download work |
@@ -34,26 +30,19 @@ flowchart LR
 
 ## Core architectural rules
 
-- **The service worker is the mutation authority.**  
-  Queue and settings changes flow through the background runtime, not direct UI storage writes.
+- **The service worker is the mutation authority.** Queue and settings changes flow through the background runtime, not direct UI storage writes.
 
-- **Listeners register synchronously.**  
-  MV3 can drop wake-up events when listener registration waits on async startup work.
+- **Listeners register synchronously.** MV3 can drop wake-up events when listener registration waits on async startup work.
 
-- **Session storage powers reactive UI.**  
-  The Side Panel and options page subscribe to projected state instead of waiting for ad hoc push messages.
+- **Session storage powers reactive UI.** The Side Panel and options page subscribe to projected state instead of waiting for ad hoc push messages.
 
-- **Offscreen handles heavy document work.**  
-  Archive creation, image transforms, DOMParser/iframe-based scraping, and similar web-API work belong in the offscreen document, not the service worker. Offscreen documents have DOM access but only the `chrome.runtime` extension API, so storage and privileged Chrome API calls still route through the service worker.
+- **Offscreen handles heavy document work.** Archive creation, image transforms, DOMParser/iframe-based scraping, and similar web-API work belong in the offscreen document, not the service worker. Offscreen documents have DOM access but only the `chrome.runtime` extension API, so storage and privileged Chrome API calls still route through the service worker.
 
-- **Site integration runtimes are context-scoped.**  
-  The manifest is metadata-only. Runtimes are statically imported through generated registries under `src/runtime/generated/`. Content scripts load only `content-runtime.ts`, the service worker loads only `background-runtime.ts`, and offscreen loads only `offscreen-runtime.ts`. Because MV3 service workers do not support dynamic `import()`, a content script that needs API-backed series data sends `FETCH_SERIES_DATA` to the service worker instead of importing background or offscreen modules directly. The registry generator, ESLint rules, and `tests/unit/site-integration-context-boundaries.spec.ts` enforce these boundaries.
+- **Site integration runtimes are context-scoped.** The manifest is metadata-only. Runtimes are statically imported through generated registries under `src/runtime/generated/`. Content scripts load only `content-runtime.ts`, the service worker loads only `background-runtime.ts`, and offscreen loads only `offscreen-runtime.ts`. Because MV3 service workers do not support dynamic `import()`, a content script that needs API-backed series data sends `FETCH_SERIES_DATA` to the service worker instead of importing background or offscreen modules directly. The registry generator, ESLint rules, and `tests/unit/site-integration-context-boundaries.spec.ts` enforce these boundaries.
 
-- **Site integrations stay integration-agnostic at the contract boundary.**  
-  Shared message types stay generic. Integration-specific runtime data travels through `integrationContext`.
+- **Site integrations stay integration-agnostic at the contract boundary.** Shared message types stay generic. Integration-specific runtime data travels through `integrationContext`.
 
-- **Volume grouping is explicit.**  
-  Integrations that know the source site's chapter categories should provide `MangaPageState.volumes[]` and set `Chapter.volumeId` to those opaque IDs. `Volume.title` / `label` and `Chapter.volumeLabel` preserve the site-visible label; `volumeNumber` is numeric metadata for fallback ordering, not identity.
+- **Volume grouping is explicit.** Integrations that know the source site's chapter categories should provide `MangaPageState.volumes[]` and set `Chapter.volumeId` to those opaque IDs. `Volume.title` / `label` and `Chapter.volumeLabel` preserve the site-visible label; `volumeNumber` is numeric metadata for fallback ordering, not identity.
 
 ## Storage model
 
@@ -103,13 +92,13 @@ The queue uses six task statuses:
 - `failed`
 - `canceled`
 
-Display order is:
+Display order:
 
 1. Active task
 2. Queued tasks in FIFO order
 3. Terminal tasks with newest completions first
 
-Important invariants:
+Invariants:
 
 - Only one task is active at a time.
 - Retry and restart actions create new tasks instead of mutating history into place.
@@ -173,13 +162,13 @@ Carries `sourceTabId`, `siteIntegrationId`, `mangaId`, `seriesTitle`, chapter la
 
 ### Offscreen contracts
 
-**Service worker → offscreen**
+**Service worker to offscreen**
 
 - `OFFSCREEN_DOWNLOAD_CHAPTER` sends book metadata, chapter metadata, `settingsSnapshot`, `saveMode`, and optional `integrationContext`. The offscreen document resolves the matching `offscreen-runtime.ts` and runs its chapter/image hooks.
 - `OFFSCREEN_CONTROL` is used for task cancellation.
 - `REVOKE_BLOB_URL` tells offscreen code to revoke a blob URL after download handoff completes or fails.
 
-**Offscreen → service worker**
+**Offscreen to service worker**
 
 - `OFFSCREEN_DOWNLOAD_PROGRESS` carries task status, error classification, image counters, and FSA fallback flags.
 - `OFFSCREEN_DOWNLOAD_API_REQUEST` requests a `chrome.downloads.download()` call from the service worker. The success payload uses `id` for the Chrome download ID.
@@ -220,7 +209,7 @@ Some handlers depend on sender context, and extension pages do not receive `send
 
 See `entrypoints/background/sender-resolution.ts` for the implementation.
 
-## Main code map
+## Code map
 
 ### Entrypoints
 
@@ -253,23 +242,12 @@ See `entrypoints/background/sender-resolution.ts` for the implementation.
 
 ## Where to work for common changes
 
-- **Queue behavior**
-  Start in `entrypoints/background/download-queue*.ts`, `entrypoints/background/task-lifecycle.ts`, and `entrypoints/background/projection.ts`.
-
-- **Side panel UX**
-  Start in `entrypoints/sidepanel/components/`, `entrypoints/sidepanel/hooks/`, and `entrypoints/sidepanel/SidePanelApp.tsx`.
-
-- **Options page flows**
-  Start in `entrypoints/options/tabs/`, `entrypoints/options/components/`, and `entrypoints/options/hooks/`.
-
-- **Download pipeline or archive behavior**
-  Start in `entrypoints/offscreen/main.ts`, `entrypoints/offscreen/chapter-processing.ts`, `entrypoints/offscreen/chapter-image-downloads.ts`, `entrypoints/offscreen/zip.worker.ts`, `entrypoints/offscreen/image-processor.ts`, and `entrypoints/background/destination.ts`.
-
-- **Storage or settings behavior**
-  Start in `src/storage/`, `src/runtime/storage-keys.ts`, and the relevant background action handlers.
-
-- **Site detection or supported-site extraction**
-  Start in `src/site-integrations/`, `entrypoints/content/`, `src/runtime/site-integration-initialization.ts`, and the generated static site-integration context registries.
+- **Queue behavior** — `entrypoints/background/download-queue*.ts`, `entrypoints/background/task-lifecycle.ts`, `entrypoints/background/projection.ts`
+- **Side panel UX** — `entrypoints/sidepanel/components/`, `entrypoints/sidepanel/hooks/`, `entrypoints/sidepanel/SidePanelApp.tsx`
+- **Options page flows** — `entrypoints/options/tabs/`, `entrypoints/options/components/`, `entrypoints/options/hooks/`
+- **Download pipeline or archive behavior** — `entrypoints/offscreen/main.ts`, `entrypoints/offscreen/chapter-processing.ts`, `entrypoints/offscreen/chapter-image-downloads.ts`, `entrypoints/offscreen/zip.worker.ts`, `entrypoints/offscreen/image-processor.ts`, `entrypoints/background/destination.ts`
+- **Storage or settings behavior** — `src/storage/`, `src/runtime/storage-keys.ts`, and the relevant background action handlers
+- **Site detection or supported-site extraction** — `src/site-integrations/`, `entrypoints/content/`, `src/runtime/site-integration-initialization.ts`, and the generated static site-integration context registries
 
 ## Current integration profile
 

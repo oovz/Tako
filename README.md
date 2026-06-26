@@ -48,9 +48,18 @@ Tako is intended for pages you can already access in your own browser session on
 - It is **not** a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
 - It does **not** grant access rights you do not already have.
 
-## Quick start
+## Get started
 
-### Install from GitHub Releases
+The fastest way to try Tako:
+
+1. Install from the [Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
+2. Open a supported series page.
+3. Click the Tako icon to open the Side Panel.
+4. Select chapters, click Download, and watch the queue.
+
+## Install from source
+
+### From GitHub Releases
 
 1. Open the repository **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip` asset.
 2. Extract the zip to a folder on your machine.
@@ -77,10 +86,12 @@ pnpm dev
 
 ## Documentation
 
-- `CONTRIBUTING.md` — general setup, workflow, code style, and PR expectations
-- `docs/ARCHITECTURE.md` — core runtime, storage, messaging, and state flow
-- `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
-- `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
+- [Architecture](https://github.com/oovz/Tako/wiki/Architecture) — core runtime, storage, messaging, and state flow
+- [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) — adding or maintaining supported-site integrations
+- [Template Macros](https://github.com/oovz/Tako/wiki/Template-Macros) — filename and path-template macro reference
+- [Quick Start](https://github.com/oovz/Tako/wiki/Quick-Start) — installation and first download walkthrough
+- [Supported Sites](https://github.com/oovz/Tako/wiki/Supported-Sites) — current site integrations and status
+- [Comparisons](https://github.com/oovz/Tako/wiki/Comparisons) — how Tako compares to other manga downloaders
 
 ## Privacy
 

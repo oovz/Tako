@@ -1,7 +1,7 @@
 {
   "name": "tako-manga-downloader",
   "version": "1.4.3",
-  "description": "Chrome Side Panel companion for saving chapters from supported manga sites into organized offline-reading files.",
+  "description": "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel.",
   "type": "module",
   "scripts": {
     "dev": "wxt",

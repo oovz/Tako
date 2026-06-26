@@ -58,8 +58,8 @@ New features should include tests. Site integrations require unit coverage and, 
 
 ## Documentation
 
-If you change behavior, contributor workflow, or submission assets, update the relevant docs in the same pull request.
+If you change behavior, contributor workflow, or submission assets, update the relevant wiki page in the same pull request.
 
-- `docs/ARCHITECTURE.md` — core runtime, storage, messaging, and state flow
-- `docs/CONTRIBUTING-SITE-INTEGRATION.md` — adding or maintaining supported-site integrations
-- `docs/TEMPLATE-MACROS.md` — filename and path-template macro reference
+- [Architecture](https://github.com/oovz/Tako/wiki/Architecture) — core runtime, storage, messaging, and state flow
+- [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) — adding or maintaining supported-site integrations
+- [Template Macros](https://github.com/oovz/Tako/wiki/Template-Macros) — filename and path-template macro reference
