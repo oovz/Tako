@@ -4,11 +4,12 @@
 
 1. Open the [Tako page on the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
 2. Click **Add to Chrome**.
-3. Pin Tako from the extensions menu if you want quick access.
+3. Pin Tako from the extensions menu for quick access.
 
 ## Install from source
 
-### From GitHub Releases
+<details>
+<summary>From GitHub Releases</summary>
 
 1. Go to the repository **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip`.
 2. Extract the zip to a folder on your machine.
@@ -16,7 +17,10 @@
 4. Enable **Developer mode**.
 5. Choose **Load unpacked** and select the extracted folder.
 
-### Build locally
+</details>
+
+<details>
+<summary>Build locally</summary>
 
 ```powershell
 pnpm install
@@ -24,6 +28,8 @@ pnpm build
 ```
 
 Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `.output\chrome-mv3`.
+
+</details>
 
 ## Download your first chapter
 
