@@ -70,26 +70,22 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
   });
 
   describe('Error Handling', () => {
-    it('should handle storage errors gracefully when checking download status', async () => {
+    it('should propagate storage errors when checking download status', async () => {
       vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('Storage error'));
 
-      const isDownloaded = await chapterPersistenceService.isChapterDownloaded('ch1');
-      expect(isDownloaded).toBe(false);
+      await expect(chapterPersistenceService.isChapterDownloaded('ch1')).rejects.toThrow('Storage error');
     });
 
-    it('should handle storage errors gracefully when getting series chapters', async () => {
+    it('should propagate storage errors when getting series chapters', async () => {
       vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('Storage error'));
 
-      const chapters = await chapterPersistenceService.getDownloadedChaptersForSeries('series-1');
-      expect(chapters).toEqual([]);
+      await expect(chapterPersistenceService.getDownloadedChaptersForSeries('series-1')).rejects.toThrow('Storage error');
     });
 
-    it('should handle storage errors gracefully when getting stats', async () => {
+    it('should propagate storage errors when getting stats', async () => {
       vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(new Error('Storage error'));
 
-      const stats = await chapterPersistenceService.getStorageStats();
-      expect(stats.totalChapters).toBe(0);
-      expect(stats.totalSeries).toBe(0);
+      await expect(chapterPersistenceService.getStorageStats()).rejects.toThrow('Storage error');
     });
   });
 }

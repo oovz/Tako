@@ -119,39 +119,24 @@ class ChapterPersistenceService {
    * Check if a chapter has been downloaded by canonical chapter ID.
    */
   async isChapterDownloaded(chapterId: string): Promise<boolean> {
-    try {
-      const downloaded = await this.getDownloadedChapters();
-      return downloaded.some(ch => ch.chapterId === chapterId);
-    } catch (error) {
-      logger.error('❌ Failed to check chapter download status:', error);
-      return false;
-    }
+    const downloaded = await this.getDownloadedChapters();
+    return downloaded.some(ch => ch.chapterId === chapterId);
   }
   
   /**
    * Get all downloaded chapters for a series
    */
   async getDownloadedChaptersForSeries(seriesId: string): Promise<DownloadedChapterRecord[]> {
-    try {
-      const allDownloaded = await this.getDownloadedChapters();
-      return allDownloaded.filter(ch => ch.seriesId === seriesId);
-    } catch (error) {
-      logger.error('❌ Failed to get downloaded chapters for series:', error);
-      return [];
-    }
+    const allDownloaded = await this.getDownloadedChapters();
+    return allDownloaded.filter(ch => ch.seriesId === seriesId);
   }
   
   /**
    * Get all downloaded chapters
    */
   async getDownloadedChapters(): Promise<DownloadedChapterRecord[]> {
-    try {
-      const result = await chrome.storage.local.get([this.STORAGE_KEY]) as Record<string, JsonValue>;
-      return parseDownloadedChapters(result[this.STORAGE_KEY]);
-    } catch (error) {
-      logger.error('❌ Failed to get downloaded chapters:', error);
-      return [];
-    }
+    const result = await chrome.storage.local.get([this.STORAGE_KEY]) as Record<string, JsonValue>;
+    return parseDownloadedChapters(result[this.STORAGE_KEY]);
   }
   
   /**
@@ -177,14 +162,9 @@ class ChapterPersistenceService {
    * Get download history for a series
    */
   async getSeriesHistory(seriesId: string): Promise<SeriesDownloadHistory | null> {
-    try {
-      const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-      const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-      return allHistory[seriesId] || null;
-    } catch (error) {
-      logger.error('❌ Failed to get series history:', error);
-      return null;
-    }
+    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
+    const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
+    return allHistory[seriesId] || null;
   }
   
   /**
@@ -302,28 +282,18 @@ class ChapterPersistenceService {
     oldestDownload: number | null;
     newestDownload: number | null;
   }> {
-    try {
-      const chapters = await this.getDownloadedChapters();
-      const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-      const seriesHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-      
-      const timestamps = chapters.map(ch => ch.downloadedAt).filter(Boolean);
-      
-      return {
-        totalChapters: chapters.length,
-        totalSeries: Object.keys(seriesHistory).length,
-        oldestDownload: timestamps.length > 0 ? Math.min(...timestamps) : null,
-        newestDownload: timestamps.length > 0 ? Math.max(...timestamps) : null
-      };
-    } catch (error) {
-      logger.error('❌ Failed to get storage stats:', error);
-      return {
-        totalChapters: 0,
-        totalSeries: 0,
-        oldestDownload: null,
-        newestDownload: null
-      };
-    }
+    const chapters = await this.getDownloadedChapters();
+    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
+    const seriesHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
+    
+    const timestamps = chapters.map(ch => ch.downloadedAt).filter(Boolean);
+    
+    return {
+      totalChapters: chapters.length,
+      totalSeries: Object.keys(seriesHistory).length,
+      oldestDownload: timestamps.length > 0 ? Math.min(...timestamps) : null,
+      newestDownload: timestamps.length > 0 ? Math.max(...timestamps) : null
+    };
   }
 }
 

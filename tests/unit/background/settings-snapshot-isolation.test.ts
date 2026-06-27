@@ -16,6 +16,19 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
+vi.mock('@/src/storage/site-overrides-service', () => ({
+  siteOverridesService: {
+    getAll: vi.fn(async () => ({})),
+  },
+}))
+
+vi.mock('@/src/storage/site-integration-settings-service', () => ({
+  siteIntegrationSettingsService: {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  },
+}))
+
 type ExtensionSettingsOverrides = Partial<Omit<ExtensionSettings, 'downloads' | 'globalPolicy'>> & {
   downloads?: Partial<ExtensionSettings['downloads']>
   globalPolicy?: {
@@ -296,4 +309,3 @@ describe('settings snapshot isolation (behavior-based)', () => {
     expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 1000 })
   })
 })
-

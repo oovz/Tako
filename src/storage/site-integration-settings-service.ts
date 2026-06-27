@@ -57,12 +57,8 @@ function getManifestDefaultsForSite(siteId: string): Record<string, StorageValue
 
 export const siteIntegrationSettingsService = {
   async getAll(): Promise<SiteIntegrationSettingsMap> {
-    try {
-      const res = await chrome.storage.local.get(SITE_INTEGRATION_SETTINGS_STORAGE_KEY) as Record<string, StorageValue>;
-      return toSiteIntegrationSettingsMap(res[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]);
-    } catch {
-      return {};
-    }
+    const res = await chrome.storage.local.get(SITE_INTEGRATION_SETTINGS_STORAGE_KEY) as Record<string, StorageValue>;
+    return toSiteIntegrationSettingsMap(res[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]);
   },
   async getForSite(siteId: string): Promise<Record<string, StorageValue>> {
     const all = await this.getAll();

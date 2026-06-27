@@ -45,7 +45,7 @@ const queueContinuationPort = (() => {
     }
 
     void processDownloadQueue(stateManager, ensureOffscreenReady).catch((error) => {
-      logger.debug('[Queue] Deferred continuation failed (non-fatal)', error);
+      logger.error('[Queue] Deferred continuation failed', error);
     });
   };
 

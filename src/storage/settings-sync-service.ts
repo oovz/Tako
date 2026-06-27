@@ -296,7 +296,8 @@ export class SettingsSyncService {
       if (!handle) return false;
       
       return await verifyPermission(handle, true);
-    } catch {
+    } catch (error) {
+      logger.error('Failed to check custom folder configuration:', error);
       return false;
     }
   }

@@ -120,10 +120,10 @@ export function useOptionsPageState() {
       const handle = await loadDownloadRootHandle()
       setSavedFolderHandle(handle ?? null)
       setPendingFolderHandle(null)
-    } catch {
+    } catch (error) {
       setSavedFolderHandle(null)
       setPendingFolderHandle(null)
-      logger.debug('[OPTIONS] No custom folder configured')
+      logger.error('[OPTIONS] Failed to load custom folder handle:', error)
     }
   }
 

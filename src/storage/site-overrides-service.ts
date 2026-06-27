@@ -71,12 +71,8 @@ export const normalizeSiteOverridesMap = (raw: unknown): SiteOverridesMap => {
 
 export const siteOverridesService = {
   async getAll(): Promise<SiteOverridesMap> {
-    try {
-      const res = await chrome.storage.local.get(SITE_OVERRIDES_STORAGE_KEY) as Record<string, unknown>;
-      return normalizeSiteOverridesMap(res[SITE_OVERRIDES_STORAGE_KEY]);
-    } catch {
-      return {};
-    }
+    const res = await chrome.storage.local.get(SITE_OVERRIDES_STORAGE_KEY) as Record<string, unknown>;
+    return normalizeSiteOverridesMap(res[SITE_OVERRIDES_STORAGE_KEY]);
   },
 
   async setAll(map: SiteOverridesMap): Promise<void> {

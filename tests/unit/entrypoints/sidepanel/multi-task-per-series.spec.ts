@@ -16,6 +16,19 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
+vi.mock('@/src/storage/site-overrides-service', () => ({
+  siteOverridesService: {
+    getAll: vi.fn(async () => ({})),
+  },
+}))
+
+vi.mock('@/src/storage/site-integration-settings-service', () => ({
+  siteIntegrationSettingsService: {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  },
+}))
+
 function makeTask(id: string, status: DownloadTaskState['status'], created: number): DownloadTaskState {
   return {
     id,
@@ -172,4 +185,3 @@ describe('multi-task same-series runtime behavior', () => {
     expect(result.retryBlockedMessage).toBeNull()
   })
 })
-

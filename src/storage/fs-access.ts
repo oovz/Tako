@@ -68,12 +68,7 @@ export async function saveDownloadRootHandle(handle: DirHandle): Promise<void> {
 }
 
 export async function loadDownloadRootHandle(): Promise<DirHandle | undefined> {
-  try {
-    const h = await idbGet<DirHandle>(DOWNLOAD_ROOT_HANDLE_ID);
-    return h;
-  } catch {
-    return undefined;
-  }
+  return idbGet<DirHandle>(DOWNLOAD_ROOT_HANDLE_ID);
 }
 
 export async function clearDownloadRootHandle(): Promise<void> {
@@ -81,21 +76,17 @@ export async function clearDownloadRootHandle(): Promise<void> {
 }
 
 export async function verifyPermission(dir: DirHandle, writable = true): Promise<boolean> {
-  try {
-    // Type assertion for optional File System Access API methods
-    type DirHandleWithPermissions = DirHandle & {
-      queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
-      requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
-    };
-    
-    const dirWithPerms = dir as DirHandleWithPermissions;
-    const perm = await dirWithPerms.queryPermission?.({ mode: writable ? 'readwrite' : 'read' });
-    if (perm === 'granted') return true;
-    const req = await dirWithPerms.requestPermission?.({ mode: writable ? 'readwrite' : 'read' });
-    return req === 'granted';
-  } catch {
-    return false;
-  }
+  // Type assertion for optional File System Access API methods
+  type DirHandleWithPermissions = DirHandle & {
+    queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+    requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  };
+
+  const dirWithPerms = dir as DirHandleWithPermissions;
+  const perm = await dirWithPerms.queryPermission?.({ mode: writable ? 'readwrite' : 'read' });
+  if (perm === 'granted') return true;
+  const req = await dirWithPerms.requestPermission?.({ mode: writable ? 'readwrite' : 'read' });
+  return req === 'granted';
 }
 
 async function ensureSubdir(root: DirHandle, pathParts: string[]): Promise<DirHandle> {

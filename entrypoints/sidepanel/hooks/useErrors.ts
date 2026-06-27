@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { isRecord, type StorageValue } from '@/src/shared/type-guards'
+import logger from '@/src/runtime/logger'
 
 export type UIPersistentErrorSeverity = 'warning' | 'error'
 
@@ -40,8 +41,8 @@ export function useErrors() {
         const result = await chrome.storage.local.get(STORAGE_KEY) as Record<string, StorageValue>
         if (!isMounted) return
         setErrors(parseErrors(result[STORAGE_KEY]))
-      } catch {
-        if (isMounted) setErrors([])
+      } catch (error) {
+        logger.error('Failed to load persistent errors from storage:', error)
       }
     }
 
@@ -71,8 +72,8 @@ export function useErrors() {
     if (!code) return
     try {
       await chrome.runtime.sendMessage({ type: 'ACKNOWLEDGE_ERROR', payload: { code } })
-    } catch {
-      // Best-effort: optimistically update local state
+    } catch (error) {
+      logger.debug('Failed to send ACKNOWLEDGE_ERROR message, updating local state optimistically:', error)
       setErrors((prev) => prev.filter((e) => e.code !== code))
     }
   }, [])

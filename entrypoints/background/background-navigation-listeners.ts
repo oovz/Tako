@@ -143,7 +143,8 @@ export function registerBackgroundNavigationListeners(
           await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, tab?.url || null)
           await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
           void deps.tabUiCoordinator.ensureContentScriptPresent(activeInfo.tabId, tab?.url || null)
-        } catch {
+        } catch (error) {
+          logger.debug('tabs.onActivated handler failed, clearing tab UI state:', error)
           await deps.tabUiCoordinator.updateActionForTab(activeInfo.tabId, null)
           await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
         }
@@ -164,7 +165,9 @@ export function registerBackgroundNavigationListeners(
           }
         }
       })
-      .catch(() => {})
+      .catch((error) => {
+        logger.debug('tabs.query failed; initial tab UI sync skipped', error)
+      })
   } catch (error) {
     logger.debug('tabs.query unavailable; initial tab UI sync skipped', error)
   }

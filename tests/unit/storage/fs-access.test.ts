@@ -104,14 +104,14 @@ describe('File System Access helpers', () => {
       expect(requests).toEqual([{ mode: 'readwrite' }])
     })
 
-    it('returns false when permission checks fail', async () => {
+    it('propagates permission check errors', async () => {
       const dir = createDirectoryHandle(undefined, {
         queryPermission: async () => {
           throw createNamedError('NotAllowedError')
         },
       })
 
-      await expect(verifyPermission(dir)).resolves.toBe(false)
+      await expect(verifyPermission(dir)).rejects.toThrow('NotAllowedError')
     })
   })
 

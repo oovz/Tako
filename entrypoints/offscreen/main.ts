@@ -282,18 +282,23 @@ export class OffscreenWorker {
       const urls = OffscreenIntegration.chapter.resolveImageUrls
         ? await withRetries(
           async () => {
-            const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
-              { id: chapter.id, url: chapter.url },
-              opts.integrationContext,
-              opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
-            )
-            const timeoutPromise = new Promise<never>((_, reject) => {
-              setTimeout(
-                () => reject(new Error('resolveImageUrls timeout')),
-                OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
+            let timer: ReturnType<typeof setTimeout> | undefined
+            try {
+              const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
+                { id: chapter.id, url: chapter.url },
+                opts.integrationContext,
+                opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
               )
-            })
-            return Promise.race([resolvePromise, timeoutPromise])
+              const timeoutPromise = new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                  () => reject(new Error('resolveImageUrls timeout')),
+                  OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
+                )
+              })
+              return await Promise.race([resolvePromise, timeoutPromise])
+            } finally {
+              if (timer) clearTimeout(timer)
+            }
           },
           chapterRetries,
         )
@@ -454,20 +459,26 @@ export class OffscreenWorker {
   }
 
 
-  // Runtime message retry with small backoff to tolerate transient SW wakeups
+  // Runtime message retry with small backoff to tolerate transient SW wakeups.
+  // Only retries on connection-level errors (port closed, SW restarting).
+  // Does NOT retry on "receiving end does not exist" (permanent — no listener registered).
   private async sendMessageWithRetry<T extends import('@/src/types/extension-messages').ExtensionMessage, R>(msg: T, attempts = 3, baseDelayMs = 250): Promise<R> {
     let lastError: Error | undefined;
     for (let i = 0; i < attempts; i++) {
       try {
         return await chrome.runtime.sendMessage<T, R>(msg);
       } catch (e) {
-        lastError = e instanceof Error ? e : new Error('sendMessage failed', { cause: e }); // Ref: https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/docs/rules/only-throw-error.mdx
+        lastError = e instanceof Error ? e : new Error('sendMessage failed', { cause: e });
+        const message = lastError.message.toLowerCase();
+        const isTransient = message.includes('port closed') || message.includes('message port closed');
+        if (!isTransient || i === attempts - 1) {
+          throw lastError;
+        }
         const delay = baseDelayMs * Math.pow(2, i);
         await new Promise((r) => setTimeout(r, delay));
       }
     }
-    if (lastError) throw lastError;
-    throw new Error('sendMessage failed after retries');
+    throw lastError ?? new Error('sendMessage failed after retries');
   }
 
   getActiveJobCount(): number {

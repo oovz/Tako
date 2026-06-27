@@ -21,12 +21,11 @@ export function registerSiteOverridesCrudCases(): void {
       });
     });
 
-    it('should return empty object on storage error', async () => {
+    it('should propagate storage errors from getAll', async () => {
       const originalGet = globalThis.chrome.storage.local.get;
       globalThis.chrome.storage.local.get = vi.fn().mockRejectedValue(new Error('Storage error'));
 
-      const overrides = await siteOverridesService.getAll();
-      expect(overrides).toEqual({});
+      await expect(siteOverridesService.getAll()).rejects.toThrow('Storage error');
 
       globalThis.chrome.storage.local.get = originalGet;
     });

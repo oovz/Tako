@@ -4,6 +4,19 @@ import { enqueueStartDownloadTask } from '@/entrypoints/background/download-queu
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 
+vi.mock('@/src/storage/site-overrides-service', () => ({
+  siteOverridesService: {
+    getAll: vi.fn(async () => ({})),
+  },
+}))
+
+vi.mock('@/src/storage/site-integration-settings-service', () => ({
+  siteIntegrationSettingsService: {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  },
+}))
+
 describe('enqueueStartDownloadTask', () => {
   it('creates queued task from START_DOWNLOAD payload with preserved raw and integration-provided chapter metadata', async () => {
     const addDownloadTask = vi.fn(async (_task: unknown) => {})

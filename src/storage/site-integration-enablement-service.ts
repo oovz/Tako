@@ -27,11 +27,7 @@ async function getStoredEnablementMap(): Promise<SiteIntegrationEnablementMap> {
 
 export const siteIntegrationEnablementService = {
   async getAll(): Promise<SiteIntegrationEnablementMap> {
-    try {
-      return await getStoredEnablementMap()
-    } catch {
-      return {}
-    }
+    return await getStoredEnablementMap()
   },
 
   async setAll(overrides: SiteIntegrationEnablementMap): Promise<void> {

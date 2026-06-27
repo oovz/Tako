@@ -5,6 +5,19 @@ import { enqueueStartDownloadTask } from '@/entrypoints/background/download-queu
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 
+vi.mock('@/src/storage/site-overrides-service', () => ({
+  siteOverridesService: {
+    getAll: vi.fn(async () => ({})),
+  },
+}))
+
+vi.mock('@/src/storage/site-integration-settings-service', () => ({
+  siteIntegrationSettingsService: {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  },
+}))
+
 describe('START_DOWNLOAD sender fallback integration', () => {
   it('resolves sourceTabId for sidepanel sender and preserves chapter language in enqueued task', async () => {
     const addDownloadTask = vi.fn(async (_task: unknown) => {})

@@ -5,6 +5,19 @@ import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state';
 
+vi.mock('@/src/storage/site-overrides-service', () => ({
+  siteOverridesService: {
+    getAll: vi.fn(async () => ({})),
+  },
+}));
+
+vi.mock('@/src/storage/site-integration-settings-service', () => ({
+  siteIntegrationSettingsService: {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  },
+}));
+
 function createStateManager(settings: ExtensionSettings, addDownloadTask = vi.fn(async () => {})): CentralizedStateManager {
   return {
     getGlobalState: vi.fn(async () => ({
