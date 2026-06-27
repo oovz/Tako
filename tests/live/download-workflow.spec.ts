@@ -293,7 +293,7 @@ async function startSingleChapterDownload(
   const downloadableChapters = state.chapters.filter(
     (candidate) => candidate.locked !== true && typeof candidate.url === 'string' && candidate.url.length > 0,
   )
-  const chapter = state.siteIntegrationId === 'mangadex'
+  const chapter = state.siteIntegrationId === 'mangadex' || state.siteIntegrationId === 'manhuagui'
     ? downloadableChapters.at(-1)
     : downloadableChapters[0]
   if (!chapter) {
@@ -362,26 +362,10 @@ async function waitForTerminalTask(context: BrowserContext, taskId: string): Pro
   return task
 }
 
-const MANGADEX_TRANSIENT_FAILURE_TOKENS = ['HTTP 500', 'HTTP 502', 'HTTP 503', 'HTTP 504']
-
-function isTransientMangadexDownloadFailure(task: DownloadTaskState): boolean {
-  const failureText = JSON.stringify({
-    errorMessage: task.errorMessage,
-    chapters: task.chapters.map((chapter) => chapter.errorMessage),
-  })
-
-  return MANGADEX_TRANSIENT_FAILURE_TOKENS.some((token) => failureText.includes(token))
-}
-
-function assertTaskSucceeded(task: DownloadTaskState, options: { allowTransientMangadexSkip?: boolean } = {}): void {
+function assertTaskSucceeded(task: DownloadTaskState): void {
   if (task.status === 'completed' || task.status === 'partial_success') {
     return
   }
-
-  test.skip(
-    options.allowTransientMangadexSkip === true && isTransientMangadexDownloadFailure(task),
-    `MangaDex live download returned a transient upstream HTTP failure after retries for task ${task.id}`,
-  )
 
   throw new Error(`Download task ${task.id} finished with status ${task.status}: ${JSON.stringify({
     errorMessage: task.errorMessage,
@@ -557,7 +541,7 @@ test.describe('Live download workflows', () => {
         const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
         const task = await waitForTerminalTask(context, taskId)
 
-        assertTaskSucceeded(task, { allowTransientMangadexSkip: workflowCase.integrationId === 'mangadex' })
+        assertTaskSucceeded(task)
         expect(typeof task.lastSuccessfulDownloadId).toBe('number')
 
         const downloadItem = await waitForBrowserDownload(optionsPage, task.lastSuccessfulDownloadId as number)
@@ -602,7 +586,7 @@ test.describe('Live download workflows', () => {
       const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
       const task = await waitForTerminalTask(context, taskId)
 
-      assertTaskSucceeded(task, { allowTransientMangadexSkip: true })
+      assertTaskSucceeded(task)
       expect(task.lastSuccessfulDownloadId).toBeUndefined()
 
       const startedAt = Date.now()

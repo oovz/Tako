@@ -3,7 +3,6 @@ import type { BrowserContext } from '@playwright/test';
 
 const MANGA_ID = process.env.TMD_LIVE_MANGADEX_MANGA_ID ?? 'db692d58-4b13-4174-ae8c-30c515c0689c';
 let resolvedChapterId = process.env.TMD_LIVE_MANGADEX_CHAPTER_ID ?? '';
-const MANGADEX_TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
 const MANGADEX_LIVE_REQUEST_RETRIES = 3;
 const MANGADEX_LIVE_RETRY_DELAY_MS = 2_000;
 
@@ -43,7 +42,7 @@ async function mangadexFetchViaBrowser(
 
       lastResult = result;
 
-      if (result.ok || result.status === 429 || !MANGADEX_TRANSIENT_STATUSES.has(result.status)) {
+      if (result.ok || result.status === 429 || result.status < 500) {
         return result;
       }
 
@@ -62,17 +61,12 @@ async function mangadexFetchViaBrowser(
   }
 }
 
-function assertMangadexResponseIsUsable(result: MangadexFetchResult, endpointName: string): void {
+function assertMangadexResponseIsUsable(result: MangadexFetchResult, _endpointName: string): void {
   if (result.status === 429) {
     const retryAfter = result.headers['x-ratelimit-retry-after'];
     expect(retryAfter).toBeDefined();
     return;
   }
-
-  test.skip(
-    MANGADEX_TRANSIENT_STATUSES.has(result.status),
-    `MangaDex ${endpointName} returned transient HTTP ${result.status} after retries`,
-  );
 
   expect(result.ok).toBe(true);
 }
