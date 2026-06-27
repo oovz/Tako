@@ -280,10 +280,22 @@ export class OffscreenWorker {
       const chapterRetries = this.currentRetries?.chapter ?? 1
       await onProgress(10, 'parsing')
       const urls = OffscreenIntegration.chapter.resolveImageUrls
-        ? await OffscreenIntegration.chapter.resolveImageUrls(
-          { id: chapter.id, url: chapter.url },
-          opts.integrationContext,
-          opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
+        ? await withRetries(
+          async () => {
+            const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
+              { id: chapter.id, url: chapter.url },
+              opts.integrationContext,
+              opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
+            )
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(
+                () => reject(new Error('resolveImageUrls timeout')),
+                OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
+              )
+            })
+            return Promise.race([resolvePromise, timeoutPromise])
+          },
+          chapterRetries,
         )
         : await (async () => {
           const parseImageUrlsFromHtml = OffscreenIntegration.chapter.parseImageUrlsFromHtml
