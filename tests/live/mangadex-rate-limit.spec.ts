@@ -1,8 +1,8 @@
 import { test, expect } from '../e2e/fixtures/extension';
 import type { BrowserContext } from '@playwright/test';
 
-const MANGA_ID = process.env.TMD_LIVE_MANGADEX_MANGA_ID ?? 'db692d58-4b13-4174-ae8c-30c515c0689c';
-let resolvedChapterId = process.env.TMD_LIVE_MANGADEX_CHAPTER_ID ?? '';
+const MANGA_ID = 'db692d58-4b13-4174-ae8c-30c515c0689c';
+let resolvedChapterId = '';
 const MANGADEX_LIVE_REQUEST_RETRIES = 3;
 const MANGADEX_LIVE_RETRY_DELAY_MS = 2_000;
 

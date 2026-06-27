@@ -53,9 +53,6 @@ type SeededDirectoryFile = {
   size: number
 }
 
-const LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_DOWNLOAD_URL
-  ?? 'https://www.manhuagui.com/comic/19430/'
-
 const browserWorkflowCases: BrowserWorkflowCase[] = [
   {
     name: 'mangadex hunter-x-hunter',
@@ -77,7 +74,7 @@ const browserWorkflowCases: BrowserWorkflowCase[] = [
   {
     name: 'manhuagui kimetsu-no-yaiba',
     integrationId: 'manhuagui',
-    url: LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL || LIVE_MANHUAGUI_REFERENCE_URL,
+    url: LIVE_MANHUAGUI_REFERENCE_URL,
   },
   {
     name: 'comicnettai kemutai-hanashi',
