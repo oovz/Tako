@@ -1,0 +1,51 @@
+name: Live E2E
+
+# Live end-to-end tests that hit real external APIs (MangaDex, Pixiv Comic,
+# Shonen Jump+, manhuagui, comicnettai). These tests are inherently flaky
+# because they depend on third-party service availability and rate limits.
+#
+# Runs on every push and PR alongside CI, but as a separate workflow so
+# its result does not affect the CI run status or block releases.
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Live end-to-end tests
+        run: pnpm test:live:ci
+      - name: Upload live E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-e2e-artifacts
+          path: |
+            test-results
+            .output
+          if-no-files-found: ignore
