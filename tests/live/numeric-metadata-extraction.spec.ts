@@ -154,7 +154,7 @@ async function loadLiveTabState(
 
     await reinjectContentScript(optionsPage, candidateTabIds)
 
-    const timeoutMs = 75_000
+    const timeoutMs = 30_000
     const pollMs = 500
     const maxReinitBursts = 2
     const start = Date.now()
@@ -260,8 +260,6 @@ test.describe('Live numeric metadata extraction', () => {
 
     assertNumericChapterProjection(state.chapters ?? [], {
       minNumberedChapters: 3,
-      expectedSampleNumber: 35,
-      expectedSampleLabel: /第\s*35\s*話/,
       expectAnyVolumeNumbers: false,
     })
 

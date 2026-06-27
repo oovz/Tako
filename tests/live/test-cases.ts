@@ -29,7 +29,7 @@ export const testCases: LiveTestCase[] = [
     url: LIVE_REFERENCE_URLS.mangadex,
     integration: 'mangadex',
     expectedMetadata: {
-      Series: 'Kemutai Hanashi',
+      Series: 'Hunter x Hunter',
     }
   },
   {
@@ -43,14 +43,14 @@ export const testCases: LiveTestCase[] = [
     url: LIVE_REFERENCE_URLS.shonenjumpplus,
     integration: 'shonenjumpplus',
     expectedMetadata: {
-      Series: 'エクソシストを堕とせない',
+      Series: 'SPY×FAMILY',
     }
   },
   {
     url: LIVE_REFERENCE_URLS.manhuagui,
     integration: 'manhuagui',
     expectedMetadata: {
-      Series: '八田百田',
+      Series: '鬼灭之刃',
     }
   },
   {

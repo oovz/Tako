@@ -29,7 +29,7 @@ function substitutePlaceholders(
 
 function getMessageMock(key: string, substitutions?: string | string[]): string {
   const msgs = loadMessages()
-  const entry = msgs[key]
+  const entry = msgs![key]
   if (!entry) return key
   if (!substitutions) return entry.message
   const subs = Array.isArray(substitutions) ? substitutions : [substitutions]
@@ -44,7 +44,7 @@ if (!globalThis.chrome) {
   ;(globalThis as Record<string, unknown>).chrome = {}
 }
 
-const chromeMock = (globalThis as Record<string, { i18n?: Record<string, unknown> }>).chrome
+const chromeMock = (globalThis as unknown as Record<string, { i18n?: Record<string, unknown> }>).chrome
 if (!chromeMock.i18n) {
   chromeMock.i18n = {
     getMessage: getMessageMock,

@@ -20,11 +20,12 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   globalSetup: path.resolve(__dirname, 'tests/e2e/global-setup.ts'),
   use: {
+    locale: 'en-US',
     // Extension testing requires headed mode - configured in fixture
     trace: 'on-first-retry',
     // Prevent browser windows from grabbing focus during tests
     launchOptions: {
-      args: ['--no-focus-on-launch', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']
+      args: ['--no-focus-on-launch', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--lang=en-US']
     }
   },
   projects: [

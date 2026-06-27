@@ -228,4 +228,82 @@ describe('Comic Nettai site integration', () => {
       mimeType: 'image/png',
     })
   })
+
+  describe('buildPublusImageUrlsFromConfig edge cases', () => {
+    const BASE_URL = 'https://cdn.comicnettai.com/9_hash/epub/book_contents/c958/'
+
+    it('throws when configuration keys are missing', () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: { ...LIVE_PUBLUS_CONFIG.configuration, keys: {} },
+      }
+
+      expect(() => buildPublusImageUrlsFromConfig(BASE_URL, config)).toThrow(
+        'Comic Nettai PUBLUS configuration keys are missing',
+      )
+    })
+
+    it('returns empty array when contents is empty', () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: { ...LIVE_PUBLUS_CONFIG.configuration, contents: [] },
+      }
+
+      expect(buildPublusImageUrlsFromConfig(BASE_URL, config)).toEqual([])
+    })
+
+    it('filters out content items missing file or type', () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: {
+          ...LIVE_PUBLUS_CONFIG.configuration,
+          contents: [
+            { file: 'item/xhtml/p-cover.xhtml', index: 1, type: 'jpeg' },
+            { index: 2, type: 'jpeg' } as { file: string; index: number; type: string },
+            { file: 'item/xhtml/p-000.xhtml', index: 3 } as { file: string; index: number; type: string },
+          ],
+        },
+      }
+
+      const urls = buildPublusImageUrlsFromConfig(BASE_URL, config)
+      expect(urls).toHaveLength(1)
+    })
+
+    it('sorts contents by index before building URLs', () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: {
+          ...LIVE_PUBLUS_CONFIG.configuration,
+          contents: [
+            { file: 'item/xhtml/p-001.xhtml', index: 3, type: 'jpeg' },
+            { file: 'item/xhtml/p-cover.xhtml', index: 1, type: 'jpeg' },
+            { file: 'item/xhtml/p-000.xhtml', index: 2, type: 'jpeg' },
+          ],
+        },
+      }
+
+      const urls = buildPublusImageUrlsFromConfig(BASE_URL, config)
+      expect(urls).toHaveLength(3)
+      expect(parsePublusImageTransportUrl(urls[0]!).sourceUrl).toContain('p-cover')
+      expect(parsePublusImageTransportUrl(urls[1]!).sourceUrl).toContain('p-000')
+      expect(parsePublusImageTransportUrl(urls[2]!).sourceUrl).toContain('p-001')
+    })
+
+    it('skips content items with no matching page data', () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: {
+          ...LIVE_PUBLUS_CONFIG.configuration,
+          contents: [
+            { file: 'item/xhtml/p-cover.xhtml', index: 1, type: 'jpeg' },
+            { file: 'item/xhtml/nonexistent.xhtml', index: 2, type: 'jpeg' },
+          ],
+        },
+      }
+
+      const urls = buildPublusImageUrlsFromConfig(BASE_URL, config)
+      expect(urls).toHaveLength(1)
+      expect(parsePublusImageTransportUrl(urls[0]!).sourceUrl).toContain('p-cover')
+    })
+  })
 })

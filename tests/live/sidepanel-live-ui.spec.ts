@@ -16,10 +16,12 @@ function escapeForRegex(value: string): string {
 async function waitForLiveTabState(
   context: import('@playwright/test').BrowserContext,
   tabId: number,
-  timeoutMs: number = 90_000,
+  page: import('@playwright/test').Page,
+  timeoutMs: number = 60_000,
 ): Promise<LiveTabState> {
   const start = Date.now()
   let lastState: LiveTabState | undefined
+  let reloaded = false
 
   while (Date.now() - start < timeoutMs) {
     const state = await getSessionState<LiveTabState>(context, `tab_${tabId}`)
@@ -34,6 +36,12 @@ async function waitForLiveTabState(
       return state
     }
 
+    // If no state after 20s, reload to re-trigger content script
+    if (!reloaded && !lastState && Date.now() - start > 20_000) {
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      reloaded = true
+    }
+
     await context.pages()[0]?.waitForTimeout(500)
   }
 
@@ -43,20 +51,21 @@ async function waitForLiveTabState(
 }
 
 test.describe('Live side panel UI smoke', () => {
+  test.describe.configure({ timeout: 120_000 })
   test('renders live side-panel action affordances on MangaDex', async ({ context, extensionId }) => {
     const page = await context.newPage()
     await page.goto(LIVE_MANGADEX_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
 
     const tabId = await getTabId(page, context)
-    const liveState = await waitForLiveTabState(context, tabId)
+    const liveState = await waitForLiveTabState(context, tabId, page)
 
     const sidepanel = await openSidepanelHarness(context, extensionId, page)
     await expect(sidepanel.locator('#root')).toBeVisible()
 
     await expect(
       sidepanel.getByText(new RegExp(escapeForRegex(liveState.seriesTitle ?? ''), 'i')),
-    ).toBeVisible({ timeout: 30_000 })
-    await expect(sidepanel.getByRole('button', { name: /Select Chapters/i })).toBeVisible()
+    ).toBeVisible({ timeout: 10_000 })
+    await expect(sidepanel.getByRole('button', { name: /Select Chapters/i })).toBeVisible({ timeout: 10_000 })
     await expect(sidepanel.getByRole('button', { name: /Open Options \(Advanced Settings\)/i })).toBeVisible()
 
     await sidepanel.close()
@@ -68,7 +77,7 @@ test.describe('Live side panel UI smoke', () => {
     await page.goto(LIVE_MANGADEX_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
 
     const tabId = await getTabId(page, context)
-    const liveState = await waitForLiveTabState(context, tabId)
+    const liveState = await waitForLiveTabState(context, tabId, page, 45_000)
     expect(Array.isArray(liveState.chapters)).toBe(true)
     expect((liveState.chapters ?? []).length).toBeGreaterThan(0)
 
@@ -76,7 +85,7 @@ test.describe('Live side panel UI smoke', () => {
     await expect(sidepanel.locator('#root')).toBeVisible()
 
     await sidepanel.getByRole('button', { name: /Select Chapters/i }).click()
-    await expect(sidepanel.getByRole('button', { name: /Close Selection/i })).toBeVisible({ timeout: 30_000 })
+    await expect(sidepanel.getByRole('button', { name: /Close Selection/i })).toBeVisible({ timeout: 10_000 })
 
     const [optionsPage] = await Promise.all([
       context.waitForEvent('page'),

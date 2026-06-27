@@ -23,7 +23,7 @@ export const MANGADEX_STRESS_TOGGLE_SERIES_ID = '33333333-3333-4333-8333-3333333
 export const MANGADEX_GROUPED_COLLAPSE_SERIES_ID = '44444444-4444-4444-8444-444444444444';
 export const MANGADEX_LOCKED_SELECTION_SERIES_ID = '55555555-5555-4555-8555-555555555555';
 export const LIVE_MANGADEX_REFERENCE_URL = process.env.TMD_LIVE_MANGADEX_URL
-  ?? 'https://mangadex.org/title/b28525ae-ef8a-47aa-a120-5917a351be2d/kemutai-hanashi';
+  ?? 'https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter';
 
 export const PIXIV_COMIC_TEST_DOMAIN = 'comic.pixiv.net';
 export const PIXIV_COMIC_BASE_URL = `https://${PIXIV_COMIC_TEST_DOMAIN}`;
@@ -37,12 +37,12 @@ export const LIVE_PIXIV_COMIC_DUAL_TITLE_URL = process.env.TMD_LIVE_PIXIV_COMIC_
 export const SHONENJUMPPLUS_TEST_DOMAIN = 'shonenjumpplus.com';
 export const SHONENJUMPPLUS_BASE_URL = `https://${SHONENJUMPPLUS_TEST_DOMAIN}`;
 export const LIVE_SHONENJUMPPLUS_REFERENCE_URL = process.env.TMD_LIVE_SHONENJUMPPLUS_URL
-  ?? 'https://shonenjumpplus.com/episode/3269754496649675685';
+  ?? 'https://shonenjumpplus.com/episode/10834108156648240735';
 
 export const MANHUAGUI_TEST_DOMAIN = 'www.manhuagui.com';
 export const MANHUAGUI_BASE_URL = `https://${MANHUAGUI_TEST_DOMAIN}`;
 export const LIVE_MANHUAGUI_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_URL
-  ?? 'https://www.manhuagui.com/comic/21243/';
+  ?? 'https://www.manhuagui.com/comic/19430/';
 export const LIVE_MANHUAGUI_KIMETSU_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_KIMETSU_URL
   ?? 'https://www.manhuagui.com/comic/19430/';
 export const MANHUAGUI_CONFIG_SCRIPT_DOMAIN = 'cf.mhgui.com';

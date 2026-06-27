@@ -16,10 +16,12 @@ function escapeForRegex(value: string): string {
 async function waitForLiveTabState(
   context: import('@playwright/test').BrowserContext,
   tabId: number,
-  timeoutMs: number = 90_000,
+  page: import('@playwright/test').Page,
+  timeoutMs: number = 60_000,
 ): Promise<LiveTabState> {
   const start = Date.now();
   let lastState: LiveTabState | undefined;
+  let reloaded = false;
 
   while (Date.now() - start < timeoutMs) {
     const state = await getSessionState<LiveTabState>(context, `tab_${tabId}`);
@@ -33,6 +35,12 @@ async function waitForLiveTabState(
       return state;
     }
 
+    // If no state after 20s, reload to re-trigger content script
+    if (!reloaded && !lastState && Date.now() - start > 20_000) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      reloaded = true;
+    }
+
     await context.pages()[0]?.waitForTimeout(500);
   }
 
@@ -42,12 +50,13 @@ async function waitForLiveTabState(
 }
 
 test.describe('Live side panel context', () => {
+  test.describe.configure({ timeout: 120_000 })
   test('renders live MangaDex series context in side panel', async ({ context, extensionId }) => {
     const page = await context.newPage();
     await page.goto(LIVE_MANGADEX_REFERENCE_URL, { waitUntil: 'domcontentloaded' });
 
     const tabId = await getTabId(page, context);
-    const liveState = await waitForLiveTabState(context, tabId);
+    const liveState = await waitForLiveTabState(context, tabId, page);
 
     expect(liveState.siteIntegrationId).toBe('mangadex');
     expect(Array.isArray(liveState.chapters)).toBe(true);
@@ -57,7 +66,7 @@ test.describe('Live side panel context', () => {
     await expect(sidepanel.locator('#root')).toBeVisible();
 
     const titlePattern = new RegExp(escapeForRegex(liveState.seriesTitle ?? ''), 'i');
-    await expect(sidepanel.getByText(titlePattern)).toBeVisible({ timeout: 30_000 });
+    await expect(sidepanel.getByText(titlePattern)).toBeVisible({ timeout: 10_000 });
 
     await expect(sidepanel.getByText(/No series detected/i)).toHaveCount(0);
     await expect(sidepanel.getByText(/not recognized as a manga series/i)).toHaveCount(0);
@@ -74,21 +83,21 @@ test.describe('Live side panel context', () => {
     await livePage.goto(LIVE_MANGADEX_REFERENCE_URL, { waitUntil: 'domcontentloaded' });
 
     const tabId = await getTabId(livePage, context);
-    const liveState = await waitForLiveTabState(context, tabId);
+    const liveState = await waitForLiveTabState(context, tabId, livePage);
 
     const sidepanelLive = await openSidepanelHarness(context, extensionId, livePage);
 
     await expect(sidepanelLive.locator('#root')).toBeVisible();
     await expect(
       sidepanelLive.getByText(new RegExp(escapeForRegex(liveState.seriesTitle ?? ''), 'i')),
-    ).toBeVisible({ timeout: 30_000 });
+    ).toBeVisible({ timeout: 10_000 });
 
     const unsupportedPage = await context.newPage();
     await unsupportedPage.goto(buildExampleUrl('/'), { waitUntil: 'domcontentloaded' });
     const sidepanelUnsupported = await openSidepanelHarness(context, extensionId, unsupportedPage);
 
     await expect(sidepanelUnsupported.locator('#root')).toBeVisible();
-    await expect(sidepanelUnsupported.getByText(/No series detected/i)).toBeVisible({ timeout: 30_000 });
+    await expect(sidepanelUnsupported.getByText(/No series detected/i)).toBeVisible({ timeout: 10_000 });
     await expect(
       sidepanelUnsupported.getByText(new RegExp(escapeForRegex(liveState.seriesTitle ?? ''), 'i')),
     ).toHaveCount(0);

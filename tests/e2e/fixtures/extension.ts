@@ -99,6 +99,7 @@ async function setupExtensionContext(testInfoHeadless: boolean): Promise<Extensi
       `--load-extension=${pathToExtension}`,
       '--no-sandbox',
       '--no-focus-on-launch',
+      '--lang=en-US',
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
       '--disable-backgrounding-occluded-windows',

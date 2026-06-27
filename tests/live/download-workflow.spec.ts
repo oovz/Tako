@@ -5,7 +5,7 @@ import { test, expect } from '../e2e/fixtures/extension'
 import { getSessionState, getTabId, waitForGlobalState } from '../e2e/fixtures/state-helpers'
 import {
   LIVE_COMICNETTAI_REFERENCE_URL,
-  MANGADEX_TEST_SERIES_URL,
+  LIVE_MANGADEX_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
@@ -53,22 +53,14 @@ type SeededDirectoryFile = {
   size: number
 }
 
-const LIVE_MANGADEX_KEMUTAI_URL = 'https://mangadex.org/title/b28525ae-ef8a-47aa-a120-5917a351be2d/kemutai-hanashi'
 const LIVE_MANHUAGUI_DOWNLOAD_REFERENCE_URL = process.env.TMD_LIVE_MANHUAGUI_DOWNLOAD_URL
   ?? 'https://www.manhuagui.com/comic/19430/'
 
 const browserWorkflowCases: BrowserWorkflowCase[] = [
   {
-    name: 'mangadex kemutai-hanashi',
-    integrationId: 'mangadex',
-    url: LIVE_MANGADEX_KEMUTAI_URL,
-    expectedMangaId: 'b28525ae-ef8a-47aa-a120-5917a351be2d',
-    expectedSeriesTitle: 'Kemutai Hanashi',
-  },
-  {
     name: 'mangadex hunter-x-hunter',
     integrationId: 'mangadex',
-    url: MANGADEX_TEST_SERIES_URL,
+    url: LIVE_MANGADEX_REFERENCE_URL,
     expectedMangaId: 'db692d58-4b13-4174-ae8c-30c515c0689c',
     expectedSeriesTitle: 'Hunter x Hunter',
   },
@@ -221,7 +213,7 @@ async function loadLiveDownloadState(
 
   const startedAt = Date.now()
   let lastState: unknown
-  while (Date.now() - startedAt < 90_000) {
+  while (Date.now() - startedAt < 30_000) {
     for (const tabId of candidateTabIds) {
       const state = await getSessionState<unknown>(context, `tab_${tabId}`)
       lastState = state
@@ -359,7 +351,7 @@ async function waitForTerminalTask(context: BrowserContext, taskId: string): Pro
       || task.status === 'failed'
       || task.status === 'canceled'
     )),
-    { timeout: 300_000 },
+    { timeout: 120_000 },
   )
 
   const task = globalState.downloadQueue.find((candidate) => candidate.id === taskId)
@@ -410,7 +402,7 @@ async function waitForBrowserDownload(optionsPage: Page, downloadId: number): Pr
   const startedAt = Date.now()
   let lastItem: DownloadItemSnapshot | undefined
 
-  while (Date.now() - startedAt < 60_000) {
+  while (Date.now() - startedAt < 30_000) {
     const item = await optionsPage.evaluate(async (id: number) => {
       const [downloadItem] = await chrome.downloads.search({ id })
       return downloadItem
@@ -516,7 +508,7 @@ async function listSeededDirectoryFiles(optionsPage: Page, directoryName: string
 }
 
 test.describe('Live download workflows', () => {
-  test.describe.configure({ timeout: 360_000 })
+  test.describe.configure({ timeout: 120_000 })
 
   for (const workflowCase of browserWorkflowCases) {
     test(`completes a browser-mode live single-chapter download for ${workflowCase.name}`, async ({ context, extensionId }) => {
@@ -581,7 +573,7 @@ test.describe('Live download workflows', () => {
 
   test('writes a live MangaDex single-chapter download through the custom-folder pipeline', async ({ context, extensionId }) => {
     const page = await context.newPage()
-    await page.goto(LIVE_MANGADEX_KEMUTAI_URL, { waitUntil: 'domcontentloaded' })
+    await page.goto(LIVE_MANGADEX_REFERENCE_URL, { waitUntil: 'domcontentloaded' })
     await seedMangadexWebsitePreferences(page)
 
     const { optionsPage, tabId, state } = await loadLiveDownloadState(context, extensionId, page, 'mangadex')

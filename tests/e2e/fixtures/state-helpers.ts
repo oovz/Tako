@@ -21,16 +21,22 @@ import { MANGADEX_GENERIC_SERIES_URL } from './test-domains';
 
 type InitializeTabActionPayload = Omit<InitializeTabReadyPayload, 'context'>;
 
+function isBackgroundWorkerUrl(url: string): boolean {
+  return url.startsWith('chrome-extension://') && /\/background(?:\.js)?$/i.test(url);
+}
+
 async function getServiceWorker(context: BrowserContext): Promise<import('@playwright/test').Worker> {
   const expectedName = 'Tako Manga Downloader'
   const isOurWorker = async (sw: import('@playwright/test').Worker): Promise<boolean> => {
+    // Check URL first — works even when the MV3 service worker has been
+    // terminated (ephemeral lifetime) and evaluate() would fail.
+    if (isBackgroundWorkerUrl(sw.url())) return true;
     try {
       const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
       return name === expectedName
     } catch {
       return false
     }
-
   }
 
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -46,7 +52,10 @@ async function getServiceWorker(context: BrowserContext): Promise<import('@playw
     }
   }
 
-  throw new Error('Service worker not found - extension may not be loaded')
+  const seenWorkerUrls = context.serviceWorkers().map((sw) => sw.url());
+  throw new Error(
+    `Service worker not found - extension may not be loaded. Seen workers: ${JSON.stringify(seenWorkerUrls)}`,
+  )
 }
 
 /**
@@ -79,6 +88,9 @@ export async function openSidepanelHarness(
 ): Promise<Page> {
   const sidepanelPage = await context.newPage()
   await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })
+  // Wait for React to mount before binding, so event listeners are registered
+  // before bringToFront triggers tabs.onActivated.
+  await sidepanelPage.locator('#root').waitFor({ state: 'visible', timeout: 15_000 })
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
   return sidepanelPage
 }
@@ -89,6 +101,7 @@ export async function reloadSidepanelHarness(
   options: SidepanelHarnessOptions = {}
 ): Promise<void> {
   await sidepanelPage.reload({ waitUntil: 'domcontentloaded' })
+  await sidepanelPage.locator('#root').waitFor({ state: 'visible', timeout: 15_000 })
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
 }
 

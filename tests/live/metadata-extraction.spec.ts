@@ -165,7 +165,7 @@ test.describe('Live Metadata Extraction', () => {
         return fallback;
       };
 
-      const timeoutMs = 75_000;
+      const timeoutMs = 30_000;
       const pollMs = 500;
       const maxReinitBursts = 2;
       let reinitBursts = 0;
