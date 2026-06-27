@@ -170,7 +170,7 @@ test.describe('Spec options coverage', () => {
     }).toBe('debug')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: 'About / Debug' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'About & Debug' })).toBeVisible()
     await expect(page.getByText('Debug Settings')).toBeVisible()
     await expect(page.getByTestId('log-level-select')).toContainText('Debug')
   })

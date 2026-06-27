@@ -10,7 +10,7 @@ test.describe('Options Page', () => {
     
     // Verify options page loaded - check for sidebar navigation
     await expect(page.getByText('Tako Settings')).toBeVisible();
-    await expect(page.getByText('General')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'General' })).toBeVisible();
   });
   
   test('displays download format selector', async ({ page, extensionId }) => {
@@ -84,7 +84,7 @@ test.describe('Options Page', () => {
     await expect(page.getByText('Download Location')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Downloads' }).click();
-    await expect(page.getByText('Download destination')).toBeVisible();
+    await expect(page.getByText('Download destination', { exact: true })).toBeVisible();
   });
 
   test('keeps page-level vertical scrolling disabled so only the main options pane scrolls', async ({ page, extensionId }) => {
@@ -122,7 +122,7 @@ test.describe('Options Page', () => {
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('button', { name: 'About / Debug' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'About & Debug' })).toBeVisible();
     await expect(page.getByText(/Clearing history will reset "New" chapter indicators\./i)).toHaveCount(0);
   });
 

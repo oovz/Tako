@@ -331,7 +331,7 @@ test.describe('Spec side panel coverage', () => {
     await existingOptionsPage.goto(`chrome-extension://${extensionId}/options.html?tab=debug`, {
       waitUntil: 'domcontentloaded',
     })
-    await expect(existingOptionsPage.getByRole('button', { name: 'About / Debug' })).toBeVisible()
+    await expect(existingOptionsPage.getByRole('button', { name: 'About & Debug' })).toBeVisible()
 
     const sp = await context.newPage()
     await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })
