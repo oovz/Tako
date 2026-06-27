@@ -343,7 +343,7 @@ test.describe('Spec side panel coverage', () => {
 
     await expect.poll(() => existingOptionsPage.url()).toContain('options.html?tab=downloads')
     await expect(existingOptionsPage.getByRole('button', { name: 'Downloads' })).toBeVisible()
-    await expect(existingOptionsPage.getByText('Download destination')).toBeVisible()
+    await expect(existingOptionsPage.getByText('Download destination', { exact: true })).toBeVisible()
 
     await sp.close()
     await existingOptionsPage.close()

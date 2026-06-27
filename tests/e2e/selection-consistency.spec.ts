@@ -10,7 +10,7 @@ import {
 const SERIES_URL = MANGADEX_TEST_SERIES_URL
 
 async function switchSelectorToFlatChapterView(sidepanelPage: import('@playwright/test').Page): Promise<void> {
-  const showAllChaptersButton = sidepanelPage.getByRole('button', { name: /All chapters/i })
+  const showAllChaptersButton = sidepanelPage.getByRole('radio', { name: /All chapters/i })
   if (await showAllChaptersButton.count()) {
     await showAllChaptersButton.click()
   }

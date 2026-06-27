@@ -202,7 +202,7 @@ test.describe('Side Panel chapter/volume order', () => {
     await expect(sp.getByText('View Toggle Series')).toBeVisible({ timeout: 15000 })
 
     await sp.getByRole('button', { name: /Select Chapters/i }).click()
-    const viewModeTrigger = sp.getByRole('button', { name: /All chapters/i })
+    const viewModeTrigger = sp.getByRole('radio', { name: /All chapters/i })
 
     await expect(sp.getByText(/^Volume 1$/)).toBeVisible()
     await expect(viewModeTrigger).toBeVisible()
@@ -214,7 +214,7 @@ test.describe('Side Panel chapter/volume order', () => {
     await viewModeTrigger.click()
 
     await expect(sp.getByText('View Toggle Series')).toBeVisible()
-    const groupByVolumeButton = sp.getByRole('button', { name: /^Volumes$/i })
+    const groupByVolumeButton = sp.getByRole('radio', { name: /^Volumes$/i })
     await expect(groupByVolumeButton).toBeVisible()
     await expect(groupByVolumeButton).toHaveText('Volumes')
     await expect(sp.locator('#toggle-1')).toBeVisible()
@@ -222,7 +222,7 @@ test.describe('Side Panel chapter/volume order', () => {
 
     await groupByVolumeButton.click()
 
-    await expect(sp.getByRole('button', { name: /All chapters/i })).toBeVisible()
+    await expect(sp.getByRole('radio', { name: /All chapters/i })).toBeVisible()
     await expect(sp.getByText(/^Volume 1$/)).toBeVisible()
 
     await sp.close()
@@ -284,11 +284,11 @@ test.describe('Side Panel chapter/volume order', () => {
 
     for (let iteration = 0; iteration < 10; iteration += 1) {
       const isGroupedView = iteration % 2 === 0
-      await sp.getByRole('button', { name: isGroupedView ? /All chapters/i : /^Volumes$/i }).click()
+      await sp.getByRole('radio', { name: isGroupedView ? /All chapters/i : /^Volumes$/i }).click()
     }
 
     await expect(sp.locator('#root')).toBeVisible()
-    await expect(sp.getByRole('button', { name: /All chapters/i })).toBeVisible()
+    await expect(sp.getByRole('radio', { name: /All chapters/i })).toBeVisible()
     expect(pageErrors.some((message) => message.includes('Maximum update depth exceeded'))).toBe(false)
     expect(consoleErrors.some((message) => message.includes('Maximum update depth exceeded'))).toBe(false)
 
@@ -330,7 +330,7 @@ test.describe('Side Panel chapter/volume order', () => {
     await expect(sp.getByText('Grouped Collapse Series')).toBeVisible({ timeout: 15000 })
 
     await sp.getByRole('button', { name: /Select Chapters/i }).click()
-    const viewModeTrigger = sp.getByRole('button', { name: /All chapters/i })
+    const viewModeTrigger = sp.getByRole('radio', { name: /All chapters/i })
     await expect(viewModeTrigger).toBeVisible()
     await viewModeTrigger.click()
 
@@ -343,7 +343,7 @@ test.describe('Side Panel chapter/volume order', () => {
 
     await expect(sp.getByRole('button', { name: /Select Chapters/i })).toBeVisible()
     await expect(sp.getByRole('button', { name: /Close Selection/i })).toHaveCount(0)
-    await expect(sp.getByRole('button', { name: /^Volumes$/i })).toHaveCount(0)
+    await expect(sp.getByRole('radio', { name: /^Volumes$/i })).toHaveCount(0)
 
     await sp.close()
   })
