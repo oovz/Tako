@@ -38,6 +38,8 @@ jobs:
         run: pnpm test:unit
       - name: Integration tests
         run: pnpm test:integration
+      - name: Coverage check
+        run: pnpm test:coverage
 
   e2e:
     runs-on: ubuntu-latest
