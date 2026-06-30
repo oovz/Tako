@@ -394,6 +394,92 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(dispatchOrder.filter((entry) => entry.startsWith('start:'))).toHaveLength(3);
       expect(dispatchOrder.filter((entry) => entry.startsWith('end:'))).toHaveLength(3);
     });
+
+    it('does not overwrite chapter/task error when liveness recovery already marked them terminal', async () => {
+      // Simulates the race: liveness recovery closes the offscreen mid-flight,
+      // marking the chapter 'failed' with "Download process unresponsive".
+      // The pending OFFSCREEN_DOWNLOAD_CHAPTER sendMessage then rejects with
+      // "message channel closed". The dispatch catch must NOT overwrite the
+      // liveness recovery error with the downstream sendMessage rejection.
+      mockRuntimeSendMessage.mockImplementationOnce(async (message: { type?: string }) => {
+        if (message?.type !== 'OFFSCREEN_DOWNLOAD_CHAPTER') {
+          return { success: true, status: 'completed' };
+        }
+
+        // Simulate liveness recovery firing while the sendMessage is pending:
+        // mark the chapter and task terminal with the canonical liveness error.
+        const task = mockGlobalState.downloadQueue.find((t) => t.id === 'task-liveness-race');
+        if (task) {
+          task.status = 'failed';
+          task.errorMessage = 'Download process unresponsive';
+          const chapter = task.chapters.find((c) => c.id === 'ch1');
+          if (chapter) {
+            chapter.status = 'failed';
+            chapter.errorMessage = 'Download process unresponsive';
+          }
+        }
+
+        throw new Error('A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received');
+      });
+
+      const task = makeTask({
+        id: 'task-liveness-race',
+        chapters: [createChapter({ id: 'ch1', url: 'https://example.com/ch1', title: 'Chapter 1', chapterNumber: 1 })],
+      });
+
+      mockGlobalState.downloadQueue = [task];
+
+      await startDownloadTask(
+        mockStateManager,
+        'task-liveness-race',
+        mockEnsureOffscreenReady,
+      );
+
+      // The chapter should retain the liveness recovery error, not the
+      // "message channel closed" sendMessage rejection.
+      const chapterUpdateCalls = vi.mocked(mockStateManager.updateDownloadTaskChapter).mock.calls.filter(
+        (call) => call[1] === 'ch1',
+      );
+      const failedChapterUpdates = chapterUpdateCalls.filter(
+        (call) => call[2] === 'failed' && call[3]?.errorMessage === 'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received',
+      );
+      expect(failedChapterUpdates).toHaveLength(0);
+
+      // The chapter's final state in mockGlobalState should still have the
+      // liveness recovery error (the dispatch catch skipped the overwrite).
+      const finalTask = mockGlobalState.downloadQueue.find((t) => t.id === 'task-liveness-race');
+      const finalChapter = finalTask?.chapters.find((c) => c.id === 'ch1');
+      expect(finalChapter?.errorMessage).toBe('Download process unresponsive');
+    });
+
+    it('overwrites chapter error when no prior terminal state exists (normal dispatch failure)', async () => {
+      // When liveness recovery has NOT fired, the dispatch catch should still
+      // record the sendMessage rejection error as the chapter's failure reason.
+      mockRuntimeSendMessage.mockImplementationOnce(async (message: { type?: string }) => {
+        if (message?.type !== 'OFFSCREEN_DOWNLOAD_CHAPTER') {
+          return { success: true, status: 'completed' };
+        }
+        throw new Error('Unexpected offscreen error');
+      });
+
+      const task = makeTask({
+        id: 'task-normal-failure',
+        chapters: [createChapter({ id: 'ch1', url: 'https://example.com/ch1', title: 'Chapter 1', chapterNumber: 1 })],
+      });
+
+      mockGlobalState.downloadQueue = [task];
+
+      await startDownloadTask(
+        mockStateManager,
+        'task-normal-failure',
+        mockEnsureOffscreenReady,
+      );
+
+      const finalTask = mockGlobalState.downloadQueue.find((t) => t.id === 'task-normal-failure');
+      const finalChapter = finalTask?.chapters.find((c) => c.id === 'ch1');
+      expect(finalChapter?.status).toBe('failed');
+      expect(finalChapter?.errorMessage).toBe('Unexpected offscreen error');
+    });
   });
 
     describe('processDownloadQueue', () => {

@@ -278,7 +278,6 @@ export class OffscreenWorker {
       if (abortSignal?.aborted) throw new Error('job-cancelled')
 
       const chapterRetries = this.currentRetries?.chapter ?? 1
-      await onProgress(10, 'parsing')
       const resolveWithTimeout = async () => {
         let timer: ReturnType<typeof setTimeout> | undefined
         try {
@@ -299,8 +298,20 @@ export class OffscreenWorker {
         }
       }
 
+      // Send a progress update before each resolve/fetch attempt so the
+      // background liveness watchdog sees activity during long retry
+      // sequences. Without this, a 3x retry cycle (3 × 30s timeout) can
+      // exceed the 60s liveness threshold and trigger a false-positive
+      // offscreen kill that masks the real error with "message channel closed".
+      // Each retry attempt is a meaningful progress event — the offscreen is
+      // actively working, not hung.
+      const resolveWithProgress = async () => {
+        await onProgress(10, 'parsing')
+        return resolveWithTimeout()
+      }
+
       const urls = OffscreenIntegration.chapter.resolveImageUrls
-        ? await (this.currentHandlesOwnRetries ? resolveWithTimeout() : withRetries(resolveWithTimeout, chapterRetries))
+        ? await (this.currentHandlesOwnRetries ? resolveWithProgress() : withRetries(resolveWithProgress, chapterRetries))
         : await (async () => {
           const parseImageUrlsFromHtml = OffscreenIntegration.chapter.parseImageUrlsFromHtml
           if (!parseImageUrlsFromHtml) {
@@ -310,15 +321,16 @@ export class OffscreenWorker {
           let html = ''
           let htmlFetchErrorMessage: string | undefined
           try {
-            html = await withRetries(
-              () => fetchChapterHtml(
+            const fetchHtmlWithProgress = async () => {
+              await onProgress(10, 'parsing')
+              return fetchChapterHtml(
                 chapter.url,
                 OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
                 integrationId,
                 opts.settingsSnapshot?.rateLimitSettings.chapter,
-              ),
-              chapterRetries,
-            )
+              )
+            }
+            html = await withRetries(fetchHtmlWithProgress, chapterRetries)
           } catch (error) {
             htmlFetchErrorMessage = error instanceof Error ? error.message : (typeof error === 'string' ? error : undefined)
             html = ''

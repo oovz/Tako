@@ -253,15 +253,33 @@ export async function startDownloadTask(
           errorMessage,
         };
 
-        if (fallbackTaskChapter?.id) {
+        // Liveness recovery may have already marked the chapter/task terminal
+        // with a more accurate "Download process unresponsive" error when the
+        // offscreen was closed mid-flight. Don't overwrite that with the
+        // sendMessage rejection error ("message channel closed"), which is a
+        // downstream symptom of the offscreen being closed, not the root cause.
+        const currentTask = (await stateManager.getGlobalState()).downloadQueue.find((t) => t.id === taskId);
+        const currentChapter = currentTask?.chapters.find((c) => c.id === fallbackTaskChapter?.id);
+        const chapterAlreadyTerminal = currentChapter &&
+          (currentChapter.status === 'completed' || currentChapter.status === 'failed' || currentChapter.status === 'partial_success');
+        const taskAlreadyTerminal = currentTask &&
+          (currentTask.status === 'completed' || currentTask.status === 'failed' || currentTask.status === 'partial_success' || currentTask.status === 'canceled');
+
+        if (fallbackTaskChapter?.id && !chapterAlreadyTerminal) {
           await stateManager.updateDownloadTaskChapter(taskId, fallbackTaskChapter.id, 'failed', {
             errorMessage,
           });
         }
 
-        await stateManager.updateDownloadTask(taskId, {
-          errorMessage,
-        });
+        if (!taskAlreadyTerminal) {
+          await stateManager.updateDownloadTask(taskId, {
+            errorMessage,
+          });
+        }
+
+        if (taskAlreadyTerminal) {
+          shouldStopDispatch = true;
+        }
 
         logger.error('[Queue]', {
           event: 'CHAPTER_DISPATCH_FAILED',
