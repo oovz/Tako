@@ -159,18 +159,40 @@ async function setupExtensionContext(testInfoHeadless: boolean): Promise<Extensi
   }
 
   const teardown = async (): Promise<void> => {
-    // Best-effort cleanup: log but don't throw so one failure doesn't
-    // leak the other resources.
+    // Attempt every cleanup step, then surface teardown failures after all
+    // resources have had a chance to close.
+    const errors: Error[] = [];
     if (dnrRulesToInstall.length > 0) {
       try {
         await clearDnrRedirectRules(backgroundWorker);
       } catch (error) {
+        errors.push(error as Error);
         console.warn('[extension.fixture] failed to clear DNR test rules:', error);
       }
     }
-    await context.close();
-    if (localMockServer) await localMockServer.close();
-    await fs.rm(userDataDir, { recursive: true, force: true });
+    try {
+      await context.close();
+    } catch (error) {
+      errors.push(error as Error);
+      console.warn('[extension.fixture] failed to close context:', error);
+    }
+    if (localMockServer) {
+      try {
+        await localMockServer.close();
+      } catch (error) {
+        errors.push(error as Error);
+        console.warn('[extension.fixture] failed to close mock server:', error);
+      }
+    }
+    try {
+      await fs.rm(userDataDir, { recursive: true, force: true });
+    } catch (error) {
+      errors.push(error as Error);
+      console.warn('[extension.fixture] failed to remove userDataDir:', error);
+    }
+    if (errors.length > 0) {
+      throw new Error(`Teardown failed with ${errors.length} errors: ${errors.map((e) => e.message).join(', ')}`);
+    }
   };
 
   return { context, extensionId, backgroundWorker, localMockServer, userDataDir, teardown };

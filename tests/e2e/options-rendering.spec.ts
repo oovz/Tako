@@ -1,25 +1,25 @@
-import { test, expect } from '../fixtures/extension';
+import { test, expect } from './fixtures/extension';
 
 test.describe('Options Page', () => {
   test('renders options page successfully', async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await page.waitForLoadState('domcontentloaded');
-    
+
     // Wait for page content to load
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
-    
+
     // Verify options page loaded - check for sidebar navigation
     await expect(page.getByText('Tako Settings')).toBeVisible();
     await expect(page.getByRole('button', { name: 'General' })).toBeVisible();
   });
-  
+
   test('displays download format selector', async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await page.waitForLoadState('domcontentloaded');
-    
+
     // Wait for page content to load
     await expect(page.locator('#root')).toBeVisible({ timeout: 10000 });
-    
+
     // Check for archive format RadioGroup (CBZ/ZIP/None options)
     await expect(page.locator('[data-testid="archive-format-radiogroup"]')).toBeVisible();
     await expect(page.getByText('CBZ Archive')).toBeVisible();

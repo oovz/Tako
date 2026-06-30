@@ -8,7 +8,7 @@
  * - Shared data (download tasks, settings) in ./mock-data/shared
  */
 
-import type { Page, BrowserContext } from '@playwright/test';
+import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { projectToQueueView } from '@/src/runtime/projection';
 import { DEFAULT_SETTINGS } from '../../../src/storage/default-settings';
 import { getExternalTabInitStorageKey } from '../../../src/runtime/external-tab-init';
@@ -158,15 +158,15 @@ export async function initializeTabViaAction(
   }
 
   const waitForInitState = async (timeoutMs: number): Promise<MangaPageState | undefined> => {
-    const start = Date.now()
     let lastState: MangaPageState | undefined
-    while (Date.now() - start < timeoutMs) {
-      const state = await getSessionState<MangaPageState>(context, `tab_${tabId}`)
-      lastState = state
-      if (isExpectedState(state)) {
-        return state
-      }
-      await page.waitForTimeout(100)
+    try {
+      await expect.poll(async () => {
+        lastState = await getSessionState<MangaPageState>(context, `tab_${tabId}`)
+        return isExpectedState(lastState)
+      }, { timeout: timeoutMs, intervals: [100] }).toBe(true)
+    } catch {
+      // Soft wait: return the last-seen state so the caller can retry
+      // initialization rather than abort on the first timeout.
     }
     return lastState
   }
@@ -179,18 +179,17 @@ export async function initializeTabViaAction(
       void 0
     }
 
-    const start = Date.now()
-    while (Date.now() - start < timeoutMs) {
-      const activeContext = await getSessionState<MangaPageState | { seriesTitle?: string; mangaId?: string }>(context, 'activeTabContext')
-      if (
-        activeContext
-        && activeContext.seriesTitle === expectedSeriesTitle
-        && (activeContext as { mangaId?: string }).mangaId === expectedSeriesId
-      ) {
-        return
-      }
-
-      await page.waitForTimeout(100)
+    try {
+      await expect.poll(async () => {
+        const activeContext = await getSessionState<MangaPageState | { seriesTitle?: string; mangaId?: string }>(context, 'activeTabContext')
+        return !!(
+          activeContext
+          && activeContext.seriesTitle === expectedSeriesTitle
+          && (activeContext as { mangaId?: string }).mangaId === expectedSeriesId
+        )
+      }, { timeout: timeoutMs, intervals: [100] }).toBe(true)
+    } catch {
+      // Soft wait: best-effort focus/restore; callers proceed regardless.
     }
   }
 
@@ -383,7 +382,7 @@ export async function seedDownloadQueueState(
         throw error
       }
 
-      await page.waitForTimeout(150)
+      await new Promise((resolve) => setTimeout(resolve, 150))
     }
   }
 }
@@ -444,24 +443,22 @@ export async function sendContentMessage(
 ): Promise<void> {
   const worker = await getServiceWorker(context);
 
-  const maxAttempts = 15;
-  const delayMs = 200;
-  let attempt = 0;
   let lastError: unknown;
-  while (attempt < maxAttempts) {
-    try {
-      await worker.evaluate(async ({ id, msg }: { id: number; msg: unknown }) => {
-        await chrome.tabs.sendMessage(id, msg as any);
-      }, { id: tabId, msg: message });
-      return; // success
-    } catch (err) {
-      lastError = err;
-      // Content script might not be ready yet; wait and retry
-      await context.pages()[0]?.waitForTimeout(delayMs);
-      attempt++;
-    }
+  try {
+    await expect(async () => {
+      try {
+        await worker.evaluate(async ({ id, msg }: { id: number; msg: unknown }) => {
+          await chrome.tabs.sendMessage(id, msg as any);
+        }, { id: tabId, msg: message });
+      } catch (err) {
+        // Content script might not be ready yet; wait and retry
+        lastError = err;
+        throw err;
+      }
+    }).toPass({ timeout: 3000, intervals: [200] });
+  } catch {
+    throw lastError instanceof Error ? lastError : new Error('Failed to send content message');
   }
-  throw lastError instanceof Error ? lastError : new Error('Failed to send content message');
 }
 
 /**
@@ -511,78 +508,76 @@ export async function getTabId(page: Page, context: BrowserContext): Promise<num
   }
 
   // Wait until chrome.tabs.query is available in the worker, then query for this page's tab by URL
-  let attempts = 0;
   let chromeTabId: number | undefined;
-  while (attempts < 20 && !chromeTabId) {
-    const tabsAvailable = await worker.evaluate(() => !!(chrome as any)?.tabs && typeof (chrome as any).tabs.query === 'function').catch(() => false);
-    if (!tabsAvailable) {
-      await context.pages()[0]?.waitForTimeout(100);
-      attempts++;
-      continue;
-    }
-    const targetUrl = pageUrl;
-    chromeTabId = await worker.evaluate(async (u: string | undefined) => {
-      const tabs = await chrome.tabs.query({});
-      const wins = await chrome.windows.getAll({ populate: true, windowTypes: ['normal'] });
-      const lastFocused = wins.find(w => w.focused) || wins[0];
-      const active = lastFocused?.tabs?.find(t => t.active);
+  try {
+    await expect.poll(async () => {
+      const tabsAvailable = await worker.evaluate(() => !!(chrome as any)?.tabs && typeof (chrome as any).tabs.query === 'function').catch(() => false);
+      if (!tabsAvailable) {
+        return false;
+      }
+      const targetUrl = pageUrl;
+      chromeTabId = await worker.evaluate(async (u: string | undefined) => {
+        const tabs = await chrome.tabs.query({});
+        const wins = await chrome.windows.getAll({ populate: true, windowTypes: ['normal'] });
+        const lastFocused = wins.find(w => w.focused) || wins[0];
+        const active = lastFocused?.tabs?.find(t => t.active);
 
-      const normalizeUrl = (value: string | undefined): string | undefined => {
-        if (!value) {
+        const normalizeUrl = (value: string | undefined): string | undefined => {
+          if (!value) {
+            return undefined;
+          }
+
+          try {
+            const parsed = new URL(value);
+            parsed.hash = '';
+            parsed.search = '';
+            parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+            return parsed.toString();
+          } catch {
+            return value;
+          }
+        };
+
+        const normalizedTarget = normalizeUrl(u);
+
+        if (active && typeof active.id === 'number' && (!u || active.url === u)) {
+          return active.id;
+        }
+
+        if (u) {
+          const matches = tabs.filter(t => t.url === u);
+          if (matches.length === 1 && typeof matches[0]?.id === 'number') {
+            return matches[0].id;
+          }
+
+          const activeMatch = matches.find(t => t.active && typeof t.id === 'number');
+          if (activeMatch && typeof activeMatch.id === 'number') {
+            return activeMatch.id;
+          }
+
+          if (normalizedTarget) {
+            const normalizedMatches = tabs.filter((tab) => normalizeUrl(tab.url) === normalizedTarget);
+            if (normalizedMatches.length === 1 && typeof normalizedMatches[0]?.id === 'number') {
+              return normalizedMatches[0].id;
+            }
+
+            const normalizedActiveMatch = normalizedMatches.find((tab) => tab.active && typeof tab.id === 'number');
+            if (normalizedActiveMatch && typeof normalizedActiveMatch.id === 'number') {
+              return normalizedActiveMatch.id;
+            }
+          }
+
           return undefined;
         }
 
-        try {
-          const parsed = new URL(value);
-          parsed.hash = '';
-          parsed.search = '';
-          parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-          return parsed.toString();
-        } catch {
-          return value;
-        }
-      };
+        // Fallback: choose the active tab in the last focused normal window
+        return (active?.id as number | undefined) ?? (tabs[0]?.id as number | undefined);
+      }, targetUrl).catch(() => undefined);
 
-      const normalizedTarget = normalizeUrl(u);
-
-      if (active && typeof active.id === 'number' && (!u || active.url === u)) {
-        return active.id;
-      }
-
-      if (u) {
-        const matches = tabs.filter(t => t.url === u);
-        if (matches.length === 1 && typeof matches[0]?.id === 'number') {
-          return matches[0].id;
-        }
-
-        const activeMatch = matches.find(t => t.active && typeof t.id === 'number');
-        if (activeMatch && typeof activeMatch.id === 'number') {
-          return activeMatch.id;
-        }
-
-        if (normalizedTarget) {
-          const normalizedMatches = tabs.filter((tab) => normalizeUrl(tab.url) === normalizedTarget);
-          if (normalizedMatches.length === 1 && typeof normalizedMatches[0]?.id === 'number') {
-            return normalizedMatches[0].id;
-          }
-
-          const normalizedActiveMatch = normalizedMatches.find((tab) => tab.active && typeof tab.id === 'number');
-          if (normalizedActiveMatch && typeof normalizedActiveMatch.id === 'number') {
-            return normalizedActiveMatch.id;
-          }
-        }
-
-        return undefined;
-      }
-
-      // Fallback: choose the active tab in the last focused normal window
-      return (active?.id as number | undefined) ?? (tabs[0]?.id as number | undefined);
-    }, targetUrl).catch(() => undefined);
-
-    if (!chromeTabId) {
-      await context.pages()[0]?.waitForTimeout(100);
-      attempts++;
-    }
+      return !!chromeTabId;
+    }, { timeout: 2000, intervals: [100] }).toBe(true);
+  } catch {
+    // fall through; chromeTabId may still be undefined below
   }
   
   if (!chromeTabId) {
@@ -625,17 +620,22 @@ export async function waitForTabState(
   options: { timeout?: number } = {}
 ): Promise<MangaPageState> {
   const timeout = options.timeout ?? 10000;
-  const startTime = Date.now();
+  let matchedState: MangaPageState | undefined;
 
-  while (Date.now() - startTime < timeout) {
+  await expect.poll(async () => {
     const state = await getTabState(page, context);
     if (state && condition(state)) {
-      return state;
+      matchedState = state;
+      return true;
     }
-    await page.waitForTimeout(100);
+    return false;
+  }, { timeout, intervals: [100], message: `Timeout waiting for tab state condition after ${timeout}ms` }).toBe(true);
+
+  if (!matchedState) {
+    throw new Error(`Timeout waiting for tab state condition after ${timeout}ms`);
   }
 
-  throw new Error(`Timeout waiting for tab state condition after ${timeout}ms`);
+  return matchedState;
 }
 
 /**
@@ -649,17 +649,22 @@ export async function waitForTabStateById(
   options: { timeout?: number } = {}
 ): Promise<MangaPageState> {
   const timeout = options.timeout ?? 10000;
-  const startTime = Date.now();
+  let matchedState: MangaPageState | undefined;
 
-  while (Date.now() - startTime < timeout) {
+  await expect.poll(async () => {
     const state = await getSessionState<MangaPageState>(context, `tab_${tabId}`);
     if (state && condition(state)) {
-      return state;
+      matchedState = state;
+      return true;
     }
-    await page.waitForTimeout(100);
+    return false;
+  }, { timeout, intervals: [100], message: `Timeout waiting for tab ${tabId} state condition after ${timeout}ms` }).toBe(true);
+
+  if (!matchedState) {
+    throw new Error(`Timeout waiting for tab ${tabId} state condition after ${timeout}ms`);
   }
 
-  throw new Error(`Timeout waiting for tab ${tabId} state condition after ${timeout}ms`);
+  return matchedState;
 }
 
 /**
@@ -674,20 +679,18 @@ export async function waitForTabSeriesTitle(
   options: { timeout?: number } = {},
 ): Promise<void> {
   const timeout = options.timeout ?? 15000;
-  const startTime = Date.now();
 
-  while (Date.now() - startTime < timeout) {
-    const state = await getSessionState<{ seriesTitle?: string }>(context, `tab_${tabId}`);
-    if (state?.seriesTitle === expectedTitle) {
-      return;
-    }
-    await context.pages()[0]?.waitForTimeout(150);
+  try {
+    await expect.poll(async () => {
+      const state = await getSessionState<{ seriesTitle?: string }>(context, `tab_${tabId}`);
+      return state?.seriesTitle === expectedTitle;
+    }, { timeout, intervals: [150] }).toBe(true);
+  } catch {
+    const finalState = await getSessionState(context, `tab_${tabId}`);
+    throw new Error(
+      `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)})`,
+    );
   }
-
-  const finalState = await getSessionState(context, `tab_${tabId}`);
-  throw new Error(
-    `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)})`,
-  );
 }
 
 /**
@@ -700,20 +703,18 @@ export async function waitForTabStateCleared(
   options: { timeout?: number } = {},
 ): Promise<void> {
   const timeout = options.timeout ?? 15000;
-  const startTime = Date.now();
 
-  while (Date.now() - startTime < timeout) {
-    const state = await getSessionState(context, `tab_${tabId}`);
-    if (!state) {
-      return;
-    }
-    await context.pages()[0]?.waitForTimeout(150);
+  try {
+    await expect.poll(async () => {
+      const state = await getSessionState(context, `tab_${tabId}`);
+      return !state;
+    }, { timeout, intervals: [150] }).toBe(true);
+  } catch {
+    const finalState = await getSessionState(context, `tab_${tabId}`);
+    throw new Error(
+      `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`,
+    );
   }
-
-  const finalState = await getSessionState(context, `tab_${tabId}`);
-  throw new Error(
-    `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`,
-  );
 }
 
 /**

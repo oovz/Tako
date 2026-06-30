@@ -43,7 +43,7 @@ function makeTask(
   }
 }
 
-test.describe('Spec options coverage', () => {
+test.describe('Options UI behavior', () => {
   test.describe.configure({ mode: 'serial' })
 
   test('Downloads tab mirrors inline cancel confirmation for active and queued tasks', async ({ page, extensionId }) => {

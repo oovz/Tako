@@ -1,148 +1,17 @@
 import { test, expect } from './fixtures/extension'
 import {
-  ensureOffscreenAliveForActiveQueue,
-  getGlobalState,
   getSessionState,
   getTabId,
   openSidepanelHarness,
-  setSessionState,
   waitForGlobalState,
 } from './fixtures/state-helpers'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { projectToQueueView } from '@/src/runtime/projection'
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
+import { getExtensionWorker, makeChapter, makeTask, seedGlobalQueue } from './fixtures/queue-test-helpers'
 import { buildExampleUrl } from './fixtures/test-domains'
 import type { DownloadTaskState } from '../../src/types/queue-state'
-import type { ChapterState } from '../../src/types/tab-state'
-
-function makeChapter(url: string, status: ChapterState['status']): ChapterState {
-  return {
-    id: url,
-    url,
-    title: url,
-    status,
-    lastUpdated: Date.now(),
-  } as ChapterState
-}
-
-function makeTask(
-  partial: Partial<DownloadTaskState> & {
-    id: string
-    seriesTitle: string
-    status: DownloadTaskState['status']
-    created: number
-  },
-): DownloadTaskState {
-  const siteIntegrationId = partial.siteIntegrationId ?? 'mangadex'
-  const base: DownloadTaskState = {
-    id: partial.id,
-    siteIntegrationId,
-    mangaId: 'mangadex:series-1',
-    seriesTitle: partial.seriesTitle,
-    chapters: [makeChapter(`${partial.id}-chapter-1`, 'queued')],
-    status: partial.status,
-    created: partial.created,
-    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
-  }
-
-  return {
-    ...base,
-    ...partial,
-  }
-}
-
-async function getExtensionWorker(context: import('@playwright/test').BrowserContext): Promise<import('@playwright/test').Worker> {
-  const expectedName = 'Tako Manga Downloader'
-  const isOurWorker = async (sw: import('@playwright/test').Worker): Promise<boolean> => {
-    try {
-      const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
-      return name === expectedName
-    } catch {
-      return false
-    }
-  }
-
-  let worker: import('@playwright/test').Worker | undefined
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context.serviceWorkers().filter((sw) => sw.url().startsWith('chrome-extension://'))
-    for (const sw of candidates) {
-      if (await isOurWorker(sw)) {
-        worker = sw
-        break
-      }
-    }
-    if (worker) break
-
-    try {
-      await context.waitForEvent('serviceworker', {
-        timeout: 1000,
-        predicate: (sw) => sw.url().startsWith('chrome-extension://'),
-      })
-    } catch {
-      void 0
-    }
-  }
-
-  if (!worker) {
-    throw new Error('Service worker not found')
-  }
-
-  return worker
-}
-
-async function seedGlobalQueue(
-  context: import('@playwright/test').BrowserContext,
-  tasks: DownloadTaskState[],
-): Promise<void> {
-  const ids = tasks.map((task) => task.id).sort()
-  const projected = projectToQueueView(tasks)
-  const worker = await getExtensionWorker(context)
-
-  if (tasks.some((task) => task.status === 'downloading')) {
-    await ensureOffscreenAliveForActiveQueue(context)
-  }
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const existing = await getGlobalState(context)
-    const next = {
-      ...(existing ?? {}),
-      downloadQueue: tasks,
-      settings: existing?.settings ?? DEFAULT_SETTINGS,
-      lastActivity: Date.now(),
-    }
-
-    await setSessionState(context, SESSION_STORAGE_KEYS.globalState, next as any)
-    await setSessionState(context, 'queueView', projected.queueView as any)
-    await worker.evaluate(async (downloadQueue: DownloadTaskState[]) => {
-      await chrome.storage.local.set({ downloadQueue })
-    }, tasks)
-
-    await context.pages()[0]?.waitForTimeout(150)
-
-    try {
-      await waitForGlobalState(
-        context,
-        (state) => {
-          const queue = state.downloadQueue ?? []
-          if (queue.length !== tasks.length) return false
-          const queueIds = queue.map((task) => task.id).sort()
-          return queueIds.length === ids.length && queueIds.every((id, index) => id === ids[index])
-        },
-        { timeout: 15000 },
-      )
-      return
-    } catch (error) {
-      if (attempt === 2) {
-        throw error
-      }
-    }
-  }
-}
 
 const exampleRootUrl = buildExampleUrl('/')
 
-test.describe('Spec side panel coverage', () => {
+test.describe('Side panel queue behavior', () => {
   test.describe.configure({ mode: 'serial' })
 
   test('queued-task cancel uses inline confirmation and preserves active task', async ({ context, extensionId, page }) => {
