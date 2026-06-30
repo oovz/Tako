@@ -16,6 +16,10 @@ import {
   buildPublusPageTileRects,
   parsePublusImageTransportUrl,
 } from '@/src/site-integrations/comicnettai/publus-image'
+import {
+  extractComicNettaiSeriesMetadataFromDocument,
+  extractComicNettaiChapterListFromDocument,
+} from '@/src/site-integrations/comicnettai/series-dom'
 
 const LIVE_PUBLUS_KEYS = {
   key1: '77fb2c670460a4daeb0463c40976806a63750720ceb768cf43031fca8f3eb5e2',
@@ -304,6 +308,185 @@ describe('Comic Nettai site integration', () => {
       const urls = buildPublusImageUrlsFromConfig(BASE_URL, config)
       expect(urls).toHaveLength(1)
       expect(parsePublusImageTransportUrl(urls[0]!).sourceUrl).toContain('p-cover')
+    })
+  })
+
+  describe('series-dom extraction', () => {
+    function makeElement(opts: {
+      textContent?: string
+      href?: string
+      classList?: string[]
+      src?: string
+      dataSrc?: string
+      alt?: string
+      getAttribute?: (name: string) => string | null
+    }) {
+      return {
+        textContent: opts.textContent ?? '',
+        getAttribute: opts.getAttribute ?? ((name: string) => {
+          if (name === 'href') return opts.href ?? null
+          if (name === 'data-src') return opts.dataSrc ?? null
+          if (name === 'content') return opts.textContent ?? null
+          return null
+        }),
+        classList: {
+          contains: (cls: string) => (opts.classList ?? []).includes(cls),
+        },
+        src: opts.src ?? '',
+        alt: opts.alt ?? '',
+        querySelector: vi.fn((selector: string) => {
+          if (selector === '.detail--product__thum') {
+            return opts.dataSrc || opts.src
+              ? { getAttribute: (name: string) => (name === 'data-src' ? opts.dataSrc ?? null : null), src: opts.src ?? '', alt: opts.alt ?? '' }
+              : null
+          }
+          if (selector === '.detail--product__item__title') {
+            return opts.textContent ? { textContent: opts.textContent } : null
+          }
+          return null
+        }),
+      }
+    }
+
+    function makeDocument(opts: {
+      title?: string
+      author?: string
+      description?: string
+      coverUrl?: string
+      ogTitle?: string
+      ogDescription?: string
+      ogImage?: string
+      metaDescription?: string
+      chapters?: Array<{ href: string; title: string; open?: boolean; thumbnailDataSrc?: string; thumbnailSrc?: string; thumbnailAlt?: string }>
+    }) {
+      const querySelector = vi.fn((selector: string) => {
+        if (selector === '.detail--title') return opts.title ? { textContent: opts.title } : null
+        if (selector === '.detail__author__item') return opts.author ? { textContent: opts.author } : null
+        if (selector === '.detail--discription') return opts.description ? { textContent: opts.description } : null
+        if (selector === 'meta[property="og:title"]') return opts.ogTitle ? { getAttribute: () => opts.ogTitle! } : null
+        if (selector === 'meta[name="description"]') return opts.metaDescription ? { getAttribute: () => opts.metaDescription! } : null
+        if (selector === 'meta[property="og:description"]') return opts.ogDescription ? { getAttribute: () => opts.ogDescription! } : null
+        if (selector === 'meta[property="og:image"]') return opts.ogImage ? { getAttribute: () => opts.ogImage! } : null
+        if (selector === '.detail-catch__img') return opts.coverUrl ? { src: opts.coverUrl } : null
+        return null
+      })
+
+      const querySelectorAll = vi.fn((selector: string) => {
+        if (selector === 'a.detail--product__item[href]') {
+          return (opts.chapters ?? []).map((ch) =>
+            makeElement({
+              href: ch.href,
+              textContent: ch.title,
+              classList: ch.open ? ['is-open'] : [],
+              dataSrc: ch.thumbnailDataSrc,
+              src: ch.thumbnailSrc,
+              alt: ch.thumbnailAlt,
+            }),
+          )
+        }
+        return []
+      })
+
+      return { querySelector, querySelectorAll } as unknown as Document
+    }
+
+    it('extracts series metadata from DOM selectors', () => {
+      const doc = makeDocument({
+        title: 'Test Manga',
+        author: 'Test Author',
+        description: 'A test manga description',
+        coverUrl: 'https://cdn.comicnettai.com/cover.jpg',
+      })
+
+      const metadata = extractComicNettaiSeriesMetadataFromDocument(doc)
+      expect(metadata).toMatchObject({
+        title: 'Test Manga',
+        author: 'Test Author',
+        description: 'A test manga description',
+        coverUrl: 'https://cdn.comicnettai.com/cover.jpg',
+        language: 'ja',
+        readingDirection: 'rtl',
+      })
+    })
+
+    it('falls back to OpenGraph title when .detail--title is missing', () => {
+      const doc = makeDocument({
+        ogTitle: 'Test Manga - Comic Nettai',
+        ogImage: 'https://cdn.comicnettai.com/og.jpg',
+      })
+
+      const metadata = extractComicNettaiSeriesMetadataFromDocument(doc)
+      expect(metadata.title).toBe('Test Manga')
+      expect(metadata.coverUrl).toBe('https://cdn.comicnettai.com/og.jpg')
+    })
+
+    it('throws when no title can be found', () => {
+      const doc = makeDocument({})
+      expect(() => extractComicNettaiSeriesMetadataFromDocument(doc)).toThrow(
+        'Comic Nettai series title not found in page DOM',
+      )
+    })
+
+    it('extracts chapter list from anchor elements', () => {
+      const doc = makeDocument({
+        title: 'Test Manga',
+        chapters: [
+          {
+            href: '/publus/viewer.html?cid=chap1',
+            title: '第1話',
+            open: true,
+            thumbnailDataSrc: 'https://cdn.comicnettai.com/9_hash/book_contents/100/icon_1.jpg',
+          },
+          {
+            href: '/publus/viewer.html?cid=chap2',
+            title: '第2話',
+            open: false,
+          },
+        ],
+      })
+
+      const result = extractComicNettaiChapterListFromDocument(doc)
+      const chapters = Array.isArray(result) ? result : result.chapters
+      expect(chapters).toHaveLength(2)
+      expect(chapters[0]).toMatchObject({
+        id: '100',
+        url: 'https://www.comicnettai.com/publus/viewer.html?cid=chap1',
+        title: '第1話',
+        locked: false,
+        language: 'ja',
+      })
+      expect(chapters[1]).toMatchObject({
+        locked: true,
+      })
+    })
+
+    it('skips anchors with invalid viewer URLs', () => {
+      const doc = makeDocument({
+        title: 'Test Manga',
+        chapters: [
+          { href: '/invalid-url', title: 'Invalid' },
+          { href: '/publus/viewer.html?cid=valid', title: 'Valid', open: true },
+        ],
+      })
+
+      const result = extractComicNettaiChapterListFromDocument(doc)
+      const chapters = Array.isArray(result) ? result : result.chapters
+      expect(chapters).toHaveLength(1)
+      expect(chapters[0]!.url).toContain('cid=valid')
+    })
+
+    it('deduplicates chapters by id', () => {
+      const doc = makeDocument({
+        title: 'Test Manga',
+        chapters: [
+          { href: '/publus/viewer.html?cid=dup', title: 'First', open: true },
+          { href: '/publus/viewer.html?cid=dup', title: 'Second', open: true },
+        ],
+      })
+
+      const result = extractComicNettaiChapterListFromDocument(doc)
+      const chapters = Array.isArray(result) ? result : result.chapters
+      expect(chapters).toHaveLength(1)
     })
   })
 })
