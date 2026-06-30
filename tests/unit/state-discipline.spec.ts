@@ -101,8 +101,33 @@ describe('State discipline runtime guards', () => {
     it('treats Extension context invalidation as non-fatal', async () => {
       mocks.runtimeSendMessage.mockRejectedValueOnce(new Error('Extension context invalidated'))
 
-      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).resolves.toBeUndefined()
+      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).resolves.toEqual({ success: true })
       expect(mocks.loggerDebug).toHaveBeenCalled()
+    })
+
+    it('throws when the service worker returns a structured failure (success: false)', async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: false, error: 'Tab ID required for CLEAR_TAB_STATE' })
+
+      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).rejects.toThrow(
+        'Tab ID required for CLEAR_TAB_STATE',
+      )
+    })
+
+    it('throws a generic message when the worker returns success: false with no error', async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: false, error: '' })
+
+      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).rejects.toThrow(
+        /was rejected by the service worker/,
+      )
+    })
+
+    it('returns the structured success response (with data) to callers', async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: true, data: { skipped: true } })
+
+      await expect(sendStateAction(StateAction.INITIALIZE_TAB, undefined, 42)).resolves.toEqual({
+        success: true,
+        data: { skipped: true },
+      })
     })
   })
 

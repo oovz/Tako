@@ -6,7 +6,7 @@
  */
 
 import { StateAction } from '@/src/types/state-actions';
-import type { StateActionMessage } from '@/src/types/state-action-message';
+import type { StateActionMessage, StateActionResponse } from '@/src/types/state-action-message';
 import logger from '@/src/runtime/logger';
 
 const VALID_STATE_ACTIONS = new Set(
@@ -55,15 +55,23 @@ const VALID_STATE_ACTIONS = new Set(
  * **Error Handling**:
  * - Throws if action is not a valid StateAction enum value
  * - Throws if chrome.runtime.sendMessage fails
- * - Service Worker may return error response (check handler implementation)
+ * - Throws if the service worker returns a structured failure
+ *   ({ success: false, error }) so callers cannot silently treat a rejected
+ *   mutation as a success. Inspect `error.message` for the worker's reason.
  * 
  * @param action - StateAction enum value (compile-time type checked)
  * @param payload - Action-specific payload (see state-action-payloads.ts)
  * @param tabId - Optional tab ID (required for tab-specific actions)
+ * @returns The structured StateActionResponse on success
  * @throws Error if action is not a StateAction enum value
  * @throws Error if chrome.runtime.sendMessage fails
+ * @throws Error if the service worker returns { success: false, error }
  */
-export async function sendStateAction(action: StateAction, payload?: unknown, tabId?: number): Promise<void> {
+export async function sendStateAction(
+  action: StateAction,
+  payload?: unknown,
+  tabId?: number,
+): Promise<StateActionResponse> {
   // Guard: enforce enum-only action at call site to fail fast
   const isValidEnum = VALID_STATE_ACTIONS.has(action);
   if (!isValidEnum) {
@@ -78,13 +86,28 @@ export async function sendStateAction(action: StateAction, payload?: unknown, ta
   };
 
   try {
-    // Send flattened message with enum action; background expects this exact shape
-    await chrome.runtime.sendMessage<StateActionMessage>(message);
+    // Send flattened message with enum action; background expects this exact
+    // shape. The service worker resolves with a structured StateActionResponse
+    // ({ success: true, data? } | { success: false, error }). We must surface
+    // failures to callers instead of discarding the response — otherwise a
+    // rejected mutation can be silently treated as a success.
+    const response = await chrome.runtime.sendMessage<StateActionMessage, StateActionResponse>(message);
+
+    // Some legacy/implicit responders (and the extension-context-invalidated
+    // edge case below) may resolve with `undefined`. Treat an explicitly
+    // structured failure as an error, but pass through undefined/true so we do
+    // not regress fire-and-forget callers that never had a responder.
+    if (response && response.success === false) {
+      const errorMessage = response.error || `State action ${action} was rejected by the service worker`;
+      throw new Error(errorMessage);
+    }
+
+    return response ?? { success: true };
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
     if (messageText.includes('Extension context invalidated')) {
       logger.debug('state-actions: extension context invalidated, skipping state action');
-      return;
+      return { success: true };
     }
     logger.error('state-actions: failed to send state action', error);
     throw error;

@@ -51,6 +51,14 @@
     "message": "$COUNT$ Volumes",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "sidepanel_volumeToggleAria": {
+    "message": "Toggle volume $TITLE$",
+    "placeholders": { "title": { "content": "$1" } }
+  },
+  "sidepanel_volumeSelectAllAria": {
+    "message": "Select all $COUNT$ chapters in volume $TITLE$",
+    "placeholders": { "title": { "content": "$1" }, "count": { "content": "$2" } }
+  },
 
   "sidepanel_selectChaptersLabel": { "message": "Select chapters" },
   "sidepanel_selectedCount": {
@@ -109,6 +117,13 @@
   "sidepanel_toastRetryFailed": { "message": "Failed to retry failed chapters" },
   "sidepanel_toastRestartFailed": { "message": "Failed to restart task" },
   "sidepanel_toastMoveTopFailed": { "message": "Failed to move task to top" },
+  "sidepanel_toastCancelFailed": { "message": "Failed to cancel task" },
+  "sidepanel_toastRemoveFailed": { "message": "Failed to remove task" },
+
+  "options_toastCancelFailed": { "message": "Failed to cancel task" },
+  "options_toastRetryFailed": { "message": "Failed to retry failed chapters" },
+  "options_toastRestartFailed": { "message": "Failed to restart task" },
+  "options_toastRemoveFailed": { "message": "Failed to remove task" },
 
   "status_downloading": { "message": "Downloading" },
   "status_queued": { "message": "Queued" },

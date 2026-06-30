@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { toast } from 'sonner'
+
 import logger from '@/src/runtime/logger'
 import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 import { StateAction } from '@/src/types/state-actions'
+import type {
+  RestartTaskMessage,
+  RestartTaskResponse,
+  RetryFailedChaptersMessage,
+  RetryFailedChaptersResponse,
+} from '@/src/types/runtime-command-messages'
+import type { StateActionMessage, StateActionResponse } from '@/src/types/state-action-message'
 import { isRecord } from '@/src/shared/type-guards'
 import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
+import { t } from '@/src/runtime/i18n'
 
 export type FsaErrorState = {
   active?: boolean
@@ -68,41 +78,63 @@ export function useDownloadsTabState() {
 
   const cancelTask = useCallback(async (taskId: string) => {
     try {
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage<StateActionMessage, StateActionResponse>({
         type: 'STATE_ACTION',
         action: StateAction.CANCEL_DOWNLOAD_TASK,
         payload: { taskId },
       })
+      if (!response || response.success === false) {
+        toast.error(response?.error || t('options_toastCancelFailed'))
+      }
     } catch (error) {
       logger.error('[DOWNLOADS TAB] Failed to cancel task:', error)
+      toast.error(t('options_toastCancelFailed'))
     }
   }, [])
 
   const retryTask = useCallback(async (taskId: string) => {
     try {
-      await chrome.runtime.sendMessage({ type: 'RETRY_FAILED_CHAPTERS', payload: { taskId } })
+      const response = await chrome.runtime.sendMessage<RetryFailedChaptersMessage, RetryFailedChaptersResponse>({
+        type: 'RETRY_FAILED_CHAPTERS',
+        payload: { taskId },
+      })
+      if (!response || response.success === false) {
+        toast.error(response?.error || t('options_toastRetryFailed'))
+      }
     } catch (error) {
       logger.error('[DOWNLOADS TAB] Failed to retry task:', error)
+      toast.error(t('options_toastRetryFailed'))
     }
   }, [])
 
   const restartTask = useCallback(async (taskId: string) => {
     try {
-      await chrome.runtime.sendMessage({ type: 'RESTART_TASK', payload: { taskId } })
+      const response = await chrome.runtime.sendMessage<RestartTaskMessage, RestartTaskResponse>({
+        type: 'RESTART_TASK',
+        payload: { taskId },
+      })
+      if (!response || response.success === false) {
+        toast.error(response?.error || t('options_toastRestartFailed'))
+      }
     } catch (error) {
       logger.error('[DOWNLOADS TAB] Failed to restart task:', error)
+      toast.error(t('options_toastRestartFailed'))
     }
   }, [])
 
   const removeTask = useCallback(async (taskId: string) => {
     try {
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage<StateActionMessage, StateActionResponse>({
         type: 'STATE_ACTION',
         action: StateAction.REMOVE_DOWNLOAD_TASK,
         payload: { taskId },
       })
+      if (!response || response.success === false) {
+        toast.error(response?.error || t('options_toastRemoveFailed'))
+      }
     } catch (error) {
       logger.error('[DOWNLOADS TAB] Failed to remove task:', error)
+      toast.error(t('options_toastRemoveFailed'))
     }
   }, [])
 

@@ -14,7 +14,7 @@ import type {
   RetryFailedChaptersMessage,
   RetryFailedChaptersResponse,
 } from '@/src/types/runtime-command-messages'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 export function useCommandCenterActions() {
   const [cancelingTaskIds, setCancelingTaskIds] = useState<Set<string>>(new Set())
@@ -30,6 +30,7 @@ export function useCommandCenterActions() {
       await cancelDownloadTask(taskId)
     } catch (error) {
       logger.error('[CommandCenter] Failed to cancel task:', error)
+      toast.error(error instanceof Error ? error.message : t('sidepanel_toastCancelFailed'))
     } finally {
       setCancelingTaskIds((previousIds) => {
         if (!previousIds.has(taskId)) {
@@ -64,6 +65,7 @@ export function useCommandCenterActions() {
       await sendStateAction(StateAction.REMOVE_DOWNLOAD_TASK, { taskId })
     } catch (error) {
       logger.error('[CommandCenter] Failed to remove task:', error)
+      toast.error(error instanceof Error ? error.message : t('sidepanel_toastRemoveFailed'))
     }
   }, [])
 

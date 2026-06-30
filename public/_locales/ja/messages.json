@@ -51,6 +51,14 @@
     "message": "$COUNT$ 巻",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "sidepanel_volumeToggleAria": {
+    "message": "巻 $TITLE$ を切り替え",
+    "placeholders": { "title": { "content": "$1" } }
+  },
+  "sidepanel_volumeSelectAllAria": {
+    "message": "巻 $TITLE$ の $COUNT$ 章をすべて選択",
+    "placeholders": { "title": { "content": "$1" }, "count": { "content": "$2" } }
+  },
 
   "sidepanel_selectChaptersLabel": { "message": "章を選択" },
   "sidepanel_selectedCount": {
@@ -109,6 +117,13 @@
   "sidepanel_toastRetryFailed": { "message": "失敗した章の再試行に失敗しました" },
   "sidepanel_toastRestartFailed": { "message": "タスクのやり直しに失敗しました" },
   "sidepanel_toastMoveTopFailed": { "message": "先頭への移動に失敗しました" },
+  "sidepanel_toastCancelFailed": { "message": "タスクのキャンセルに失敗しました" },
+  "sidepanel_toastRemoveFailed": { "message": "タスクの削除に失敗しました" },
+
+  "options_toastCancelFailed": { "message": "タスクのキャンセルに失敗しました" },
+  "options_toastRetryFailed": { "message": "失敗した章の再試行に失敗しました" },
+  "options_toastRestartFailed": { "message": "タスクのやり直しに失敗しました" },
+  "options_toastRemoveFailed": { "message": "タスクの削除に失敗しました" },
 
   "status_downloading": { "message": "ダウンロード中" },
   "status_queued": { "message": "待機中" },

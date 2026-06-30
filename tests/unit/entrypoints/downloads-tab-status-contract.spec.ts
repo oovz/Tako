@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectToQueueView } from '@/entrypoints/background/projection'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { projectToQueueView } from '@/src/runtime/projection'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 

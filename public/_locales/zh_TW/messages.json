@@ -51,6 +51,14 @@
     "message": "$COUNT$ 卷",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "sidepanel_volumeToggleAria": {
+    "message": "切換卷 $TITLE$",
+    "placeholders": { "title": { "content": "$1" } }
+  },
+  "sidepanel_volumeSelectAllAria": {
+    "message": "選取卷 $TITLE$ 的全部 $COUNT$ 章",
+    "placeholders": { "title": { "content": "$1" }, "count": { "content": "$2" } }
+  },
 
   "sidepanel_selectChaptersLabel": { "message": "選擇章節" },
   "sidepanel_selectedCount": {
@@ -109,6 +117,13 @@
   "sidepanel_toastRetryFailed": { "message": "重試失敗章節失敗" },
   "sidepanel_toastRestartFailed": { "message": "重新開始任務失敗" },
   "sidepanel_toastMoveTopFailed": { "message": "移至頂部失敗" },
+  "sidepanel_toastCancelFailed": { "message": "取消任務失敗" },
+  "sidepanel_toastRemoveFailed": { "message": "移除任務失敗" },
+
+  "options_toastCancelFailed": { "message": "取消任務失敗" },
+  "options_toastRetryFailed": { "message": "重試失敗章節失敗" },
+  "options_toastRestartFailed": { "message": "重新開始任務失敗" },
+  "options_toastRemoveFailed": { "message": "移除任務失敗" },
 
   "status_downloading": { "message": "下載中" },
   "status_queued": { "message": "排隊中" },

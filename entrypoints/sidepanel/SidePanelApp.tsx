@@ -9,6 +9,7 @@ import { useOptionsActionItems } from '@/entrypoints/sidepanel/hooks/useOptionsA
 import { useQueueView } from '@/entrypoints/sidepanel/hooks/useQueueView'
 import { useSidepanelSeriesContext, type SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { Toaster } from '@/components/ui/sonner'
 import { ErrorBanner } from '@/entrypoints/sidepanel/components/ErrorBanner'
 import { FsaBanner } from '@/entrypoints/sidepanel/components/FsaBanner'
 import { SidePanelHeader } from '@/entrypoints/sidepanel/components/SidePanelHeader'
@@ -46,6 +47,10 @@ export function SidePanelApp() {
 
   return (
     <TooltipProvider delayDuration={300}>
+      {/* Sonner Toaster: required to render toast.error() calls from
+          useCommandCenterActions (cancel/retry/restart/move-top/remove).
+          Without a mounted <Toaster />, sonner toasts are never visible. */}
+      <Toaster position="top-right" richColors closeButton />
       <div className="flex flex-col h-full w-full bg-background text-foreground select-none relative">
         <ErrorBanner />
         <div className="px-2 pt-2">
@@ -73,6 +78,7 @@ export function SidePanelApp() {
 
           {/* Inline Selection Panel */}
           <div
+            id="inline-selection-panel"
             className={cn(
               "overflow-hidden transition-all duration-300 ease-out flex-shrink-0 will-change-[height,opacity]",
               isInlineSelectionOpen ? "flex-1 min-h-0 opacity-100" : "h-0 opacity-0"

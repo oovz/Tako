@@ -1,10 +1,10 @@
 import { test, expect } from './fixtures/extension'
 import { ensureOffscreenAliveForActiveQueue, setSessionState, waitForGlobalState, getGlobalState, getTabId } from './fixtures/state-helpers'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { MANGADEX_TEST_SERIES_URL, buildExampleUrl } from './fixtures/test-domains'
-import { projectToQueueView } from '@/entrypoints/background/projection'
+import { projectToQueueView } from '@/src/runtime/projection'
 import type { DownloadTaskState } from '../../src/types/queue-state'
 import type { ChapterState } from '../../src/types/tab-state'
 
