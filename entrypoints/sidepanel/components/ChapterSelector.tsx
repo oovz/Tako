@@ -217,6 +217,7 @@ export function ChapterSelector({
             checked={row.chapterCount > 0 && row.allSelected}
             onCheckedChange={() => onVolumeSelectAll(row.groupId)}
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
             disabled={row.selectableChapterCount === 0 || isEnqueuing}
             aria-label={t('sidepanel_volumeSelectAllAria', [row.title, String(row.chapterCount)])}
           />

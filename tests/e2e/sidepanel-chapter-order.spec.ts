@@ -160,6 +160,61 @@ test.describe('Side Panel chapter/volume order', () => {
     await sp.close()
   })
 
+  test('keyboard volume select-all does not collapse the volume group', async ({ context, extensionId, page }) => {
+    await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: 'domcontentloaded' })
+
+    const baseChapters = [
+      { id: 'standalone-1', url: 'https://example.com/standalone-1', title: 'Standalone chapter 1' },
+      { id: 'v2-c3', url: 'https://example.com/v2-c3', title: 'Volume 2 Chapter 3', chapterNumber: 3, volumeNumber: 2 },
+      { id: 'standalone-2', url: 'https://example.com/standalone-2', title: 'Standalone chapter 2' },
+      { id: 'v2-c4', url: 'https://example.com/v2-c4', title: 'Volume 2 Chapter 4', chapterNumber: 4, volumeNumber: 2 },
+      { id: 'v2-c5', url: 'https://example.com/v2-c5', title: 'Volume 2 Chapter 5', chapterNumber: 5, volumeNumber: 2 },
+      { id: 'standalone-3', url: 'https://example.com/standalone-3', title: 'Standalone chapter 3' },
+      { id: 'v2-c6', url: 'https://example.com/v2-c6', title: 'Volume 2 Chapter 6', chapterNumber: 6, volumeNumber: 2 },
+    ]
+
+    await initializeTabViaAction(
+      page,
+      context,
+      extensionId,
+      {
+        siteIntegrationId: 'mangadex',
+        mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
+        seriesTitle: 'Ordering Test Series',
+        chapters: baseChapters,
+      },
+      ORDER_TEST_SERIES_URL,
+    )
+
+    await waitForTabState(page, context, (state) => {
+      return (
+        state.mangaId === MANGADEX_ORDER_TEST_SERIES_ID &&
+        state.seriesTitle === 'Ordering Test Series' &&
+        state.chapters?.length === baseChapters.length
+      )
+    })
+
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator('#root')).toBeVisible()
+    await expect(sp.getByText('Ordering Test Series')).toBeVisible({ timeout: 15000 })
+
+    await sp.getByRole('button', { name: /Select Chapters/i }).click()
+
+    const secondVolume = sp.locator('[data-testid="inline-item"][data-kind="volume"]').nth(1)
+    const secondVolumeDisclosure = secondVolume.getByRole('button')
+    await expect(secondVolumeDisclosure).toHaveAttribute('aria-expanded', 'true')
+
+    await secondVolume.getByRole('checkbox').focus()
+    await sp.keyboard.press('Space')
+
+    await expect(sp.getByRole('button', { name: /Download \(2\)/i })).toBeVisible()
+    await expect(secondVolumeDisclosure).toHaveAttribute('aria-expanded', 'true')
+    await expect(sp.getByRole('checkbox', { name: /Volume 2 Chapter 4/i })).toBeVisible()
+    await expect(sp.getByRole('checkbox', { name: /Volume 2 Chapter 5/i })).toBeVisible()
+
+    await sp.close()
+  })
+
   test('switches between grouped and flat chapter views without crashing the side panel', async ({ context, extensionId, page }) => {
     await page.goto(VIEW_TOGGLE_SERIES_URL, { waitUntil: 'domcontentloaded' })
 
