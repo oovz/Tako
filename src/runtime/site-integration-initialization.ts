@@ -15,6 +15,7 @@ import {
   normalizeEnablementMap,
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
   siteIntegrationEnablementService,
+  type SiteIntegrationEnablementMap,
 } from '@/src/storage/site-integration-enablement-service';
 import type { RuntimeSiteIntegration } from '../types/site-integrations';
 
@@ -24,19 +25,38 @@ let metadataInitialized = false;
 let metadataInitPromise: Promise<void> | null = null;
 let integrationEnablementInitialized = false;
 
-export async function initializeSiteIntegrationEnablement(): Promise<void> {
+/**
+ * Default enablement loader: reads `chrome.storage.local` directly.
+ *
+ * Valid in background service worker and content script contexts, which both
+ * have access to `chrome.storage`. MUST NOT be used in the offscreen document,
+ * where only `chrome.runtime` is available (see `offscreenEnablementLoader`).
+ */
+async function defaultEnablementLoader(): Promise<SiteIntegrationEnablementMap> {
+  return siteIntegrationEnablementService.getAll();
+}
+
+export type SiteIntegrationEnablementLoader = () => Promise<SiteIntegrationEnablementMap>;
+
+export async function initializeSiteIntegrationEnablement(
+  loader: SiteIntegrationEnablementLoader = defaultEnablementLoader,
+): Promise<void> {
   if (integrationEnablementInitialized) {
     return;
   }
 
   try {
-    const enablement = await siteIntegrationEnablementService.getAll();
+    const enablement = await loader();
     setUserSiteIntegrationEnablement(enablement);
   } catch (error) {
     logger.warn('Failed to load site integration enablement; using defaults', error);
     setUserSiteIntegrationEnablement({});
   }
 
+  // chrome.storage.onChanged is only available in contexts with the storage API
+  // (background, content). The offscreen document only exposes chrome.runtime,
+  // so it must not register a storage change listener here; it re-initializes
+  // from the background-sourced enablement on each offscreen lifecycle.
   if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local' || !(SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY in changes)) {

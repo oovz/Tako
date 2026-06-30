@@ -8,6 +8,8 @@ import type {
   FetchSeriesDataResponse,
   GetSettingsMessage,
   GetSettingsResponse,
+  GetSiteIntegrationEnablementMessage,
+  GetSiteIntegrationEnablementResponse,
   GetTabIdMessage,
   GetTabIdResponse,
   MoveTaskToTopMessage,
@@ -41,6 +43,7 @@ import type { StateActionMessage, StateActionResponse } from '@/src/types/state-
 export type ExtensionMessage =
   | GetTabIdMessage
   | GetSettingsMessage
+  | GetSiteIntegrationEnablementMessage
   | FetchSeriesDataMessage
   | SyncSettingsToStateMessage
   | AcknowledgeErrorMessage
@@ -61,6 +64,7 @@ export type ExtensionMessage =
 export type ExtensionMessageResponse =
   | GetTabIdResponse
   | GetSettingsResponse
+  | GetSiteIntegrationEnablementResponse
   | FetchSeriesDataResponse
   | SyncSettingsToStateResponse
   | AcknowledgeErrorResponse

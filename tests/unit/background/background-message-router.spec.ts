@@ -9,6 +9,7 @@ import type { ExtensionMessage } from '@/src/types/extension-messages'
 const mocks = vi.hoisted(() => ({
   settingsGetSettings: vi.fn(),
   canonicalizeSettingsDocument: vi.fn(),
+  enablementServiceGetAll: vi.fn(),
   clearPersistentError: vi.fn(),
   enqueueStartDownloadTask: vi.fn(),
   processDownloadQueue: vi.fn(),
@@ -44,7 +45,13 @@ vi.mock('@/src/storage/settings-service', () => ({
   },
 }))
 
-vi.mock('@/entrypoints/background/errors', () => ({
+vi.mock('@/src/storage/site-integration-enablement-service', () => ({
+  siteIntegrationEnablementService: {
+    getAll: mocks.enablementServiceGetAll,
+  },
+}))
+
+vi.mock('@/src/runtime/errors', () => ({
   clearPersistentError: mocks.clearPersistentError,
 }))
 
@@ -92,6 +99,7 @@ describe('handleBackgroundMessage', () => {
     mocks.settingsGetSettings.mockResolvedValue(DEFAULT_SETTINGS)
     mocks.canonicalizeSettingsDocument.mockImplementation((value: unknown) => value)
     mocks.getBackgroundSiteAdapterById.mockResolvedValue(undefined)
+    mocks.enablementServiceGetAll.mockResolvedValue({})
   })
 
   it('syncs centralized state from the authoritative payload without re-reading settings', async () => {
@@ -357,5 +365,44 @@ describe('handleBackgroundMessage', () => {
     expect(response).toEqual({ success: false, error: 'CLEAR_ALL_HISTORY is only available from Options page' })
     expect(ensureStateManagerInitialized).not.toHaveBeenCalled()
     expect(mocks.clearAllHistory).not.toHaveBeenCalled()
+  })
+
+  it('returns the stored site integration enablement map for GET_SITE_INTEGRATION_ENABLEMENT (offscreen proxy)', async () => {
+    // The offscreen document cannot read chrome.storage; it proxies through
+    // this handler. User-disabled integrations must round-trip intact.
+    mocks.enablementServiceGetAll.mockResolvedValueOnce({ mangadex: false, 'pixiv-comic': true })
+
+    const response = await handleBackgroundMessage(
+      { type: 'GET_SITE_INTEGRATION_ENABLEMENT' } as ExtensionMessage,
+      { url: 'chrome-extension://extension-id/offscreen.html' } as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        getStateManager: () => ({} as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(mocks.enablementServiceGetAll).toHaveBeenCalledTimes(1)
+    expect(response).toEqual({ success: true, enablement: { mangadex: false, 'pixiv-comic': true } })
+  })
+
+  it('returns a structured failure when enablement storage read throws', async () => {
+    mocks.enablementServiceGetAll.mockRejectedValueOnce(new Error('storage corrupted'))
+
+    const response = await handleBackgroundMessage(
+      { type: 'GET_SITE_INTEGRATION_ENABLEMENT' } as ExtensionMessage,
+      { url: 'chrome-extension://extension-id/offscreen.html' } as chrome.runtime.MessageSender,
+      {
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        getStateManager: () => ({} as CentralizedStateManager),
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+      },
+    )
+
+    expect(response).toEqual({ success: false, error: 'storage corrupted' })
   })
 })

@@ -271,8 +271,12 @@ describe('site-integration-initialization full integration lookup', () => {
             },
         }))
 
+        // Offscreen documents only expose chrome.runtime; provide the
+        // sendMessage-based enablement loader path (no chrome.storage).
         vi.stubGlobal('chrome', {
-            runtime: {},
+            runtime: {
+                sendMessage: vi.fn(async () => ({ success: true, enablement: {} })),
+            },
         })
 
         const {

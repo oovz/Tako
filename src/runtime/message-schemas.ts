@@ -31,6 +31,9 @@ export const ActionMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('GET_SETTINGS'),
   }),
   z.object({
+    type: z.literal('GET_SITE_INTEGRATION_ENABLEMENT'),
+  }),
+  z.object({
     type: z.literal('FETCH_SERIES_DATA'),
     payload: z.object({
       siteIntegrationId: z.string().min(1),

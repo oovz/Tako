@@ -97,6 +97,16 @@ export interface OpenOptionsMessage {
 
 export type OpenOptionsResponse = { success: true } | ErrorResponse;
 
+export interface GetSiteIntegrationEnablementMessage {
+  type: 'GET_SITE_INTEGRATION_ENABLEMENT';
+}
+
+export type SiteIntegrationEnablementMap = Record<string, boolean>;
+
+export type GetSiteIntegrationEnablementResponse =
+  | { success: true; enablement: SiteIntegrationEnablementMap }
+  | ErrorResponse;
+
 export interface StartDownloadMessage {
   type: 'START_DOWNLOAD';
   payload: {

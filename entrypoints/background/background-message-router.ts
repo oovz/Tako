@@ -6,7 +6,8 @@ import {
   type OffscreenMessage,
 } from '@/src/runtime/message-schemas'
 import { canonicalizeSettingsDocument, settingsService } from '@/src/storage/settings-service'
-import { clearPersistentError } from '@/entrypoints/background/errors'
+import { siteIntegrationEnablementService } from '@/src/storage/site-integration-enablement-service'
+import { clearPersistentError } from '@/src/runtime/errors'
 import {
   enqueueStartDownloadTask,
   processDownloadQueue,
@@ -46,6 +47,7 @@ export const backgroundHandledMessages = new Set<ExtensionMessage['type']>([
   'STATE_ACTION',
   'ACKNOWLEDGE_ERROR',
   'GET_SETTINGS',
+  'GET_SITE_INTEGRATION_ENABLEMENT',
   'FETCH_SERIES_DATA',
   'SYNC_SETTINGS_TO_STATE',
   'OFFSCREEN_DOWNLOAD_API_REQUEST',
@@ -174,6 +176,18 @@ export async function handleBackgroundMessage(
           return { success: true, ...settings }
         } catch (e: unknown) {
           const message = e instanceof Error ? e.message : 'Failed to load settings'
+          return { success: false, error: message }
+        }
+      }
+      case 'GET_SITE_INTEGRATION_ENABLEMENT': {
+        // Offscreen documents only have chrome.runtime; they proxy storage
+        // reads through this handler. Background/content read storage directly.
+        try {
+          const enablement = await siteIntegrationEnablementService.getAll()
+          return { success: true, enablement }
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : 'Failed to load site integration enablement'
+          logger.error('Error handling GET_SITE_INTEGRATION_ENABLEMENT:', e)
           return { success: false, error: message }
         }
       }
