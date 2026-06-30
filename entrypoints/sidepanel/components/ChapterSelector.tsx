@@ -4,10 +4,17 @@ import { ChevronRight } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/src/shared/utils'
+import { createCappedRangeExtractor } from '@/src/ui/shared/virtualization/cap-range-extractor'
 import type { SidePanelChapter, VolumeOrChapter } from '@/entrypoints/sidepanel/types'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
+// Below this row count the list is rendered without virtualization; above it
+// the virtualizer is used. Threshold for the display-limits contract.
 const MAX_NON_VIRTUALIZED_ROWS = 28
+// Target render budget for the virtualized path. The range extractor trims
+// overscan down to this count, but it still preserves every viewport-visible
+// row if an unusually tall panel can show more than 28 rows at once.
+const MAX_VIRTUALIZED_DOM_ITEMS = 28
 
 interface ChapterSelectorProps {
   items: VolumeOrChapter[]
@@ -129,6 +136,8 @@ export function ChapterSelector({
     getItemKey: (index) => rows[index]?.key ?? index,
     estimateSize: () => 40,
     overscan: 6,
+    // Cap overscan rows while preserving every viewport-visible row.
+    rangeExtractor: createCappedRangeExtractor(MAX_VIRTUALIZED_DOM_ITEMS),
   })
 
   const renderRow = (row: SelectorRow) => {
@@ -176,15 +185,26 @@ export function ChapterSelector({
     return (
       <div className="border-b border-border/30" data-testid="inline-item" data-kind="volume">
         <div
+          role="button"
+          tabIndex={isEnqueuing ? -1 : 0}
+          aria-expanded={row.isExpanded}
+          aria-label={t('sidepanel_volumeToggleAria', [row.title])}
           className={cn(
             'flex items-center gap-2 px-3 py-2 transition-colors duration-150',
             isEnqueuing
               ? 'cursor-default bg-muted/20'
-              : 'cursor-pointer bg-muted/20 hover:bg-muted/45',
+              : 'cursor-pointer bg-muted/20 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           )}
           onClick={() => {
             if (isEnqueuing) return
             onToggleGroup(row.groupKey)
+          }}
+          onKeyDown={(event) => {
+            if (isEnqueuing) return
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onToggleGroup(row.groupKey)
+            }
           }}
         >
           <ChevronRight
@@ -198,6 +218,7 @@ export function ChapterSelector({
             onCheckedChange={() => onVolumeSelectAll(row.groupId)}
             onClick={(event) => event.stopPropagation()}
             disabled={row.selectableChapterCount === 0 || isEnqueuing}
+            aria-label={t('sidepanel_volumeSelectAllAria', [row.title, String(row.chapterCount)])}
           />
           <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
             <span className="truncate">
@@ -246,4 +267,3 @@ export function ChapterSelector({
     </div>
   )
 }
-

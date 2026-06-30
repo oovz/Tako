@@ -4,11 +4,17 @@ import { Download } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { cn } from '@/src/shared/utils'
+import { createCappedRangeExtractor } from '@/src/ui/shared/virtualization/cap-range-extractor'
 import { HistorySection } from '@/entrypoints/sidepanel/components/HistorySection'
 import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
+
+// Target render budget for queued rows. The range extractor trims overscan down
+// to this count, but it still preserves every viewport-visible row if an
+// unusually tall panel can show more than 18 rows at once.
+const MAX_QUEUE_DOM_ITEMS = 18
 
 interface SidePanelQueueRegionProps {
   activeTasks: QueueTaskSummary[]
@@ -50,6 +56,8 @@ export function SidePanelQueueRegion({
     getScrollElement: () => queueScrollRef.current,
     estimateSize: () => 78,
     overscan: 4,
+    // Cap overscan rows while preserving every viewport-visible row.
+    rangeExtractor: createCappedRangeExtractor(MAX_QUEUE_DOM_ITEMS),
   })
 
   const hasAnyTask = activeTasks.length > 0 || queuedTasks.length > 0 || historyTasks.length > 0
@@ -148,4 +156,3 @@ export function SidePanelQueueRegion({
     </div>
   )
 }
-
