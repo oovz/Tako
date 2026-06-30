@@ -279,29 +279,28 @@ export class OffscreenWorker {
 
       const chapterRetries = this.currentRetries?.chapter ?? 1
       await onProgress(10, 'parsing')
+      const resolveWithTimeout = async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
+            { id: chapter.id, url: chapter.url },
+            opts.integrationContext,
+            opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
+          )
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('resolveImageUrls timeout')),
+              OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
+            )
+          })
+          return await Promise.race([resolvePromise, timeoutPromise])
+        } finally {
+          if (timer) clearTimeout(timer)
+        }
+      }
+
       const urls = OffscreenIntegration.chapter.resolveImageUrls
-        ? await withRetries(
-          async () => {
-            let timer: ReturnType<typeof setTimeout> | undefined
-            try {
-              const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
-                { id: chapter.id, url: chapter.url },
-                opts.integrationContext,
-                opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined,
-              )
-              const timeoutPromise = new Promise<never>((_, reject) => {
-                timer = setTimeout(
-                  () => reject(new Error('resolveImageUrls timeout')),
-                  OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
-                )
-              })
-              return await Promise.race([resolvePromise, timeoutPromise])
-            } finally {
-              if (timer) clearTimeout(timer)
-            }
-          },
-          chapterRetries,
-        )
+        ? await (this.currentHandlesOwnRetries ? resolveWithTimeout() : withRetries(resolveWithTimeout, chapterRetries))
         : await (async () => {
           const parseImageUrlsFromHtml = OffscreenIntegration.chapter.parseImageUrlsFromHtml
           if (!parseImageUrlsFromHtml) {

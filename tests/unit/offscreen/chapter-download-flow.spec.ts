@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
 import type { OffscreenIntegration } from '@/src/types/site-integrations'
