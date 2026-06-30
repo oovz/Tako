@@ -282,6 +282,11 @@ export async function startDownloadTask(
       await dispatchChapter(i);
 
       if (i < totalChapters - 1 && chapterDelayMs > 0) {
+        // setTimeout is used here instead of chrome.alarms because alarms has a
+        // 30s minimum interval, making it unusable for sub-30s inter-chapter
+        // delays. If the service worker terminates during this delay, the
+        // zombie-sweep + auto-resume path on next SW startup will recover the
+        // queue (see background-startup.ts / initialize-from-storage.ts).
         await new Promise((resolve) => setTimeout(resolve, chapterDelayMs));
       }
     }
