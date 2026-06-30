@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { clearAllHistory } from '@/entrypoints/background/download-queue'
-import { projectToQueueView } from '@/entrypoints/background/projection'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { projectToQueueView } from '@/src/runtime/projection'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { DownloadTaskState, GlobalAppState } from '@/src/types/queue-state'
