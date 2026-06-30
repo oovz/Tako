@@ -10,6 +10,7 @@ import {
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
 } from '../e2e/fixtures/test-domains'
+import { resolveCandidateTabIds, reinjectContentScript } from './fixtures/download-workflow-helpers'
 import type { DownloadTaskState, GlobalAppState } from '@/src/types/queue-state'
 import type { MangaPageState } from '@/src/types/tab-state'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
@@ -53,6 +54,9 @@ type SeededDirectoryFile = {
   size: number
 }
 
+// Canary series — these manga IDs and titles are single points of failure.
+// If a series is removed or redirected on the live site, the corresponding
+// test case will fail. Monitor these series and update IDs if they change.
 const browserWorkflowCases: BrowserWorkflowCase[] = [
   {
     name: 'mangadex hunter-x-hunter',
@@ -135,61 +139,6 @@ async function seedMangadexSessionPreferences(optionsPage: Page, seriesId: strin
       [storageKey]: bySeries,
     })
   }, seriesId)
-}
-
-async function resolveCandidateTabIds(optionsPage: Page, preferredTabId: number, targetHref: string): Promise<number[]> {
-  return await optionsPage.evaluate(
-    async ({ preferredTabId: preferredId, targetHref: href }: { preferredTabId: number; targetHref: string }) => {
-      const target = new URL(href)
-      const allTabs = await chrome.tabs.query({})
-
-      const matchedIds = allTabs
-        .filter((tab) => {
-          if (typeof tab.id !== 'number' || !tab.url) {
-            return false
-          }
-
-          try {
-            const url = new URL(tab.url)
-            if (url.hostname !== target.hostname) {
-              return false
-            }
-
-            return url.pathname === target.pathname
-              || url.pathname.startsWith(target.pathname)
-              || target.pathname.startsWith(url.pathname)
-          } catch {
-            return false
-          }
-        })
-        .map((tab) => tab.id as number)
-
-      return [preferredId, ...matchedIds].filter(
-        (id, index, arr): id is number => typeof id === 'number' && arr.indexOf(id) === index,
-      )
-    },
-    { preferredTabId, targetHref },
-  )
-}
-
-async function reinjectContentScript(optionsPage: Page, candidateTabIds: number[]): Promise<void> {
-  await optionsPage.evaluate(async (ids: number[]) => {
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-    for (const tabId of ids) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ['content-scripts/content.js'],
-          })
-          break
-        } catch {
-          await wait(750)
-        }
-      }
-    }
-  }, candidateTabIds)
 }
 
 async function loadLiveDownloadState(

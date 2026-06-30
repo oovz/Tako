@@ -1,7 +1,14 @@
+// This spec tests the MangaDex public API directly via browser fetch
+// (navigating to mangadex.org and calling api.mangadex.org from the page
+// context). It does NOT exercise the extension's Bottleneck rate limiter —
+// the extension's concurrency/limiter behaviour is covered by mocked E2E
+// tests. Here we verify that the live MangaDex API endpoints still return
+// the response shapes the extension's site integration relies on.
 import { test, expect } from '../e2e/fixtures/extension';
 import type { BrowserContext } from '@playwright/test';
 
 const MANGA_ID = 'db692d58-4b13-4174-ae8c-30c515c0689c';
+// Canary series — monitor for removal/redirect on MangaDex.
 let resolvedChapterId = '';
 const MANGADEX_LIVE_REQUEST_RETRIES = 3;
 const MANGADEX_LIVE_RETRY_DELAY_MS = 2_000;
@@ -71,7 +78,7 @@ function assertMangadexResponseIsUsable(result: MangadexFetchResult, _endpointNa
   expect(result.ok).toBe(true);
 }
 
-test.describe('MangaDex live API contracts', () => {
+test.describe('MangaDex API contract (live)', () => {
   test('manga endpoint returns expected core fields', async ({ context }) => {
     const result = await mangadexFetchViaBrowser(
       context,
