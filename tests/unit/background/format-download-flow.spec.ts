@@ -93,4 +93,3 @@ describe('format resolution integration (resolveDownloadPlan)', () => {
     expect(plan.chapters[0]?.resolvedPath).toContain('.cbz');
   });
 });
-

@@ -71,4 +71,3 @@ describe('clear history + queue projection flow', () => {
     expect(projection.queueView.every((task) => task.status === 'downloading' || task.status === 'queued')).toBe(true)
   })
 })
-
