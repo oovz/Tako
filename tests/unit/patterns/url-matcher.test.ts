@@ -171,6 +171,35 @@ it('does not match manganelo domain (unsupported scope)', () => {
       
       expect(matches.length).toBe(uniqueMatches.size);
     });
+
+    // Regression guard: runtime URL matching accepted subdomains via
+    // hostname.endsWith('.' + domain) but the manifest
+    // emitted exact-host patterns only, so Chrome would NOT inject the static
+    // content script on subdomain pages (e.g. www.mangadex.org) that the
+    // runtime would accept. The manifest must now emit wildcard-subdomain
+    // patterns alongside the exact-host patterns so static injection and
+    // runtime matching agree.
+    it('emits wildcard-subdomain match patterns so Chrome injects on subdomains the runtime accepts', () => {
+      const matches = getContentScriptMatches();
+
+      // MangaDex declares only `mangadex.org`; the manifest must now also
+      // cover `*.mangadex.org` so www.mangadex.org/title/* gets the static
+      // content script just like the runtime matcher accepts it.
+      expect(matches).toContain('*://mangadex.org/title/*');
+      expect(matches).toContain('*://*.mangadex.org/title/*');
+
+      // Every exact-host pattern must have a matching wildcard-subdomain
+      // pattern so apex + subdomains are both covered (Chrome's *.domain
+      // does NOT match the apex domain itself).
+      for (const pattern of matches) {
+        const exactMatch = pattern.match(/^\*:\/\/([^/]+)(\/.*)$/);
+        if (!exactMatch) continue;
+        const host = exactMatch[1];
+        if (host.startsWith('*.')) continue; // already a wildcard
+        const wildcard = `*://*.${host}${exactMatch[2]}`;
+        expect(matches).toContain(wildcard);
+      }
+    });
   });
 
   describe('Edge Cases', () => {

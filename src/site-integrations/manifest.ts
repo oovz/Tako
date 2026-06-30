@@ -295,8 +295,24 @@ export function getAllSiteIntegrationPatterns(): Record<string, SiteIntegrationU
 }
 
 /**
- * Generate content script match patterns for WXT/Chrome manifest
- * Format: *://{domain}{path}
+ * Generate content script match patterns for WXT/Chrome manifest.
+ *
+ * Chrome MV3 match patterns are exact-host by default: `*://example.com/*`
+ * matches only `example.com`, NOT `www.example.com`. To match subdomains the
+ * host must use a leading wildcard: `*://*.example.com/*` (which matches
+ * subdomains only, NOT the apex). See:
+ * https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns
+ *
+ * The runtime URL matcher (url-matcher.ts isDomainMatch) accepts both the apex
+ * domain and any subdomain via `hostname === domain || hostname.endsWith('.' + domain)`.
+ * The manifest must agree, otherwise Chrome will not inject the static content
+ * script on subdomain pages that the runtime would accept (e.g. www.mangadex.org).
+ *
+ * Therefore, for each declared domain we emit BOTH the exact-host pattern and
+ * the wildcard-subdomain pattern so the static injection covers the same set
+ * of hosts the runtime matcher accepts.
+ *
+ * Format: `*://{domain}{path}` and `*://*.{domain}{path}`
  */
 export function generateContentScriptMatches(): string[] {
   const matches: string[] = [];
@@ -307,9 +323,12 @@ export function generateContentScriptMatches(): string[] {
 
     for (const domain of manifest.patterns.domains) {
       for (const path of manifest.patterns.seriesMatches) {
-        const pattern = `*://${domain}${path}`;
-        if (!matches.includes(pattern)) {
-          matches.push(pattern);
+        const exact = `*://${domain}${path}`;
+        const wildcard = `*://*.${domain}${path}`;
+        for (const pattern of [exact, wildcard]) {
+          if (!matches.includes(pattern)) {
+            matches.push(pattern);
+          }
         }
       }
     }
@@ -318,7 +337,11 @@ export function generateContentScriptMatches(): string[] {
 }
 
 /**
- * Generate content script exclude_matches patterns for WXT/Chrome manifest
+ * Generate content script exclude_matches patterns for WXT/Chrome manifest.
+ *
+ * Same subdomain rationale as generateContentScriptMatches: emit both the
+ * exact-host and wildcard-subdomain exclude patterns so excludes stay
+ * consistent with the runtime exclude logic across apex + subdomains.
  */
 export function generateContentScriptExcludeMatches(): string[] {
   const excludes: string[] = [];
@@ -330,9 +353,12 @@ export function generateContentScriptExcludeMatches(): string[] {
     const excludeMatches = manifest.patterns.excludeMatches ?? [];
     for (const domain of manifest.patterns.domains) {
       for (const path of excludeMatches) {
-        const pattern = `*://${domain}${path}`;
-        if (!excludes.includes(pattern)) {
-          excludes.push(pattern);
+        const exact = `*://${domain}${path}`;
+        const wildcard = `*://*.${domain}${path}`;
+        for (const pattern of [exact, wildcard]) {
+          if (!excludes.includes(pattern)) {
+            excludes.push(pattern);
+          }
         }
       }
     }
