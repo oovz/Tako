@@ -38,7 +38,7 @@ vi.mock('@/src/storage/fs-access', () => ({
   clearDownloadRootHandle: mocks.clearDownloadRootHandle,
 }))
 
-vi.mock('@/entrypoints/background/errors', () => ({
+vi.mock('@/src/runtime/errors', () => ({
   addPersistentError: mocks.addPersistentError,
 }))
 

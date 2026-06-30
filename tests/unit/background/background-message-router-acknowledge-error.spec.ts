@@ -29,7 +29,7 @@ vi.mock('@/src/storage/settings-service', () => ({
   },
 }))
 
-vi.mock('@/entrypoints/background/errors', () => ({
+vi.mock('@/src/runtime/errors', () => ({
   clearPersistentError: mocks.clearPersistentError,
 }))
 

@@ -9,7 +9,7 @@
  */
 
 import type { Page, BrowserContext } from '@playwright/test';
-import { projectToQueueView } from '../../../entrypoints/background/projection';
+import { projectToQueueView } from '@/src/runtime/projection';
 import { DEFAULT_SETTINGS } from '../../../src/storage/default-settings';
 import { getExternalTabInitStorageKey } from '../../../src/runtime/external-tab-init';
 import { SESSION_STORAGE_KEYS } from '../../../src/runtime/storage-keys';

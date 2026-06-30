@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getBadgeText, projectToQueueView, updateActionBadge } from '@/entrypoints/background/projection'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { getBadgeText, projectToQueueView, updateActionBadge } from '@/src/runtime/projection'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateComicInfo } from '@/src/shared/comicinfo-generator';
+import { generateComicInfo } from '@/src/runtime/comicinfo-generator';
 import type { ComicInfoV2 } from '@/src/types/comic-info';
 
 export function registerComicInfoCoverCases(): void {

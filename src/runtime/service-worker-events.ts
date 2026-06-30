@@ -7,7 +7,7 @@
  * - Eliminates race conditions in Service Worker lifecycle
  */
 
-import { createInitializationBarrier } from '@/entrypoints/background/initialization-barrier';
+import { createInitializationBarrier } from '@/src/runtime/initialization-barrier';
 import logger from '@/src/runtime/logger';
 
 let initialized = false;

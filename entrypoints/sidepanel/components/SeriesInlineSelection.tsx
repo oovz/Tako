@@ -17,7 +17,7 @@ import {
   syncInlineSelectionItems,
 } from '@/entrypoints/sidepanel/components/series-inline-selection-helpers'
 import { Check, Download } from 'lucide-react'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface SeriesInlineSelectionProps {
   data: SidepanelSeriesContextData

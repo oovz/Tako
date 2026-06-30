@@ -9,10 +9,10 @@
 
 import { useMemo } from 'react'
 
-import { t as tFn, getUILanguage } from '@/src/shared/i18n'
+import { t as tFn, getUILanguage } from '@/src/runtime/i18n'
 
 export interface UseI18nResult {
-  /** Translate a message key. See src/shared/i18n.ts for details. */
+  /** Translate a message key. See src/runtime/i18n.ts for details. */
   t: (key: string, substitutions?: string | string[]) => string
   /** Current UI locale code (e.g. 'en', 'zh_CN', 'ja'). */
   locale: string

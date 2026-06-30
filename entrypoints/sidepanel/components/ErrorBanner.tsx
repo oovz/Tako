@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useErrors } from '../hooks/useErrors';
 import { useInitFailure } from '../hooks/useInitFailure';
-import { t } from '@/src/shared/i18n';
+import { t } from '@/src/runtime/i18n';
 
 export function ErrorBanner() {
     const { errors, acknowledgeError } = useErrors();

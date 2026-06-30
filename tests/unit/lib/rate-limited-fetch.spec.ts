@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { rateLimitedFetchByUrlScope } from '@/src/shared/rate-limited-fetch'
+import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limited-fetch'
 
 vi.mock('@/src/runtime/rate-limit', () => ({
   rateLimitedFetchByUrlScope: vi.fn(),

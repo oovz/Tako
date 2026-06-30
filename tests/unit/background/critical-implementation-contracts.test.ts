@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resolveDownloadPlan } from '@/entrypoints/background/queue-helpers'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { RuntimeMessageSchema } from '@/src/runtime/message-schemas'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'

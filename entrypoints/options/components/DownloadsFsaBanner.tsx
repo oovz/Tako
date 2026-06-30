@@ -3,7 +3,7 @@ import { Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { FsaErrorState } from '@/entrypoints/options/hooks/useDownloadsTabState'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface DownloadsFsaBannerProps {
   fsaError: FsaErrorState

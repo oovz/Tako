@@ -26,7 +26,7 @@ vi.mock('@/src/storage/fs-access', () => ({
   DOWNLOAD_ROOT_HANDLE_ID: 'download-root',
 }))
 
-vi.mock('@/entrypoints/background/errors', () => ({
+vi.mock('@/src/runtime/errors', () => ({
   addPersistentError: mocks.emitError,
 }))
 

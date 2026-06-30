@@ -17,7 +17,7 @@ import {
   markExtensionUpdateActionItemAvailable,
 } from '@/src/runtime/options-action-items'
 import { cn } from '@/src/shared/utils'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 const CHROME_WEB_STORE_URL = 'https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb'
 

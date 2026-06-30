@@ -1,5 +1,5 @@
 import type { DownloadTaskState, TaskChapter } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 export interface DownloadTaskBuckets {
   activeTasks: DownloadTaskState[]

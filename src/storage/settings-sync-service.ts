@@ -10,7 +10,7 @@ import { canonicalizeSettingsDocument, settingsService, SETTINGS_STORAGE_KEY } f
 import { loadDownloadRootHandle, verifyPermission, clearDownloadRootHandle } from './fs-access';
 import type { ExtensionSettings } from './settings-types';
 import { SyncSettingsToStateMessage } from '../types/runtime-command-messages';
-import { addPersistentError } from '@/entrypoints/background/errors';
+import { addPersistentError } from '@/src/runtime/errors';
 import { isRecord } from '@/src/shared/type-guards';
 
 export interface SettingsSyncNotification {

@@ -8,7 +8,7 @@ import type { SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/u
 import { getSiteIntegrationDisplayName } from '@/src/site-integrations/manifest'
 import type { Volume } from '@/entrypoints/sidepanel/types'
 import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '@/entrypoints/sidepanel/messages'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface SeriesContextCardProps {
   data: SidepanelSeriesContextData

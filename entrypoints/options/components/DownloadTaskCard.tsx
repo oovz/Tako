@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineConfirmation } from '@/src/ui/shared/components/InlineConfirmation'
 import { getSiteIntegrationDisplayName } from '@/src/site-integrations/manifest'
 import type { DownloadTaskState } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 import {
   chapterStatusBadgeClass,
   formatChapterStatusLabel,
@@ -118,7 +118,7 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
                   const showError = shouldShowChapterError(chapter.status)
                   return (
                     <div
-                      key={chapter.id ?? chapter.url ?? index}
+                      key={chapter.id ?? chapter.url ?? `chapter-row-${index}`}
                       className="grid grid-cols-[minmax(0,1fr)_90px_100px_minmax(0,1fr)] items-center gap-2 border-t px-3 py-2 text-xs"
                     >
                       <span className="truncate" title={chapter.title}>{chapter.title}</span>

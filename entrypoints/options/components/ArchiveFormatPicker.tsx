@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, FileArchive, Files, FileType } from 'lucid
 
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface ArchiveFormatPickerProps {
   showNoArchiveWarning: boolean

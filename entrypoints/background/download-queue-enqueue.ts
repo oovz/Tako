@@ -1,5 +1,5 @@
 import logger from '@/src/runtime/logger'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { siteIntegrationSettingsService } from '@/src/storage/site-integration-settings-service'
 import { siteOverridesService } from '@/src/storage/site-overrides-service'
 import { sanitizeLabel } from '@/src/shared/site-integration-utils'

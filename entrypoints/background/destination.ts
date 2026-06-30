@@ -1,7 +1,7 @@
 import { loadDownloadRootHandle, clearDownloadRootHandle, DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access';
 import { settingsService } from '@/src/storage/settings-service';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
-import { addPersistentError } from './errors';
+import { addPersistentError } from '@/src/runtime/errors';
 import logger from '@/src/runtime/logger';
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 

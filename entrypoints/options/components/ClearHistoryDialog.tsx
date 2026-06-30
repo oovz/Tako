@@ -8,7 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface ClearHistoryDialogProps {
   open: boolean

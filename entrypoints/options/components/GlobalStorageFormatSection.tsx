@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
 import { ArchiveFormatPicker } from '@/entrypoints/options/components/ArchiveFormatPicker'
 import { PathVisualization } from '@/entrypoints/options/components/PathVisualization'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface GlobalStorageFormatSectionProps {
   downloads: ExtensionSettings['downloads']

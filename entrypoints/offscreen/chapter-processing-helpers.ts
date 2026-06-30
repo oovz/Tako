@@ -1,5 +1,5 @@
 import type { Chapter } from '@/src/types/chapter'
-import { generateComicInfo } from '@/src/shared/comicinfo-generator'
+import { generateComicInfo } from '@/src/runtime/comicinfo-generator'
 import { normalizeImageFilename } from '@/src/shared/filename-sanitizer'
 import {
   buildComicInfoMetadata,

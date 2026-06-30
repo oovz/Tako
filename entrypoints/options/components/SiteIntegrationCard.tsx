@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { RateLimitingForm } from "./RateLimitingForm"
 import { cn } from "@/src/shared/utils"
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"

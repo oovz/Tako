@@ -8,7 +8,7 @@ import { openOptionsPage } from '@/src/runtime/open-options'
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
 import logger from '@/src/runtime/logger'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface FsaErrorState {
   active?: boolean

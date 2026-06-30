@@ -3,7 +3,7 @@ import { ArrowUp, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface CommandCenterTaskActionsProps {
   taskId: string

@@ -10,7 +10,7 @@ import logger from '@/src/runtime/logger';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import { initializeChapterStates } from './state-helpers';
 import { LOCAL_STORAGE_KEYS, SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys';
-import { projectToQueueView, updateActionBadge } from '@/entrypoints/background/projection';
+import { projectToQueueView, updateActionBadge } from '@/src/runtime/projection';
 import type { StorageValue } from '@/src/shared/type-guards';
 import { normalizePersistedDownloadTask } from './persisted-download-task';
 import { isGlobalAppState, isMangaPageState, resolveVolumeStates } from './state-shapes';

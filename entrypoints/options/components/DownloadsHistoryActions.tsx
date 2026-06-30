@@ -2,7 +2,7 @@ import { Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { formatBytes } from '@/entrypoints/options/components/downloads-tab-helpers'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface DownloadsHistoryActionsProps {
   historyStorageBytes: number

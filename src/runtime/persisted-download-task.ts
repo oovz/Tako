@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot';
 import { ArchiveFormatSchema, DownloadErrorCategorySchema, DownloadTaskChapterStatusSchema, DownloadTaskStatusSchema, ImagePaddingDigitsSchema } from '@/src/shared/download-contract';
 import { isRecord } from '@/src/shared/type-guards';
 import { z } from 'zod';

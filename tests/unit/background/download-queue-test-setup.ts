@@ -1,4 +1,4 @@
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state';
 import type { DownloadTaskState, GlobalAppState, TaskChapter } from '@/src/types/queue-state';

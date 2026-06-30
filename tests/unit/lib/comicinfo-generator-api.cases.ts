@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   integrationSupportsMetadata,
   validateComicInfo,
-} from '@/src/shared/comicinfo-generator';
+} from '@/src/runtime/comicinfo-generator';
 import type { ComicInfoV2 } from '@/src/types/comic-info';
 
 export function registerComicInfoApiCases(): void {

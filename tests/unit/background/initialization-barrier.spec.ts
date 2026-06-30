@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createInitializationBarrier } from '@/entrypoints/background/initialization-barrier'
+import { createInitializationBarrier } from '@/src/runtime/initialization-barrier'
 
 describe('createInitializationBarrier', () => {
   it('initializes at most once after success', async () => {

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 
 import { createMockContext, expandTemplate, validateTemplate } from '@/src/shared/template-expander'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface PathVisualizationProps {
   template: string

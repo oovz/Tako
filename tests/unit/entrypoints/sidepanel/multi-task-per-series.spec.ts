@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { enqueueStartDownloadTask } from '@/entrypoints/background/download-queue'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
 import type { DownloadTaskState, QueueTaskSummary } from '@/src/types/queue-state'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'

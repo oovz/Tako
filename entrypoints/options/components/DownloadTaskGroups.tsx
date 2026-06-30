@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle, Clock, Download, XCircle } from 'lucide-react
 import { Card, CardContent } from '@/components/ui/card'
 import { DownloadTaskSection } from '@/entrypoints/options/components/DownloadTaskSection'
 import type { DownloadTaskState } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface DownloadTaskGroupsProps {
   tasks: DownloadTaskState[]

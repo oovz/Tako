@@ -8,9 +8,9 @@ import {
   setSessionState,
   waitForGlobalState,
 } from './fixtures/state-helpers'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { projectToQueueView } from '@/entrypoints/background/projection'
+import { projectToQueueView } from '@/src/runtime/projection'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import { buildExampleUrl } from './fixtures/test-domains'
 import type { DownloadTaskState } from '../../src/types/queue-state'

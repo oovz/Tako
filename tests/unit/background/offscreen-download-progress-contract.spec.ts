@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { normalizeActiveTaskProgress } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import { NotificationService } from '@/entrypoints/background/notification-service'
 import { OffscreenMessageSchema } from '@/src/runtime/message-schemas'

@@ -1,5 +1,5 @@
 import logger from '@/src/runtime/logger'
-import { projectToQueueView } from '@/entrypoints/background/projection'
+import { projectToQueueView } from '@/src/runtime/projection'
 import { normalizeInterruptedTask } from '@/entrypoints/background/task-lifecycle'
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
 import type { DownloadTaskState } from '@/src/types/queue-state'

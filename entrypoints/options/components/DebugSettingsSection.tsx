@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Bug } from "lucide-react"
 import type { ExtensionSettings } from "@/src/storage/settings-types"
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface DebugSettingsSectionProps {
   settings: ExtensionSettings

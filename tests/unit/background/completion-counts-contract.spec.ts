@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { NotificationService } from '@/entrypoints/background/notification-service'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState } from '@/src/types/queue-state'

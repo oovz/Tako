@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/extension'
 import { seedDownloadQueueState } from './fixtures/state-helpers'
-import { createTaskSettingsSnapshot } from '../../entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { DEFAULT_SETTINGS } from '../../src/storage/default-settings'
 import type { DownloadTaskState } from '../../src/types/queue-state'
 import type { ChapterState } from '../../src/types/tab-state'

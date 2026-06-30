@@ -1,6 +1,6 @@
 import logger from '@/src/runtime/logger'
 import { processDownloadQueue } from '@/entrypoints/background/download-queue'
-import { projectToQueueView, updateActionBadge } from '@/entrypoints/background/projection'
+import { projectToQueueView, updateActionBadge } from '@/src/runtime/projection'
 import {
   recoverFromLivenessTimeout,
   scheduleOffscreenCloseIfIdle,

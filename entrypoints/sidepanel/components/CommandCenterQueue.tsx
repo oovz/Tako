@@ -4,7 +4,7 @@ import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoint
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CommandCenterTaskRow } from '@/entrypoints/sidepanel/components/CommandCenterTaskRow'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 export interface CommandCenterQueueProps {
   tasks: QueueTaskSummary[]

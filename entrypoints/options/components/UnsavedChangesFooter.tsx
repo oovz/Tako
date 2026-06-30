@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface UnsavedChangesFooterProps {
   isSaving: boolean

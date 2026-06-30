@@ -2,7 +2,7 @@ import React from 'react'
 
 import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 export interface HistorySectionProps {
   tasks: QueueTaskSummary[]

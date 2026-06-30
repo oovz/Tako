@@ -12,7 +12,7 @@ import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
 import type { SiteIntegrationEnablementMap } from "@/src/storage/site-integration-enablement-service"
 import type { ExtensionSettings } from "@/src/storage/settings-types"
 import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 type CustomSettingValue = SiteIntegrationSettingValue
 

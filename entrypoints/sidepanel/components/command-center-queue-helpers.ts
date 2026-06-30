@@ -4,7 +4,7 @@ import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react'
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 export interface CommandCenterTaskActionAvailability {
   canCancel: boolean

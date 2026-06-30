@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 
-import { t, getUILanguage, getAcceptLanguages, getLocaleDisplayName, SUPPORTED_LOCALES, DEFAULT_LOCALE } from '@/src/shared/i18n'
+import { t, getUILanguage, getAcceptLanguages, getLocaleDisplayName, SUPPORTED_LOCALES, DEFAULT_LOCALE } from '@/src/runtime/i18n'
 
 describe('i18n infrastructure', () => {
   const originalChrome = globalThis.chrome

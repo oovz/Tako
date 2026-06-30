@@ -20,7 +20,7 @@ import {
   partitionDownloadTasks,
 } from '@/entrypoints/options/components/downloads-tab-helpers'
 import { useDownloadsTabState } from '@/entrypoints/options/hooks/useDownloadsTabState'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface DownloadsTabProps {
   settings: ExtensionSettings

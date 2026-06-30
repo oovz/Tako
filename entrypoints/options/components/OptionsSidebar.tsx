@@ -2,7 +2,7 @@ import { Bug, Download, Puzzle, Settings } from 'lucide-react'
 
 import { cn } from '@/src/shared/utils'
 import type { OptionsSection } from '../tab-routing'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface OptionsSidebarProps {
   activeSection: OptionsSection

@@ -14,7 +14,7 @@ const projectionMocks = vi.hoisted(() => ({
   updateActionBadge: vi.fn(async () => undefined),
 }))
 
-vi.mock('@/entrypoints/background/projection', () => ({
+vi.mock('@/src/runtime/projection', () => ({
   projectToQueueView: projectionMocks.projectToQueueView,
   updateActionBadge: projectionMocks.updateActionBadge,
 }))

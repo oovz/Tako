@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import type { RateScopePolicy } from '@/src/types/rate-policy'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface GlobalPerformanceSectionProps {
   chapterPolicy: RateScopePolicy
@@ -28,12 +28,13 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
         <div className="grid md:grid-cols-2 gap-8">
           <div className="flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <Label>{t('options_imageConcurrency')}</Label>
+              <Label htmlFor="image-concurrency-slider">{t('options_imageConcurrency')}</Label>
               <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-foreground font-medium">
                 {t('options_streams', [String(imagePolicy.concurrency)])}
               </span>
             </div>
             <Slider
+              id="image-concurrency-slider"
               data-testid="image-concurrency-slider"
               value={[imagePolicy.concurrency]}
               min={1}
@@ -48,8 +49,9 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
           </div>
 
           <div className="flex flex-col gap-4">
-            <Label>{t('options_imageRequestDelay')}</Label>
+            <Label htmlFor="image-request-delay">{t('options_imageRequestDelay')}</Label>
             <Input
+              id="image-request-delay"
               data-testid="request-delay-input"
               type="number"
               min={0}
@@ -65,8 +67,9 @@ export function GlobalPerformanceSection({ chapterPolicy, imagePolicy, onChapter
           </div>
 
           <div className="flex flex-col gap-4">
-            <Label>{t('options_chapterDelay')}</Label>
+            <Label htmlFor="chapter-delay">{t('options_chapterDelay')}</Label>
             <Input
+              id="chapter-delay"
               data-testid="chapter-delay-input"
               type="number"
               min={0}

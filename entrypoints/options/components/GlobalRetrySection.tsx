@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface GlobalRetrySectionProps {
   retries: ExtensionSettings['globalRetries']
