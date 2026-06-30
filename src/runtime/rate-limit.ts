@@ -5,6 +5,7 @@
 import Bottleneck from 'bottleneck/light.js'
 import { settingsService, SETTINGS_STORAGE_KEY } from '@/src/storage/settings-service'
 import { findSiteIntegrationForUrl, siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
+import { SITE_INTEGRATION_MANIFESTS, type SiteIntegrationManifest } from '@/src/site-integrations/manifest'
 import { siteOverridesService, SITE_OVERRIDES_STORAGE_KEY } from '@/src/storage/site-overrides-service'
 import { isRecord } from '@/src/shared/type-guards'
 import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
@@ -69,6 +70,51 @@ function normalizePolicy(p: { concurrency: number; delayMs: number }): Effective
   }
 }
 
+function isDomainMatch(hostname: string, domains: string[]): boolean {
+  return domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+}
+
+function pathPatternMatches(pathname: string, pattern: string): boolean {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')
+  return new RegExp(`^${escaped}$`).test(pathname)
+}
+
+function manifestMatchesSeriesPath(manifest: SiteIntegrationManifest, pathname: string): boolean {
+  if (!manifest.patterns.seriesMatches.some((pattern) => pathPatternMatches(pathname, pattern))) {
+    return false
+  }
+
+  return !(manifest.patterns.excludeMatches ?? []).some((pattern) => pathPatternMatches(pathname, pattern))
+}
+
+function resolveKnownIntegrationIdIgnoringUserEnablement(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+
+  const pathname = parsed.pathname.length > 1 && parsed.pathname.endsWith('/')
+    ? parsed.pathname.replace(/\/+$/, '')
+    : parsed.pathname
+
+  const domainMatches = SITE_INTEGRATION_MANIFESTS.filter((manifest) => {
+    return manifest.enabled !== false && isDomainMatch(parsed.hostname, manifest.patterns.domains)
+  })
+
+  if (domainMatches.length === 0) {
+    return null
+  }
+
+  if (domainMatches.length === 1) {
+    return domainMatches[0].id
+  }
+
+  const pathMatches = domainMatches.filter((manifest) => manifestMatchesSeriesPath(manifest, pathname))
+  return pathMatches.length === 1 ? pathMatches[0].id : null
+}
+
 async function ensureLimiter(integrationId: string, scope: RateScope, policyOverride?: EffectivePolicy): Promise<Bottleneck> {
   const normalizedOverride = policyOverride ? normalizePolicy(policyOverride) : undefined
   const key = limiterKey(integrationId, scope, normalizedOverride)
@@ -83,9 +129,9 @@ async function ensureLimiter(integrationId: string, scope: RateScope, policyOver
 function resolveIntegrationIdFromUrl(url: string): string | null {
   try {
     const info = findSiteIntegrationForUrl(url)
-    return info?.id ?? null
+    return info?.id ?? resolveKnownIntegrationIdIgnoringUserEnablement(url)
   } catch {
-    return null
+    return resolveKnownIntegrationIdIgnoringUserEnablement(url)
   }
 }
 

@@ -165,6 +165,36 @@ describe('Rate Limiting', () => {
       // Should attempt to find the site integration for the URL
       expect(findSiteIntegrationForUrl).toHaveBeenCalledWith('https://mangadex.org/title/123');
     });
+
+    it('still rate-limits known integration URLs when user enablement hides them from the runtime matcher', async () => {
+      const Bottleneck = (await import('bottleneck/light')).default;
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
+      const { findSiteIntegrationForUrl, siteIntegrationRegistry } = await import('@/src/runtime/site-integration-registry');
+
+      vi.mocked(Bottleneck).mockClear();
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null);
+      vi.mocked(siteIntegrationRegistry.findById).mockReturnValueOnce({
+        id: 'pixiv-comic',
+        name: 'Pixiv Comic',
+        author: 'test',
+        policyDefaults: {
+          image: { concurrency: 2, delayMs: 1000 },
+        },
+      });
+
+      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+
+      await rateLimitedFetchByUrlScope('https://comic.pixiv.net/works/123', 'image');
+
+      expect(siteIntegrationRegistry.findById).toHaveBeenCalledWith('pixiv-comic');
+      expect(Bottleneck).toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://comic.pixiv.net/works/123',
+        expect.objectContaining({
+          credentials: 'include',
+        }),
+      );
+    });
   });
 
   describe('Limiter Caching', () => {
