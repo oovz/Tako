@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot'
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
 import { NotificationService } from '@/entrypoints/background/notification-service'
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
 import type { DownloadTaskState, TaskChapter } from '@/src/types/queue-state'
@@ -45,7 +45,7 @@ function makeTask(overrides: Partial<DownloadTaskState> = {}): DownloadTaskState
   }
 }
 
-describe('FR-3.8 notification content templates', () => {
+describe('notification content templates', () => {
   const notificationsCreate = vi.fn()
   const onClickedAddListener = vi.fn()
   const onClosedAddListener = vi.fn()
@@ -73,7 +73,7 @@ describe('FR-3.8 notification content templates', () => {
     vi.unstubAllGlobals()
   })
 
-  describe('completed task notification (FR-3.8)', () => {
+  describe('completed task notification', () => {
     it('uses title "Download complete" with series title and chapter count', () => {
       const service = new NotificationService()
       const task = makeTask({
@@ -108,7 +108,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('partial_success task notification (FR-3.8)', () => {
+  describe('partial_success task notification', () => {
     it('uses title "Download partially complete" with failure counts', () => {
       const service = new NotificationService()
       const task = makeTask({
@@ -133,7 +133,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('failed task notification (FR-3.8)', () => {
+  describe('failed task notification', () => {
     it('uses title "Download failed" with failure counts', () => {
       const service = new NotificationService()
       const task = makeTask({
@@ -156,7 +156,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('canceled task notification (FR-3.8)', () => {
+  describe('canceled task notification', () => {
     it('notifyTaskCompleted does not filter by task status — caller must not call it for canceled tasks', () => {
       const service = new NotificationService()
       const task = makeTask({
@@ -182,7 +182,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('notifications disabled (FR-3.8)', () => {
+  describe('notifications disabled', () => {
     it('does not fire completed notification when notifications are disabled', () => {
       const service = new NotificationService()
       const task = makeTask({ status: 'completed' })
@@ -202,7 +202,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('all notifications use iconUrl from runtime.getURL (FR-3.8)', () => {
+  describe('all notifications use iconUrl from runtime.getURL', () => {
     it('completed notification sets iconUrl to chrome.runtime.getURL("icon/128.png")', () => {
       const service = new NotificationService()
       const task = makeTask()
@@ -226,7 +226,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('all notifications use type "basic" (FR-3.8)', () => {
+  describe('all notifications use type "basic"', () => {
     it('completed notification uses type basic', () => {
       const service = new NotificationService()
       service.notifyTaskCompleted({ task: makeTask(), notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 })
@@ -242,7 +242,7 @@ describe('FR-3.8 notification content templates', () => {
     })
   })
 
-  describe('requireInteraction is false for all download notifications (FR-3.8)', () => {
+  describe('requireInteraction is false for all download notifications', () => {
     it('completed notification has requireInteraction false', () => {
       const service = new NotificationService()
       service.notifyTaskCompleted({ task: makeTask(), notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 })

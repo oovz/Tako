@@ -35,7 +35,8 @@ import {
 import { createPendingDownloadsStore } from '@/entrypoints/background/pending-downloads';
 import { tabContextCache } from '@/entrypoints/background/tab-cache';
 import { createTabUiCoordinator } from '@/entrypoints/background/tab-ui-coordinator';
-import { createInitializationBarrier } from '@/entrypoints/background/initialization-barrier';
+import { createInitializationBarrier } from '@/src/runtime/initialization-barrier';
+import { getNotificationService } from '@/entrypoints/background/notification-service';
 
 // Global state manager instance
 let stateManager!: CentralizedStateManager; // set during initializeExtensionRuntime()
@@ -171,6 +172,13 @@ export default defineBackground({
       tabContextCache,
       tabUiCoordinator,
     })
+
+    // Register notification click listener synchronously in main() so it
+    // survives service worker restarts. The service is lazily instantiated
+    // on first notification show; this listener delegates to it on click.
+    chrome.notifications.onClicked.addListener((notificationId) => {
+      void getNotificationService().handleNotificationClick(notificationId);
+    });
 
     logger.info('Background script initialized');
 

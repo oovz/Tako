@@ -41,21 +41,11 @@ function extractTaskId(notificationId: string): string | null {
 }
 
 export class NotificationService {
-  constructor() {
-    this.registerClickHandler();
-  }
-
   showDownloadCompleteNotification(data: DownloadCompleteNotificationData): void {
     this.notifyTaskCompleted(data);
   }
 
-  private registerClickHandler(): void {
-    chrome.notifications.onClicked.addListener((notificationId) => {
-      void this.handleNotificationClick(notificationId);
-    });
-  }
-
-  private async handleNotificationClick(notificationId: string): Promise<void> {
+  async handleNotificationClick(notificationId: string): Promise<void> {
     const downloadId = await this.readPersistedDownloadId(notificationId);
     if (typeof downloadId === 'number') {
       void chrome.downloads.show(downloadId);

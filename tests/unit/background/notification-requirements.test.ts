@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTaskSettingsSnapshot } from '@/entrypoints/background/settings-snapshot';
+import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot';
 import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 import { NotificationService } from '@/entrypoints/background/notification-service';
-import { addPersistentError, clearPersistentError, getPersistentErrors } from '@/entrypoints/background/errors';
+import { addPersistentError, clearPersistentError, getPersistentErrors } from '@/src/runtime/errors';
 import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
 import type { DownloadTaskState } from '@/src/types/queue-state';
 
@@ -114,10 +114,9 @@ describe('notification behavior', () => {
     const service = new NotificationService();
     service.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
 
-    const clickHandler = onClickedAddListener.mock.calls[0]?.[0] as ((notificationId: string) => void) | undefined;
-    expect(clickHandler).toBeTypeOf('function');
-
-    clickHandler?.(`task_complete_${task.id}`);
+    // Click handler is now registered in background main(), not the constructor.
+    // Test the handler directly.
+    await service.handleNotificationClick(`task_complete_${task.id}`);
 
     await Promise.resolve();
     await Promise.resolve();
@@ -152,11 +151,11 @@ describe('notification behavior', () => {
       ],
     });
 
-    new NotificationService();
-    const clickHandler = onClickedAddListener.mock.calls[0]?.[0] as ((notificationId: string) => void) | undefined;
-    expect(clickHandler).toBeTypeOf('function');
+    const service = new NotificationService();
 
-    clickHandler?.('task_complete_task-click-stale');
+    // Click handler is now registered in background main(), not the constructor.
+    // Test the handler directly.
+    await service.handleNotificationClick('task_complete_task-click-stale');
 
     await Promise.resolve();
     await Promise.resolve();
