@@ -184,8 +184,12 @@ export function useOptionsPageState() {
   async function handleRefreshHistory() {
     const series = await loadSeriesHistory()
     setHistorySeries(series)
-    const stats = await chapterPersistenceService.getStorageStats()
-    setHistoryStats({ totalChapters: stats.totalChapters, totalSeries: stats.totalSeries })
+    try {
+      const stats = await chapterPersistenceService.getStorageStats()
+      setHistoryStats({ totalChapters: stats.totalChapters, totalSeries: stats.totalSeries })
+    } catch (error) {
+      logger.error('[OPTIONS] Failed to refresh storage stats:', error)
+    }
     return series
   }
 

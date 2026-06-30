@@ -19,13 +19,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import logger from '@/src/runtime/logger'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
+import { ErrorBoundary } from '@/src/ui/shared/components/ErrorBoundary'
 import { getInitialOptionsSection, type OptionsSection } from './tab-routing'
 import { useOptionsPageState } from './hooks/useOptionsPageState'
 
-import { GlobalSettingsTab } from './tabs/GlobalSettingsTab'
-
-// Lazy load non-default tabs for code splitting
+// Lazy load all tabs for code splitting
+const GlobalSettingsTab = lazy(() => import('./tabs/GlobalSettingsTab').then(m => ({ default: m.GlobalSettingsTab })))
 const SiteIntegrationManagementTab = lazy(() => import('./tabs/SiteIntegrationManagementTab').then(m => ({ default: m.SiteIntegrationManagementTab })))
 const HistoryTab = lazy(() => import('./tabs/HistoryTab').then(m => ({ default: m.HistoryTab })))
 const DownloadsTab = lazy(() => import('./tabs/DownloadsTab').then(m => ({ default: m.DownloadsTab })))
@@ -84,21 +84,17 @@ function onRenderCallback(
 
   useEffect(() => {
     const root = document.getElementById('root')
-    const previousHtmlOverflow = document.documentElement.style.overflow
-    const previousBodyOverflow = document.body.style.overflow
-    const previousRootOverflow = root?.style.overflow ?? ''
-
-    document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
+    document.documentElement.classList.add('tako-scroll-locked')
+    document.body.classList.add('tako-scroll-locked')
     if (root) {
-      root.style.overflow = 'hidden'
+      root.classList.add('tako-scroll-locked')
     }
 
     return () => {
-      document.documentElement.style.overflow = previousHtmlOverflow
-      document.body.style.overflow = previousBodyOverflow
+      document.documentElement.classList.remove('tako-scroll-locked')
+      document.body.classList.remove('tako-scroll-locked')
       if (root) {
-        root.style.overflow = previousRootOverflow
+        root.classList.remove('tako-scroll-locked')
       }
     }
   }, [])
@@ -114,8 +110,7 @@ function onRenderCallback(
     )
   }
 
-  return (
-    <Profiler id="OptionsPage" onRender={onRenderCallback}>
+  const pageContent = (
       <div className="flex h-full min-h-0 overflow-hidden bg-background text-foreground font-sans antialiased">
         <Toaster />
 
@@ -126,10 +121,12 @@ function onRenderCallback(
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col p-8 pb-24">
             {activeSection === 'global' && (
               <section className="animate-in fade-in slide-in-from-right-4 duration-300">
-                <GlobalSettingsTab
-                  settings={settingsBuffer}
-                  onChange={handleSettingsChange}
-                />
+                <Suspense fallback={<SectionLoadingSkeleton />}>
+                  <GlobalSettingsTab
+                    settings={settingsBuffer}
+                    onChange={handleSettingsChange}
+                  />
+                </Suspense>
               </section>
             )}
 
@@ -222,14 +219,27 @@ function onRenderCallback(
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </Profiler>
   )
+
+  if (import.meta.env.DEV) {
+    return (
+      <Profiler id="OptionsPage" onRender={onRenderCallback}>
+        {pageContent}
+      </Profiler>
+    )
+  }
+
+  return pageContent
 }
 
 // Mount the application
 const container = document.getElementById('root')
 if (container) {
   const root = createRoot(container)
-  root.render(<OptionsPage />)
+  root.render(
+    <ErrorBoundary>
+      <OptionsPage />
+    </ErrorBoundary>
+  )
 }
 
