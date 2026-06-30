@@ -85,9 +85,12 @@ export function useDownload({ tabId, mangaState }: UseDownloadOptions): UseDownl
   const [showSuccess, setShowSuccess] = useState(false)
   const [isEnqueuing, setIsEnqueuing] = useState(false)
   const successHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
+      isMountedRef.current = false
       if (successHideTimeoutRef.current !== null) {
         clearTimeout(successHideTimeoutRef.current)
       }
@@ -127,8 +130,15 @@ export function useDownload({ tabId, mangaState }: UseDownloadOptions): UseDownl
         throw new Error(enqueueError || 'Failed to enqueue download task')
       }
 
+      // Guard against setting state after unmount
+      if (!isMountedRef.current) return true
+
       setShowSuccess(true)
       successHideTimeoutRef.current = setTimeout(() => {
+        if (!isMountedRef.current) {
+          successHideTimeoutRef.current = null
+          return
+        }
         setShowSuccess(false)
         successHideTimeoutRef.current = null
       }, SUCCESS_HIDE_DELAY_MS)
@@ -137,7 +147,9 @@ export function useDownload({ tabId, mangaState }: UseDownloadOptions): UseDownl
       logger.error('❌ Failed to start download:', error)
       return false
     } finally {
-      setIsEnqueuing(false)
+      if (isMountedRef.current) {
+        setIsEnqueuing(false)
+      }
     }
   }, [tabId, mangaState, isEnqueuing])
   

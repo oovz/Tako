@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn } from '@/src/shared/utils'
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
@@ -15,7 +16,7 @@ import {
   getTaskStatusLabel,
 } from '@/entrypoints/sidepanel/components/command-center-queue-helpers'
 import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/shared/i18n'
+import { t } from '@/src/runtime/i18n'
 
 interface CommandCenterTaskRowProps {
   task: QueueTaskSummary
@@ -35,7 +36,7 @@ interface CommandCenterTaskRowProps {
   onRemoveTask?: (taskId: string) => void
 }
 
-export function CommandCenterTaskRow({
+export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
   task,
   isCanceling,
   isConfirmingCancel,
@@ -192,5 +193,5 @@ export function CommandCenterTaskRow({
       )}
     </>
   )
-}
+})
 
