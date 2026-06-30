@@ -1,4 +1,4 @@
-onlyBuiltDependencies:
-  - '@tailwindcss/oxide'
-  - esbuild
-  - spawn-sync
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
+  spawn-sync: true
