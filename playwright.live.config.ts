@@ -11,10 +11,10 @@ export default defineConfig({
   testDir: path.resolve(__dirname, 'tests/live'),
   fullyParallel: false, // Run sequentially to avoid rate limiting
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0, // Retry once in CI for transient network failures
+  retries: process.env.CI ? 3 : 0, // Retry up to 3 times in CI for transient network failures
   workers: 1, // Single worker to avoid rate limiting
   reporter: [['list']],
-  timeout: 60_000,
+  timeout: 120_000,
   expect: { timeout: 10_000 },
   use: {
     locale: 'en-US',

@@ -42,7 +42,7 @@ pnpm test:e2e
 ## Testing
 
 - **Unit tests** (`tests/unit/`) cover pure logic, message contracts, and component behavior.
-- **Integration tests** run with Vitest's browser mode for cross-context contracts.
+- **Integration tests** run in Node environment with mocked Chrome APIs for cross-context module wiring.
 - **E2E tests** (`tests/e2e/`) use Playwright against the built extension with mocked routes.
 - **Live tests** (`tests/live/`) validate real-site behavior.
 
