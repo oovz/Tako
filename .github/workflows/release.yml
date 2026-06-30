@@ -1,11 +1,15 @@
 name: Release
 
+# Triggered by tag pushes (v*) and manual dispatch. Calls the same reusable
+# quality-e2e.yml workflow used by ci.yml so a release is gated by the exact
+# same build/lint/test/E2E verification as branch CI, without re-triggering
+# ci.yml itself (which would duplicate runs when main and a tag are pushed
+# together).
+
 on:
-  workflow_call:
-    inputs:
-      release_tag:
-        required: false
-        type: string
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -21,7 +25,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/quality-e2e.yml
+
   release:
+    needs: verify
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}

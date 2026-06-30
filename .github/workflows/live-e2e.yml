@@ -5,14 +5,13 @@ name: Live E2E
 # because they depend on third-party service availability and rate limits.
 #
 # Runs on every push and PR alongside CI, but as a separate workflow so
-# its result does not affect the CI run status or block releases.
+# its result does not affect the CI run status or block releases. Tags are
+# excluded to avoid a duplicate run when main and a tag are pushed together.
 
 on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   pull_request:
   workflow_dispatch:
 
