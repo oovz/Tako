@@ -13,7 +13,7 @@ import type { ComicInfoV2, ComicInfoVersionSupport } from '../types/comic-info';
 import logger from '@/src/runtime/logger';
 
 /**
- * ComicInfo version compatibility definitions - P1-3: Only v2.0 supported
+ * ComicInfo version compatibility definitions. Only v2.0 is supported.
  */
 export const COMICINFO_VERSION_SUPPORT: Record<'2.0', ComicInfoVersionSupport> = {
   '2.0': {
@@ -235,7 +235,7 @@ function cleanUnifiedMetadata(metadata: ComicInfoV2): ComicInfoV2 {
  * @param hasCoverImage - Whether to mark cover page
  */
 function generateVersionSpecificXML(metadata: ComicInfoV2, hasCoverImage: boolean = false): string {
-  // P1-3: Always generates ComicInfo v2.0 XML
+  // Always generates ComicInfo v2.0 XML.
   let xml = '<?xml version="1.0" encoding="utf-8"?>\n';
   xml += '<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n';
   
@@ -335,7 +335,7 @@ function generateVersionSpecificXML(metadata: ComicInfoV2, hasCoverImage: boolea
 export function generateComicInfo(
   metadata: ComicInfoV2 = {}, 
   pageCount: number = 0, 
-  version: '2.0' = '2.0',  // P1-3: Always v2.0
+  version: '2.0' = '2.0',
   hasCoverImage: boolean = false  // Cover image marker
 ): string | null {
   try {
