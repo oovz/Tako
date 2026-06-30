@@ -109,7 +109,7 @@ export function registerTemplateResolverDirectoryCases(): void {
       it('returns error when template has invalid macro', () => {
         const result = resolveDownloadDirectory('<INVALID_MACRO>', baseDirectoryContext);
         expect(result.success).toBe(false);
-        expect(result.error).toBeTruthy();
+        expect(result.error).toMatch(/Unknown macros/i);
       });
 
       it('returns error when resolved directory is empty', () => {

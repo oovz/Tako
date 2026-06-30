@@ -224,6 +224,17 @@ describe('notification content templates', () => {
       const [, options] = notificationsCreate.mock.calls[0]
       expect(options.iconUrl).toBe('chrome-extension://test/icon/128.png')
     })
+
+    it('partial_success notification sets iconUrl to chrome.runtime.getURL("icon/128.png")', () => {
+      const service = new NotificationService()
+      const task = makeTask({ status: 'partial_success' })
+
+      service.notifyTaskFailed({ task, notificationsEnabled: true })
+
+      expect(runtimeGetUrl).toHaveBeenCalledWith('icon/128.png')
+      const [, options] = notificationsCreate.mock.calls[0]
+      expect(options.iconUrl).toBe('chrome-extension://test/icon/128.png')
+    })
   })
 
   describe('all notifications use type "basic"', () => {

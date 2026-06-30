@@ -1,13 +1,13 @@
 import { vi } from 'vitest';
 
-export const mockStorageData: Record<string, any> = {};
-export const mockOnChangedListeners: Array<(changes: any, area: string) => void> = [];
+export const mockStorageData: Record<string, unknown> = {};
+export const mockOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void> = [];
 
 globalThis.chrome = {
   storage: {
     local: {
       get: vi.fn((keys: string[] | string) => {
-        const result: Record<string, any> = {};
+        const result: Record<string, unknown> = {};
         const keyArray = Array.isArray(keys) ? keys : [keys];
         keyArray.forEach(key => {
           if (key in mockStorageData) {
@@ -16,8 +16,8 @@ globalThis.chrome = {
         });
         return Promise.resolve(result);
       }),
-      set: vi.fn((items: Record<string, any>) => {
-        const changes: Record<string, { oldValue?: any; newValue: any }> = {};
+      set: vi.fn((items: Record<string, unknown>) => {
+        const changes: Record<string, { oldValue?: unknown; newValue: unknown }> = {};
         Object.entries(items).forEach(([key, newValue]) => {
           const oldValue = mockStorageData[key];
           mockStorageData[key] = newValue;
@@ -28,7 +28,7 @@ globalThis.chrome = {
       }),
     },
     onChanged: {
-      addListener: vi.fn((callback: (changes: any, area: string) => void) => {
+      addListener: vi.fn((callback: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void) => {
         mockOnChangedListeners.push(callback);
       }),
     },

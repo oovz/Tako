@@ -454,9 +454,11 @@ describe('Comic Nettai site integration', () => {
         title: '第1話',
         locked: false,
         language: 'ja',
+        chapterNumber: 1,
       })
       expect(chapters[1]).toMatchObject({
         locked: true,
+        chapterNumber: 2,
       })
     })
 

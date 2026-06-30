@@ -11,6 +11,7 @@ export interface ChromeStorageMock {
   session: Record<string, unknown>
   localOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void>
   sessionOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void>
+  mocks: Array<{ mockClear: () => void }>
   restore: () => void
 }
 
@@ -82,21 +83,28 @@ export function createChromeStorageMock(options: ChromeStorageMockOptions = {}):
     session,
   }
 
+  const collectedMocks: Array<{ mockClear: () => void }> = [
+    local.get, local.set, local.remove, local.clear,
+    session.get, session.set, session.remove, session.clear,
+  ]
+
   if (options.includeOnChanged) {
-    storage.onChanged = {
-      addListener: vi.fn((callback: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void) => {
-        localOnChangedListeners.push((changes, area) => {
-          if (area === 'local') callback(changes, area)
-        })
-        sessionOnChangedListeners.push((changes, area) => {
-          if (area === 'session') callback(changes, area)
-        })
-      }),
-      removeListener: vi.fn(),
-    }
+    const addListener = vi.fn((callback: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void) => {
+      localOnChangedListeners.push((changes, area) => {
+        if (area === 'local') callback(changes, area)
+      })
+      sessionOnChangedListeners.push((changes, area) => {
+        if (area === 'session') callback(changes, area)
+      })
+    })
+    const removeListener = vi.fn()
+    storage.onChanged = { addListener, removeListener }
+    collectedMocks.push(addListener, removeListener)
   }
 
-  ;(session as Record<string, unknown>).setAccessLevel = vi.fn().mockResolvedValue(undefined)
+  const setAccessLevel = vi.fn().mockResolvedValue(undefined)
+  ;(session as Record<string, unknown>).setAccessLevel = setAccessLevel
+  collectedMocks.push(setAccessLevel)
 
   const previous = (globalThis as { chrome?: unknown }).chrome
 
@@ -110,6 +118,7 @@ export function createChromeStorageMock(options: ChromeStorageMockOptions = {}):
     session: sessionData,
     localOnChangedListeners,
     sessionOnChangedListeners,
+    mocks: collectedMocks,
     restore: () => {
       ;(globalThis as { chrome?: unknown }).chrome = previous
     },
@@ -125,5 +134,7 @@ export function resetChromeStorageMock(mock: ChromeStorageMock): void {
   }
   mock.localOnChangedListeners.length = 0
   mock.sessionOnChangedListeners.length = 0
-  vi.clearAllMocks()
+  for (const fn of mock.mocks) {
+    fn.mockClear()
+  }
 }

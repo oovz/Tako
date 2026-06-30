@@ -63,7 +63,7 @@ describe('enqueueStartDownloadTask', () => {
     expect(result.taskId?.length ?? 0).toBeGreaterThan(0)
 
     const firstCall = addDownloadTask.mock.calls[0]
-    expect(firstCall).toBeTruthy()
+    expect(firstCall).toBeDefined()
 
     const task = firstCall?.[0] as unknown as {
       siteIntegrationId: string

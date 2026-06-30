@@ -108,7 +108,7 @@ export function registerSettingsServicePersistenceAndValidationCases(): void {
         },
       });
 
-      expect(mockStorageData[SETTINGS_STORAGE_KEY].downloads.defaultFormat).toBe('zip');
+      expect((mockStorageData[SETTINGS_STORAGE_KEY] as ExtensionSettings).downloads.defaultFormat).toBe('zip');
     });
 
     it('should merge partial updates with existing settings', async () => {

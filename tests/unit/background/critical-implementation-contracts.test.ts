@@ -83,6 +83,14 @@ describe('critical runtime contracts (behavior-based)', () => {
     expect(parsed.type).toBe('OFFSCREEN_DOWNLOAD_API_REQUEST')
   })
 
+  it('accepts GET_SITE_INTEGRATION_ENABLEMENT runtime message payload shape', () => {
+    const parsed = RuntimeMessageSchema.parse({
+      type: 'GET_SITE_INTEGRATION_ENABLEMENT',
+    })
+
+    expect(parsed.type).toBe('GET_SITE_INTEGRATION_ENABLEMENT')
+  })
+
   it('resolves download format as site override first, global default fallback', async () => {
     getAllSiteOverrides.mockResolvedValue({
       mangadex: {

@@ -36,7 +36,7 @@ describe('SPA Navigation State Cleanup Logic', () => {
             const { matchUrl } = await import('@/src/site-integrations/url-matcher')
 
             const result = matchUrl('https://mangadex.org/title/abc123/test-manga')
-            expect(result).toBeTruthy()
+            expect(result).toBeDefined()
             expect(result?.integrationId).toBe('mangadex')
         })
 

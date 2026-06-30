@@ -89,7 +89,7 @@ describe('initializeFromStorage', () => {
     const queueViewWrite = writeSession.mock.calls.find(
       (call) => call[0] && Object.prototype.hasOwnProperty.call(call[0], 'queueView'),
     )
-    expect(queueViewWrite).toBeTruthy()
+    expect(queueViewWrite).toBeDefined()
     expect(queueViewWrite?.[0]).toEqual(
       expect.objectContaining({
         [SESSION_STORAGE_KEYS.activeTaskProgress]: null,

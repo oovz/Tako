@@ -264,7 +264,9 @@ describe('tab context cache', () => {
     await cache.handleTabReplaced(22, 21)
 
     expect(cache.getCachedContext(21)).toBeUndefined()
-    expect(cache.getCachedContext(22)).toBeTruthy()
+    const transferred = cache.getCachedContext(22)
+    expect(transferred).toBeDefined()
+    expect(transferred && 'mangaId' in transferred ? transferred.mangaId : undefined).toBe('series-x')
   })
 })
 
