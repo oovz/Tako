@@ -76,17 +76,25 @@ export async function clearDownloadRootHandle(): Promise<void> {
 }
 
 export async function verifyPermission(dir: DirHandle, writable = true): Promise<boolean> {
-  // Type assertion for optional File System Access API methods
-  type DirHandleWithPermissions = DirHandle & {
-    queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
-    requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
-  };
+  try {
+    // Type assertion for optional File System Access API methods
+    type DirHandleWithPermissions = DirHandle & {
+      queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+      requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>;
+    };
 
-  const dirWithPerms = dir as DirHandleWithPermissions;
-  const perm = await dirWithPerms.queryPermission?.({ mode: writable ? 'readwrite' : 'read' });
-  if (perm === 'granted') return true;
-  const req = await dirWithPerms.requestPermission?.({ mode: writable ? 'readwrite' : 'read' });
-  return req === 'granted';
+    const dirWithPerms = dir as DirHandleWithPermissions;
+    const perm = await dirWithPerms.queryPermission?.({ mode: writable ? 'readwrite' : 'read' });
+    if (perm === 'granted') return true;
+    const req = await dirWithPerms.requestPermission?.({ mode: writable ? 'readwrite' : 'read' });
+    return req === 'granted';
+  } catch (error) {
+    // Permission API unavailable or threw (e.g. iframe sandbox, user gesture
+    // required). Treat as "no permission" but log so FSA failures are
+    // debuggable instead of silently degrading to Downloads API.
+    logger.debug('[fs-access] verifyPermission failed:', error);
+    return false;
+  }
 }
 
 async function ensureSubdir(root: DirHandle, pathParts: string[]): Promise<DirHandle> {
