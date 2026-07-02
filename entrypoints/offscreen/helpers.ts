@@ -4,13 +4,20 @@ import { buildSeriesComicInfoBase } from '@/src/shared/chapter-metadata'
 import type {
   OffscreenDownloadApiRequestMessage,
   OffscreenDownloadApiRequestResponse,
-  OffscreenDownloadChapterMessage,
 } from '@/src/types/offscreen-messages'
+import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
 
 const OFFSCREEN_DOWNLOAD_API_THROTTLE_MS = 250
 let lastDownloadApiRequestAt = 0
 
-export type SeriesMetadataInput = OffscreenDownloadChapterMessage['payload']['book']['metadata']
+/**
+ * Consumer-side type for series metadata passed to ComicInfo generation.
+ *
+ * The wire format (Zod-validated) is `Record<string, unknown> | undefined`;
+ * callers narrow to this type before passing it in. See
+ * `createProcessChapterStreamingOptions` in `download-request-mappers.ts`.
+ */
+export type SeriesMetadataInput = SeriesMetadataSnapshot | undefined
 
 export function buildComicInfoMetadata(input: {
   chapter: Chapter

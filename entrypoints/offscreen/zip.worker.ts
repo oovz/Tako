@@ -29,6 +29,12 @@ type InboundMsg = InitMsg | AddComicInfoMsg | AddImageMsg | FinalizeMsg | ResetM
 
 export type ZipWorkerResponse =
   | {
+      type: 'progress';
+      bytes: number;
+      chunks: number;
+      final: boolean;
+    }
+  | {
       success: true;
       filename: string;
       size: number;
@@ -45,6 +51,8 @@ interface StreamingState {
   chapterTitle?: string;
   extension?: 'cbz' | 'zip';
   imageCount: number;
+  compressedBytes: number;
+  chunkCount: number;
   // Normalization state
   normalizeImageFilenames: boolean;
   imagePaddingDigits: 'auto' | 2 | 3 | 4 | 5;
@@ -55,6 +63,8 @@ const streamState: StreamingState = {
   chunks: [],
   isFinalized: false,
   imageCount: 0,
+  compressedBytes: 0,
+  chunkCount: 0,
   normalizeImageFilenames: false,
   imagePaddingDigits: 'auto',
   totalImages: 0,
@@ -101,6 +111,14 @@ function ensureZip(): Zip {
         return;
       }
       streamState.chunks.push(chunk);
+      streamState.compressedBytes += chunk.byteLength;
+      streamState.chunkCount += 1;
+      post({
+        type: 'progress',
+        bytes: streamState.compressedBytes,
+        chunks: streamState.chunkCount,
+        final,
+      });
       if (final) {
         const totalLength = streamState.chunks.reduce((sum, c) => sum + c.length, 0);
         const finalBuffer = new Uint8Array(totalLength);
@@ -134,6 +152,8 @@ function resetState() {
   streamState.chapterTitle = undefined;
   streamState.extension = undefined;
   streamState.imageCount = 0;
+  streamState.compressedBytes = 0;
+  streamState.chunkCount = 0;
   streamState.normalizeImageFilenames = false;
   streamState.imagePaddingDigits = 'auto';
   streamState.totalImages = 0;

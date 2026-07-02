@@ -1,6 +1,7 @@
 import logger from '@/src/runtime/logger'
 import {
   OffscreenMessageSchema,
+  type OffscreenDownloadChapterPayload,
   type OffscreenMessage,
 } from '@/src/runtime/message-schemas'
 import type {
@@ -8,14 +9,13 @@ import type {
   ExtensionMessageResponse,
 } from '@/src/types/extension-messages'
 import type {
-  OffscreenDownloadChapterMessage,
   OffscreenDownloadChapterResponse,
 } from '@/src/types/offscreen-messages'
 
 interface OffscreenWorkerRuntime {
   initialize: () => Promise<void>
   processDownloadChapter: (
-    payload: OffscreenDownloadChapterMessage['payload'],
+    payload: OffscreenDownloadChapterPayload,
   ) => Promise<{
     status: 'completed' | 'partial_success' | 'failed'
     errorMessage?: string
@@ -61,7 +61,7 @@ function processMessage(
       return true
     }
 
-    worker.processDownloadChapter(parsedMessage.payload as unknown as OffscreenDownloadChapterMessage['payload'])
+    worker.processDownloadChapter(parsedMessage.payload)
       .then((outcome) => {
         const response: OffscreenDownloadChapterResponse = {
           success: true,

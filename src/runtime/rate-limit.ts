@@ -136,7 +136,7 @@ function resolveIntegrationIdFromUrl(url: string): string | null {
 }
 
 export function getRateLimitPolicyFromSnapshot(
-  settingsSnapshot: TaskSettingsSnapshot | undefined,
+  settingsSnapshot: Partial<TaskSettingsSnapshot> | undefined,
   scope: RateScope,
 ): EffectivePolicy | undefined {
   return settingsSnapshot?.rateLimitSettings?.[scope]

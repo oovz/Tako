@@ -28,6 +28,13 @@ export type WorkerZipResult = {
   error?: string
 }
 
+export type WorkerZipProgress = {
+  type: 'progress'
+  bytes: number
+  chunks: number
+  final: boolean
+}
+
 export type ProcessChapterStreamingOptions = {
   taskId: string
   chapter: Chapter
@@ -46,7 +53,7 @@ export type ProcessChapterStreamingOptions = {
   onImageDownloaded?: () => void
   integrationContext?: Record<string, unknown>
   seriesMetadata?: SeriesMetadataInput
-  settingsSnapshot?: TaskSettingsSnapshot
+  settingsSnapshot?: ProcessDownloadChapterSettingsSnapshot
 }
 
 export type ProcessDownloadChapterSettingsSnapshot = Partial<{
@@ -66,7 +73,11 @@ export type ChapterDownloadImageResult = {
 
 export type ChapterDownloadImageFn = (
   url: string,
-  options: { signal?: AbortSignal; context?: Record<string, unknown> },
+  options: {
+    signal?: AbortSignal
+    context?: Record<string, unknown>
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  },
 ) => Promise<ChapterDownloadImageResult>
 
 export type BrowserBlobDownloadResponse = {
@@ -75,7 +86,10 @@ export type BrowserBlobDownloadResponse = {
 } | undefined
 
 export interface ChapterProcessingRuntime {
-  withImageRetries: <T>(fn: () => Promise<T>) => Promise<T>
+  withImageRetries: <T>(
+    fn: () => Promise<T>,
+    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+  ) => Promise<T>
   resolveWritableDownloadRoot: (input: {
     taskId: string
     chapter: Chapter

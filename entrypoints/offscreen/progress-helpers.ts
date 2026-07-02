@@ -1,7 +1,7 @@
 import type {
-  OffscreenDownloadChapterMessage,
   OffscreenDownloadProgressMessage,
 } from '@/src/types/offscreen-messages'
+import type { OffscreenDownloadChapterPayload } from '@/src/runtime/message-schemas'
 import type { ProcessChapterStreamingOptions } from './chapter-processing'
 
 export function createDownloadingProgressPayload(input: {
@@ -26,8 +26,8 @@ export function createDownloadingProgressPayload(input: {
   }
 }
 
-export async function sendInitialDownloadHeartbeat(input: {
-  request: OffscreenDownloadChapterMessage['payload']
+export async function sendInitialDownloadProgress(input: {
+  request: OffscreenDownloadChapterPayload
   sendMessageWithRetry: <T extends import('@/src/types/extension-messages').ExtensionMessage, R>(msg: T, attempts?: number, baseDelayMs?: number) => Promise<R>
 }): Promise<void> {
   const { request, sendMessageWithRetry } = input

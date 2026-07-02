@@ -194,5 +194,43 @@ describe('File System Access helpers', () => {
       expect(written).toEqual([blob])
       expect(closed).toEqual(['Chapter 001.cbz'])
     })
+
+    it('streams blob writes and reports cumulative bytes when progress is requested', async () => {
+      const written: Uint8Array[] = []
+      const progress: number[] = []
+      const closed: string[] = []
+      const aborted: string[] = []
+      const dir = createDirectoryHandle(
+        async (name) => ({
+          createWritable: async () => ({
+            write: async (chunk: Uint8Array) => {
+              written.push(chunk)
+            },
+            close: async () => {
+              closed.push(name)
+            },
+            abort: async () => {
+              aborted.push(name)
+            },
+          }),
+        }),
+        {
+          getDirectoryHandle: async () => dir,
+        }
+      )
+      const blob = new Blob([new Uint8Array([1, 2]), new Uint8Array([3, 4])])
+
+      await writeBlobToPath(dir, 'Chapter 001.cbz', blob, true, {
+        onBytesWritten: async (bytesWritten) => {
+          progress.push(bytesWritten)
+        },
+      })
+
+      const totalWritten = written.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+      expect(totalWritten).toBe(4)
+      expect(progress.at(-1)).toBe(4)
+      expect(closed).toEqual(['Chapter 001.cbz'])
+      expect(aborted).toEqual([])
+    })
   })
 })

@@ -11,14 +11,18 @@ export type CoverImageAsset = {
   mimeType: string
 }
 
+type ImageRetryHooks = { onAttemptStart?: (attempt: number) => void | Promise<void> }
+
 export async function prefetchCoverImage(input: {
   coverUrl?: string
   integrationId?: string
   integrationContext?: Record<string, unknown>
   rateLimitSettings?: RateLimitPolicySnapshot
-  withImageRetries: <T>(fn: () => Promise<T>) => Promise<T>
+  signal?: AbortSignal
+  onActivity?: () => void | Promise<void>
+  withImageRetries: <T>(fn: () => Promise<T>, hooks?: ImageRetryHooks) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { coverUrl, integrationId, integrationContext, rateLimitSettings, withImageRetries } = input
+  const { coverUrl, integrationId, integrationContext, rateLimitSettings, signal, onActivity, withImageRetries } = input
   if (!coverUrl || !integrationId) {
     return undefined
   }
@@ -33,16 +37,25 @@ export async function prefetchCoverImage(input: {
     if (!OffscreenIntegration) {
       return undefined
     }
-    const result = await withImageRetries<ChapterDownloadImageResult>(() =>
-      scheduleForIntegrationScope(integrationId, 'image', () =>
-        OffscreenIntegration.chapter.downloadImage(coverUrl, {
-          context: {
-            ...(integrationContext ?? {}),
-            ...(rateLimitSettings ? { rateLimitSettings } : {}),
-          },
-        }),
-        rateLimitSettings?.image,
-      ),
+    const reportActivity = async () => {
+      await onActivity?.()
+    }
+    const result = await withImageRetries<ChapterDownloadImageResult>(
+      () =>
+        scheduleForIntegrationScope(integrationId, 'image', () =>
+          OffscreenIntegration.chapter.downloadImage(coverUrl, {
+            signal,
+            onBytesReceived: reportActivity,
+            context: {
+              ...(integrationContext ?? {}),
+              ...(rateLimitSettings ? { rateLimitSettings } : {}),
+            },
+          }),
+          rateLimitSettings?.image,
+        ),
+      {
+        onAttemptStart: reportActivity,
+      },
     )
     return { data: result.data, mimeType: result.mimeType }
   } catch (error) {
@@ -57,9 +70,11 @@ export async function prefetchOptionalCoverImage(input: {
   integrationId?: string
   integrationContext?: Record<string, unknown>
   rateLimitSettings?: RateLimitPolicySnapshot
-  withImageRetries: <T>(fn: () => Promise<T>) => Promise<T>
+  signal?: AbortSignal
+  onActivity?: () => void | Promise<void>
+  withImageRetries: <T>(fn: () => Promise<T>, hooks?: ImageRetryHooks) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { includeCoverImage = true, coverUrl, integrationId, integrationContext, rateLimitSettings, withImageRetries } = input
+  const { includeCoverImage = true, coverUrl, integrationId, integrationContext, rateLimitSettings, signal, onActivity, withImageRetries } = input
   if (!includeCoverImage) {
     return undefined
   }
@@ -69,6 +84,8 @@ export async function prefetchOptionalCoverImage(input: {
     integrationId,
     integrationContext,
     rateLimitSettings,
+    signal,
+    onActivity,
     withImageRetries,
   })
 }

@@ -92,6 +92,14 @@ export async function downloadChapterImages(
     downloadQueue.cancelPending(new Error('job-cancelled'))
   }
 
+  const emitInFlightProgress = async (): Promise<void> => {
+    try {
+      await onProgress(10, 'downloading', { current: processed, total })
+    } catch (error) {
+      logger.debug('image in-flight progress update failed (non-fatal)', error)
+    }
+  }
+
   const tasks: Promise<void>[] = []
   abortSignal?.addEventListener('abort', cancelPendingDownloads, { once: true })
   try {
@@ -109,7 +117,9 @@ export async function downloadChapterImages(
             () => scheduleForIntegrationScope(integrationId, 'image', () => downloadImage(url, {
               signal: abortSignal,
               context: imageDownloadContext,
+              onBytesReceived: emitInFlightProgress,
             }), rateLimitSettings?.image),
+            { onAttemptStart: emitInFlightProgress },
           )
           onDownloaded({ url, index: imageIndex, result })
           succeeded++

@@ -15,6 +15,7 @@ import { destinationService } from './destination';
 import { getBackgroundSiteAdapterById } from '@/src/runtime/background-site-integration-initialization';
 import { composeSeriesKey } from '@/src/runtime/queue-task-summary';
 import type { ExtensionSettings } from '@/src/storage/settings-types';
+import { recordOffscreenActivity } from './offscreen-lifecycle';
 
 // Current queue scheduling is intentionally single-task and single-chapter dispatch.
 // Re-enable chapter concurrency only after the scheduler, offscreen request
@@ -89,6 +90,7 @@ export async function startDownloadTask(
       status: 'downloading',
       started: Date.now(),
     });
+    await recordOffscreenActivity();
 
     await ensureOffscreenReady();
 
@@ -146,6 +148,7 @@ export async function startDownloadTask(
         }
 
         await stateManager.updateDownloadTaskChapter(taskId, chapter.id, 'downloading');
+        await recordOffscreenActivity();
 
         const seriesKey = composeSeriesKey(dispatchPlan.book.siteId, dispatchPlan.book.seriesId);
         let integrationContext: Record<string, unknown> | undefined;
@@ -434,4 +437,3 @@ export async function processDownloadQueue(
     });
   }
 }
-

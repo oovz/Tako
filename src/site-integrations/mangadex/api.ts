@@ -118,6 +118,32 @@ const parseRetryAfterHeader = (response: Response): number | null => {
   return parseStandardRetryAfterHeader(response) ?? parseMangadexRateLimitRetryAfterHeader(response)
 }
 
+const waitForRetryDelay = async (delayMs: number, signal?: AbortSignal | null): Promise<void> => {
+  if (delayMs <= 0) {
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+
+    const onAbort = () => {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
+      reject(new Error('aborted'))
+    }
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 export function createMangadexHttpError(response: Response, message?: string): MangadexHttpError {
   const error = new Error(message ?? `HTTP ${response.status}: ${response.statusText}`) as MangadexHttpError
   error.status = response.status
@@ -156,7 +182,7 @@ export async function fetchWithMangadexRetry(
   if ((shouldRetryRateLimit || shouldRetryTransient) && retryCount < MANGADEX_RETRY_CONFIG.maxRetries) {
     const retryDelay = parseRetryAfterHeader(response) ?? MANGADEX_RETRY_CONFIG.defaultRetryDelayMs
     logger.warn(`[mangadex] HTTP ${response.status}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${MANGADEX_RETRY_CONFIG.maxRetries})`)
-    await new Promise((resolve) => setTimeout(resolve, retryDelay))
+    await waitForRetryDelay(retryDelay, options?.signal)
     return fetchWithMangadexRetry(url, options, retryCount + 1)
   }
 

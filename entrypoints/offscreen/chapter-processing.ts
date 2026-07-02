@@ -16,6 +16,7 @@ import type {
   ChapterOutcome,
   ChapterProcessingRuntime,
   ProcessChapterStreamingOptions,
+  WorkerZipProgress,
   WorkerZipResult,
 } from './chapter-processing-types'
 import type { SeriesMetadataInput } from './helpers'
@@ -31,6 +32,7 @@ export type {
   ErrorCategory,
   ProcessChapterStreamingOptions,
   ProcessDownloadChapterSettingsSnapshot,
+  WorkerZipProgress,
   WorkerZipResult,
 } from './chapter-processing-types'
 
@@ -41,7 +43,13 @@ type DownloadedChapterImage = {
   mimeType: string
 }
 
-function createArchiveWorker(): { worker: Worker; resultPromise: Promise<WorkerZipResult> } {
+function isWorkerZipProgress(value: WorkerZipResult | WorkerZipProgress): value is WorkerZipProgress {
+  return !!value && typeof value === 'object' && 'type' in value && value.type === 'progress'
+}
+
+function createArchiveWorker(
+  onProgress?: (progress: WorkerZipProgress) => void | Promise<void>,
+): { worker: Worker; resultPromise: Promise<WorkerZipResult>; startFinalizationTimeout: () => void } {
   const worker = new ZipWorker()
 
   let resolveResult!: (value: WorkerZipResult) => void
@@ -51,21 +59,41 @@ function createArchiveWorker(): { worker: Worker; resultPromise: Promise<WorkerZ
     rejectResult = reject
   })
 
-  const timeout = setTimeout(() => {
-    try {
-      worker.terminate()
-    } catch (error) {
-      logger.debug('zip worker terminate failed (non-fatal)', error)
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const clearResultTimeout = () => {
+    if (timeout) {
+      clearTimeout(timeout)
+      timeout = undefined
     }
-    rejectResult(new Error('Zip worker timed out'))
-  }, 5 * 60 * 1000)
+  }
+  const startFinalizationTimeout = () => {
+    clearResultTimeout()
+    timeout = setTimeout(() => {
+      try {
+        worker.terminate()
+      } catch (error) {
+        logger.debug('zip worker terminate failed (non-fatal)', error)
+      }
+      rejectResult(new Error('Zip worker timed out'))
+    }, 5 * 60 * 1000)
+  }
 
-  worker.onmessage = (event: MessageEvent<WorkerZipResult>) => {
-    clearTimeout(timeout)
+  worker.onmessage = (event: MessageEvent<WorkerZipResult | WorkerZipProgress>) => {
+    if (isWorkerZipProgress(event.data)) {
+      startFinalizationTimeout()
+      if (onProgress) {
+        void Promise.resolve(onProgress(event.data)).catch((error) => {
+          logger.debug('zip worker progress handling failed (non-fatal)', error)
+        })
+      }
+      return
+    }
+
+    clearResultTimeout()
     resolveResult(event.data)
   }
   worker.onerror = (event) => {
-    clearTimeout(timeout)
+    clearResultTimeout()
     const workerError = event.error instanceof Error
       ? event.error
       : new Error(
@@ -76,7 +104,7 @@ function createArchiveWorker(): { worker: Worker; resultPromise: Promise<WorkerZ
     rejectResult(workerError)
   }
 
-  return { worker, resultPromise }
+  return { worker, resultPromise, startFinalizationTimeout }
 }
 
 function initializeArchiveWorker(input: {
@@ -231,7 +259,11 @@ export async function processNoneFormatChapter(
           const coverPath = `${chapterDir}/${buildCoverOutputFilename(coverImage.mimeType)}`
           writeStarted = true
           logger.debug('Writing cover image to custom folder for NONE format', { chapterDir, coverPath })
-          await writeBlobToPath(dir, coverPath, new Blob([coverImage.data], { type: coverImage.mimeType || 'application/octet-stream' }), true)
+          await onArchiveProgress(92, 'saving cover')
+          await writeBlobToPath(dir, coverPath, new Blob([coverImage.data], { type: coverImage.mimeType || 'application/octet-stream' }), true, {
+            signal: abortSignal,
+            onBytesWritten: () => onArchiveProgress(92, 'saving cover'),
+          })
         }
 
         for (const image of images) {
@@ -245,7 +277,11 @@ export async function processNoneFormatChapter(
           })
           const filePath = `${chapterDir}/${filename}`
           writeStarted = true
-          await writeBlobToPath(dir, filePath, new Blob([image.data], { type: image.mimeType || 'application/octet-stream' }), true)
+          await onArchiveProgress(95, 'saving images')
+          await writeBlobToPath(dir, filePath, new Blob([image.data], { type: image.mimeType || 'application/octet-stream' }), true, {
+            signal: abortSignal,
+            onBytesWritten: () => onArchiveProgress(95, 'saving images'),
+          })
         }
 
         if (includeComicInfo) {
@@ -261,7 +297,11 @@ export async function processNoneFormatChapter(
           if (comicInfoXml) {
             const comicInfoPath = `${chapterDir}/ComicInfo.xml`
             writeStarted = true
-            await writeBlobToPath(dir, comicInfoPath, new Blob([comicInfoXml], { type: 'application/xml' }), true)
+            await onArchiveProgress(98, 'saving metadata')
+            await writeBlobToPath(dir, comicInfoPath, new Blob([comicInfoXml], { type: 'application/xml' }), true, {
+              signal: abortSignal,
+              onBytesWritten: () => onArchiveProgress(98, 'saving metadata'),
+            })
           }
         }
 
@@ -290,6 +330,7 @@ export async function processNoneFormatChapter(
     const coverPath = `${chapterDir}/${buildCoverOutputFilename(coverImage.mimeType)}`.replace(/\\/g, '/')
     const coverBlob = new Blob([coverImage.data], { type: coverImage.mimeType || 'application/octet-stream' })
     logger.debug('Requesting browser download for NONE-format cover image', { chapterDir, coverPath })
+    await onArchiveProgress(92, 'download handoff')
     const coverResp = await runtime.requestBrowserBlobDownload({
       taskId,
       chapterId: chapter.id,
@@ -312,6 +353,7 @@ export async function processNoneFormatChapter(
     })
     const filePath = `${chapterDir}/${filename}`.replace(/\\/g, '/')
     const blob = new Blob([image.data], { type: image.mimeType || 'application/octet-stream' })
+    await onArchiveProgress(95, 'download handoff')
     const response = await runtime.requestBrowserBlobDownload({
       taskId,
       chapterId: chapter.id,
@@ -336,6 +378,7 @@ export async function processNoneFormatChapter(
     if (comicInfoXml) {
       const comicInfoPath = `${chapterDir}/ComicInfo.xml`.replace(/\\/g, '/')
       const comicInfoBlob = new Blob([comicInfoXml], { type: 'application/xml' })
+      await onArchiveProgress(98, 'download handoff')
       const comicInfoResp = await runtime.requestBrowserBlobDownload({
         taskId,
         chapterId: chapter.id,
@@ -383,7 +426,7 @@ export async function processArchiveFormatChapter(
   } = opts
 
   await onArchiveProgress(5, 'starting archive')
-  const { worker, resultPromise } = createArchiveWorker()
+  const { worker, resultPromise, startFinalizationTimeout } = createArchiveWorker(() => onArchiveProgress(90, 'finalizing'))
   const archivePageCount = urls.length + (coverImage ? 1 : 0)
 
   initializeArchiveWorker({
@@ -458,6 +501,7 @@ export async function processArchiveFormatChapter(
     return { status: 'failed', errorMessage: errorMsg, imagesFailed: failed }
   }
 
+  startFinalizationTimeout()
   worker.postMessage({ type: 'finalize' })
   const result = await resultPromise
   if (!result?.success || !result.buffer) {
@@ -492,7 +536,11 @@ export async function processArchiveFormatChapter(
       })
       if (dir) {
         writeStarted = true
-        await writeBlobToPath(dir, finalPath, blob, true)
+        await onArchiveProgress(96, 'saving')
+        await writeBlobToPath(dir, finalPath, blob, true, {
+          signal: abortSignal,
+          onBytesWritten: () => onArchiveProgress(96, 'saving'),
+        })
         await onArchiveProgress(100, 'saved')
         return { status: 'completed' }
       }
@@ -511,6 +559,7 @@ export async function processArchiveFormatChapter(
   }
 
   const normalized = normalizeDownloadPath(finalPath)
+  await onArchiveProgress(96, 'download handoff')
   const response = await runtime.requestBrowserBlobDownload({
     taskId,
     chapterId: chapter.id,

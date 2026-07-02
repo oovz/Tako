@@ -5,9 +5,9 @@
 
 import type { Chapter } from '@/src/types/chapter'
 import type {
-  OffscreenDownloadChapterMessage,
   OffscreenDownloadProgressMessage,
 } from '@/src/types/offscreen-messages'
+import type { OffscreenDownloadChapterPayload } from '@/src/runtime/message-schemas'
 import {
   withRetries,
   fetchChapterHtml
@@ -33,7 +33,7 @@ import {
 import {
   createDownloadingProgressPayload,
   createStreamingProgressHandlers,
-  sendInitialDownloadHeartbeat,
+  sendInitialDownloadProgress,
 } from './progress-helpers'
 import {
   createChapterForProcessing,
@@ -119,22 +119,26 @@ export class OffscreenWorker {
     return null;
   }
 
-  private withImageRetries<T>(fn: () => Promise<T>): Promise<T> {
+  private async withImageRetries<T>(
+    fn: () => Promise<T>,
+    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+  ): Promise<T> {
     if (this.currentHandlesOwnRetries) {
+      await hooks?.onAttemptStart?.(1)
       return fn()
     }
     const imageRetries = this.currentRetries?.image ?? 1
-    return withRetries(fn, imageRetries)
+    return withRetries(fn, imageRetries, 1000, hooks)
   }
 
-  private async sendInitialDownloadHeartbeat(request: OffscreenDownloadChapterMessage['payload']): Promise<void> {
+  private async sendInitialDownloadProgress(request: OffscreenDownloadChapterPayload): Promise<void> {
     try {
-      await sendInitialDownloadHeartbeat({
+      await sendInitialDownloadProgress({
         request,
         sendMessageWithRetry: this.sendMessageWithRetry.bind(this),
       })
     } catch (error) {
-      logger.debug('Failed to send initial offscreen startup heartbeat (non-fatal):', error)
+      logger.debug('Failed to send initial offscreen download progress (non-fatal):', error)
     }
   }
 
@@ -207,7 +211,7 @@ export class OffscreenWorker {
   }
 
   public async processDownloadChapter(
-    request: OffscreenDownloadChapterMessage['payload']
+    request: OffscreenDownloadChapterPayload
   ): Promise<ChapterOutcome> {
     const taskControllerEntry = this.acquireTaskController(request.taskId)
 
@@ -216,16 +220,7 @@ export class OffscreenWorker {
 
     this.initializeCurrentIntegrationState(request.book.siteIntegrationId, request.settingsSnapshot)
 
-    await this.sendInitialDownloadHeartbeat(request)
-
-    const coverImage = await prefetchOptionalCoverImage({
-      includeCoverImage: snapshot.includeCoverImage,
-      coverUrl: request.book.coverUrl,
-      integrationId: this.currentIntegrationId,
-      integrationContext: request.integrationContext,
-      rateLimitSettings: request.settingsSnapshot.rateLimitSettings,
-      withImageRetries: <T>(fn: () => Promise<T>) => this.withImageRetries(fn),
-    })
+    await this.sendInitialDownloadProgress(request)
 
     const latestImageProgress = { current: 0, total: 0 }
     const progressHandlers = createStreamingProgressHandlers({
@@ -235,6 +230,21 @@ export class OffscreenWorker {
       latestImageProgress,
       emitProgressMessage: (payload) => this.sendChapterProgressMessage(payload),
     })
+
+    const coverImage = await prefetchOptionalCoverImage({
+      includeCoverImage: snapshot.includeCoverImage,
+      coverUrl: request.book.coverUrl,
+      integrationId: this.currentIntegrationId,
+      integrationContext: request.integrationContext,
+      rateLimitSettings: snapshot.rateLimitSettings,
+      signal: taskControllerEntry.controller.signal,
+      onActivity: () => progressHandlers.onArchiveProgress(0, 'cover'),
+      withImageRetries: <T>(
+        fn: () => Promise<T>,
+        hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+      ) => this.withImageRetries(fn, hooks),
+    })
+
     const streamingOptions = createProcessChapterStreamingOptions({
       request,
       snapshot,
@@ -327,7 +337,7 @@ export class OffscreenWorker {
                 chapter.url,
                 OffscreenWorker.DEFAULT_FETCH_TIMEOUT_MS,
                 integrationId,
-                opts.settingsSnapshot?.rateLimitSettings.chapter,
+                opts.settingsSnapshot?.rateLimitSettings?.chapter,
               )
             }
             html = await withRetries(fetchHtmlWithProgress, chapterRetries)
@@ -355,7 +365,10 @@ export class OffscreenWorker {
       await onProgress(10, 'ready', { current: 0, total: urls.length })
 
       const chapterProcessingRuntime: ChapterProcessingRuntime = {
-        withImageRetries: <T>(fn: () => Promise<T>) => this.withImageRetries(fn),
+        withImageRetries: <T>(
+          fn: () => Promise<T>,
+          hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+        ) => this.withImageRetries(fn, hooks),
         resolveWritableDownloadRoot: (input) => this.resolveWritableDownloadRoot(input),
         emitFsaFallbackProgress: (taskId, targetChapter, totalImages) => this.emitFsaFallbackProgress(taskId, targetChapter, totalImages),
         requestBrowserBlobDownload: (input) => this.requestBrowserBlobDownload(input),

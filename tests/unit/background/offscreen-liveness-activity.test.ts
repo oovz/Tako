@@ -4,7 +4,7 @@ import { ensureLivenessAlarm, LIVENESS_ALARM_NAME, recordOffscreenActivity } fro
 import { LIVENESS_TIMEOUT_MS } from '@/src/constants/timeouts';
 import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys';
 
-describe('offscreen liveness heartbeat behavior', () => {
+describe('offscreen liveness activity behavior', () => {
   const alarmsCreate = vi.fn(async () => {});
   const storageSessionSet = vi.fn(async () => {});
 
@@ -53,10 +53,10 @@ describe('liveness timeout constants', () => {
     expect(LIVENESS_TIMEOUT_MS).toBe(60_000);
   });
 
-  it('keeps timeout greater than the 30-second heartbeat interval', () => {
-    const heartbeatIntervalMs = 30_000;
-    expect(LIVENESS_TIMEOUT_MS).toBeGreaterThan(heartbeatIntervalMs);
-    expect(LIVENESS_TIMEOUT_MS).toBe(heartbeatIntervalMs * 2);
+  it('keeps timeout greater than the 30-second liveness alarm interval', () => {
+    const livenessAlarmIntervalMs = 30_000;
+    expect(LIVENESS_TIMEOUT_MS).toBeGreaterThan(livenessAlarmIntervalMs);
+    expect(LIVENESS_TIMEOUT_MS).toBe(livenessAlarmIntervalMs * 2);
   });
 });
 

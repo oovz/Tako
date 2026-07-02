@@ -177,6 +177,11 @@ export async function checkPermissionBeforeWrite(dir: DirHandle): Promise<void> 
 
 const MAX_UNIQUE_FILENAME_COLLISIONS = 999;
 
+type WriteBlobToPathOptions = {
+  signal?: AbortSignal;
+  onBytesWritten?: (bytesWritten: number) => void | Promise<void>;
+}
+
 function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && error.name === 'NotFoundError';
 }
@@ -216,8 +221,15 @@ export async function generateUniqueFilename(dir: DirHandle, baseFilename: strin
   }
 }
 
-export async function writeBlobToPath(root: DirHandle, fullPath: string, blob: Blob, overwriteExisting: boolean = true): Promise<void> {
+export async function writeBlobToPath(
+  root: DirHandle,
+  fullPath: string,
+  blob: Blob,
+  overwriteExisting: boolean = true,
+  options: WriteBlobToPathOptions = {},
+): Promise<void> {
   // fullPath like "Root/Series/Vol/File.cbz" relative to chosen root; we ignore first path if redundant.
+  throwIfAborted(options.signal);
   const parts = fullPath.split('/').filter(Boolean);
   let fileName = parts.pop()!;
   const dir = await ensureSubdir(root, parts);
@@ -235,7 +247,64 @@ export async function writeBlobToPath(root: DirHandle, fullPath: string, blob: B
   
   const fh = await dir.getFileHandle(fileName, { create: true });
   const ws = await (fh as FileHandleWithWritable).createWritable();
-  await ws.write(blob);
-  await ws.close();
+  if (!options.signal && !options.onBytesWritten) {
+    await ws.write(blob);
+    await ws.close();
+    return;
+  }
+
+  await writeBlobStream(ws, blob, options);
+}
+
+async function writeBlobStream(
+  ws: FileSystemWritableFileStream,
+  blob: Blob,
+  options: WriteBlobToPathOptions,
+): Promise<void> {
+  const reader = blob.stream().getReader();
+  let completed = false;
+  let bytesWritten = 0;
+
+  try {
+    while (true) {
+      throwIfAborted(options.signal);
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value || value.byteLength === 0) {
+        continue;
+      }
+
+      await ws.write(value);
+      bytesWritten += value.byteLength;
+      await options.onBytesWritten?.(bytesWritten);
+    }
+    completed = true;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // no-op
+    }
+
+    if (completed) {
+      await ws.close();
+    } else {
+      try {
+        await ws.abort();
+      } catch {
+        // no-op
+      }
+    }
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) {
+    return;
+  }
+
+  throw signal.reason instanceof Error ? signal.reason : new Error('job-cancelled');
 }
 

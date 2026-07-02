@@ -22,7 +22,8 @@ import {
   isMangadexTransientHttpStatus,
 } from './api'
 import { getContextMangadexPreferences, resolveMangadexImageQuality } from './preferences'
-import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
+import { fetchImageWithStallDetection } from '@/src/runtime/fetch-image-core'
+import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
 
 type MangadexAtHomeReport = {
   url: string
@@ -92,25 +93,30 @@ async function reportToMangadexNetwork(report: MangadexAtHomeReport): Promise<vo
   }
 }
 
-async function fetchMangadexImageAsset(imageUrl: string, signal?: AbortSignal): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+async function fetchMangadexImageAsset(
+  imageUrl: string,
+  signal?: AbortSignal,
+  onBytesReceived?: (bytesReceived: number) => void | Promise<void>,
+): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
   const startTime = Date.now()
   let success = false
   let bytes = 0
   let cached = false
 
   try {
-    const response = await fetchWithMangadexRetry(imageUrl, {
-      credentials: 'omit',
+    const { data, mimeType } = await fetchImageWithStallDetection(imageUrl, {
       signal,
+      init: {
+        credentials: 'omit',
+      },
+      fetcher: (url, init) => fetchWithMangadexRetry(url, init),
+      createHttpError: createMangadexHttpError,
+      onResponse: (response) => {
+        cached = response.headers.get('X-Cache')?.startsWith('HIT') ?? false
+      },
+      onBytesReceived,
     })
 
-    if (!response.ok) {
-      throw createMangadexHttpError(response)
-    }
-
-    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
-    cached = response.headers.get('X-Cache')?.startsWith('HIT') ?? false
-    const data = await response.arrayBuffer()
     bytes = data.byteLength
     success = true
 
@@ -183,7 +189,11 @@ export function processMangadexImageUrls(urls: string[]): Promise<string[]> {
 
 export async function downloadMangadexChapterImage(
   imageUrl: string,
-  opts?: { signal?: AbortSignal; context?: Record<string, unknown> },
+  opts?: {
+    signal?: AbortSignal
+    context?: Record<string, unknown>
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  },
 ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
   if (opts?.signal?.aborted) {
     throw new Error('aborted')
@@ -191,7 +201,7 @@ export async function downloadMangadexChapterImage(
 
   logger.debug('[mangadex] Downloading chapter image', { imageUrl })
   try {
-    return await fetchMangadexImageAsset(imageUrl, opts?.signal)
+    return await fetchMangadexImageAsset(imageUrl, opts?.signal, opts?.onBytesReceived)
   } catch (error) {
     const chapterId = getContextChapterId(opts?.context)
     const deliveryTarget = parseMangadexImageDeliveryTarget(imageUrl)
@@ -227,7 +237,7 @@ export async function downloadMangadexChapterImage(
 
       lastRecoveryUrl = recoveryUrl
       try {
-        return await fetchMangadexImageAsset(recoveryUrl, opts?.signal)
+        return await fetchMangadexImageAsset(recoveryUrl, opts?.signal, opts?.onBytesReceived)
       } catch (recoveryError) {
         lastRecoveryError = recoveryError
       }

@@ -30,7 +30,11 @@ const offscreen: OffscreenIntegration = {
 
     async downloadImage(
       imageUrl: string,
-      opts?: { signal?: AbortSignal; context?: Record<string, unknown> },
+      opts?: {
+        signal?: AbortSignal
+        context?: Record<string, unknown>
+        onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+      },
     ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
       return downloadMangadexChapterImage(imageUrl, opts)
     },
