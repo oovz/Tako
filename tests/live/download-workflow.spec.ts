@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import type { BrowserContext, Page } from '@playwright/test'
 
 import { test, expect } from '../e2e/fixtures/extension'
-import { getSessionState, getTabId, waitForGlobalState } from '../e2e/fixtures/state-helpers'
+import { getSessionState, getTabId } from '../e2e/fixtures/state-helpers'
 import {
   LIVE_COMICNETTAI_REFERENCE_URL,
   LIVE_MANGADEX_REFERENCE_URL,
@@ -14,6 +14,8 @@ import { resolveCandidateTabIds, reinjectContentScript } from './fixtures/downlo
 import type { DownloadTaskState, GlobalAppState } from '@/src/types/queue-state'
 import type { MangaPageState } from '@/src/types/tab-state'
 import type { ExtensionSettings } from '@/src/storage/settings-types'
+import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
+import { HARD_TIMEOUT_MS } from '@/src/constants/timeouts'
 
 type LiveChapter = {
   id: string
@@ -88,6 +90,8 @@ const browserWorkflowCases: BrowserWorkflowCase[] = [
     expectedSeriesTitle: '煙たい話',
   },
 ]
+
+const LIVE_TASK_TERMINAL_TIMEOUT_MS = HARD_TIMEOUT_MS + 30_000
 
 function isLiveDownloadState(value: unknown, integrationId: string): value is LiveDownloadState {
   if (!value || typeof value !== 'object') {
@@ -288,21 +292,64 @@ async function startSingleChapterDownload(
   }
 }
 
-async function waitForTerminalTask(context: BrowserContext, taskId: string): Promise<DownloadTaskState> {
-  const globalState = await waitForGlobalState(
-    context,
-    (state: GlobalAppState) => state.downloadQueue.some((task) => task.id === taskId && (
+async function readGlobalStateFromExtensionPage(optionsPage: Page): Promise<GlobalAppState | undefined> {
+  return await optionsPage.evaluate(async (storageKey: string) => {
+    const result = await chrome.storage.session.get(storageKey) as Record<string, unknown>
+    return result[storageKey] as GlobalAppState | undefined
+  }, SESSION_STORAGE_KEYS.globalState)
+}
+
+async function readActiveTaskProgressFromExtensionPage(optionsPage: Page): Promise<unknown> {
+  return await optionsPage.evaluate(async (storageKey: string) => {
+    const result = await chrome.storage.session.get(storageKey) as Record<string, unknown>
+    return result[storageKey]
+  }, SESSION_STORAGE_KEYS.activeTaskProgress)
+}
+
+async function waitForTerminalTask(optionsPage: Page, taskId: string): Promise<DownloadTaskState> {
+  const startedAt = Date.now()
+  let globalState: GlobalAppState | undefined
+  let terminalTask: DownloadTaskState | undefined
+
+  while (Date.now() - startedAt < LIVE_TASK_TERMINAL_TIMEOUT_MS) {
+    globalState = await readGlobalStateFromExtensionPage(optionsPage)
+    terminalTask = globalState?.downloadQueue.find((task) => task.id === taskId && (
       task.status === 'completed'
       || task.status === 'partial_success'
       || task.status === 'failed'
       || task.status === 'canceled'
-    )),
-    { timeout: 120_000 },
-  )
+    ))
+    if (terminalTask) {
+      break
+    }
+
+    await optionsPage.waitForTimeout(100)
+  }
+
+  if (!globalState) {
+    throw new Error(`Timed out waiting for global state while waiting for task ${taskId}`)
+  }
 
   const task = globalState.downloadQueue.find((candidate) => candidate.id === taskId)
   if (!task) {
     throw new Error(`Task ${taskId} disappeared before terminal assertion`)
+  }
+
+  if (!terminalTask) {
+    const activeTaskProgress = await readActiveTaskProgressFromExtensionPage(optionsPage)
+    throw new Error(`Timed out waiting for task ${taskId} to finish after ${LIVE_TASK_TERMINAL_TIMEOUT_MS}ms: ${JSON.stringify({
+      status: task.status,
+      lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
+      activeTaskProgress,
+      chapters: task.chapters.map((chapter) => ({
+        id: chapter.id,
+        status: chapter.status,
+        errorMessage: chapter.errorMessage,
+        imagesFailed: chapter.imagesFailed,
+        totalImages: chapter.totalImages,
+        title: chapter.title,
+      })),
+    })}`)
   }
 
   return task
@@ -485,7 +532,7 @@ test.describe('Live download workflows', () => {
         )
 
         const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
-        const task = await waitForTerminalTask(context, taskId)
+        const task = await waitForTerminalTask(optionsPage, taskId)
 
         assertTaskSucceeded(task)
         expect(typeof task.lastSuccessfulDownloadId).toBe('number')
@@ -530,7 +577,7 @@ test.describe('Live download workflows', () => {
       )
 
       const { taskId } = await startSingleChapterDownload(optionsPage, tabId, state)
-      const task = await waitForTerminalTask(context, taskId)
+      const task = await waitForTerminalTask(optionsPage, taskId)
 
       assertTaskSucceeded(task)
       expect(task.lastSuccessfulDownloadId).toBeUndefined()

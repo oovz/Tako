@@ -279,5 +279,35 @@ describe('Pixiv Comic site integration', () => {
         'https://img.pixiv.net/page2.png',
       ])
     })
+
+    it('offscreen image downloads use the outer image scheduler without re-entering the URL limiter', async () => {
+      const { offscreenSiteAdapter } = await import('@/src/site-integrations/pixiv-comic/offscreen-runtime')
+      const payload = new Uint8Array([1, 2, 3]).buffer
+      const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+        body: null,
+        arrayBuffer: async () => payload,
+      } as unknown as Response))
+      vi.stubGlobal('fetch', fetch)
+
+      const image = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        'https://img-comic.pximg.net/path/page.jpg',
+        { signal: new AbortController().signal, context: undefined },
+      )
+
+      expect(image.filename).toBe('page.jpg')
+      expect(image.mimeType).toBe('image/jpeg')
+      expect(rateLimitedFetchByUrlScope).not.toHaveBeenCalled()
+      const [, init] = fetch.mock.calls.at(-1) ?? []
+      expect(init).toMatchObject({
+        credentials: 'include',
+        referrer: 'https://comic.pixiv.net/',
+        referrerPolicy: 'strict-origin-when-cross-origin',
+      })
+      expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal)
+    })
   })
 })

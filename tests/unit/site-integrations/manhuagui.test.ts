@@ -208,6 +208,40 @@ describe('Manhuagui site integration', () => {
       expect(urls).toEqual(['https://i.hamreus.com/ps1/f/page1.jpg?e=1&m=sig'])
     })
 
+    it('offscreen image downloads use the outer image scheduler without re-entering the URL limiter', async () => {
+      const { offscreenSiteAdapter } = await import('@/src/site-integrations/manhuagui/offscreen-runtime')
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      const payload = new Uint8Array([1, 2, 3, 4]).buffer
+      const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'content-type': 'image/webp' }),
+        body: null,
+        arrayBuffer: async () => payload,
+      } as unknown as Response))
+      vi.stubGlobal('fetch', fetch)
+
+      const image = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        'https://i.hamreus.com/ps1/f/page1.jpg?e=1&m=sig',
+        { signal: new AbortController().signal, context: undefined },
+      )
+
+      expect(image.filename).toBe('page1.jpg')
+      expect(image.mimeType).toBe('image/webp')
+      expect(rateLimitedFetchByUrlScope).not.toHaveBeenCalled()
+      const [, init] = fetch.mock.calls.at(-1) ?? []
+      expect(init).toMatchObject({
+        credentials: 'include',
+        referrer: 'https://www.manhuagui.com/',
+        referrerPolicy: 'strict-origin-when-cross-origin',
+        headers: {
+          referer: 'https://www.manhuagui.com/',
+        },
+      })
+      expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal)
+    })
+
     it('parseManhuaguiImageUrlsFromHtml delegates to chapter-viewer', async () => {
       const { buildManhuaguiPackedPayloadScript, buildManhuaguiChapterPathSegment, buildManhuaguiChapterSlMetadata } = await import('@/tests/e2e/fixtures/mock-data/site-integrations/manhuagui/api-fixtures')
 

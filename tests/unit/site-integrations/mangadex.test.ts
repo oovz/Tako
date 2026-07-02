@@ -1739,6 +1739,64 @@ describe('MangaDex site integration', () => {
             expect(result.filename).toBe('page1.jpg');
         });
 
+        it('honors MangaDex X-RateLimit-Retry-After waits longer than the body stall timeout', async () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+            try {
+                const mockImageData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]).buffer;
+                const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+                let imageFetchCount = 0;
+
+                fetchMock.mockImplementation(async (url: string) => {
+                    if (url.includes('mangadex.network/report')) {
+                        return { ok: true, headers: { get: () => null } };
+                    }
+
+                    imageFetchCount += 1;
+                    if (imageFetchCount === 1) {
+                        return {
+                            ok: false,
+                            status: 429,
+                            statusText: 'Too Many Requests',
+                            headers: new Headers({
+                                'X-RateLimit-Retry-After': String(Math.floor(Date.now() / 1000) + 40),
+                            }),
+                        };
+                    }
+
+                    return {
+                        ok: true,
+                        status: 200,
+                        statusText: 'OK',
+                        arrayBuffer: async () => mockImageData,
+                        headers: {
+                            get: (name: string) => {
+                                if (name === 'content-type') return 'image/jpeg';
+                                if (name === 'X-Cache') return 'MISS';
+                                return null;
+                            },
+                        },
+                    };
+                });
+
+                const { mangadexIntegration } = await import('@/src/site-integrations/mangadex');
+                const resultPromise = mangadexIntegration.background.chapter.downloadImage(
+                    'https://uploads.mangadex.org/data/abc123/page1.jpg'
+                );
+
+                await vi.advanceTimersByTimeAsync(40_100);
+
+                const result = await resultPromise;
+                expect(result.data.byteLength).toBe(4);
+                expect(result.mimeType).toBe('image/jpeg');
+                expect(result.filename).toBe('page1.jpg');
+                expect(imageFetchCount).toBe(2);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
         it('rejects non-raster image responses before reporting a successful download', async () => {
             (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
                 ok: true,

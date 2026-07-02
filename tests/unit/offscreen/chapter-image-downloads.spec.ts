@@ -103,4 +103,62 @@ describe('downloadChapterImages', () => {
       succeeded: 0,
     })
   })
+
+  it('emits attempt and byte progress without timer-driven in-flight updates', async () => {
+    vi.useFakeTimers()
+    try {
+      const onProgress = vi.fn(async () => undefined)
+      let resolveImage!: (value: { data: ArrayBuffer; filename: string; mimeType: string }) => void
+      let reportBytes: ((bytesReceived: number) => void | Promise<void>) | undefined
+      const downloadImage = vi.fn((_url: string, opts?: { onBytesReceived?: (bytesReceived: number) => void | Promise<void> }) => new Promise<{ data: ArrayBuffer; filename: string; mimeType: string }>((resolve) => {
+        reportBytes = opts?.onBytesReceived
+        resolveImage = resolve
+      }))
+      const runtime: ChapterProcessingRuntime = {
+        withImageRetries: async (fn, hooks) => {
+          await hooks?.onAttemptStart?.(1)
+          return fn()
+        },
+        resolveWritableDownloadRoot: vi.fn(),
+        emitFsaFallbackProgress: vi.fn(),
+        requestBrowserBlobDownload: vi.fn(),
+        retryWithBrowserDownloads: vi.fn(),
+        getMemoryStats: vi.fn(() => null),
+      }
+
+      const resultPromise = downloadChapterImages(runtime, {
+        urls: ['https://example.com/slow.jpg'],
+        integrationId: 'test-site',
+        chapterId: 'chapter-1',
+        onProgress,
+        downloadImage,
+        onDownloaded: vi.fn(),
+        onDownloadFailed: vi.fn(),
+      })
+
+      await vi.waitFor(() => {
+        expect(downloadImage).toHaveBeenCalledTimes(1)
+      })
+      expect(onProgress).toHaveBeenCalledTimes(1)
+      expect(onProgress).toHaveBeenLastCalledWith(10, 'downloading', { current: 0, total: 1 })
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(onProgress).toHaveBeenCalledTimes(1)
+
+      await reportBytes?.(1024)
+      expect(onProgress).toHaveBeenCalledTimes(2)
+      expect(onProgress).toHaveBeenLastCalledWith(10, 'downloading', { current: 0, total: 1 })
+
+      resolveImage({
+        data: new ArrayBuffer(1),
+        filename: 'slow.jpg',
+        mimeType: 'image/jpeg',
+      })
+
+      await resultPromise
+      expect(onProgress).toHaveBeenLastCalledWith(100, undefined, { current: 1, total: 1 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

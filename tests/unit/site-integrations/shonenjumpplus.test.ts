@@ -169,5 +169,33 @@ describe('Shonen Jump+ site integration', () => {
 
       expect(urls).toEqual(['https://cdn-ak-img.shonenjumpplus.com/page1.jpg'])
     })
+
+    it('passes a bounded abortable request into the offscreen image fetch path', async () => {
+      const { offscreenSiteAdapter } = await import('@/src/site-integrations/shonenjumpplus/offscreen-runtime')
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      const payload = new Uint8Array([1, 2, 3, 4]).buffer
+      const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'content-type': 'image/jpeg' }),
+        body: null,
+        arrayBuffer: async () => payload,
+      } as unknown as Response))
+      vi.stubGlobal('fetch', fetch)
+
+      const image = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        'https://cdn-ak.shonenjumpplus.com/pages/001.jpg',
+        { signal: new AbortController().signal, context: undefined },
+      )
+
+      expect(image.filename).toBe('001.jpg')
+      expect(image.mimeType).toBe('image/jpeg')
+
+      expect(rateLimitedFetchByUrlScope).not.toHaveBeenCalled()
+      const [, init] = fetch.mock.calls.at(-1) ?? []
+      expect(init).toMatchObject({ credentials: 'include' })
+      expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal)
+    })
   })
 })

@@ -180,7 +180,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         expect(progressUpdates.every((m) => m.payload?.chapterOutcomes === undefined)).toBe(true)
     })
 
-    it('emits OFFSCREEN_DOWNLOAD_PROGRESS heartbeats for single-chapter flow', async () => {
+    it('emits OFFSCREEN_DOWNLOAD_PROGRESS updates for single-chapter flow', async () => {
         const processChapterStreamingMock = vi.fn().mockImplementation(async (opts: any) => {
             await opts.onProgress(20, undefined, { current: 1, total: 39 })
             await opts.onArchiveProgress(40)
@@ -216,7 +216,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
             },
         })
 
-        const heartbeatUpdates = messages.filter(
+        const progressUpdates = messages.filter(
             (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
                 && m.payload?.taskId === 'task-single'
                 && m.payload?.chapterId === 'c1'
@@ -229,19 +229,19 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
                 && m.payload?.status === 'completed'
         )
 
-        expect(heartbeatUpdates.length).toBeGreaterThanOrEqual(1)
-        const imageProgressUpdate = heartbeatUpdates.find((m) => m.payload?.imagesProcessed === 1)
+        expect(progressUpdates.length).toBeGreaterThanOrEqual(1)
+        const imageProgressUpdate = progressUpdates.find((m) => m.payload?.imagesProcessed === 1)
         expect(imageProgressUpdate?.payload?.imagesProcessed).toBe(1)
         expect(imageProgressUpdate?.payload?.totalImages).toBe(39)
-        expect(heartbeatUpdates.every((m) => m.payload?.currentChapter === undefined)).toBe(true)
-        expect(heartbeatUpdates.every((m) => m.payload?.progress === undefined)).toBe(true)
+        expect(progressUpdates.every((m) => m.payload?.currentChapter === undefined)).toBe(true)
+        expect(progressUpdates.every((m) => m.payload?.progress === undefined)).toBe(true)
         expect(outcome.status).toBe('completed')
         expect(terminalUpdate).toBeUndefined()
         const forwarded = processChapterStreamingMock.mock.calls[0]?.[0]?.integrationContext
         expect(forwarded).toEqual({ cookieHeader: 'PHPSESSID=abc123' })
     })
 
-    it('keeps the leading-edge heartbeat and emits the latest cumulative progress after the throttle window', async () => {
+    it('keeps the leading-edge progress update and emits the latest cumulative progress after the throttle window', async () => {
         vi.useFakeTimers()
         try {
             const processChapterStreamingMock = vi.fn().mockImplementation(async (opts: any) => {
@@ -278,7 +278,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
 
             await downloadPromise
 
-            const initialHeartbeat = messages.find(
+            const initialProgress = messages.find(
                 (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
                     && m.payload?.taskId === 'task-initial-progress'
                     && m.payload?.chapterId === 'c1'
@@ -294,8 +294,8 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
                     && m.payload?.imagesProcessed === 1
             )
 
-            expect(initialHeartbeat).toBeDefined()
-            expect(initialHeartbeat?.payload?.imagesFailed).toBe(0)
+            expect(initialProgress).toBeDefined()
+            expect(initialProgress?.payload?.imagesFailed).toBe(0)
             expect(immediateFollowUp).toBeUndefined()
 
             await vi.advanceTimersByTimeAsync(250)
@@ -372,7 +372,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         expect(outcome.status).toBe('failed')
     })
 
-    it('emits an immediate startup heartbeat before optional cover-image prefetch begins', async () => {
+    it('emits immediate startup progress before optional cover-image prefetch begins', async () => {
         let resolveCoverFetch!: (value: { filename: string; data: ArrayBuffer; mimeType: string }) => void
         mockDownloadImage.mockImplementationOnce(async () => {
             return await new Promise((resolve) => {
@@ -381,7 +381,7 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
         })
 
         const downloadPromise = worker.processDownloadChapter({
-            taskId: 'task-cover-heartbeat',
+            taskId: 'task-cover-progress',
             seriesKey: 'test-site:series-1',
             book: {
                 siteIntegrationId: 'test-site',
@@ -416,16 +416,16 @@ describe('OffscreenWorker Integration: NONE format failures', () => {
             expect(resolveCoverFetch).toBeTypeOf('function')
         })
 
-        const startupHeartbeat = messages.find(
+        const startupProgress = messages.find(
             (m) => m.type === 'OFFSCREEN_DOWNLOAD_PROGRESS'
-                && m.payload?.taskId === 'task-cover-heartbeat'
+                && m.payload?.taskId === 'task-cover-progress'
                 && m.payload?.chapterId === 'c1'
                 && m.payload?.status === 'downloading'
                 && m.payload?.imagesProcessed === 0
                 && m.payload?.totalImages === 0,
         )
 
-        expect(startupHeartbeat).toBeDefined()
+        expect(startupProgress).toBeDefined()
 
         resolveCoverFetch({
             filename: 'cover.jpg',
