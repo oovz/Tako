@@ -94,7 +94,7 @@ export function DownloadTaskCard({ task, onCancel, onRetry, onRestart, onRemove 
           <button
             type="button"
             onClick={() => setIsChapterListExpanded((currentValue) => !currentValue)}
-            className="flex w-full items-center gap-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="flex w-full items-center gap-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
             aria-expanded={isChapterListExpanded}
           >
             {isChapterListExpanded ? (
