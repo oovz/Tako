@@ -52,7 +52,7 @@ export interface ChapterImageIntegration {
     resolveImageUrls?: (
       chapter: { id: string; url: string },
       context?: Record<string, unknown>,
-      settings?: TaskSettingsSnapshot
+      settings?: Partial<TaskSettingsSnapshot>
     ) => Promise<string[]>;
     /**
      * Optional HTML fallback path used only when `resolveImageUrls` is not
@@ -61,7 +61,11 @@ export interface ChapterImageIntegration {
      */
     parseImageUrlsFromHtml?: (input: ParseImageUrlsFromHtmlInput) => Promise<string[]>;
     processImageUrls(urls: string[], chapterInfo: Chapter): Promise<string[]>;
-    downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }): Promise<{
+    downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal;
+      context?: Record<string, unknown>;
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>;
+    }): Promise<{
       data: ArrayBuffer;
       filename: string;
       mimeType: string;

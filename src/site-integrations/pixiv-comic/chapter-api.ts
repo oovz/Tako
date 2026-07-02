@@ -1,8 +1,9 @@
 import type { ParseImageUrlsFromHtmlInput } from '../../types/site-integrations'
 import logger from '@/src/runtime/logger'
 import { getRateLimitPolicyFromContext, rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit'
+import { fetchImageWithStallDetection } from '@/src/runtime/fetch-image'
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder'
-import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
+import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
 import { descramblePixivImage } from './descrambler'
 import { parseEpisodeIdFromUrl } from './page-context'
 import {
@@ -314,7 +315,12 @@ export function processPixivImageUrls(urls: string[]): Promise<string[]> {
 
 export async function downloadPixivChapterImage(
   imageUrl: string,
-  opts?: { signal?: AbortSignal; context?: Record<string, unknown> },
+  opts?: {
+    signal?: AbortSignal
+    context?: Record<string, unknown>
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  },
 ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
   if (opts?.signal?.aborted) {
     throw new Error('aborted')
@@ -339,19 +345,18 @@ export async function downloadPixivChapterImage(
     requestHeaders[PIXIV_GRIDSHUFFLE_HEADER] = pixivKey
   }
 
-  const response = await rateLimitedFetchByUrlScope(sourceImageUrl, 'image', {
-    credentials: 'include',
-    headers: requestHeaders,
-    referrer: PIXIV_IMAGE_REFERRER,
-    referrerPolicy: 'strict-origin-when-cross-origin',
+  const { data: rawData, mimeType } = await fetchImageWithStallDetection(sourceImageUrl, {
     signal: opts?.signal,
-  }, getRateLimitPolicyFromContext(opts?.context, 'image'))
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-  }
-
-  const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
-  const rawData = await response.arrayBuffer()
+    rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, 'image'),
+    skipRateLimit: opts?.skipRateLimit,
+    onBytesReceived: opts?.onBytesReceived,
+    init: {
+      credentials: 'include',
+      headers: requestHeaders,
+      referrer: PIXIV_IMAGE_REFERRER,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    },
+  })
   const data = pixivKey
     ? await descramblePixivImage(rawData, mimeType, pixivKey, sourceImageUrl)
     : rawData

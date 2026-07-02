@@ -24,8 +24,12 @@ const offscreen: OffscreenIntegration = {
       return processComicNettaiImageUrls(urls)
     },
 
-    downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }) {
-      return downloadComicNettaiChapterImage(imageUrl, opts)
+    downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal
+      context?: Record<string, unknown>
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    }) {
+      return downloadComicNettaiChapterImage(imageUrl, { ...opts, skipRateLimit: true })
     },
   },
 }

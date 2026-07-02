@@ -7,121 +7,11 @@
 
 import { rateLimitedFetchByUrlScope, scheduleForIntegrationScope } from '@/src/runtime/rate-limit';
 import type { EffectivePolicy } from '@/src/runtime/rate-limit';
-import { HARD_TIMEOUT_MS, STALL_TIMEOUT_MS } from '@/src/constants/timeouts';
 import { decodeHtmlResponse } from '@/src/shared/html-response-decoder';
-import { normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils';
+import { fetchImageWithStallDetection } from '@/src/runtime/fetch-image';
 import logger from '@/src/runtime/logger';
 
-
-interface FetchImageWithStallDetectionOptions {
-  integrationId?: string;
-  signal?: AbortSignal;
-  stallTimeoutMs?: number;
-  hardTimeoutMs?: number;
-  rateLimitPolicy?: EffectivePolicy;
-}
-
-/**
- * Fetches an image while enforcing both stall timeout (no chunk progress)
- * and hard timeout (total request duration cap), with MIME validation.
- */
-export async function fetchImageWithStallDetection(
-  imageUrl: string,
-  options: FetchImageWithStallDetectionOptions = {}
-): Promise<{ data: ArrayBuffer; mimeType: string }> {
-  const stallTimeoutMs = options.stallTimeoutMs ?? STALL_TIMEOUT_MS;
-  const hardTimeoutMs = options.hardTimeoutMs ?? HARD_TIMEOUT_MS;
-
-  const controller = new AbortController();
-  const onAbort = () => controller.abort(options.signal?.reason);
-  options.signal?.addEventListener('abort', onAbort, { once: true });
-
-  const hardTimeoutId = setTimeout(() => {
-    controller.abort(new Error(`Image download hard timeout after ${hardTimeoutMs}ms`));
-  }, hardTimeoutMs);
-
-  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-
-  try {
-    const fetchImage = () =>
-      rateLimitedFetchByUrlScope(imageUrl, 'image', {
-        signal: controller.signal,
-        credentials: 'include',
-      }, options.rateLimitPolicy);
-
-    const response = options.integrationId
-      ? await scheduleForIntegrationScope(options.integrationId, 'image', fetchImage, options.rateLimitPolicy)
-      : await fetchImage();
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
-
-    if (!response.body) {
-      const data = await response.arrayBuffer();
-      return { data, mimeType };
-    }
-
-    reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
-
-    while (true) {
-      let stallTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-      try {
-        const readResult = await Promise.race<ReadableStreamReadResult<Uint8Array>>([
-          reader.read(),
-          new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
-            stallTimeoutId = setTimeout(() => {
-              reject(new Error(`Image download stalled after ${stallTimeoutMs}ms`));
-            }, stallTimeoutMs);
-          }),
-        ]);
-
-        if (stallTimeoutId) {
-          clearTimeout(stallTimeoutId);
-        }
-
-        if (readResult.done) {
-          break;
-        }
-
-        if (readResult.value && readResult.value.byteLength > 0) {
-          chunks.push(readResult.value);
-          totalBytes += readResult.value.byteLength;
-        }
-      } catch (error) {
-        if (stallTimeoutId) {
-          clearTimeout(stallTimeoutId);
-        }
-        throw error;
-      }
-    }
-
-    const merged = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
-    return {
-      data: merged.buffer,
-      mimeType,
-    };
-  } finally {
-    clearTimeout(hardTimeoutId);
-    options.signal?.removeEventListener('abort', onAbort);
-    try {
-      reader?.releaseLock();
-    } catch {
-      // no-op
-    }
-  }
-}
+export { fetchImageWithStallDetection };
 
 /**
  * Promise queue for managing concurrent operations
@@ -251,9 +141,15 @@ function isCancellationError(error: unknown): boolean {
   return message === 'aborted' || message.includes('job-cancelled');
 }
 
-async function withRetries<T>(fn: () => Promise<T>, attempts: number, baseDelayMs = 1000): Promise<T> {
+async function withRetries<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  baseDelayMs = 1000,
+  hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+): Promise<T> {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
+      await hooks?.onAttemptStart?.(attempt);
       return await fn();
     } catch (error) {
       if (isCancellationError(error)) {
@@ -295,22 +191,14 @@ export async function downloadCoverImage(
   try {
     logger.debug('[COVER] Downloading:', coverUrl);
 
-    // Apply rate limiting with same scope as chapter images
-    const response = await withRetries(
-      () => rateLimitedFetchByUrlScope(coverUrl, 'image'),
+    const { data, mimeType } = await withRetries(
+      () => fetchImageWithStallDetection(coverUrl, {
+        stallTimeoutMs: fetchTimeoutMs,
+        hardTimeoutMs: fetchTimeoutMs,
+      }),
       retries,
       300 // Base delay for retries
     );
-
-    if (!response.ok) {
-      logger.warn(`[COVER] Fetch failed: ${response.status} ${response.statusText}`);
-      return null; // Graceful fallback
-    }
-
-    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
-
-    // Get data as ArrayBuffer
-    const data = await response.arrayBuffer();
 
     const subtype = mimeType.split('/')[1];
     let extension: string;

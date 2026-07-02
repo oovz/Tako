@@ -1,6 +1,7 @@
 import type { Chapter } from '../../types/chapter';
 import type { SiteIntegration, ContentScriptIntegration, BackgroundIntegration, ParseImageUrlsFromHtmlInput } from '../../types/site-integrations';
 import logger from '@/src/runtime/logger';
+import { fetchImageWithStallDetection } from '@/src/runtime/fetch-image';
 import {
   getRateLimitPolicyFromContext,
   getRateLimitPolicyFromSnapshot,
@@ -11,7 +12,7 @@ import {
   extractImageUrlsFromEpisodeJsonScript,
   readEpisodeJsonSeriesMetadataFromDocument,
 } from './episode-json';
-import { filterValidImageUrls, normalizeAllowedImageMimeType, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
+import { filterValidImageUrls, parseChapterNumber, sanitizeLabel } from '@/src/shared/site-integration-utils';
 
 const encodeSeed = (seed: number): string => {
   const seedText = String(seed);
@@ -430,7 +431,11 @@ export const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
       return Promise.resolve(filterValidImageUrls(urls));
     },
 
-    async downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+    async downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal;
+      context?: Record<string, unknown>;
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>;
+    }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
       if (opts?.signal?.aborted) {
         throw new Error('aborted');
       }
@@ -442,18 +447,11 @@ export const shonenJumpPlusBackgroundIntegration: BackgroundIntegration = {
         hasSeed: typeof seed === 'number',
       });
 
-      const response = await rateLimitedFetchByUrlScope(
-        sourceUrl,
-        'image',
-        undefined,
-        getRateLimitPolicyFromContext(opts?.context, 'image'),
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'));
-      const rawData = await response.arrayBuffer();
+      const { data: rawData, mimeType } = await fetchImageWithStallDetection(sourceUrl, {
+        signal: opts?.signal,
+        rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, 'image'),
+        onBytesReceived: opts?.onBytesReceived,
+      });
       const shouldDescramble = typeof seed === 'number' || isShonenJumpPlusPageImageUrl(sourceUrl);
       const data = shouldDescramble
         ? await descrambleGigaviewerImage(rawData, mimeType)

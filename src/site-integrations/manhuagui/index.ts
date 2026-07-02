@@ -64,7 +64,11 @@ export const manhuaguiBackgroundIntegration: BackgroundIntegration = {
       return processManhuaguiImageUrls(urls);
     },
 
-    downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }) {
+    downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal;
+      context?: Record<string, unknown>;
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>;
+    }) {
       return downloadManhuaguiChapterImage(imageUrl, opts);
     },
   },

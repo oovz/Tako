@@ -88,6 +88,55 @@ describe('downloadCoverImage', () => {
   })
 
   describe('fetchImageWithStallDetection', () => {
+    it('aborts pending response headers at the hard timeout', async () => {
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      vi.mocked(rateLimitedFetchByUrlScope).mockImplementation(
+        async () => await new Promise<Response>(() => undefined),
+      )
+
+      await expect(
+        fetchImageWithStallDetection('https://example.com/no-response.jpg', {
+          stallTimeoutMs: 10,
+          hardTimeoutMs: 20,
+        })
+      ).rejects.toThrow('Image download hard timeout')
+    })
+
+    it('allows a custom fetcher to wait longer than the body stall timeout before returning a response', async () => {
+      vi.useFakeTimers()
+      try {
+        const mockImageData = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]).buffer
+        const mockResponse = {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'content-type': 'image/jpeg' }),
+          body: null,
+          arrayBuffer: async () => mockImageData,
+        }
+        const fetcher = vi.fn(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          return mockResponse as unknown as Response
+        })
+
+        const promise = fetchImageWithStallDetection('https://example.com/retry-wait.jpg', {
+          stallTimeoutMs: 10,
+          hardTimeoutMs: 200,
+          fetcher,
+        })
+
+        await vi.advanceTimersByTimeAsync(51)
+
+        await expect(promise).resolves.toEqual({
+          data: mockImageData,
+          mimeType: 'image/jpeg',
+        })
+        expect(fetcher).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('rejects unsupported MIME types', async () => {
       const mockResponse = {
         ok: true,
@@ -157,6 +206,93 @@ describe('downloadCoverImage', () => {
           hardTimeoutMs: 200,
         })
       ).rejects.toThrow('stalled')
+    })
+
+    it('rejects on hard timeout even when the active stream read has not reached stall timeout', async () => {
+      vi.useFakeTimers()
+      try {
+        const mockResponse = {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'content-type': 'image/jpeg' }),
+          body: {
+            getReader: () => ({
+              read: () => new Promise<ReadableStreamReadResult<Uint8Array>>(() => undefined),
+              releaseLock: vi.fn(),
+            }),
+          },
+        }
+
+        const promise = fetchImageWithStallDetection('https://example.com/hard-timeout.jpg', {
+          stallTimeoutMs: 1_000,
+          hardTimeoutMs: 10,
+          fetcher: async () => mockResponse as unknown as Response,
+        })
+        const rejection = expect(promise).rejects.toThrow('Image download hard timeout')
+
+        await vi.advanceTimersByTimeAsync(11)
+        await rejection
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reports cumulative byte progress from streamed image responses', async () => {
+      const chunks = [new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])]
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Map([['content-type', 'image/jpeg']]),
+        body: {
+          getReader: () => {
+            let index = 0
+            return {
+              read: async () => {
+                const value = chunks[index++]
+                return value ? { done: false, value } : { done: true, value: undefined }
+              },
+              releaseLock: vi.fn(),
+            }
+          },
+        },
+      }
+
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      vi.mocked(rateLimitedFetchByUrlScope).mockResolvedValue(mockResponse as unknown as Response)
+      const onBytesReceived = vi.fn()
+
+      await fetchImageWithStallDetection('https://example.com/progressive.jpg', {
+        stallTimeoutMs: 20,
+        hardTimeoutMs: 100,
+        onBytesReceived,
+      })
+
+      expect(onBytesReceived).toHaveBeenCalledTimes(2)
+      expect(onBytesReceived).toHaveBeenNthCalledWith(1, 2)
+      expect(onBytesReceived).toHaveBeenNthCalledWith(2, 5)
+    })
+
+    it('uses a custom HTTP error factory when provided', async () => {
+      const customError = Object.assign(new Error('custom 404'), { status: 404 })
+      const mockResponse = {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        headers: new Map([['content-type', 'text/plain']]),
+      }
+
+      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+      vi.mocked(rateLimitedFetchByUrlScope).mockResolvedValue(mockResponse as unknown as Response)
+
+      await expect(
+        fetchImageWithStallDetection('https://example.com/missing.jpg', {
+          stallTimeoutMs: 20,
+          hardTimeoutMs: 100,
+          createHttpError: () => customError,
+        })
+      ).rejects.toMatchObject({ message: 'custom 404', status: 404 })
     })
   })
 
@@ -387,7 +523,15 @@ describe('downloadCoverImage', () => {
 
       await downloadCoverImage(mockUrl, mockIntegrationId, mockFetchTimeoutMs)
 
-      expect(rateLimitedFetchByUrlScope).toHaveBeenCalledWith(mockUrl, 'image')
+      expect(rateLimitedFetchByUrlScope).toHaveBeenCalledWith(
+        mockUrl,
+        'image',
+        expect.objectContaining({
+          credentials: 'include',
+          signal: expect.any(AbortSignal),
+        }),
+        undefined,
+      )
     })
   })
 

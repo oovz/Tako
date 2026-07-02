@@ -48,7 +48,11 @@ export const pixivComicBackgroundIntegration: BackgroundIntegration = {
       return processPixivImageUrls(urls);
     },
 
-    async downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+    async downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal;
+      context?: Record<string, unknown>;
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>;
+    }): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
       return downloadPixivChapterImage(imageUrl, opts);
     },
   },

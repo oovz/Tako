@@ -200,7 +200,7 @@ export function registerPixivComicBackgroundImageCases(): void {
       expect(requestInit.credentials).toBe('include');
       expect(requestInit.referrer).toBe('https://comic.pixiv.net/');
       expect(requestInit.referrerPolicy).toBe('strict-origin-when-cross-origin');
-      expect(requestInit.signal).toBe(abortController.signal);
+      expect(requestInit.signal).toBeInstanceOf(AbortSignal);
 
       expect(requestInit.headers).toEqual({
         referer: 'https://comic.pixiv.net/',

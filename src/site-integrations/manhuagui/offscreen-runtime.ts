@@ -25,8 +25,12 @@ const offscreen: OffscreenIntegration = {
       return processManhuaguiImageUrls(urls)
     },
 
-    downloadImage(imageUrl: string, opts?: { signal?: AbortSignal; context?: Record<string, unknown> }) {
-      return downloadManhuaguiChapterImage(imageUrl, opts)
+    downloadImage(imageUrl: string, opts?: {
+      signal?: AbortSignal
+      context?: Record<string, unknown>
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    }) {
+      return downloadManhuaguiChapterImage(imageUrl, { ...opts, skipRateLimit: true })
     },
   },
 }

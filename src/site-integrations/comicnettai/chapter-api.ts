@@ -3,7 +3,8 @@ import {
   getRateLimitPolicyFromSnapshot,
   rateLimitedFetchByUrlScope,
 } from '@/src/runtime/rate-limit'
-import { filterValidImageUrls, normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
+import { fetchImageWithStallDetection } from '@/src/runtime/fetch-image'
+import { filterValidImageUrls } from '@/src/shared/site-integration-utils'
 import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
 import { buildComicNettaiViewerApiUrl } from './shared'
 import { buildPublusImageUrlsFromConfig, decodePublusConfigurationPack, type PublusConfig } from './publus-config'
@@ -25,7 +26,7 @@ function assertViewerContentResponse(value: ComicNettaiViewerContentResponse, ch
   return value.url
 }
 
-async function fetchJson(url: string, settingsSnapshot?: TaskSettingsSnapshot): Promise<unknown> {
+async function fetchJson(url: string, settingsSnapshot?: Partial<TaskSettingsSnapshot>): Promise<unknown> {
   const response = await rateLimitedFetchByUrlScope(
     url,
     'chapter',
@@ -45,7 +46,7 @@ async function fetchJson(url: string, settingsSnapshot?: TaskSettingsSnapshot): 
 
 export async function resolveComicNettaiChapterImageUrls(
   chapter: { id: string; url: string },
-  settingsSnapshot?: TaskSettingsSnapshot,
+  settingsSnapshot?: Partial<TaskSettingsSnapshot>,
 ): Promise<string[]> {
   const contentCheckUrl = buildComicNettaiViewerApiUrl(chapter.url)
   const contentPayload = await fetchJson(contentCheckUrl, settingsSnapshot) as ComicNettaiViewerContentResponse
@@ -81,7 +82,12 @@ export function processComicNettaiImageUrls(urls: string[]): Promise<string[]> {
 
 export async function downloadComicNettaiChapterImage(
   imageUrl: string,
-  opts?: { signal?: AbortSignal; context?: Record<string, unknown> },
+  opts?: {
+    signal?: AbortSignal
+    context?: Record<string, unknown>
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  },
 ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
   if (opts?.signal?.aborted) {
     throw new Error('aborted')
@@ -89,18 +95,12 @@ export async function downloadComicNettaiChapterImage(
 
   const { sourceUrl, metadata } = parsePublusImageTransportUrl(imageUrl)
 
-  const response = await rateLimitedFetchByUrlScope(
-    sourceUrl,
-    'image',
-    opts?.signal ? { signal: opts.signal } : undefined,
-    getRateLimitPolicyFromContext(opts?.context, 'image'),
-  )
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-  }
-
-  const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
-  const rawData = await response.arrayBuffer()
+  const { data: rawData, mimeType } = await fetchImageWithStallDetection(sourceUrl, {
+    signal: opts?.signal,
+    rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, 'image'),
+    skipRateLimit: opts?.skipRateLimit,
+    onBytesReceived: opts?.onBytesReceived,
+  })
   const data = metadata ? await descramblePublusImage(rawData, mimeType, metadata) : rawData
   const filename = new URL(sourceUrl).pathname.split('/').filter(Boolean).pop() || 'page.jpeg'
 
