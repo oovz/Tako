@@ -55,7 +55,7 @@ export default defineConfig({
   // Configure manifest
   manifest: {
     name: "__MSG_extName__",
-    version: "1.5.4",
+    version: "1.5.5",
     description: "__MSG_extDescription__",
     default_locale: "en",
     minimum_chrome_version: "122",
