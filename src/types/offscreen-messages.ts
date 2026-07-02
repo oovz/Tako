@@ -1,5 +1,5 @@
 import type { ErrorResponse } from '@/src/types/message-common';
-import type { SeriesMetadataSnapshot, TaskSettingsSnapshot } from '@/src/types/state-snapshots';
+import type { OffscreenDownloadChapterPayload } from '@/src/runtime/message-schemas';
 
 export interface OffscreenStatusMessage {
   type: 'OFFSCREEN_STATUS';
@@ -30,34 +30,21 @@ export interface OffscreenDownloadProgressMessage {
 
 export type OffscreenDownloadProgressResponse = { success: true } | ErrorResponse;
 
+/**
+ * Message type for OFFSCREEN_DOWNLOAD_CHAPTER.
+ *
+ * The `payload` field uses the Zod-inferred `OffscreenDownloadChapterPayload`
+ * type (from `message-schemas.ts`) as the single source of truth. This keeps
+ * the runtime-validated wire format and the static type aligned — no
+ * `as unknown as` casts needed at the validation boundary.
+ *
+ * `settingsSnapshot` and `book.metadata` are `Record<string, unknown>` on the
+ * wire; downstream code narrows them to `TaskSettingsSnapshot` /
+ * `SeriesMetadataSnapshot` via dedicated helpers.
+ */
 export interface OffscreenDownloadChapterMessage {
   type: 'OFFSCREEN_DOWNLOAD_CHAPTER';
-  payload: {
-    taskId: string;
-    seriesKey: string;
-    book: {
-      siteIntegrationId: string;
-      seriesTitle: string;
-      coverUrl?: string;
-      metadata?: SeriesMetadataSnapshot;
-    };
-    chapter: {
-      id: string;
-      title: string;
-      url: string;
-      index: number;
-      chapterLabel?: string;
-      chapterNumber?: number;
-      volumeId?: string;
-      volumeNumber?: number;
-      volumeLabel?: string;
-      language?: string;
-      resolvedPath: string;
-    };
-    settingsSnapshot: TaskSettingsSnapshot;
-    saveMode: 'fsa' | 'downloads-api';
-    integrationContext?: Record<string, unknown>;
-  };
+  payload: OffscreenDownloadChapterPayload;
 }
 
 export type OffscreenDownloadChapterResponse = ({

@@ -1,5 +1,6 @@
 import type { InitializeTabPayload, InitializeTabReadyPayload } from '@/src/types/state-action-tab-payloads'
 import type { GetTabIdResponse } from '@/src/types/runtime-command-messages'
+import { GetTabIdResponseSchema } from '@/src/runtime/message-schemas'
 import { isRecord } from '@/src/shared/type-guards'
 
 import type {
@@ -149,7 +150,16 @@ export async function resolveContentTabId(
 ): Promise<number | null> {
   try {
     const response = await requestTabId()
-    return typeof response?.tabId === 'number' ? response.tabId : null
+
+    // Validate the response shape before trusting the tabId. A malformed
+    // response (stale SW, schema drift, unexpected sender) yields null
+    // rather than a coerced or undefined value.
+    const parsed = GetTabIdResponseSchema.safeParse(response)
+    if (!parsed.success) {
+      return null
+    }
+
+    return parsed.data.success ? parsed.data.tabId : null
   } catch {
     return null
   }

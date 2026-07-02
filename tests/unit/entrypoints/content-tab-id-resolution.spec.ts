@@ -57,5 +57,30 @@ describe('resolveContentTabId', () => {
       }),
     ).resolves.toBeNull()
   })
+
+  // W3 regression: schema-drift / malformed responses must fail closed.
+  it('returns null for a negative tabId (fails integer.nonnegative)', async () => {
+    const { resolveContentTabId } = await import('@/entrypoints/content')
+
+    await expect(
+      resolveContentTabId(async () => ({ success: true, tabId: -1 }) as never),
+    ).resolves.toBeNull()
+  })
+
+  it('returns null when success is true but tabId is missing', async () => {
+    const { resolveContentTabId } = await import('@/entrypoints/content')
+
+    await expect(
+      resolveContentTabId(async () => ({ success: true }) as never),
+    ).resolves.toBeNull()
+  })
+
+  it('returns null for a non-boolean success field', async () => {
+    const { resolveContentTabId } = await import('@/entrypoints/content')
+
+    await expect(
+      resolveContentTabId(async () => ({ success: 'true', tabId: 5 }) as never),
+    ).resolves.toBeNull()
+  })
 })
 

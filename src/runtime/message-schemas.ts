@@ -1,6 +1,48 @@
 import { z } from 'zod'
 import { DownloadErrorCategorySchema, DownloadProgressStatusSchema } from '@/src/shared/download-contract'
 
+/**
+ * Shared error response shape — every response is either
+ * `{ success: true, ...data }` or `{ success: false, error: string }`.
+ */
+const ErrorResponseSchema = z.object({
+  success: z.literal(false),
+  error: z.string(),
+})
+
+/**
+ * Response schema for GET_TAB_ID.
+ *
+ * Validated on the content-script side before the tabId is trusted.
+ * The background may return `{ success: false, error }` or
+ * `{ success: true, tabId }`.
+ */
+export const GetTabIdResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    tabId: z.number().int().nonnegative(),
+  }),
+  ErrorResponseSchema,
+])
+
+/**
+ * Response schema for FETCH_SERIES_DATA.
+ *
+ * Validated on the content-script side before seriesMetadata / chapterList
+ * are consumed. `chapterList` is intentionally `z.unknown()` — it is
+ * normalized via `normalizeFetchedSeriesData` which has its own guards.
+ */
+export const FetchSeriesDataResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    seriesMetadata: z.unknown().optional(),
+    chapterList: z.unknown().optional(),
+    metadataError: z.string().optional(),
+    chapterListError: z.string().optional(),
+  }),
+  ErrorResponseSchema,
+])
+
 const ChapterPayloadSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -84,6 +126,55 @@ export const ActionMessageSchema = z.discriminatedUnion('type', [
   }),
 ])
 
+/**
+ * Schema for OFFSCREEN_DOWNLOAD_CHAPTER payload.
+ *
+ * Exported separately so the Zod-inferred type is the single source of truth
+ * for this payload shape — consumers import `OffscreenDownloadChapterPayload`
+ * instead of maintaining a parallel hand-written interface that can drift.
+ *
+ * `settingsSnapshot` and `book.metadata` are validated as `Record<string, unknown>`
+ * (the wire format). Downstream code narrows them to specific types via
+ * `readProcessDownloadChapterSettingsSnapshot` and similar helpers.
+ */
+export const OffscreenDownloadChapterMessageSchema = z.object({
+  type: z.literal('OFFSCREEN_DOWNLOAD_CHAPTER'),
+  payload: z.object({
+    taskId: z.string().min(1),
+    seriesKey: z.string().min(1),
+    book: z.object({
+      siteIntegrationId: z.string().min(1),
+      seriesTitle: z.string().min(1),
+      coverUrl: z.string().url().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    }),
+    chapter: z.object({
+      id: z.string().min(1),
+      title: z.string().min(1),
+      url: z.string().url(),
+      index: z.number().int().positive(),
+      chapterLabel: z.string().optional(),
+      chapterNumber: z.number().optional(),
+      volumeId: z.string().optional(),
+      volumeNumber: z.number().optional(),
+      volumeLabel: z.string().optional(),
+      language: z.string().optional(),
+      resolvedPath: z.string().min(1),
+    }),
+    settingsSnapshot: z.record(z.string(), z.unknown()),
+    saveMode: z.enum(['fsa', 'downloads-api']),
+    integrationContext: z.record(z.string(), z.unknown()).optional(),
+  }),
+})
+
+/**
+ * Zod-inferred payload type for OFFSCREEN_DOWNLOAD_CHAPTER.
+ * This is the authoritative type — the hand-written `OffscreenDownloadChapterMessage`
+ * interface in `src/types/offscreen-messages.ts` re-exports this to stay aligned.
+ */
+export type OffscreenDownloadChapterPayload =
+  z.infer<typeof OffscreenDownloadChapterMessageSchema>['payload']
+
 export const OffscreenMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('OFFSCREEN_STATUS'),
@@ -99,35 +190,7 @@ export const OffscreenMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('REVOKE_BLOB_URL'),
     payload: z.object({ blobUrl: z.string().min(1) }),
   }),
-  z.object({
-    type: z.literal('OFFSCREEN_DOWNLOAD_CHAPTER'),
-    payload: z.object({
-      taskId: z.string().min(1),
-      seriesKey: z.string().min(1),
-      book: z.object({
-        siteIntegrationId: z.string().min(1),
-        seriesTitle: z.string().min(1),
-        coverUrl: z.string().url().optional(),
-        metadata: z.record(z.string(), z.unknown()).optional(),
-      }),
-      chapter: z.object({
-        id: z.string().min(1),
-        title: z.string().min(1),
-        url: z.string().url(),
-        index: z.number().int().positive(),
-        chapterLabel: z.string().optional(),
-        chapterNumber: z.number().optional(),
-        volumeId: z.string().optional(),
-        volumeNumber: z.number().optional(),
-        volumeLabel: z.string().optional(),
-        language: z.string().optional(),
-        resolvedPath: z.string().min(1),
-      }),
-      settingsSnapshot: z.record(z.string(), z.unknown()),
-      saveMode: z.enum(['fsa', 'downloads-api']),
-      integrationContext: z.record(z.string(), z.unknown()).optional(),
-    }),
-  }),
+  OffscreenDownloadChapterMessageSchema,
   z.object({
     type: z.literal('OFFSCREEN_DOWNLOAD_API_REQUEST'),
     payload: z.object({

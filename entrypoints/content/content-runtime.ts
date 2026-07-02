@@ -3,6 +3,9 @@ import { findSiteIntegrationForUrl } from '@/src/runtime/site-integration-regist
 import { initializeContentSiteIntegrations } from '@/src/runtime/site-integration-content-initialization'
 import { sendStateAction } from '@/src/runtime/centralized-state'
 import { consumeRecentExternalTabInitialization } from '@/src/runtime/external-tab-init'
+import {
+  FetchSeriesDataResponseSchema,
+} from '@/src/runtime/message-schemas'
 import type { SeriesMetadata } from '@/src/types/series-metadata'
 import { matchUrl } from '@/src/site-integrations/url-matcher'
 import type { ContentSiteAdapter } from '@/src/types/site-integrations'
@@ -39,12 +42,28 @@ async function requestBackgroundSeriesData(
     },
   })
 
-  if (!response?.success) {
-    const message = typeof response?.error === 'string' ? response.error : 'Failed to fetch series data'
-    throw new Error(message)
+  // Validate the response shape before consuming it. The background is a
+  // trusted sender, but a malformed response (e.g. from a stale service
+  // worker, a bug in the handler, or a future schema drift) should fail
+  // closed with a clear error rather than silently producing undefined
+  // metadata/chapters.
+  const parsed = FetchSeriesDataResponseSchema.safeParse(response)
+  if (!parsed.success) {
+    logger.error('content: FETCH_SERIES_DATA response failed validation', parsed.error)
+    throw new Error('Failed to fetch series data: invalid response from background')
   }
 
-  return response as BackgroundSeriesDataResponse
+  const validated = parsed.data
+  if (!validated.success) {
+    throw new Error(validated.error || 'Failed to fetch series data')
+  }
+
+  return {
+    seriesMetadata: validated.seriesMetadata as SeriesMetadata | undefined,
+    chapterList: validated.chapterList,
+    metadataError: validated.metadataError,
+    chapterListError: validated.chapterListError,
+  }
 }
 
 export function initializeContentScript() {

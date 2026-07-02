@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ActionMessageSchema,
+  FetchSeriesDataResponseSchema,
+  GetTabIdResponseSchema,
   OffscreenMessageSchema,
   RuntimeMessageSchema,
 } from '@/src/runtime/message-schemas'
@@ -453,6 +455,113 @@ describe('message-schemas', () => {
     })
 
     expect(parsed.success).toBe(false)
+  })
+})
+
+describe('GetTabIdResponseSchema', () => {
+  it('accepts a successful response with a nonnegative integer tabId', () => {
+    const parsed = GetTabIdResponseSchema.safeParse({ success: true, tabId: 42 })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.success).toBe(true)
+      if (parsed.data.success) {
+        expect(parsed.data.tabId).toBe(42)
+      }
+    }
+  })
+
+  it('accepts tabId zero', () => {
+    const parsed = GetTabIdResponseSchema.safeParse({ success: true, tabId: 0 })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts an error response', () => {
+    const parsed = GetTabIdResponseSchema.safeParse({ success: false, error: 'no tab' })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.success).toBe(false)
+    }
+  })
+
+  it('rejects a negative tabId', () => {
+    expect(GetTabIdResponseSchema.safeParse({ success: true, tabId: -1 }).success).toBe(false)
+  })
+
+  it('rejects a non-integer tabId', () => {
+    expect(GetTabIdResponseSchema.safeParse({ success: true, tabId: 1.5 }).success).toBe(false)
+  })
+
+  it('rejects success:true without tabId', () => {
+    expect(GetTabIdResponseSchema.safeParse({ success: true }).success).toBe(false)
+  })
+
+  it('rejects a non-boolean success field', () => {
+    expect(GetTabIdResponseSchema.safeParse({ success: 'true', tabId: 5 }).success).toBe(false)
+  })
+
+  it('rejects null', () => {
+    expect(GetTabIdResponseSchema.safeParse(null).success).toBe(false)
+  })
+
+  it('rejects undefined', () => {
+    expect(GetTabIdResponseSchema.safeParse(undefined).success).toBe(false)
+  })
+})
+
+describe('FetchSeriesDataResponseSchema', () => {
+  it('accepts a successful response with seriesMetadata and chapterList', () => {
+    const parsed = FetchSeriesDataResponseSchema.safeParse({
+      success: true,
+      seriesMetadata: { title: 'Series', author: 'Author' },
+      chapterList: { chapters: [], volumes: [] },
+    })
+    expect(parsed.success).toBe(true)
+    if (parsed.success && parsed.data.success) {
+      expect(parsed.data.seriesMetadata).toEqual({ title: 'Series', author: 'Author' })
+    }
+  })
+
+  it('accepts a successful response with only metadataError', () => {
+    const parsed = FetchSeriesDataResponseSchema.safeParse({
+      success: true,
+      metadataError: 'Chapter list unavailable',
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('accepts an error response', () => {
+    const parsed = FetchSeriesDataResponseSchema.safeParse({
+      success: false,
+      error: 'Network failure',
+    })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.success).toBe(false)
+    }
+  })
+
+  it('accepts a response with unknown-typed seriesMetadata (W3: z.unknown not z.any)', () => {
+    const parsed = FetchSeriesDataResponseSchema.safeParse({
+      success: true,
+      seriesMetadata: 'not-an-object',
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects a response missing the success field', () => {
+    expect(
+      FetchSeriesDataResponseSchema.safeParse({ seriesMetadata: { title: 'X' } }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a response with a non-string error', () => {
+    expect(
+      FetchSeriesDataResponseSchema.safeParse({ success: false, error: 42 }).success,
+    ).toBe(false)
+  })
+
+  it('rejects null', () => {
+    expect(FetchSeriesDataResponseSchema.safeParse(null).success).toBe(false)
   })
 })
 
