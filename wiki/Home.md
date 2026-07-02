@@ -11,6 +11,7 @@
 |---|---|
 | [Quick Start](Quick-Start) | Install and download your first chapter |
 | [Supported Sites](Supported-Sites) | Current site integrations and status |
+| [Permissions](Permissions) | Why Tako requests `<all_urls>` and what it does with it |
 | [Comparisons](Comparisons) | How Tako compares to other manga downloaders |
 | [Template Macros](Template-Macros) | Filename and path-template macro reference |
 | [Architecture](Architecture) | Core runtime, storage, messaging, and state flow |

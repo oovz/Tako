@@ -104,6 +104,7 @@ pnpm type-check   # TypeScript 厳格モード
 | [比較](https://github.com/oovz/Tako/wiki/Comparisons) | Takoと他の漫画ダウンローダーの比較 |
 | [テンプレートマクロ](https://github.com/oovz/Tako/wiki/Template-Macros) | ファイル名とパステンプレートのマクロリファレンス |
 | [アーキテクチャ](https://github.com/oovz/Tako/wiki/Architecture) | コアランタイム、ストレージ、メッセージング、状態フロー |
+| [権限](https://github.com/oovz/Tako/wiki/Permissions) | 各要求権限の用途 |
 | [サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | サイト統合の追加または保守 |
 
 ## プライバシー

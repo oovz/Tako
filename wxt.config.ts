@@ -80,7 +80,8 @@ export default defineConfig({
       default_path: "sidepanel.html"
     },
     host_permissions: [
-      "<all_urls>" // needed for cross-origin fetches; no per-host entries
+      // See wiki/Permissions.md for why each permission is needed.
+      "<all_urls>"
     ],
     action: {
       default_title: "__MSG_extName__",

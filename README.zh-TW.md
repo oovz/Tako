@@ -104,6 +104,7 @@ pnpm type-check   # TypeScript 嚴格模式
 | [比較](https://github.com/oovz/Tako/wiki/Comparisons) | Tako 與其他漫畫下載器的比較 |
 | [範本巨集](https://github.com/oovz/Tako/wiki/Template-Macros) | 檔名和路徑範本巨集參考 |
 | [架構](https://github.com/oovz/Tako/wiki/Architecture) | 核心執行階段、儲存、訊息和狀態流 |
+| [權限](https://github.com/oovz/Tako/wiki/Permissions) | 各請求權限的用途 |
 | [網站整合指南](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | 新增或維護網站整合 |
 
 ## 隱私

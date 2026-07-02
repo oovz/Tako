@@ -104,6 +104,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full development workflow, code
 | [Comparisons](https://github.com/oovz/Tako/wiki/Comparisons) | How Tako compares to other manga downloaders |
 | [Template Macros](https://github.com/oovz/Tako/wiki/Template-Macros) | Filename and path-template macro reference |
 | [Architecture](https://github.com/oovz/Tako/wiki/Architecture) | Core runtime, storage, messaging, and state flow |
+| [Permissions](https://github.com/oovz/Tako/wiki/Permissions) | What each requested permission is used for |
 | [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | Adding or maintaining supported-site integrations |
 
 ## Privacy
