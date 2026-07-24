@@ -1,9 +1,9 @@
 ---
 name: Bug report
 about: Report a problem with Tako
-title: '[BUG] '
+title: "[BUG] "
 labels: bug
-assignees: ''
+assignees: ""
 ---
 
 ## What's wrong?

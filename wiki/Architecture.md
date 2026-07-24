@@ -1,285 +1,236 @@
 # Architecture
 
-Tako is a Chrome Manifest V3 extension built around a service-worker-first architecture. The service worker owns all queue mutations and durable runtime orchestration. The Side Panel and options page are reactive clients. Heavy chapter work moves into a single offscreen document. Content scripts handle supported-page detection and extraction.
+Tako is a WXT Manifest V3 extension targeting Chrome 150. It separates durable
+control from long-running data work so Service Worker suspension cannot silently
+lose or duplicate a download.
 
-If you are changing queue behavior, background state, side panel UX, options flows, storage, or test infrastructure, start here.
-
-## System overview
-
-```mermaid
-flowchart LR
-  CS["Content Script"] -->|INITIALIZE_TAB| SW["Service Worker"]
-  SP["Side Panel"] -->|runtime commands| SW
-  OP["Options Page"] -->|runtime commands| SW
-  SW -->|queueView / activeTabContext / activeTaskProgress| SS["chrome.storage.session"]
-  SW -->|downloadQueue / settings / fsaError| LS["chrome.storage.local"]
-  SW -->|OFFSCREEN_DOWNLOAD_CHAPTER| OS["Offscreen Document"]
-  OS -->|progress / download requests| SW
-  SW -->|downloads / notifications / sidePanel| CHROME["Chrome APIs"]
-```
-
-## Runtime surfaces
-
-| Surface | Location | Owns | Must not own |
-|---|---|---|---|
-| Background service worker | `entrypoints/background/` | Queue lifecycle, startup, storage projection, sender resolution, offscreen lifecycle, notifications | DOM-heavy work, long-lived in-memory truth |
-| Content script | `entrypoints/content/` | Supported-page detection, chapter extraction, page-scoped metadata, preference bridges | Global queue state, privileged Chrome download work |
-| Offscreen document | `entrypoints/offscreen/` | Image resolution, downloads, archive creation, descrambling, DOM/web-API-assisted processing, ComicInfo assembly, browser-download handoff | Direct storage access, global queue mutation, live page DOM access |
-| Side Panel | `entrypoints/sidepanel/` | Command center UI, chapter selection state, active-task and history display, user-triggered commands | Direct queue mutation in storage |
-| Options page | `entrypoints/options/` | Settings editor, full history UI, maintenance flows, FSA folder coordination | Direct queue mutation in storage |
-
-## Core architectural rules
-
-- **The service worker is the mutation authority.** Queue and settings changes flow through the background runtime, not direct UI storage writes.
-
-- **Listeners register synchronously.** MV3 can drop wake-up events when listener registration waits on async startup work.
-
-- **Session storage powers reactive UI.** The Side Panel and options page subscribe to projected state instead of waiting for ad hoc push messages.
-
-- **Offscreen handles heavy document work.** Archive creation, image transforms, DOMParser/iframe-based scraping, and similar web-API work belong in the offscreen document, not the service worker. Offscreen documents have DOM access but only the `chrome.runtime` extension API, so storage and privileged Chrome API calls still route through the service worker.
-
-- **Site integration runtimes are context-scoped.** The manifest is metadata-only. Runtimes are statically imported through generated registries under `src/runtime/generated/`. Content scripts load only `content-runtime.ts`, the service worker loads only `background-runtime.ts`, and offscreen loads only `offscreen-runtime.ts`. Because MV3 service workers do not support dynamic `import()`, a content script that needs API-backed series data sends `FETCH_SERIES_DATA` to the service worker instead of importing background or offscreen modules directly. The registry generator, ESLint rules, and `tests/unit/site-integration-context-boundaries.spec.ts` enforce these boundaries.
-
-- **Site integrations stay integration-agnostic at the contract boundary.** Shared message types stay generic. Integration-specific runtime data travels through `integrationContext`.
-
-- **Volume grouping is explicit.** Integrations that know the source site's chapter categories should provide `MangaPageState.volumes[]` and set `Chapter.volumeId` to those opaque IDs. `Volume.title` / `label` and `Chapter.volumeLabel` preserve the site-visible label; `volumeNumber` is numeric metadata for fallback ordering, not identity.
-
-## Storage model
-
-### Durable storage
-
-`chrome.storage.local` keeps state that must survive worker restarts and browser restarts.
-
-| Key | Purpose |
-|---|---|
-| `downloadQueue` | Durable task history and queue state |
-| `settings:global` | Canonical persisted settings |
-| `fsaError` | Persistent File System Access fallback state |
-| `siteOverrides` | Per-site output format, path template, rate-limit, and retry overrides |
-| `siteIntegrationSettings` | Manifest-defined custom settings values by integration |
-| `siteIntegrationEnablement` | User-facing integration enablement overrides |
-| `downloadedChapters` | Canonical chapter-level download history |
-| `seriesDownloadHistory` | Series-grouped download history |
-
-### Reactive session projections
-
-`chrome.storage.session` keeps state that the UI should react to quickly without rewriting the durable queue on every small update.
-
-| Key | Purpose |
-|---|---|
-| `globalState` | Service-worker-owned runtime state, including the queue and settings snapshot |
-| `tab_<tabId>` | Per-tab supported-page state for detected series and chapters |
-| `queueView` | Side-panel-friendly queue summary list |
-| `activeTabContext` | Current tracked tab's supported-page context |
-| `activeTaskProgress` | Lightweight progress state for the currently running task |
-| `lastOffscreenActivity` | Liveness timestamp for offscreen recovery |
-| `pendingDownloads` | Browser-download tracking for blob cleanup and idle teardown |
-| `initFailed` | Fatal startup failure flag |
-| `error` | Startup failure message companion |
-
-### IndexedDB
-
-Tako stores the selected File System Access directory handle in IndexedDB because directory handles cannot live in `chrome.storage`.
-
-## Queue model
-
-The queue uses six task statuses:
-
-- `queued`
-- `downloading`
-- `completed`
-- `partial_success`
-- `failed`
-- `canceled`
-
-Display order:
-
-1. Active task
-2. Queued tasks in FIFO order
-3. Terminal tasks with newest completions first
-
-Invariants:
-
-- Only one task is active at a time.
-- Retry and restart actions create new tasks instead of mutating history into place.
-- The Side Panel shows only a short history slice; the options page reads the full durable history.
-
-## Messaging model
-
-Tako uses two channels:
-
-- **Runtime messages** for commands, queue mutations, and worker-to-offscreen coordination.
-- **`chrome.storage.onChanged`** for passive UI reactivity in the Side Panel and options page.
+## Runtime boundaries
 
 ```mermaid
-flowchart LR
-  CS["Content Script"] -->|STATE_ACTION| SW["Service Worker"]
-  CS -->|FETCH_SERIES_DATA| SW
-  SP["Side Panel"] -->|runtime commands| SW
-  OP["Options Page"] -->|runtime commands| SW
-  SW -->|OFFSCREEN_DOWNLOAD_CHAPTER / OFFSCREEN_CONTROL / REVOKE_BLOB_URL| OS["Offscreen Document"]
-  OS -->|OFFSCREEN_DOWNLOAD_PROGRESS / OFFSCREEN_DOWNLOAD_API_REQUEST| SW
-  SW -->|queueView / activeTabContext / activeTaskProgress| SS["chrome.storage.session"]
-  SS -->|storage.onChanged| SP
-  SS -->|storage.onChanged| OP
+flowchart TD
+  UI["Side Panel / Options"]
+  SW["Service Worker — durable control plane"]
+  OS["Offscreen document — data plane"]
+  WK["Bundled workers"]
+  PAGE["Supported page — optional one-shot probe"]
+  CHROME["Chrome Downloads"]
+  FSA["File System Access"]
+
+  UI -->|"idempotent commands"| SW
+  SW -->|"session projections + active-progress Port"| UI
+  SW -->|"jobId + attempt"| OS
+  OS -->|"accepted / heartbeat / progress / output"| SW
+  OS --> WK
+  SW -->|"executeScript only when needed"| PAGE
+  OS -->|"Blob output"| SW
+  SW --> CHROME
+  OS --> FSA
 ```
 
-### Background routing boundaries
+### Side Panel and Options
 
-| Routed to offscreen | Purpose |
-|---|---|
-| `OFFSCREEN_STATUS` | Query offscreen liveness |
-| `OFFSCREEN_CONTROL` | Task cancellation |
-| `REVOKE_BLOB_URL` | Blob cleanup after download handoff |
-| `OFFSCREEN_DOWNLOAD_CHAPTER` | Dispatch one chapter for download |
+- Present data and forms; never mutate durable queue state directly.
+- Read queue, context, destination issues, and recovery state from
+  `chrome.storage.session` projections.
+- Open a named `runtime.Port` only for high-frequency active-task progress;
+  reconnects fall back to the latest session snapshot.
+- Include `windowId`, `tabId`, request/command identity, and expected revision
+  where applicable.
+- Keep the current Side Panel layout: inline chapter selector, unified
+  nonterminal queue with the active task first, and separate recent history.
 
-| Handled by background | Purpose |
-|---|---|
-| `GET_TAB_ID` | Resolve sender tab ID |
-| `STATE_ACTION` | Service-worker state mutations |
-| `FETCH_SERIES_DATA` | Request API-backed series metadata and chapter list |
-| `OFFSCREEN_DOWNLOAD_API_REQUEST` | Proxy `chrome.downloads.download()` from offscreen |
-| `OFFSCREEN_DOWNLOAD_PROGRESS` | Receive progress from offscreen |
-| `START_DOWNLOAD` / `RETRY_FAILED_CHAPTERS` / `RESTART_TASK` / `MOVE_TASK_TO_TOP` / `CLEAR_ALL_HISTORY` | Queue and task actions |
+### Service Worker
 
-### `FETCH_SERIES_DATA` contract
+- Registers Chrome event listeners synchronously at module load.
+- Serializes commands and is the only durable queue/task-state mutator.
+- Persists intent before effects: queue transitions, dispatch lease, pending
+  native output, destination issues, Undo actions, and provider dispatch
+  deadline.
+- Owns privileged Chrome APIs: downloads, permissions, alarms, notifications,
+  badge, scripting, and offscreen lifecycle.
+- Reconciles current offscreen job and native downloads on every initialization.
 
-Content scripts request API-backed series data from the service worker without importing background runtime modules into the content bundle.
+### Offscreen document
 
-Payload: `siteIntegrationId`, `seriesId`, optional `language`.
+- Owns provider API/HTML/image requests, per-origin scheduling, retry timers,
+  transforms/descrambling, archive creation, FSA writes, and Blob URLs.
+- Communicates through `chrome.runtime`; other extension APIs remain in the
+  Service Worker.
+- Emits job acceptance and a dedicated heartbeat independent from progress.
+- Uses bundled workers for CPU-heavy compression/transforms when appropriate.
+- Stays alive while Chrome still reads a Blob-backed output.
 
-Response (`success: true`): optional `seriesMetadata`, optional `chapterList`, optional `metadataError` / `chapterListError` when one fetch fails but the other succeeds. Missing fields mean "not supplied by this integration," not a transport failure. A transport failure returns `success: false` with `error`.
+### Page probe
 
-### `START_DOWNLOAD` payload highlights
+There is no resident content script by default. Active-tab context resolves in
+this order:
 
-Carries `sourceTabId`, `siteIntegrationId`, `mangaId`, `seriesTitle`, chapter labels, `volumeId`, numeric metadata, and optional series snapshot metadata.
+1. URL parsing.
+2. Provider API.
+3. Fetched provider HTML parsed in extension/offscreen context.
+4. A bundled, read-only, isolated-world one-shot
+   `chrome.scripting.executeScript` probe only for live DOM or page-owned
+   storage.
 
-`volumeId`, `volumeLabel`, and `volumeNumber` are intentionally separate:
+The probe returns schema-validated plain data, accepts no remote code/selectors,
+installs no listener/timer, and cannot write extension storage or operate the
+queue. Main-world execution requires an integration-specific reason.
 
-- `volumeId` is the opaque grouping key from `MangaPageState.volumes[].id`. Not displayed, not parsed as a number.
-- `volumeLabel` preserves the site's visible group/category label.
-- `volumeNumber` is parsed numeric metadata when the integration can derive it.
+## Durable job protocol
 
-### Offscreen contracts
+Every chapter attempt has a stable `jobId` and monotonic `attempt`.
 
-**Service worker to offscreen**
-
-- `OFFSCREEN_DOWNLOAD_CHAPTER` sends book metadata, chapter metadata, `settingsSnapshot`, `saveMode`, and optional `integrationContext`. The offscreen document resolves the matching `offscreen-runtime.ts` and runs its chapter/image hooks.
-- `OFFSCREEN_CONTROL` is used for task cancellation.
-- `REVOKE_BLOB_URL` tells offscreen code to revoke a blob URL after download handoff completes or fails.
-
-**Offscreen to service worker**
-
-- `OFFSCREEN_DOWNLOAD_PROGRESS` carries task status, error classification, image counters, and FSA fallback flags.
-- `OFFSCREEN_DOWNLOAD_API_REQUEST` requests a `chrome.downloads.download()` call from the service worker. The success payload uses `id` for the Chrome download ID.
-
-### Storage-driven UI updates
-
-The Side Panel and options page react to projected state instead of relying on unsolicited UI events.
-
-Reactive keys:
-
-- `queueView`
-- `activeTabContext`
-- `activeTaskProgress`
-- `initFailed`
-- `error`
-
-### Async handler contract
-
-Chrome MV3 async message handlers must return `true` from the listener and resolve through `sendResponse(...)`.
-
-In this codebase:
-
-- The background runtime wraps async routing in `entrypoints/background/background-runtime-listeners.ts`.
-- The offscreen runtime wraps async routing in `entrypoints/offscreen/runtime-bridge.ts`.
-
-All error paths must resolve `{ success: false, error }` rather than leaving callers hanging.
-
-## Sender context rules
-
-Some handlers depend on sender context, and extension pages do not receive `sender.tab`.
-
-| Message | Typical senders | Resolution rule |
-|---|---|---|
-| `GET_TAB_ID` | Content script | Requires `sender.tab.id` |
-| `START_DOWNLOAD` | Side Panel, content script | Use `sender.tab.id` when present; otherwise fall back to `payload.sourceTabId` |
-| `CLEAR_ALL_HISTORY` | Options page | Validate sender URL belongs to the options page |
-| Tab-scoped `STATE_ACTION` | Content script, extension pages | Prefer `message.tabId`, then `sender.tab.id` |
-
-See `entrypoints/background/sender-resolution.ts` for the implementation.
-
-## Code map
-
-### Entrypoints
-
-| Path | Purpose |
-|---|---|
-| `entrypoints/background/` | Background runtime, startup barrier, queue orchestration, sender resolution, notifications, tab cache, projections |
-| `entrypoints/content/` | Supported-page bootstrap and extraction plumbing |
-| `entrypoints/offscreen/` | Download pipeline, archive creation, image processing, runtime bridge |
-| `entrypoints/sidepanel/` | Command center UI, hooks, local chapter-selection state |
-| `entrypoints/options/` | Settings UI, history UI, FSA management, tab routing |
-
-### Shared source
-
-| Path | Purpose |
-|---|---|
-| `src/runtime/` | Cross-context runtime helpers, schemas, registries, projections, storage keys |
-| `src/shared/` | Pure utilities such as template resolution, filename sanitization, ComicInfo helpers, HTML decoding |
-| `src/storage/` | Persistence helpers and services |
-| `src/site-integrations/` | Supported-site manifest, registry helpers, runtime implementations |
-| `src/types/` | Message, state, settings, and integration contracts |
-| `src/ui/shared/` | Shared UI hooks and components used by multiple extension pages |
-
-### Test layout
-
-| Path | Purpose |
-|---|---|
-| `tests/unit/` | Pure logic, message, state, and component contracts |
-| `tests/e2e/` | Deterministic extension behavior with mocked routes |
-| `tests/live/` | Real-site validation against supported integrations |
-
-## Where to work for common changes
-
-- **Queue behavior** — `entrypoints/background/download-queue*.ts`, `entrypoints/background/task-lifecycle.ts`, `entrypoints/background/projection.ts`
-- **Side panel UX** — `entrypoints/sidepanel/components/`, `entrypoints/sidepanel/hooks/`, `entrypoints/sidepanel/SidePanelApp.tsx`
-- **Options page flows** — `entrypoints/options/tabs/`, `entrypoints/options/components/`, `entrypoints/options/hooks/`
-- **Download pipeline or archive behavior** — `entrypoints/offscreen/main.ts`, `entrypoints/offscreen/chapter-processing.ts`, `entrypoints/offscreen/chapter-image-downloads.ts`, `entrypoints/offscreen/zip.worker.ts`, `entrypoints/offscreen/image-processor.ts`, `entrypoints/background/destination.ts`
-- **Storage or settings behavior** — `src/storage/`, `src/runtime/storage-keys.ts`, and the relevant background action handlers
-- **Site detection or supported-site extraction** — `src/site-integrations/`, `entrypoints/content/`, `src/runtime/site-integration-initialization.ts`, and the generated static site-integration context registries
-
-## Current integration profile
-
-| Integration | Strengths |
-|---|---|
-| `mangadex` | Rich metadata, language and image-quality controls, preference bridge support |
-| `pixiv-comic` | Auth-aware requests, protected-viewer support, image reconstruction |
-| `shonenjumpplus` | Official episode-page support, image reconstruction, manga-oriented metadata defaults |
-| `manhuagui` | Series-page extraction, adult-gated chapter-list handling, reader-config image URL resolution, Manhuagui referrer/cookie handling |
-| `comicnettai` | PUBLUS viewer support, tile-based image reconstruction, DOM-backed series and chapter extraction |
-
-## Validation commands
-
-```powershell
-pnpm build
-pnpm lint
-pnpm type-check
-pnpm test:unit
-pnpm test:integration
-pnpm test:e2e
-pnpm test:live:ci
+```text
+SW persists dispatch lease
+  → SW sends START_JOB
+  → offscreen sends JOB_ACCEPTED
+  → offscreen sends HEARTBEAT and phase progress
+  → offscreen prepares/writes requested outputs
+  → SW/offscreen commit destination results
+  → SW persists chapter/task outcome
+  → SW clears lease and dispatches next eligible work
 ```
 
-Use the targeted command first when iterating on one area, then run the broader suite before finishing.
+The offscreen document rejects duplicate/stale jobs. Duplicate UI commands and
+output handoffs return their prior result. On Service Worker wake:
 
-## References
+1. Hydrate durable state.
+2. Check `chrome.offscreen.hasDocument()`.
+3. Query its current job.
+4. Reconcile `jobId`/`attempt`, pending native output, and lease.
+5. Resume observation, replay idempotently, or mark only unrecoverable work
+   interrupted.
 
-- [WXT guide](https://wxt.dev/guide)
-- [WXT extension API limitations](https://wxt.dev/guide/essentials/extension-apis)
-- [Chrome MV3 service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle)
-- [Chrome Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)
-- [Chrome Runtime Messaging](https://developer.chrome.com/docs/extensions/reference/api/runtime#method-sendMessage)
-- [Chrome Storage API](https://developer.chrome.com/docs/extensions/reference/api/storage)
-- [Chrome Offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen)
-- [React `useSyncExternalStore`](https://react.dev/reference/react/useSyncExternalStore)
+The watchdog alarm uses `persistAcrossSessions: true` and is verified/recreated
+at initialization. Multiple missed heartbeats trigger `QUERY_JOB` before any
+recovery teardown.
+
+## Output transaction
+
+“Completed” means usable output exists at the requested destination.
+
+### Chrome Downloads
+
+1. Offscreen creates a Blob URL and sends `OUTPUT_READY` with task, chapter,
+   job, attempt, and output identity.
+2. Service Worker calls `chrome.downloads.download()`.
+3. The returned `downloadId` is persisted as an accepted pending output.
+4. Service Worker immediately searches that ID and also observes
+   `downloads.onChanged` to cover the fast-completion race.
+5. `complete` commits the output; `interrupted` records a typed output failure.
+6. Service Worker tells offscreen to revoke the Blob URL after terminal state.
+
+Canceling a task stops future dispatch and uncommitted pipeline work. It does
+not cancel native downloads already accepted by Chrome.
+
+### File System Access
+
+The task's destination is snapshotted at enqueue. Before promotion, Tako checks
+capability, handle presence, and `queryPermission({mode:'readwrite'})`. A write
+commits only after the writable stream closes successfully.
+
+Unsupported, prompt/denied, missing-folder, write, or disk-full failures persist
+a `DestinationIssue`, block further dispatch, and show repair actions. Tako
+never silently changes the destination. The user can explicitly re-grant,
+reselect, continue that task in Downloads, or cancel.
+
+Both destinations use one `uniquify | overwrite` collision policy; `uniquify` is
+the default.
+
+## Task and chapter outcomes
+
+```typescript
+type TaskStatus =
+  | "queued"
+  | "downloading"
+  | "completed"
+  | "partial_success"
+  | "failed"
+  | "canceled"
+
+type ChapterStatus =
+  | "queued"
+  | "downloading"
+  | "completed"
+  | "partial_success"
+  | "failed"
+  | "canceled"
+  | "skipped"
+```
+
+- `completed`: every requested output committed.
+- `partial_success`: some usable requested output committed, but the request is
+  incomplete. Partially saved loose images count even if no whole chapter did.
+- `failed`: no usable requested output committed.
+- On cancellation, the active uncommitted chapter becomes `canceled`, remaining
+  queued chapters become `skipped`, and terminal chapter outcomes remain.
+
+There is no Pause state. A destination prerequisite is an external
+action-required block, not Pause.
+
+## Progress
+
+Offscreen reports resolving, downloading, transforming, archiving, and saving
+stages. Live updates use the Side Panel Port; session storage keeps a
+bounded-cadence latest snapshot for reconnect.
+
+Overall percentage is weighted by locally learned phase duration using provider,
+transform type, bytes/pixels, archive format, and destination. It is monotonic,
+does not fabricate progress from elapsed time alone, and remains below 100%
+until destination commit.
+
+## Storage ownership
+
+| Store                    | Canonical data                                                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chrome.storage.local`   | queue/history, settings, queue revision, dispatch lease, pending native output identity, destination issues, pending Undo actions, migrations |
+| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                     |
+| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                     |
+| Runtime Port             | high-frequency active-task progress only                                                                                                      |
+| React state              | component/view state and chapter selection drafts for this phase                                                                              |
+
+Large Blobs are never stored in Chrome storage.
+
+## Site integrations
+
+Each manifest declares identity, maturity, shipped/default state, implementation
+type, match patterns, required origins, page-probe need, broad-permission need,
+capabilities, rate/timeout policies, and custom settings.
+
+The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+,
+Manhuagui, and Comic Nettai. The set is extensible. New integrations begin
+Experimental and may become Stable after deterministic fixtures and several days
+of live smoke testing. Stability describes observed behavior, not API
+officiality.
+
+MangaDex is disabled by default. Enabling it from Options requests optional
+`https://*/*` access for dynamic MangaDex@Home nodes. Runtime URL policy remains
+narrow even after Chrome grants that broad permission.
+
+All integration requests use a shared hardened layer: HTTPS and origin policy,
+pre-follow redirect rejection, defensive final-URL validation, declared
+credential mode, private/loopback rejection unless explicitly approved,
+response/redirect limits, abort signals, MIME plus magic-byte and
+pixel-dimension validation, filename sanitization, and structured retry/error
+classification.
+
+## Error and diagnostic boundary
+
+The UI shows localized plain-language categories. It never displays raw browser
+errors, stack traces, signed URLs, headers, or provider bodies. Technical detail
+goes to redacted extension console diagnostics. `runtime.lastError.message` is
+not parsed because Chrome does not define it as a stable machine-readable API.
+
+## Scope boundaries
+
+- Same-profile queue state is global; routing identifiers are present now.
+- Full multi-window context/selection isolation and incognito split mode are a
+  separate tested phase.
+- Compatibility below Chrome 150 is not maintained.
+- Pause/resume and a broad Side Panel redesign are out of scope.
+
+## Related references
+
+- [Site Integration Guide](Site-Integration-Guide.md)
+- [Chrome offscreen API](https://developer.chrome.com/docs/extensions/reference/api/offscreen)
+- [Chrome downloads API](https://developer.chrome.com/docs/extensions/reference/api/downloads)

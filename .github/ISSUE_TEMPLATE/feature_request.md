@@ -1,9 +1,9 @@
 ---
 name: Feature request
 about: Suggest an idea for Tako
-title: '[FEATURE] '
+title: "[FEATURE] "
 labels: enhancement
-assignees: ''
+assignees: ""
 ---
 
 ## What problem are you trying to solve?

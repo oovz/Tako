@@ -1,250 +1,265 @@
 # Contributing a Site Integration
 
-This guide covers how to add or maintain a supported-site integration for Tako.
+This guide covers adding or maintaining a manga/comic/manhwa/manhua integration
+for Tako's WXT Manifest V3 architecture.
 
-## What a site integration owns
+## What an integration owns
 
-A site integration is responsible for four things:
+An integration owns:
 
-1. **URL matching** through the manifest.
-2. **Series and chapter extraction** in the content-script context or through background-side APIs.
-3. **Chapter image resolution and download behavior** in the offscreen pipeline.
-4. **Optional site-specific settings and runtime handoff data.**
+1. URL matching and required provider/asset origins.
+2. Series/chapter context resolution.
+3. Chapter image resolution, validation, download behavior, and any
+   descrambling.
+4. Provider rate/timeout policy and optional localized settings.
+5. Deterministic fixtures plus live smoke evidence.
 
-Tako uses the term **site integration** everywhere in code and UI. Use `siteIntegrationId` for identifiers.
+Use the term **site integration** and the field `siteIntegrationId`
+consistently. Provider-specific fields must not leak into shared queue/message
+contracts.
 
-## The main files
+## Manifest first
 
-| Path | Purpose |
-|---|---|
-| `src/site-integrations/manifest.ts` | Single source of truth for integration metadata, URL patterns, defaults, and optional settings |
-| `src/site-integrations/<site>/index.ts` | Main integration implementation |
-| `src/site-integrations/<site>/content-runtime.ts` | Content-script runtime export used by the static content registry |
-| `src/site-integrations/<site>/background-runtime.ts` | Service-worker runtime export for series API calls and dispatch-context preparation |
-| `src/site-integrations/<site>/offscreen-runtime.ts` | Offscreen runtime export for chapter image resolution, DOM/web-API-assisted processing, and image downloads |
-| `src/runtime/generated/site-integration-content-registry.ts` | Generated static list of content runtime imports |
-| `src/runtime/generated/site-integration-background-registry.ts` | Generated static list of service-worker runtime imports |
-| `src/runtime/generated/site-integration-offscreen-registry.ts` | Generated static list of offscreen runtime imports |
-| `scripts/generate-site-integration-registries.mjs` | Build-time generator for context-scoped static registries |
-| `src/types/site-integrations.ts` | Shared integration interfaces |
-| `src/shared/site-integration-utils.ts` | Shared label and numeric parsing helpers |
-| `tests/unit/integrations/` or `tests/unit/site-integrations/` | Integration-focused unit coverage |
-| `tests/e2e/fixtures/mock-data/site-integrations/` | Mock site data for deterministic Side Panel and download-workflow coverage |
-| `tests/live/` | Real-site validation for supported integrations |
+`src/site-integrations/manifest.ts` is the single registry. Every entry
+declares:
 
-## Integration shape
+```typescript
+interface SiteIntegrationManifest {
+  id: string
+  name: string
+  version: string
+  author: string
+  maturity: "experimental" | "stable"
+  shipped: boolean
+  enabledByDefault: boolean
+  implementationType:
+    "official-api" | "unofficial-api" | "dom-scraping" | "hybrid"
 
-Every integration implements three runtime contexts, each exported through its own file:
+  patterns: {
+    domains: string[]
+    seriesMatches: string[]
+    excludeMatches?: string[]
+  }
+  requiredOrigins: string[]
+  requiresPageProbe: boolean
+  requiresBroadHttpsPermission?: boolean
 
-- `content-runtime.ts` — content-script side
-- `background-runtime.ts` — service-worker side
-- `offscreen-runtime.ts` — offscreen-document side
+  policyDefaults: {
+    image: { concurrency: number; delayMs: number }
+    chapter: { concurrency: number; delayMs: number }
+  }
+  handlesOwnRetries?: boolean
+  customSettings?: SettingsFieldSchema[]
+  runtimes: {
+    background: boolean
+    offscreen: boolean
+  }
+}
+```
 
-### Content integration
+`enabledByDefault` is the only fresh-profile default. A missing user override
+resolves from it everywhere: Options, active-tab detection, background dispatch,
+generated registries, and tests. Do not duplicate a different fallback.
 
-The content side can:
+Set a runtime flag to `true` only when that context has a real, bundled
+implementation. The generator must not create placeholder adapters just to
+satisfy a manifest shape.
 
-- wait for a page to be ready with `waitForPageReady?()`
-- derive a stable series identifier with `getSeriesId()`
-- extract chapter lists with `extractChapterList?()`
-- extract series metadata with `extractSeriesMetadata?()`
+MangaDex is the current example of `requiresBroadHttpsPermission: true`. It is
+disabled by default; its Options enable gesture requests optional `https://*/*`.
+A denied/revoked permission leaves it unavailable. Broad browser permission
+never broadens the integration's runtime URL policy.
 
-Use the content side when the site's truth lives in the page DOM or in page-scoped state.
+## Context-resolution hierarchy
 
-### Background integration
+Use the least page-coupled strategy that produces correct data:
 
-The background side runs in the MV3 service worker. It can:
+1. Parse the active tab URL.
+2. Call a provider API.
+3. Fetch and structurally parse provider HTML in extension/offscreen context.
+4. Use a bundled one-shot page probe only when live DOM or page-owned storage is
+   genuinely required.
 
-- fetch series metadata from an API with `series.fetchSeriesMetadata()`
-- fetch chapter lists from an API with `series.fetchChapterList()`
-- prepare per-dispatch runtime context with `prepareDispatchContext()`
+There is no resident content script by default. Do not add a static WXT content
+entrypoint merely for URL parsing or data that fetched HTML already contains.
 
-Use the background side when the site exposes stable series APIs or when queue dispatch needs privileged extension APIs such as storage. It must not import DOM-only or offscreen-only image processing code.
+### One-shot probe rules
 
-### Offscreen integration
+A probe runs through `chrome.scripting.executeScript` and must:
 
-The offscreen side runs in the hidden offscreen document. It can:
+- use the isolated world by default;
+- be bundled with the extension;
+- be read-only and return schema-validated plain data;
+- accept no selector, code, or executable configuration from provider responses;
+- install no persistent listener, history patch, interval, or unbounded
+  observer;
+- clean up any bounded readiness observer before returning;
+- never write extension storage or operate the queue/download pipeline;
+- use `world: 'MAIN'` only with a documented integration-specific reason.
 
-- resolve image URLs with `chapter.resolveImageUrls()`
-- fall back to HTML parsing with `chapter.parseImageUrlsFromHtml()`
-- normalize candidate image URLs with `chapter.processImageUrls()`
-- download final image bytes with `chapter.downloadImage()`
+SPA navigation restarts loading-first resolution. A resident observer is allowed
+only after an integration test proves URL/navigation events plus one-shot
+resolution cannot represent the visible page correctly.
 
-Use the offscreen side for chapter/image work, DOMParser, iframe-assisted scraping, canvas, `createImageBitmap`, `OffscreenCanvas`, Blob/object URL work, and other web APIs unavailable to the service worker. Offscreen documents have DOM/web APIs but only the `chrome.runtime` extension API, so storage and downloads API calls still route through the service worker by message.
+## Runtime boundaries
 
-## Manifest-first registration
+### Service Worker runtime
 
-Add every integration to `src/site-integrations/manifest.ts`.
+Use it for URL routing, provider series API/HTML loading that is Service Worker
+safe, permission checks, and preparing small non-secret dispatch context. It
+must not perform long-running timers or DOM/canvas work.
 
-Each manifest entry should define:
+### Offscreen runtime
 
-- `id`
-- `name`
-- `author`
-- `patterns.domains`
-- `patterns.seriesMatches`
-- optional `patterns.excludeMatches`
-- `policyDefaults.image`
-- `policyDefaults.chapter`
-- optional `handlesOwnRetries`
-- optional `customSettings`
-- `runtimes.content`
-- `runtimes.background`
-- `runtimes.offscreen`
+Use it for provider request scheduling, chapter HTML parsing, image resolution,
+image validation/download, descrambling, archive creation, FSA writes, and Blob
+URL ownership. It communicates through `chrome.runtime`; storage/downloads/
+permissions/alarms remain Service Worker responsibilities.
 
-The manifest drives metadata, URL matching, user enablement, options rendering, rate defaults, and content-script match generation. It must stay metadata-only and must not import site runtime code.
+The component making requests owns the rate limiter, Retry-After handling,
+backoff, and `nextChapterDispatchAt` deadline. Service Worker suspension must
+not erase a provider delay.
 
-Runtime loading is static and context-scoped. Each site folder should provide a runtime file for every manifest runtime flag set to `true`:
+### Dispatch context
 
-- `content-runtime.ts` exports `contentSiteAdapter`
-- `background-runtime.ts` exports `backgroundSiteAdapter`
-- `offscreen-runtime.ts` exports `offscreenSiteAdapter`
+Provider-specific dispatch data uses a versioned envelope:
 
-Do not edit generated registry files directly. `pnpm generate:site-integrations` regenerates them, and `pnpm lint` verifies they are current. `pnpm type-check`, `pnpm build`, and packaging scripts regenerate them automatically before running their normal work.
+```typescript
+interface IntegrationContextEnvelope<T = unknown> {
+  integrationId: string
+  schemaVersion: number
+  createdAt: number
+  data: T
+}
+```
 
-If a site has no custom runtime for a context, set that flag to `false`. For example, `runtimes.offscreen: false` means `offscreen-runtime.ts` is not required and will not be imported into the offscreen registry.
+Only the owning integration decodes `data` with a runtime schema. Reject unknown
+future versions with a mapped compatibility error. Do not put cookies, bearer
+tokens, signed URLs intended for logs, or constructed `Cookie` headers into this
+envelope. Normal browser-managed credentials are declared per request origin.
+
+## Shared request security
+
+All provider/API/image requests must go through the shared hardened request
+layer, which enforces:
+
+- HTTPS unless an origin is explicitly approved;
+- integration-specific origin allowlists;
+- redirect rejection before follow (current limit: zero), plus defensive
+  final-URL validation;
+- private, link-local, and loopback rejection unless explicitly required;
+- declared credential mode;
+- response-size limits and AbortSignal cancellation;
+- raster MIME plus magic-byte validation;
+- pixel-dimension limits before canvas allocation;
+- sanitized filenames;
+- structured retry/error categories;
+- redacted logging of query values, credentials, headers, and bodies.
+
+`handlesOwnRetries` changes retry classification/backoff only; it never bypasses
+proactive rate limiting.
+
+## Chapter and volume data
+
+Preserve explicit site categories such as volumes, arcs, books, single issues,
+extras, or localized section headings.
+
+| Field                    | Responsibility                                              |
+| ------------------------ | ----------------------------------------------------------- |
+| `Volume.id`              | Opaque deterministic group identity scoped to the series    |
+| `Volume.title` / `label` | User-visible source label                                   |
+| `Chapter.volumeId`       | Explicit reference to `Volume.id`                           |
+| `Chapter.volumeLabel`    | Source label retained for fallback/templates/metadata       |
+| `Chapter.volumeNumber`   | Parsed numeric metadata, not grouping identity              |
+| `Chapter.listPosition`   | Stable 1-based source-list position preserved through retry |
+
+Use shared sanitization and chapter/volume parsing helpers. Integrations should
+provide numeric metadata when reliable; the enqueue path preserves rather than
+reinterprets it.
+
+## Image and output rules
+
+- Resolve ordered image candidates deterministically.
+- Validate final response MIME, magic bytes, size, and dimensions.
+- Preserve source extensions only after validation.
+- Keep descramblers deterministic and pixel-tested against representative
+  fixtures.
+- Never report chapter/task completion when offscreen merely prepared a Blob.
+  Chrome Downloads commit at `downloads.onChanged: complete`; FSA commits after
+  writable-stream `close()` succeeds.
+- For loose images, record requested, committed, and failed output counts so a
+  partial image result produces task `partial_success` rather than false
+  failure.
+
+## Settings schema
+
+Custom settings use a typed, checked schema. `select` and `multiselect` fields
+must declare a nonempty `options` list; a malformed schema fails at startup
+instead of producing an unbounded text input in Options.
+
+```typescript
+interface SettingsFieldSchema {
+  id: string
+  type: "boolean" | "select" | "multiselect" | "string" | "number"
+  label: string
+  description?: string
+  defaultValue: unknown
+  options?: Array<{ value: string; label: string }>
+}
+```
+
+Validate persisted values when a field is renamed or removed, and add a
+migration when the old value has a safe replacement.
+
+## Maturity and promotion
+
+New integrations begin `experimental`. They may become `stable` after:
+
+- deterministic parser/image/descrambler fixtures pass;
+- live smoke tests pass over several days;
+- representative readable, unavailable, and locked states are covered;
+- unknown provider changes fail closed with a mapped message;
+- no known archive corruption or systematic extraction failure remains.
+
+Unofficial APIs, HTML parsing, and descrambling can be Stable after this
+evidence. The soak period supplements regression tests; it does not replace
+them.
 
 ## Recommended implementation flow
 
-1. Add the manifest entry.
-2. Create `src/site-integrations/<site>/index.ts`.
-3. Create `src/site-integrations/<site>/content-runtime.ts`, `src/site-integrations/<site>/background-runtime.ts`, and `src/site-integrations/<site>/offscreen-runtime.ts` runtime exports.
-4. Run `pnpm generate:site-integrations` or rely on `pnpm type-check` / `pnpm build` to regenerate static registries.
-5. Add any helper modules the site needs inside the same folder.
-6. Add unit coverage in `tests/unit/integrations/` or `tests/unit/site-integrations/`.
-7. Add mocked E2E coverage under `tests/e2e/` for Side Panel navigation and download workflows when the integration participates in the MVP UI flow.
-8. Add or update live coverage in `tests/live/` when the site is stable enough for it.
-
-## Shared helper rules
-
-Use `src/shared/site-integration-utils.ts` when you need common preprocessing.
-
-| Helper | Use it for |
-|---|---|
-| `sanitizeLabel()` | Normalizing titles, chapter labels, and volume labels |
-| `parseChapterNumber()` | Deriving numeric chapter values from raw text |
-| `parseVolumeInfo()` | Deriving `volumeLabel` and `volumeNumber` from raw text |
-| `filterValidImageUrls()` | Dropping malformed absolute image URL candidates |
-| `normalizeAllowedImageMimeType()` | Validating image response content types before filename/path work |
-
-If an integration can derive numeric chapter or volume metadata, it should set those values itself. The enqueue path preserves provided numeric metadata; it does not invent it later.
-
-## Chapter volume grouping
-
-Use explicit volumes whenever the source site exposes chapter sections, arcs, books, single issues, extras, or similar chapter-list categories.
-
-The fields have separate responsibilities:
-
-| Field | Responsibility |
-|---|---|
-| `VolumeState.id` | Opaque, deterministic group key scoped to the current series state. Not user-visible, not numeric. |
-| `VolumeState.title` / `VolumeState.label` | User-visible group text from the site. Prefer the site label when it exists, including localized labels such as Manhuagui `单行本`, `番外篇`, and `连载`. |
-| `Chapter.volumeId` | Reference to `VolumeState.id`; this is what the Side Panel uses for explicit grouping. |
-| `Chapter.volumeLabel` | Per-chapter copy of the source volume/category label for display fallback, debugging, templates, and downstream metadata. |
-| `Chapter.volumeNumber` | Parsed numeric volume metadata when available. Useful for ComicInfo/template output and numeric fallback sorting, but not the group identity. |
-
-For sites like Manhuagui, each chapter-list heading should become one `VolumeState` entry. Chapters under that heading should set `volumeId` to the corresponding entry's `id` and should preserve the heading text as `volumeLabel`. The Side Panel displays the explicit `VolumeState.title` / `label` first and falls back to `Chapter.volumeLabel` or `Volume {volumeNumber}` only when the explicit label is absent.
-
-If a site only provides numeric volume metadata and no explicit `volumes[]`, the runtime may derive fallback groups such as `volume-1` with label `Volume 1`. New integrations should prefer explicit `volumes[]` when the site has meaningful category names.
-
-## Dispatch-context handoff pattern
-
-When a site needs extra runtime data during chapter processing:
-
-1. Prefer `prepareDispatchContext()`.
-2. Use a `chrome.storage.session` bridge only when the source data exists only in page or content-script context.
-3. Keep the payload integration-scoped and small.
-4. Pass the data through the generic `integrationContext` field instead of adding site-named shared message fields.
-
-Examples in the current codebase:
-
-- **MangaDex** bridges selected website preferences from page state into session storage, then forwards the needed subset through `integrationContext`.
-- **Pixiv Comic** resolves cookie-backed request context and forwards the required header data through `integrationContext`.
-
-## Context ownership
-
-Keep content, service-worker, and offscreen responsibilities separable even when they share helper modules.
-
-- **Content runtime code** may read `window`, `document`, page DOM, and page-scoped state.
-- **Background runtime code** runs in the service worker and may use service-worker-safe extension APIs. Because MV3 service workers do not support dynamic `import()`, background runtimes are statically imported into the service-worker graph. Keep them free of offscreen-only chapter/image code.
-- **Offscreen runtime code** may use DOM and web APIs such as `DOMParser`, iframe scripting, canvas, and document APIs. It cannot read the live tab DOM directly; pass page-derived data from content scripts or fetch/embed source documents explicitly. It also cannot read `chrome.storage` directly, so storage-dependent data must be passed in `integrationContext` or requested from the service worker.
-- **API-backed series loading** should be exposed through the background runtime and requested from content via `FETCH_SERIES_DATA`. Content scripts should not import background runtime modules directly.
-- **User enablement** is currently a runtime processing toggle. Disabling an integration does not remove static content-script matches or broad host permissions.
-- **ESLint restrictions** and `tests/unit/site-integration-context-boundaries.spec.ts` enforce that content, background, and offscreen entrypoints cannot reach wrong-context site runtime files.
-
-## Rate limiting and download rules
-
-All integrations must use the shared rate limiter for network work:
-
-```typescript
-import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
-```
-
-Do not bypass it with raw `fetch(...)` for chapter or image traffic unless you are deliberately delegating to a helper that already applies the shared limiter. Even when an integration handles its own retry strategy, it must still respect the shared concurrency and delay rules.
-
-## Site-specific settings
-
-Integrations can expose custom settings through `customSettings` in the manifest.
-
-Common field types:
-
-- `boolean`
-- `string`
-- `number`
-- `select`
-- `multiselect`
-
-Those settings are rendered in the options page and stored under the integration's settings namespace in local storage.
-
-Use this only for true integration behavior, not for generic extension settings that belong to all sites.
-
-## DNR and header rewriting
-
-Use Declarative Net Request only when regular request options are not enough.
-
-Rules:
-
-- Keep the scope site-specific.
-- Prefer session rules over broad persistent rules.
-- Document the reason in the integration code and guide reviewers to the affected hostnames.
-- Avoid rules that could affect unrelated integrations.
-
-## Validation checklist
-
-Before you consider a site integration ready, verify all of the following.
-
-- The manifest entry matches only the URLs you truly support.
-- `getSeriesId()` is stable for the supported page shape.
-- Chapter titles and numeric metadata are normalized.
-- Image downloads go through the shared rate limiter.
-- Any integration-specific handoff data flows through `integrationContext`.
-- The integration works after `pnpm build` and appears in the generated extension manifest.
-- Unit coverage exists for parsing and integration-specific edge cases.
-- Mocked E2E coverage exists for supported user workflows when the site has UI-visible behavior.
-- Live coverage exists if the site is stable and publicly testable.
+1. Add the manifest entry and runtime schemas.
+2. Implement URL/API/fetched-HTML series resolution.
+3. Add a one-shot probe only if a fixture proves it is necessary.
+4. Implement offscreen chapter/image behavior through the shared request layer.
+5. Add deterministic unit fixtures, including locked/unavailable cases.
+6. Add mocked Side Panel/download E2E coverage.
+7. Add live smoke coverage when publicly testable.
+8. Regenerate registry artifacts; do not edit generated files manually.
+9. Inspect the built Chrome manifest and verify required versus optional
+   origins.
 
 ## Validation commands
 
 ```powershell
-pnpm type-check
-pnpm test:unit
-pnpm test:live:ci
+node scripts/generate-site-integration-registries.mjs --check
+pnpm exec tsc --noEmit
+pnpm exec vitest run --project unit
 pnpm build
 ```
 
-After a build, inspect `.output/chrome-mv3/manifest.json` and confirm your domains appear in the generated content-script matches.
+Run site-specific live tests manually where access and automation policy permit.
+A Stable integration must test production parsing/descrambling code, not only a
+parallel test implementation.
 
-## Learn from the existing integrations
+## Current integration notes
 
-| Integration | Useful patterns |
-|---|---|
-| `mangadex` | Preference bridge, rich metadata, numeric metadata preservation |
-| `pixiv-comic` | Cookie-backed request context, build-ID refresh, image reconstruction |
-| `shonenjumpplus` | Episode JSON flow, DOM-backed metadata, image reconstruction |
-| `manhuagui` | DOM chapter grouping, adult-gate cookie priming, reader-config parsing, referrer-sensitive image fetches |
-| `comicnettai` | PUBLUS viewer API flow, tile-based image reconstruction, DOM chapter list extraction |
+| Integration  | Useful patterns                                                                                                                                                           |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MangaDex     | Official API, At-Home reporting, optional broad permission, optional one-shot page-preference import                                                                      |
+| Pixiv Comic  | Internal API/build data and image reconstruction                                                                                                                          |
+| Shonen Jump+ | Numeric `/episode/{id}` pages only; fetched SSR `readableProduct`, viewer API, tile reconstruction. Homepage and `/series*` catalog routes are intentionally unsupported. |
+| Manhuagui    | SSR grouping, packed reader payload, explicit adult gate, referrer-sensitive images                                                                                       |
+| Comic Nettai | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access                                                                                  |
 
-## Related docs
-
-- [Architecture](Architecture) — core runtime, storage, messaging, and state flow
-- [Template Macros](Template-Macros) — path and filename template reference
+Related: [Architecture](Architecture), [Permissions](Permissions), and
+[Template Macros](Template-Macros).

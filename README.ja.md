@@ -11,9 +11,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 
-[インストール](#はじめに) · [機能](#機能) · [対応サイト](#対応サイト) · [Wiki](https://github.com/oovz/Tako/wiki) · [プライバシー](#プライバシー)
+[インストール](#はじめに) · [機能](#機能) · [対応サイト](#対応サイト) ·
+[Wiki](https://github.com/oovz/Tako/wiki) · [プライバシー](#プライバシー)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+· [日本語](README.ja.md)
 
 </div>
 
@@ -21,26 +23,40 @@
 
 ## 機能
 
-- **サイドパネルコマンドセンター** — 章選択、キュー、進行状況がすべてChromeのサイドパネルにあります。読書中のタブのすぐ隣。余計なタブも保存ダイアログも不要。
-- **本物のキューとリトライ** — 数十の章をキューに追加し、画像ごとの進行状況を確認し、失敗したダウンロードを自動または手動で再試行。同時に処理するタスクは1つだけなので安定動作。
-- **クリーンな書き出し** — CBZ、ZIP、または画像フォルダで保存。カスタムパスとファイル名テンプレートはKomga、Kavita、Calibreなどのライブラリツールに対応。
-- **最適化されたサイト統合** — 対応サイトごとに専用のページ構造、画像CDN、メタデータ処理を提供 — 汎用スクレイピングではありません。
-- **統一設定ページ** — 出力形式、テンプレート、レート制限、リトライのグローバルデフォルトとサイト別オーバーライドがすべてオプションページに集約。
-- **File System Access対応** — カスタムダウンロードフォルダを選択すると、Takoが直接書き込みます。必要に応じてChromeのダウンロードバーにフォールバック。
-- **ComicInfo.xml生成** — CBZアーカイブにシリーズメタデータ、章番号、作者などを埋め込み、コミックライブラリマネージャーとの互換性を確保。
-- **プライバシー優先** — 分析なし、テレメトリなし、データ収集なし。すべてローカルブラウザ内に留まります。
+- **サイドパネルコマンドセンター**
+  — 章選択、キュー、進行状況がすべてChromeのサイドパネルにあります。読書中のタブのすぐ隣。余計なタブも保存ダイアログも不要。
+- **本物のキューとリトライ**
+  — 数十の章をキューに追加し、画像ごとの進行状況を確認し、失敗したダウンロードを自動または手動で再試行。同時に処理するタスクは1つだけなので安定動作。
+- **クリーンな書き出し**
+  —初期設定では Chrome のダウンロード経由で CBZ を保存します。ZIP と画像フォルダも選べます。カスタムパスとファイル名テンプレートはKomga、Kavita、Calibreなどのライブラリツールに対応。
+- **最適化されたサイト統合**
+  — 対応サイトごとに専用のページ構造、画像CDN、メタデータ処理を提供 — 汎用スクレイピングではありません。
+- **統一設定ページ**
+  — 出力形式、テンプレート、レート制限、リトライのグローバルデフォルトとサイト別オーバーライドがすべてオプションページに集約。
+- **File System Access対応**
+  — カスタムダウンロードフォルダを選択すると、Takoが直接書き込みます。アクセスできなくなった場合は停止し、再許可、別フォルダの選択、Chrome
+  Downloads への明示的な切り替え、またはキャンセルを選べます。
+- **ComicInfo.xml生成** —
+  CBZアーカイブにシリーズメタデータ、章番号、作者などを埋め込み、コミックライブラリマネージャーとの互換性を確保。
+- **プライバシー優先**
+  — 開発者向けの分析やテレメトリはありません。必要なリクエストは有効にした提供元へ直接送られ、MangaDex を有効にした場合の MangaDex@Home 報告も明示されています。
 
 ## 対応サイト
 
-| サイト | 状態 |
-|---|:---:|
-| [MangaDex](https://mangadex.org) | ✅ |
-| [Pixiv Comic](https://comic.pixiv.net) | ✅ |
-| [Shonen Jump+](https://shonenjumpplus.com) | ✅ |
-| [Manhuagui](https://www.manhuagui.com) | ✅ |
-| [Comic Nettai](https://comic-nettai.com) | ✅ |
+| サイト                                      |                      状態                      |
+| ------------------------------------------- | :--------------------------------------------: |
+| [MangaDex](https://mangadex.org)            | ✅（初期状態では無効。HTTPS の任意権限が必要） |
+| [Pixiv Comic](https://comic.pixiv.net)      |                       ✅                       |
+| [Shonen Jump+](https://shonenjumpplus.com)  |                       ✅                       |
+| [Manhuagui](https://www.manhuagui.com)      |                       ✅                       |
+| [Comic Nettai](https://www.comicnettai.com) |                       ✅                       |
 
-新しいサイトを希望しますか？[リクエストを送信](https://github.com/oovz/Tako/issues/new?template=feature_request.md)するか、統合を貢献してください — [サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)を参照。
+Shonen Jump+ は数値 ID を含む `/episode/{id}`
+ページで利用できます。ホームページと `/series`
+カタログルートは意図的にサポート対象外です。
+
+新しいサイトを希望しますか？[リクエストを送信](https://github.com/oovz/Tako/issues/new?template=feature_request.md)するか、統合を貢献してください —
+[サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)を参照。
 
 ## 権利とサイトアクセス
 
@@ -63,7 +79,8 @@ Takoは、お使いのブラウザセッションで既にアクセス可能な�
 
 ### GitHub Releasesから
 
-1. リポジトリの **Releases** ページに移動し、最新の `tako-manga-downloader-vX.Y.Z-chrome.zip` をダウンロード。
+1. リポジトリの **Releases** ページに移動し、最新の
+   `tako-manga-downloader-vX.Y.Z-chrome.zip` をダウンロード。
 2. zipをフォルダに展開。
 3. `chrome://extensions` を開く。
 4. **デベロッパーモード**を有効化。
@@ -76,7 +93,9 @@ pnpm install
 pnpm build
 ```
 
-`chrome://extensions` を開き、**デベロッパーモード**を有効化し、**パッケージ化されていない拡張機能を読み込む**を選択して `.output\chrome-mv3` を選択。
+`chrome://extensions`
+を開き、**デベロッパーモード**を有効化し、**パッケージ化されていない拡張機能を読み込む**を選択して
+`.output\chrome-mv3` を選択。
 
 </details>
 
@@ -91,31 +110,33 @@ pnpm lint         # ESLint
 pnpm type-check   # TypeScript 厳格モード
 ```
 
-開発ワークフロー、コードスタイルルール、PRガイドラインの詳細は [`CONTRIBUTING.md`](CONTRIBUTING.md) を参照。
+開発ワークフロー、コードスタイルルール、PRガイドラインの詳細は
+[`CONTRIBUTING.md`](CONTRIBUTING.md) を参照。
 
 </details>
 
 ## ドキュメント
 
-| Wikiページ | 説明 |
-|---|---|
-| [クイックスタート](https://github.com/oovz/Tako/wiki/Quick-Start) | インストールと初回ダウンロードのガイド |
-| [対応サイト](https://github.com/oovz/Tako/wiki/Supported-Sites) | 現在のサイト統合と状態 |
-| [比較](https://github.com/oovz/Tako/wiki/Comparisons) | Takoと他の漫画ダウンローダーの比較 |
-| [テンプレートマクロ](https://github.com/oovz/Tako/wiki/Template-Macros) | ファイル名とパステンプレートのマクロリファレンス |
-| [アーキテクチャ](https://github.com/oovz/Tako/wiki/Architecture) | コアランタイム、ストレージ、メッセージング、状態フロー |
-| [権限](https://github.com/oovz/Tako/wiki/Permissions) | 各要求権限の用途 |
-| [サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | サイト統合の追加または保守 |
+| Wikiページ                                                                   | 説明                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [クイックスタート](https://github.com/oovz/Tako/wiki/Quick-Start)            | インストールと初回ダウンロードのガイド                 |
+| [対応サイト](https://github.com/oovz/Tako/wiki/Supported-Sites)              | 現在のサイト統合と状態                                 |
+| [比較](https://github.com/oovz/Tako/wiki/Comparisons)                        | Takoと他の漫画ダウンローダーの比較                     |
+| [テンプレートマクロ](https://github.com/oovz/Tako/wiki/Template-Macros)      | ファイル名とパステンプレートのマクロリファレンス       |
+| [アーキテクチャ](https://github.com/oovz/Tako/wiki/Architecture)             | コアランタイム、ストレージ、メッセージング、状態フロー |
+| [権限](https://github.com/oovz/Tako/wiki/Permissions)                        | 各要求権限の用途                                       |
+| [サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | サイト統合の追加または保守                             |
 
 ## プライバシー
 
-Takoは設定、キュー状態、履歴をローカルブラウザに保存します。ネットワークリクエストは対応サイトとダウンロードに必要な関連インフラに直接送信されます。分析バックエンドなし、テレメトリなし、データ収集なし。
+Takoは設定、キュー状態、履歴をローカルブラウザに保存します。ネットワークリクエストは対応サイトとダウンロードに必要な関連インフラへ直接送信されます。開発者が運用する分析やテレメトリのサービスはありません。MangaDex を有効にした場合、必要な MangaDex@Home 報告は MangaDex に直接送信されます。
 
 完全なプライバシーポリシーは [`PRIVACY.md`](PRIVACY.md) を参照。
 
 ## 貢献
 
-貢献を歓迎します。Pull Requestを提出する前に[`貢献ガイドライン`](CONTRIBUTING.md)をお読みください。
+貢献を歓迎します。Pull
+Requestを提出する前に[`貢献ガイドライン`](CONTRIBUTING.md)をお読みください。
 
 ## ライセンス
 
