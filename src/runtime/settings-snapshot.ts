@@ -1,11 +1,42 @@
-import type { ExtensionSettings } from '@/src/storage/settings-types'
-import type { SiteOverrideRecord } from '@/src/storage/site-overrides-service'
-import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
-import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
+import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
+import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
+import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
+import {
+  canonicalizeSettingsDocument,
+  SETTINGS_LIMITS,
+} from "@/src/storage/settings-service"
 
 type SitePolicyDefaults = {
-  image?: Partial<ExtensionSettings['globalPolicy']['image']>
-  chapter?: Partial<ExtensionSettings['globalPolicy']['chapter']>
+  image?: Partial<ExtensionSettings["globalPolicy"]["image"]>
+  chapter?: Partial<ExtensionSettings["globalPolicy"]["chapter"]>
+}
+
+function canonicalizePolicy(
+  policy: Partial<ExtensionSettings["globalPolicy"]["image"]>,
+  fallback: ExtensionSettings["globalPolicy"]["image"]
+): ExtensionSettings["globalPolicy"]["image"] {
+  const rawConcurrency = policy.concurrency ?? fallback.concurrency
+  const rawDelayMs = policy.delayMs ?? fallback.delayMs
+  const concurrency = Number.isFinite(rawConcurrency)
+    ? Math.min(
+        SETTINGS_LIMITS.MAX_CONCURRENCY,
+        Math.max(SETTINGS_LIMITS.MIN_CONCURRENCY, Math.trunc(rawConcurrency))
+      )
+    : fallback.concurrency
+  const delayMs = Number.isFinite(rawDelayMs)
+    ? Math.max(SETTINGS_LIMITS.MIN_DELAY_MS, rawDelayMs)
+    : fallback.delayMs
+
+  return { concurrency, delayMs }
+}
+
+function canonicalizeRetryCount(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(
+    SETTINGS_LIMITS.MAX_RETRIES,
+    Math.max(SETTINGS_LIMITS.MIN_RETRIES, Math.trunc(value))
+  )
 }
 
 export function createTaskSettingsSnapshot(
@@ -16,39 +47,75 @@ export function createTaskSettingsSnapshot(
     siteOverride?: SiteOverrideRecord
     sitePolicyDefaults?: SitePolicyDefaults
     comicInfo?: SeriesMetadataSnapshot
-  } = {},
+  } = {}
 ): TaskSettingsSnapshot {
-  const { siteSettings = {}, siteOverride, sitePolicyDefaults, comicInfo } = options
+  const canonicalSettings = canonicalizeSettingsDocument(settings)
+  if (!canonicalSettings) {
+    throw new Error("Cannot create task snapshot from invalid settings")
+  }
+
+  const {
+    siteSettings = {},
+    siteOverride,
+    sitePolicyDefaults,
+    comicInfo,
+  } = options
+  const canonicalSiteOverride = siteOverride
+  const imagePolicy = canonicalizePolicy(
+    {
+      ...canonicalSettings.globalPolicy.image,
+      ...(sitePolicyDefaults?.image ?? {}),
+      ...(canonicalSiteOverride?.imagePolicy ?? {}),
+    },
+    canonicalSettings.globalPolicy.image
+  )
+  const chapterPolicy = canonicalizePolicy(
+    {
+      ...canonicalSettings.globalPolicy.chapter,
+      ...(sitePolicyDefaults?.chapter ?? {}),
+      delayMs:
+        canonicalSiteOverride?.chapterPolicy?.delayMs ??
+        sitePolicyDefaults?.chapter?.delayMs ??
+        canonicalSettings.globalPolicy.chapter.delayMs,
+      concurrency: 1,
+    },
+    canonicalSettings.globalPolicy.chapter
+  )
+  chapterPolicy.concurrency = 1
 
   return {
-    archiveFormat: siteOverride?.outputFormat ?? settings.downloads.defaultFormat,
-    overwriteExisting: settings.downloads.overwriteExisting,
-    pathTemplate: siteOverride?.pathTemplate ?? settings.downloads.pathTemplate,
-    fileNameTemplate: settings.downloads.fileNameTemplate || '<CHAPTER_TITLE>',
-    includeComicInfo: settings.downloads.includeComicInfo,
-    includeCoverImage: settings.downloads.includeCoverImage ?? true,
+    archiveFormat:
+      canonicalSiteOverride?.outputFormat ??
+      canonicalSettings.downloads.defaultFormat,
+    destination: canonicalSettings.downloads.destination,
+    conflictPolicy: canonicalSettings.downloads.conflictPolicy,
+    pathTemplate:
+      canonicalSiteOverride?.pathTemplate ??
+      canonicalSettings.downloads.pathTemplate,
+    fileNameTemplate:
+      canonicalSettings.downloads.fileNameTemplate || "<CHAPTER_TITLE>",
+    includeComicInfo: canonicalSettings.downloads.includeComicInfo,
+    includeCoverImage: canonicalSettings.downloads.includeCoverImage,
     siteSettings: { ...siteSettings },
     rateLimitSettings: {
-      image: {
-        ...settings.globalPolicy.image,
-        ...(sitePolicyDefaults?.image ?? {}),
-        ...(siteOverride?.imagePolicy ?? {}),
-      },
-      chapter: {
-        ...settings.globalPolicy.chapter,
-        ...(sitePolicyDefaults?.chapter ?? {}),
-        delayMs: siteOverride?.chapterPolicy?.delayMs
-          ?? sitePolicyDefaults?.chapter?.delayMs
-          ?? settings.globalPolicy.chapter.delayMs,
-        concurrency: 1,
-      },
+      image: imagePolicy,
+      chapter: chapterPolicy,
     },
     retrySettings: {
-      image: siteOverride?.retries?.image ?? settings.globalRetries.image,
-      chapter: siteOverride?.retries?.chapter ?? settings.globalRetries.chapter,
+      image: canonicalizeRetryCount(
+        canonicalSiteOverride?.retries?.image ??
+          canonicalSettings.globalRetries.image,
+        canonicalSettings.globalRetries.image
+      ),
+      chapter: canonicalizeRetryCount(
+        canonicalSiteOverride?.retries?.chapter ??
+          canonicalSettings.globalRetries.chapter,
+        canonicalSettings.globalRetries.chapter
+      ),
     },
-    normalizeImageFilenames: settings.downloads.normalizeImageFilenames,
-    imagePaddingDigits: settings.downloads.imagePaddingDigits,
+    normalizeImageFilenames:
+      canonicalSettings.downloads.normalizeImageFilenames,
+    imagePaddingDigits: canonicalSettings.downloads.imagePaddingDigits,
     comicInfo,
     siteIntegrationId,
   }

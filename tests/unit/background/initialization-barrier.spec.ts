@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from "vitest"
 
-import { createInitializationBarrier } from '@/src/runtime/initialization-barrier'
+import { createInitializationBarrier } from "@/src/runtime/initialization-barrier"
 
-describe('createInitializationBarrier', () => {
-  it('initializes at most once after success', async () => {
+describe("createInitializationBarrier", () => {
+  it("initializes at most once after success", async () => {
     let initialized = false
     const initialize = vi.fn(async () => {
       initialized = true
@@ -20,8 +20,8 @@ describe('createInitializationBarrier', () => {
     expect(initialize).toHaveBeenCalledTimes(1)
   })
 
-  it('does not retry initialization after a failure on the next call', async () => {
-    const fatalError = new Error('storage corruption')
+  it("does not retry initialization after a failure on the next call", async () => {
+    const fatalError = new Error("storage corruption")
     let initialized = false
     const initialize = vi.fn(async () => {
       if (initialize.mock.calls.length === 1) {
@@ -42,4 +42,3 @@ describe('createInitializationBarrier', () => {
     expect(initialize).toHaveBeenCalledTimes(1)
   })
 })
-

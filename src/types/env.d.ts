@@ -1,1 +1,1 @@
-// Intentionally empty: the project currently relies on Vite/WXT's default ImportMetaEnv typings.
+declare const __TAKO_E2E_STATE_SEED__: boolean

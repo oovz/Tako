@@ -1,12 +1,15 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 
-let messages: Record<string, { message: string; placeholders?: Record<string, { content: string }> }> | null = null
+let messages: Record<
+  string,
+  { message: string; placeholders?: Record<string, { content: string }> }
+> | null = null
 
 function loadMessages() {
   if (messages) return messages
-  const filePath = resolve(__dirname, '../../public/_locales/en/messages.json')
-  const content = readFileSync(filePath, 'utf-8')
+  const filePath = resolve(__dirname, "../../public/_locales/en/messages.json")
+  const content = readFileSync(filePath, "utf-8")
   messages = JSON.parse(content)
   return messages
 }
@@ -14,20 +17,23 @@ function loadMessages() {
 function substitutePlaceholders(
   template: string,
   substitutions: string[],
-  placeholders?: Record<string, { content: string }>,
+  placeholders?: Record<string, { content: string }>
 ): string {
   if (!placeholders) return template
   let result = template
   for (const [name, def] of Object.entries(placeholders)) {
     const token = `$${name.toUpperCase()}$`
-    const index = parseInt(def.content.replace('$', ''), 10) - 1
-    const value = substitutions[index] ?? ''
+    const index = parseInt(def.content.replace("$", ""), 10) - 1
+    const value = substitutions[index] ?? ""
     result = result.replaceAll(token, value)
   }
   return result
 }
 
-function getMessageMock(key: string, substitutions?: string | string[]): string {
+function getMessageMock(
+  key: string,
+  substitutions?: string | string[]
+): string {
   const msgs = loadMessages()
   const entry = msgs![key]
   if (!entry) return key
@@ -37,14 +43,16 @@ function getMessageMock(key: string, substitutions?: string | string[]): string 
 }
 
 function getUILanguageMock(): string {
-  return 'en'
+  return "en"
 }
 
 if (!globalThis.chrome) {
   ;(globalThis as Record<string, unknown>).chrome = {}
 }
 
-const chromeMock = (globalThis as unknown as Record<string, { i18n?: Record<string, unknown> }>).chrome
+const chromeMock = (
+  globalThis as unknown as Record<string, { i18n?: Record<string, unknown> }>
+).chrome
 if (!chromeMock.i18n) {
   chromeMock.i18n = {
     getMessage: getMessageMock,

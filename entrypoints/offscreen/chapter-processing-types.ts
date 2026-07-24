@@ -1,21 +1,25 @@
-import type { Chapter } from '@/src/types/chapter'
-import type { TaskSettingsSnapshot } from '@/src/types/state-snapshots'
-import type { SeriesMetadataInput } from './helpers'
+import type { Chapter } from "@/src/types/chapter"
+import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+import type { SeriesMetadataInput } from "./helpers"
 
-export type ChapterOutcomeStatus = 'completed' | 'partial_success' | 'failed'
+export type ChapterOutcomeStatus = "completed" | "partial_success" | "failed"
 
-export type ErrorCategory = 'network' | 'download' | 'other'
+export type ErrorCategory = DownloadErrorCategory
 
 export type ChapterOutcome = {
   status: ChapterOutcomeStatus
   errorMessage?: string
   errorCategory?: ErrorCategory
   imagesFailed?: number
+  outputsRequested?: number
+  outputsFailedBeforeHandoff?: number
+  outputsCommitted?: number
 }
 
 export type ArchiveNormalizationSettings = {
   normalizeImageFilenames: boolean
-  imagePaddingDigits: 'auto' | 2 | 3 | 4 | 5
+  imagePaddingDigits: "auto" | 2 | 3 | 4 | 5
 }
 
 export type WorkerZipResult = {
@@ -29,7 +33,7 @@ export type WorkerZipResult = {
 }
 
 export type WorkerZipProgress = {
-  type: 'progress'
+  type: "progress"
   bytes: number
   chunks: number
   final: boolean
@@ -37,33 +41,39 @@ export type WorkerZipProgress = {
 
 export type ProcessChapterStreamingOptions = {
   taskId: string
+  jobId: string
+  attempt: number
   chapter: Chapter
   seriesTitle: string
-  format: 'cbz' | 'zip' | 'none'
-  includeComicInfo: boolean | undefined
-  downloadMode: 'browser' | 'custom'
-  overwriteExisting: boolean
-  comicInfoVersion: '2.0'
-  onProgress: (pct: number, label?: string, imageProgress?: { current: number; total: number }) => Promise<void>
+  format: "cbz" | "zip" | "none"
+  includeComicInfo: boolean
+  downloadMode: "browser" | "custom"
+  comicInfoVersion: "2.0"
+  onProgress: (
+    pct: number,
+    label?: string,
+    imageProgress?: { current: number; total: number }
+  ) => Promise<void>
   onArchiveProgress: (pct: number, label?: string) => Promise<void>
   abortSignal?: AbortSignal
   normalizeImageFilenames?: boolean
-  imagePaddingDigits?: 'auto' | 2 | 3 | 4 | 5
+  imagePaddingDigits?: "auto" | 2 | 3 | 4 | 5
   coverImage?: { data: ArrayBuffer; mimeType: string }
   onImageDownloaded?: () => void
   integrationContext?: Record<string, unknown>
   seriesMetadata?: SeriesMetadataInput
-  settingsSnapshot?: ProcessDownloadChapterSettingsSnapshot
+  settingsSnapshot: ProcessDownloadChapterSettingsSnapshot
 }
 
-export type ProcessDownloadChapterSettingsSnapshot = Partial<{
-  archiveFormat: 'cbz' | 'zip' | 'none'
-  overwriteExisting: boolean
-  includeComicInfo: boolean
-  includeCoverImage: boolean
-  rateLimitSettings: TaskSettingsSnapshot['rateLimitSettings']
-  retrySettings: TaskSettingsSnapshot['retrySettings']
-}>
+export type ProcessDownloadChapterSettingsSnapshot = Pick<
+  TaskSettingsSnapshot,
+  | "archiveFormat"
+  | "conflictPolicy"
+  | "includeComicInfo"
+  | "includeCoverImage"
+  | "rateLimitSettings"
+  | "retrySettings"
+>
 
 export type ChapterDownloadImageResult = {
   filename: string
@@ -77,31 +87,42 @@ export type ChapterDownloadImageFn = (
     signal?: AbortSignal
     context?: Record<string, unknown>
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-  },
+  }
 ) => Promise<ChapterDownloadImageResult>
 
-export type BrowserBlobDownloadResponse = {
-  success: boolean
-  error?: string
-} | undefined
+export type BrowserBlobDownloadResponse =
+  | {
+      success: boolean
+      error?: string
+    }
+  | undefined
 
 export interface ChapterProcessingRuntime {
   withImageRetries: <T>(
     fn: () => Promise<T>,
-    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> },
+    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> }
   ) => Promise<T>
   resolveWritableDownloadRoot: (input: {
     taskId: string
     chapter: Chapter
     totalImages: number
-  }) => Promise<FileSystemDirectoryHandle | null>
-  emitFsaFallbackProgress: (taskId: string, chapter: Chapter, totalImages: number) => Promise<void>
+  }) => Promise<FileSystemDirectoryHandle>
   requestBrowserBlobDownload: (input: {
+    jobId: string
+    attempt: number
     taskId: string
     chapterId: string
     blob: Blob
     filename: string
+    outputId: string
+    outputIndex: number
+    outputCount: number
+    outputKind: "archive" | "image"
+    signal?: AbortSignal
   }) => Promise<BrowserBlobDownloadResponse>
-  retryWithBrowserDownloads: (opts: ProcessChapterStreamingOptions) => Promise<ChapterOutcome>
-  getMemoryStats: () => { usedMB: number; totalMB: number; limitMB: number } | null
+  getMemoryStats: () => {
+    usedMB: number
+    totalMB: number
+    limitMB: number
+  } | null
 }

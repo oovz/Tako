@@ -1,24 +1,35 @@
 export const SESSION_STORAGE_KEYS = {
-  globalState: 'globalState',
-  queueView: 'queueView',
-  activeTabContext: 'activeTabContext',
-  activeTaskProgress: 'activeTaskProgress',
-  lastOffscreenActivity: 'lastOffscreenActivity',
-  externalTabInitPrefix: 'externalTabInit_',
-  pendingDownloads: 'pendingDownloads',
-  initFailed: 'initFailed',
-  initError: 'error',
-  optionsActionItems: 'optionsActionItems',
+  globalState: "globalState",
+  queueView: "queueView",
+  historyView: "historyView",
+  activeTabContext: "activeTabContext",
+  activeTabContextByWindow: "activeTabContextByWindow",
+  activeTaskProgress: "activeTaskProgress",
+  activeTaskProgressRevision: "activeTaskProgressRevision",
+  activeTaskProgressGeneration: "activeTaskProgressGeneration",
+  externalTabInitPrefix: "externalTabInit_",
+  pendingDownloads: "pendingDownloads",
+  initFailed: "initFailed",
+  initError: "error",
+  optionsActionItems: "optionsActionItems",
 } as const
 
 export const SETTINGS_STORAGE_KEYS = {
-  global: 'settings:global',
+  global: "settings:global",
 } as const
 
 export const LOCAL_STORAGE_KEYS = {
-  downloadQueue: 'downloadQueue',
-  fsaError: 'fsaError',
+  downloadQueue: "downloadQueue",
+  destinationIssues: "destinationIssues",
   settings: SETTINGS_STORAGE_KEYS.global,
+  downloadedChapters: "downloadedChapters",
+  seriesDownloadHistory: "seriesDownloadHistory",
+  persistentErrors: "persistent_errors",
+  activeDispatchLease: "activeDispatchLease",
+  pendingOutputs: "pendingOutputs",
+  pendingUndoActions: "pendingUndoActions",
+  progressTimingEstimates: "progressTimingEstimates",
+  commandResults: "commandResults",
 } as const
 
 export const STORAGE_KEYS = {

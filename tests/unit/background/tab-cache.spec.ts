@@ -1,16 +1,35 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest"
 
-import { createTabContextCache } from '@/entrypoints/background/tab-cache'
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
+import { createTabContextCache } from "@/entrypoints/background/tab-cache"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { setUserSiteIntegrationEnablement } from "@/src/site-integrations/registry"
 
-describe('tab context cache', () => {
+describe("tab context cache", () => {
   const sessionStore: Record<string, unknown> = {}
-  let writeSession: ReturnType<typeof vi.fn>
-  let readSession: ReturnType<typeof vi.fn>
-  let removeSession: ReturnType<typeof vi.fn>
-  let queryActiveTabs: ReturnType<typeof vi.fn>
+  let writeSession: Mock<(values: Record<string, unknown>) => Promise<void>>
+  let readSession: Mock<(keys: string[]) => Promise<Record<string, unknown>>>
+  let removeSession: Mock<(keys: string | string[]) => Promise<void>>
+  let queryActiveTabs: Mock<
+    () => Promise<Array<{ id?: number; windowId?: number }>>
+  >
+  let getTab: Mock<
+    (
+      tabId: number
+    ) => Promise<
+      { id: number; url: string; windowId: number; active: boolean } | undefined
+    >
+  >
 
   beforeEach(() => {
+    setUserSiteIntegrationEnablement({ mangadex: true })
     Object.keys(sessionStore).forEach((key) => delete sessionStore[key])
 
     writeSession = vi.fn(async (values: Record<string, unknown>) => {
@@ -34,20 +53,36 @@ describe('tab context cache', () => {
       })
     })
 
-    queryActiveTabs = vi.fn(async () => [{ id: 11 }])
+    queryActiveTabs = vi.fn(async () => [{ id: 11, windowId: 1 }])
+    getTab = vi.fn(async (tabId: number) => ({
+      id: tabId,
+      url: `https://mangadex.org/title/series-${tabId}`,
+      windowId: 1,
+      active: true,
+    }))
   })
 
-  it('writes activeTabContext from tab session state on activation', async () => {
+  afterEach(() => {
+    setUserSiteIntegrationEnablement({})
+  })
+
+  it("writes activeTabContext from tab session state on activation", async () => {
     sessionStore.tab_11 = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'abc',
-      seriesTitle: 'Series',
+      siteIntegrationId: "mangadex",
+      mangaId: "abc",
+      seriesTitle: "Series",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
     }
 
-    const cache = createTabContextCache({ readSession, removeSession, writeSession, queryActiveTabs })
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
 
     await cache.handleTabActivated(11)
 
@@ -56,23 +91,31 @@ describe('tab context cache', () => {
     })
   })
 
-  it('uses tab-specific error when tab state is unavailable', async () => {
-    sessionStore.seriesContextError_12 = 'Integration parse error'
+  it("uses tab-specific error when tab state is unavailable", async () => {
+    sessionStore.seriesContextError_12 = "Integration parse error"
 
-    const cache = createTabContextCache({ readSession, removeSession, writeSession, queryActiveTabs })
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
 
     await cache.handleTabActivated(12)
 
     expect(writeSession).toHaveBeenCalledWith({
-      [SESSION_STORAGE_KEYS.activeTabContext]: { error: 'Integration parse error' },
+      [SESSION_STORAGE_KEYS.activeTabContext]: {
+        error: "Integration parse error",
+      },
     })
   })
 
-  it('clears activeTabContext on extension page activation', async () => {
+  it("clears activeTabContext on extension page activation", async () => {
     sessionStore[SESSION_STORAGE_KEYS.activeTabContext] = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'sticky-series',
-      seriesTitle: 'Sticky Series',
+      siteIntegrationId: "mangadex",
+      mangaId: "sticky-series",
+      seriesTitle: "Sticky Series",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
@@ -80,7 +123,9 @@ describe('tab context cache', () => {
 
     const getTab = vi.fn(async () => ({
       id: 50,
-      url: 'chrome-extension://test/sidepanel.html',
+      url: "chrome-extension://test/sidepanel.html",
+      windowId: 1,
+      active: true,
     }))
 
     const cache = createTabContextCache({
@@ -98,11 +143,11 @@ describe('tab context cache', () => {
     })
   })
 
-  it('clears activeTabContext when an extension page is still pending behind about:blank', async () => {
+  it("clears activeTabContext when an extension page is still pending behind about:blank", async () => {
     sessionStore[SESSION_STORAGE_KEYS.activeTabContext] = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'sticky-series',
-      seriesTitle: 'Sticky Series',
+      siteIntegrationId: "mangadex",
+      mangaId: "sticky-series",
+      seriesTitle: "Sticky Series",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
@@ -110,8 +155,10 @@ describe('tab context cache', () => {
 
     const getTab = vi.fn(async () => ({
       id: 51,
-      url: 'about:blank',
-      pendingUrl: 'chrome-extension://test/sidepanel.html',
+      url: "about:blank",
+      pendingUrl: "chrome-extension://test/sidepanel.html",
+      windowId: 1,
+      active: true,
     }))
 
     const cache = createTabContextCache({
@@ -129,11 +176,11 @@ describe('tab context cache', () => {
     })
   })
 
-  it('does not clobber previously projected activeTabContext during a transient about:blank activation before pendingUrl resolves', async () => {
+  it("does not clobber previously projected activeTabContext during a transient about:blank activation before pendingUrl resolves", async () => {
     sessionStore[SESSION_STORAGE_KEYS.activeTabContext] = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'sticky-series',
-      seriesTitle: 'Sticky Series',
+      siteIntegrationId: "mangadex",
+      mangaId: "sticky-series",
+      seriesTitle: "Sticky Series",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
@@ -141,8 +188,10 @@ describe('tab context cache', () => {
 
     const getTab = vi.fn(async () => ({
       id: 52,
-      url: 'about:blank',
+      url: "about:blank",
       pendingUrl: undefined,
+      windowId: 1,
+      active: true,
     }))
 
     const cache = createTabContextCache({
@@ -158,11 +207,11 @@ describe('tab context cache', () => {
     expect(writeSession).not.toHaveBeenCalled()
   })
 
-  it('does not clobber previously projected activeTabContext when the activated tab URL is not resolved yet', async () => {
+  it("does not clobber previously projected activeTabContext when the activated tab URL is not resolved yet", async () => {
     sessionStore[SESSION_STORAGE_KEYS.activeTabContext] = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'sticky-series',
-      seriesTitle: 'Sticky Series',
+      siteIntegrationId: "mangadex",
+      mangaId: "sticky-series",
+      seriesTitle: "Sticky Series",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
@@ -172,6 +221,8 @@ describe('tab context cache', () => {
       id: 51,
       url: undefined,
       pendingUrl: undefined,
+      windowId: 1,
+      active: true,
     }))
 
     const cache = createTabContextCache({
@@ -187,10 +238,12 @@ describe('tab context cache', () => {
     expect(writeSession).not.toHaveBeenCalled()
   })
 
-  it('writes loading activeTabContext when the active tab is supported but no cached context exists', async () => {
+  it("writes loading activeTabContext when the active tab is supported but no cached context exists", async () => {
     const getTab = vi.fn(async () => ({
       id: 14,
-      url: 'https://mangadex.org/title/series-14',
+      url: "https://mangadex.org/title/series-14",
+      windowId: 1,
+      active: true,
     }))
 
     const cache = createTabContextCache({
@@ -208,11 +261,11 @@ describe('tab context cache', () => {
     })
   })
 
-  it('clears stale tab state on URL update and syncs active tab context to loading', async () => {
+  it("invalidates stale context and projects loading across a supported URL update", async () => {
     sessionStore.tab_11 = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'before',
-      seriesTitle: 'Before',
+      siteIntegrationId: "mangadex",
+      mangaId: "before",
+      seriesTitle: "Before",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
@@ -220,53 +273,166 @@ describe('tab context cache', () => {
 
     const getTab = vi.fn(async () => ({
       id: 11,
-      url: 'https://mangadex.org/title/after',
+      url: "https://mangadex.org/title/after",
+      windowId: 1,
+      active: true,
     }))
 
-    const cache = createTabContextCache({ readSession, removeSession, writeSession, queryActiveTabs, getTab })
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
 
     await cache.handleTabActivated(11)
 
-    sessionStore.tab_11 = {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'after',
-      seriesTitle: 'After',
-      chapters: [],
-      volumes: [],
-      lastUpdated: Date.now(),
-    }
+    await cache.handleTabUpdated(11, {
+      url: "https://mangadex.org/title/after",
+    })
 
-    await cache.handleTabUpdated(11, { url: 'https://mangadex.org/title/after' })
-
-    const lastCall = writeSession.mock.calls[writeSession.mock.calls.length - 1]?.[0]
     expect(removeSession).toHaveBeenCalledWith([
-      'tab_11',
-      'seriesContextError_11',
-      'externalTabInit_11',
+      "tab_11",
+      "seriesContextError_11",
+      `${SESSION_STORAGE_KEYS.externalTabInitPrefix}11`,
     ])
     expect(sessionStore.tab_11).toBeUndefined()
-    expect(lastCall).toEqual({ [SESSION_STORAGE_KEYS.activeTabContext]: { loading: true } })
+    expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
+      loading: true,
+    })
   })
 
-  it('transfers cached context on tab replacement', async () => {
-    const cache = createTabContextCache({ readSession, removeSession, writeSession, queryActiveTabs })
+  it("transfers cached context on tab replacement", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
     cache.setCachedContext(21, {
-      siteIntegrationId: 'mangadex',
-      mangaId: 'series-x',
-      seriesTitle: 'X',
+      siteIntegrationId: "mangadex",
+      mangaId: "series-x",
+      seriesTitle: "X",
       chapters: [],
       volumes: [],
       lastUpdated: Date.now(),
     })
 
-    queryActiveTabs.mockResolvedValueOnce([{ id: 22 }])
+    queryActiveTabs.mockResolvedValueOnce([{ id: 22, windowId: 1 }])
 
     await cache.handleTabReplaced(22, 21)
 
     expect(cache.getCachedContext(21)).toBeUndefined()
     const transferred = cache.getCachedContext(22)
     expect(transferred).toBeDefined()
-    expect(transferred && 'mangaId' in transferred ? transferred.mangaId : undefined).toBe('series-x')
+    expect(
+      transferred && "mangaId" in transferred ? transferred.mangaId : undefined
+    ).toBe("series-x")
+  })
+
+  it("allocates unique serialized revisions and rejects an older result", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+
+    const [first, second] = await Promise.all([
+      cache.projectLoadingForTab(11, 1),
+      cache.projectLoadingForTab(11, 1),
+    ])
+
+    expect(first).toEqual({ requestId: 1 })
+    expect(second).toEqual({ requestId: 2 })
+    expect(await cache.isRequestIdCurrent(1, 1)).toBe(false)
+    expect(await cache.isRequestIdCurrent(1, 2)).toBe(true)
+
+    await expect(
+      cache.syncActiveTabContext(
+        11,
+        { error: "stale result" },
+        {
+          requestId: 1,
+          windowId: 1,
+        }
+      )
+    ).resolves.toBe(false)
+    await expect(
+      cache.syncActiveTabContext(
+        11,
+        { error: "current result" },
+        {
+          requestId: 2,
+          windowId: 1,
+        }
+      )
+    ).resolves.toBe(true)
+
+    expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
+      error: "current result",
+    })
+  })
+
+  it("supersedes an in-flight resolver when an external context arrives", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+
+    const loading = await cache.projectLoadingForTab(11, 1)
+    expect(loading).toEqual({ requestId: 1 })
+
+    await expect(
+      cache.syncActiveTabContext(
+        11,
+        { error: "external context" },
+        { windowId: 1, supersedeInFlight: true }
+      )
+    ).resolves.toBe(true)
+
+    expect(await cache.isRequestIdCurrent(1, 1)).toBe(false)
+    expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
+      error: "external context",
+    })
+
+    await expect(
+      cache.syncActiveTabContext(
+        11,
+        { error: "stale resolver result" },
+        { requestId: 1, windowId: 1 }
+      )
+    ).resolves.toBe(false)
+    expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
+      error: "external context",
+    })
+  })
+
+  it("preserves concurrent projections for different windows", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+
+    await Promise.all([
+      cache.projectLoadingForTab(11, 1),
+      cache.projectLoadingForTab(22, 2),
+    ])
+
+    expect(
+      sessionStore[SESSION_STORAGE_KEYS.activeTabContextByWindow]
+    ).toMatchObject({
+      1: { windowId: 1, activeTabId: 11, revision: 1 },
+      2: { windowId: 2, activeTabId: 22, revision: 1 },
+    })
   })
 })
-

@@ -1,38 +1,7 @@
-import type { DownloadTaskState, QueueTaskSummary } from '@/src/types/queue-state'
-
-function classifyFailureCategory(errorMessage: string | undefined): QueueTaskSummary['failureCategory'] {
-  if (!errorMessage) return undefined
-
-  const msg = errorMessage.toLowerCase()
-
-  if (
-    msg.includes('network') ||
-    msg.includes('timeout') ||
-    msg.includes('dns') ||
-    msg.includes('unreachable') ||
-    msg.includes('offline') ||
-    msg.includes('connection') ||
-    msg.includes('econn') ||
-    msg.includes('enet')
-  ) {
-    return 'network'
-  }
-
-  if (
-    msg.includes('chapter') ||
-    msg.includes('download') ||
-    msg.includes('file') ||
-    msg.includes('archive') ||
-    msg.includes('zip') ||
-    msg.includes('cbz') ||
-    msg.includes('image') ||
-    msg.includes('page')
-  ) {
-    return 'download'
-  }
-
-  return undefined
-}
+import type {
+  DownloadTaskState,
+  QueueTaskSummary,
+} from "@/src/types/queue-state"
 
 export function composeSeriesKey(siteId: string, seriesId: string): string {
   return `${siteId}#${seriesId}`
@@ -44,15 +13,22 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
   let unsuccessfulChapters = 0
 
   for (const chapter of task.chapters) {
-    if (chapter.status === 'completed') {
+    if (chapter.status === "completed") {
       completedChapters += 1
-    } else if (chapter.status === 'failed' || chapter.status === 'partial_success') {
+    } else if (
+      chapter.status === "failed" ||
+      chapter.status === "partial_success"
+    ) {
       unsuccessfulChapters += 1
     }
   }
 
-  const failureReason = task.errorMessage
-  const failureCategory = task.errorCategory ?? classifyFailureCategory(failureReason)
+  const failureCategory =
+    task.errorCategory ??
+    task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
+    (task.status === "failed" || task.status === "partial_success"
+      ? "unknown"
+      : undefined)
 
   return {
     id: task.id,
@@ -70,7 +46,6 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
       created: task.created,
       completed: task.completed,
     },
-    failureReason,
     failureCategory,
     isRetried: task.isRetried ?? false,
     isRetryTask: task.isRetryTask ?? false,

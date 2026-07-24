@@ -10,19 +10,19 @@
  *   1. The offscreen init never touches chrome.storage (it is absent).
  *   2. It sends GET_SITE_INTEGRATION_ENABLEMENT via chrome.runtime.sendMessage.
  *   3. User-disabled integrations from the background response are honored.
- *   4. A failed/non-success background response falls back to defaults
- *      (empty overrides) without throwing.
+ *   4. A failed/non-success background response fails initialization and can
+ *      be retried instead of silently enabling default integrations.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const setUserSiteIntegrationEnablementMock = vi.fn()
 
-vi.mock('@/src/site-integrations/registry', () => ({
+vi.mock("@/src/site-integrations/registry", () => ({
   setUserSiteIntegrationEnablement: setUserSiteIntegrationEnablementMock,
   SITE_INTEGRATION_MANIFESTS: [],
 }))
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-describe('offscreen site integration enablement loader', () => {
+describe("offscreen site integration enablement loader", () => {
   const runtimeSendMessage = vi.fn()
   // Storage spies are sentinels only. The offscreen loader must not call them.
   const storageLocalGet = vi.fn()
@@ -41,7 +41,7 @@ describe('offscreen site integration enablement loader', () => {
     vi.resetModules()
     vi.clearAllMocks()
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       // Only chrome.runtime is available in the offscreen document.
       runtime: {
         sendMessage: runtimeSendMessage,
@@ -61,21 +61,22 @@ describe('offscreen site integration enablement loader', () => {
     vi.unstubAllGlobals()
   })
 
-  it('routes enablement read through chrome.runtime.sendMessage and honors user-disabled integrations', async () => {
+  it("routes enablement read through chrome.runtime.sendMessage and honors user-disabled integrations", async () => {
     runtimeSendMessage.mockResolvedValueOnce({
       success: true,
-      enablement: { mangadex: false, 'pixiv-comic': true },
+      enablement: { mangadex: false, "pixiv-comic": true },
     })
 
-    const { initializeOffscreenSiteIntegrations } = await import(
-      '@/src/runtime/site-integration-offscreen-initialization'
-    )
+    const { initializeOffscreenSiteIntegrations } =
+      await import("@/src/runtime/site-integration-offscreen-initialization")
 
     await initializeOffscreenSiteIntegrations()
 
     // Must have asked the background for the enablement map.
     expect(runtimeSendMessage).toHaveBeenCalledTimes(1)
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'GET_SITE_INTEGRATION_ENABLEMENT' })
+    expect(runtimeSendMessage).toHaveBeenCalledWith({
+      type: "GET_SITE_INTEGRATION_ENABLEMENT",
+    })
 
     // Must NOT have touched chrome.storage.local at all.
     expect(storageLocalGet).not.toHaveBeenCalled()
@@ -84,36 +85,54 @@ describe('offscreen site integration enablement loader', () => {
     // User-disabled integrations must be propagated (not silently defaulted).
     expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({
       mangadex: false,
-      'pixiv-comic': true,
+      "pixiv-comic": true,
     })
   })
 
-  it('falls back to empty overrides (defaults) when background returns success: false', async () => {
-    runtimeSendMessage.mockResolvedValueOnce({ success: false, error: 'storage read failed' })
+  it("fails closed when the background rejects the enablement read", async () => {
+    runtimeSendMessage.mockResolvedValueOnce({
+      success: false,
+      error: "storage read failed",
+    })
 
-    const { initializeOffscreenSiteIntegrations } = await import(
-      '@/src/runtime/site-integration-offscreen-initialization'
+    const { initializeOffscreenSiteIntegrations } =
+      await import("@/src/runtime/site-integration-offscreen-initialization")
+
+    await expect(initializeOffscreenSiteIntegrations()).rejects.toThrow(
+      "Failed to load site integration enablement: storage read failed"
     )
 
-    await initializeOffscreenSiteIntegrations()
-
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'GET_SITE_INTEGRATION_ENABLEMENT' })
-    expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({})
+    expect(runtimeSendMessage).toHaveBeenCalledWith({
+      type: "GET_SITE_INTEGRATION_ENABLEMENT",
+    })
+    expect(setUserSiteIntegrationEnablementMock).not.toHaveBeenCalled()
     expect(storageLocalGet).not.toHaveBeenCalled()
   })
 
-  it('falls back to empty overrides (defaults) when sendMessage rejects', async () => {
-    runtimeSendMessage.mockRejectedValueOnce(new Error('extension context invalidated'))
-
-    const { initializeOffscreenSiteIntegrations } = await import(
-      '@/src/runtime/site-integration-offscreen-initialization'
+  it("allows initialization to retry after a transport failure", async () => {
+    runtimeSendMessage.mockRejectedValueOnce(
+      new Error("extension context invalidated")
     )
+    runtimeSendMessage.mockResolvedValueOnce({
+      success: true,
+      enablement: { mangadex: false },
+    })
 
-    // Must not throw — graceful degradation.
+    const { initializeOffscreenSiteIntegrations } =
+      await import("@/src/runtime/site-integration-offscreen-initialization")
+
+    await expect(initializeOffscreenSiteIntegrations()).rejects.toThrow(
+      "extension context invalidated"
+    )
     await expect(initializeOffscreenSiteIntegrations()).resolves.toBeUndefined()
 
-    expect(runtimeSendMessage).toHaveBeenCalledWith({ type: 'GET_SITE_INTEGRATION_ENABLEMENT' })
-    expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({})
+    expect(runtimeSendMessage).toHaveBeenCalledTimes(2)
+    expect(runtimeSendMessage).toHaveBeenLastCalledWith({
+      type: "GET_SITE_INTEGRATION_ENABLEMENT",
+    })
+    expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({
+      mangadex: false,
+    })
     expect(storageLocalGet).not.toHaveBeenCalled()
   })
 })

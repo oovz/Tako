@@ -1,13 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { normalizeActiveTaskProgress } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { NotificationService } from '@/entrypoints/background/notification-service'
-import { OffscreenMessageSchema } from '@/src/runtime/message-schemas'
-import type { DownloadTaskState } from '@/src/types/queue-state'
+import { normalizeActiveTaskProgress } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { NotificationService } from "@/entrypoints/background/notification-service"
+import { OffscreenMessageSchema } from "@/src/runtime/message-schemas"
+import type { DownloadTaskState } from "@/src/types/queue-state"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -16,33 +16,37 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/site-integrations/manifest', () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => 'MangaDex'),
+vi.mock("@/src/site-integrations/manifest", () => ({
+  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
 }))
 
-function makeTask(overrides: Partial<DownloadTaskState> = {}): DownloadTaskState {
+function makeTask(
+  overrides: Partial<DownloadTaskState> = {}
+): DownloadTaskState {
   const now = Date.now()
-  const siteIntegrationId = overrides.siteIntegrationId ?? 'mangadex'
+  const siteIntegrationId = overrides.siteIntegrationId ?? "mangadex"
   return {
-    id: overrides.id ?? 'task-1',
+    id: overrides.id ?? "task-1",
     siteIntegrationId,
-    mangaId: overrides.mangaId ?? 'mangadex:series-1',
-    seriesTitle: overrides.seriesTitle ?? 'Series 1',
+    mangaId: overrides.mangaId ?? "mangadex:series-1",
+    seriesTitle: overrides.seriesTitle ?? "Series 1",
     chapters: overrides.chapters ?? [],
-    status: overrides.status ?? 'completed',
+    status: overrides.status ?? "completed",
     created: overrides.created ?? now,
     completed: overrides.completed ?? now,
-    settingsSnapshot: overrides.settingsSnapshot ?? createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
+    settingsSnapshot:
+      overrides.settingsSnapshot ??
+      createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
   }
 }
 
-describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
+describe("OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)", () => {
   const notificationsCreate = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       runtime: {
         getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
       },
@@ -58,17 +62,27 @@ describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
     })
   })
 
-  it('normalizes and aggregates concurrent chapter snapshots for active progress display', () => {
+  it("normalizes and aggregates concurrent chapter snapshots for active progress display", () => {
     const normalized = normalizeActiveTaskProgress({
-      taskId: 'task-1',
+      taskId: "task-1",
       imagesProcessed: 1,
       totalImages: 4,
       activeChapterCount: 1,
       activeChapters: [
-        { chapterId: 'ch-1', chapterTitle: 'A', imagesProcessed: 2, totalImages: 8 },
-        { chapterId: 'ch-2', chapterTitle: 'B', imagesProcessed: 3, totalImages: 12 },
+        {
+          chapterId: "ch-1",
+          chapterTitle: "A",
+          imagesProcessed: 2,
+          totalImages: 8,
+        },
+        {
+          chapterId: "ch-2",
+          chapterTitle: "B",
+          imagesProcessed: 3,
+          totalImages: 12,
+        },
       ],
-      status: 'downloading',
+      status: "downloading",
     })
 
     expect(normalized).toEqual(
@@ -76,33 +90,33 @@ describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
         activeChapterCount: 2,
         imagesProcessed: 5,
         totalImages: 20,
-      }),
+      })
     )
   })
 
-  it('rejects non-canonical waiting status in progress message schema', () => {
+  it("rejects non-canonical waiting status in progress message schema", () => {
     const parsed = OffscreenMessageSchema.safeParse({
-      type: 'OFFSCREEN_DOWNLOAD_PROGRESS',
+      type: "OFFSCREEN_DOWNLOAD_PROGRESS",
       payload: {
-        taskId: 'task-1',
-        chapterId: 'chapter-1',
-        status: 'waiting',
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        status: "waiting",
       },
     })
 
     expect(parsed.success).toBe(false)
   })
 
-  it('dispatches one completion notification call per completion event', () => {
+  it("dispatches one completion notification call per completion event", () => {
     const service = new NotificationService()
     const task = makeTask({
       chapters: [
         {
-          id: 'ch-1',
-          url: 'https://example.com/ch-1',
-          title: 'Chapter 1',
+          id: "ch-1",
+          url: "https://example.com/ch-1",
+          title: "Chapter 1",
           index: 1,
-          status: 'completed',
+          status: "completed",
           lastUpdated: Date.now(),
         },
       ],
@@ -118,4 +132,3 @@ describe('OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)', () => {
     expect(notificationsCreate).toHaveBeenCalledTimes(1)
   })
 })
-

@@ -1,4 +1,4 @@
 export interface ErrorResponse {
-  success: false;
-  error: string;
+  success: false
+  error: string
 }

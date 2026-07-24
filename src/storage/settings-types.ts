@@ -1,52 +1,66 @@
 // Shared types for settings to avoid circular imports
-import type { RateScopePolicy } from '@/src/types/rate-policy'
-import type { ArchiveFormat, DownloadMode, ImagePaddingDigits, LogLevel } from '@/src/shared/download-contract'
+import type { RateScopePolicy } from "@/src/types/rate-policy"
+import type {
+  ArchiveFormat,
+  ConflictPolicy,
+  DownloadDestination,
+  ImagePaddingDigits,
+  LogLevel,
+} from "@/src/shared/download-contract"
+import type { UiLanguagePreference } from "@/src/shared/ui-language"
+import type { MotionPreference } from "@/src/shared/motion-preference"
 
-export interface RetryCounts { image: number; chapter: number }
+export interface RetryCounts {
+  image: number
+  chapter: number
+}
 
 export interface AdvancedSettings {
   /** Log verbosity level. 'debug' = most verbose, 'error' = least verbose */
-  logLevel: LogLevel;
-  storageCleanupDays: number;
+  logLevel: LogLevel
+  storageCleanupDays: number
 }
 
 // All download-related settings (both engine and behavior)
 export interface DownloadSettings {
   // Engine settings
-  downloadMode: DownloadMode;
-  customDirectoryEnabled: boolean;
-  customDirectoryHandleId: string | null;
+  destination: DownloadDestination
+  customDirectoryHandleId: string | null
   /** Directory path template for downloads. */
-  pathTemplate: string;
+  pathTemplate: string
   // Format and behavior settings
-  defaultFormat: ArchiveFormat;
+  defaultFormat: ArchiveFormat
   /** Optional template for the final chapter filename (without extension when using archives; used as chapter directory name when format is 'none').
    * Supported macros are the same as pathTemplate plus numeric pads like <CHAPTER_NUMBER_PAD2>, <CHAPTER_NUMBER_PAD3>, <VOLUME_NUMBER_PAD2>.
    * Defaults to <CHAPTER_TITLE>.
    */
-  fileNameTemplate?: string;
-  overwriteExisting: boolean;
+  fileNameTemplate?: string
+  /** Shared collision behavior for Chrome Downloads and File System Access. */
+  conflictPolicy: ConflictPolicy
   /** When true, chrome.downloads.download runs without Chrome's file chooser. */
-  suppressSaveAsDialog: boolean;
-  includeComicInfo: boolean; // whether to embed ComicInfo.xml in archives
-  includeCoverImage: boolean; // whether to include series cover image in archives
+  suppressSaveAsDialog: boolean
+  includeComicInfo: boolean // whether to embed ComicInfo.xml in archives
+  includeCoverImage: boolean // whether to include series cover image in archives
   // Image filename normalization
-  normalizeImageFilenames: boolean; // whether to rename images to numeric indices (001.jpg, 002.jpg, etc.)
-  imagePaddingDigits: ImagePaddingDigits; // zero-padding for image filenames ('auto' = based on total count)
+  normalizeImageFilenames: boolean // whether to rename images to numeric indices (001.jpg, 002.jpg, etc.)
+  imagePaddingDigits: ImagePaddingDigits // zero-padding for image filenames ('auto' = based on total count)
 }
 
 export interface ExtensionSettings {
   // All download-related settings
-  downloads: DownloadSettings;
+  downloads: DownloadSettings
   // Global default policy when no site override or site integration default exists
   globalPolicy: {
-    image: RateScopePolicy;
-    chapter: RateScopePolicy;
-  };
+    image: RateScopePolicy
+    chapter: RateScopePolicy
+  }
   // Global default retries; can be overridden per-site
-  globalRetries: RetryCounts;
+  globalRetries: RetryCounts
   // Notification preferences
-  notifications: boolean;
+  notifications: boolean
+  // Interface preferences
+  motionPreference: MotionPreference
+  uiLanguage: UiLanguagePreference
   // Advanced preferences
-  advanced: AdvancedSettings;
+  advanced: AdvancedSettings
 }

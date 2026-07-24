@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -15,22 +15,22 @@ async function flushAsyncWork(cycles = 4): Promise<void> {
   }
 }
 
-describe('service-worker event promise barrier', () => {
+describe("service-worker event promise barrier", () => {
   beforeEach(() => {
     vi.resetModules()
     vi.unstubAllGlobals()
   })
 
-  it('shares a single initialization barrier across concurrent callers', async () => {
+  it("shares a single initialization barrier across concurrent callers", async () => {
     let resolveAccessLevel: (() => void) | undefined
     const setAccessLevel = vi.fn(
       () =>
         new Promise<void>((resolve) => {
           resolveAccessLevel = resolve
-        }),
+        })
     )
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       storage: {
         session: {
           setAccessLevel,
@@ -38,26 +38,29 @@ describe('service-worker event promise barrier', () => {
       },
     })
 
-    const { waitForInitialization } = await import('@/src/runtime/service-worker-events')
+    const { waitForInitialization } =
+      await import("@/src/runtime/service-worker-events")
     const firstWait = waitForInitialization()
     const secondWait = waitForInitialization()
 
     expect(setAccessLevel).toHaveBeenCalledTimes(1)
-    expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' })
+    expect(setAccessLevel).toHaveBeenCalledWith({
+      accessLevel: "TRUSTED_CONTEXTS",
+    })
 
     await flushAsyncWork()
-    expect(resolveAccessLevel).toBeTypeOf('function')
+    expect(resolveAccessLevel).toBeTypeOf("function")
     resolveAccessLevel?.()
 
     await Promise.all([firstWait, secondWait])
   })
 
-  it('treats session access-level setup failures as non-fatal', async () => {
+  it("treats session access-level setup failures as non-fatal", async () => {
     const setAccessLevel = vi.fn(async () => {
-      throw new Error('boom')
+      throw new Error("boom")
     })
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       storage: {
         session: {
           setAccessLevel,
@@ -65,11 +68,13 @@ describe('service-worker event promise barrier', () => {
       },
     })
 
-    const { waitForInitialization } = await import('@/src/runtime/service-worker-events')
+    const { waitForInitialization } =
+      await import("@/src/runtime/service-worker-events")
 
     await expect(waitForInitialization()).resolves.toBeUndefined()
     expect(setAccessLevel).toHaveBeenCalledTimes(1)
-    expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' })
+    expect(setAccessLevel).toHaveBeenCalledWith({
+      accessLevel: "TRUSTED_CONTEXTS",
+    })
   })
 })
-

@@ -1,7 +1,15 @@
 export interface RemoveDownloadTaskPayload {
-  taskId: string;
+  taskId: string
 }
 
 export interface CancelDownloadTaskPayload {
-  taskId: string;
+  taskId: string
+}
+
+export interface ResumeDestinationTaskPayload {
+  taskId: string
+}
+
+export interface UndoPendingActionPayload {
+  token: string
 }

@@ -1,5 +1,11 @@
 export const STALL_TIMEOUT_MS = 30_000
 export const HARD_TIMEOUT_MS = 150_000
-export const LIVENESS_TIMEOUT_MS = 60_000
+export const OFFSCREEN_HEARTBEAT_INTERVAL_MS = 12_000
+export const OFFSCREEN_JOB_LEASE_MS = 45_000
 export const IPC_THROTTLE_MS = 250
 export const TRANSITION_DURATION_MS = 275
+export const DEFAULT_FETCH_TIMEOUT_MS = 30_000
+export const DEFAULT_IMAGE_TIMEOUT_MS = 30_000
+export const DEFAULT_CHAPTER_TIMEOUT_MS = 5 * 60_000
+export const ZIP_WORKER_FINALIZATION_TIMEOUT_MS = 5 * 60 * 1000
+export const MAX_IMAGE_BYTES = 100 * 1024 * 1024 // 100MB per image — guards against decompression bombs

@@ -1,28 +1,27 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import {
-  normalizeDownloadQueueState,
-  normalizeFsaErrorState,
-} from '@/entrypoints/options/hooks/useDownloadsTabState'
-import { __createChromeStorageStoreForTests } from '@/src/ui/shared/hooks/useChromeStorageValue'
+import { normalizeDownloadQueueState } from "@/entrypoints/options/hooks/useDownloadsTabState"
+import { normalizeDestinationIssues } from "@/src/runtime/destination-issue-state"
+import { __createChromeStorageStoreForTests } from "@/src/ui/shared/hooks/useChromeStorageValue"
 
-describe('DownloadsTab queue parsing', () => {
-  it('normalizes malformed persisted queue entries before exposing them to the UI', () => {
+describe("DownloadsTab queue parsing", () => {
+  it("filters invalid persisted entries while preserving valid tasks", () => {
     const normalized = normalizeDownloadQueueState([
       {
-        id: 'task-1',
-        siteIntegrationId: 'mangadex',
-        mangaId: 'series-1',
-        seriesTitle: 'Series 1',
-        status: 'queued',
+        id: "task-1",
+        siteIntegrationId: "mangadex",
+        mangaId: "series-1",
+        seriesTitle: "Series 1",
+        status: "queued",
         created: 123,
         lastSuccessfulDownloadId: 456,
         chapters: [
           {
-            url: 'https://example.com/ch-1',
-            title: 'Chapter 1',
+            id: "https://example.com/ch-1",
+            url: "https://example.com/ch-1",
+            title: "Chapter 1",
             index: 1,
-            status: 'queued',
+            status: "queued",
             lastUpdated: 789,
           },
         ],
@@ -33,28 +32,45 @@ describe('DownloadsTab queue parsing', () => {
     ])
 
     expect(normalized).toHaveLength(1)
-    expect(normalized[0]?.lastSuccessfulDownloadId).toBeUndefined()
-    expect(normalized[0]?.chapters[0]?.id).toBe('https://example.com/ch-1')
+    expect(normalized[0]?.lastSuccessfulDownloadId).toBe(456)
+    expect(normalized[0]?.chapters[0]?.id).toBe("https://example.com/ch-1")
   })
 
-  it('normalizes malformed FSA error payloads before exposing them to the UI', () => {
-    expect(normalizeFsaErrorState({ active: 'yes', message: 123 })).toEqual({
-      active: false,
-      message: undefined,
-    })
-    expect(normalizeFsaErrorState({ active: true, message: 'Folder access lost' })).toEqual({
-      active: true,
-      message: 'Folder access lost',
-    })
-    expect(normalizeFsaErrorState(null)).toBeNull()
+  it("normalizes malformed destination issues before exposing them to the UI", () => {
+    expect(normalizeDestinationIssues({ bogus: true })).toEqual([])
+    expect(
+      normalizeDestinationIssues([
+        { id: 12, taskId: "bad" },
+        {
+          id: "task-1::fsa_permission_required",
+          taskId: "task-1",
+          kind: "fsa_permission_required",
+          occurredAt: 123,
+        },
+      ])
+    ).toEqual([
+      {
+        id: "task-1::fsa_permission_required",
+        taskId: "task-1",
+        chapterId: undefined,
+        kind: "fsa_permission_required",
+        occurredAt: 123,
+        acknowledgedAt: undefined,
+      },
+    ])
   })
 })
 
-describe('DownloadsTab storage subscription contract (behavior-based)', () => {
+describe("DownloadsTab storage subscription contract (behavior-based)", () => {
   const addListener = vi.fn()
   const removeListener = vi.fn()
   const sessionGet = vi.fn()
-  let registeredListener: ((changes: Record<string, chrome.storage.StorageChange>, areaName: chrome.storage.AreaName) => void) | undefined
+  let registeredListener:
+    | ((
+        changes: Record<string, chrome.storage.StorageChange>,
+        areaName: chrome.storage.AreaName
+      ) => void)
+    | undefined
   let sessionStore: Record<string, unknown>
 
   beforeEach(() => {
@@ -71,13 +87,15 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
 
     sessionGet.mockImplementation(async (key: string | string[]) => {
       if (Array.isArray(key)) {
-        return Object.fromEntries(key.map((entry) => [entry, sessionStore[entry]]))
+        return Object.fromEntries(
+          key.map((entry) => [entry, sessionStore[entry]])
+        )
       }
 
       return { [key]: sessionStore[key] }
     })
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       storage: {
         session: {
           get: sessionGet,
@@ -93,10 +111,10 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     })
   })
 
-  it('subscribes and removes the same storage listener instance on cleanup', () => {
+  it("subscribes and removes the same storage listener instance on cleanup", () => {
     const store = __createChromeStorageStoreForTests({
-      areaName: 'session',
-      key: 'downloadQueue',
+      areaName: "session",
+      key: "downloadQueue",
       initialValue: [],
       parse: (raw) => (Array.isArray(raw) ? raw : []),
     })
@@ -105,7 +123,7 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
 
     expect(addListener).toHaveBeenCalledTimes(1)
     const listenerFn = addListener.mock.calls[0]?.[0]
-    expect(typeof listenerFn).toBe('function')
+    expect(typeof listenerFn).toBe("function")
 
     unsubscribe()
 
@@ -113,10 +131,10 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     expect(removeListener).toHaveBeenCalledWith(listenerFn)
   })
 
-  it('emits updates only for the tracked storage area and keys', async () => {
+  it("emits updates only for the tracked storage area and keys", async () => {
     const store = __createChromeStorageStoreForTests({
-      areaName: 'session',
-      key: 'downloadQueue',
+      areaName: "session",
+      key: "downloadQueue",
       initialValue: [],
       parse: (raw) => (Array.isArray(raw) ? raw : []),
     })
@@ -128,17 +146,17 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     await Promise.resolve()
     callback.mockClear()
 
-    expect(registeredListener).toBeTypeOf('function')
+    expect(registeredListener).toBeTypeOf("function")
 
-    sessionStore.downloadQueue = ['task-1']
+    sessionStore.downloadQueue = ["task-1"]
     registeredListener?.(
       {
         downloadQueue: {
           oldValue: [],
-          newValue: ['task-1'],
+          newValue: ["task-1"],
         },
       } as unknown as Record<string, chrome.storage.StorageChange>,
-      'local',
+      "local"
     )
     await Promise.resolve()
     expect(callback).not.toHaveBeenCalled()
@@ -146,37 +164,39 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     registeredListener?.(
       {
         unrelatedKey: {
-          oldValue: 'x',
-          newValue: 'y',
+          oldValue: "x",
+          newValue: "y",
         },
       } as unknown as Record<string, chrome.storage.StorageChange>,
-      'session',
+      "session"
     )
     await Promise.resolve()
     expect(callback).not.toHaveBeenCalled()
 
-    sessionStore.downloadQueue = ['task-2']
+    sessionStore.downloadQueue = ["task-2"]
     registeredListener?.(
       {
         downloadQueue: {
-          oldValue: ['task-1'],
-          newValue: ['task-2'],
+          oldValue: ["task-1"],
+          newValue: ["task-2"],
         },
       } as unknown as Record<string, chrome.storage.StorageChange>,
-      'session',
+      "session"
     )
     await Promise.resolve()
     await Promise.resolve()
 
     expect(callback).toHaveBeenCalled()
-    expect(store.getSnapshot().value).toEqual(['task-2'])
+    expect(store.getSnapshot().value).toEqual(["task-2"])
 
     unsubscribe()
   })
 
-  it('ignores stale async reads that resolve after a newer storage refresh', async () => {
-    let resolveInitialRead: ((value: Record<string, unknown>) => void) | undefined
-    let resolveRefreshRead: ((value: Record<string, unknown>) => void) | undefined
+  it("ignores stale async reads that resolve after a newer storage refresh", async () => {
+    let resolveInitialRead:
+      ((value: Record<string, unknown>) => void) | undefined
+    let resolveRefreshRead:
+      ((value: Record<string, unknown>) => void) | undefined
     let readCount = 0
 
     sessionGet.mockImplementation((_key: string | string[]) => {
@@ -193,8 +213,8 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     })
 
     const store = __createChromeStorageStoreForTests({
-      areaName: 'session',
-      key: 'downloadQueue',
+      areaName: "session",
+      key: "downloadQueue",
       initialValue: [],
       parse: (raw) => (Array.isArray(raw) ? raw : []),
     })
@@ -203,38 +223,39 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     const unsubscribe = store.subscribe(callback)
 
     await Promise.resolve()
-    expect(registeredListener).toBeTypeOf('function')
+    expect(registeredListener).toBeTypeOf("function")
 
     registeredListener?.(
       {
         downloadQueue: {
           oldValue: [],
-          newValue: ['fresh-task'],
+          newValue: ["fresh-task"],
         },
       } as unknown as Record<string, chrome.storage.StorageChange>,
-      'session',
+      "session"
     )
 
-    resolveRefreshRead?.({ downloadQueue: ['fresh-task'] })
+    resolveRefreshRead?.({ downloadQueue: ["fresh-task"] })
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(store.getSnapshot().value).toEqual(['fresh-task'])
+    expect(store.getSnapshot().value).toEqual(["fresh-task"])
 
     resolveInitialRead?.({ downloadQueue: [] })
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(store.getSnapshot().value).toEqual(['fresh-task'])
+    expect(store.getSnapshot().value).toEqual(["fresh-task"])
     expect(callback).toHaveBeenCalled()
 
     unsubscribe()
   })
 
-  it('re-reads once after subscribe so immediate post-mount writes are observed without relying on storage events', async () => {
+  it("re-reads once after subscribe so immediate post-mount writes are observed without relying on storage events", async () => {
     vi.useFakeTimers()
 
-    let resolveInitialRead: ((value: Record<string, unknown>) => void) | undefined
+    let resolveInitialRead:
+      ((value: Record<string, unknown>) => void) | undefined
     let readCount = 0
 
     sessionGet.mockImplementation(() => {
@@ -250,8 +271,8 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     })
 
     const store = __createChromeStorageStoreForTests({
-      areaName: 'session',
-      key: 'downloadQueue',
+      areaName: "session",
+      key: "downloadQueue",
       initialValue: [],
       parse: (raw) => (Array.isArray(raw) ? raw : []),
     })
@@ -259,18 +280,17 @@ describe('DownloadsTab storage subscription contract (behavior-based)', () => {
     const callback = vi.fn()
     const unsubscribe = store.subscribe(callback)
 
-    sessionStore.downloadQueue = ['late-task']
+    sessionStore.downloadQueue = ["late-task"]
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(store.getSnapshot().value).toEqual(['late-task'])
+    expect(store.getSnapshot().value).toEqual(["late-task"])
 
     resolveInitialRead?.({ downloadQueue: [] })
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(store.getSnapshot().value).toEqual(['late-task'])
+    expect(store.getSnapshot().value).toEqual(["late-task"])
 
     unsubscribe()
   })
 })
-

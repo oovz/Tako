@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -9,26 +9,83 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-const projectionMocks = vi.hoisted(() => ({
-  projectToQueueView: vi.fn(() => ({ queueView: [{ id: 'projected-task' }], nonTerminalCount: 1 })),
-  updateActionBadge: vi.fn(async () => undefined),
+const recoveryMocks = vi.hoisted(() => ({
+  reconcileAllPendingOutputs: vi.fn(async () => undefined),
+  recoverFromLivenessTimeout: vi.fn(async () => undefined),
+}))
+const pendingUndoMocks = vi.hoisted(() => ({
+  finalizePendingUndoAndCleanup: vi.fn(async () => undefined),
+}))
+const progressPortMocks = vi.hoisted(() => ({
+  registerActiveTaskProgressPort: vi.fn(),
 }))
 
-vi.mock('@/src/runtime/projection', () => ({
-  projectToQueueView: projectionMocks.projectToQueueView,
-  updateActionBadge: projectionMocks.updateActionBadge,
+vi.mock(
+  "@/entrypoints/background/native-output-finalizer",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/entrypoints/background/native-output-finalizer")
+      >()
+    return {
+      ...actual,
+      reconcileAllPendingOutputs: recoveryMocks.reconcileAllPendingOutputs,
+    }
+  }
+)
+
+vi.mock("@/entrypoints/background/pending-undo-coordinator", () => ({
+  finalizePendingUndoAndCleanup: pendingUndoMocks.finalizePendingUndoAndCleanup,
 }))
 
-import { registerBackgroundRuntimeListeners } from '@/entrypoints/background/background-runtime-listeners'
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
+vi.mock("@/entrypoints/background/active-task-progress-bus", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/entrypoints/background/active-task-progress-bus")
+  >("@/entrypoints/background/active-task-progress-bus")
+  return {
+    ...actual,
+    registerActiveTaskProgressPort:
+      progressPortMocks.registerActiveTaskProgressPort,
+  }
+})
 
-describe('registerBackgroundRuntimeListeners', () => {
-  const storageOnChangedAddListener = vi.fn()
+vi.mock(
+  "@/entrypoints/background/offscreen-lifecycle",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/entrypoints/background/offscreen-lifecycle")
+      >()
+    return {
+      ...actual,
+      recoverFromLivenessTimeout: recoveryMocks.recoverFromLivenessTimeout,
+    }
+  }
+)
+
+import { registerBackgroundRuntimeListeners } from "@/entrypoints/background/background-runtime-listeners"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import {
+  createPendingDownloadsStoreStub,
+  createPendingOutputRecord,
+} from "./pending-output-test-helpers"
+
+describe("registerBackgroundRuntimeListeners", () => {
   const tabsOnReplacedAddListener = vi.fn()
   const downloadsOnChangedAddListener = vi.fn()
   const alarmsOnAlarmAddListener = vi.fn()
   const tabsOnRemovedAddListener = vi.fn()
   const runtimeOnUpdateAvailableAddListener = vi.fn()
+  const runtimeOnSuspendAddListener = vi.fn()
+  const runtimeOnConnectAddListener = vi.fn()
+  const runtimeGetContexts = vi.fn(async () => [{}])
+  const runtimeSendMessage = vi.fn(async () => ({
+    success: true,
+    isInitialized: true,
+    activeJobCount: 0,
+    activeTaskIds: [],
+  }))
+  const closeDocument = vi.fn(async () => undefined)
   const storageSessionGet = vi.fn(async () => ({}))
   const storageSessionSet = vi.fn(async () => undefined)
 
@@ -36,10 +93,10 @@ describe('registerBackgroundRuntimeListeners', () => {
     vi.clearAllMocks()
     storageSessionGet.mockResolvedValue({})
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       storage: {
-        onChanged: {
-          addListener: storageOnChangedAddListener,
+        local: {
+          get: vi.fn(async () => ({})),
         },
         session: {
           get: storageSessionGet,
@@ -65,236 +122,309 @@ describe('registerBackgroundRuntimeListeners', () => {
         },
       },
       runtime: {
+        id: "extension-id",
+        getURL: vi.fn(() => "chrome-extension://test/offscreen.html"),
+        getContexts: runtimeGetContexts,
+        sendMessage: runtimeSendMessage,
         onUpdateAvailable: {
           addListener: runtimeOnUpdateAvailableAddListener,
         },
         onSuspend: {
-          addListener: vi.fn(),
+          addListener: runtimeOnSuspendAddListener,
         },
+        onConnect: {
+          addListener: runtimeOnConnectAddListener,
+        },
+      },
+      offscreen: {
+        hasDocument: vi.fn(async () => true),
+        closeDocument,
       },
     })
   })
 
-  it('marks an Options action item when Chrome reports an extension update is available', async () => {
+  it("routes only internal live-progress Ports to the progress bus", () => {
     registerBackgroundRuntimeListeners({
       ensureStateManagerInitialized: vi.fn(async () => undefined),
       isStateManagerReady: () => true,
       getStateManager: vi.fn() as never,
-      pendingDownloadsStore: {
-        hydrate: vi.fn(async () => undefined),
-        get: vi.fn(),
-        set: vi.fn(),
-        remove: vi.fn(),
-        clear: vi.fn(),
-        snapshot: vi.fn(() => new Map()),
-      },
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
       requestBlobRevocation: vi.fn(async () => undefined),
       tabContextCache: {
         handleTabRemoved: vi.fn(async () => undefined),
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
-      livenessAlarmName: 'offscreen-liveness',
+      livenessAlarmName: "offscreen-liveness",
     })
 
-    const updateAvailableListener = runtimeOnUpdateAvailableAddListener.mock.calls[0]?.[0] as (
-      details: chrome.runtime.UpdateAvailableDetails,
+    const listener = runtimeOnConnectAddListener.mock.calls[0]?.[0] as (
+      port: chrome.runtime.Port
     ) => void
+    const accepted = {
+      name: "tako-active-task-progress",
+      sender: { id: "extension-id" },
+    } as chrome.runtime.Port
+    listener({ name: "another-port" } as chrome.runtime.Port)
+    listener({
+      name: "tako-active-task-progress",
+      sender: { id: "different-extension" },
+    } as chrome.runtime.Port)
+    listener(accepted)
 
-    updateAvailableListener({ version: '1.2.8' })
+    expect(
+      progressPortMocks.registerActiveTaskProgressPort
+    ).toHaveBeenCalledOnce()
+    expect(
+      progressPortMocks.registerActiveTaskProgressPort
+    ).toHaveBeenCalledWith(accepted)
+  })
+
+  it("marks an Options action item when Chrome reports an extension update is available", async () => {
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized: vi.fn(async () => undefined),
+      isStateManagerReady: () => true,
+      getStateManager: vi.fn() as never,
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      livenessAlarmName: "offscreen-liveness",
+    })
+
+    const updateAvailableListener = runtimeOnUpdateAvailableAddListener.mock
+      .calls[0]?.[0] as (details: chrome.runtime.UpdateAvailableDetails) => void
+
+    updateAvailableListener({ version: "1.2.8" })
     await Promise.resolve()
     await Promise.resolve()
 
     expect(storageSessionSet).toHaveBeenCalledWith({
       [SESSION_STORAGE_KEYS.optionsActionItems]: {
         extensionUpdate: expect.objectContaining({
-          status: 'available',
-          version: '1.2.8',
+          status: "available",
+          version: "1.2.8",
         }),
       },
     })
   })
 
-  it('normalizes malformed session queue entries before projecting queueView', async () => {
-    registerBackgroundRuntimeListeners({
-      ensureStateManagerInitialized: vi.fn(async () => undefined),
-      isStateManagerReady: () => true,
-      getStateManager: vi.fn() as never,
-      pendingDownloadsStore: {
-        hydrate: vi.fn(async () => undefined),
-        get: vi.fn(),
-        set: vi.fn(),
-        remove: vi.fn(),
-        clear: vi.fn(),
-        snapshot: vi.fn(() => new Map()),
-      },
-      requestBlobRevocation: vi.fn(async () => undefined),
-      tabContextCache: {
-        handleTabRemoved: vi.fn(async () => undefined),
-        handleTabReplaced: vi.fn(async () => undefined),
-      },
-      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
-      livenessAlarmName: 'offscreen-liveness',
+  it("hydrates persisted outputs before committing and revoking terminal Blob URLs", async () => {
+    const ensureStateManagerInitialized = vi.fn(async () => undefined)
+    const record = createPendingOutputRecord({
+      downloadId: 101,
+      blobUrl: "blob:tracked-download",
     })
-
-    const storageChangeListener = storageOnChangedAddListener.mock.calls[0]?.[0] as (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: chrome.storage.AreaName,
-    ) => void
-
-    storageChangeListener(
-      {
-        [SESSION_STORAGE_KEYS.globalState]: {
-          oldValue: null,
-          newValue: {
-            downloadQueue: [
-              {
-                id: 'task-1',
-                siteIntegrationId: 'mangadex',
-                mangaId: 'series-1',
-                seriesTitle: 'Series 1',
-                status: 'queued',
-                created: 123,
-                lastSuccessfulDownloadId: 999,
-                chapters: [
-                  {
-                    url: 'https://example.com/ch-1',
-                    title: 'Chapter 1',
-                    index: 1,
-                    status: 'queued',
-                    lastUpdated: 456,
-                  },
-                ],
-              },
-              {
-                bogus: true,
-              },
-            ],
-          },
-        },
-      } as unknown as Record<string, chrome.storage.StorageChange>,
-      'session',
-    )
-
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(projectionMocks.projectToQueueView).toHaveBeenCalledTimes(1)
-    expect(projectionMocks.projectToQueueView).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'task-1',
-        lastSuccessfulDownloadId: undefined,
-        chapters: [
-          expect.objectContaining({
-            id: 'https://example.com/ch-1',
-          }),
-        ],
-      }),
-    ])
-    expect(storageSessionSet).toHaveBeenCalledWith({ queueView: [{ id: 'projected-task' }] })
-    expect(projectionMocks.updateActionBadge).toHaveBeenCalledWith(1)
-  })
-
-  it('revokes tracked blobs for terminal downloads without waiting for full state initialization', async () => {
-    const ensureStateManagerInitialized = vi.fn(async () => {
-      throw new Error('state init should not be needed for download cleanup')
-    })
-    const hydrate = vi.fn(async () => undefined)
-    const get = vi.fn()
+    const pendingDownloadsStore = createPendingDownloadsStoreStub([record])
+    pendingDownloadsStore.get
       .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce('blob:tracked-download')
-    const remove = vi.fn()
+      .mockReturnValue(record)
+    const updateDownloadTask = vi.fn(async () => undefined)
     const requestBlobRevocation = vi.fn(async () => undefined)
 
     registerBackgroundRuntimeListeners({
       ensureStateManagerInitialized,
       isStateManagerReady: () => false,
-      getStateManager: vi.fn() as never,
-      pendingDownloadsStore: {
-        hydrate,
-        get,
-        set: vi.fn(),
-        remove,
-        clear: vi.fn(),
-        snapshot: vi.fn(() => new Map()),
-      },
+      getStateManager: () => ({ updateDownloadTask }) as never,
+      pendingDownloadsStore,
       requestBlobRevocation,
       tabContextCache: {
         handleTabRemoved: vi.fn(async () => undefined),
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
-      livenessAlarmName: 'offscreen-liveness',
+      livenessAlarmName: "offscreen-liveness",
     })
 
-    const downloadListener = downloadsOnChangedAddListener.mock.calls[0]?.[0] as (delta: {
+    const downloadListener = downloadsOnChangedAddListener.mock
+      .calls[0]?.[0] as (delta: {
       id?: number
       state?: { current?: string }
     }) => void
 
     downloadListener({
       id: 101,
-      state: { current: 'complete' },
+      state: { current: "complete" },
     })
 
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(ensureStateManagerInitialized).not.toHaveBeenCalled()
-    expect(hydrate).toHaveBeenCalledTimes(1)
-    expect(get).toHaveBeenNthCalledWith(1, 101)
-    expect(get).toHaveBeenNthCalledWith(2, 101)
-    expect(remove).toHaveBeenCalledWith(101)
-    expect(requestBlobRevocation).toHaveBeenCalledWith('blob:tracked-download')
+    await vi.waitFor(() => {
+      expect(ensureStateManagerInitialized).toHaveBeenCalledTimes(1)
+      expect(pendingDownloadsStore.hydrate).toHaveBeenCalledTimes(1)
+      expect(pendingDownloadsStore.get).toHaveBeenNthCalledWith(1, 101)
+      expect(pendingDownloadsStore.get).toHaveBeenNthCalledWith(2, 101)
+      expect(pendingDownloadsStore.markTerminal).toHaveBeenCalledWith(
+        101,
+        "complete",
+        undefined
+      )
+      expect(updateDownloadTask).toHaveBeenCalledWith("task-1", {
+        lastSuccessfulDownloadId: 101,
+      })
+      expect(requestBlobRevocation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outputId: "job-1:archive:0",
+          blobUrl: "blob:tracked-download",
+        })
+      )
+    })
+    await vi.waitFor(() => {
+      expect(closeDocument).toHaveBeenCalledTimes(1)
+    })
   })
 
-  it('uses the in-memory pending download mapping before hydrating from session backup', async () => {
-    const ensureStateManagerInitialized = vi.fn(async () => {
-      throw new Error('state init should not be needed for download cleanup')
+  it("does not close an idle offscreen document on suspend while a task is active", async () => {
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized: vi.fn(async () => undefined),
+      isStateManagerReady: () => true,
+      getStateManager: () =>
+        ({
+          getGlobalState: vi.fn(async () => ({
+            downloadQueue: [{ id: "active", status: "downloading" }],
+          })),
+        }) as never,
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      livenessAlarmName: "offscreen-liveness",
     })
-    const hydrate = vi.fn(async () => undefined)
-    const get = vi.fn((downloadId: number) => (downloadId === 202 ? 'blob:in-memory-download' : undefined))
-    const remove = vi.fn()
+
+    const suspendListener = runtimeOnSuspendAddListener.mock.calls.at(
+      -1
+    )?.[0] as (() => void) | undefined
+    suspendListener?.()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(closeDocument).not.toHaveBeenCalled()
+  })
+
+  it("uses the in-memory pending output before hydrating its durable backup", async () => {
+    const ensureStateManagerInitialized = vi.fn(async () => undefined)
+    const pendingDownloadsStore = createPendingDownloadsStoreStub([
+      createPendingOutputRecord({
+        downloadId: 202,
+        blobUrl: "blob:in-memory-download",
+      }),
+    ])
+    const updateDownloadTask = vi.fn(async () => undefined)
     const requestBlobRevocation = vi.fn(async () => undefined)
 
     registerBackgroundRuntimeListeners({
       ensureStateManagerInitialized,
       isStateManagerReady: () => false,
-      getStateManager: vi.fn() as never,
-      pendingDownloadsStore: {
-        hydrate,
-        get,
-        set: vi.fn(),
-        remove,
-        clear: vi.fn(),
-        snapshot: vi.fn(() => new Map()),
-      },
+      getStateManager: () => ({ updateDownloadTask }) as never,
+      pendingDownloadsStore,
       requestBlobRevocation,
       tabContextCache: {
         handleTabRemoved: vi.fn(async () => undefined),
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
-      livenessAlarmName: 'offscreen-liveness',
+      livenessAlarmName: "offscreen-liveness",
     })
 
-    const downloadListener = downloadsOnChangedAddListener.mock.calls[0]?.[0] as (delta: {
+    const downloadListener = downloadsOnChangedAddListener.mock
+      .calls[0]?.[0] as (delta: {
       id?: number
       state?: { current?: string }
     }) => void
 
     downloadListener({
       id: 202,
-      state: { current: 'complete' },
+      state: { current: "complete" },
     })
 
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.waitFor(() => {
+      expect(ensureStateManagerInitialized).toHaveBeenCalledTimes(1)
+      expect(pendingDownloadsStore.hydrate).not.toHaveBeenCalled()
+      expect(pendingDownloadsStore.get).toHaveBeenCalledWith(202)
+      expect(pendingDownloadsStore.markTerminal).toHaveBeenCalledWith(
+        202,
+        "complete",
+        undefined
+      )
+      expect(requestBlobRevocation).toHaveBeenCalledWith(
+        expect.objectContaining({ blobUrl: "blob:in-memory-download" })
+      )
+    })
+  })
 
-    expect(ensureStateManagerInitialized).not.toHaveBeenCalled()
-    expect(hydrate).not.toHaveBeenCalled()
-    expect(get).toHaveBeenCalledWith(202)
-    expect(remove).toHaveBeenCalledWith(202)
-    expect(requestBlobRevocation).toHaveBeenCalledWith('blob:in-memory-download')
+  it("reconciles ambiguous outputs before running liveness recovery on an alarm", async () => {
+    const ensureStateManagerInitialized = vi.fn(async () => undefined)
+    const stateManager = {} as never
+    const pendingDownloadsStore = createPendingDownloadsStoreStub()
+
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized,
+      isStateManagerReady: () => true,
+      getStateManager: () => stateManager,
+      pendingDownloadsStore,
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      livenessAlarmName: "offscreen-liveness",
+    })
+
+    const alarmListener = alarmsOnAlarmAddListener.mock.calls.at(-1)?.[0] as (
+      alarm: chrome.alarms.Alarm
+    ) => void
+    alarmListener({ name: "offscreen-liveness" } as chrome.alarms.Alarm)
+
+    await vi.waitFor(() => {
+      expect(ensureStateManagerInitialized).toHaveBeenCalledTimes(1)
+      expect(recoveryMocks.reconcileAllPendingOutputs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stateManager,
+          pendingOutputs: pendingDownloadsStore,
+        })
+      )
+      expect(recoveryMocks.recoverFromLivenessTimeout).toHaveBeenCalledTimes(1)
+    })
+    expect(
+      recoveryMocks.reconcileAllPendingOutputs.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      recoveryMocks.recoverFromLivenessTimeout.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("routes a persisted Undo alarm without running liveness recovery", async () => {
+    const ensureStateManagerInitialized = vi.fn(async () => undefined)
+    const stateManager = {} as never
+
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized,
+      isStateManagerReady: () => true,
+      getStateManager: () => stateManager,
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      livenessAlarmName: "offscreen-liveness",
+    })
+
+    const alarmListener = alarmsOnAlarmAddListener.mock.calls.at(-1)?.[0] as (
+      alarm: chrome.alarms.Alarm
+    ) => void
+    alarmListener({ name: "pending-undo:undo-123" } as chrome.alarms.Alarm)
+
+    await vi.waitFor(() => {
+      expect(
+        pendingUndoMocks.finalizePendingUndoAndCleanup
+      ).toHaveBeenCalledWith(stateManager, "undo-123")
+    })
+    expect(recoveryMocks.recoverFromLivenessTimeout).not.toHaveBeenCalled()
   })
 })

@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { sendStateAction } from '@/src/runtime/state-actions'
-import { processStateAction } from '@/entrypoints/background/state-action-router'
-import { StateAction } from '@/src/types/state-actions'
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
-import type { StateActionMessage } from '@/src/types/state-action-message'
+import { sendStateAction } from "@/src/runtime/state-actions"
+import { processStateAction } from "@/entrypoints/background/state-action-router"
+import { StateAction } from "@/src/types/state-actions"
+import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import type { StateActionMessage } from "@/src/types/state-action-message"
 
 const mocks = vi.hoisted(() => ({
   runtimeSendMessage: vi.fn(),
@@ -16,9 +16,11 @@ const mocks = vi.hoisted(() => ({
   handleClearTabState: vi.fn(),
   handleRemoveDownloadTask: vi.fn(),
   handleCancelDownloadTask: vi.fn(),
+  handleRetryDestinationTask: vi.fn(),
+  handleContinueTaskInDownloads: vi.fn(),
 }))
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: mocks.loggerInfo,
     warn: mocks.loggerWarn,
@@ -27,28 +29,30 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/entrypoints/background/action-handlers/tab-state-handlers', () => ({
+vi.mock("@/entrypoints/background/action-handlers/tab-state-handlers", () => ({
   handleInitializeTab: mocks.handleInitializeTab,
   handleClearTabState: mocks.handleClearTabState,
 }))
 
-vi.mock('@/entrypoints/background/action-handlers/download-task-handlers', () => ({
-  handleRemoveDownloadTask: mocks.handleRemoveDownloadTask,
-  handleCancelDownloadTask: mocks.handleCancelDownloadTask,
-}))
+vi.mock(
+  "@/entrypoints/background/action-handlers/download-task-handlers",
+  () => ({
+    handleRemoveDownloadTask: mocks.handleRemoveDownloadTask,
+    handleCancelDownloadTask: mocks.handleCancelDownloadTask,
+    handleRetryDestinationTask: mocks.handleRetryDestinationTask,
+    handleContinueTaskInDownloads: mocks.handleContinueTaskInDownloads,
+  })
+)
 
-describe('State discipline runtime guards', () => {
+describe("State discipline runtime guards", () => {
   const stateManager = {} as CentralizedStateManager
-  let tabsGetMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.runtimeSendMessage.mockResolvedValue(undefined)
+    mocks.runtimeSendMessage.mockResolvedValue({ success: true })
     mocks.handleInitializeTab.mockResolvedValue({ success: true })
     mocks.handleClearTabState.mockResolvedValue({ success: true })
-    tabsGetMock = vi.fn()
-
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       runtime: {
         sendMessage: mocks.runtimeSendMessage,
       },
@@ -57,96 +61,123 @@ describe('State discipline runtime guards', () => {
           set: vi.fn(async () => undefined),
         },
       },
-      tabs: {
-        get: tabsGetMock,
-      },
     })
   })
 
-  describe('sendStateAction', () => {
-    it('sends flattened STATE_ACTION message with enum action and tab id', async () => {
-      await sendStateAction(
-        StateAction.CLEAR_TAB_STATE,
-        undefined,
-        42,
-      )
+  describe("sendStateAction", () => {
+    it("sends flattened STATE_ACTION message with enum action and tab id", async () => {
+      await sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)
 
       expect(mocks.runtimeSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'STATE_ACTION',
+          type: "STATE_ACTION",
           action: StateAction.CLEAR_TAB_STATE,
           payload: undefined,
           tabId: 42,
           timestamp: expect.any(Number),
-        }),
+        })
       )
     })
 
-    it('rejects non-enum actions at runtime', async () => {
+    it("rejects non-enum actions at runtime", async () => {
       await expect(
-        sendStateAction('REMOVED_TAB_SCOPED_ACTION' as unknown as StateAction, undefined, 42),
-      ).rejects.toThrow('sendStateAction: "action" must be a StateAction enum value')
+        sendStateAction(
+          "REMOVED_TAB_SCOPED_ACTION" as unknown as StateAction,
+          undefined,
+          42
+        )
+      ).rejects.toThrow(
+        'sendStateAction: "action" must be a StateAction enum value'
+      )
 
       expect(mocks.runtimeSendMessage).not.toHaveBeenCalled()
     })
 
-    it('rejects arbitrary numeric values that are not declared StateAction members', async () => {
+    it("rejects arbitrary numeric values that are not declared StateAction members", async () => {
       await expect(
-        sendStateAction(999 as StateAction, undefined, 42),
-      ).rejects.toThrow('sendStateAction: "action" must be a StateAction enum value')
+        sendStateAction(999 as StateAction, undefined, 42)
+      ).rejects.toThrow(
+        'sendStateAction: "action" must be a StateAction enum value'
+      )
 
       expect(mocks.runtimeSendMessage).not.toHaveBeenCalled()
     })
 
-    it('treats Extension context invalidation as non-fatal', async () => {
-      mocks.runtimeSendMessage.mockRejectedValueOnce(new Error('Extension context invalidated'))
+    it("rejects when the extension context is invalidated before acknowledgement", async () => {
+      mocks.runtimeSendMessage.mockRejectedValueOnce(
+        new Error("Extension context invalidated")
+      )
 
-      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).resolves.toEqual({ success: true })
+      await expect(
+        sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)
+      ).rejects.toThrow("Extension context invalidated")
       expect(mocks.loggerDebug).toHaveBeenCalled()
     })
 
-    it('throws when the service worker returns a structured failure (success: false)', async () => {
-      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: false, error: 'Tab ID required for CLEAR_TAB_STATE' })
+    it("rejects when the service worker returns no structured acknowledgement", async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce(undefined)
 
-      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).rejects.toThrow(
-        'Tab ID required for CLEAR_TAB_STATE',
-      )
+      await expect(
+        sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)
+      ).rejects.toThrow(/structured acknowledgement/)
     })
 
-    it('throws a generic message when the worker returns success: false with no error', async () => {
-      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: false, error: '' })
+    it("throws when the service worker returns a structured failure (success: false)", async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({
+        success: false,
+        error: "Tab ID required for CLEAR_TAB_STATE",
+      })
 
-      await expect(sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)).rejects.toThrow(
-        /was rejected by the service worker/,
-      )
+      await expect(
+        sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)
+      ).rejects.toThrow("Tab ID required for CLEAR_TAB_STATE")
     })
 
-    it('returns the structured success response (with data) to callers', async () => {
-      mocks.runtimeSendMessage.mockResolvedValueOnce({ success: true, data: { skipped: true } })
+    it("throws a generic message when the worker returns success: false with no error", async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({
+        success: false,
+        error: "",
+      })
 
-      await expect(sendStateAction(StateAction.INITIALIZE_TAB, undefined, 42)).resolves.toEqual({
+      await expect(
+        sendStateAction(StateAction.CLEAR_TAB_STATE, undefined, 42)
+      ).rejects.toThrow(/was rejected by the service worker/)
+    })
+
+    it("returns the structured success response (with data) to callers", async () => {
+      mocks.runtimeSendMessage.mockResolvedValueOnce({
+        success: true,
+        data: { skipped: true },
+      })
+
+      await expect(
+        sendStateAction(StateAction.INITIALIZE_TAB, undefined, 42)
+      ).resolves.toEqual({
         success: true,
         data: { skipped: true },
       })
     })
   })
 
-  describe('processStateAction', () => {
-    it('enforces tab id for tab-scoped actions', async () => {
+  describe("processStateAction", () => {
+    it("enforces tab id for tab-scoped actions", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: StateAction.CLEAR_TAB_STATE,
       }
 
       const result = await processStateAction(stateManager, message)
 
-      expect(result).toEqual({ success: false, error: 'Tab ID required for CLEAR_TAB_STATE' })
+      expect(result).toEqual({
+        success: false,
+        error: "Tab ID required for CLEAR_TAB_STATE",
+      })
       expect(mocks.handleClearTabState).not.toHaveBeenCalled()
     })
 
-    it('accepts tab id zero for tab-scoped actions', async () => {
+    it("accepts tab id zero for tab-scoped actions", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: StateAction.CLEAR_TAB_STATE,
         tabId: 0,
       }
@@ -157,9 +188,9 @@ describe('State discipline runtime guards', () => {
       expect(mocks.handleClearTabState).toHaveBeenCalledWith(stateManager, 0)
     })
 
-    it('uses sender.tab.id when message tabId is absent', async () => {
+    it("rejects tab-origin state actions instead of inferring sender.tab.id", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: StateAction.CLEAR_TAB_STATE,
       }
 
@@ -167,52 +198,60 @@ describe('State discipline runtime guards', () => {
         tab: { id: 55 } as chrome.tabs.Tab,
       } as chrome.runtime.MessageSender)
 
-      expect(result).toEqual({ success: true })
-      expect(mocks.handleClearTabState).toHaveBeenCalledWith(stateManager, 55)
+      expect(result).toEqual({
+        success: false,
+        error: "State actions are only accepted from extension pages",
+      })
+      expect(mocks.handleClearTabState).not.toHaveBeenCalled()
     })
 
-    it('ignores stale ready INITIALIZE_TAB actions when the target tab has already navigated to an unsupported URL', async () => {
+    it("routes extension-page INITIALIZE_TAB actions with an explicit target tab id", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: StateAction.INITIALIZE_TAB,
         tabId: 77,
         payload: {
-          context: 'ready',
-          siteIntegrationId: 'mangadex',
-          mangaId: 'stale-series',
-          seriesTitle: 'Stale Series',
+          context: "ready",
+          siteIntegrationId: "mangadex",
+          mangaId: "stale-series",
+          seriesTitle: "Stale Series",
           chapters: [],
         },
       }
 
-      tabsGetMock.mockResolvedValue({
-        id: 77,
-        url: 'https://example.com/',
-      } as chrome.tabs.Tab)
-
       const result = await processStateAction(stateManager, message, {
         tab: { id: 88 } as chrome.tabs.Tab,
+        id: "test-extension-id",
+        url: "chrome-extension://test-extension-id/sidepanel.html",
       } as chrome.runtime.MessageSender)
 
-      expect(result).toEqual({ success: true, data: { skipped: true, reason: 'stale-target-url' } })
-      expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
+      expect(result).toEqual({ success: true })
+      expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+        stateManager,
+        message.payload,
+        77,
+        {
+          requestId: undefined,
+          windowId: undefined,
+        }
+      )
     })
 
-    it('rejects malformed INITIALIZE_TAB payloads before reaching the handler', async () => {
+    it("rejects malformed INITIALIZE_TAB payloads before reaching the handler", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: StateAction.INITIALIZE_TAB,
         tabId: 77,
         payload: {
-          context: 'ready',
-          siteIntegrationId: 'mangadex',
-          mangaId: 'series-1',
-          seriesTitle: 'Series 1',
+          context: "ready",
+          siteIntegrationId: "mangadex",
+          mangaId: "series-1",
+          seriesTitle: "Series 1",
           chapters: [
             {
-              id: '',
-              url: 'https://mangadex.org/chapter/1',
-              title: 'Chapter 1',
+              id: "",
+              url: "https://mangadex.org/chapter/1",
+              title: "Chapter 1",
             },
           ],
         } as unknown,
@@ -220,21 +259,23 @@ describe('State discipline runtime guards', () => {
 
       const result = await processStateAction(stateManager, message)
 
-      expect(result).toEqual({ success: false, error: 'Invalid payload for INITIALIZE_TAB' })
+      expect(result).toEqual({
+        success: false,
+        error: "Invalid payload for INITIALIZE_TAB",
+      })
       expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
     })
 
-    it('returns standardized unknown-action error for unsupported actions', async () => {
+    it("returns standardized unknown-action error for unsupported actions", async () => {
       const message: StateActionMessage = {
-        type: 'STATE_ACTION',
+        type: "STATE_ACTION",
         action: 999 as StateAction,
       }
 
       const result = await processStateAction(stateManager, message)
 
-      expect(result).toEqual({ success: false, error: 'Unknown action' })
-      expect(mocks.loggerWarn).toHaveBeenCalledWith('Unknown state action: 999')
+      expect(result).toEqual({ success: false, error: "Unknown action" })
+      expect(mocks.loggerWarn).toHaveBeenCalledWith("Unknown state action: 999")
     })
   })
 })
-

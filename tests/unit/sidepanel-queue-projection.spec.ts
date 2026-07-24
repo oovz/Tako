@@ -1,41 +1,64 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from "vitest"
 
-import { projectToQueueView } from '@/src/runtime/projection'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { DownloadTaskState } from '@/src/types/queue-state'
+import { projectToQueueView } from "@/src/runtime/projection"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import type { DownloadTaskState } from "@/src/types/queue-state"
 
-function makeTask(id: string, status: DownloadTaskState['status'], created: number): DownloadTaskState {
+function makeTask(
+  id: string,
+  status: DownloadTaskState["status"],
+  created: number,
+  completed?: number
+): DownloadTaskState {
   return {
     id,
-    siteIntegrationId: 'test-site',
-    mangaId: 'series-1',
+    siteIntegrationId: "test-site",
+    mangaId: "series-1",
     seriesTitle: `Series ${id}`,
     chapters: [],
     status,
     created,
-    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'test-site'),
+    completed,
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
   } as DownloadTaskState
 }
 
-describe('queueView projection contract', () => {
-  it('keeps downloading active and queued tasks ordered by creation time', () => {
+describe("queueView projection contract", () => {
+  it("keeps downloading active and queued tasks ordered by creation time", () => {
     const now = Date.now()
     const projection = projectToQueueView([
-      makeTask('queued-1', 'queued', now - 3000),
-      makeTask('queued-2', 'queued', now - 2000),
-      makeTask('downloading-1', 'downloading', now - 1000),
+      makeTask("queued-1", "queued", now - 3000),
+      makeTask("queued-2", "queued", now - 2000),
+      makeTask("downloading-1", "downloading", now - 1000),
     ])
 
     expect(projection.activeCount).toBe(1)
     expect(projection.queuedCount).toBe(2)
     expect(projection.queueView.map((task) => task.id)).toEqual([
-      'downloading-1',
-      'queued-1',
-      'queued-2',
+      "downloading-1",
+      "queued-1",
+      "queued-2",
     ])
-    expect(projection.queueView[1]?.status).toBe('queued')
-    expect(projection.queueView[2]?.status).toBe('queued')
+    expect(projection.queueView[1]?.status).toBe("queued")
+    expect(projection.queueView[2]?.status).toBe("queued")
+  })
+
+  it("keeps terminal tasks out of the nonterminal queue and orders history newest first", () => {
+    const projection = projectToQueueView([
+      makeTask("completed-old", "completed", 1000, 1000),
+      makeTask("queued-1", "queued", 2000),
+      makeTask("failed-new", "failed", 3000, 3000),
+      makeTask("downloading-1", "downloading", 4000),
+    ])
+
+    expect(projection.queueView.map((task) => task.id)).toEqual([
+      "downloading-1",
+      "queued-1",
+    ])
+    expect(projection.historyView.map((task) => task.id)).toEqual([
+      "failed-new",
+      "completed-old",
+    ])
   })
 })
-

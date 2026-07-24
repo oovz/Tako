@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi } from "vitest"
 
 export interface ChromeStorageMockOptions {
   localData?: Record<string, unknown>
@@ -9,16 +9,31 @@ export interface ChromeStorageMockOptions {
 export interface ChromeStorageMock {
   local: Record<string, unknown>
   session: Record<string, unknown>
-  localOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void>
-  sessionOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void>
+  localOnChangedListeners: Array<
+    (
+      changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+      area: string
+    ) => void
+  >
+  sessionOnChangedListeners: Array<
+    (
+      changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+      area: string
+    ) => void
+  >
   mocks: Array<{ mockClear: () => void }>
   restore: () => void
 }
 
 function createStorageArea(
   data: Record<string, unknown>,
-  onChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void>,
-  areaName: string,
+  onChangedListeners: Array<
+    (
+      changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+      area: string
+    ) => void
+  >,
+  areaName: string
 ) {
   return {
     get: vi.fn((keys?: string | string[] | null) => {
@@ -35,7 +50,10 @@ function createStorageArea(
       return Promise.resolve(result)
     }),
     set: vi.fn((items: Record<string, unknown>) => {
-      const changes: Record<string, { oldValue?: unknown; newValue?: unknown }> = {}
+      const changes: Record<
+        string,
+        { oldValue?: unknown; newValue?: unknown }
+      > = {}
       for (const [key, newValue] of Object.entries(items)) {
         const oldValue = data[key]
         data[key] = newValue
@@ -47,8 +65,11 @@ function createStorageArea(
       return Promise.resolve()
     }),
     remove: vi.fn((keys: string | string[]) => {
-      const keyArray = typeof keys === 'string' ? [keys] : keys
-      const changes: Record<string, { oldValue?: unknown; newValue?: unknown }> = {}
+      const keyArray = typeof keys === "string" ? [keys] : keys
+      const changes: Record<
+        string,
+        { oldValue?: unknown; newValue?: unknown }
+      > = {}
       for (const key of keyArray) {
         if (key in data) {
           changes[key] = { oldValue: data[key], newValue: undefined }
@@ -69,14 +90,22 @@ function createStorageArea(
   }
 }
 
-export function createChromeStorageMock(options: ChromeStorageMockOptions = {}): ChromeStorageMock {
+export function createChromeStorageMock(
+  options: ChromeStorageMockOptions = {}
+): ChromeStorageMock {
   const localData: Record<string, unknown> = { ...options.localData }
   const sessionData: Record<string, unknown> = { ...options.sessionData }
-  const localOnChangedListeners: ChromeStorageMock['localOnChangedListeners'] = []
-  const sessionOnChangedListeners: ChromeStorageMock['sessionOnChangedListeners'] = []
+  const localOnChangedListeners: ChromeStorageMock["localOnChangedListeners"] =
+    []
+  const sessionOnChangedListeners: ChromeStorageMock["sessionOnChangedListeners"] =
+    []
 
-  const local = createStorageArea(localData, localOnChangedListeners, 'local')
-  const session = createStorageArea(sessionData, sessionOnChangedListeners, 'session')
+  const local = createStorageArea(localData, localOnChangedListeners, "local")
+  const session = createStorageArea(
+    sessionData,
+    sessionOnChangedListeners,
+    "session"
+  )
 
   const storage: Record<string, unknown> = {
     local,
@@ -84,19 +113,32 @@ export function createChromeStorageMock(options: ChromeStorageMockOptions = {}):
   }
 
   const collectedMocks: Array<{ mockClear: () => void }> = [
-    local.get, local.set, local.remove, local.clear,
-    session.get, session.set, session.remove, session.clear,
+    local.get,
+    local.set,
+    local.remove,
+    local.clear,
+    session.get,
+    session.set,
+    session.remove,
+    session.clear,
   ]
 
   if (options.includeOnChanged) {
-    const addListener = vi.fn((callback: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void) => {
-      localOnChangedListeners.push((changes, area) => {
-        if (area === 'local') callback(changes, area)
-      })
-      sessionOnChangedListeners.push((changes, area) => {
-        if (area === 'session') callback(changes, area)
-      })
-    })
+    const addListener = vi.fn(
+      (
+        callback: (
+          changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+          area: string
+        ) => void
+      ) => {
+        localOnChangedListeners.push((changes, area) => {
+          if (area === "local") callback(changes, area)
+        })
+        sessionOnChangedListeners.push((changes, area) => {
+          if (area === "session") callback(changes, area)
+        })
+      }
+    )
     const removeListener = vi.fn()
     storage.onChanged = { addListener, removeListener }
     collectedMocks.push(addListener, removeListener)

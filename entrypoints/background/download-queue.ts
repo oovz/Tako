@@ -8,15 +8,16 @@
 
 export {
   processDownloadQueue,
+  resumeDownloadTask,
   startDownloadTask,
-} from './download-queue-runner'
+} from "./download-queue-runner"
 export {
   enqueueStartDownloadTask,
   type StartDownloadPayload,
-} from './download-queue-enqueue'
+} from "./download-queue-enqueue"
 export {
   clearAllHistory,
   moveTaskToTop,
   restartTask,
   retryFailedChapters,
-} from './download-queue-history-actions'
+} from "./download-queue-history-actions"

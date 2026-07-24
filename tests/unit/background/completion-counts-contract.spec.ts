@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { NotificationService } from '@/entrypoints/background/notification-service'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { DownloadTaskState } from '@/src/types/queue-state'
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { NotificationService } from "@/entrypoints/background/notification-service"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import type { DownloadTaskState } from "@/src/types/queue-state"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -14,33 +14,37 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/site-integrations/manifest', () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => 'MangaDex'),
+vi.mock("@/src/site-integrations/manifest", () => ({
+  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
 }))
 
-function makeTask(overrides: Partial<DownloadTaskState> = {}): DownloadTaskState {
+function makeTask(
+  overrides: Partial<DownloadTaskState> = {}
+): DownloadTaskState {
   const now = Date.now()
-  const siteIntegrationId = overrides.siteIntegrationId ?? 'mangadex'
+  const siteIntegrationId = overrides.siteIntegrationId ?? "mangadex"
   return {
-    id: overrides.id ?? 'task-1',
+    id: overrides.id ?? "task-1",
     siteIntegrationId,
-    mangaId: overrides.mangaId ?? 'mangadex:series-1',
-    seriesTitle: overrides.seriesTitle ?? 'Series 1',
+    mangaId: overrides.mangaId ?? "mangadex:series-1",
+    seriesTitle: overrides.seriesTitle ?? "Series 1",
     chapters: overrides.chapters ?? [],
-    status: overrides.status ?? 'completed',
+    status: overrides.status ?? "completed",
     created: overrides.created ?? now,
     completed: overrides.completed ?? now,
-    settingsSnapshot: overrides.settingsSnapshot ?? createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
+    settingsSnapshot:
+      overrides.settingsSnapshot ??
+      createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
   }
 }
 
-describe('completion notification chapter counts', () => {
+describe("completion notification chapter counts", () => {
   const notificationsCreate = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       runtime: {
         getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
       },
@@ -56,23 +60,23 @@ describe('completion notification chapter counts', () => {
     })
   })
 
-  it('falls back to total chapter count when completed count is zero', () => {
+  it("falls back to total chapter count when completed count is zero", () => {
     const task = makeTask({
       chapters: [
         {
-          id: 'ch-1',
-          url: 'https://example.com/ch-1',
-          title: 'Chapter 1',
+          id: "ch-1",
+          url: "https://example.com/ch-1",
+          title: "Chapter 1",
           index: 1,
-          status: 'failed',
+          status: "failed",
           lastUpdated: Date.now(),
         },
         {
-          id: 'ch-2',
-          url: 'https://example.com/ch-2',
-          title: 'Chapter 2',
+          id: "ch-2",
+          url: "https://example.com/ch-2",
+          title: "Chapter 2",
           index: 2,
-          status: 'failed',
+          status: "failed",
           lastUpdated: Date.now(),
         },
       ],
@@ -85,8 +89,7 @@ describe('completion notification chapter counts', () => {
       `task_complete_${task.id}`,
       expect.objectContaining({
         message: `${task.seriesTitle}: 2/2 chapters saved`,
-      }),
+      })
     )
   })
 })
-

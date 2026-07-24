@@ -1,148 +1,285 @@
 /**
  * Intelligent Progress Calculator
- * 
+ *
  * Implements 5% startup + 95% distributed across chapters
  * Provides accurate, smooth progress tracking for downloads
  */
 
 export interface ProgressPhase {
-  name: 'startup' | 'downloading' | 'finalizing';
-  basePercentage: number;
-  weight: number;
+  name: "startup" | "downloading" | "finalizing"
+  basePercentage: number
+  weight: number
 }
 
 export interface ChapterProgressInfo {
-  chapterIndex: number;
-  totalChapters: number;
-  chapterPhase: 'fetching_html' | 'extracting_urls' | 'downloading_images' | 'creating_archive';
-  imageIndex?: number;
-  totalImages?: number;
+  chapterIndex: number
+  totalChapters: number
+  chapterPhase:
+    | "fetching_html"
+    | "extracting_urls"
+    | "downloading_images"
+    | "creating_archive"
+  imageIndex?: number
+  totalImages?: number
+}
+
+export type PipelineProgressPhase =
+  "resolving" | "downloading" | "transforming" | "archiving" | "saving"
+
+export type ProgressPhaseCostProfile = Record<PipelineProgressPhase, number>
+
+export interface ProgressCostContext {
+  integrationId: string
+  archiveFormat: "cbz" | "zip" | "none"
+  destination: "downloads-api" | "file-system-access"
+}
+
+const TRANSFORM_COST_BY_INTEGRATION: Record<string, number> = {
+  "pixiv-comic": 4_000,
+  shonenjumpplus: 3_000,
+  comicnettai: 3_000,
+}
+
+export function getInitialProgressPhaseCosts(
+  context: ProgressCostContext
+): ProgressPhaseCostProfile {
+  const integratedTransformCost =
+    TRANSFORM_COST_BY_INTEGRATION[context.integrationId] ?? 0
+  return {
+    resolving: 800,
+    // Current adapters report an image only after any descrambling has
+    // finished, so this is one measurable composite phase.
+    downloading: 8_000 + integratedTransformCost,
+    transforming: 0,
+    archiving: context.archiveFormat === "none" ? 0 : 2_500,
+    saving: context.destination === "file-system-access" ? 1_500 : 1_000,
+  }
+}
+
+export function toPipelineProgressPhase(
+  stage:
+    | "dispatching"
+    | "accepted"
+    | "resolving"
+    | "downloading"
+    | "transforming"
+    | "archiving"
+    | "saving"
+): PipelineProgressPhase {
+  return stage === "dispatching" || stage === "accepted" ? "resolving" : stage
+}
+
+export function calculatePhaseWeightedChapterFraction(input: {
+  costs: ProgressPhaseCostProfile
+  stage: Parameters<typeof toPipelineProgressPhase>[0]
+  phaseFraction: number
+}): number {
+  const phase = toPipelineProgressPhase(input.stage)
+  const boundedFraction = clamp(input.phaseFraction, 0, 1)
+  const totalCost = Object.values(input.costs).reduce(
+    (sum, cost) => sum + Math.max(0, cost),
+    0
+  )
+  if (totalCost <= 0) return boundedFraction
+
+  const phaseOrder: PipelineProgressPhase[] = [
+    "resolving",
+    "downloading",
+    "transforming",
+    "archiving",
+    "saving",
+  ]
+  let completedCost = 0
+  for (const candidate of phaseOrder) {
+    const cost = Math.max(0, input.costs[candidate])
+    if (candidate === phase) {
+      completedCost += cost * boundedFraction
+      break
+    }
+    completedCost += cost
+  }
+
+  return clamp(completedCost / totalCost, 0, 1)
+}
+
+export function calculateTimeWeightedTaskFraction(input: {
+  totalChapters: number
+  settledChapters: number
+  activeChapterFractions: number[]
+  previousDisplayedFraction?: number
+  destinationCommitted: boolean
+}): number {
+  const totalChapters = Math.max(1, Math.floor(input.totalChapters))
+  const rawFraction = clamp(
+    (Math.max(0, input.settledChapters) +
+      input.activeChapterFractions.reduce(
+        (sum, fraction) => sum + clamp(fraction, 0, 1),
+        0
+      )) /
+      totalChapters,
+    0,
+    1
+  )
+  const monotonicFraction = Math.max(
+    clamp(input.previousDisplayedFraction ?? 0, 0, 1),
+    rawFraction
+  )
+  return input.destinationCommitted
+    ? monotonicFraction
+    : Math.min(monotonicFraction, 0.99)
 }
 
 function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+  return Math.min(Math.max(value, min), max)
 }
 
 export class IntelligentProgressCalculator {
-  private readonly STARTUP_PERCENTAGE = 5;
-  private readonly DOWNLOAD_PERCENTAGE = 90;
-  private readonly FINALIZATION_PERCENTAGE = 5;
-  
+  private readonly STARTUP_PERCENTAGE = 5
+  private readonly DOWNLOAD_PERCENTAGE = 90
+  private readonly FINALIZATION_PERCENTAGE = 5
+
   private readonly phases: ProgressPhase[] = [
-    { name: 'startup', basePercentage: 0, weight: this.STARTUP_PERCENTAGE },
-    { name: 'downloading', basePercentage: this.STARTUP_PERCENTAGE, weight: this.DOWNLOAD_PERCENTAGE },
-    { name: 'finalizing', basePercentage: this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE, weight: this.FINALIZATION_PERCENTAGE }
-  ];
+    { name: "startup", basePercentage: 0, weight: this.STARTUP_PERCENTAGE },
+    {
+      name: "downloading",
+      basePercentage: this.STARTUP_PERCENTAGE,
+      weight: this.DOWNLOAD_PERCENTAGE,
+    },
+    {
+      name: "finalizing",
+      basePercentage: this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE,
+      weight: this.FINALIZATION_PERCENTAGE,
+    },
+  ]
 
   /**
    * Calculate startup progress (0-5%)
    */
-  calculateStartupProgress(step: 'initializing' | 'connecting' | 'ready'): number {
+  calculateStartupProgress(
+    step: "initializing" | "connecting" | "ready"
+  ): number {
     const stepProgress = {
-      initializing: 30,  // 30% of startup
-      connecting: 70,    // 70% of startup  
-      ready: 100         // 100% of startup
-    };
-    
-    return Math.round((stepProgress[step] / 100) * this.STARTUP_PERCENTAGE);
+      initializing: 30, // 30% of startup
+      connecting: 70, // 70% of startup
+      ready: 100, // 100% of startup
+    }
+
+    return Math.round((stepProgress[step] / 100) * this.STARTUP_PERCENTAGE)
   }
 
   /**
    * Calculate download progress (5-95%)
    */
   calculateDownloadProgress(chapterInfo: ChapterProgressInfo): number {
-    const { chapterIndex, totalChapters, chapterPhase, imageIndex = 0, totalImages = 0 } = chapterInfo;
+    const {
+      chapterIndex,
+      totalChapters,
+      chapterPhase,
+      imageIndex = 0,
+      totalImages = 0,
+    } = chapterInfo
 
     if (!Number.isFinite(totalChapters) || totalChapters <= 0) {
-      return this.STARTUP_PERCENTAGE;
+      return this.STARTUP_PERCENTAGE
     }
 
-    const boundedTotalChapters = Math.max(1, Math.floor(totalChapters));
-    const boundedChapterIndex = clamp(chapterIndex, 0, boundedTotalChapters - 1);
-    
+    const boundedTotalChapters = Math.max(1, Math.floor(totalChapters))
+    const boundedChapterIndex = clamp(chapterIndex, 0, boundedTotalChapters - 1)
+
     // Each chapter gets equal portion of the 90% download allocation
-    const chapterWeight = this.DOWNLOAD_PERCENTAGE / boundedTotalChapters;
-    const completedChaptersProgress = boundedChapterIndex * chapterWeight;
-    
+    const chapterWeight = this.DOWNLOAD_PERCENTAGE / boundedTotalChapters
+    const completedChaptersProgress = boundedChapterIndex * chapterWeight
+
     // Current chapter progress within its allocation
-    let currentChapterProgress = 0;
-    
+    let currentChapterProgress = 0
+
     switch (chapterPhase) {
-      case 'fetching_html':
-        currentChapterProgress = 0.1; // 10% of chapter
-        break;
-        
-      case 'extracting_urls':
-        currentChapterProgress = 0.2; // 20% of chapter
-        break;
-        
-      case 'downloading_images':
+      case "fetching_html":
+        currentChapterProgress = 0.1 // 10% of chapter
+        break
+
+      case "extracting_urls":
+        currentChapterProgress = 0.2 // 20% of chapter
+        break
+
+      case "downloading_images":
         if (totalImages > 0) {
           // 20% -> 90% of chapter (70% range for image downloading)
-          const imageProgress = clamp(imageIndex / totalImages, 0, 1);
-          currentChapterProgress = 0.2 + (imageProgress * 0.7);
+          const imageProgress = clamp(imageIndex / totalImages, 0, 1)
+          currentChapterProgress = 0.2 + imageProgress * 0.7
         } else {
-          currentChapterProgress = 0.2;
+          currentChapterProgress = 0.2
         }
-        break;
-        
-      case 'creating_archive':
-        currentChapterProgress = 0.9; // 90% of chapter
-        break;
+        break
+
+      case "creating_archive":
+        currentChapterProgress = 0.9 // 90% of chapter
+        break
     }
-    
-    const currentChapterContribution = currentChapterProgress * chapterWeight;
-    const totalDownloadProgress = completedChaptersProgress + currentChapterContribution;
-    
+
+    const currentChapterContribution = currentChapterProgress * chapterWeight
+    const totalDownloadProgress =
+      completedChaptersProgress + currentChapterContribution
+
     return clamp(
       Math.round(this.STARTUP_PERCENTAGE + totalDownloadProgress),
       this.STARTUP_PERCENTAGE,
-      this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE,
-    );
+      this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE
+    )
   }
 
   /**
    * Calculate finalization progress (95-100%)
    */
-  calculateFinalizationProgress(step: 'organizing' | 'cleanup' | 'complete'): number {
+  calculateFinalizationProgress(
+    step: "organizing" | "cleanup" | "complete"
+  ): number {
     const stepProgress = {
-      organizing: 30,   // 30% of finalization
-      cleanup: 70,      // 70% of finalization
-      complete: 100     // 100% of finalization
-    };
-    
-    const baseProgress = this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE;
-    return Math.round(baseProgress + (stepProgress[step] / 100) * this.FINALIZATION_PERCENTAGE);
+      organizing: 30, // 30% of finalization
+      cleanup: 70, // 70% of finalization
+      complete: 100, // 100% of finalization
+    }
+
+    const baseProgress = this.STARTUP_PERCENTAGE + this.DOWNLOAD_PERCENTAGE
+    return Math.round(
+      baseProgress + (stepProgress[step] / 100) * this.FINALIZATION_PERCENTAGE
+    )
   }
 
   /**
    * Get progress percentage for overall task status
    */
   getOverallProgress(
-    phase: 'startup' | 'downloading' | 'finalizing',
+    phase: "startup" | "downloading" | "finalizing",
     details: Partial<ChapterProgressInfo> & { step?: string }
   ): number {
     switch (phase) {
-      case 'startup': {
-        const step = details.step as 'initializing' | 'connecting' | 'ready' | undefined;
-        return this.calculateStartupProgress(step || 'initializing');
+      case "startup": {
+        const step = details.step as
+          "initializing" | "connecting" | "ready" | undefined
+        return this.calculateStartupProgress(step || "initializing")
       }
-        
-      case 'downloading': {
+
+      case "downloading": {
         // Ensure required fields exist for ChapterProgressInfo
-        if (typeof details.chapterIndex === 'number' && typeof details.totalChapters === 'number' && details.chapterPhase) {
-          return this.calculateDownloadProgress(details as ChapterProgressInfo);
+        if (
+          typeof details.chapterIndex === "number" &&
+          typeof details.totalChapters === "number" &&
+          details.chapterPhase
+        ) {
+          return this.calculateDownloadProgress(details as ChapterProgressInfo)
         }
-        return this.STARTUP_PERCENTAGE; // Fallback
+        return this.STARTUP_PERCENTAGE // Fallback
       }
-        
-      case 'finalizing': {
-        const step = details.step as 'organizing' | 'cleanup' | 'complete' | undefined;
-        return this.calculateFinalizationProgress(step || 'organizing');
+
+      case "finalizing": {
+        const step = details.step as
+          "organizing" | "cleanup" | "complete" | undefined
+        return this.calculateFinalizationProgress(step || "organizing")
       }
-        
+
       default:
-        return 0;
+        return 0
     }
   }
 
@@ -155,14 +292,14 @@ export class IntelligentProgressCalculator {
     smoothingFactor: number = 0.3
   ): number {
     if (Math.abs(targetProgress - currentProgress) < 1) {
-      return targetProgress;
+      return targetProgress
     }
-    
+
     // Smooth transition to avoid jerky progress bars
-    const diff = targetProgress - currentProgress;
-    const increment = diff * smoothingFactor;
-    
-    return Math.round(currentProgress + increment);
+    const diff = targetProgress - currentProgress
+    const increment = diff * smoothingFactor
+
+    return Math.round(currentProgress + increment)
   }
 
   /**
@@ -173,59 +310,63 @@ export class IntelligentProgressCalculator {
     elapsedTime: number
   ): number | null {
     if (currentProgress <= 5) {
-      return null; // Too early to estimate
+      return null // Too early to estimate
     }
-    
-    const progressPercentage = currentProgress / 100;
-    const timePerPercent = elapsedTime / progressPercentage;
-    const remainingPercentage = 1 - progressPercentage;
-    
-    return Math.round(remainingPercentage * timePerPercent);
+
+    const progressPercentage = currentProgress / 100
+    const timePerPercent = elapsedTime / progressPercentage
+    const remainingPercentage = 1 - progressPercentage
+
+    return Math.round(remainingPercentage * timePerPercent)
   }
 
   /**
    * Get human-readable progress message
    */
   getProgressMessage(
-    phase: 'startup' | 'downloading' | 'finalizing',
+    phase: "startup" | "downloading" | "finalizing",
     details: Partial<ChapterProgressInfo> & { step?: string }
   ): string {
     switch (phase) {
-      case 'startup':
-        return details.step === 'initializing' ? 'Initializing download...' :
-               details.step === 'connecting' ? 'Connecting to server...' :
-               'Starting download...';
-               
-      case 'downloading': {
-        const { chapterIndex, totalChapters, chapterPhase } = details;
-        const chapterNum = (chapterIndex ?? 0) + 1;
-        
+      case "startup":
+        return details.step === "initializing"
+          ? "Initializing download..."
+          : details.step === "connecting"
+            ? "Connecting to server..."
+            : "Starting download..."
+
+      case "downloading": {
+        const { chapterIndex, totalChapters, chapterPhase } = details
+        const chapterNum = (chapterIndex ?? 0) + 1
+
         switch (chapterPhase) {
-          case 'fetching_html':
-            return `Chapter ${chapterNum}/${totalChapters}: Loading page...`;
-          case 'extracting_urls':
-            return `Chapter ${chapterNum}/${totalChapters}: Finding images...`;
-          case 'downloading_images': {
-            const { imageIndex = 0, totalImages = 0 } = details;
-            return `Chapter ${chapterNum}/${totalChapters}: Downloading ${imageIndex}/${totalImages} images...`;
+          case "fetching_html":
+            return `Chapter ${chapterNum}/${totalChapters}: Loading page...`
+          case "extracting_urls":
+            return `Chapter ${chapterNum}/${totalChapters}: Finding images...`
+          case "downloading_images": {
+            const { imageIndex = 0, totalImages = 0 } = details
+            return `Chapter ${chapterNum}/${totalChapters}: Downloading ${imageIndex}/${totalImages} images...`
           }
-          case 'creating_archive':
-            return `Chapter ${chapterNum}/${totalChapters}: Creating archive...`;
+          case "creating_archive":
+            return `Chapter ${chapterNum}/${totalChapters}: Creating archive...`
           default:
-            return `Chapter ${chapterNum}/${totalChapters}: Processing...`;
+            return `Chapter ${chapterNum}/${totalChapters}: Processing...`
         }
       }
-        
-      case 'finalizing':
-        return details.step === 'organizing' ? 'Organizing files...' :
-               details.step === 'cleanup' ? 'Cleaning up...' :
-               'Download complete!';
-               
+
+      case "finalizing":
+        return details.step === "organizing"
+          ? "Organizing files..."
+          : details.step === "cleanup"
+            ? "Cleaning up..."
+            : "Download complete!"
+
       default:
-        return 'Processing...';
+        return "Processing..."
     }
   }
 }
 
 // Export singleton instance
-export const progressCalculator = new IntelligentProgressCalculator();
+export const progressCalculator = new IntelligentProgressCalculator()

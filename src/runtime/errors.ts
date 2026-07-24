@@ -1,7 +1,8 @@
-import logger from '@/src/runtime/logger'
-import { isRecord } from '@/src/shared/type-guards'
+import logger from "@/src/runtime/logger"
+import { isRecord } from "@/src/shared/type-guards"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
-export type PersistentErrorSeverity = 'warning' | 'error'
+export type PersistentErrorSeverity = "warning" | "error"
 
 type PersistentErrorInput = {
   code: string
@@ -17,7 +18,7 @@ export interface PersistentError {
   ts: number
 }
 
-const PERSISTENT_ERRORS_STORAGE_KEY = 'persistent_errors'
+const PERSISTENT_ERRORS_STORAGE_KEY = LOCAL_STORAGE_KEYS.persistentErrors
 
 async function readPersistentErrors(): Promise<PersistentError[]> {
   try {
@@ -26,18 +27,22 @@ async function readPersistentErrors(): Promise<PersistentError[]> {
     if (!Array.isArray(raw)) return []
     const errors: PersistentError[] = []
     for (const item of raw) {
-      if (isRecord(item) && typeof item.code === 'string' && typeof item.message === 'string') {
+      if (
+        isRecord(item) &&
+        typeof item.code === "string" &&
+        typeof item.message === "string"
+      ) {
         errors.push({
           code: item.code,
           message: item.message,
-          severity: (item.severity === 'error' ? 'error' : 'warning') as PersistentErrorSeverity,
-          ts: typeof item.ts === 'number' ? item.ts : Date.now(),
+          severity: item.severity === "error" ? "error" : "warning",
+          ts: typeof item.ts === "number" ? item.ts : Date.now(),
         })
       }
     }
     return errors
   } catch (error) {
-    logger.error('persistentErrors: failed to read from storage', error)
+    logger.error("persistentErrors: failed to read from storage", error)
     return []
   }
 }
@@ -46,13 +51,13 @@ async function writePersistentErrors(errors: PersistentError[]): Promise<void> {
   try {
     await chrome.storage.local.set({ [PERSISTENT_ERRORS_STORAGE_KEY]: errors })
   } catch (error) {
-    logger.error('persistentErrors: failed to write to storage', error)
+    logger.error("persistentErrors: failed to write to storage", error)
   }
 }
 
 async function updatePersistentErrors(
   update: (existing: PersistentError[]) => PersistentError[],
-  errorContext: string,
+  errorContext: string
 ): Promise<void> {
   try {
     const existing = await readPersistentErrors()
@@ -66,20 +71,22 @@ export async function getPersistentErrors(): Promise<PersistentError[]> {
   return readPersistentErrors()
 }
 
-export async function addPersistentError(input: PersistentErrorInput): Promise<void> {
+export async function addPersistentError(
+  input: PersistentErrorInput
+): Promise<void> {
   const { code, message } = input
-  const severity: PersistentErrorSeverity = input.severity ?? 'error'
+  const severity: PersistentErrorSeverity = input.severity ?? "error"
   const ts = input.ts ?? Date.now()
 
   await updatePersistentErrors((existing) => {
     const filtered = existing.filter((error) => error.code !== code)
     return [...filtered, { code, message, severity, ts }]
-  }, 'add error')
+  }, "add error")
 }
 
 export async function clearPersistentError(code: string): Promise<void> {
   await updatePersistentErrors(
     (existing) => existing.filter((error) => error.code !== code),
-    'clear error',
+    "clear error"
   )
 }

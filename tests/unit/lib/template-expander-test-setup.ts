@@ -1,5 +1,8 @@
-import { beforeEach } from 'vitest'
-import { createMockContext, type TemplateContext } from '@/src/shared/template-expander'
+import { beforeEach } from "vitest"
+import {
+  createMockContext,
+  type TemplateContext,
+} from "@/src/shared/template-expander"
 
 let mockContext: TemplateContext
 

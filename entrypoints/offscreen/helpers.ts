@@ -1,14 +1,17 @@
-import type { Chapter } from '@/src/types/chapter'
-import type { ComicInfoV2 } from '@/src/types/comic-info'
-import { buildSeriesComicInfoBase } from '@/src/shared/chapter-metadata'
+import type { Chapter } from "@/src/types/chapter"
+import type { ComicInfoV2 } from "@/src/types/comic-info"
+import { buildSeriesComicInfoBase } from "@/src/shared/chapter-metadata"
 import type {
-  OffscreenDownloadApiRequestMessage,
-  OffscreenDownloadApiRequestResponse,
-} from '@/src/types/offscreen-messages'
-import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
+  OffscreenOutputReadyMessage,
+  OffscreenOutputReadyResponse,
+} from "@/src/types/offscreen-messages"
+import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 
-const OFFSCREEN_DOWNLOAD_API_THROTTLE_MS = 250
-let lastDownloadApiRequestAt = 0
+function throwIfDownloadRequestAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error("job-cancelled")
+  }
+}
 
 /**
  * Consumer-side type for series metadata passed to ComicInfo generation.
@@ -26,7 +29,8 @@ export function buildComicInfoMetadata(input: {
   pageCount: number
   hasCoverImage: boolean
 }): ComicInfoV2 {
-  const { chapter, seriesTitle, seriesMetadata, pageCount, hasCoverImage } = input
+  const { chapter, seriesTitle, seriesMetadata, pageCount, hasCoverImage } =
+    input
   const metadata: ComicInfoV2 = {
     ...buildSeriesComicInfoBase(seriesTitle, seriesMetadata),
     Title: chapter.title,
@@ -41,27 +45,23 @@ export function buildComicInfoMetadata(input: {
   if (hasCoverImage && pageCount > 0) {
     metadata.Pages = Array.from({ length: pageCount }, (_, index) => ({
       Image: index,
-      Type: index === 0 ? 'FrontCover' : undefined,
+      Type: index === 0 ? "FrontCover" : undefined,
     }))
   }
 
   return metadata
 }
 
-export async function sendThrottledDownloadApiRequest(
-  payload: OffscreenDownloadApiRequestMessage['payload'],
-): Promise<OffscreenDownloadApiRequestResponse> {
-  const now = Date.now()
-  const elapsed = now - lastDownloadApiRequestAt
-
-  if (elapsed < OFFSCREEN_DOWNLOAD_API_THROTTLE_MS) {
-    await new Promise((resolve) => setTimeout(resolve, OFFSCREEN_DOWNLOAD_API_THROTTLE_MS - elapsed))
-  }
-
-  lastDownloadApiRequestAt = Date.now()
-  return chrome.runtime.sendMessage<OffscreenDownloadApiRequestMessage, OffscreenDownloadApiRequestResponse>({
-    type: 'OFFSCREEN_DOWNLOAD_API_REQUEST',
+export async function sendDownloadApiRequest(
+  payload: OffscreenOutputReadyMessage["payload"],
+  signal?: AbortSignal
+): Promise<OffscreenOutputReadyResponse> {
+  throwIfDownloadRequestAborted(signal)
+  return chrome.runtime.sendMessage<
+    OffscreenOutputReadyMessage,
+    OffscreenOutputReadyResponse
+  >({
+    type: "OFFSCREEN_OUTPUT_READY",
     payload,
   })
 }
-

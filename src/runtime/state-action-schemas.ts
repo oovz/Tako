@@ -1,7 +1,17 @@
-import { z } from 'zod'
-import { StateAction } from '@/src/types/state-actions'
+import { z } from "zod"
+import { StateAction } from "@/src/types/state-actions"
 
-const InitializeTabChapterSchema = z.object({
+export const StateActionSchema = z.union([
+  z.literal(StateAction.INITIALIZE_TAB),
+  z.literal(StateAction.CLEAR_TAB_STATE),
+  z.literal(StateAction.REMOVE_DOWNLOAD_TASK),
+  z.literal(StateAction.CANCEL_DOWNLOAD_TASK),
+  z.literal(StateAction.RETRY_DESTINATION_TASK),
+  z.literal(StateAction.CONTINUE_TASK_IN_DOWNLOADS),
+  z.literal(StateAction.UNDO_PENDING_ACTION),
+])
+
+const InitializeTabChapterSchema = z.strictObject({
   id: z.string().min(1),
   url: z.string().min(1),
   title: z.string().min(1),
@@ -14,15 +24,15 @@ const InitializeTabChapterSchema = z.object({
   language: z.string().min(1).optional(),
 })
 
-const InitializeTabVolumeSchema = z.object({
+const InitializeTabVolumeSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1).optional(),
   label: z.string().min(1).optional(),
 })
 
-export const InitializeTabPayloadSchema = z.discriminatedUnion('context', [
-  z.object({
-    context: z.literal('ready'),
+export const InitializeTabPayloadSchema = z.discriminatedUnion("context", [
+  z.strictObject({
+    context: z.literal("ready"),
     siteIntegrationId: z.string().min(1),
     mangaId: z.string().min(1),
     seriesTitle: z.string().min(1),
@@ -30,17 +40,21 @@ export const InitializeTabPayloadSchema = z.discriminatedUnion('context', [
     volumes: z.array(InitializeTabVolumeSchema).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   }),
-  z.object({
-    context: z.literal('unsupported'),
+  z.strictObject({
+    context: z.literal("unsupported"),
   }),
-  z.object({
-    context: z.literal('error'),
+  z.strictObject({
+    context: z.literal("error"),
     error: z.string().min(1),
   }),
 ])
 
-export const TaskIdPayloadSchema = z.object({
+export const TaskIdPayloadSchema = z.strictObject({
   taskId: z.string().min(1),
+})
+
+export const UndoPendingActionPayloadSchema = z.strictObject({
+  token: z.string().min(1),
 })
 
 const StateActionPayloadSchemas = {
@@ -48,8 +62,14 @@ const StateActionPayloadSchemas = {
   [StateAction.CLEAR_TAB_STATE]: z.undefined(),
   [StateAction.REMOVE_DOWNLOAD_TASK]: TaskIdPayloadSchema,
   [StateAction.CANCEL_DOWNLOAD_TASK]: TaskIdPayloadSchema,
+  [StateAction.RETRY_DESTINATION_TASK]: TaskIdPayloadSchema,
+  [StateAction.CONTINUE_TASK_IN_DOWNLOADS]: TaskIdPayloadSchema,
+  [StateAction.UNDO_PENDING_ACTION]: UndoPendingActionPayloadSchema,
 } as const
 
-export function parseStateActionPayload(action: StateAction, payload: unknown): unknown {
+export function parseStateActionPayload(
+  action: StateAction,
+  payload: unknown
+): unknown {
   return StateActionPayloadSchemas[action].parse(payload)
 }

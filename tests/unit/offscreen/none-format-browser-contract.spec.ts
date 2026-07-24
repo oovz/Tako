@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { OffscreenIntegration } from '@/src/types/site-integrations'
-import { writeBlobToPath } from '@/src/storage/fs-access'
+import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import type { OffscreenIntegration } from "@/src/types/site-integrations"
+import { writeBlobToPath } from "@/src/storage/fs-access"
 
-vi.mock('@/src/runtime/site-integration-registry', () => ({
+vi.mock("@/src/runtime/site-integration-registry", () => ({
   siteIntegrationRegistry: {
     getSiteIntegration: vi.fn(),
     findById: vi.fn(),
@@ -14,16 +14,20 @@ vi.mock('@/src/runtime/site-integration-registry', () => ({
   registerSiteIntegration: vi.fn(),
 }))
 
-vi.mock('@/src/runtime/rate-limit', () => ({
-  scheduleForIntegrationScope: async (_id: string, _scope: string, fn: () => Promise<unknown>) => fn(),
+vi.mock("@/src/runtime/rate-limit", () => ({
+  scheduleForIntegrationScope: async (
+    _id: string,
+    _scope: string,
+    fn: () => Promise<unknown>
+  ) => fn(),
 }))
 
-vi.mock('@/src/shared/filename-sanitizer', () => ({
+vi.mock("@/src/shared/filename-sanitizer", () => ({
   sanitizeFilename: (value: string) => value,
-  normalizeImageFilename: () => 'normalized.jpg',
+  normalizeImageFilename: () => "normalized.jpg",
 }))
 
-vi.mock('@/entrypoints/offscreen/image-processor', () => ({
+vi.mock("@/entrypoints/offscreen/image-processor", () => ({
   PromiseQueue: class {
     add(fn: () => Promise<unknown>) {
       return fn()
@@ -41,13 +45,13 @@ vi.mock('@/entrypoints/offscreen/image-processor', () => ({
   getHttpStatusFromError: () => 500,
 }))
 
-vi.mock('@/src/storage/fs-access', () => ({
+vi.mock("@/src/storage/fs-access", () => ({
   loadDownloadRootHandle: vi.fn(),
   verifyPermission: vi.fn(),
   writeBlobToPath: vi.fn(),
 }))
 
-vi.mock('@/src/shared/settings-utils', () => ({
+vi.mock("@/src/shared/settings-utils", () => ({
   resolveEffectiveRetries: async () => ({ image: 3, chapter: 3 }),
 }))
 
@@ -57,8 +61,8 @@ global.chrome = {
   runtime: {
     sendMessage: vi.fn(async (message: { type?: string }) => {
       messages.push(message)
-      if (message.type === 'OFFSCREEN_DOWNLOAD_API_REQUEST') {
-        return { success: true, downloadId: 101 }
+      if (message.type === "OFFSCREEN_OUTPUT_READY") {
+        return { success: true, accepted: true, id: 101 }
       }
       return { success: true }
     }),
@@ -70,10 +74,10 @@ global.chrome = {
 } as unknown as typeof chrome
 
 const mockElement = {
-  textContent: '',
+  textContent: "",
   dataset: {},
   hidden: false,
-  innerHTML: '',
+  innerHTML: "",
 }
 
 global.document = {
@@ -84,36 +88,38 @@ global.window = global as unknown as Window & typeof globalThis
 global.HTMLElement = class {} as unknown as typeof HTMLElement
 global.HTMLDivElement = class {} as unknown as typeof HTMLDivElement
 
-describe('NONE format + browser downloads contract (behavior-based)', () => {
-  let worker: InstanceType<typeof import('@/entrypoints/offscreen/main').OffscreenWorker>
+describe("NONE format + browser downloads contract (behavior-based)", () => {
+  let worker: InstanceType<
+    typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+  >
   let mockDownloadImage: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     messages.length = 0
-    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:mock-url')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:mock-url")
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
 
-    const module = await import('@/entrypoints/offscreen/main')
+    const module = await import("@/entrypoints/offscreen/main")
     worker = new module.OffscreenWorker()
 
     mockDownloadImage = vi.fn().mockImplementation(async (url: string) => ({
-      filename: url.endsWith('cover.jpg')
-        ? 'cover.jpg'
-        : url.endsWith('2.jpg')
-          ? 'img2.jpg'
-          : 'img1.jpg',
+      filename: url.endsWith("cover.jpg")
+        ? "cover.jpg"
+        : url.endsWith("2.jpg")
+          ? "img2.jpg"
+          : "img1.jpg",
       data: new ArrayBuffer(10),
-      mimeType: 'image/jpeg',
+      mimeType: "image/jpeg",
     }))
 
     const mockOffscreenIntegration = {
-      id: 'test-site',
-      scope: 'test',
+      id: "test-site",
+      scope: "test",
       chapter: {
-        resolveImageUrls: async () => ['img1.jpg', 'img2.jpg'],
+        resolveImageUrls: async () => ["img1.jpg", "img2.jpg"],
         downloadImage: mockDownloadImage,
-        parseImageUrlsFromHtml: async () => ['img1.jpg', 'img2.jpg'],
+        parseImageUrlsFromHtml: async () => ["img1.jpg", "img2.jpg"],
         processImageUrls: async (raw: unknown) => raw,
       },
     } as unknown as OffscreenIntegration
@@ -127,44 +133,55 @@ describe('NONE format + browser downloads contract (behavior-based)', () => {
     vi.restoreAllMocks()
   })
 
-  it('streams image files through OFFSCREEN_DOWNLOAD_API_REQUEST in browser mode', async () => {
+  it("streams image files through OFFSCREEN_OUTPUT_READY in browser mode", async () => {
     const outcome = await worker.processDownloadChapter({
-      taskId: 'task-none-browser',
-      seriesKey: 'test-site:series-1',
+      jobId: "job-none-browser",
+      attempt: 1,
+      taskId: "task-none-browser",
+      seriesKey: "test-site:series-1",
       book: {
-        siteIntegrationId: 'test-site',
-        seriesTitle: 'Test Book',
-        coverUrl: 'https://example.com/cover.jpg',
+        siteIntegrationId: "test-site",
+        seriesTitle: "Test Book",
+        coverUrl: "https://example.com/cover.jpg",
       },
       chapter: {
-        id: 'c1',
-        title: 'Chapter 1',
-        url: 'http://example.com/c1',
+        id: "c1",
+        title: "Chapter 1",
+        url: "http://example.com/c1",
         index: 1,
         chapterNumber: 1,
-        resolvedPath: 'Chapter 1',
+        resolvedPath: "Chapter 1",
       },
       settingsSnapshot: {
-        ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'test-site'),
-        archiveFormat: 'none',
+        ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+        archiveFormat: "none",
       },
-      saveMode: 'downloads-api',
+      saveMode: "downloads-api",
       integrationContext: {
-        cookieHeader: 'PHPSESSID=abc123',
+        taskId: "task-123",
       },
     })
 
-    expect(outcome.status).toBe('completed')
+    expect(outcome.status).toBe("completed")
 
     const apiRequests = messages.filter(
       (message): message is { type: string; payload?: { filename?: string } } =>
-        typeof message === 'object' && message !== null && (message as { type?: string }).type === 'OFFSCREEN_DOWNLOAD_API_REQUEST',
+        typeof message === "object" &&
+        message !== null &&
+        (message as { type?: string }).type === "OFFSCREEN_OUTPUT_READY"
     )
 
     expect(apiRequests.length).toBeGreaterThanOrEqual(3)
-    expect(apiRequests.some((request) => request.payload?.filename?.endsWith('000-cover.jpg'))).toBe(true)
-    expect(apiRequests.some((request) => request.payload?.filename?.endsWith('ComicInfo.xml'))).toBe(true)
+    expect(
+      apiRequests.some((request) =>
+        request.payload?.filename?.endsWith("000-cover.jpg")
+      )
+    ).toBe(true)
+    expect(
+      apiRequests.some((request) =>
+        request.payload?.filename?.endsWith("ComicInfo.xml")
+      )
+    ).toBe(true)
     expect(writeBlobToPath).not.toHaveBeenCalled()
   })
 })
-

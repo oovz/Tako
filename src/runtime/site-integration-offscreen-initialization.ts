@@ -1,14 +1,14 @@
-import logger from '@/src/runtime/logger'
-import { offscreenSiteAdapters } from '@/src/runtime/generated/site-integration-offscreen-registry'
+import logger from "@/src/runtime/logger"
+import { offscreenSiteAdapters } from "@/src/runtime/generated/site-integration-offscreen-registry"
 import {
   initializeSiteIntegrationEnablement,
   registerSiteIntegrationRuntime,
   type SiteIntegrationEnablementLoader,
-} from '@/src/runtime/site-integration-initialization'
+} from "@/src/runtime/site-integration-initialization"
 import type {
   GetSiteIntegrationEnablementMessage,
   GetSiteIntegrationEnablementResponse,
-} from '@/src/types/runtime-command-messages'
+} from "@/src/types/runtime-command-messages"
 
 let offscreenInitialized = false
 let offscreenInitPromise: Promise<void> | null = null
@@ -22,22 +22,22 @@ let offscreenInitPromise: Promise<void> | null = null
  * directly. The background handler for `GET_SITE_INTEGRATION_ENABLEMENT` reads
  * `chrome.storage.local` and returns the normalized map.
  *
- * On any failure the caller falls back to empty overrides (all defaults),
- * matching the prior graceful-degradation behavior but without the TypeError
- * from touching an unavailable API.
+ * Initialization fails when the background cannot provide the persisted map.
+ * Treating an unreadable setting as "all defaults" could enable an integration
+ * the user explicitly disabled.
  */
 const offscreenEnablementLoader: SiteIntegrationEnablementLoader = async () => {
   const response = await chrome.runtime.sendMessage<
     GetSiteIntegrationEnablementMessage,
     GetSiteIntegrationEnablementResponse
-  >({ type: 'GET_SITE_INTEGRATION_ENABLEMENT' })
+  >({ type: "GET_SITE_INTEGRATION_ENABLEMENT" })
 
   if (!response || !response.success) {
-    logger.warn(
-      'offscreen: background returned no/failed enablement response; using defaults',
-      response && !response.success ? response.error : undefined,
+    throw new Error(
+      response && !response.success
+        ? `Failed to load site integration enablement: ${response.error}`
+        : "Failed to load site integration enablement: no response"
     )
-    return {}
   }
 
   return response.enablement
@@ -48,7 +48,7 @@ async function registerOffscreenSiteIntegrations(): Promise<void> {
     return
   }
 
-  logger.info('🔌 Initializing offscreen site integrations...')
+  logger.info("🔌 Initializing offscreen site integrations...")
 
   // Offscreen must NOT read chrome.storage directly; route through background.
   await initializeSiteIntegrationEnablement(offscreenEnablementLoader)
@@ -58,10 +58,15 @@ async function registerOffscreenSiteIntegrations(): Promise<void> {
   }
 
   offscreenInitialized = true
-  logger.info('✅ Offscreen site integrations initialized')
+  logger.info("✅ Offscreen site integrations initialized")
 }
 
 export function initializeOffscreenSiteIntegrations(): Promise<void> {
-  offscreenInitPromise ??= registerOffscreenSiteIntegrations()
+  offscreenInitPromise ??= registerOffscreenSiteIntegrations().catch(
+    (error) => {
+      offscreenInitPromise = null
+      throw error
+    }
+  )
   return offscreenInitPromise
 }

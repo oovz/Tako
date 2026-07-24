@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { withRetries } from '@/entrypoints/offscreen/image-processor'
+import { afterEach, describe, it, expect, vi } from "vitest"
+import { withRetries } from "@/entrypoints/offscreen/image-processor"
 
 // Retry policy behavior
 // Validates:
@@ -7,44 +7,47 @@ import { withRetries } from '@/entrypoints/offscreen/image-processor'
 // - No retries for non-429 4xx errors
 // - Single consolidated failure after final attempt
 
-describe('Retry policy', () => {
-  it('uses exponential backoff 1000, 3000, 9000 for 5xx errors', async () => {
-    const error = new Error('HTTP 500: Server error')
+describe("Retry policy", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("uses exponential backoff 1000, 3000, 9000 for 5xx errors", async () => {
+    const error = new Error("HTTP 500: Server error")
     const fn = vi.fn(async () => {
       throw error
     })
     const delays: number[] = []
-    const setTimeoutSpy = vi
-      .spyOn(globalThis, 'setTimeout')
-      .mockImplementation(((cb: (...args: unknown[]) => void, delay?: number) => {
-        delays.push(delay ?? 0)
-        cb()
-        return 0 as unknown as number
-      }) as unknown as typeof setTimeout)
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      cb: (...args: unknown[]) => void,
+      delay?: number
+    ) => {
+      delays.push(delay ?? 0)
+      cb()
+      return 0 as unknown as number
+    }) as unknown as typeof setTimeout)
 
-    await expect(withRetries(fn, 4)).rejects.toBe(error)
+    await expect(withRetries(fn, 3)).rejects.toBe(error)
     expect(fn).toHaveBeenCalledTimes(4)
 
     expect(delays.slice(0, 3)).toEqual([1000, 3000, 9000])
-    setTimeoutSpy.mockRestore()
   })
 
-  it('does not retry on non-429 4xx errors', async () => {
-    const error = new Error('HTTP 404: Not Found')
+  it("does not retry on non-429 4xx errors", async () => {
+    const error = new Error("HTTP 404: Not Found")
     const fn = vi.fn(async () => {
       throw error
     })
-    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout")
 
-    await expect(withRetries(fn, 4)).rejects.toBe(error)
+    await expect(withRetries(fn, 3)).rejects.toBe(error)
     expect(fn).toHaveBeenCalledTimes(1)
     expect(setTimeoutSpy).not.toHaveBeenCalled()
-    setTimeoutSpy.mockRestore()
   })
 
-  it('retries on 429 errors with exponential backoff', async () => {
-    const error = new Error('HTTP 429: Too Many Requests')
-    const successValue = 'ok'
+  it("retries on 429 errors with exponential backoff", async () => {
+    const error = new Error("HTTP 429: Too Many Requests")
+    const successValue = "ok"
     let attempts = 0
     const fn = vi.fn(async () => {
       attempts++
@@ -55,18 +58,18 @@ describe('Retry policy', () => {
     })
 
     const delays: number[] = []
-    const setTimeoutSpy = vi
-      .spyOn(globalThis, 'setTimeout')
-      .mockImplementation(((cb: (...args: unknown[]) => void, delay?: number) => {
-        delays.push(delay ?? 0)
-        cb()
-        return 0 as unknown as number
-      }) as unknown as typeof setTimeout)
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      cb: (...args: unknown[]) => void,
+      delay?: number
+    ) => {
+      delays.push(delay ?? 0)
+      cb()
+      return 0 as unknown as number
+    }) as unknown as typeof setTimeout)
 
-    await expect(withRetries(fn, 4)).resolves.toBe(successValue)
+    await expect(withRetries(fn, 3)).resolves.toBe(successValue)
     expect(fn).toHaveBeenCalledTimes(3)
 
     expect(delays.slice(0, 2)).toEqual([1000, 3000])
-    setTimeoutSpy.mockRestore()
   })
 })

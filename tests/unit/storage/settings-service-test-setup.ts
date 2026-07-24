@@ -1,41 +1,56 @@
-import { vi } from 'vitest';
+import { vi } from "vitest"
 
-export const mockStorageData: Record<string, unknown> = {};
-export const mockOnChangedListeners: Array<(changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void> = [];
+export const mockStorageData: Record<string, unknown> = {}
+export const mockOnChangedListeners: Array<
+  (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    area: string
+  ) => void
+> = []
 
 globalThis.chrome = {
   storage: {
     local: {
       get: vi.fn((keys: string[] | string) => {
-        const result: Record<string, unknown> = {};
-        const keyArray = Array.isArray(keys) ? keys : [keys];
-        keyArray.forEach(key => {
+        const result: Record<string, unknown> = {}
+        const keyArray = Array.isArray(keys) ? keys : [keys]
+        keyArray.forEach((key) => {
           if (key in mockStorageData) {
-            result[key] = mockStorageData[key];
+            result[key] = mockStorageData[key]
           }
-        });
-        return Promise.resolve(result);
+        })
+        return Promise.resolve(result)
       }),
       set: vi.fn((items: Record<string, unknown>) => {
-        const changes: Record<string, { oldValue?: unknown; newValue: unknown }> = {};
+        const changes: Record<
+          string,
+          { oldValue?: unknown; newValue: unknown }
+        > = {}
         Object.entries(items).forEach(([key, newValue]) => {
-          const oldValue = mockStorageData[key];
-          mockStorageData[key] = newValue;
-          changes[key] = { oldValue, newValue };
-        });
-        mockOnChangedListeners.forEach(listener => listener(changes, 'local'));
-        return Promise.resolve();
+          const oldValue = mockStorageData[key]
+          mockStorageData[key] = newValue
+          changes[key] = { oldValue, newValue }
+        })
+        mockOnChangedListeners.forEach((listener) => listener(changes, "local"))
+        return Promise.resolve()
       }),
     },
     onChanged: {
-      addListener: vi.fn((callback: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, area: string) => void) => {
-        mockOnChangedListeners.push(callback);
-      }),
+      addListener: vi.fn(
+        (
+          callback: (
+            changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+            area: string
+          ) => void
+        ) => {
+          mockOnChangedListeners.push(callback)
+        }
+      ),
     },
   },
-} as any;
+} as any
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     error: vi.fn(),
@@ -43,15 +58,15 @@ vi.mock('@/src/runtime/logger', () => ({
     warn: vi.fn(),
   },
   applyAdvancedLoggerSettings: vi.fn(),
-}));
+}))
 
-export let settingsService: any;
+export let settingsService: any
 
 export async function resetSettingsServiceTestEnvironment(): Promise<void> {
-  vi.clearAllMocks();
-  Object.keys(mockStorageData).forEach(key => delete mockStorageData[key]);
-  mockOnChangedListeners.length = 0;
-  vi.resetModules();
-  const module = await import('@/src/storage/settings-service');
-  settingsService = module.settingsService;
+  vi.clearAllMocks()
+  Object.keys(mockStorageData).forEach((key) => delete mockStorageData[key])
+  mockOnChangedListeners.length = 0
+  vi.resetModules()
+  const module = await import("@/src/storage/settings-service")
+  settingsService = module.settingsService
 }

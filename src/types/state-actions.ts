@@ -1,11 +1,11 @@
 /**
  * State Action Enum - Central Registry of All State Mutations
- * 
+ *
  * **CRITICAL**: All state mutations MUST use these StateAction values.
- * 
+ *
  * This enum serves as the single source of truth for state mutation types.
  * Each action corresponds to a handler in `entrypoints/background/action-handlers/`.
- * 
+ *
  * **Architecture Pattern**:
  * 1. UI/Content sends: `sendStateAction(StateAction.*, payload, tabId?)`
  * 2. Service Worker receives via `chrome.runtime.onMessage`
@@ -13,9 +13,9 @@
  * 4. Handler mutates state via `CentralizedStateManager`
  * 5. `chrome.storage.session.set()` broadcasts change
  * 6. All contexts react via `chrome.storage.session.onChanged`
- * 
+ *
  * **Coverage**: See individual action JSDoc comments below
- * 
+ *
  * Kept in a tiny module to avoid circular deps and allow safe imports
  * from any context (service worker, content script, UI, offscreen).
  */
@@ -36,4 +36,13 @@ export enum StateAction {
 
   /** Cancel active download task - Uses taskId, no tabId required */
   CANCEL_DOWNLOAD_TASK,
+
+  /** Retry a task after the selected custom folder has been repaired */
+  RETRY_DESTINATION_TASK,
+
+  /** Explicitly continue one blocked task through the browser Downloads API */
+  CONTINUE_TASK_IN_DOWNLOADS,
+
+  /** Restore a queued cancellation or history removal during its Undo window */
+  UNDO_PENDING_ACTION,
 }

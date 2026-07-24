@@ -4,11 +4,10 @@
  * Covers: macro expansion, edge cases, validation, sanitization, all template variables
  */
 
-import { registerTemplateResolverDirectoryCases } from './template-resolver-directory.cases';
-import { registerTemplateResolverFilenameAndPreviewCases } from './template-resolver-filename-preview.cases';
-import { registerTemplateResolverMacroUtilityCases } from './template-resolver-macro-utils.cases';
+import { registerTemplateResolverDirectoryCases } from "./template-resolver-directory.cases"
+import { registerTemplateResolverFilenameAndPreviewCases } from "./template-resolver-filename-preview.cases"
+import { registerTemplateResolverMacroUtilityCases } from "./template-resolver-macro-utils.cases"
 
-registerTemplateResolverDirectoryCases();
-registerTemplateResolverFilenameAndPreviewCases();
-registerTemplateResolverMacroUtilityCases();
-
+registerTemplateResolverDirectoryCases()
+registerTemplateResolverFilenameAndPreviewCases()
+registerTemplateResolverMacroUtilityCases()

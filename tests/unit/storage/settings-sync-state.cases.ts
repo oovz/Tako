@@ -1,18 +1,22 @@
-import { describe, expect, it, vi } from 'vitest'
-import { SettingsSyncService } from '@/src/storage/settings-sync-service'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { SETTINGS_STORAGE_KEY } from '@/src/storage/settings-service'
-import { mergeSettings, mocks, settingsGlobalChangeListener } from './settings-sync-test-setup'
+import { describe, expect, it, vi } from "vitest"
+import { SettingsSyncService } from "@/src/storage/settings-sync-service"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { SETTINGS_STORAGE_KEY } from "@/src/storage/settings-service"
+import {
+  mergeSettings,
+  mocks,
+  settingsGlobalChangeListener,
+} from "./settings-sync-test-setup"
 
 export function registerSettingsSyncStateCases(): void {
-  describe('SettingsSyncService behavior', () => {
-    it('sends SYNC_SETTINGS_TO_STATE with updated settings after updateSettingsWithSync succeeds', async () => {
+  describe("SettingsSyncService behavior", () => {
+    it("sends one centralized-state update after settings are persisted", async () => {
       const service = new SettingsSyncService()
 
       const result = await service.updateSettingsWithSync({
         downloads: {
           ...DEFAULT_SETTINGS.downloads,
-          defaultFormat: 'zip',
+          defaultFormat: "zip",
           includeComicInfo: false,
         },
       })
@@ -21,18 +25,19 @@ export function registerSettingsSyncStateCases(): void {
       expect(mocks.updateSettings).toHaveBeenCalledWith(
         expect.objectContaining({
           downloads: expect.objectContaining({
-            defaultFormat: 'zip',
+            defaultFormat: "zip",
             includeComicInfo: false,
           }),
         })
       )
+      expect(mocks.runtimeSendMessage).toHaveBeenCalledTimes(1)
       expect(mocks.runtimeSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'SYNC_SETTINGS_TO_STATE',
+          type: "SYNC_SETTINGS_TO_STATE",
           payload: {
             settings: expect.objectContaining({
               downloads: expect.objectContaining({
-                defaultFormat: 'zip',
+                defaultFormat: "zip",
                 includeComicInfo: false,
               }),
             }),
@@ -41,19 +46,19 @@ export function registerSettingsSyncStateCases(): void {
       )
     })
 
-    it('publishes SETTINGS_CHANGED notification and syncs centralized state on settings:global storage changes', () => {
+    it("publishes SETTINGS_CHANGED without echoing a background storage event", () => {
       const service = new SettingsSyncService()
       const listener = vi.fn()
       service.addListener(listener)
 
       service.initialize()
       expect(mocks.storageOnChangedAddListener).toHaveBeenCalledTimes(1)
-      expect(settingsGlobalChangeListener).toBeTypeOf('function')
+      expect(settingsGlobalChangeListener).toBeTypeOf("function")
 
       const newSettings = mergeSettings(DEFAULT_SETTINGS, {
         downloads: {
           ...DEFAULT_SETTINGS.downloads,
-          defaultFormat: 'none',
+          defaultFormat: "none",
         },
       })
 
@@ -64,27 +69,23 @@ export function registerSettingsSyncStateCases(): void {
             newValue: newSettings,
           },
         } as Record<string, chrome.storage.StorageChange>,
-        'local'
+        "local"
       )
 
       expect(listener).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'SETTINGS_CHANGED',
+          type: "SETTINGS_CHANGED",
           settings: expect.objectContaining({
-            downloads: expect.objectContaining({ defaultFormat: 'none' }),
+            downloads: expect.objectContaining({ defaultFormat: "none" }),
           }),
-          changedKeys: expect.arrayContaining(['downloads.defaultFormat']),
+          changedKeys: expect.arrayContaining(["downloads.defaultFormat"]),
         })
       )
-      expect(mocks.runtimeSendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'SYNC_SETTINGS_TO_STATE',
-        })
-      )
+      expect(mocks.runtimeSendMessage).not.toHaveBeenCalled()
     })
 
-    it('skips storage listener registration when chrome.storage.onChanged is unavailable', () => {
-      vi.stubGlobal('chrome', {
+    it("skips storage listener registration when chrome.storage.onChanged is unavailable", () => {
+      vi.stubGlobal("chrome", {
         runtime: {
           sendMessage: mocks.runtimeSendMessage,
         },
@@ -97,7 +98,7 @@ export function registerSettingsSyncStateCases(): void {
       expect(mocks.storageOnChangedAddListener).not.toHaveBeenCalled()
     })
 
-    it('canonicalizes partial settings storage changes before notifying listeners and syncing state', () => {
+    it("canonicalizes partial settings storage changes before notifying listeners", () => {
       const service = new SettingsSyncService()
       const listener = vi.fn()
       service.addListener(listener)
@@ -109,46 +110,34 @@ export function registerSettingsSyncStateCases(): void {
           [SETTINGS_STORAGE_KEY]: {
             oldValue: {
               downloads: {
-                defaultFormat: 'cbz',
+                defaultFormat: "cbz",
               },
             },
             newValue: {
               downloads: {
-                defaultFormat: 'none',
+                defaultFormat: "none",
               },
             },
           },
         } as Record<string, chrome.storage.StorageChange>,
-        'local'
+        "local"
       )
 
       expect(listener).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'SETTINGS_CHANGED',
+          type: "SETTINGS_CHANGED",
           settings: expect.objectContaining({
             downloads: expect.objectContaining({
-              defaultFormat: 'none',
+              defaultFormat: "none",
               pathTemplate: DEFAULT_SETTINGS.downloads.pathTemplate,
             }),
             globalPolicy: DEFAULT_SETTINGS.globalPolicy,
           }),
-          changedKeys: expect.arrayContaining(['downloads.defaultFormat']),
+          changedKeys: expect.arrayContaining(["downloads.defaultFormat"]),
         })
       )
 
-      expect(mocks.runtimeSendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'SYNC_SETTINGS_TO_STATE',
-          payload: {
-            settings: expect.objectContaining({
-              downloads: expect.objectContaining({
-                defaultFormat: 'none',
-                pathTemplate: DEFAULT_SETTINGS.downloads.pathTemplate,
-              }),
-            }),
-          },
-        })
-      )
+      expect(mocks.runtimeSendMessage).not.toHaveBeenCalled()
     })
   })
 }

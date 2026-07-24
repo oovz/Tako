@@ -1,124 +1,215 @@
-import { loadDownloadRootHandle, clearDownloadRootHandle, DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access';
-import { settingsService } from '@/src/storage/settings-service';
-import type { ExtensionSettings } from '@/src/storage/settings-types';
-import { addPersistentError } from '@/src/runtime/errors';
-import logger from '@/src/runtime/logger';
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
+import {
+  DOWNLOAD_ROOT_HANDLE_ID,
+  loadDownloadRootHandle,
+  queryFsaPermission,
+} from "@/src/storage/fs-access"
+import logger from "@/src/runtime/logger"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type {
+  DestinationIssue,
+  DestinationIssueKind,
+} from "@/src/types/queue-state"
+import type { DownloadDestination } from "@/src/shared/download-contract"
+import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
+import { settingsService } from "@/src/storage/settings-service"
+import { getNotificationService } from "./notification-service"
+import { normalizeDestinationIssues } from "@/src/runtime/destination-issue-state"
 
 type EffectiveDestination =
-    | { kind: 'custom'; handleId: string; handle: FileSystemDirectoryHandle }
-    | { kind: 'downloads' };
+  | { kind: "custom"; handleId: string; handle: FileSystemDirectoryHandle }
+  | { kind: "downloads" }
 
-export class DestinationService {
-    /**
-     * Resolves the effective download destination for the next task.
-     * When custom-directory mode is enabled and the persisted handle is still available,
-     * returns the custom handle. Otherwise it falls back to browser downloads and
-     * persists the fallback state for the UI.
-     */
-    async getEffectiveDestination(): Promise<EffectiveDestination> {
-        const settings = await settingsService.getSettings();
-        const wantsCustomDirectory = settings.downloads.downloadMode === 'custom'
-            || settings.downloads.customDirectoryEnabled;
-
-        if (!wantsCustomDirectory) {
-            return { kind: 'downloads' };
-        }
-
-        const handleId = settings.downloads.customDirectoryHandleId ?? DOWNLOAD_ROOT_HANDLE_ID;
-
-        try {
-            // `loadDownloadRootHandle` resolves the persisted root handle if it is still available.
-            const handle = await loadDownloadRootHandle();
-            if (!handle) {
-                await this.clearCustomDirectoryAndFallback(
-                    'Custom Folder Missing',
-                    'The selected download folder handle is no longer available. Downloads will be saved to your browser\'s default location.'
-                );
-                return { kind: 'downloads' };
-            }
-
-            return { kind: 'custom', handleId, handle };
-        } catch (error) {
-            logger.warn('[DestinationService] Custom directory handle invalid or missing, falling back to downloads', error);
-
-            await this.clearCustomDirectoryAndFallback(
-                'Custom Folder Error',
-                'The selected download folder is no longer accessible. Downloads will be saved to your browser\'s default location.'
-            );
-            return { kind: 'downloads' };
-        }
-    }
-
-    /**
-     * Clears custom directory configuration and falls back to browser downloads.
-     * Consolidates all fallback logic into a single method.
-     * 
-     * @param errorTitle - Short title for the persistent error notification
-     * @param errorMessage - Detailed message explaining why fallback occurred
-     */
-    async clearCustomDirectoryAndFallback(errorTitle: string, errorMessage: string): Promise<void> {
-        const settings = await settingsService.getSettings();
-        const fullMessage = `${errorTitle}: ${errorMessage}`;
-
-        // Only perform updates if we are currently in custom mode to avoid redundant writes
-        if (!settings.downloads.customDirectoryEnabled) {
-            return;
-        }
-
-        logger.warn('[DestinationService] Clearing custom directory, falling back to browser downloads');
-
-        await this.disableCustomDirectory(settings);
-
-        await addPersistentError({
-            code: 'FSA_HANDLE_INVALID',
-            message: fullMessage,
-            severity: 'warning'
-        });
-
-        await this.persistFallbackBanner(fullMessage);
-    }
-
-    private async disableCustomDirectory(settings: ExtensionSettings): Promise<void> {
-        const { downloads } = settings;
-
-        await settingsService.updateSettings({
-            downloads: {
-                ...downloads,
-                downloadMode: 'browser',
-                customDirectoryEnabled: false,
-                customDirectoryHandleId: null,
-            },
-        });
-
-        try {
-            await clearDownloadRootHandle();
-        } catch (e) {
-            logger.error('[DestinationService] Failed to remove handle from IDB', e);
-        }
-    }
-
-    private async persistFallbackBanner(message: string): Promise<void> {
-        await chrome.storage.local.set({
-            [LOCAL_STORAGE_KEYS.fsaError]: {
-                active: true,
-                message,
-            },
-        });
-    }
-
-    /**
-     * Called when a write failure occurs during download (e.g. from Offscreen).
-     */
-    async reportWriteFailure(error: unknown): Promise<void> {
-        const msg = error instanceof Error ? error.message : String(error);
-        await this.clearCustomDirectoryAndFallback(
-            'Download Location Changed',
-            `Write failed: ${msg}. Falling back to browser downloads.`
-        );
-    }
+export interface DestinationContext {
+  taskId: string
+  chapterId?: string
+  destination: DownloadDestination
+  destinationOverride?: "downloads-api"
 }
 
-export const destinationService = new DestinationService();
+const destinationIssueMutations = new StorageMutationQueue()
 
+export type DestinationPreflight =
+  | { ready: true }
+  | {
+      ready: false
+      reason:
+        | "unsupported"
+        | "not_configured"
+        | "permission_prompt"
+        | "permission_denied"
+        | "folder_unavailable"
+    }
 
+export class DestinationPreflightError extends Error {
+  readonly reason: Exclude<DestinationPreflight, { ready: true }>["reason"]
+
+  constructor(reason: DestinationPreflightError["reason"]) {
+    super(`Destination preflight failed: ${reason}`)
+    this.name = "DestinationPreflightError"
+    this.reason = reason
+  }
+}
+
+function issueKindForPreflight(
+  result: Exclude<DestinationPreflight, { ready: true }>
+): DestinationIssueKind {
+  switch (result.reason) {
+    case "permission_prompt":
+    case "permission_denied":
+      return "fsa_permission_required"
+    case "not_configured":
+    case "folder_unavailable":
+      return "fsa_folder_missing"
+    case "unsupported":
+      return "fsa_unsupported"
+  }
+}
+
+export async function getDestinationIssues(): Promise<DestinationIssue[]> {
+  const stored = await chrome.storage.local.get(
+    LOCAL_STORAGE_KEYS.destinationIssues
+  )
+  const value = stored[LOCAL_STORAGE_KEYS.destinationIssues]
+  return normalizeDestinationIssues(value)
+}
+
+async function recordDestinationIssueKind(
+  context: DestinationContext,
+  kind: DestinationIssueKind
+): Promise<DestinationIssue> {
+  return await destinationIssueMutations.run(async () => {
+    const issueId = `${context.taskId}:${context.chapterId ?? ""}:${kind}`
+    const current = await getDestinationIssues()
+    const existing = current.find((candidate) => candidate.id === issueId)
+    if (existing) return existing
+
+    const issue: DestinationIssue = {
+      id: issueId,
+      taskId: context.taskId,
+      chapterId: context.chapterId,
+      kind,
+      occurredAt: Date.now(),
+    }
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.destinationIssues]: [...current, issue],
+    })
+    try {
+      const settings = await settingsService.getSettings()
+      getNotificationService().notifyDestinationActionRequired({
+        issue,
+        notificationsEnabled: settings.notifications,
+      })
+    } catch (error) {
+      logger.debug(
+        "[DestinationService] Failed to show destination notification",
+        error
+      )
+    }
+    return issue
+  })
+}
+
+export async function recordDestinationIssue(
+  context: DestinationContext,
+  result: Exclude<DestinationPreflight, { ready: true }>
+): Promise<DestinationIssue> {
+  return await recordDestinationIssueKind(
+    context,
+    issueKindForPreflight(result)
+  )
+}
+
+export async function recordDestinationRuntimeIssue(
+  context: DestinationContext,
+  kind: Extract<
+    DestinationIssueKind,
+    | "fsa_permission_required"
+    | "fsa_folder_missing"
+    | "fsa_write_failed"
+    | "disk_full"
+  >
+): Promise<DestinationIssue> {
+  return await recordDestinationIssueKind(context, kind)
+}
+
+export async function clearDestinationIssuesForTask(
+  taskId: string
+): Promise<void> {
+  await destinationIssueMutations.run(async () => {
+    const current = await getDestinationIssues()
+    const next = current.filter((issue) => issue.taskId !== taskId)
+    if (next.length === current.length) return
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.destinationIssues]: next,
+    })
+  })
+}
+
+export class DestinationService {
+  async preflight(context: DestinationContext): Promise<DestinationPreflight> {
+    const destination = context.destinationOverride ?? context.destination
+    if (destination === "downloads-api") {
+      return { ready: true }
+    }
+
+    let handle: FileSystemDirectoryHandle | undefined
+    try {
+      handle = await loadDownloadRootHandle()
+    } catch (error) {
+      logger.debug(
+        "[DestinationService] FSA handle storage is unavailable",
+        error
+      )
+      return { ready: false, reason: "unsupported" }
+    }
+    if (!handle) {
+      return { ready: false, reason: "not_configured" }
+    }
+
+    const permission = await queryFsaPermission(handle, true)
+    if (permission === "granted") {
+      return { ready: true }
+    }
+    if (permission === "prompt") {
+      return { ready: false, reason: "permission_prompt" }
+    }
+    if (permission === "denied") {
+      return { ready: false, reason: "permission_denied" }
+    }
+    if (permission === "unsupported") {
+      return { ready: false, reason: "unsupported" }
+    }
+
+    return { ready: false, reason: "folder_unavailable" }
+  }
+
+  async getEffectiveDestination(
+    context: DestinationContext
+  ): Promise<EffectiveDestination> {
+    const destination = context.destinationOverride ?? context.destination
+    if (destination === "downloads-api") {
+      return { kind: "downloads" }
+    }
+
+    const preflight = await this.preflight(context)
+    if (!preflight.ready) {
+      await recordDestinationIssue(context, preflight)
+      throw new DestinationPreflightError(preflight.reason)
+    }
+
+    const handle = await loadDownloadRootHandle()
+    if (!handle) {
+      const unavailable = { ready: false, reason: "not_configured" } as const
+      await recordDestinationIssue(context, unavailable)
+      throw new DestinationPreflightError(unavailable.reason)
+    }
+
+    return {
+      kind: "custom",
+      handleId: DOWNLOAD_ROOT_HANDLE_ID,
+      handle,
+    }
+  }
+}
+
+export const destinationService = new DestinationService()

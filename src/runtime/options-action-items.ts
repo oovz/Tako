@@ -1,8 +1,8 @@
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { isRecord } from '@/src/shared/type-guards'
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { isRecord } from "@/src/shared/type-guards"
 
 export interface ExtensionUpdateActionItem {
-  status: 'available'
+  status: "available"
   version?: string
   detectedAt: number
 }
@@ -17,7 +17,7 @@ interface CreateExtensionUpdateActionItemInput {
 }
 
 interface PersistOptionsActionItemsInput {
-  storageArea?: Pick<chrome.storage.StorageArea, 'get' | 'set'>
+  storageArea?: Pick<chrome.storage.StorageArea, "get" | "set">
   now?: () => number
 }
 
@@ -25,8 +25,13 @@ interface ExtensionUpdatePersistenceInput extends PersistOptionsActionItemsInput
   version?: string
 }
 
-function getSessionStorageArea(): Pick<chrome.storage.StorageArea, 'get' | 'set'> | undefined {
-  return (globalThis as { chrome?: { storage?: { session?: chrome.storage.StorageArea } } }).chrome?.storage?.session
+function getSessionStorageArea():
+  Pick<chrome.storage.StorageArea, "get" | "set"> | undefined {
+  return (
+    globalThis as {
+      chrome?: { storage?: { session?: chrome.storage.StorageArea } }
+    }
+  ).chrome?.storage?.session
 }
 
 export function createExtensionUpdateActionItem({
@@ -35,7 +40,7 @@ export function createExtensionUpdateActionItem({
 }: CreateExtensionUpdateActionItemInput): OptionsActionItems {
   return {
     extensionUpdate: {
-      status: 'available',
+      status: "available",
       ...(version ? { version } : {}),
       detectedAt,
     },
@@ -48,26 +53,36 @@ export function parseOptionsActionItems(raw: unknown): OptionsActionItems {
   }
 
   const rawUpdate = raw.extensionUpdate
-  if (!isRecord(rawUpdate) || rawUpdate.status !== 'available' || typeof rawUpdate.detectedAt !== 'number') {
+  if (
+    !isRecord(rawUpdate) ||
+    rawUpdate.status !== "available" ||
+    typeof rawUpdate.detectedAt !== "number"
+  ) {
     return {}
   }
 
   return {
     extensionUpdate: {
-      status: 'available',
-      ...(typeof rawUpdate.version === 'string' && rawUpdate.version ? { version: rawUpdate.version } : {}),
+      status: "available",
+      ...(typeof rawUpdate.version === "string" && rawUpdate.version
+        ? { version: rawUpdate.version }
+        : {}),
       detectedAt: rawUpdate.detectedAt,
     },
   }
 }
 
 export function hasOptionsActionItems(items: OptionsActionItems): boolean {
-  return items.extensionUpdate?.status === 'available'
+  return items.extensionUpdate?.status === "available"
 }
 
-async function readOptionsActionItems(storageArea: Pick<chrome.storage.StorageArea, 'get'>): Promise<OptionsActionItems> {
-  const result = await storageArea.get(SESSION_STORAGE_KEYS.optionsActionItems) as Record<string, unknown>
-  return parseOptionsActionItems(result[SESSION_STORAGE_KEYS.optionsActionItems])
+async function readOptionsActionItems(
+  storageArea: Pick<chrome.storage.StorageArea, "get">
+): Promise<OptionsActionItems> {
+  const result = await storageArea.get(SESSION_STORAGE_KEYS.optionsActionItems)
+  return parseOptionsActionItems(
+    result[SESSION_STORAGE_KEYS.optionsActionItems]
+  )
 }
 
 export async function markExtensionUpdateActionItemAvailable({
@@ -98,5 +113,7 @@ export async function clearExtensionUpdateActionItem({
   const current = await readOptionsActionItems(storageArea)
   const remaining = { ...current }
   delete remaining.extensionUpdate
-  await storageArea.set({ [SESSION_STORAGE_KEYS.optionsActionItems]: remaining })
+  await storageArea.set({
+    [SESSION_STORAGE_KEYS.optionsActionItems]: remaining,
+  })
 }

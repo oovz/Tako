@@ -1,5 +1,13 @@
-import { HARD_TIMEOUT_MS, STALL_TIMEOUT_MS } from '@/src/constants/timeouts'
-import { normalizeAllowedImageMimeType } from '@/src/shared/site-integration-utils'
+import {
+  HARD_TIMEOUT_MS,
+  STALL_TIMEOUT_MS,
+  MAX_IMAGE_BYTES,
+} from "@/src/constants/timeouts"
+import { normalizeAllowedImageMimeType } from "@/src/shared/site-integration-utils"
+import {
+  allowsDeterministicE2eRedirect,
+  shouldAcceptDeterministicE2eMockResponse,
+} from "./deterministic-e2e-redirect"
 
 export interface FetchImageWithStallDetectionCoreOptions {
   signal?: AbortSignal
@@ -8,6 +16,7 @@ export interface FetchImageWithStallDetectionCoreOptions {
   hardTimeoutMs?: number
   fetcher?: (imageUrl: string, init: RequestInit) => Promise<Response>
   createHttpError?: (response: Response) => Error
+  assertUrlAllowed?: (url: string) => void
   onResponse?: (response: Response) => void | Promise<void>
   onBytesReceived?: (bytesReceived: number) => void | Promise<void>
 }
@@ -18,38 +27,56 @@ export interface FetchImageWithStallDetectionCoreOptions {
  */
 export async function fetchImageWithStallDetection(
   imageUrl: string,
-  options: FetchImageWithStallDetectionCoreOptions = {},
+  options: FetchImageWithStallDetectionCoreOptions = {}
 ): Promise<{ data: ArrayBuffer; mimeType: string }> {
   const stallTimeoutMs = options.stallTimeoutMs ?? STALL_TIMEOUT_MS
   const hardTimeoutMs = options.hardTimeoutMs ?? HARD_TIMEOUT_MS
 
   const controller = new AbortController()
   const onAbort = () => controller.abort(options.signal?.reason)
-  options.signal?.addEventListener('abort', onAbort, { once: true })
+  options.signal?.addEventListener("abort", onAbort, { once: true })
   if (options.signal?.aborted) {
     controller.abort(options.signal.reason)
   }
 
   const hardTimeoutId = setTimeout(() => {
-    controller.abort(new Error(`Image download hard timeout after ${hardTimeoutMs}ms`))
+    controller.abort(
+      new Error(`Image download hard timeout after ${hardTimeoutMs}ms`)
+    )
   }, hardTimeoutMs)
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
   try {
+    options.assertUrlAllowed?.(imageUrl)
     const requestInit: RequestInit = {
-      credentials: 'include',
+      credentials: "include",
       ...options.init,
+      // Validation after an automatically followed redirect is too late: the
+      // browser has already contacted the target and may have sent credentials.
+      // Integration requests therefore fail closed on every redirect.
+      redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
       signal: controller.signal,
     }
     const fetcher = options.fetcher ?? fetch
-    const response = await withAbortSignal(fetcher(imageUrl, requestInit), controller)
-
-    if (!response.ok) {
-      throw options.createHttpError?.(response) ?? new Error(`HTTP ${response.status}: ${response.statusText}`)
+    const response = await withAbortSignal(
+      fetcher(imageUrl, requestInit),
+      controller
+    )
+    if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
+      options.assertUrlAllowed?.(response.url || imageUrl)
     }
 
-    const mimeType = normalizeAllowedImageMimeType(response.headers.get('content-type'))
+    if (!response.ok) {
+      throw (
+        options.createHttpError?.(response) ??
+        new Error(`HTTP ${response.status}: ${response.statusText}`)
+      )
+    }
+
+    const mimeType = normalizeAllowedImageMimeType(
+      response.headers.get("content-type")
+    )
     await options.onResponse?.(response)
 
     if (!response.body) {
@@ -57,9 +84,14 @@ export async function fetchImageWithStallDetection(
         response.arrayBuffer(),
         stallTimeoutMs,
         `Image body stalled after ${stallTimeoutMs}ms`,
-        controller,
+        controller
       )
       await options.onBytesReceived?.(data.byteLength)
+      if (data.byteLength > MAX_IMAGE_BYTES) {
+        throw new Error(
+          `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${data.byteLength})`
+        )
+      }
       return { data, mimeType }
     }
 
@@ -78,7 +110,7 @@ export async function fetchImageWithStallDetection(
           controller,
           (timeoutId) => {
             stallTimeoutId = timeoutId
-          },
+          }
         )
 
         if (stallTimeoutId) {
@@ -92,6 +124,11 @@ export async function fetchImageWithStallDetection(
         if (readResult.value && readResult.value.byteLength > 0) {
           chunks.push(readResult.value)
           totalBytes += readResult.value.byteLength
+          if (totalBytes > MAX_IMAGE_BYTES) {
+            throw new Error(
+              `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${totalBytes})`
+            )
+          }
           await options.onBytesReceived?.(totalBytes)
         }
       } catch (error) {
@@ -115,7 +152,7 @@ export async function fetchImageWithStallDetection(
     }
   } finally {
     clearTimeout(hardTimeoutId)
-    options.signal?.removeEventListener('abort', onAbort)
+    options.signal?.removeEventListener("abort", onAbort)
     try {
       reader?.releaseLock()
     } catch {
@@ -126,7 +163,7 @@ export async function fetchImageWithStallDetection(
 
 async function withAbortSignal<T>(
   promise: Promise<T>,
-  controller: AbortController,
+  controller: AbortController
 ): Promise<T> {
   let onAbort: (() => void) | null = null
 
@@ -140,12 +177,12 @@ async function withAbortSignal<T>(
         }
 
         onAbort = () => reject(toAbortError(controller.signal))
-        controller.signal.addEventListener('abort', onAbort, { once: true })
+        controller.signal.addEventListener("abort", onAbort, { once: true })
       }),
     ])
   } finally {
     if (onAbort) {
-      controller.signal.removeEventListener('abort', onAbort)
+      controller.signal.removeEventListener("abort", onAbort)
     }
   }
 }
@@ -155,7 +192,7 @@ async function withStallTimeout<T>(
   timeoutMs: number,
   message: string,
   controller: AbortController,
-  onTimeoutScheduled?: (timeoutId: ReturnType<typeof setTimeout>) => void,
+  onTimeoutScheduled?: (timeoutId: ReturnType<typeof setTimeout>) => void
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let onAbort: (() => void) | null = null
@@ -170,7 +207,7 @@ async function withStallTimeout<T>(
         }
 
         onAbort = () => reject(toAbortError(controller.signal))
-        controller.signal.addEventListener('abort', onAbort, { once: true })
+        controller.signal.addEventListener("abort", onAbort, { once: true })
 
         timeoutId = setTimeout(() => {
           const error = new Error(message)
@@ -185,11 +222,11 @@ async function withStallTimeout<T>(
       clearTimeout(timeoutId)
     }
     if (onAbort) {
-      controller.signal.removeEventListener('abort', onAbort)
+      controller.signal.removeEventListener("abort", onAbort)
     }
   }
 }
 
 function toAbortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('aborted')
+  return signal.reason instanceof Error ? signal.reason : new Error("aborted")
 }

@@ -1,41 +1,47 @@
-import { t } from '@/src/runtime/i18n'
+import { t } from "@/src/runtime/i18n"
 
 export type ChromeWebStoreUpdateStatus = chrome.runtime.RequestUpdateCheckStatus
 
 export interface ExtensionUpdateRuntime {
-  getManifest?: () => Pick<chrome.runtime.Manifest, 'version'>
-  requestUpdateCheck?: () => Promise<Partial<chrome.runtime.RequestUpdateCheckResult>>
+  getManifest?: () => Pick<chrome.runtime.Manifest, "version">
+  requestUpdateCheck?: () => Promise<
+    Partial<chrome.runtime.RequestUpdateCheckResult>
+  >
   reload?: () => void
   onUpdateAvailable?: {
-    addListener: (callback: (details: chrome.runtime.UpdateAvailableDetails) => void) => void
-    removeListener: (callback: (details: chrome.runtime.UpdateAvailableDetails) => void) => void
+    addListener: (
+      callback: (details: chrome.runtime.UpdateAvailableDetails) => void
+    ) => void
+    removeListener: (
+      callback: (details: chrome.runtime.UpdateAvailableDetails) => void
+    ) => void
   }
 }
 
 export type ChromeWebStoreUpdateCheckResult =
   | {
       ok: true
-      status: 'no_update' | 'throttled'
+      status: "no_update" | "throttled"
       currentVersion: string
       checkedAt: number
     }
   | {
       ok: true
-      status: 'update_available'
+      status: "update_available"
       currentVersion: string
       availableVersion?: string
       checkedAt: number
     }
   | {
       ok: false
-      status: 'unsupported' | 'error'
+      status: "unsupported" | "error"
       currentVersion: string
       checkedAt: number
       error: string
     }
 
 export interface ChromeWebStoreUpdateStatusCopy {
-  tone: 'neutral' | 'success' | 'warning' | 'error'
+  tone: "neutral" | "success" | "warning" | "error"
   title: string
   description: string
 }
@@ -45,14 +51,20 @@ interface CheckForUpdateOptions {
   now?: () => number
 }
 
-const UNKNOWN_VERSION = 'unknown'
-const UNSUPPORTED_ERROR = 'Chrome Web Store update checks are only available in Chromium extension runtimes.'
+const UNKNOWN_VERSION = "unknown"
+const UNSUPPORTED_ERROR =
+  "Chrome Web Store update checks are only available in Chromium extension runtimes."
 
-export function getDefaultExtensionUpdateRuntime(): ExtensionUpdateRuntime | undefined {
-  return (globalThis as { chrome?: { runtime?: ExtensionUpdateRuntime } }).chrome?.runtime
+export function getDefaultExtensionUpdateRuntime():
+  ExtensionUpdateRuntime | undefined {
+  return (globalThis as { chrome?: { runtime?: ExtensionUpdateRuntime } })
+    .chrome?.runtime
 }
 
-export function getCurrentExtensionVersion(runtime: ExtensionUpdateRuntime | undefined = getDefaultExtensionUpdateRuntime()): string {
+export function getCurrentExtensionVersion(
+  runtime:
+    ExtensionUpdateRuntime | undefined = getDefaultExtensionUpdateRuntime()
+): string {
   return runtime?.getManifest?.().version ?? UNKNOWN_VERSION
 }
 
@@ -66,7 +78,7 @@ export async function checkForChromeWebStoreUpdate({
   if (!runtime?.requestUpdateCheck) {
     return {
       ok: false,
-      status: 'unsupported',
+      status: "unsupported",
       currentVersion,
       checkedAt,
       error: UNSUPPORTED_ERROR,
@@ -75,20 +87,20 @@ export async function checkForChromeWebStoreUpdate({
 
   try {
     const result = await runtime.requestUpdateCheck()
-    if (result.status === 'update_available') {
+    if (result.status === "update_available") {
       return {
         ok: true,
-        status: 'update_available',
+        status: "update_available",
         currentVersion,
         availableVersion: result.version || undefined,
         checkedAt,
       }
     }
 
-    if (result.status === 'throttled') {
+    if (result.status === "throttled") {
       return {
         ok: true,
-        status: 'throttled',
+        status: "throttled",
         currentVersion,
         checkedAt,
       }
@@ -96,56 +108,67 @@ export async function checkForChromeWebStoreUpdate({
 
     return {
       ok: true,
-      status: 'no_update',
+      status: "no_update",
       currentVersion,
       checkedAt,
     }
   } catch (error) {
     return {
       ok: false,
-      status: 'error',
+      status: "error",
       currentVersion,
       checkedAt,
-      error: error instanceof Error ? error.message : 'Chrome could not complete the update check.',
+      error:
+        error instanceof Error
+          ? error.message
+          : "Chrome could not complete the update check.",
     }
   }
 }
 
 export function getChromeWebStoreUpdateStatusCopy(
-  result: ChromeWebStoreUpdateCheckResult,
+  result: ChromeWebStoreUpdateCheckResult
 ): ChromeWebStoreUpdateStatusCopy {
   if (!result.ok) {
     return {
-      tone: 'error',
-      title: result.status === 'unsupported' ? t('options_updateCheckUnavailable') : t('options_updateCheckFailed'),
+      tone: "error",
+      title:
+        result.status === "unsupported"
+          ? t("options_updateCheckUnavailable")
+          : t("options_updateCheckFailed"),
       description: result.error,
     }
   }
 
-  if (result.status === 'update_available') {
-    const version = result.availableVersion ? t('options_version', [result.availableVersion]) : t('options_anUpdate')
+  if (result.status === "update_available") {
+    const version = result.availableVersion
+      ? t("options_version", [result.availableVersion])
+      : t("options_anUpdate")
     return {
-      tone: 'warning',
-      title: t('options_updateReady'),
-      description: t('options_updateReadyDesc', [version]),
+      tone: "warning",
+      title: t("options_updateReady"),
+      description: t("options_updateReadyDesc", [version]),
     }
   }
 
-  if (result.status === 'throttled') {
+  if (result.status === "throttled") {
     return {
-      tone: 'warning',
-      title: t('options_checkThrottled'),
-      description: t('options_checkThrottledDesc'),
+      tone: "warning",
+      title: t("options_checkThrottled"),
+      description: t("options_checkThrottledDesc"),
     }
   }
 
   return {
-    tone: 'neutral',
-    title: t('options_noUpdateAvailable'),
-    description: t('options_noUpdateAvailableDesc', [result.currentVersion]),
+    tone: "neutral",
+    title: t("options_noUpdateAvailable"),
+    description: t("options_noUpdateAvailableDesc", [result.currentVersion]),
   }
 }
 
-export function reloadExtensionForUpdate(runtime: ExtensionUpdateRuntime | undefined = getDefaultExtensionUpdateRuntime()): void {
+export function reloadExtensionForUpdate(
+  runtime:
+    ExtensionUpdateRuntime | undefined = getDefaultExtensionUpdateRuntime()
+): void {
   runtime?.reload?.()
 }

@@ -1,4 +1,4 @@
-import logger from '@/src/runtime/logger'
+import logger from "@/src/runtime/logger"
 
 interface OffscreenStatusWorker {
   getActiveJobCount(): number
@@ -11,19 +11,29 @@ interface OffscreenStatusController {
   reportBootstrapError(error: unknown): void
 }
 
-export function createOffscreenStatusController(worker: OffscreenStatusWorker): OffscreenStatusController {
+export function createOffscreenStatusController(
+  worker: OffscreenStatusWorker
+): OffscreenStatusController {
   const runtimeUiState = {
     isInitialized: false,
     initializationError: null as string | null,
   }
 
   const renderOffscreenStatus = (): void => {
-    const statusEl = document.getElementById('offscreen-status') as HTMLDivElement | null
-    const healthEl = document.getElementById('offscreen-health') as HTMLDivElement | null
-    const errorEl = document.getElementById('offscreen-error') as HTMLDivElement | null
+    const statusEl = document.getElementById(
+      "offscreen-status"
+    ) as HTMLDivElement | null
+    const healthEl = document.getElementById(
+      "offscreen-health"
+    ) as HTMLDivElement | null
+    const errorEl = document.getElementById(
+      "offscreen-error"
+    ) as HTMLDivElement | null
 
     if (statusEl) {
-      statusEl.textContent = runtimeUiState.initializationError ? 'Failed' : 'Active'
+      statusEl.textContent = runtimeUiState.initializationError
+        ? "Failed"
+        : "Active"
     }
 
     if (healthEl) {
@@ -33,21 +43,29 @@ export function createOffscreenStatusController(worker: OffscreenStatusWorker): 
     }
 
     if (errorEl) {
-      errorEl.textContent = runtimeUiState.initializationError ? `Error: ${runtimeUiState.initializationError}` : ''
+      errorEl.textContent = runtimeUiState.initializationError
+        ? `Error: ${runtimeUiState.initializationError}`
+        : ""
       errorEl.hidden = runtimeUiState.initializationError === null
     }
   }
 
   return {
     initializeDom(): void {
-      const statusEl = document.getElementById('offscreen-status') as HTMLDivElement | null
-      const healthEl = document.getElementById('offscreen-health') as HTMLDivElement | null
-      const jobsEl = document.getElementById('jobs') as HTMLDivElement | null
-      const jobsEmptyEl = document.getElementById('jobs-empty') as HTMLDivElement | null
+      const statusEl = document.getElementById(
+        "offscreen-status"
+      ) as HTMLDivElement | null
+      const healthEl = document.getElementById(
+        "offscreen-health"
+      ) as HTMLDivElement | null
+      const jobsEl = document.getElementById("jobs") as HTMLDivElement | null
+      const jobsEmptyEl = document.getElementById(
+        "jobs-empty"
+      ) as HTMLDivElement | null
 
       if (jobsEl && jobsEmptyEl) {
-        jobsEl.innerHTML = ''
-        jobsEmptyEl.textContent = 'No active jobs'
+        jobsEl.innerHTML = ""
+        jobsEmptyEl.textContent = "No active jobs"
       }
 
       void statusEl
@@ -68,11 +86,11 @@ export function createOffscreenStatusController(worker: OffscreenStatusWorker): 
     },
 
     reportBootstrapError(error: unknown): void {
-      logger.error('❌ Failed to initialize offscreen worker:', error)
+      logger.error("❌ Failed to initialize offscreen worker:", error)
       runtimeUiState.isInitialized = false
-      runtimeUiState.initializationError = error instanceof Error ? error.message : 'Unknown error'
+      runtimeUiState.initializationError =
+        error instanceof Error ? error.message : "Unknown error"
       renderOffscreenStatus()
     },
   }
 }
-

@@ -4,11 +4,11 @@
  */
 
 export interface TemplateMacro {
-  name: string;
-  description: string;
-  example: string;
-  requiresMangaMetadata: boolean;
-  category: 'date' | 'manga' | 'site';
+  name: string
+  description: string
+  example: string
+  requiresMangaMetadata: boolean
+  category: "date" | "manga" | "site"
 }
 
 /**
@@ -17,211 +17,247 @@ export interface TemplateMacro {
 export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
   // Date macros - can be resolved anywhere
   {
-    name: 'YYYY',
-    description: 'Current year (4 digits)',
-    example: '2025',
+    name: "YYYY",
+    description: "Current year (4 digits)",
+    example: "2025",
     requiresMangaMetadata: false,
-    category: 'date'
+    category: "date",
   },
   {
-    name: 'MM',
-    description: 'Current month (2 digits, zero-padded)',
-    example: '09',
+    name: "MM",
+    description: "Current month (2 digits, zero-padded)",
+    example: "09",
     requiresMangaMetadata: false,
-    category: 'date'
+    category: "date",
   },
   {
-    name: 'DD',
-    description: 'Current day (2 digits, zero-padded)',
-    example: '07',
+    name: "DD",
+    description: "Current day (2 digits, zero-padded)",
+    example: "07",
     requiresMangaMetadata: false,
-    category: 'date'
+    category: "date",
   },
 
   // Site macros - require site context
   {
-    name: 'PUBLISHER',
-    description: 'Manga publisher name',
-    example: 'Weekly Shonen Jump',
+    name: "PUBLISHER",
+    description: "Manga publisher name",
+    example: "Weekly Shonen Jump",
     requiresMangaMetadata: true,
-    category: 'site'
+    category: "site",
   },
   {
-    name: 'INTEGRATION_NAME',
-    description: 'Site integration name',
-    example: 'mangadex',
+    name: "INTEGRATION_NAME",
+    description: "Site integration name",
+    example: "mangadex",
     requiresMangaMetadata: false,
-    category: 'site'
+    category: "site",
   },
 
   // Manga macros - require manga metadata
   {
-    name: 'SERIES_TITLE',
-    description: 'Manga series title',
-    example: 'Hunter x Hunter',
+    name: "SERIES_TITLE",
+    description: "Manga series title",
+    example: "Hunter x Hunter",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'CHAPTER_TITLE',
-    description: 'Chapter title',
-    example: 'Chapter 1',
+    name: "CHAPTER_TITLE",
+    description: "Chapter title",
+    example: "Chapter 1",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   // Raw numeric values
   {
-    name: 'CHAPTER_NUMBER',
-    description: 'Raw chapter number (may be decimal like 15.5)',
-    example: '15.5',
+    name: "CHAPTER_NUMBER",
+    description: "Raw chapter number (may be decimal like 15.5)",
+    example: "15.5",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'VOLUME_NUMBER',
-    description: 'Raw volume number',
-    example: '5',
+    name: "VOLUME_NUMBER",
+    description: "Raw volume number",
+    example: "5",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   // Padded numeric values
   {
-    name: 'CHAPTER_NUMBER_PAD2',
-    description: 'Chapter number padded to 2 digits (falls back to raw number)',
-    example: '01',
+    name: "CHAPTER_NUMBER_PAD2",
+    description: "Chapter number padded to 2 digits (falls back to raw number)",
+    example: "01",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'CHAPTER_NUMBER_PAD3',
-    description: 'Chapter number padded to 3 digits (falls back to raw number)',
-    example: '001',
+    name: "CHAPTER_NUMBER_PAD3",
+    description: "Chapter number padded to 3 digits (falls back to raw number)",
+    example: "001",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'VOLUME_NUMBER_PAD2',
-    description: 'Volume number padded to 2 digits (falls back to raw number)',
-    example: '01',
+    name: "VOLUME_NUMBER_PAD2",
+    description: "Volume number padded to 2 digits (falls back to raw number)",
+    example: "01",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'VOLUME_TITLE',
-    description: 'Volume title',
-    example: 'Volume 1',
+    name: "VOLUME_TITLE",
+    description: "Volume title",
+    example: "Volume 1",
     requiresMangaMetadata: true,
-    category: 'manga'
+    category: "manga",
   },
   // Index macros (always available - 1-indexed position in download queue)
   {
-    name: 'CHAPTER_INDEX',
-    description: '1-indexed position in download queue (always available)',
-    example: '1',
+    name: "CHAPTER_INDEX",
+    description: "1-indexed position in download queue (always available)",
+    example: "1",
     requiresMangaMetadata: false,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'CHAPTER_INDEX_PAD2',
-    description: '1-indexed position padded to 2 digits (always available)',
-    example: '01',
+    name: "CHAPTER_INDEX_PAD2",
+    description: "1-indexed position padded to 2 digits (always available)",
+    example: "01",
     requiresMangaMetadata: false,
-    category: 'manga'
+    category: "manga",
   },
   {
-    name: 'CHAPTER_INDEX_PAD3',
-    description: '1-indexed position padded to 3 digits (always available)',
-    example: '001',
+    name: "CHAPTER_INDEX_PAD3",
+    description: "1-indexed position padded to 3 digits (always available)",
+    example: "001",
     requiresMangaMetadata: false,
-    category: 'manga'
+    category: "manga",
   },
   // Language macro
   {
-    name: 'LANGUAGE',
-    description: 'Chapter language (BCP 47 code)',
-    example: 'en',
+    name: "LANGUAGE",
+    description: "Chapter language (BCP 47 code)",
+    example: "en",
     requiresMangaMetadata: true,
-    category: 'manga'
-  }
-] as const;
+    category: "manga",
+  },
+] as const
 
-export type TemplateMacroName = (typeof TEMPLATE_MACROS)[number]['name'];
+export type TemplateMacroName = (typeof TEMPLATE_MACROS)[number]["name"]
 
 /**
- * Get all macro names as array
+ * Macros that are actually implemented in both template-expander.ts and
+ * template-resolver.ts. The full TEMPLATE_MACROS registry includes
+ * compatibility tokens (CHAPTER_INDEX*, LANGUAGE) that are declared for
+ * future implementation but not yet populated in final paths.
+ * validateTemplateMacros checks against this set so users get a clear
+ * validation error instead of a silent runtime failure.
+ */
+export const IMPLEMENTED_MACRO_NAMES: readonly string[] = [
+  "YYYY",
+  "MM",
+  "DD",
+  "PUBLISHER",
+  "INTEGRATION_NAME",
+  "SERIES_TITLE",
+  "CHAPTER_TITLE",
+  "CHAPTER_NUMBER",
+  "VOLUME_NUMBER",
+  "CHAPTER_NUMBER_PAD2",
+  "CHAPTER_NUMBER_PAD3",
+  "VOLUME_NUMBER_PAD2",
+  "VOLUME_TITLE",
+] as const
+
+/**
+ * Get all macro names as array (full registry, including unimplemented tokens)
  */
 export function getSupportedMacroNames(): TemplateMacroName[] {
-  return TEMPLATE_MACROS.map(macro => macro.name);
+  return TEMPLATE_MACROS.map((macro) => macro.name)
+}
+
+/**
+ * Get all IMPLEMENTED macro names as array
+ */
+export function getImplementedMacroNames(): readonly string[] {
+  return IMPLEMENTED_MACRO_NAMES
 }
 
 /**
  * Check if a macro name is supported
  */
 export function isSupportedMacro(macroName: string): boolean {
-  return getSupportedMacroNames().includes(macroName);
+  return getSupportedMacroNames().includes(macroName)
 }
 
 /**
  * Get macro information by name
  */
 export function getMacroInfo(macroName: string): TemplateMacro | undefined {
-  return TEMPLATE_MACROS.find(macro => macro.name === macroName);
+  return TEMPLATE_MACROS.find((macro) => macro.name === macroName)
 }
 
 /**
  * Get macros grouped by category
  */
 export function getMacrosByCategory(): Record<string, TemplateMacro[]> {
-  const grouped: Record<string, TemplateMacro[]> = {};
-  
+  const grouped: Record<string, TemplateMacro[]> = {}
+
   for (const macro of TEMPLATE_MACROS) {
     if (!grouped[macro.category]) {
-      grouped[macro.category] = [];
+      grouped[macro.category] = []
     }
-    grouped[macro.category].push(macro);
+    grouped[macro.category].push(macro)
   }
-  
-  return grouped;
+
+  return grouped
 }
 
 /**
  * Generate sample data for template preview
  */
 export function generateSampleMacroData(): Record<TemplateMacroName, string> {
-  const sampleData = {} as Record<TemplateMacroName, string>;
-  
+  const sampleData = {} as Record<TemplateMacroName, string>
+
   for (const macro of TEMPLATE_MACROS) {
-    sampleData[macro.name] = macro.example;
+    sampleData[macro.name] = macro.example
   }
-  
-  return sampleData;
+
+  return sampleData
 }
 
 /**
  * Validate that a template only uses supported macros
  */
 export function validateTemplateMacros(template: string): {
-  isValid: boolean;
-  invalidMacros: string[];
-  error?: string;
+  isValid: boolean
+  invalidMacros: string[]
+  error?: string
 } {
-  const macroPattern = /<([^>]+)>/g;
-  const usedMacros = [...template.matchAll(macroPattern)].map(match => match[1]);
-  const supportedMacros = getSupportedMacroNames();
-  
-  const invalidMacros = usedMacros.filter(macro => !supportedMacros.includes(macro));
-  
+  const macroPattern = /<([^>]+)>/g
+  const usedMacros = [...template.matchAll(macroPattern)].map(
+    (match) => match[1]
+  )
+  const implementedMacros = getImplementedMacroNames()
+
+  const invalidMacros = usedMacros.filter(
+    (macro) => !implementedMacros.includes(macro)
+  )
+
   if (invalidMacros.length > 0) {
     return {
       isValid: false,
       invalidMacros,
-      error: `Unknown macros: ${invalidMacros.map(m => `<${m}>`).join(', ')}. ` +
-             `Valid macros: ${supportedMacros.map(m => `<${m}>`).join(', ')}`
-    };
+      error:
+        `Unknown or unimplemented macros: ${invalidMacros.map((m) => `<${m}>`).join(", ")}. ` +
+        `Valid macros: ${implementedMacros.map((m) => `<${m}>`).join(", ")}`,
+    }
   }
-  
+
   return {
     isValid: true,
-    invalidMacros: []
-  };
+    invalidMacros: [],
+  }
 }

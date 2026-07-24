@@ -1,227 +1,359 @@
 /**
  * @file rate-limit.test.ts
  * @description Unit tests for rate limiting with Bottleneck
- * 
+ *
  * Tests:
  * - Policy resolution (site override > site integration default > global)
  * - Limiter creation and caching
  * - Site-integration-specific rate limiting
  * - Policy normalization
- * 
+ *
  * Note: Actual rate limiting behavior (delays, concurrency) is tested via integration tests.
  * These unit tests focus on policy resolution logic.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from "vitest"
+
+// Spy that tracks Bottleneck constructor calls (Vitest 4 mock functions are
+// not constructable, so we use a class mock with a separate call tracker).
+const bottleneckMock = vi.fn()
 
 // Mock Bottleneck before imports
-vi.mock('bottleneck/light', () => {
+vi.mock("bottleneck/light", () => {
   return {
-    default: vi.fn().mockImplementation((config) => {
-      return {
-        schedule: vi.fn().mockImplementation((task) => task()),
-        _config: config, // Store for testing
-      };
-    }),
-  };
-});
+    default: class MockBottleneck {
+      _config: unknown
+      schedule: ReturnType<typeof vi.fn>
+      constructor(config: unknown) {
+        bottleneckMock(config)
+        this._config = config
+        this.schedule = vi
+          .fn()
+          .mockImplementation((task: () => unknown) => task())
+      }
+    },
+  }
+})
 
 // Mock storage services
-vi.mock('@/src/storage/settings-service', () => ({
-  SETTINGS_STORAGE_KEY: 'settings:canonical-test',
+vi.mock("@/src/storage/settings-service", () => ({
+  SETTINGS_STORAGE_KEY: "settings:canonical-test",
   settingsService: {
     getGlobalPolicy: vi.fn().mockResolvedValue({
       image: { concurrency: 2, delayMs: 500 },
       chapter: { concurrency: 2, delayMs: 1000 },
     }),
   },
-}));
+}))
 
-vi.mock('@/src/storage/site-overrides-service', () => ({
-  SITE_OVERRIDES_STORAGE_KEY: 'siteOverrides:canonical-test',
+vi.mock("@/src/storage/site-overrides-service", () => ({
+  SITE_OVERRIDES_STORAGE_KEY: "siteOverrides:canonical-test",
   siteOverridesService: {
     getAll: vi.fn().mockResolvedValue({}),
   },
-}));
+}))
 
-vi.mock('@/src/runtime/site-integration-registry', () => ({
+vi.mock("@/src/runtime/site-integration-registry", () => ({
   siteIntegrationRegistry: {
     findById: vi.fn().mockReturnValue(null),
   },
   findSiteIntegrationForUrl: vi.fn().mockReturnValue(null),
-}));
+}))
 
-describe('Rate Limiting', () => {
+describe("Rate Limiting", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-  });
+    vi.clearAllMocks()
+  })
 
-  describe('Policy Resolution', () => {
-    it('uses global policy when no overrides exist', async () => {
-      const { settingsService } = await import('@/src/storage/settings-service');
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+  describe("Policy Resolution", () => {
+    it("uses global policy when no overrides exist", async () => {
+      const { settingsService } = await import("@/src/storage/settings-service")
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'result');
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "result"
+      )
 
       // Should call getGlobalPolicy to fetch defaults
-      expect(settingsService.getGlobalPolicy).toHaveBeenCalled();
-    });
+      expect(settingsService.getGlobalPolicy).toHaveBeenCalled()
+    })
 
-    it('checks site overrides before using defaults', async () => {
-      const { siteOverridesService } = await import('@/src/storage/site-overrides-service');
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+    it("checks site overrides before using defaults", async () => {
+      const { siteOverridesService } =
+        await import("@/src/storage/site-overrides-service")
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
-      await scheduleForIntegrationScope('test-integration', 'chapter', async () => 'result');
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "chapter",
+        async () => "result"
+      )
 
       // Should check for site overrides
-      expect(siteOverridesService.getAll).toHaveBeenCalled();
-    });
+      expect(siteOverridesService.getAll).toHaveBeenCalled()
+    })
 
-    it('merges partial site overrides over site integration defaults before global defaults', async () => {
-      const { siteOverridesService } = await import('@/src/storage/site-overrides-service');
-      const { siteIntegrationRegistry } = await import('@/src/runtime/site-integration-registry');
-      const { resolveEffectivePolicy } = await import('@/src/runtime/rate-limit');
+    it("merges partial site overrides over site integration defaults before global defaults", async () => {
+      const { siteOverridesService } =
+        await import("@/src/storage/site-overrides-service")
+      const { siteIntegrationRegistry } =
+        await import("@/src/runtime/site-integration-registry")
+      const { resolveEffectivePolicy } =
+        await import("@/src/runtime/rate-limit")
 
       vi.mocked(siteOverridesService.getAll).mockResolvedValueOnce({
-        'test-integration': {
+        "test-integration": {
           imagePolicy: { concurrency: 8 },
         },
-      });
+      })
       vi.mocked(siteIntegrationRegistry.findById).mockReturnValueOnce({
-        id: 'test-integration',
-        name: 'Test Integration',
-        author: 'test',
+        id: "test-integration",
+        name: "Test Integration",
+        author: "test",
         policyDefaults: {
           image: { concurrency: 3, delayMs: 250 },
         },
-      });
+      })
 
-      await expect(resolveEffectivePolicy('test-integration', 'image')).resolves.toEqual({
+      await expect(
+        resolveEffectivePolicy("test-integration", "image")
+      ).resolves.toEqual({
         concurrency: 8,
         delayMs: 250,
-      });
-    });
+      })
+    })
+  })
 
-  });
+  describe("URL-based Rate Limiting", () => {
+    it("rate-limits and validates declared CDN assets when the page URL matcher cannot identify them", async () => {
+      const { rateLimitedFetchForIntegration } =
+        await import("@/src/runtime/rate-limit")
 
-  describe('URL-based Rate Limiting', () => {
-    it('fetches with credentials included by default', async () => {
-      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
-      const { findSiteIntegrationForUrl } = await import('@/src/runtime/site-integration-registry');
+      bottleneckMock.mockClear()
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        url: "https://cdn.comicnettai.com/assets/page-1.jpg",
+      } as Response)
+
+      await rateLimitedFetchForIntegration(
+        "comicnettai",
+        "https://cdn.comicnettai.com/assets/page-1.jpg",
+        "image"
+      )
+
+      expect(bottleneckMock).toHaveBeenCalled()
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://cdn.comicnettai.com/assets/page-1.jpg",
+        expect.objectContaining({
+          credentials: "include",
+          redirect: "error",
+        })
+      )
+    })
+
+    it("rejects undeclared asset origins before an integration fetch starts", async () => {
+      const { rateLimitedFetchForIntegration } =
+        await import("@/src/runtime/rate-limit")
+
+      global.fetch = vi.fn()
+
+      await expect(
+        rateLimitedFetchForIntegration(
+          "comicnettai",
+          "https://attacker.example/assets/page-1.jpg",
+          "image"
+        )
+      ).rejects.toThrow("Blocked untrusted Comic Nettai request URL")
+      expect(global.fetch).not.toHaveBeenCalled()
+    })
+
+    it("fetches with credentials included by default", async () => {
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
+      const { findSiteIntegrationForUrl } =
+        await import("@/src/runtime/site-integration-registry")
 
       // Mock site integration not found - should use regular fetch
-      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null);
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null)
 
-      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+      global.fetch = vi.fn().mockResolvedValue(new Response("ok"))
 
-      await rateLimitedFetchByUrlScope('https://example.com/image.jpg', 'image');
+      await rateLimitedFetchByUrlScope("https://example.com/image.jpg", "image")
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://example.com/image.jpg',
+        "https://example.com/image.jpg",
         expect.objectContaining({
-          credentials: 'include',
+          credentials: "include",
+          redirect: "error",
         })
-      );
-    });
+      )
+    })
 
-    it('preserves custom request init options', async () => {
-      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
-      const { findSiteIntegrationForUrl } = await import('@/src/runtime/site-integration-registry');
+    it("preserves custom request init options", async () => {
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
+      const { findSiteIntegrationForUrl } =
+        await import("@/src/runtime/site-integration-registry")
 
-      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null);
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null)
 
-      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+      global.fetch = vi.fn().mockResolvedValue(new Response("ok"))
 
       await rateLimitedFetchByUrlScope(
-        'https://example.com/image.jpg', 
-        'image',
-        { method: 'POST', headers: { 'Custom': 'Header' } }
-      );
+        "https://example.com/image.jpg",
+        "image",
+        {
+          method: "POST",
+          headers: { Custom: "Header" },
+          redirect: "follow",
+        }
+      )
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://example.com/image.jpg',
+        "https://example.com/image.jpg",
         expect.objectContaining({
-          method: 'POST',
-          headers: { 'Custom': 'Header' },
-          credentials: 'include',
+          method: "POST",
+          headers: { Custom: "Header" },
+          credentials: "include",
+          redirect: "error",
         })
-      );
-    });
+      )
+    })
 
-    it('resolves the site integration from URL when available', async () => {
-      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
-      const { findSiteIntegrationForUrl } = await import('@/src/runtime/site-integration-registry');
+    it("resolves the site integration from URL when available", async () => {
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
+      const { findSiteIntegrationForUrl } =
+        await import("@/src/runtime/site-integration-registry")
 
-      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce({ 
-        id: 'mangadex', 
-        name: 'MangaDex API',
-        author: 'test'
-      });
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce({
+        id: "mangadex",
+        name: "MangaDex API",
+        author: "test",
+      })
 
-      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+      global.fetch = vi.fn().mockResolvedValue(new Response("ok"))
 
-      await rateLimitedFetchByUrlScope('https://mangadex.org/title/123', 'chapter');
+      await rateLimitedFetchByUrlScope(
+        "https://mangadex.org/title/123",
+        "chapter"
+      )
 
       // Should attempt to find the site integration for the URL
-      expect(findSiteIntegrationForUrl).toHaveBeenCalledWith('https://mangadex.org/title/123');
-    });
+      expect(findSiteIntegrationForUrl).toHaveBeenCalledWith(
+        "https://mangadex.org/title/123"
+      )
+    })
 
-    it('still rate-limits known integration URLs when user enablement hides them from the runtime matcher', async () => {
-      const Bottleneck = (await import('bottleneck/light')).default;
-      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
-      const { findSiteIntegrationForUrl, siteIntegrationRegistry } = await import('@/src/runtime/site-integration-registry');
+    it("rejects a fixed-provider redirect outside its declared origins", async () => {
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
+      const { findSiteIntegrationForUrl } =
+        await import("@/src/runtime/site-integration-registry")
 
-      vi.mocked(Bottleneck).mockClear();
-      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null);
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce({
+        id: "pixiv-comic",
+        name: "Pixiv Comic",
+        author: "test",
+      })
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        url: "https://attacker.example/redirected",
+      } as Response)
+
+      await expect(
+        rateLimitedFetchByUrlScope(
+          "https://comic.pixiv.net/api/app/works/v5/123",
+          "chapter"
+        )
+      ).rejects.toThrow("Blocked untrusted Pixiv Comic request URL")
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://comic.pixiv.net/api/app/works/v5/123",
+        expect.objectContaining({ redirect: "error" })
+      )
+    })
+
+    it("still rate-limits known integration URLs when user enablement hides them from the runtime matcher", async () => {
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
+      const { findSiteIntegrationForUrl, siteIntegrationRegistry } =
+        await import("@/src/runtime/site-integration-registry")
+
+      bottleneckMock.mockClear()
+      vi.mocked(findSiteIntegrationForUrl).mockReturnValueOnce(null)
       vi.mocked(siteIntegrationRegistry.findById).mockReturnValueOnce({
-        id: 'pixiv-comic',
-        name: 'Pixiv Comic',
-        author: 'test',
+        id: "pixiv-comic",
+        name: "Pixiv Comic",
+        author: "test",
         policyDefaults: {
           image: { concurrency: 2, delayMs: 1000 },
         },
-      });
+      })
 
-      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+      global.fetch = vi.fn().mockResolvedValue(new Response("ok"))
 
-      await rateLimitedFetchByUrlScope('https://comic.pixiv.net/works/123', 'image');
+      await rateLimitedFetchByUrlScope(
+        "https://comic.pixiv.net/works/123",
+        "image"
+      )
 
-      expect(siteIntegrationRegistry.findById).toHaveBeenCalledWith('pixiv-comic');
-      expect(Bottleneck).toHaveBeenCalled();
+      expect(siteIntegrationRegistry.findById).toHaveBeenCalledWith(
+        "pixiv-comic"
+      )
+      expect(bottleneckMock).toHaveBeenCalled()
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://comic.pixiv.net/works/123',
+        "https://comic.pixiv.net/works/123",
         expect.objectContaining({
-          credentials: 'include',
-        }),
-      );
-    });
-  });
+          credentials: "include",
+          redirect: "error",
+        })
+      )
+    })
+  })
 
-  describe('Limiter Caching', () => {
-    it('reuses limiter for the same site integration and scope', async () => {
-      const Bottleneck = (await import('bottleneck/light')).default;
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+  describe("Limiter Caching", () => {
+    it("reuses limiter for the same site integration and scope", async () => {
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
       // Clear previous calls
-      vi.mocked(Bottleneck).mockClear();
+      bottleneckMock.mockClear()
 
       // Schedule two tasks for the same site integration + scope
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'task1');
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'task2');
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "task1"
+      )
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "task2"
+      )
 
       // Bottleneck should only be instantiated once (limiter reused)
       // Note: This may be called more times due to module initialization
-      const callCount = vi.mocked(Bottleneck).mock.calls.length;
-      
-      // Schedule a third task
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'task3');
-      
-      // Should not create new limiter
-      expect(vi.mocked(Bottleneck).mock.calls.length).toBe(callCount);
-    });
+      const callCount = bottleneckMock.mock.calls.length
 
-    it('clears cached limiters when canonical storage keys change', async () => {
-      const listeners: Array<(changes: Record<string, { newValue?: unknown }>, area: string) => void> = []
+      // Schedule a third task
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "task3"
+      )
+
+      // Should not create new limiter
+      expect(bottleneckMock.mock.calls.length).toBe(callCount)
+    })
+
+    it("clears cached limiters when canonical storage keys change", async () => {
+      const listeners: Array<
+        (changes: Record<string, { newValue?: unknown }>, area: string) => void
+      > = []
       globalThis.chrome = {
         storage: {
           onChanged: {
@@ -234,102 +366,151 @@ describe('Rate Limiting', () => {
 
       vi.resetModules()
 
-      const Bottleneck = (await import('bottleneck/light')).default
-      vi.mocked(Bottleneck).mockClear()
+      bottleneckMock.mockClear()
 
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit')
-      const { SETTINGS_STORAGE_KEY } = await import('@/src/storage/settings-service')
-      const { SITE_OVERRIDES_STORAGE_KEY } = await import('@/src/storage/site-overrides-service')
+      const { scheduleForIntegrationScope, initRateLimitStorageListener } =
+        await import("@/src/runtime/rate-limit")
+      const { SETTINGS_STORAGE_KEY } =
+        await import("@/src/storage/settings-service")
+      const { SITE_OVERRIDES_STORAGE_KEY } =
+        await import("@/src/storage/site-overrides-service")
 
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'first')
-      const initialLimiterCount = vi.mocked(Bottleneck).mock.calls.length
+      initRateLimitStorageListener()
+
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "first"
+      )
+      const initialLimiterCount = bottleneckMock.mock.calls.length
 
       expect(listeners).toHaveLength(1)
 
-      listeners[0]!({
-        [SETTINGS_STORAGE_KEY]: { newValue: {} },
-        [SITE_OVERRIDES_STORAGE_KEY]: { newValue: {} },
-      }, 'local')
+      listeners[0]!(
+        {
+          [SETTINGS_STORAGE_KEY]: { newValue: {} },
+          [SITE_OVERRIDES_STORAGE_KEY]: { newValue: {} },
+        },
+        "local"
+      )
 
-      await scheduleForIntegrationScope('test-integration', 'image', async () => 'second')
+      await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "second"
+      )
 
-      expect(vi.mocked(Bottleneck).mock.calls.length).toBeGreaterThan(initialLimiterCount)
+      expect(bottleneckMock.mock.calls.length).toBeGreaterThan(
+        initialLimiterCount
+      )
     })
 
-    it('uses separate limiters per scope', async () => {
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+    it("uses separate limiters per scope", async () => {
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
       // Execute tasks with different scopes
-      const imageResult = await scheduleForIntegrationScope('test-integration', 'image', async () => 'image-task');
-      const chapterResult = await scheduleForIntegrationScope('test-integration', 'chapter', async () => 'chapter-task');
+      const imageResult = await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => "image-task"
+      )
+      const chapterResult = await scheduleForIntegrationScope(
+        "test-integration",
+        "chapter",
+        async () => "chapter-task"
+      )
 
       // Both should execute successfully with their respective limiters
-      expect(imageResult).toBe('image-task');
-      expect(chapterResult).toBe('chapter-task');
-    });
-  });
+      expect(imageResult).toBe("image-task")
+      expect(chapterResult).toBe("chapter-task")
+    })
+  })
 
-  describe('Task Execution', () => {
-    it('executes scheduled task and returns result', async () => {
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+  describe("Task Execution", () => {
+    it("executes scheduled task and returns result", async () => {
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
-      const result = await scheduleForIntegrationScope('test-integration', 'image', async () => {
-        return 'test-result';
-      });
+      const result = await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => {
+          return "test-result"
+        }
+      )
 
-      expect(result).toBe('test-result');
-    });
+      expect(result).toBe("test-result")
+    })
 
-    it('propagates task errors', async () => {
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+    it("propagates task errors", async () => {
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
       await expect(
-        scheduleForIntegrationScope('test-integration', 'image', async () => {
-          throw new Error('Task failed');
+        scheduleForIntegrationScope("test-integration", "image", async () => {
+          throw new Error("Task failed")
         })
-      ).rejects.toThrow('Task failed');
-    });
+      ).rejects.toThrow("Task failed")
+    })
 
-    it('handles async task resolution', async () => {
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+    it("handles async task resolution", async () => {
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
-      const result = await scheduleForIntegrationScope('test-integration', 'image', async () => {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return 42;
-      });
+      const result = await scheduleForIntegrationScope(
+        "test-integration",
+        "image",
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          return 42
+        }
+      )
 
-      expect(result).toBe(42);
-    });
-  });
+      expect(result).toBe(42)
+    })
+  })
 
-  describe('Error Handling', () => {
-    it('handles site integration resolution errors gracefully', async () => {
-      const { findSiteIntegrationForUrl } = await import('@/src/runtime/site-integration-registry');
-      const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit');
+  describe("Error Handling", () => {
+    it("handles site integration resolution errors gracefully", async () => {
+      const { findSiteIntegrationForUrl } =
+        await import("@/src/runtime/site-integration-registry")
+      const { rateLimitedFetchByUrlScope } =
+        await import("@/src/runtime/rate-limit")
 
       vi.mocked(findSiteIntegrationForUrl).mockImplementationOnce(() => {
-        throw new Error('Site integration error');
-      });
+        throw new Error("Site integration error")
+      })
 
-      global.fetch = vi.fn().mockResolvedValue(new Response('ok'));
+      global.fetch = vi.fn().mockResolvedValue(new Response("ok"))
 
       // Should fallback to regular fetch on error
-      const response = await rateLimitedFetchByUrlScope('https://example.com/test', 'image');
+      const response = await rateLimitedFetchByUrlScope(
+        "https://example.com/test",
+        "image"
+      )
 
-      expect(response).toBeInstanceOf(Response);
-    });
+      expect(response).toBeInstanceOf(Response)
+    })
 
-    it('handles missing settings service gracefully', async () => {
-      const { siteOverridesService } = await import('@/src/storage/site-overrides-service');
-      const { scheduleForIntegrationScope } = await import('@/src/runtime/rate-limit');
+    it("handles missing settings service gracefully", async () => {
+      const { siteOverridesService } =
+        await import("@/src/storage/site-overrides-service")
+      const { scheduleForIntegrationScope } =
+        await import("@/src/runtime/rate-limit")
 
-      vi.mocked(siteOverridesService.getAll).mockRejectedValueOnce(new Error('storage unavailable'))
+      vi.mocked(siteOverridesService.getAll).mockRejectedValueOnce(
+        new Error("storage unavailable")
+      )
 
       // Should handle error and likely use fallback defaults
       await expect(
-        scheduleForIntegrationScope('test-integration', 'image', async () => 'result')
-      ).resolves.toBeDefined();
-    });
-  });
-});
-
+        scheduleForIntegrationScope(
+          "test-integration",
+          "image",
+          async () => "result"
+        )
+      ).resolves.toBeDefined()
+    })
+  })
+})

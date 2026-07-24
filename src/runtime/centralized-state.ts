@@ -1,151 +1,392 @@
 /**
  * Centralized State Management for Chrome Extension
- * 
- * This module implements the single source of truth pattern using chrome.storage.session.
+ *
+ * Implements a durable-commit cache pattern: storage.local is authoritative,
+ * an in-memory copy serves reads after initialization, and storage.session
+ * contains best-effort UI projections.
  * The Service Worker is the ONLY component authorized to modify state.
  * All UIs listen to storage changes and render accordingly.
  */
 
-import logger from '@/src/runtime/logger';
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
-import { initializeChapterStates } from './state-helpers';
-import { LOCAL_STORAGE_KEYS, SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys';
-import { projectToQueueView, updateActionBadge } from '@/src/runtime/projection';
-import type { StorageValue } from '@/src/shared/type-guards';
-import { normalizePersistedDownloadTask } from './persisted-download-task';
-import { isGlobalAppState, isMangaPageState, resolveVolumeStates } from './state-shapes';
-import type { ChapterStatus } from '@/src/types/chapter';
-import type { DownloadTaskState, GlobalAppState } from '@/src/types/queue-state';
-import type { ChapterState, MangaPageState } from '@/src/types/tab-state';
+import logger from "@/src/runtime/logger"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { initializeChapterStates } from "./state-helpers"
+import { tabContextCache } from "@/entrypoints/background/tab-cache"
+import {
+  LOCAL_STORAGE_KEYS,
+  SESSION_STORAGE_KEYS,
+} from "@/src/runtime/storage-keys"
+import { projectToQueueView, updateActionBadge } from "@/src/runtime/projection"
+
+import { normalizePersistedDownloadTask } from "./persisted-download-task"
+import {
+  isGlobalAppState,
+  isMangaPageState,
+  resolveVolumeStates,
+} from "./state-shapes"
+import type { ChapterStatus } from "@/src/types/chapter"
+import type { DownloadTaskStatus } from "@/src/shared/download-contract"
+import type {
+  ActiveDispatchLease,
+  DownloadTaskState,
+  GlobalAppState,
+  PendingUndoAction,
+  PendingUndoReceipt,
+  TaskChapter,
+} from "@/src/types/queue-state"
+import type { ChapterState, MangaPageState } from "@/src/types/tab-state"
+import { runDispatchPersistenceExclusive } from "./dispatch-persistence-gate"
+import { normalizeActiveDispatchLease } from "./active-dispatch-lease"
+import {
+  normalizePendingUndoActions,
+  PENDING_UNDO_WINDOW_MS,
+  toPendingUndoReceipt,
+} from "./pending-undo-actions"
 
 // Re-export helpers for convenience
-export { sendStateAction, cancelDownloadTask } from './state-actions';
-export { toQueueTaskSummary } from './queue-task-summary';
+export {
+  sendStateAction,
+  cancelDownloadTask,
+  undoPendingAction,
+} from "./state-actions"
+export { toQueueTaskSummary } from "./queue-task-summary"
+
+export type DownloadTaskTransitionResult =
+  | { success: true; task: DownloadTaskState }
+  | { success: false; reason: "not-found" }
+  | {
+      success: false
+      reason: "invalid-status"
+      currentStatus: DownloadTaskStatus
+    }
+  | { success: false; reason: "active-task-exists" }
+
+export type RemoveTerminalDownloadTaskResult =
+  | { success: true; undo: PendingUndoReceipt }
+  | { success: false; reason: "not-found" }
+  | {
+      success: false
+      reason: "invalid-status"
+      currentStatus: DownloadTaskStatus
+    }
+
+export type DownloadingTaskChapterUpdateResult =
+  | { success: true; updated: boolean }
+  | { success: false; reason: "task-not-found" }
+  | { success: false; reason: "chapter-not-found" }
+  | {
+      success: false
+      reason: "task-not-downloading"
+      currentStatus: DownloadTaskStatus
+    }
+
+export type BeginChapterDispatchResult =
+  | { success: true; updated: true }
+  | Exclude<DownloadingTaskChapterUpdateResult, { success: true }>
+  | { success: false; reason: "chapter-not-dispatchable" }
+  | { success: false; reason: "dispatch-lease-conflict" }
+
+export type CancelDownloadTaskTransitionResult =
+  | {
+      success: true
+      task: DownloadTaskState
+      canceledLease: ActiveDispatchLease | null
+      undo?: PendingUndoReceipt | null
+    }
+  | Exclude<DownloadTaskTransitionResult, { success: true }>
+
+export type RestorePendingUndoActionResult =
+  | { success: true; action: PendingUndoAction }
+  | {
+      success: false
+      reason: "not-found" | "expired"
+      action?: PendingUndoAction
+    }
+
+export type FinalizePendingUndoActionResult =
+  | { success: true; action: PendingUndoAction }
+  | { success: false; reason: "not-found" }
+
+export interface ReconcilePendingUndoActionsResult {
+  finalized: PendingUndoAction[]
+  pending: PendingUndoAction[]
+}
 
 /**
  * State Manager - Service Worker Only
- * 
+ *
  * @internal This class should ONLY be instantiated in the Service Worker (background.ts).
  * Other components should use typed runtime messages and storage-backed subscription hooks.
- * 
+ *
  * CRITICAL: Do not import and instantiate this class directly in content scripts or popup.
  * The runtime check in the constructor will throw an error if used outside Service Worker context.
  */
 export class CentralizedStateManager {
-  private initialized = false;
-  private locks = new Map<string, Promise<void>>();
+  private initialized = false
+  private locks = new Map<string, Promise<void>>()
+  // Hydrated from storage.local during initialize() and replaced only after a
+  // successful durable write. Callers receive copies so they cannot expose an
+  // uncommitted mutation through this cache.
+  private globalStateCache: GlobalAppState | null = null
 
-  private async syncQueueProjection(downloadQueue: DownloadTaskState[]): Promise<void> {
-    try {
-      const projection = projectToQueueView(downloadQueue);
-      await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.queueView]: projection.queueView });
-      await updateActionBadge(projection.nonTerminalCount);
-    } catch (error) {
-      logger.debug('Failed to sync queue projection (non-fatal):', error);
+  private cloneGlobalState(state: GlobalAppState): GlobalAppState {
+    return structuredClone(state)
+  }
+
+  private normalizeDownloadQueue(value: unknown): DownloadTaskState[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+
+    return value
+      .map(normalizePersistedDownloadTask)
+      .filter((task): task is DownloadTaskState => task !== null)
+  }
+
+  private async readPendingUndoActions(): Promise<PendingUndoAction[]> {
+    const result = await chrome.storage.local.get(
+      LOCAL_STORAGE_KEYS.pendingUndoActions
+    )
+    return normalizePendingUndoActions(
+      result[LOCAL_STORAGE_KEYS.pendingUndoActions]
+    )
+  }
+
+  private createPendingUndoAction(
+    type: PendingUndoAction["type"],
+    taskSnapshot: DownloadTaskState,
+    previousQueuePosition: number,
+    now: number
+  ): PendingUndoAction {
+    return {
+      token: crypto.randomUUID(),
+      type,
+      taskSnapshot: structuredClone(taskSnapshot),
+      previousQueuePosition,
+      createdAt: now,
+      expiresAt: now + PENDING_UNDO_WINDOW_MS,
     }
   }
 
-  private async syncActiveTabContext(tabId: number, context: MangaPageState | null): Promise<void> {
+  private insertPendingUndoTask(
+    queue: DownloadTaskState[],
+    action: PendingUndoAction,
+    task: DownloadTaskState
+  ): void {
+    if (queue.some((candidate) => candidate.id === task.id)) return
+    const insertionIndex = Math.min(action.previousQueuePosition, queue.length)
+    queue.splice(insertionIndex, 0, structuredClone(task))
+  }
+
+  private applyExpiredPendingUndoAction(
+    state: GlobalAppState,
+    action: PendingUndoAction
+  ): void {
+    if (action.type !== "cancel_queued") return
+
+    const canceledAt = action.createdAt
+    const canceledTask: DownloadTaskState = {
+      ...structuredClone(action.taskSnapshot),
+      status: "canceled",
+      activeBlock: undefined,
+      errorMessage: undefined,
+      errorCategory: undefined,
+      completed: canceledAt,
+      chapters: action.taskSnapshot.chapters.map((chapter) => {
+        if (chapter.status === "downloading") {
+          return {
+            ...chapter,
+            status: "canceled",
+            errorMessage: "Canceled by user",
+            lastUpdated: canceledAt,
+          }
+        }
+        if (chapter.status === "queued") {
+          return {
+            ...chapter,
+            status: "skipped",
+            errorMessage: "Skipped after task cancellation",
+            lastUpdated: canceledAt,
+          }
+        }
+        return structuredClone(chapter)
+      }),
+    }
+    this.insertPendingUndoTask(state.downloadQueue, action, canceledTask)
+  }
+
+  private async readSessionGlobalState(): Promise<GlobalAppState | null> {
     try {
-      const tabsQuery = chrome.tabs?.query;
-      if (typeof tabsQuery !== 'function') {
-        return;
-      }
-
-      const [activeTab] = await tabsQuery({ active: true, currentWindow: true });
-      if (activeTab?.id !== tabId) {
-        return;
-      }
-
-      await chrome.storage.session.set({ [SESSION_STORAGE_KEYS.activeTabContext]: context });
+      const result = await chrome.storage.session.get(
+        SESSION_STORAGE_KEYS.globalState
+      )
+      const state = result[SESSION_STORAGE_KEYS.globalState]
+      return isGlobalAppState(state) ? state : null
     } catch (error) {
-      logger.debug('Failed to sync active tab context (non-fatal):', error);
+      logger.debug("Failed to read global state projection (non-fatal):", error)
+      return null
+    }
+  }
+
+  private async readAuthoritativeGlobalState(): Promise<GlobalAppState> {
+    const persistedQueueResult = await chrome.storage.local.get(
+      LOCAL_STORAGE_KEYS.downloadQueue
+    )
+    const downloadQueue = this.normalizeDownloadQueue(
+      persistedQueueResult[LOCAL_STORAGE_KEYS.downloadQueue]
+    )
+    const projectedState = await this.readSessionGlobalState()
+
+    return projectedState
+      ? {
+          ...this.cloneGlobalState(projectedState),
+          downloadQueue,
+        }
+      : {
+          ...this.getDefaultGlobalState(),
+          downloadQueue,
+        }
+  }
+
+  private async syncGlobalStateProjection(
+    state: GlobalAppState
+  ): Promise<void> {
+    try {
+      await chrome.storage.session.set({
+        [SESSION_STORAGE_KEYS.globalState]: this.cloneGlobalState(state),
+      })
+    } catch (error) {
+      logger.debug("Failed to sync global state projection (non-fatal):", error)
+    }
+  }
+
+  private async syncQueueProjection(
+    downloadQueue: DownloadTaskState[]
+  ): Promise<void> {
+    try {
+      const projection = projectToQueueView(downloadQueue)
+      await chrome.storage.session.set({
+        [SESSION_STORAGE_KEYS.queueView]: projection.queueView,
+        [SESSION_STORAGE_KEYS.historyView]: projection.historyView,
+      })
+      await updateActionBadge(projection.nonTerminalCount)
+    } catch (error) {
+      logger.debug("Failed to sync queue projection (non-fatal):", error)
+    }
+  }
+
+  private async syncActiveTabContext(
+    tabId: number,
+    context: MangaPageState | null
+  ): Promise<void> {
+    try {
+      await tabContextCache.syncActiveTabContext(tabId, context)
+    } catch (error) {
+      logger.debug("Failed to sync active tab context (non-fatal):", error)
     }
   }
 
   constructor() {
-    if (typeof chrome === 'undefined' || typeof chrome.storage === 'undefined') {
-      throw new Error('StateManager can only be used in Service Worker context');
+    if (
+      typeof chrome === "undefined" ||
+      typeof chrome.storage === "undefined"
+    ) {
+      throw new Error("StateManager can only be used in Service Worker context")
     }
   }
 
   /**
    * Acquire a lock for a given key
    * @internal Race condition protection for critical operations
+   *
+   * SW restart safety: The `locks` Map is in-memory and ephemeral. On service
+   * worker restart, a fresh `CentralizedStateManager` is constructed with an
+   * empty Map, so stale locks from a previous lifetime are automatically
+   * cleared. The `setTimeout` timeout below handles within-lifetime hangs
+   * where a lock holder's operation stalls indefinitely.
    */
-  private async acquireLock(lockKey: string, timeoutMs: number = 5000): Promise<() => void> {
-    const previousLock = this.locks.get(lockKey);
+  // Safe under JS's single-threaded model: Map.get → new Promise → Map.set
+  // runs synchronously with no await between them, so two concurrent callers
+  // cannot both observe an empty lock slot. The first await is at Promise.race
+  // below, which is after the Map.set.
+  private async acquireLock(
+    lockKey: string,
+    timeoutMs: number = 5000
+  ): Promise<() => void> {
+    const previousLock = this.locks.get(lockKey)
 
-    let releaseLock!: () => void;
-    const lockPromise = new Promise<void>(resolve => {
-      releaseLock = resolve;
-    });
+    let releaseLock!: () => void
+    const lockPromise = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
 
-    const lockChain = (previousLock ?? Promise.resolve()).then(() => lockPromise);
-    this.locks.set(lockKey, lockChain);
+    const lockChain = (previousLock ?? Promise.resolve()).then(
+      () => lockPromise
+    )
+    this.locks.set(lockKey, lockChain)
 
     if (previousLock) {
-      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined
 
       try {
         await Promise.race([
           previousLock,
           new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
-              reject(new Error(`Lock timeout: ${lockKey}`));
-            }, timeoutMs);
+              reject(new Error(`Lock timeout: ${lockKey}`))
+            }, timeoutMs)
           }),
-        ]);
+        ])
       } catch (error) {
         if (timeoutHandle !== undefined) {
-          clearTimeout(timeoutHandle);
+          clearTimeout(timeoutHandle)
         }
 
-        if (this.locks.get(lockKey) === lockChain) {
-          this.locks.delete(lockKey);
-        }
+        releaseLock()
 
-        releaseLock();
-        throw error;
+        // The waiter owns this chain node, but it must not remove the node
+        // while its predecessor is still live. Resolve this waiter's portion
+        // and clean up only after the complete owned chain settles.
+        void lockChain.then(() => {
+          if (this.locks.get(lockKey) === lockChain) {
+            this.locks.delete(lockKey)
+          }
+        })
+        throw error
       }
 
       if (timeoutHandle !== undefined) {
-        clearTimeout(timeoutHandle);
+        clearTimeout(timeoutHandle)
       }
     }
 
     // Return release function
     return () => {
       if (this.locks.get(lockKey) === lockChain) {
-        this.locks.delete(lockKey);
+        this.locks.delete(lockKey)
       }
-      releaseLock();
-    };
+      releaseLock()
+    }
   }
 
   /**
    * Initialize state manager
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) return
 
     try {
       await chrome.storage.session.setAccessLevel({
-        accessLevel: 'TRUSTED_CONTEXTS'
-      });
+        accessLevel: "TRUSTED_CONTEXTS",
+      })
 
-      // Initialize global state if not exists
-      const globalState = await chrome.storage.session.get(SESSION_STORAGE_KEYS.globalState) as Record<string, StorageValue>;
-      const existingGlobal = globalState[SESSION_STORAGE_KEYS.globalState];
-      if (!isGlobalAppState(existingGlobal)) {
-        await this.initializeGlobalState();
-      }
+      await this.initializeGlobalState()
 
-      this.initialized = true;
-      logger.info('✅ CentralizedStateManager initialized');
+      this.initialized = true
+      logger.info("✅ CentralizedStateManager initialized")
     } catch (error) {
-      logger.error('❌ StateManager initialization failed:', error);
-      throw error;
+      logger.error("❌ StateManager initialization failed:", error)
+      throw error
     }
   }
 
@@ -153,42 +394,38 @@ export class CentralizedStateManager {
    * Initialize global application state
    */
   private async initializeGlobalState(): Promise<void> {
-    const persistedQueueResult = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.downloadQueue) as Record<string, StorageValue>;
-    const persistedQueue = persistedQueueResult[LOCAL_STORAGE_KEYS.downloadQueue];
-    const initialQueue = Array.isArray(persistedQueue)
-      ? persistedQueue.map(normalizePersistedDownloadTask).filter((task): task is DownloadTaskState => task !== null)
-      : [];
-    // Initialize with full default ExtensionSettings; background will sync persisted settings shortly
-    const initialState: GlobalAppState = {
-      downloadQueue: initialQueue,
-      settings: { ...DEFAULT_SETTINGS },
-      lastActivity: Date.now()
-    };
+    const initialState = await this.readAuthoritativeGlobalState()
 
-    await Promise.all([
-      chrome.storage.session.set({ [SESSION_STORAGE_KEYS.globalState]: initialState }),
-      chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: initialQueue }),
-    ]);
-    await this.syncQueueProjection(initialState.downloadQueue);
-    logger.info('🌍 Global state initialized');
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(
+        initialState.downloadQueue
+      ),
+    })
+    this.globalStateCache = this.cloneGlobalState(initialState)
+    await this.syncGlobalStateProjection(initialState)
+    await this.syncQueueProjection(initialState.downloadQueue)
+    logger.info("🌍 Global state initialized")
   }
 
   /**
    * Get state for specific tab
    */
   async getTabState(tabId: number): Promise<MangaPageState | null> {
-    const result = await chrome.storage.session.get(`tab_${tabId}`) as Record<string, StorageValue>;
-    const maybeState = result[`tab_${tabId}`];
-    return isMangaPageState(maybeState) ? maybeState : null;
+    const result = await chrome.storage.session.get(`tab_${tabId}`)
+    const maybeState = result[`tab_${tabId}`]
+    return isMangaPageState(maybeState) ? maybeState : null
   }
 
   /**
    * Update state for specific tab
    */
-  async updateTabState(tabId: number, state: Partial<MangaPageState>): Promise<void> {
-    const existing = await this.getTabState(tabId);
+  async updateTabState(
+    tabId: number,
+    state: Partial<MangaPageState>
+  ): Promise<void> {
+    const existing = await this.getTabState(tabId)
     // Allow partial updates even if no existing state
-    const base: Partial<MangaPageState> = existing ?? {};
+    const base: Partial<MangaPageState> = existing ?? {}
     const updatedState: MangaPageState = {
       ...(base as MangaPageState),
       ...(state as MangaPageState),
@@ -197,17 +434,17 @@ export class CentralizedStateManager {
         : Array.isArray(base.volumes)
           ? base.volumes
           : [],
-      lastUpdated: Date.now()
-    };
+      lastUpdated: Date.now(),
+    }
 
-    await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState });
-    await this.syncActiveTabContext(tabId, updatedState);
-    logger.info(`📊 Tab ${tabId} state updated`);
+    await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState })
+    await this.syncActiveTabContext(tabId, updatedState)
+    logger.info(`📊 Tab ${tabId} state updated`)
   }
 
   /**
    * Initialize manga page state for a tab
-   * 
+   *
    * Race condition protection: Uses optimistic locking to prevent simultaneous
    * initialization calls (e.g., from rapid page refreshes) from overwriting each other.
    */
@@ -216,54 +453,62 @@ export class CentralizedStateManager {
     siteId: string,
     seriesId: string,
     seriesTitle: string,
-    chapters: Omit<ChapterState, 'status' | 'lastUpdated'>[],
-    metadata?: MangaPageState['metadata'],
-    volumes?: MangaPageState['volumes'],
+    chapters: Omit<ChapterState, "status" | "lastUpdated">[],
+    metadata?: MangaPageState["metadata"],
+    volumes?: MangaPageState["volumes"]
   ): Promise<void> {
-    const lockKey = `tab_${tabId}_init`;
-    const releaseLock = await this.acquireLock(lockKey);
+    const lockKey = `tab_${tabId}_init`
+    const releaseLock = await this.acquireLock(lockKey)
 
     try {
       // Check if state already exists for this tab (inside lock to prevent race)
-      const existingState = await this.getTabState(tabId);
+      const existingState = await this.getTabState(tabId)
 
-      if (existingState && existingState.siteIntegrationId === siteId && existingState.mangaId === seriesId) {
+      if (
+        existingState &&
+        existingState.siteIntegrationId === siteId &&
+        existingState.mangaId === seriesId
+      ) {
         // State exists for same manga - preserve runtime chapter status while updating chapter list
-        logger.info(`🔄 Updating existing state for tab ${tabId}: ${seriesTitle}`);
+        logger.info(
+          `🔄 Updating existing state for tab ${tabId}: ${seriesTitle}`
+        )
 
         // Preserve runtime chapter state strictly by canonical chapter ID.
-        const existingChapterStates = new Map<string, ChapterState>();
-        existingState.chapters.forEach(chapter => {
-          existingChapterStates.set(chapter.id, chapter);
-        });
+        const existingChapterStates = new Map<string, ChapterState>()
+        existingState.chapters.forEach((chapter) => {
+          existingChapterStates.set(chapter.id, chapter)
+        })
 
         // Update state with new chapter list while preserving runtime chapter state
         const updatedState: MangaPageState = {
           ...existingState,
           seriesTitle, // Update title in case it changed
-          chapters: chapters.map(chapter => {
-            const existingChapter = existingChapterStates.get(chapter.id);
+          chapters: chapters.map((chapter) => {
+            const existingChapter = existingChapterStates.get(chapter.id)
             return {
               ...chapter,
               // Preserve status and other runtime state if chapter exists, otherwise default to queued
-              status: existingChapter?.status ?? 'queued',
+              status: existingChapter?.status ?? "queued",
               errorMessage: existingChapter?.errorMessage,
               totalImages: existingChapter?.totalImages,
               imagesFailed: existingChapter?.imagesFailed,
-              lastUpdated: existingChapter?.lastUpdated || Date.now()
-            };
+              lastUpdated: existingChapter?.lastUpdated || Date.now(),
+            }
           }),
           volumes: resolveVolumeStates(chapters, volumes),
           metadata: metadata ?? existingState.metadata,
-          lastUpdated: Date.now()
-        };
+          lastUpdated: Date.now(),
+        }
 
-        await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState });
-        await this.syncActiveTabContext(tabId, updatedState);
-        logger.info(`✅ Updated ${updatedState.chapters.length} chapters for tab ${tabId}`);
+        await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState })
+        await this.syncActiveTabContext(tabId, updatedState)
+        logger.info(
+          `✅ Updated ${updatedState.chapters.length} chapters for tab ${tabId}`
+        )
       } else {
         // No existing state or different manga - create fresh state
-        logger.info(`🆕 Creating fresh state for tab ${tabId}: ${seriesTitle}`);
+        logger.info(`🆕 Creating fresh state for tab ${tabId}: ${seriesTitle}`)
 
         const initialState: MangaPageState = {
           siteIntegrationId: siteId,
@@ -272,15 +517,17 @@ export class CentralizedStateManager {
           chapters: initializeChapterStates(chapters),
           volumes: resolveVolumeStates(chapters, volumes),
           metadata,
-          lastUpdated: Date.now()
-        };
+          lastUpdated: Date.now(),
+        }
 
-        await chrome.storage.session.set({ [`tab_${tabId}`]: initialState });
-        await this.syncActiveTabContext(tabId, initialState);
-        logger.info(`🆕 Initialized fresh state for tab ${tabId}: ${seriesTitle}`);
+        await chrome.storage.session.set({ [`tab_${tabId}`]: initialState })
+        await this.syncActiveTabContext(tabId, initialState)
+        logger.info(
+          `🆕 Initialized fresh state for tab ${tabId}: ${seriesTitle}`
+        )
       }
     } finally {
-      releaseLock();
+      releaseLock()
     }
   }
 
@@ -294,36 +541,264 @@ export class CentralizedStateManager {
    * @param chapterId - Chapter ID to match
    * @returns Index of matching chapter, or -1 if not found
    */
-  private findChapterIndex<T extends { id: string }>(chapters: T[], chapterId: string): number {
-    return chapters.findIndex(ch => ch.id === chapterId);
+  private findChapterIndex<T extends { id: string }>(
+    chapters: T[],
+    chapterId: string
+  ): number {
+    return chapters.findIndex((ch) => ch.id === chapterId)
   }
 
   /**
    * Get global application state
+   *
+   * Returns a copy of the committed in-memory state when available. On a cache
+   * miss, storage.local supplies the authoritative queue while the session
+   * projection contributes only transient global metadata.
    */
   async getGlobalState(): Promise<GlobalAppState> {
-    const result = await chrome.storage.session.get(SESSION_STORAGE_KEYS.globalState) as Record<string, StorageValue>;
-    const maybeState = result[SESSION_STORAGE_KEYS.globalState];
-    return isGlobalAppState(maybeState) ? maybeState : this.getDefaultGlobalState();
+    if (this.globalStateCache) {
+      return this.cloneGlobalState(this.globalStateCache)
+    }
+
+    const state = await this.readAuthoritativeGlobalState()
+    this.globalStateCache = this.cloneGlobalState(state)
+    return this.cloneGlobalState(state)
   }
 
-  private async withGlobalStateLock<T>(operation: () => Promise<T>): Promise<T> {
-    const releaseLock = await this.acquireLock('global_state_mutation', 10000);
+  private async withGlobalStateLock<T>(
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const releaseLock = await this.acquireLock("global_state_mutation", 10000)
     try {
-      return await operation();
+      return await operation()
     } finally {
-      releaseLock();
+      releaseLock()
     }
   }
 
   private async writeGlobalState(state: GlobalAppState): Promise<void> {
-    state.lastActivity = Date.now();
-    await Promise.all([
-      chrome.storage.session.set({ [SESSION_STORAGE_KEYS.globalState]: state }),
-      chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: state.downloadQueue }),
-    ]);
-    await this.syncQueueProjection(state.downloadQueue);
-    logger.debug('🌍 Global state updated');
+    const committedState = this.cloneGlobalState({
+      ...state,
+      lastActivity: Date.now(),
+    })
+
+    // This is the commit point. Do not mutate the cache or publish session
+    // projections before the authoritative local write succeeds.
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(
+        committedState.downloadQueue
+      ),
+    })
+    this.globalStateCache = this.cloneGlobalState(committedState)
+
+    await this.syncGlobalStateProjection(committedState)
+    await this.syncQueueProjection(committedState.downloadQueue)
+    logger.debug("🌍 Global state updated")
+  }
+
+  private async writeGlobalStateAndPendingUndoActions(
+    state: GlobalAppState,
+    actions: PendingUndoAction[]
+  ): Promise<void> {
+    const committedState = this.cloneGlobalState({
+      ...state,
+      lastActivity: Date.now(),
+    })
+
+    // Queue visibility and its recovery snapshot form one durable transaction.
+    // Publishing session projections happens only after that commit succeeds.
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(
+        committedState.downloadQueue
+      ),
+      [LOCAL_STORAGE_KEYS.pendingUndoActions]: structuredClone(actions),
+    })
+    this.globalStateCache = this.cloneGlobalState(committedState)
+    await this.syncGlobalStateProjection(committedState)
+    await this.syncQueueProjection(committedState.downloadQueue)
+  }
+
+  private async writeGlobalStateAndDispatchLease(
+    state: GlobalAppState,
+    lease: ActiveDispatchLease | null
+  ): Promise<void> {
+    const committedState = this.cloneGlobalState({
+      ...state,
+      lastActivity: Date.now(),
+    })
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(
+        committedState.downloadQueue
+      ),
+      [LOCAL_STORAGE_KEYS.activeDispatchLease]: lease,
+    })
+    this.globalStateCache = this.cloneGlobalState(committedState)
+    await this.syncGlobalStateProjection(committedState)
+    await this.syncQueueProjection(committedState.downloadQueue)
+  }
+
+  async beginChapterDispatch(input: {
+    taskId: string
+    chapterId: string
+    lease: ActiveDispatchLease
+    expectedPreviousLease: Pick<
+      ActiveDispatchLease,
+      "jobId" | "taskId" | "chapterId" | "attempt"
+    > | null
+  }): Promise<BeginChapterDispatchResult> {
+    return await this.withGlobalStateLock(() =>
+      runDispatchPersistenceExclusive(async () => {
+        const globalState = await this.getGlobalState()
+        const taskIndex = globalState.downloadQueue.findIndex(
+          (task) => task.id === input.taskId
+        )
+        if (taskIndex === -1) {
+          return { success: false, reason: "task-not-found" }
+        }
+        const task = globalState.downloadQueue[taskIndex]
+        if (task.status !== "downloading") {
+          return {
+            success: false,
+            reason: "task-not-downloading",
+            currentStatus: task.status,
+          }
+        }
+        const chapterIndex = this.findChapterIndex(
+          task.chapters,
+          input.chapterId
+        )
+        if (chapterIndex === -1) {
+          return { success: false, reason: "chapter-not-found" }
+        }
+        const chapter = task.chapters[chapterIndex]
+        if (chapter.status !== "queued" && chapter.status !== "downloading") {
+          return { success: false, reason: "chapter-not-dispatchable" }
+        }
+
+        const stored = await chrome.storage.local.get(
+          LOCAL_STORAGE_KEYS.activeDispatchLease
+        )
+        const currentLease = normalizeActiveDispatchLease(
+          stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
+        )
+        const expected = input.expectedPreviousLease
+        const previousLeaseMatches = expected
+          ? currentLease?.jobId === expected.jobId &&
+            currentLease.attempt === expected.attempt &&
+            currentLease.taskId === expected.taskId &&
+            currentLease.chapterId === expected.chapterId
+          : currentLease === null
+        if (
+          !previousLeaseMatches ||
+          input.lease.taskId !== input.taskId ||
+          input.lease.chapterId !== input.chapterId
+        ) {
+          return { success: false, reason: "dispatch-lease-conflict" }
+        }
+
+        task.chapters[chapterIndex] = {
+          ...chapter,
+          status: "downloading",
+          dispatchAttempt: input.lease.attempt,
+          outputs: { requested: 0, committed: 0, failed: 0 },
+          errorMessage: undefined,
+          lastUpdated: Date.now(),
+        }
+        await this.writeGlobalStateAndDispatchLease(globalState, input.lease)
+        return { success: true, updated: true }
+      })
+    )
+  }
+
+  async cancelDownloadTaskAtomically(
+    taskId: string,
+    now: number = Date.now()
+  ): Promise<CancelDownloadTaskTransitionResult> {
+    return await this.withGlobalStateLock(() =>
+      runDispatchPersistenceExclusive(async () => {
+        const globalState = await this.getGlobalState()
+        const taskIndex = globalState.downloadQueue.findIndex(
+          (task) => task.id === taskId
+        )
+        if (taskIndex === -1) return { success: false, reason: "not-found" }
+        const currentTask = globalState.downloadQueue[taskIndex]
+        if (
+          currentTask.status !== "queued" &&
+          currentTask.status !== "downloading"
+        ) {
+          return {
+            success: false,
+            reason: "invalid-status",
+            currentStatus: currentTask.status,
+          }
+        }
+
+        if (currentTask.status === "queued") {
+          const pendingUndoActions = await this.readPendingUndoActions()
+          const action = this.createPendingUndoAction(
+            "cancel_queued",
+            currentTask,
+            taskIndex,
+            now
+          )
+          globalState.downloadQueue.splice(taskIndex, 1)
+          await this.writeGlobalStateAndPendingUndoActions(globalState, [
+            ...pendingUndoActions,
+            action,
+          ])
+          return {
+            success: true,
+            task: currentTask,
+            canceledLease: null,
+            undo: toPendingUndoReceipt(action),
+          }
+        }
+
+        const stored = await chrome.storage.local.get(
+          LOCAL_STORAGE_KEYS.activeDispatchLease
+        )
+        const currentLease = normalizeActiveDispatchLease(
+          stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
+        )
+        const canceledLease =
+          currentLease?.taskId === taskId ? currentLease : null
+        const updatedTask: DownloadTaskState = {
+          ...currentTask,
+          status: "canceled",
+          completed: now,
+          chapters: currentTask.chapters.map((chapter) => {
+            if (chapter.status === "downloading") {
+              return {
+                ...chapter,
+                status: "canceled",
+                errorMessage: "Canceled by user",
+                lastUpdated: now,
+              }
+            }
+            if (chapter.status === "queued") {
+              return {
+                ...chapter,
+                status: "skipped",
+                errorMessage: "Skipped after task cancellation",
+                lastUpdated: now,
+              }
+            }
+            return chapter
+          }),
+        }
+        globalState.downloadQueue[taskIndex] = updatedTask
+        await this.writeGlobalStateAndDispatchLease(
+          globalState,
+          canceledLease ? null : currentLease
+        )
+        return {
+          success: true,
+          task: updatedTask,
+          canceledLease,
+          undo: null,
+        }
+      })
+    )
   }
 
   /**
@@ -331,14 +806,28 @@ export class CentralizedStateManager {
    */
   async updateGlobalState(updates: Partial<GlobalAppState>): Promise<void> {
     await this.withGlobalStateLock(async () => {
-      const existing = await this.getGlobalState();
+      const existing = await this.getGlobalState()
       const updatedState: GlobalAppState = {
         ...existing,
         ...updates,
-      };
+      }
 
-      await this.writeGlobalState(updatedState);
-    });
+      await this.writeGlobalState(updatedState)
+    })
+  }
+
+  async updateDownloadQueueAtomically<T>(
+    update: (queue: readonly DownloadTaskState[]) => {
+      queue: DownloadTaskState[]
+      result: T
+    }
+  ): Promise<T> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const { queue, result } = update(globalState.downloadQueue)
+      await this.writeGlobalState({ ...globalState, downloadQueue: queue })
+      return result
+    })
   }
 
   /**
@@ -346,41 +835,115 @@ export class CentralizedStateManager {
    */
   async addDownloadTask(task: DownloadTaskState): Promise<void> {
     await this.withGlobalStateLock(async () => {
-      const globalState = await this.getGlobalState();
-      globalState.downloadQueue.push(task);
-      await this.writeGlobalState(globalState);
-    });
-    logger.debug(`📥 Added download task: ${task.seriesTitle}`);
+      const globalState = await this.getGlobalState()
+      globalState.downloadQueue.push(task)
+      await this.writeGlobalState(globalState)
+    })
+    logger.debug(`📥 Added download task: ${task.seriesTitle}`)
   }
 
   /**
    * Update download task status
    */
-  async updateDownloadTask(taskId: string, updates: Partial<DownloadTaskState>): Promise<void> {
-    let foundTask = false;
+  async updateDownloadTask(
+    taskId: string,
+    updates: Omit<Partial<DownloadTaskState>, "id" | "status">
+  ): Promise<void> {
+    let foundTask = false
     await this.withGlobalStateLock(async () => {
-      const globalState = await this.getGlobalState();
-      const taskIndex = globalState.downloadQueue.findIndex(task => task.id === taskId);
+      const globalState = await this.getGlobalState()
+      const taskIndex = globalState.downloadQueue.findIndex(
+        (task) => task.id === taskId
+      )
 
       if (taskIndex === -1) {
-        return;
+        return
       }
 
-      foundTask = true;
+      foundTask = true
       globalState.downloadQueue[taskIndex] = {
         ...globalState.downloadQueue[taskIndex],
-        ...updates
-      };
+        ...updates,
+      }
 
-      await this.writeGlobalState(globalState);
-    });
+      await this.writeGlobalState(globalState)
+    })
 
     if (!foundTask) {
-      logger.warn(`⚠️ Download task not found: ${taskId}`);
-      return;
+      logger.warn(`⚠️ Download task not found: ${taskId}`)
+      return
     }
 
-    logger.debug(`📋 Download task updated: ${taskId}`);
+    logger.debug(`📋 Download task updated: ${taskId}`)
+  }
+
+  /**
+   * Atomically move a task between lifecycle states.
+   *
+   * The expected-state check and write share the global-state lock so stale
+   * cancellation, completion, and recovery commands cannot overwrite a task
+   * that has already reached a competing terminal state.
+   */
+  async transitionDownloadTask(
+    taskId: string,
+    allowedCurrentStatuses: readonly DownloadTaskStatus[],
+    updates: Omit<Partial<DownloadTaskState>, "id" | "status"> & {
+      status: DownloadTaskStatus
+    }
+  ): Promise<DownloadTaskTransitionResult> {
+    let result: DownloadTaskTransitionResult = {
+      success: false,
+      reason: "not-found",
+    }
+
+    await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const taskIndex = globalState.downloadQueue.findIndex(
+        (task) => task.id === taskId
+      )
+
+      if (taskIndex === -1) {
+        return
+      }
+
+      const currentTask = globalState.downloadQueue[taskIndex]
+      if (!allowedCurrentStatuses.includes(currentTask.status)) {
+        result = {
+          success: false,
+          reason: "invalid-status",
+          currentStatus: currentTask.status,
+        }
+        return
+      }
+
+      if (
+        updates.status === "downloading" &&
+        globalState.downloadQueue.some(
+          (task) => task.id !== taskId && task.status === "downloading"
+        )
+      ) {
+        result = { success: false, reason: "active-task-exists" }
+        return
+      }
+
+      const updatedTask: DownloadTaskState = {
+        ...currentTask,
+        ...updates,
+      }
+      globalState.downloadQueue[taskIndex] = updatedTask
+      await this.writeGlobalState(globalState)
+      result = { success: true, task: updatedTask }
+    })
+
+    if (!result.success) {
+      logger.warn(`Download task transition rejected: ${taskId}`, result)
+      return result
+    }
+
+    logger.debug(`Download task transitioned: ${taskId}`, {
+      status: updates.status,
+    })
+    return result
   }
 
   /**
@@ -391,49 +954,146 @@ export class CentralizedStateManager {
     taskId: string,
     chapterId: string,
     status: ChapterStatus,
-    updates?: { errorMessage?: string; totalImages?: number; imagesFailed?: number }
+    updates?: {
+      errorMessage?: string
+      errorCategory?: TaskChapter["errorCategory"]
+      totalImages?: number
+      imagesFailed?: number
+      outputs?: TaskChapter["outputs"]
+      dispatchAttempt?: number
+    }
   ): Promise<void> {
-    let foundTask = false;
-    let foundChapter = false;
+    let foundTask = false
+    let foundChapter = false
 
     await this.withGlobalStateLock(async () => {
-      const globalState = await this.getGlobalState();
-      const taskIndex = globalState.downloadQueue.findIndex(task => task.id === taskId);
+      const globalState = await this.getGlobalState()
+      const taskIndex = globalState.downloadQueue.findIndex(
+        (task) => task.id === taskId
+      )
 
       if (taskIndex === -1) {
-        return;
+        return
       }
 
-      foundTask = true;
-      const task = globalState.downloadQueue[taskIndex];
-      const chapterIndex = this.findChapterIndex(task.chapters, chapterId);
+      foundTask = true
+      const task = globalState.downloadQueue[taskIndex]
+      const chapterIndex = this.findChapterIndex(task.chapters, chapterId)
 
       if (chapterIndex === -1) {
-        return;
+        return
       }
 
-      foundChapter = true;
+      foundChapter = true
+      const currentChapter = task.chapters[chapterIndex]
+      const currentChapterIsTerminal =
+        currentChapter.status === "completed" ||
+        currentChapter.status === "failed" ||
+        currentChapter.status === "partial_success" ||
+        currentChapter.status === "canceled" ||
+        currentChapter.status === "skipped"
+      if (currentChapterIsTerminal && status !== currentChapter.status) {
+        return
+      }
       task.chapters[chapterIndex] = {
-        ...task.chapters[chapterIndex],
+        ...currentChapter,
         status,
         errorMessage: updates?.errorMessage,
-        totalImages: updates?.totalImages ?? task.chapters[chapterIndex].totalImages,
-        imagesFailed: updates?.imagesFailed ?? task.chapters[chapterIndex].imagesFailed,
-        lastUpdated: Date.now()
-      };
+        errorCategory: updates?.errorCategory,
+        totalImages:
+          updates?.totalImages ?? task.chapters[chapterIndex].totalImages,
+        imagesFailed:
+          updates?.imagesFailed ?? task.chapters[chapterIndex].imagesFailed,
+        outputs: updates?.outputs ?? currentChapter.outputs,
+        dispatchAttempt:
+          updates?.dispatchAttempt ?? currentChapter.dispatchAttempt,
+        lastUpdated: Date.now(),
+      }
 
-      await this.writeGlobalState(globalState);
-    });
+      await this.writeGlobalState(globalState)
+    })
 
     if (!foundTask) {
-      logger.warn(`⚠️ Download task not found for chapter update: ${taskId}`);
-      return;
+      logger.warn(`⚠️ Download task not found for chapter update: ${taskId}`)
+      return
     }
 
     if (!foundChapter) {
-      logger.warn(`⚠️ Chapter not found in task: ${chapterId}`);
-      return;
+      logger.warn(`⚠️ Chapter not found in task: ${chapterId}`)
+      return
     }
+  }
+
+  /**
+   * Update a chapter only while its parent task is still downloading.
+   *
+   * The parent-state check and child write share the global-state lock. This
+   * is the cancellation/restart boundary used by offscreen progress and the
+   * queue runner so a stale child completion cannot commit after a competing
+   * parent transition has won.
+   */
+  async updateDownloadingTaskChapter(
+    taskId: string,
+    chapterId: string,
+    status: ChapterStatus,
+    updates?: {
+      errorMessage?: string
+      errorCategory?: TaskChapter["errorCategory"]
+      totalImages?: number
+      imagesFailed?: number
+      outputs?: TaskChapter["outputs"]
+      dispatchAttempt?: number
+    }
+  ): Promise<DownloadingTaskChapterUpdateResult> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const taskIndex = globalState.downloadQueue.findIndex(
+        (task) => task.id === taskId
+      )
+      if (taskIndex === -1) {
+        return { success: false, reason: "task-not-found" }
+      }
+
+      const task = globalState.downloadQueue[taskIndex]
+      if (task.status !== "downloading") {
+        return {
+          success: false,
+          reason: "task-not-downloading",
+          currentStatus: task.status,
+        }
+      }
+
+      const chapterIndex = this.findChapterIndex(task.chapters, chapterId)
+      if (chapterIndex === -1) {
+        return { success: false, reason: "chapter-not-found" }
+      }
+
+      const currentChapter = task.chapters[chapterIndex]
+      const currentChapterIsTerminal =
+        currentChapter.status === "completed" ||
+        currentChapter.status === "failed" ||
+        currentChapter.status === "partial_success" ||
+        currentChapter.status === "canceled" ||
+        currentChapter.status === "skipped"
+      if (currentChapterIsTerminal && status !== currentChapter.status) {
+        return { success: true, updated: false }
+      }
+
+      task.chapters[chapterIndex] = {
+        ...currentChapter,
+        status,
+        errorMessage: updates?.errorMessage,
+        errorCategory: updates?.errorCategory,
+        totalImages: updates?.totalImages ?? currentChapter.totalImages,
+        imagesFailed: updates?.imagesFailed ?? currentChapter.imagesFailed,
+        outputs: updates?.outputs ?? currentChapter.outputs,
+        dispatchAttempt:
+          updates?.dispatchAttempt ?? currentChapter.dispatchAttempt,
+        lastUpdated: Date.now(),
+      }
+      await this.writeGlobalState(globalState)
+      return { success: true, updated: true }
+    })
   }
 
   /**
@@ -441,20 +1101,153 @@ export class CentralizedStateManager {
    */
   async removeDownloadTask(taskId: string): Promise<void> {
     await this.withGlobalStateLock(async () => {
-      const globalState = await this.getGlobalState();
-      globalState.downloadQueue = globalState.downloadQueue.filter(task => task.id !== taskId);
-      await this.writeGlobalState(globalState);
-    });
-    logger.debug(`🗑️ Removed download task: ${taskId}`);
+      const globalState = await this.getGlobalState()
+      globalState.downloadQueue = globalState.downloadQueue.filter(
+        (task) => task.id !== taskId
+      )
+      await this.writeGlobalState(globalState)
+    })
+    logger.debug(`🗑️ Removed download task: ${taskId}`)
+  }
+
+  async removeTerminalDownloadTask(
+    taskId: string
+  ): Promise<RemoveTerminalDownloadTaskResult> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const taskIndex = globalState.downloadQueue.findIndex(
+        (candidate) => candidate.id === taskId
+      )
+      if (taskIndex === -1) {
+        return { success: false, reason: "not-found" }
+      }
+
+      const task = globalState.downloadQueue[taskIndex]
+      if (task.status === "queued" || task.status === "downloading") {
+        return {
+          success: false,
+          reason: "invalid-status",
+          currentStatus: task.status,
+        }
+      }
+
+      const pendingUndoActions = await this.readPendingUndoActions()
+      const action = this.createPendingUndoAction(
+        "remove_history",
+        task,
+        taskIndex,
+        Date.now()
+      )
+      globalState.downloadQueue.splice(taskIndex, 1)
+      await this.writeGlobalStateAndPendingUndoActions(globalState, [
+        ...pendingUndoActions,
+        action,
+      ])
+      return { success: true, undo: toPendingUndoReceipt(action) }
+    })
+  }
+
+  async getPendingUndoActions(): Promise<PendingUndoAction[]> {
+    return structuredClone(await this.readPendingUndoActions())
+  }
+
+  async restorePendingUndoAction(
+    token: string,
+    now: number = Date.now()
+  ): Promise<RestorePendingUndoActionResult> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const pendingUndoActions = await this.readPendingUndoActions()
+      const actionIndex = pendingUndoActions.findIndex(
+        (candidate) => candidate.token === token
+      )
+      if (actionIndex === -1) {
+        return { success: false, reason: "not-found" }
+      }
+
+      const action = pendingUndoActions[actionIndex]
+      const remainingActions = pendingUndoActions.filter(
+        (_candidate, index) => index !== actionIndex
+      )
+      if (now >= action.expiresAt) {
+        this.applyExpiredPendingUndoAction(globalState, action)
+        await this.writeGlobalStateAndPendingUndoActions(
+          globalState,
+          remainingActions
+        )
+        return { success: false, reason: "expired", action }
+      }
+
+      this.insertPendingUndoTask(
+        globalState.downloadQueue,
+        action,
+        action.taskSnapshot
+      )
+      await this.writeGlobalStateAndPendingUndoActions(
+        globalState,
+        remainingActions
+      )
+      return { success: true, action }
+    })
+  }
+
+  async finalizePendingUndoAction(
+    token: string
+  ): Promise<FinalizePendingUndoActionResult> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const pendingUndoActions = await this.readPendingUndoActions()
+      const actionIndex = pendingUndoActions.findIndex(
+        (candidate) => candidate.token === token
+      )
+      if (actionIndex === -1) {
+        return { success: false, reason: "not-found" }
+      }
+
+      const action = pendingUndoActions[actionIndex]
+      this.applyExpiredPendingUndoAction(globalState, action)
+      await this.writeGlobalStateAndPendingUndoActions(
+        globalState,
+        pendingUndoActions.filter((_candidate, index) => index !== actionIndex)
+      )
+      return { success: true, action }
+    })
+  }
+
+  async reconcileExpiredPendingUndoActions(
+    now: number = Date.now()
+  ): Promise<ReconcilePendingUndoActionsResult> {
+    return await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const pendingUndoActions = await this.readPendingUndoActions()
+      const finalized = pendingUndoActions.filter(
+        (action) => now >= action.expiresAt
+      )
+      const pending = pendingUndoActions.filter(
+        (action) => now < action.expiresAt
+      )
+
+      if (finalized.length > 0) {
+        for (const action of finalized) {
+          this.applyExpiredPendingUndoAction(globalState, action)
+        }
+        await this.writeGlobalStateAndPendingUndoActions(globalState, pending)
+      }
+
+      return {
+        finalized: structuredClone(finalized),
+        pending: structuredClone(pending),
+      }
+    })
   }
 
   /**
    * Clear state for tab (when tab is closed)
    */
   async clearTabState(tabId: number): Promise<void> {
-    await chrome.storage.session.remove(`tab_${tabId}`);
-    await this.syncActiveTabContext(tabId, null);
-    logger.debug(`🗑️ Cleared state for tab ${tabId}`);
+    await chrome.storage.session.remove(`tab_${tabId}`)
+    await this.syncActiveTabContext(tabId, null)
+    logger.debug(`🗑️ Cleared state for tab ${tabId}`)
   }
 
   /**
@@ -465,8 +1258,7 @@ export class CentralizedStateManager {
     return {
       downloadQueue: [],
       settings: { ...DEFAULT_SETTINGS },
-      lastActivity: Date.now()
-    };
+      lastActivity: Date.now(),
+    }
   }
- }
-
+}

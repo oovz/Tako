@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -9,13 +9,13 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/runtime/site-integration-offscreen-initialization', () => ({
+vi.mock("@/src/runtime/site-integration-offscreen-initialization", () => ({
   initializeOffscreenSiteIntegrations: vi.fn(),
 }))
 
-import { initializeOffscreenSiteIntegrations } from '@/src/runtime/site-integration-offscreen-initialization'
+import { initializeOffscreenSiteIntegrations } from "@/src/runtime/site-integration-offscreen-initialization"
 
-describe('offscreen entrypoint initialization failure handling', () => {
+describe("offscreen entrypoint initialization failure handling", () => {
   const addListener = vi.fn()
   const removeListener = vi.fn()
   const sendMessage = vi.fn()
@@ -25,13 +25,13 @@ describe('offscreen entrypoint initialization failure handling', () => {
     vi.clearAllMocks()
 
     const mockElement = {
-      textContent: '',
+      textContent: "",
       dataset: {},
       hidden: false,
-      innerHTML: '',
+      innerHTML: "",
     }
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       runtime: {
         sendMessage,
         onMessage: {
@@ -41,14 +41,17 @@ describe('offscreen entrypoint initialization failure handling', () => {
       },
     } as unknown as typeof chrome)
 
-    vi.stubGlobal('document', {
+    vi.stubGlobal("document", {
       getElementById: vi.fn().mockReturnValue(mockElement),
       addEventListener: vi.fn(),
     } as unknown as Document)
 
-    vi.stubGlobal('window', globalThis as unknown as Window & typeof globalThis)
-    vi.stubGlobal('HTMLElement', class {} as unknown as typeof HTMLElement)
-    vi.stubGlobal('HTMLDivElement', class {} as unknown as typeof HTMLDivElement)
+    vi.stubGlobal("window", globalThis as unknown as Window & typeof globalThis)
+    vi.stubGlobal("HTMLElement", class {} as unknown as typeof HTMLElement)
+    vi.stubGlobal(
+      "HTMLDivElement",
+      class {} as unknown as typeof HTMLDivElement
+    )
   })
 
   afterEach(() => {
@@ -56,54 +59,65 @@ describe('offscreen entrypoint initialization failure handling', () => {
     vi.restoreAllMocks()
   })
 
-  it('flushes queued responses and fails closed after offscreen initialization fails', async () => {
-    vi.mocked(initializeOffscreenSiteIntegrations).mockRejectedValueOnce(new Error('registry init failed'))
+  it("flushes queued responses and fails closed after offscreen initialization fails", async () => {
+    vi.mocked(initializeOffscreenSiteIntegrations).mockRejectedValueOnce(
+      new Error("registry init failed")
+    )
 
-    await import('@/entrypoints/offscreen/main')
+    await import("@/entrypoints/offscreen/main")
 
     expect(addListener).toHaveBeenCalledTimes(1)
 
     const listener = addListener.mock.calls[0]?.[0] as (
       message: { type: string; payload?: unknown },
       sender: chrome.runtime.MessageSender,
-      sendResponse: (response: { success: boolean; error?: string }) => void,
+      sendResponse: (response: { success: boolean; error?: string }) => void
     ) => boolean
 
     const queuedResponse = vi.fn()
     expect(
       listener(
-        { type: 'REVOKE_BLOB_URL', payload: { blobUrl: 'blob:queued-before-init-failure' } },
+        {
+          type: "REVOKE_BLOB_URL",
+          payload: { blobUrl: "blob:queued-before-init-failure" },
+        },
         {} as chrome.runtime.MessageSender,
-        queuedResponse,
-      ),
+        queuedResponse
+      )
     ).toBe(true)
 
-    for (let attempt = 0; attempt < 5 && queuedResponse.mock.calls.length === 0; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < 5 && queuedResponse.mock.calls.length === 0;
+      attempt += 1
+    ) {
       await Promise.resolve()
     }
 
     expect(queuedResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         success: false,
-        error: expect.stringContaining('registry init failed'),
-      }),
+        error: expect.stringContaining("registry init failed"),
+      })
     )
 
     const postFailureResponse = vi.fn()
     expect(
       listener(
-        { type: 'REVOKE_BLOB_URL', payload: { blobUrl: 'blob:after-init-failure' } },
+        {
+          type: "REVOKE_BLOB_URL",
+          payload: { blobUrl: "blob:after-init-failure" },
+        },
         {} as chrome.runtime.MessageSender,
-        postFailureResponse,
-      ),
+        postFailureResponse
+      )
     ).toBe(true)
 
     expect(postFailureResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         success: false,
-        error: expect.stringContaining('registry init failed'),
-      }),
+        error: expect.stringContaining("registry init failed"),
+      })
     )
   })
 })
-

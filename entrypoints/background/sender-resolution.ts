@@ -1,5 +1,3 @@
-import type { GetTabIdResponse } from '@/src/types/runtime-command-messages'
-
 /**
  * Sender Resolution Utilities
  *
@@ -7,43 +5,90 @@ import type { GetTabIdResponse } from '@/src/types/runtime-command-messages'
  * from chrome.runtime.MessageSender objects.
  *
  * Chrome MV3 sender context rules:
- * - Content scripts: sender.tab is populated with the hosting tab
- * - Extension pages (side panel, options, popup): sender.tab is UNDEFINED
- * - Offscreen documents: sender.tab is UNDEFINED
+ * - Content scripts: sender.tab is populated with the hosting tab,
+ *   sender.url is the web page URL (NOT chrome-extension://)
+ * - Extension pages (side panel, options, popup): sender.url is a
+ *   chrome-extension:// URL. sender.tab MAY be populated for side panels
+ *   (they are associated with a tab/window), so URL-based classification
+ *   takes priority over sender.tab in classifySenderOrigin.
+ * - Offscreen documents: sender.tab is UNDEFINED, sender.url is the
+ *   offscreen.html chrome-extension:// URL
  *
  * Any message handler that needs a tab ID MUST account for extension-page
  * senders by accepting a fallback (e.g. payload.sourceTabId).
  */
 
-export type SenderOrigin = 'content-script' | 'extension-page' | 'offscreen' | 'unknown';
+export type SenderOrigin =
+  "content-script" | "extension-page" | "offscreen" | "unknown"
+
+const OFFSCREEN_DOCUMENT_PATHNAME = "/offscreen.html"
+
+function parseExtensionSenderUrl(
+  senderUrl: string,
+  extensionId?: string
+): URL | null {
+  if (!senderUrl) {
+    return null
+  }
+
+  try {
+    const url = new URL(senderUrl)
+    if (url.protocol !== "chrome-extension:") {
+      return null
+    }
+
+    if (extensionId && url.hostname !== extensionId) {
+      return null
+    }
+
+    return url
+  } catch {
+    return null
+  }
+}
 
 /**
  * Classify the origin of a message sender.
+ *
+ * Classification priority:
+ * 1. Extension URL (chrome-extension://) — takes priority over sender.tab
+ *    because Chrome MV3 side panels may have sender.tab populated even though
+ *    they are extension pages, not content scripts.
+ * 2. sender.tab — content scripts hosted in a web page tab.
+ * 3. unknown — no recognizable origin.
  *
  * @param sender - The MessageSender from chrome.runtime.onMessage
  * @param extensionId - The extension's own ID (chrome.runtime.id)
  */
 export function classifySenderOrigin(
   sender: chrome.runtime.MessageSender,
-  extensionId?: string,
+  extensionId?: string
 ): SenderOrigin {
-  if (sender.tab && typeof sender.tab.id === 'number') {
-    return 'content-script';
+  if (extensionId && sender.id && sender.id !== extensionId) {
+    return "unknown"
   }
 
-  const url = sender.url ?? '';
-  const extPrefix = extensionId
-    ? `chrome-extension://${extensionId}/`
-    : 'chrome-extension://';
-
-  if (url.startsWith(extPrefix)) {
-    if (url.includes('offscreen')) {
-      return 'offscreen';
+  const senderUrl = sender.url ?? ""
+  const url = parseExtensionSenderUrl(senderUrl, extensionId)
+  if (url) {
+    if (url.pathname === OFFSCREEN_DOCUMENT_PATHNAME) {
+      return "offscreen"
     }
-    return 'extension-page';
+    return "extension-page"
   }
 
-  return 'unknown';
+  // A chrome-extension:// URL that did not pass the own-extension check must
+  // never fall through to the content-script branch merely because it also
+  // carries a tab (for example, a side panel from another extension).
+  if (senderUrl.startsWith("chrome-extension://")) {
+    return "unknown"
+  }
+
+  if (sender.tab && typeof sender.tab.id === "number") {
+    return "content-script"
+  }
+
+  return "unknown"
 }
 
 /**
@@ -57,33 +102,22 @@ export function classifySenderOrigin(
  */
 export function resolveSourceTabId(
   sender: chrome.runtime.MessageSender,
-  payloadTabId?: number,
+  payloadTabId?: number
 ): number | undefined {
-  const senderTabId = sender.tab?.id;
-  if (typeof senderTabId === 'number') {
-    return senderTabId;
-  }
-
-  if (typeof payloadTabId === 'number' && Number.isInteger(payloadTabId) && payloadTabId >= 0) {
-    return payloadTabId;
-  }
-
-  return undefined;
-}
-
-export function resolveGetTabIdResponse(
-  sender: chrome.runtime.MessageSender,
-): GetTabIdResponse {
   const senderTabId = sender.tab?.id
-
-  if (typeof senderTabId === 'number') {
-    return { success: true, tabId: senderTabId }
+  if (typeof senderTabId === "number") {
+    return senderTabId
   }
 
-  return {
-    success: false,
-    error: 'GET_TAB_ID requires a sender with sender.tab.id',
+  if (
+    typeof payloadTabId === "number" &&
+    Number.isInteger(payloadTabId) &&
+    payloadTabId >= 0
+  ) {
+    return payloadTabId
   }
+
+  return undefined
 }
 
 /**
@@ -91,8 +125,16 @@ export function resolveGetTabIdResponse(
  */
 export function isSenderFromOptionsPage(
   sender: chrome.runtime.MessageSender,
-  optionsUrlPrefix: string,
+  optionsUrlPrefix: string
 ): boolean {
-  const senderUrl = sender.url ?? '';
-  return senderUrl.startsWith(optionsUrlPrefix);
+  try {
+    const senderUrl = new URL(sender.url ?? "")
+    const optionsUrl = new URL(optionsUrlPrefix)
+    return (
+      senderUrl.origin === optionsUrl.origin &&
+      senderUrl.pathname === optionsUrl.pathname
+    )
+  } catch {
+    return false
+  }
 }

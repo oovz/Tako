@@ -1,38 +1,39 @@
 /**
  * Chapter Persistence Service
- * 
+ *
  * Tracks downloaded chapters across sessions using chrome.storage.local
  * Provides persistent memory of what has been downloaded.
  *
  * Records are deduplicated and queried by canonical `chapterId`; `url` is
  * retained only as descriptive source metadata.
  */
-import logger from '@/src/runtime/logger';
-import type { JsonValue } from '@/src/shared/type-guards';
-import { z } from 'zod';
+import logger from "@/src/runtime/logger"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { z } from "zod"
+import { StorageMutationQueue } from "./storage-mutation-queue"
 
 export interface DownloadedChapterRecord {
-  chapterId: string;
-  url: string;
-  title: string;
-  seriesId: string;
-  seriesTitle: string;
-  chapterNumber?: number;
-  volumeNumber?: number;
-  downloadedAt: number;
-  filePath?: string;
-  fileSize?: number;
-  format: 'zip' | 'cbz' | 'cbr' | 'pdf' | 'none';
+  chapterId: string
+  url: string
+  title: string
+  seriesId: string
+  seriesTitle: string
+  chapterNumber?: number
+  volumeNumber?: number
+  downloadedAt: number
+  filePath?: string
+  fileSize?: number
+  format: "zip" | "cbz" | "cbr" | "pdf" | "none"
 }
 
 export interface SeriesDownloadHistory {
-  seriesId: string;
-  seriesTitle: string;
-  lastUpdated: number;
-  downloadedChapters: DownloadedChapterRecord[];
+  seriesId: string
+  seriesTitle: string
+  lastUpdated: number
+  downloadedChapters: DownloadedChapterRecord[]
 }
 
-const VALID_FORMATS = ['zip', 'cbz', 'cbr', 'pdf', 'none'] as const;
+const VALID_FORMATS = ["zip", "cbz", "cbr", "pdf", "none"] as const
 
 const DownloadedChapterRecordSchema = z.object({
   chapterId: z.string(),
@@ -46,257 +47,280 @@ const DownloadedChapterRecordSchema = z.object({
   filePath: z.string().optional(),
   fileSize: z.number().optional(),
   format: z.enum(VALID_FORMATS),
-});
+})
 
-const parseDownloadedChapters = (raw: unknown): DownloadedChapterRecord[] => {
-  if (!Array.isArray(raw)) return [];
+export const parseDownloadedChapters = (
+  raw: unknown
+): DownloadedChapterRecord[] => {
+  if (!Array.isArray(raw)) return []
   return raw.flatMap((entry) => {
-    const parsed = DownloadedChapterRecordSchema.safeParse(entry);
-    return parsed.success ? [parsed.data] : [];
-  });
-};
+    const parsed = DownloadedChapterRecordSchema.safeParse(entry)
+    return parsed.success ? [parsed.data] : []
+  })
+}
 
 const SeriesDownloadHistorySchema = z.object({
   seriesId: z.string(),
   seriesTitle: z.string(),
   lastUpdated: z.number(),
-  downloadedChapters: z.array(z.unknown()).transform((entries) => parseDownloadedChapters(entries)),
-});
+  downloadedChapters: z
+    .array(z.unknown())
+    .transform((entries) => parseDownloadedChapters(entries)),
+})
 
-const parseSeriesHistory = (value: JsonValue | undefined): SeriesDownloadHistory | null => {
-  const parsed = SeriesDownloadHistorySchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-};
+const parseSeriesHistory = (value: unknown): SeriesDownloadHistory | null => {
+  const parsed = SeriesDownloadHistorySchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
 
-const parseSeriesHistoryMap = (raw: JsonValue | undefined): Record<string, SeriesDownloadHistory> => {
-  const rawEntries = z.record(z.string(), z.unknown()).safeParse(raw);
+const parseSeriesHistoryMap = (
+  raw: unknown
+): Record<string, SeriesDownloadHistory> => {
+  const rawEntries = z.record(z.string(), z.unknown()).safeParse(raw)
   if (!rawEntries.success) {
-    return {};
+    return {}
   }
 
-  const entries: Record<string, SeriesDownloadHistory> = {};
+  const entries: Record<string, SeriesDownloadHistory> = {}
   for (const [key, value] of Object.entries(rawEntries.data)) {
-    const parsed = parseSeriesHistory(value as JsonValue | undefined);
-    if (parsed) entries[key] = parsed;
+    const parsed = parseSeriesHistory(value)
+    if (parsed) entries[key] = parsed
   }
-  return entries;
-};
+  return entries
+}
 
 class ChapterPersistenceService {
-  private readonly STORAGE_KEY = 'downloadedChapters';
-  private readonly SERIES_HISTORY_KEY = 'seriesDownloadHistory';
+  private readonly STORAGE_KEY = LOCAL_STORAGE_KEYS.downloadedChapters
+  private readonly SERIES_HISTORY_KEY = LOCAL_STORAGE_KEYS.seriesDownloadHistory
+  private readonly mutationQueue = new StorageMutationQueue()
 
   /**
    * Mark a chapter as downloaded
    */
-  async markChapterAsDownloaded(record: DownloadedChapterRecord): Promise<void> {
-    try {
-      // Get existing records
-      const existing = await this.getDownloadedChapters();
-      
-      // Remove any existing record for this chapter (in case of re-download)
-      const filtered = existing.filter(ch => ch.chapterId !== record.chapterId);
-      
-      // Add the new record
-      filtered.push(record);
-      
-      // Store updated list
-      await chrome.storage.local.set({
-        [this.STORAGE_KEY]: filtered
-      });
-      
-      // Update series history
-      await this.updateSeriesHistory(record);
-      
-  logger.info(`✅ Chapter marked as downloaded: ${record.title}`);
-    } catch (error) {
-  logger.error('❌ Failed to mark chapter as downloaded:', error);
-      throw error;
-    }
+  async markChapterAsDownloaded(
+    record: DownloadedChapterRecord
+  ): Promise<void> {
+    await this.mutationQueue.run(async () => {
+      try {
+        // Get existing records and series history in a single read
+        const [existing, historyResult] = await Promise.all([
+          this.getDownloadedChapters(),
+          chrome.storage.local.get([this.SERIES_HISTORY_KEY]),
+        ])
+
+        // Remove any existing record for this chapter (in case of re-download)
+        const filtered = existing.filter(
+          (ch) => ch.chapterId !== record.chapterId
+        )
+        filtered.push(record)
+
+        // Compute updated series history (pure — no storage write)
+        const allHistory = parseSeriesHistoryMap(
+          historyResult[this.SERIES_HISTORY_KEY]
+        )
+        this.applySeriesHistoryUpdate(allHistory, record)
+
+        // Atomic single write: both keys in one chrome.storage.local.set call
+        await chrome.storage.local.set({
+          [this.STORAGE_KEY]: filtered,
+          [this.SERIES_HISTORY_KEY]: allHistory,
+        })
+
+        logger.info(`✅ Chapter marked as downloaded: ${record.title}`)
+      } catch (error) {
+        logger.error("❌ Failed to mark chapter as downloaded:", error)
+        throw error
+      }
+    })
   }
-  
+
   /**
    * Check if a chapter has been downloaded by canonical chapter ID.
    */
   async isChapterDownloaded(chapterId: string): Promise<boolean> {
-    const downloaded = await this.getDownloadedChapters();
-    return downloaded.some(ch => ch.chapterId === chapterId);
+    const downloaded = await this.getDownloadedChapters()
+    return downloaded.some((ch) => ch.chapterId === chapterId)
   }
-  
+
   /**
    * Get all downloaded chapters for a series
    */
-  async getDownloadedChaptersForSeries(seriesId: string): Promise<DownloadedChapterRecord[]> {
-    const allDownloaded = await this.getDownloadedChapters();
-    return allDownloaded.filter(ch => ch.seriesId === seriesId);
+  async getDownloadedChaptersForSeries(
+    seriesId: string
+  ): Promise<DownloadedChapterRecord[]> {
+    const allDownloaded = await this.getDownloadedChapters()
+    return allDownloaded.filter((ch) => ch.seriesId === seriesId)
   }
-  
+
   /**
    * Get all downloaded chapters
    */
   async getDownloadedChapters(): Promise<DownloadedChapterRecord[]> {
-    const result = await chrome.storage.local.get([this.STORAGE_KEY]) as Record<string, JsonValue>;
-    return parseDownloadedChapters(result[this.STORAGE_KEY]);
+    const result = await chrome.storage.local.get([this.STORAGE_KEY])
+    return parseDownloadedChapters(result[this.STORAGE_KEY])
   }
-  
+
   /**
    * Remove a chapter from downloaded list by canonical chapter ID.
    */
   async removeDownloadedChapter(chapterId: string): Promise<void> {
-    try {
-      const existing = await this.getDownloadedChapters();
-      const filtered = existing.filter(ch => ch.chapterId !== chapterId);
-      
-      await chrome.storage.local.set({
-        [this.STORAGE_KEY]: filtered
-      });
-      
-  logger.info(`✅ Chapter removed from downloaded list: ${chapterId}`);
-    } catch (error) {
-  logger.error('❌ Failed to remove downloaded chapter:', error);
-      throw error;
-    }
+    await this.mutationQueue.run(async () => {
+      try {
+        const existing = await this.getDownloadedChapters()
+        const filtered = existing.filter((ch) => ch.chapterId !== chapterId)
+
+        await chrome.storage.local.set({
+          [this.STORAGE_KEY]: filtered,
+        })
+
+        logger.info(`✅ Chapter removed from downloaded list: ${chapterId}`)
+      } catch (error) {
+        logger.error("❌ Failed to remove downloaded chapter:", error)
+        throw error
+      }
+    })
   }
-  
+
   /**
    * Get download history for a series
    */
-  async getSeriesHistory(seriesId: string): Promise<SeriesDownloadHistory | null> {
-    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-    const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-    return allHistory[seriesId] || null;
+  async getSeriesHistory(
+    seriesId: string
+  ): Promise<SeriesDownloadHistory | null> {
+    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY])
+    const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY])
+    return allHistory[seriesId] || null
   }
-  
+
   /**
-   * Update series download history
+   * Apply a series history update to the in-memory map (pure — no storage write).
    */
-  private async updateSeriesHistory(record: DownloadedChapterRecord): Promise<void> {
-    try {
-      const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-      const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-      
-      if (!allHistory[record.seriesId]) {
-        allHistory[record.seriesId] = {
-          seriesId: record.seriesId,
-          seriesTitle: record.seriesTitle,
-          lastUpdated: record.downloadedAt,
-          downloadedChapters: []
-        };
+  private applySeriesHistoryUpdate(
+    allHistory: Record<string, SeriesDownloadHistory>,
+    record: DownloadedChapterRecord
+  ): void {
+    if (!allHistory[record.seriesId]) {
+      allHistory[record.seriesId] = {
+        seriesId: record.seriesId,
+        seriesTitle: record.seriesTitle,
+        lastUpdated: record.downloadedAt,
+        downloadedChapters: [],
       }
-      
-      const seriesHistory = allHistory[record.seriesId];
-      
-      // Remove existing record for this chapter
-      seriesHistory.downloadedChapters = seriesHistory.downloadedChapters.filter(
-        ch => ch.chapterId !== record.chapterId
-      );
-      
-      // Add new record
-      seriesHistory.downloadedChapters.push(record);
-      seriesHistory.lastUpdated = record.downloadedAt;
-      
-      // Sort by full chapter title (no reliance on parsed numbers)
-      seriesHistory.downloadedChapters.sort((a, b) => {
-        const opts: Intl.CollatorOptions = { numeric: true, sensitivity: 'base' };
-        return a.title.localeCompare(b.title, undefined, opts);
-      });
-      
-      await chrome.storage.local.set({
-        [this.SERIES_HISTORY_KEY]: allHistory
-      });
-    } catch (error) {
-      logger.error('❌ Failed to update series history:', error);
-      throw error;
     }
+
+    const seriesHistory = allHistory[record.seriesId]
+
+    // Remove existing record for this chapter
+    seriesHistory.downloadedChapters = seriesHistory.downloadedChapters.filter(
+      (ch) => ch.chapterId !== record.chapterId
+    )
+
+    // Add new record
+    seriesHistory.downloadedChapters.push(record)
+    seriesHistory.lastUpdated = record.downloadedAt
+
+    // Sort by full chapter title (no reliance on parsed numbers)
+    seriesHistory.downloadedChapters.sort((a, b) => {
+      const opts: Intl.CollatorOptions = { numeric: true, sensitivity: "base" }
+      return a.title.localeCompare(b.title, undefined, opts)
+    })
   }
-  
+
   /**
    * Clear all download history
    */
   async clearAllDownloadHistory(): Promise<void> {
-    try {
-      await chrome.storage.local.remove([this.STORAGE_KEY, this.SERIES_HISTORY_KEY]);
-      logger.info('✅ Cleared all download history');
-    } catch (error) {
-      logger.error('❌ Failed to clear all download history:', error);
-      throw error;
-    }
+    await this.mutationQueue.run(async () => {
+      try {
+        await chrome.storage.local.remove([
+          this.STORAGE_KEY,
+          this.SERIES_HISTORY_KEY,
+        ])
+        logger.info("✅ Cleared all download history")
+      } catch (error) {
+        logger.error("❌ Failed to clear all download history:", error)
+        throw error
+      }
+    })
   }
-  
+
   /**
    * Clear download history for a specific series
    */
   async clearSeriesDownloadHistory(seriesId: string): Promise<void> {
-    try {
-      // Remove chapters for this series
-      const existing = await this.getDownloadedChapters();
-      const filtered = existing.filter(ch => ch.seriesId !== seriesId);
-      
-      await chrome.storage.local.set({
-        [this.STORAGE_KEY]: filtered
-      });
-      
-      // Remove series history entry
-      const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-      const allHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-      delete allHistory[seriesId];
-      
-      await chrome.storage.local.set({
-        [this.SERIES_HISTORY_KEY]: allHistory
-      });
-      
-      logger.info(`✅ Cleared download history for series: ${seriesId}`);
-    } catch (error) {
-      logger.error('❌ Failed to clear series download history:', error);
-      throw error;
-    }
+    await this.mutationQueue.run(async () => {
+      try {
+        const [existing, historyResult] = await Promise.all([
+          this.getDownloadedChapters(),
+          chrome.storage.local.get([this.SERIES_HISTORY_KEY]),
+        ])
+        const filtered = existing.filter((ch) => ch.seriesId !== seriesId)
+        const allHistory = parseSeriesHistoryMap(
+          historyResult[this.SERIES_HISTORY_KEY]
+        )
+        delete allHistory[seriesId]
+
+        await chrome.storage.local.set({
+          [this.STORAGE_KEY]: filtered,
+          [this.SERIES_HISTORY_KEY]: allHistory,
+        })
+
+        logger.info(`✅ Cleared download history for series: ${seriesId}`)
+      } catch (error) {
+        logger.error("❌ Failed to clear series download history:", error)
+        throw error
+      }
+    })
   }
-  
+
   /**
    * Clean up old download records (older than specified days)
    */
   async cleanupOldRecords(olderThanDays: number = 90): Promise<void> {
-    try {
-      const cutoffTime = Date.now() - (olderThanDays * 24 * 60 * 60 * 1000);
-      
-      const existing = await this.getDownloadedChapters();
-      const filtered = existing.filter(ch => ch.downloadedAt > cutoffTime);
-      
-      await chrome.storage.local.set({
-        [this.STORAGE_KEY]: filtered
-      });
-      
-  logger.info(`✅ Cleaned up ${existing.length - filtered.length} old download records`);
-    } catch (error) {
-  logger.error('❌ Failed to cleanup old records:', error);
-      throw error;
-    }
+    await this.mutationQueue.run(async () => {
+      try {
+        const cutoffTime = Date.now() - olderThanDays * 24 * 60 * 60 * 1000
+
+        const existing = await this.getDownloadedChapters()
+        const filtered = existing.filter((ch) => ch.downloadedAt > cutoffTime)
+
+        await chrome.storage.local.set({
+          [this.STORAGE_KEY]: filtered,
+        })
+
+        logger.info(
+          `✅ Cleaned up ${existing.length - filtered.length} old download records`
+        )
+      } catch (error) {
+        logger.error("❌ Failed to cleanup old records:", error)
+        throw error
+      }
+    })
   }
-  
+
   /**
    * Get storage usage statistics
    */
   async getStorageStats(): Promise<{
-    totalChapters: number;
-    totalSeries: number;
-    oldestDownload: number | null;
-    newestDownload: number | null;
+    totalChapters: number
+    totalSeries: number
+    oldestDownload: number | null
+    newestDownload: number | null
   }> {
-    const chapters = await this.getDownloadedChapters();
-    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY]) as Record<string, JsonValue>;
-    const seriesHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY]);
-    
-    const timestamps = chapters.map(ch => ch.downloadedAt).filter(Boolean);
-    
+    const chapters = await this.getDownloadedChapters()
+    const result = await chrome.storage.local.get([this.SERIES_HISTORY_KEY])
+    const seriesHistory = parseSeriesHistoryMap(result[this.SERIES_HISTORY_KEY])
+
+    const timestamps = chapters.map((ch) => ch.downloadedAt).filter(Boolean)
+
     return {
       totalChapters: chapters.length,
       totalSeries: Object.keys(seriesHistory).length,
       oldestDownload: timestamps.length > 0 ? Math.min(...timestamps) : null,
-      newestDownload: timestamps.length > 0 ? Math.max(...timestamps) : null
-    };
+      newestDownload: timestamps.length > 0 ? Math.max(...timestamps) : null,
+    }
   }
 }
 
 // Export singleton instance
-export const chapterPersistenceService = new ChapterPersistenceService();
-
+export const chapterPersistenceService = new ChapterPersistenceService()

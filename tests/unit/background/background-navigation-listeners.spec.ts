@@ -1,216 +1,343 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock('@/src/runtime/logger', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
+vi.mock("@/src/runtime/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-vi.mock('@/src/site-integrations/url-matcher', () => ({
-  matchUrl: vi.fn((url: string) => (
-    url.includes('/title/')
-      ? { integrationId: 'mangadex', role: 'series' }
+vi.mock("@/src/site-integrations/url-matcher", () => ({
+  matchUrl: vi.fn((url: string) =>
+    url.includes("/title/")
+      ? { integrationId: "mangadex", role: "series" }
       : null
-  )),
+  ),
 }))
 
-import { registerBackgroundNavigationListeners } from '@/entrypoints/background/background-navigation-listeners'
+import { registerBackgroundNavigationListeners } from "@/entrypoints/background/background-navigation-listeners"
+import logger from "@/src/runtime/logger"
 
-describe('registerBackgroundNavigationListeners', () => {
-  const tabsOnUpdatedAddListener = vi.fn()
-  const tabsOnActivatedAddListener = vi.fn()
-  const webNavigationOnCommittedAddListener = vi.fn()
-  const webNavigationOnHistoryStateUpdatedAddListener = vi.fn()
-  const storageGet = vi.fn()
-  const storageRemove = vi.fn()
-  const tabsQuery = vi.fn()
-  const tabsGet = vi.fn()
+describe("background navigation listeners", () => {
+  const onUpdated = vi.fn()
+  const onActivated = vi.fn()
+  const onCommitted = vi.fn()
+  const onDOMContentLoaded = vi.fn()
+  const onHistoryStateUpdated = vi.fn()
+  const queryTabs = vi.fn()
+  const getTab = vi.fn()
+  const removeSession = vi.fn(async () => undefined)
+
+  function createDependencies() {
+    const clearTabState = vi.fn(async () => undefined)
+    return {
+      ensureStateManagerInitialized: vi.fn(async () => undefined),
+      getStateManager: vi.fn(() => ({ clearTabState }) as never),
+      clearTabState,
+      tabContextCache: {
+        handleTabActivated: vi.fn(async () => undefined),
+        handleTabUpdated: vi.fn(async (): Promise<void> => {}),
+        setCachedContext: vi.fn(),
+        deleteCachedContext: vi.fn(),
+        getCachedContext: vi.fn<() => unknown>(() => undefined),
+        syncActiveTabContext: vi.fn(async () => undefined),
+        projectLoadingForTab: vi.fn(async () => ({ requestId: 1 })),
+      },
+      tabContextResolver: {
+        resolveTabContext: vi.fn(async () => undefined),
+      },
+      tabUiCoordinator: {
+        updateActionForTab: vi.fn(async () => undefined),
+        updateSidePanelForTab: vi.fn(async () => undefined),
+      },
+    }
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
-
-    storageGet.mockResolvedValue({})
-    storageRemove.mockResolvedValue(undefined)
-    tabsQuery.mockResolvedValue([])
-    tabsGet.mockResolvedValue(undefined)
-
-    vi.stubGlobal('chrome', {
+    queryTabs.mockResolvedValue([])
+    getTab.mockResolvedValue({
+      id: 7,
+      active: true,
+      windowId: 2,
+      url: "https://mangadex.org/title/series-1",
+    })
+    vi.stubGlobal("chrome", {
       tabs: {
-        onUpdated: {
-          addListener: tabsOnUpdatedAddListener,
-        },
-        onActivated: {
-          addListener: tabsOnActivatedAddListener,
-        },
-        query: tabsQuery,
-        get: tabsGet,
+        onUpdated: { addListener: onUpdated },
+        onActivated: { addListener: onActivated },
+        query: queryTabs,
+        get: getTab,
       },
       webNavigation: {
-        onCommitted: {
-          addListener: webNavigationOnCommittedAddListener,
-        },
-        onHistoryStateUpdated: {
-          addListener: webNavigationOnHistoryStateUpdatedAddListener,
-        },
+        onCommitted: { addListener: onCommitted },
+        onDOMContentLoaded: { addListener: onDOMContentLoaded },
+        onHistoryStateUpdated: { addListener: onHistoryStateUpdated },
       },
       storage: {
         session: {
-          get: storageGet,
-          remove: storageRemove,
+          get: vi.fn(async () => ({})),
+          remove: removeSession,
         },
       },
     })
   })
 
-  it('does not fail startup when optional tab navigation events are unavailable', () => {
-    vi.stubGlobal('chrome', {
-      tabs: {
-        query: tabsQuery,
-        get: tabsGet,
-      },
-      webNavigation: {
-        onCommitted: {
-          addListener: webNavigationOnCommittedAddListener,
-        },
-        onHistoryStateUpdated: {
-          addListener: webNavigationOnHistoryStateUpdatedAddListener,
-        },
-      },
-      storage: {
-        session: {
-          get: storageGet,
-          remove: storageRemove,
-        },
-      },
-    })
+  it("projects loading on navigation and resolves only after completion", async () => {
+    const deps = createDependencies()
+    registerBackgroundNavigationListeners(deps)
+    const listener = onUpdated.mock.calls[0][0] as (
+      tabId: number,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
+    ) => void
+    const tab = {
+      id: 7,
+      active: true,
+      windowId: 2,
+      url: "https://mangadex.org/title/series-1",
+    } as chrome.tabs.Tab
 
-    expect(() => registerBackgroundNavigationListeners({
-      ensureStateManagerInitialized: async () => undefined,
-      getStateManager: () => ({
-        clearTabState: vi.fn(async () => undefined),
-      }) as never,
-      tabContextCache: {
-        handleTabActivated: vi.fn(async () => undefined),
-        handleTabUpdated: vi.fn(async () => undefined),
-        setCachedContext: vi.fn(),
-        deleteCachedContext: vi.fn(),
-        syncActiveTabContext: vi.fn(async () => undefined),
-      },
-      tabUiCoordinator: {
-        ensureContentScriptPresent: vi.fn(async () => undefined),
-        updateActionForTab: vi.fn(async () => undefined),
-        updateSidePanelForTab: vi.fn(async () => undefined),
-      },
-    })).not.toThrow()
+    listener(7, { status: "loading" }, tab)
+    await vi.waitFor(() =>
+      expect(deps.tabContextCache.projectLoadingForTab).toHaveBeenCalledWith(
+        7,
+        2
+      )
+    )
+    expect(deps.tabContextResolver.resolveTabContext).not.toHaveBeenCalled()
 
-    expect(webNavigationOnCommittedAddListener).toHaveBeenCalledTimes(1)
-    expect(webNavigationOnHistoryStateUpdatedAddListener).toHaveBeenCalledTimes(1)
-    expect(tabsQuery).toHaveBeenCalledWith({})
+    listener(7, { status: "complete" }, tab)
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(
+        7,
+        {
+          windowId: 2,
+          allowCached: false,
+        }
+      )
+    )
   })
 
-  it('treats supported SPA navigations as a no-op so refresh remains the recovery path', async () => {
-    const clearTabState = vi.fn(async () => undefined)
-    const deleteCachedContext = vi.fn()
-    const syncActiveTabContext = vi.fn(async () => undefined)
-    const ensureContentScriptPresent = vi.fn(async () => undefined)
+  it("serializes a loading projection before a following complete event resolves", async () => {
+    const deps = createDependencies()
+    let releaseLoadingUpdate: (() => void) | undefined
+    deps.tabContextCache.handleTabUpdated.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseLoadingUpdate = resolve
+        })
+    )
+    registerBackgroundNavigationListeners(deps)
+    const listener = onUpdated.mock.calls[0][0] as (
+      tabId: number,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
+    ) => void
+    const tab = {
+      id: 7,
+      active: true,
+      windowId: 2,
+      url: "https://mangadex.org/title/series-1",
+    } as chrome.tabs.Tab
 
-    storageGet.mockResolvedValue({
-      tab_9: {
-        siteIntegrationId: 'mangadex',
-        mangaId: 'old-series',
-        seriesTitle: 'Old Series',
-      },
-    })
+    listener(7, { status: "loading" }, tab)
+    listener(7, { status: "complete" }, tab)
 
-    registerBackgroundNavigationListeners({
-      ensureStateManagerInitialized: async () => undefined,
-      getStateManager: () => ({
-        clearTabState,
-      }) as never,
-      tabContextCache: {
-        handleTabActivated: vi.fn(async () => undefined),
-        handleTabUpdated: vi.fn(async () => undefined),
-        setCachedContext: vi.fn(),
-        deleteCachedContext,
-        syncActiveTabContext,
-      },
-      tabUiCoordinator: {
-        ensureContentScriptPresent,
-        updateActionForTab: vi.fn(async () => undefined),
-        updateSidePanelForTab: vi.fn(async () => undefined),
-      },
-    })
+    await vi.waitFor(() =>
+      expect(deps.tabContextCache.handleTabUpdated).toHaveBeenCalledTimes(1)
+    )
+    expect(deps.tabContextResolver.resolveTabContext).not.toHaveBeenCalled()
 
-    const historyListener = webNavigationOnHistoryStateUpdatedAddListener.mock.calls[0]?.[0] as (details: {
+    releaseLoadingUpdate?.()
+
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledTimes(1)
+    )
+    expect(
+      deps.tabContextCache.projectLoadingForTab.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      deps.tabContextResolver.resolveTabContext.mock.invocationCallOrder[0]
+    )
+  })
+
+  it("starts supported active-tab resolution at top-frame DOM readiness", async () => {
+    const deps = createDependencies()
+    registerBackgroundNavigationListeners(deps)
+    const listener = onDOMContentLoaded.mock.calls[0][0] as (details: {
       tabId: number
       frameId: number
-      url?: string
+      url: string
     }) => void
 
-    historyListener({
-      tabId: 9,
+    listener({
+      tabId: 7,
       frameId: 0,
-      url: 'https://mangadex.org/title/new-series?tab=chapters&order=asc',
+      url: "https://mangadex.org/title/series-1",
     })
 
-    await Promise.resolve()
-
-    expect(deleteCachedContext).not.toHaveBeenCalled()
-    expect(storageRemove).not.toHaveBeenCalled()
-    expect(syncActiveTabContext).not.toHaveBeenCalled()
-    expect(ensureContentScriptPresent).not.toHaveBeenCalled()
-    expect(clearTabState).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(
+        7,
+        { windowId: 2, allowCached: false }
+      )
+    )
   })
 
-  it('ignores malformed stored tab state when deciding unsupported SPA cleanup', async () => {
-    const clearTabState = vi.fn(async () => undefined)
-    const deleteCachedContext = vi.fn()
+  it("does not refetch on completion after a context has already resolved", async () => {
+    const deps = createDependencies()
+    deps.tabContextCache.getCachedContext.mockReturnValue({
+      siteIntegrationId: "mangadex",
+    })
+    registerBackgroundNavigationListeners(deps)
+    const listener = onUpdated.mock.calls[0][0] as (
+      tabId: number,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
+    ) => void
 
-    storageGet.mockResolvedValue({
-      tab_9: {
-        bogus: true,
-      },
+    listener(7, { status: "complete" }, {
+      id: 7,
+      active: true,
+      windowId: 2,
+      url: "https://mangadex.org/title/series-1",
+    } as chrome.tabs.Tab)
+
+    await vi.waitFor(() =>
+      expect(deps.tabContextCache.handleTabUpdated).toHaveBeenCalled()
+    )
+    expect(deps.tabContextResolver.resolveTabContext).not.toHaveBeenCalled()
+  })
+
+  it("resolves an activated tab loading-first with cache allowed", async () => {
+    const deps = createDependencies()
+    registerBackgroundNavigationListeners(deps)
+    const listener = onActivated.mock.calls[0][0] as (
+      info: chrome.tabs.OnActivatedInfo
+    ) => void
+
+    listener({ tabId: 7, windowId: 2 })
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(
+        7,
+        {
+          windowId: 2,
+          allowCached: true,
+        }
+      )
+    )
+    await vi.waitFor(() =>
+      expect(deps.tabUiCoordinator.updateActionForTab).toHaveBeenCalledWith(
+        7,
+        "https://mangadex.org/title/series-1"
+      )
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[navigation] Active tab changed",
+      expect.objectContaining({
+        phase: "received",
+        reason: "tabs.onActivated",
+        tabId: 7,
+        windowId: 2,
+      })
+    )
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[navigation] Active tab context resolution finished",
+      expect.objectContaining({
+        phase: "resolution-finished",
+        reason: "tabs.onActivated",
+        tabId: 7,
+        windowId: 2,
+        url: "https://mangadex.org/title/series-1",
+        initializationWaitMs: expect.any(Number),
+        resolutionMs: expect.any(Number),
+        totalMs: expect.any(Number),
+      })
+    )
+  })
+
+  it("logs activation receipt before initialization or provider work settles", async () => {
+    const deps = createDependencies()
+    let releaseInitialization: (() => void) | undefined
+    deps.ensureStateManagerInitialized.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          releaseInitialization = () => resolve(undefined)
+        })
+    )
+    registerBackgroundNavigationListeners(deps)
+    const listener = onActivated.mock.calls[0][0] as (
+      info: chrome.tabs.OnActivatedInfo
+    ) => void
+
+    listener({ tabId: 7, windowId: 2 })
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[navigation] Active tab changed",
+      expect.objectContaining({ phase: "received", tabId: 7, windowId: 2 })
+    )
+    expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(7, {
+      windowId: 2,
+      allowCached: true,
     })
 
-    registerBackgroundNavigationListeners({
-      ensureStateManagerInitialized: async () => undefined,
-      getStateManager: () => ({
-        clearTabState,
-      }) as never,
-      tabContextCache: {
-        handleTabActivated: vi.fn(async () => undefined),
-        handleTabUpdated: vi.fn(async () => undefined),
-        setCachedContext: vi.fn(),
-        deleteCachedContext,
-        syncActiveTabContext: vi.fn(async () => undefined),
-      },
-      tabUiCoordinator: {
-        ensureContentScriptPresent: vi.fn(async () => undefined),
-        updateActionForTab: vi.fn(async () => undefined),
-        updateSidePanelForTab: vi.fn(async () => undefined),
-      },
-    })
+    releaseInitialization?.()
+    await vi.waitFor(() =>
+      expect(logger.debug).toHaveBeenCalledWith(
+        "[navigation] Active tab initialization synchronized",
+        expect.objectContaining({
+          phase: "initialization-completed",
+          tabId: 7,
+          windowId: 2,
+        })
+      )
+    )
+  })
 
-    const historyListener = webNavigationOnHistoryStateUpdatedAddListener.mock.calls[0]?.[0] as (details: {
+  it("re-resolves SPA navigation without messaging a resident content script", async () => {
+    const deps = createDependencies()
+    registerBackgroundNavigationListeners(deps)
+    const listener = onHistoryStateUpdated.mock.calls[0][0] as (details: {
       tabId: number
       frameId: number
-      url?: string
+      url: string
     }) => void
 
-    historyListener({
-      tabId: 9,
+    listener({
+      tabId: 7,
       frameId: 0,
-      url: 'https://example.com/unsupported-spa-route',
+      url: "https://mangadex.org/title/series-2",
     })
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(
+        7,
+        {
+          windowId: 2,
+          allowCached: false,
+        }
+      )
+    )
+    expect(deps.clearTabState).toHaveBeenCalledWith(7)
+    expect(removeSession).toHaveBeenCalledWith("seriesContextError_7")
+  })
 
-    await Promise.resolve()
-    await Promise.resolve()
+  it("resolves active tabs discovered during service-worker startup", async () => {
+    queryTabs.mockResolvedValue([
+      {
+        id: 8,
+        active: true,
+        windowId: 3,
+        url: "https://mangadex.org/title/series-3",
+      },
+    ])
+    const deps = createDependencies()
+    registerBackgroundNavigationListeners(deps)
 
-    expect(deleteCachedContext).not.toHaveBeenCalled()
-    expect(storageRemove).not.toHaveBeenCalled()
-    expect(clearTabState).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(deps.tabContextResolver.resolveTabContext).toHaveBeenCalledWith(
+        8,
+        {
+          windowId: 3,
+          allowCached: true,
+        }
+      )
+    )
   })
 })

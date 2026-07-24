@@ -1,13 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { enqueueStartDownloadTask } from '@/entrypoints/background/download-queue'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import type { ExtensionSettings } from '@/src/storage/settings-types'
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
-import { registerSiteIntegration, siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
+import { enqueueStartDownloadTask } from "@/entrypoints/background/download-queue"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import {
+  registerSiteIntegration,
+  siteIntegrationRegistry,
+} from "@/src/runtime/site-integration-registry"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     error: vi.fn(),
@@ -16,28 +19,32 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-vi.mock('@/src/storage/site-overrides-service', () => ({
+vi.mock("@/src/storage/site-overrides-service", () => ({
   siteOverridesService: {
     getAll: vi.fn(async () => ({})),
   },
 }))
 
-vi.mock('@/src/storage/site-integration-settings-service', () => ({
+vi.mock("@/src/storage/site-integration-settings-service", () => ({
   siteIntegrationSettingsService: {
     getAll: vi.fn(async () => ({})),
     getForSite: vi.fn(async () => ({})),
   },
 }))
 
-type ExtensionSettingsOverrides = Partial<Omit<ExtensionSettings, 'downloads' | 'globalPolicy'>> & {
-  downloads?: Partial<ExtensionSettings['downloads']>
+type ExtensionSettingsOverrides = Partial<
+  Omit<ExtensionSettings, "downloads" | "globalPolicy">
+> & {
+  downloads?: Partial<ExtensionSettings["downloads"]>
   globalPolicy?: {
-    image?: Partial<ExtensionSettings['globalPolicy']['image']>
-    chapter?: Partial<ExtensionSettings['globalPolicy']['chapter']>
+    image?: Partial<ExtensionSettings["globalPolicy"]["image"]>
+    chapter?: Partial<ExtensionSettings["globalPolicy"]["chapter"]>
   }
 }
 
-function makeSettings(overrides: ExtensionSettingsOverrides = {}): ExtensionSettings {
+function makeSettings(
+  overrides: ExtensionSettingsOverrides = {}
+): ExtensionSettings {
   return {
     ...DEFAULT_SETTINGS,
     ...overrides,
@@ -60,7 +67,7 @@ function makeSettings(overrides: ExtensionSettingsOverrides = {}): ExtensionSett
 
 function createStateManager(
   settingsRef: { current: ExtensionSettings },
-  addDownloadTask = vi.fn(async (_task: unknown) => {}),
+  addDownloadTask = vi.fn(async (_task: unknown) => {})
 ): CentralizedStateManager {
   return {
     getGlobalState: vi.fn(async () => ({
@@ -73,36 +80,37 @@ function createStateManager(
 }
 
 const START_PAYLOAD = {
-  siteIntegrationId: 'mangadex',
-  mangaId: 'mangadex:series-1',
-  seriesTitle: 'Hunter x Hunter',
+  siteIntegrationId: "mangadex",
+  mangaId: "mangadex:series-1",
+  seriesTitle: "Hunter x Hunter",
   chapters: [
     {
-      id: 'chapter-1',
-      title: 'Chapter 1',
-      url: 'https://mangadex.org/chapter/1',
+      id: "chapter-1",
+      title: "Chapter 1",
+      url: "https://mangadex.org/chapter/1",
       index: 1,
-      chapterLabel: '1',
-      volumeLabel: 'Vol. 1',
-      language: 'en',
+      chapterLabel: "1",
+      volumeLabel: "Vol. 1",
+      language: "en",
     },
   ],
 }
 
-describe('settings snapshot isolation (behavior-based)', () => {
+describe("settings snapshot isolation (behavior-based)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     siteIntegrationRegistry.clear()
   })
 
-  it('captures enqueue-time task settings snapshot for created task', async () => {
+  it("captures enqueue-time task settings snapshot for created task", async () => {
     const settingsRef = {
       current: makeSettings({
         downloads: {
-          defaultFormat: 'none',
-          overwriteExisting: true,
-          pathTemplate: 'Library/<SERIES_TITLE>',
-          fileNameTemplate: '<CHAPTER_NUMBER>-<CHAPTER_TITLE>',
+          defaultFormat: "none",
+          destination: "file-system-access",
+          conflictPolicy: "overwrite",
+          pathTemplate: "Library/<SERIES_TITLE>",
+          fileNameTemplate: "<CHAPTER_NUMBER>-<CHAPTER_TITLE>",
         },
         globalPolicy: {
           image: { concurrency: 4, delayMs: 150 },
@@ -113,18 +121,25 @@ describe('settings snapshot isolation (behavior-based)', () => {
     const addDownloadTask = vi.fn(async (_task: unknown) => {})
     const stateManager = createStateManager(settingsRef, addDownloadTask)
 
-    const result = await enqueueStartDownloadTask(stateManager, START_PAYLOAD, 42)
+    const result = await enqueueStartDownloadTask(
+      stateManager,
+      START_PAYLOAD,
+      42
+    )
 
     expect(result.success).toBe(true)
     expect(addDownloadTask).toHaveBeenCalledTimes(1)
-    const addCalls = (addDownloadTask as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const addCalls = (
+      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls
     const createdTaskRaw = addCalls[0]?.[0]
     expect(createdTaskRaw).toBeDefined()
 
     const createdTask = createdTaskRaw as {
       settingsSnapshot: {
         archiveFormat: string
-        overwriteExisting: boolean
+        destination: string
+        conflictPolicy: string
         pathTemplate: string
         fileNameTemplate: string
         rateLimitSettings: {
@@ -134,20 +149,32 @@ describe('settings snapshot isolation (behavior-based)', () => {
       }
     }
 
-    expect(createdTask.settingsSnapshot.archiveFormat).toBe('none')
-    expect(createdTask.settingsSnapshot.overwriteExisting).toBe(true)
-    expect(createdTask.settingsSnapshot.pathTemplate).toBe('Library/<SERIES_TITLE>')
-    expect(createdTask.settingsSnapshot.fileNameTemplate).toBe('<CHAPTER_NUMBER>-<CHAPTER_TITLE>')
-    expect(createdTask.settingsSnapshot.rateLimitSettings.image).toEqual({ concurrency: 4, delayMs: 150 })
-    expect(createdTask.settingsSnapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 750 })
+    expect(createdTask.settingsSnapshot.archiveFormat).toBe("none")
+    expect(createdTask.settingsSnapshot.destination).toBe("file-system-access")
+    expect(createdTask.settingsSnapshot.conflictPolicy).toBe("overwrite")
+    expect(createdTask.settingsSnapshot.pathTemplate).toBe(
+      "Library/<SERIES_TITLE>"
+    )
+    expect(createdTask.settingsSnapshot.fileNameTemplate).toBe(
+      "<CHAPTER_NUMBER>-<CHAPTER_TITLE>"
+    )
+    expect(createdTask.settingsSnapshot.rateLimitSettings.image).toEqual({
+      concurrency: 4,
+      delayMs: 150,
+    })
+    expect(createdTask.settingsSnapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 750,
+    })
   })
 
-  it('keeps first task snapshot isolated from later settings mutation while new task uses updated values', async () => {
+  it("keeps first task snapshot isolated from later settings mutation while new task uses updated values", async () => {
     const settingsRef = {
       current: makeSettings({
         downloads: {
-          defaultFormat: 'cbz',
-          overwriteExisting: false,
+          defaultFormat: "cbz",
+          destination: "downloads-api",
+          conflictPolicy: "uniquify",
         },
         globalPolicy: {
           image: { concurrency: 4, delayMs: 100 },
@@ -160,58 +187,81 @@ describe('settings snapshot isolation (behavior-based)', () => {
 
     await enqueueStartDownloadTask(stateManager, START_PAYLOAD, 1)
 
-    settingsRef.current.downloads.defaultFormat = 'zip'
-    settingsRef.current.downloads.overwriteExisting = true
+    settingsRef.current.downloads.defaultFormat = "zip"
+    settingsRef.current.downloads.destination = "file-system-access"
+    settingsRef.current.downloads.conflictPolicy = "overwrite"
     settingsRef.current.globalPolicy.image.concurrency = 9
     settingsRef.current.globalPolicy.chapter.delayMs = 250
 
     await enqueueStartDownloadTask(stateManager, START_PAYLOAD, 2)
     expect(addDownloadTask).toHaveBeenCalledTimes(2)
 
-    const addCalls = (addDownloadTask as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const addCalls = (
+      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls
     const firstTaskRaw = addCalls[0]?.[0]
     const secondTaskRaw = addCalls[1]?.[0]
     expect(firstTaskRaw).toBeDefined()
     expect(secondTaskRaw).toBeDefined()
 
-    const firstTaskSnapshot = (firstTaskRaw as {
-      settingsSnapshot: {
-        archiveFormat: string
-        overwriteExisting: boolean
-        rateLimitSettings: {
-          image: { concurrency: number; delayMs: number }
-          chapter: { concurrency: number; delayMs: number }
+    const firstTaskSnapshot = (
+      firstTaskRaw as {
+        settingsSnapshot: {
+          archiveFormat: string
+          destination: string
+          conflictPolicy: string
+          rateLimitSettings: {
+            image: { concurrency: number; delayMs: number }
+            chapter: { concurrency: number; delayMs: number }
+          }
         }
       }
-    }).settingsSnapshot
+    ).settingsSnapshot
 
-    const secondTaskSnapshot = (secondTaskRaw as {
-      settingsSnapshot: {
-        archiveFormat: string
-        overwriteExisting: boolean
-        rateLimitSettings: {
-          image: { concurrency: number; delayMs: number }
-          chapter: { concurrency: number; delayMs: number }
+    const secondTaskSnapshot = (
+      secondTaskRaw as {
+        settingsSnapshot: {
+          archiveFormat: string
+          destination: string
+          conflictPolicy: string
+          rateLimitSettings: {
+            image: { concurrency: number; delayMs: number }
+            chapter: { concurrency: number; delayMs: number }
+          }
         }
       }
-    }).settingsSnapshot
+    ).settingsSnapshot
 
-    expect(firstTaskSnapshot.archiveFormat).toBe('cbz')
-    expect(firstTaskSnapshot.overwriteExisting).toBe(false)
-    expect(firstTaskSnapshot.rateLimitSettings.image).toEqual({ concurrency: 4, delayMs: 100 })
-    expect(firstTaskSnapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 500 })
+    expect(firstTaskSnapshot.archiveFormat).toBe("cbz")
+    expect(firstTaskSnapshot.destination).toBe("downloads-api")
+    expect(firstTaskSnapshot.conflictPolicy).toBe("uniquify")
+    expect(firstTaskSnapshot.rateLimitSettings.image).toEqual({
+      concurrency: 4,
+      delayMs: 100,
+    })
+    expect(firstTaskSnapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 500,
+    })
 
-    expect(secondTaskSnapshot.archiveFormat).toBe('zip')
-    expect(secondTaskSnapshot.overwriteExisting).toBe(true)
-    expect(secondTaskSnapshot.rateLimitSettings.image).toEqual({ concurrency: 9, delayMs: 100 })
-    expect(secondTaskSnapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 250 })
+    expect(secondTaskSnapshot.archiveFormat).toBe("zip")
+    expect(secondTaskSnapshot.destination).toBe("file-system-access")
+    expect(secondTaskSnapshot.conflictPolicy).toBe("overwrite")
+    expect(secondTaskSnapshot.rateLimitSettings.image).toEqual({
+      concurrency: 9,
+      delayMs: 100,
+    })
+    expect(secondTaskSnapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 250,
+    })
   })
 
-  it('uses registered site policy defaults when enqueueing a task', async () => {
+  it("uses registered site policy defaults when enqueueing a task", async () => {
     registerSiteIntegration({
-      id: 'custom-site',
-      name: 'Custom Site',
-      author: 'test',
+      id: "custom-site",
+      name: "Custom Site",
+      author: "test",
       policyDefaults: {
         image: { concurrency: 5, delayMs: 350 },
         chapter: { concurrency: 4, delayMs: 450 },
@@ -229,30 +279,44 @@ describe('settings snapshot isolation (behavior-based)', () => {
     const addDownloadTask = vi.fn(async (_task: unknown) => {})
     const stateManager = createStateManager(settingsRef, addDownloadTask)
 
-    const result = await enqueueStartDownloadTask(stateManager, {
-      ...START_PAYLOAD,
-      siteIntegrationId: 'custom-site',
-    }, 42)
+    const result = await enqueueStartDownloadTask(
+      stateManager,
+      {
+        ...START_PAYLOAD,
+        siteIntegrationId: "custom-site",
+      },
+      42
+    )
 
     expect(result.success).toBe(true)
-    const addCalls = (addDownloadTask as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const addCalls = (
+      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls
     const createdTaskRaw = addCalls[0]?.[0]
     expect(createdTaskRaw).toBeDefined()
 
-    const snapshot = (createdTaskRaw as {
-      settingsSnapshot: {
-        rateLimitSettings: {
-          image: { concurrency: number; delayMs: number }
-          chapter: { concurrency: number; delayMs: number }
+    const snapshot = (
+      createdTaskRaw as {
+        settingsSnapshot: {
+          rateLimitSettings: {
+            image: { concurrency: number; delayMs: number }
+            chapter: { concurrency: number; delayMs: number }
+          }
         }
       }
-    }).settingsSnapshot
+    ).settingsSnapshot
 
-    expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 5, delayMs: 350 })
-    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 450 })
+    expect(snapshot.rateLimitSettings.image).toEqual({
+      concurrency: 5,
+      delayMs: 350,
+    })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 450,
+    })
   })
 
-  it('createTaskSettingsSnapshot returns policy objects independent from subsequent source mutations', () => {
+  it("createTaskSettingsSnapshot returns policy objects independent from subsequent source mutations", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: 4, delayMs: 100 },
@@ -260,16 +324,22 @@ describe('settings snapshot isolation (behavior-based)', () => {
       },
     })
 
-    const snapshot = createTaskSettingsSnapshot(settings, 'mangadex')
+    const snapshot = createTaskSettingsSnapshot(settings, "mangadex")
 
     settings.globalPolicy.image.concurrency = 99
     settings.globalPolicy.chapter.delayMs = 999
 
-    expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 4, delayMs: 100 })
-    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 500 })
+    expect(snapshot.rateLimitSettings.image).toEqual({
+      concurrency: 4,
+      delayMs: 100,
+    })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 500,
+    })
   })
 
-  it('freezes chapter concurrency at one while applying configured chapter delay', () => {
+  it("freezes chapter concurrency at one while applying configured chapter delay", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: 4, delayMs: 100 },
@@ -277,16 +347,21 @@ describe('settings snapshot isolation (behavior-based)', () => {
       },
     })
 
-    const snapshot = createTaskSettingsSnapshot(settings, 'mangadex', {
+    const snapshot = createTaskSettingsSnapshot(settings, "mangadex", {
       siteOverride: {
-        chapterPolicy: { concurrency: 9, delayMs: 1250 } as unknown as { delayMs: number },
+        chapterPolicy: { concurrency: 9, delayMs: 1250 } as unknown as {
+          delayMs: number
+        },
       },
     })
 
-    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 1250 })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 1250,
+    })
   })
 
-  it('applies site policy defaults between global settings and explicit site overrides', () => {
+  it("applies site policy defaults between global settings and explicit site overrides", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: 2, delayMs: 100 },
@@ -294,7 +369,7 @@ describe('settings snapshot isolation (behavior-based)', () => {
       },
     })
 
-    const snapshot = createTaskSettingsSnapshot(settings, 'custom-site', {
+    const snapshot = createTaskSettingsSnapshot(settings, "custom-site", {
       sitePolicyDefaults: {
         image: { concurrency: 6, delayMs: 700 },
         chapter: { concurrency: 4, delayMs: 800 },
@@ -305,7 +380,44 @@ describe('settings snapshot isolation (behavior-based)', () => {
       },
     })
 
-    expect(snapshot.rateLimitSettings.image).toEqual({ concurrency: 6, delayMs: 900 })
-    expect(snapshot.rateLimitSettings.chapter).toEqual({ concurrency: 1, delayMs: 1000 })
+    expect(snapshot.rateLimitSettings.image).toEqual({
+      concurrency: 6,
+      delayMs: 900,
+    })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 1000,
+    })
+  })
+
+  it("canonicalizes the effective settings document and merged policy overrides once", () => {
+    const settings = makeSettings({
+      globalPolicy: {
+        image: { concurrency: -4, delayMs: -50 },
+        chapter: { concurrency: 9, delayMs: -75 },
+      },
+      globalRetries: { image: 99, chapter: -2 },
+    })
+
+    const snapshot = createTaskSettingsSnapshot(settings, "custom-site", {
+      sitePolicyDefaults: {
+        image: { concurrency: 50, delayMs: -100 },
+      },
+      siteOverride: {
+        imagePolicy: { concurrency: 25, delayMs: -200 },
+        retries: { image: 50, chapter: -3 },
+      },
+    })
+
+    expect(snapshot.rateLimitSettings.image).toEqual({
+      concurrency: 10,
+      delayMs: 0,
+    })
+    expect(snapshot.rateLimitSettings.chapter).toEqual({
+      concurrency: 1,
+      delayMs: 0,
+    })
+    expect(snapshot.retrySettings).toEqual({ image: 10, chapter: 0 })
+    expect(snapshot.conflictPolicy).toBe("uniquify")
   })
 })

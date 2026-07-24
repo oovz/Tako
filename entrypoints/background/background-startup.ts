@@ -1,84 +1,158 @@
-import logger from '@/src/runtime/logger'
-import { initializeBackgroundSiteIntegrations } from '@/src/runtime/background-site-integration-initialization'
-import { settingsService } from '@/src/storage/settings-service'
-import { settingsSyncService } from '@/src/storage/settings-sync-service'
-import { createStateManager } from '@/entrypoints/background/state-action-router'
-import { initializeFromStorage } from '@/entrypoints/background/initialize-from-storage'
-import { processDownloadQueue } from '@/entrypoints/background/download-queue'
-import { getOffscreenContexts } from '@/entrypoints/background/offscreen-lifecycle'
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
-import type { CentralizedStateManager } from '@/src/runtime/centralized-state'
-import type { PendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
-import type { DownloadTaskState } from '@/src/types/queue-state'
+import logger from "@/src/runtime/logger"
+import { applyUiLanguagePreference } from "@/src/runtime/i18n"
+import { initializeBackgroundSiteIntegrations } from "@/src/runtime/background-site-integration-initialization"
+import { settingsService } from "@/src/storage/settings-service"
+import { settingsSyncService } from "@/src/storage/settings-sync-service"
+import { createStateManager } from "@/entrypoints/background/state-action-router"
+import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
+import type { StartupQueueActivation } from "@/entrypoints/background/initialize-from-storage"
+import {
+  processDownloadQueue,
+  resumeDownloadTask,
+} from "@/entrypoints/background/download-queue"
+import {
+  getOffscreenContexts,
+  hasOffscreenDocument,
+  queryOffscreenJob,
+  queryOffscreenStatus,
+} from "@/entrypoints/background/offscreen-lifecycle"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { normalizePersistedDownloadTask } from "@/src/runtime/persisted-download-task"
+import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import type { PendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
+import type {
+  DownloadTaskState,
+  PendingOutputRecord,
+} from "@/src/types/queue-state"
+import { reconcileBroadHttpsPermissionEnablement } from "@/src/site-integrations/host-permission-service"
+import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
+import {
+  mergePendingOutputAccountingIntoQueue,
+  reconcileAllPendingOutputs,
+} from "./native-output-finalizer"
+import { recoverPendingUndoActions } from "./pending-undo-coordinator"
 
 const PIXIV_REFERER_REWRITE_RULE_ID = 41001
 const MANHUAGUI_REFERER_REWRITE_RULE_ID = 41002
 const MANHUAGUI_IMAGE_DOMAINS = [
-  'i.hamreus.com',
-  'eu.hamreus.com',
-  'eu1.hamreus.com',
-  'eu2.hamreus.com',
-  'us.hamreus.com',
-  'us1.hamreus.com',
-  'us2.hamreus.com',
-  'us3.hamreus.com',
+  "i.hamreus.com",
+  "eu.hamreus.com",
+  "eu1.hamreus.com",
+  "eu2.hamreus.com",
+  "us.hamreus.com",
+  "us1.hamreus.com",
+  "us2.hamreus.com",
+  "us3.hamreus.com",
 ]
 
 async function readPersistedDownloadQueue(): Promise<DownloadTaskState[]> {
-  const result = await chrome.storage.local.get(LOCAL_STORAGE_KEYS.downloadQueue) as Record<string, unknown>
+  const result = await chrome.storage.local.get(
+    LOCAL_STORAGE_KEYS.downloadQueue
+  )
   const queue = result[LOCAL_STORAGE_KEYS.downloadQueue]
   return Array.isArray(queue)
-    ? queue.map(normalizePersistedDownloadTask).filter((task): task is DownloadTaskState => task !== null)
+    ? queue
+        .map(normalizePersistedDownloadTask)
+        .filter((task): task is DownloadTaskState => task !== null)
     : []
 }
 
-async function writePersistedDownloadQueue(queue: DownloadTaskState[]): Promise<void> {
+async function writePersistedDownloadQueue(
+  queue: DownloadTaskState[]
+): Promise<void> {
   await chrome.storage.local.set({ [LOCAL_STORAGE_KEYS.downloadQueue]: queue })
 }
 
 async function applyRecoveredQueue(
   stateManager: CentralizedStateManager,
-  queue: DownloadTaskState[],
+  queue: DownloadTaskState[]
 ): Promise<void> {
   await stateManager.updateGlobalState({ downloadQueue: queue })
+}
+
+async function releaseSettledPendingOutputJobs(
+  store: PendingDownloadsStore
+): Promise<void> {
+  const releasableJobIds = new Set(
+    [...store.snapshot().values()]
+      .filter(
+        (record) =>
+          record.state !== "prepared" &&
+          record.state !== "in_progress" &&
+          record.blobRevokedAt !== undefined
+      )
+      .map((record) => record.jobId)
+  )
+  for (const jobId of releasableJobIds) {
+    try {
+      await store.releaseJob(jobId)
+    } catch (error) {
+      logger.warn("Settled pending-output cleanup will be retried", {
+        jobId,
+        error,
+      })
+    }
+  }
 }
 
 async function resumeRecoveredQueue(
   stateManager: CentralizedStateManager,
   ensureOffscreenDocumentReady: () => Promise<void>,
+  activeTaskId?: string
 ): Promise<void> {
+  if (activeTaskId) {
+    await resumeDownloadTask(
+      stateManager,
+      activeTaskId,
+      ensureOffscreenDocumentReady
+    )
+    return
+  }
   await processDownloadQueue(stateManager, ensureOffscreenDocumentReady)
 }
 
-async function initializeSiteIntegrationsSafely(): Promise<void> {
+async function initializeSiteIntegrations(): Promise<void> {
   try {
-    await initializeBackgroundSiteIntegrations()
+    await reconcileBroadHttpsPermissionEnablement()
   } catch (error) {
-    logger.warn('Warning during site integration initialization (continuing anyway):', error)
+    logger.warn(
+      "Could not reconcile optional host permission during startup:",
+      error
+    )
   }
+  await initializeBackgroundSiteIntegrations()
 }
 
-async function syncSettingsToState(stateManager: CentralizedStateManager): Promise<void> {
+async function syncSettingsToState(
+  stateManager: CentralizedStateManager
+): Promise<void> {
   try {
     const settings = await settingsService.getSettings()
-    logger.debug(`[Init] Loading settings - defaultFormat: ${settings.downloads.defaultFormat}`)
+    await applyUiLanguagePreference(settings.uiLanguage)
+    logger.debug(
+      `[Init] Loading settings - defaultFormat: ${settings.downloads.defaultFormat}`
+    )
     await stateManager.updateGlobalState({ settings })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    logger.warn('Failed to sync settings to centralized state:', message)
+    logger.warn("Failed to sync settings to centralized state:", message)
   }
 }
 
 export async function configureImageRefererRewriteRules(): Promise<void> {
   if (!chrome.declarativeNetRequest?.updateSessionRules) {
-    logger.debug('declarativeNetRequest API unavailable; skipping image referer rewrite rule setup')
+    logger.debug(
+      "declarativeNetRequest API unavailable; skipping image referer rewrite rule setup"
+    )
     return
   }
 
   try {
     await chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [PIXIV_REFERER_REWRITE_RULE_ID, MANHUAGUI_REFERER_REWRITE_RULE_ID],
+      removeRuleIds: [
+        PIXIV_REFERER_REWRITE_RULE_ID,
+        MANHUAGUI_REFERER_REWRITE_RULE_ID,
+      ],
       addRules: [
         {
           id: PIXIV_REFERER_REWRITE_RULE_ID,
@@ -87,14 +161,14 @@ export async function configureImageRefererRewriteRules(): Promise<void> {
             type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
             requestHeaders: [
               {
-                header: 'referer',
+                header: "referer",
                 operation: chrome.declarativeNetRequest.HeaderOperation.SET,
-                value: 'https://comic.pixiv.net/',
+                value: "https://comic.pixiv.net/",
               },
             ],
           },
           condition: {
-            requestDomains: ['img-comic.pximg.net'],
+            requestDomains: ["img-comic.pximg.net"],
             resourceTypes: [
               chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
               chrome.declarativeNetRequest.ResourceType.OTHER,
@@ -108,9 +182,9 @@ export async function configureImageRefererRewriteRules(): Promise<void> {
             type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
             requestHeaders: [
               {
-                header: 'referer',
+                header: "referer",
                 operation: chrome.declarativeNetRequest.HeaderOperation.SET,
-                value: 'https://www.manhuagui.com/',
+                value: "https://www.manhuagui.com/",
               },
             ],
           },
@@ -124,9 +198,52 @@ export async function configureImageRefererRewriteRules(): Promise<void> {
         },
       ],
     })
-    logger.debug('Configured image referer rewrite session rules')
+    logger.debug("Configured image referer rewrite session rules")
   } catch (error) {
-    logger.warn('Failed to configure image referer rewrite rules (non-fatal)', error)
+    logger.warn(
+      "Failed to configure image referer rewrite rules (non-fatal)",
+      error
+    )
+  }
+}
+
+export interface InitializedBackgroundRuntime {
+  stateManager: CentralizedStateManager
+  activateQueue: () => Promise<void>
+}
+
+export function exposeAndActivateBackgroundRuntime(input: {
+  runtime: InitializedBackgroundRuntime
+  exposeStateManager: (stateManager: CentralizedStateManager) => void
+}): Promise<void> {
+  input.exposeStateManager(input.runtime.stateManager)
+  return input.runtime.activateQueue()
+}
+
+function createQueueActivator(input: {
+  activation?: StartupQueueActivation
+  stateManager: CentralizedStateManager
+  ensureOffscreenDocumentReady: () => Promise<void>
+}): () => Promise<void> {
+  let activationStarted = false
+
+  return async () => {
+    if (activationStarted || !input.activation) return
+    activationStarted = true
+
+    if (input.activation.kind === "resume-task") {
+      await resumeRecoveredQueue(
+        input.stateManager,
+        input.ensureOffscreenDocumentReady,
+        input.activation.taskId
+      )
+      return
+    }
+
+    await resumeRecoveredQueue(
+      input.stateManager,
+      input.ensureOffscreenDocumentReady
+    )
   }
 }
 
@@ -134,17 +251,41 @@ export async function initializeBackgroundRuntime(input: {
   pendingDownloadsStore: PendingDownloadsStore
   ensureLivenessAlarm: () => Promise<void>
   ensureOffscreenDocumentReady: () => Promise<void>
-}): Promise<CentralizedStateManager> {
+  requestBlobRevocation: (
+    record: Pick<
+      PendingOutputRecord,
+      "jobId" | "attempt" | "outputId" | "blobUrl"
+    >
+  ) => Promise<void>
+}): Promise<InitializedBackgroundRuntime> {
   try {
-    logger.info('Initializing extension runtime services and state...')
+    logger.info("Initializing extension runtime services and state...")
 
     settingsSyncService.initialize()
 
     const stateManager = await createStateManager()
 
-    await input.pendingDownloadsStore.hydrate()
+    await recoverPendingUndoActions(stateManager)
 
-    await initializeSiteIntegrationsSafely()
+    await input.pendingDownloadsStore.hydrate()
+    await reconcileAllPendingOutputs({
+      stateManager,
+      pendingOutputs: input.pendingDownloadsStore,
+      requestBlobRevocation: input.requestBlobRevocation,
+    })
+    const persistedQueueWithOutputState = await readPersistedDownloadQueue()
+    const recoveredOutputState = mergePendingOutputAccountingIntoQueue({
+      queue: persistedQueueWithOutputState,
+      records: input.pendingDownloadsStore.snapshot().values(),
+    })
+    if (recoveredOutputState.changed) {
+      await writePersistedDownloadQueue(recoveredOutputState.queue)
+    }
+    // Accounting is now durable, so terminal records with released Blob URLs
+    // no longer carry recovery information and can be removed safely.
+    await releaseSettledPendingOutputJobs(input.pendingDownloadsStore)
+
+    await initializeSiteIntegrations()
 
     const startupRecovery = await initializeFromStorage({
       readQueue: readPersistedDownloadQueue,
@@ -154,21 +295,65 @@ export async function initializeBackgroundRuntime(input: {
       },
       applyQueue: async (queue) => applyRecoveredQueue(stateManager, queue),
       getOffscreenContexts,
+      hasOffscreenDocument,
+      getOffscreenJobState: queryOffscreenJob,
+      getActiveDispatchLease: () => activeDispatchLeaseStore.get(),
+      clearActiveDispatchLease: (identity) =>
+        activeDispatchLeaseStore.clear(identity),
+      releasePendingOutputJob: (jobId) =>
+        input.pendingDownloadsStore.releaseJob(jobId),
+      hasReconcilablePendingOutputs: (task) =>
+        [...input.pendingDownloadsStore.snapshot().values()].some((record) => {
+          if (record.taskId !== task.id) return false
+          if (record.state !== "prepared" && record.state !== "in_progress") {
+            return false
+          }
+          const chapter = task.chapters.find(
+            (candidate) => candidate.id === record.chapterId
+          )
+          return (
+            chapter?.status === "downloading" &&
+            chapter.dispatchAttempt === record.attempt
+          )
+        }),
+      getOffscreenActiveTaskIds: async () => {
+        const status = await queryOffscreenStatus()
+        if (status) {
+          return status.activeTaskIds
+        }
+
+        // The document may close after startup enumerates it but before the
+        // status message is delivered. Only that confirmed disappearance is
+        // equivalent to an idle offscreen context; a still-present document
+        // with an invalid response remains a fail-closed recovery error.
+        if ((await getOffscreenContexts()).length === 0) {
+          return []
+        }
+
+        throw new Error("Unable to query the existing offscreen document")
+      },
       ensureLivenessAlarm: input.ensureLivenessAlarm,
-      resumeQueue: async () => resumeRecoveredQueue(stateManager, input.ensureOffscreenDocumentReady),
     })
 
     if (startupRecovery.initFailed) {
-      throw new Error(startupRecovery.error ?? 'Extension initialization failed')
+      throw new Error(
+        startupRecovery.error ?? "Extension initialization failed"
+      )
     }
 
     await syncSettingsToState(stateManager)
 
-    logger.info('Extension runtime initialized successfully')
-    return stateManager
+    logger.info("Extension runtime initialized successfully")
+    return {
+      stateManager,
+      activateQueue: createQueueActivator({
+        activation: startupRecovery.queueActivation,
+        stateManager,
+        ensureOffscreenDocumentReady: input.ensureOffscreenDocumentReady,
+      }),
+    }
   } catch (error) {
-    logger.error('Failed to initialize extension runtime:', error)
+    logger.error("Failed to initialize extension runtime:", error)
     throw error
   }
 }
-

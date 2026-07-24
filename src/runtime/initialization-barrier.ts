@@ -3,7 +3,7 @@ export interface InitializationBarrier {
 }
 
 const toError = (error: unknown): Error =>
-  error instanceof Error ? error : new Error('Extension initialization failed')
+  error instanceof Error ? error : new Error("Extension initialization failed")
 
 export function createInitializationBarrier(input: {
   isInitialized: () => boolean

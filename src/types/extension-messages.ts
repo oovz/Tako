@@ -1,4 +1,4 @@
-import type { ErrorResponse } from '@/src/types/message-common';
+import type { ErrorResponse } from "@/src/types/message-common"
 import type {
   AcknowledgeErrorMessage,
   AcknowledgeErrorResponse,
@@ -10,8 +10,8 @@ import type {
   GetSettingsResponse,
   GetSiteIntegrationEnablementMessage,
   GetSiteIntegrationEnablementResponse,
-  GetTabIdMessage,
-  GetTabIdResponse,
+  RequestTabContextRefreshMessage,
+  RequestTabContextRefreshResponse,
   MoveTaskToTopMessage,
   MoveTaskToTopResponse,
   OpenOptionsMessage,
@@ -24,24 +24,35 @@ import type {
   StartDownloadResponse,
   SyncSettingsToStateMessage,
   SyncSettingsToStateResponse,
-} from '@/src/types/runtime-command-messages';
+} from "@/src/types/runtime-command-messages"
 import type {
   OffscreenControlMessage,
-  OffscreenDownloadApiRequestMessage,
-  OffscreenDownloadApiRequestResponse,
+  OffscreenOutputReadyMessage,
+  OffscreenOutputReadyResponse,
   OffscreenDownloadChapterMessage,
   OffscreenDownloadChapterResponse,
   OffscreenDownloadProgressMessage,
   OffscreenDownloadProgressResponse,
+  OffscreenParseSeriesHtmlMessage,
+  OffscreenParseSeriesHtmlResponse,
   OffscreenStatusMessage,
   OffscreenStatusResponse,
   RevokeBlobUrlMessage,
   RevokeBlobUrlResponse,
-} from '@/src/types/offscreen-messages';
-import type { StateActionMessage, StateActionResponse } from '@/src/types/state-action-message';
+  OffscreenJobAcceptedMessage,
+  OffscreenJobHeartbeatMessage,
+  OffscreenQueryJobMessage,
+  OffscreenQueryJobResponse,
+  OffscreenCancelJobMessage,
+  OffscreenCancelJobResponse,
+} from "@/src/types/offscreen-messages"
+import type {
+  StateActionMessage,
+  StateActionResponse,
+} from "@/src/types/state-action-message"
 
 export type ExtensionMessage =
-  | GetTabIdMessage
+  | RequestTabContextRefreshMessage
   | GetSettingsMessage
   | GetSiteIntegrationEnablementMessage
   | FetchSeriesDataMessage
@@ -51,7 +62,12 @@ export type ExtensionMessage =
   | OffscreenControlMessage
   | OffscreenDownloadChapterMessage
   | OffscreenDownloadProgressMessage
-  | OffscreenDownloadApiRequestMessage
+  | OffscreenOutputReadyMessage
+  | OffscreenJobAcceptedMessage
+  | OffscreenJobHeartbeatMessage
+  | OffscreenQueryJobMessage
+  | OffscreenCancelJobMessage
+  | OffscreenParseSeriesHtmlMessage
   | RevokeBlobUrlMessage
   | RetryFailedChaptersMessage
   | RestartTaskMessage
@@ -59,10 +75,10 @@ export type ExtensionMessage =
   | ClearAllHistoryMessage
   | OpenOptionsMessage
   | StartDownloadMessage
-  | StateActionMessage;
+  | StateActionMessage
 
 export type ExtensionMessageResponse =
-  | GetTabIdResponse
+  | RequestTabContextRefreshResponse
   | GetSettingsResponse
   | GetSiteIntegrationEnablementResponse
   | FetchSeriesDataResponse
@@ -71,7 +87,10 @@ export type ExtensionMessageResponse =
   | OffscreenStatusResponse
   | OffscreenDownloadChapterResponse
   | OffscreenDownloadProgressResponse
-  | OffscreenDownloadApiRequestResponse
+  | OffscreenOutputReadyResponse
+  | OffscreenQueryJobResponse
+  | OffscreenCancelJobResponse
+  | OffscreenParseSeriesHtmlResponse
   | RevokeBlobUrlResponse
   | RetryFailedChaptersResponse
   | RestartTaskResponse
@@ -80,4 +99,4 @@ export type ExtensionMessageResponse =
   | OpenOptionsResponse
   | StartDownloadResponse
   | StateActionResponse
-  | ErrorResponse;
+  | ErrorResponse

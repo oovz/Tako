@@ -1,56 +1,68 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot';
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys';
-import { NotificationService } from '@/entrypoints/background/notification-service';
-import { addPersistentError, clearPersistentError, getPersistentErrors } from '@/src/runtime/errors';
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings';
-import type { DownloadTaskState } from '@/src/types/queue-state';
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { NotificationService } from "@/entrypoints/background/notification-service"
+import {
+  addPersistentError,
+  clearPersistentError,
+  getPersistentErrors,
+} from "@/src/runtime/errors"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import type { DownloadTaskState } from "@/src/types/queue-state"
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
   },
-}));
+}))
 
-vi.mock('@/src/site-integrations/manifest', () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => 'MangaDex'),
-}));
+vi.mock("@/src/site-integrations/manifest", () => ({
+  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
+}))
 
-function makeTask(overrides: Partial<DownloadTaskState> = {}): DownloadTaskState {
-  const now = Date.now();
-  const siteIntegrationId = overrides.siteIntegrationId ?? 'mangadex';
+function makeTask(
+  overrides: Partial<DownloadTaskState> = {}
+): DownloadTaskState {
+  const now = Date.now()
+  const siteIntegrationId = overrides.siteIntegrationId ?? "mangadex"
   return {
-    id: overrides.id ?? 'task-1',
+    id: overrides.id ?? "task-1",
     siteIntegrationId,
-    mangaId: overrides.mangaId ?? 'mangadex:series-1',
-    seriesTitle: overrides.seriesTitle ?? 'Series 1',
+    mangaId: overrides.mangaId ?? "mangadex:series-1",
+    seriesTitle: overrides.seriesTitle ?? "Series 1",
     chapters: overrides.chapters ?? [],
-    status: overrides.status ?? 'completed',
+    status: overrides.status ?? "completed",
     created: overrides.created ?? now,
     completed: overrides.completed ?? now,
     lastSuccessfulDownloadId: overrides.lastSuccessfulDownloadId,
-    settingsSnapshot: overrides.settingsSnapshot ?? createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
-  };
+    settingsSnapshot:
+      overrides.settingsSnapshot ??
+      createTaskSettingsSnapshot(DEFAULT_SETTINGS, siteIntegrationId),
+  }
 }
 
-describe('notification behavior', () => {
-  const notificationsCreate = vi.fn();
-  const runtimeGetUrl = vi.fn((path: string) => `chrome-extension://test/${path}`);
-  const onClickedAddListener = vi.fn();
-  const onClosedAddListener = vi.fn();
-  const downloadsShow = vi.fn();
-  const notificationsClear = vi.fn();
-  const storageLocalGet = vi.fn();
+describe("notification behavior", () => {
+  const notificationsCreate = vi.fn()
+  const runtimeGetUrl = vi.fn(
+    (path: string) => `chrome-extension://test/${path}`
+  )
+  const onClickedAddListener = vi.fn()
+  const onClosedAddListener = vi.fn()
+  const downloadsShow = vi.fn()
+  const notificationsClear = vi.fn()
+  const storageLocalGet = vi.fn()
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    storageLocalGet.mockResolvedValue({ [LOCAL_STORAGE_KEYS.downloadQueue]: [] });
+    vi.clearAllMocks()
+    storageLocalGet.mockResolvedValue({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: [],
+    })
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       runtime: {
         getURL: runtimeGetUrl,
       },
@@ -68,139 +80,188 @@ describe('notification behavior', () => {
         onClicked: { addListener: onClickedAddListener },
         onClosed: { addListener: onClosedAddListener },
       },
-    });
-  });
+    })
+  })
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+    vi.unstubAllGlobals()
+  })
 
-  it('creates completion notification with iconUrl from runtime URL', () => {
-    const service = new NotificationService();
+  it("creates completion notification with iconUrl from runtime URL", () => {
+    const service = new NotificationService()
     const task = makeTask({
-      chapters: [{ id: 'ch-1', url: 'https://example.com/ch-1', title: 'Chapter 1', index: 1, status: 'completed', lastUpdated: Date.now() }],
-    });
+      chapters: [
+        {
+          id: "ch-1",
+          url: "https://example.com/ch-1",
+          title: "Chapter 1",
+          index: 1,
+          status: "completed",
+          lastUpdated: Date.now(),
+        },
+      ],
+    })
 
-    service.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
+    service.notifyTaskCompleted({
+      task,
+      notificationsEnabled: true,
+      chaptersCompleted: 1,
+      chaptersTotal: 1,
+    })
 
-    expect(runtimeGetUrl).toHaveBeenCalledWith('icon/128.png');
+    expect(runtimeGetUrl).toHaveBeenCalledWith("icon/128.png")
     expect(notificationsCreate).toHaveBeenCalledWith(
       `task_complete_${task.id}`,
       expect.objectContaining({
-        type: 'basic',
-        iconUrl: 'chrome-extension://test/icon/128.png',
-        title: 'Download complete',
-      }),
-    );
-  });
+        type: "basic",
+        iconUrl: "chrome-extension://test/icon/128.png",
+        title: "Download complete",
+      })
+    )
+  })
 
-  it('does not create notification when notifications are disabled', () => {
-    const service = new NotificationService();
-    const task = makeTask();
+  it("does not create notification when notifications are disabled", () => {
+    const service = new NotificationService()
+    const task = makeTask()
 
-    service.notifyTaskCompleted({ task, notificationsEnabled: false });
+    service.notifyTaskCompleted({ task, notificationsEnabled: false })
 
-    expect(notificationsCreate).not.toHaveBeenCalled();
-  });
+    expect(notificationsCreate).not.toHaveBeenCalled()
+  })
 
-  it('resolves notification click targets from persisted queue state', async () => {
+  it("resolves notification click targets from persisted queue state", async () => {
     const task = makeTask({
-      id: 'task-click',
+      id: "task-click",
       lastSuccessfulDownloadId: 321,
-      chapters: [{ id: 'ch-1', url: 'https://example.com/ch-1', title: 'Chapter 1', index: 1, status: 'completed', lastUpdated: Date.now() }],
-    });
-    storageLocalGet.mockResolvedValue({ [LOCAL_STORAGE_KEYS.downloadQueue]: [task] });
+      chapters: [
+        {
+          id: "ch-1",
+          url: "https://example.com/ch-1",
+          title: "Chapter 1",
+          index: 1,
+          status: "completed",
+          lastUpdated: Date.now(),
+        },
+      ],
+    })
+    storageLocalGet.mockResolvedValue({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
+    })
 
-    const service = new NotificationService();
-    service.notifyTaskCompleted({ task, notificationsEnabled: true, chaptersCompleted: 1, chaptersTotal: 1 });
+    const service = new NotificationService()
+    service.notifyTaskCompleted({
+      task,
+      notificationsEnabled: true,
+      chaptersCompleted: 1,
+      chaptersTotal: 1,
+    })
 
     // Click handler is now registered in background main(), not the constructor.
     // Test the handler directly.
-    await service.handleNotificationClick(`task_complete_${task.id}`);
+    await service.handleNotificationClick(`task_complete_${task.id}`)
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await Promise.resolve()
+    await Promise.resolve()
 
-    expect(storageLocalGet).toHaveBeenCalledWith(LOCAL_STORAGE_KEYS.downloadQueue);
-    expect(downloadsShow).toHaveBeenCalledWith(321);
-    expect(notificationsClear).toHaveBeenCalledWith(`task_complete_${task.id}`);
-  });
+    expect(storageLocalGet).toHaveBeenCalledWith(
+      LOCAL_STORAGE_KEYS.downloadQueue
+    )
+    expect(downloadsShow).toHaveBeenCalledWith(321)
+    expect(notificationsClear).toHaveBeenCalledWith(`task_complete_${task.id}`)
+  })
 
-  it('ignores stale persisted lastSuccessfulDownloadId values for active tasks when resolving notification clicks', async () => {
+  it("opens a committed output retained across active-task recovery", async () => {
     storageLocalGet.mockResolvedValue({
       [LOCAL_STORAGE_KEYS.downloadQueue]: [
         {
-          id: 'task-click-stale',
-          siteIntegrationId: 'mangadex',
-          mangaId: 'series-1',
-          seriesTitle: 'Series 1',
-          status: 'queued',
+          id: "task-click-stale",
+          siteIntegrationId: "mangadex",
+          mangaId: "series-1",
+          seriesTitle: "Series 1",
+          status: "queued",
           created: Date.now(),
           lastSuccessfulDownloadId: 654,
           chapters: [
             {
-              id: 'ch-1',
-              url: 'https://example.com/ch-1',
-              title: 'Chapter 1',
+              id: "ch-1",
+              url: "https://example.com/ch-1",
+              title: "Chapter 1",
               index: 1,
-              status: 'queued',
+              status: "queued",
               lastUpdated: Date.now(),
             },
           ],
         },
       ],
-    });
+    })
 
-    const service = new NotificationService();
+    const service = new NotificationService()
 
     // Click handler is now registered in background main(), not the constructor.
     // Test the handler directly.
-    await service.handleNotificationClick('task_complete_task-click-stale');
+    await service.handleNotificationClick("task_complete_task-click-stale")
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await Promise.resolve()
+    await Promise.resolve()
 
-    expect(storageLocalGet).toHaveBeenCalledWith(LOCAL_STORAGE_KEYS.downloadQueue);
-    expect(downloadsShow).not.toHaveBeenCalled();
-    expect(notificationsClear).toHaveBeenCalledWith('task_complete_task-click-stale');
-  });
-});
+    expect(storageLocalGet).toHaveBeenCalledWith(
+      LOCAL_STORAGE_KEYS.downloadQueue
+    )
+    expect(downloadsShow).toHaveBeenCalledWith(654)
+    expect(notificationsClear).toHaveBeenCalledWith(
+      "task_complete_task-click-stale"
+    )
+  })
+})
 
-describe('settings and persistent error behavior', () => {
-  const storageLocalGet = vi.fn();
-  const storageLocalSet = vi.fn();
+describe("settings and persistent error behavior", () => {
+  const storageLocalGet = vi.fn()
+  const storageLocalSet = vi.fn()
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    storageLocalGet.mockResolvedValue({ persistent_errors: [] });
-    storageLocalSet.mockResolvedValue(undefined);
+    vi.clearAllMocks()
+    storageLocalGet.mockResolvedValue({ persistent_errors: [] })
+    storageLocalSet.mockResolvedValue(undefined)
 
-    vi.stubGlobal('chrome', {
+    vi.stubGlobal("chrome", {
       storage: {
         local: {
           get: storageLocalGet,
           set: storageLocalSet,
         },
       },
-    });
-  });
+    })
+  })
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+    vi.unstubAllGlobals()
+  })
 
-  it('adds and clears persistent error entries by code', async () => {
+  it("adds and clears persistent error entries by code", async () => {
     storageLocalGet
       .mockResolvedValueOnce({ persistent_errors: [] })
-      .mockResolvedValueOnce({ persistent_errors: [{ code: 'FSA_HANDLE_INVALID', message: 'invalid', severity: 'error', ts: 1 }] })
-      .mockResolvedValueOnce({ persistent_errors: [] });
+      .mockResolvedValueOnce({
+        persistent_errors: [
+          {
+            code: "FSA_HANDLE_INVALID",
+            message: "invalid",
+            severity: "error",
+            ts: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ persistent_errors: [] })
 
-    await addPersistentError({ code: 'FSA_HANDLE_INVALID', message: 'invalid', severity: 'error', ts: 1 });
-    await clearPersistentError('FSA_HANDLE_INVALID');
+    await addPersistentError({
+      code: "FSA_HANDLE_INVALID",
+      message: "invalid",
+      severity: "error",
+      ts: 1,
+    })
+    await clearPersistentError("FSA_HANDLE_INVALID")
 
-    const errors = await getPersistentErrors();
-    expect(errors).toEqual([]);
-    expect(storageLocalSet).toHaveBeenCalledTimes(2);
-  });
-});
-
+    const errors = await getPersistentErrors()
+    expect(errors).toEqual([])
+    expect(storageLocalSet).toHaveBeenCalledTimes(2)
+  })
+})

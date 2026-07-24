@@ -1,20 +1,19 @@
-import type { Chapter } from '@/src/types/chapter'
-import type { OffscreenDownloadChapterPayload } from '@/src/runtime/message-schemas'
-import type { SeriesMetadataSnapshot } from '@/src/types/state-snapshots'
+import type { Chapter } from "@/src/types/chapter"
+import type { OffscreenDownloadChapterPayload } from "@/src/runtime/message-schemas"
 import type {
   ProcessChapterStreamingOptions,
   ProcessDownloadChapterSettingsSnapshot,
-} from './chapter-processing'
-import type { CoverImageAsset } from './download-runtime-helpers'
+} from "./chapter-processing"
+import type { CoverImageAsset } from "./download-runtime-helpers"
 
 export function readProcessDownloadChapterSettingsSnapshot(
-  settingsSnapshot: OffscreenDownloadChapterPayload['settingsSnapshot']
+  settingsSnapshot: OffscreenDownloadChapterPayload["settingsSnapshot"]
 ): ProcessDownloadChapterSettingsSnapshot {
-  return settingsSnapshot as ProcessDownloadChapterSettingsSnapshot
+  return settingsSnapshot
 }
 
 export function createChapterForProcessing(
-  chapter: OffscreenDownloadChapterPayload['chapter']
+  chapter: OffscreenDownloadChapterPayload["chapter"]
 ): Chapter {
   return {
     id: chapter.id,
@@ -36,21 +35,30 @@ export function createProcessChapterStreamingOptions(input: {
   snapshot: ProcessDownloadChapterSettingsSnapshot
   chapter: Chapter
   abortSignal: AbortSignal
-  onProgress: ProcessChapterStreamingOptions['onProgress']
-  onArchiveProgress: ProcessChapterStreamingOptions['onArchiveProgress']
+  onProgress: ProcessChapterStreamingOptions["onProgress"]
+  onArchiveProgress: ProcessChapterStreamingOptions["onArchiveProgress"]
   coverImage?: CoverImageAsset
 }): ProcessChapterStreamingOptions {
-  const { request, snapshot, chapter, abortSignal, onProgress, onArchiveProgress, coverImage } = input
+  const {
+    request,
+    snapshot,
+    chapter,
+    abortSignal,
+    onProgress,
+    onArchiveProgress,
+    coverImage,
+  } = input
 
   return {
     taskId: request.taskId,
+    jobId: request.jobId,
+    attempt: request.attempt,
     chapter,
     seriesTitle: request.book.seriesTitle,
-    format: snapshot.archiveFormat ?? 'cbz',
-    includeComicInfo: snapshot.includeComicInfo ?? true,
-    downloadMode: request.saveMode === 'fsa' ? 'custom' : 'browser',
-    overwriteExisting: snapshot.overwriteExisting ?? false,
-    comicInfoVersion: '2.0',
+    format: snapshot.archiveFormat,
+    includeComicInfo: snapshot.includeComicInfo,
+    downloadMode: request.saveMode === "fsa" ? "custom" : "browser",
+    comicInfoVersion: "2.0",
     abortSignal,
     onProgress,
     onArchiveProgress,
@@ -59,7 +67,7 @@ export function createProcessChapterStreamingOptions(input: {
     // Narrow from wire format (Record<string, unknown>, Zod-validated) to
     // consumer types. The Zod schema confirms the shape is a record; the
     // snapshot is already narrowed via readProcessDownloadChapterSettingsSnapshot.
-    seriesMetadata: request.book.metadata as SeriesMetadataSnapshot | undefined,
+    seriesMetadata: request.book.metadata,
     settingsSnapshot: snapshot,
   }
 }

@@ -1,34 +1,67 @@
-import type { ErrorResponse } from '@/src/types/message-common';
-import type { OffscreenDownloadChapterPayload } from '@/src/runtime/message-schemas';
+import type { ErrorResponse } from "@/src/types/message-common"
+import type { OffscreenDownloadChapterPayload } from "@/src/runtime/message-schemas"
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+import type { OffscreenJobStage } from "@/src/types/queue-state"
+
+export interface OffscreenJobIdentity {
+  jobId: string
+  attempt: number
+  taskId: string
+  chapterId: string
+}
+
+export interface OffscreenJobState extends OffscreenJobIdentity {
+  status: "active" | "terminal" | "canceled"
+  stage: OffscreenJobStage
+  sequence: number
+  outcome?: {
+    status: "completed" | "partial_success" | "failed"
+    errorMessage?: string
+    errorCategory?: DownloadErrorCategory
+    imagesFailed?: number
+    outputsRequested?: number
+    outputsFailedBeforeHandoff?: number
+    outputsCommitted?: number
+  }
+}
 
 export interface OffscreenStatusMessage {
-  type: 'OFFSCREEN_STATUS';
+  type: "OFFSCREEN_STATUS"
 }
 
 export interface OffscreenStatusResponse {
-  success: boolean;
-  isInitialized: boolean;
-  ready?: boolean;
-  activeJobCount: number;
+  success: boolean
+  isInitialized: boolean
+  ready?: boolean
+  activeJobCount: number
+  activeTaskIds: string[]
 }
 
 export interface OffscreenDownloadProgressMessage {
-  type: 'OFFSCREEN_DOWNLOAD_PROGRESS';
+  type: "OFFSCREEN_DOWNLOAD_PROGRESS"
   payload: {
-    taskId: string;
-    chapterId: string;
-    status: 'downloading' | 'completed' | 'failed' | 'partial_success';
-    chapterTitle?: string;
-    error?: string;
-    errorCategory?: 'network' | 'download' | 'other';
-    imagesProcessed?: number;
-    imagesFailed?: number;
-    totalImages?: number;
-    fsaFallbackTriggered?: boolean;
-  };
+    jobId: string
+    attempt: number
+    taskId: string
+    chapterId: string
+    sequence: number
+    stage: OffscreenJobStage
+    phaseFraction?: number
+    status: "downloading" | "completed" | "failed" | "partial_success"
+    chapterTitle?: string
+    error?: string
+    errorCategory?: DownloadErrorCategory
+    imagesProcessed?: number
+    imagesFailed?: number
+    outputsRequested?: number
+    outputsFailedBeforeHandoff?: number
+    outputsCommitted?: number
+    totalImages?: number
+  }
 }
 
-export type OffscreenDownloadProgressResponse = { success: true } | ErrorResponse;
+export type OffscreenDownloadProgressResponse =
+  { success: true } | ErrorResponse
 
 /**
  * Message type for OFFSCREEN_DOWNLOAD_CHAPTER.
@@ -43,43 +76,112 @@ export type OffscreenDownloadProgressResponse = { success: true } | ErrorRespons
  * `SeriesMetadataSnapshot` via dedicated helpers.
  */
 export interface OffscreenDownloadChapterMessage {
-  type: 'OFFSCREEN_DOWNLOAD_CHAPTER';
-  payload: OffscreenDownloadChapterPayload;
+  type: "OFFSCREEN_DOWNLOAD_CHAPTER"
+  payload: OffscreenDownloadChapterPayload
 }
 
-export type OffscreenDownloadChapterResponse = ({
-  success: true;
-  status: 'completed' | 'partial_success' | 'failed';
-  errorMessage?: string;
-  errorCategory?: 'network' | 'download' | 'other';
-  imagesFailed?: number;
-}) | ErrorResponse;
+export type OffscreenDownloadChapterResponse =
+  | {
+      success: true
+      status: "completed" | "partial_success" | "failed"
+      errorMessage?: string
+      errorCategory?: DownloadErrorCategory
+      imagesFailed?: number
+      outputsRequested?: number
+      outputsFailedBeforeHandoff?: number
+      outputsCommitted?: number
+    }
+  | ErrorResponse
 
-export interface OffscreenDownloadApiRequestMessage {
-  type: 'OFFSCREEN_DOWNLOAD_API_REQUEST';
+export interface OffscreenOutputReadyMessage {
+  type: "OFFSCREEN_OUTPUT_READY"
   payload: {
-    taskId: string;
-    chapterId: string;
-    fileUrl: string;
-    filename: string;
-  };
+    jobId: string
+    attempt: number
+    outputId: string
+    taskId: string
+    chapterId: string
+    fileUrl: string
+    filename: string
+    outputIndex: number
+    outputCount: number
+    outputKind: "archive" | "image"
+  }
 }
 
-export type OffscreenDownloadApiRequestResponse = ({ success: true; id: number }) | ErrorResponse;
+export type OffscreenOutputReadyResponse =
+  | { success: true; accepted: true; id: number }
+  | { success: true; accepted: "unknown"; id?: number }
+  | ErrorResponse
 
 export interface RevokeBlobUrlMessage {
-  type: 'REVOKE_BLOB_URL';
+  type: "REVOKE_BLOB_URL"
   payload: {
-    blobUrl: string;
-  };
+    jobId: string
+    attempt: number
+    outputId: string
+    blobUrl: string
+  }
 }
 
-export type RevokeBlobUrlResponse = { success: true } | ErrorResponse;
+export type RevokeBlobUrlResponse = { success: true } | ErrorResponse
 
 export interface OffscreenControlMessage {
-  type: 'OFFSCREEN_CONTROL';
+  type: "OFFSCREEN_CONTROL"
   payload: {
-    taskId: string;
-    action: 'cancel';
-  };
+    taskId: string
+    action: "cancel"
+  }
 }
+
+export interface OffscreenJobAcceptedMessage {
+  type: "OFFSCREEN_JOB_ACCEPTED"
+  payload: OffscreenJobIdentity & { acceptedAt: number; sequence: number }
+}
+
+export interface OffscreenJobHeartbeatMessage {
+  type: "OFFSCREEN_JOB_HEARTBEAT"
+  payload: OffscreenJobIdentity & {
+    stage: OffscreenJobStage
+    sequence: number
+    sentAt: number
+  }
+}
+
+export interface OffscreenQueryJobMessage {
+  type: "OFFSCREEN_QUERY_JOB"
+  payload: { requestId: string }
+}
+
+export type OffscreenQueryJobResponse =
+  | { success: true; requestId: string; job: OffscreenJobState | null }
+  | ErrorResponse
+
+export interface OffscreenCancelJobMessage {
+  type: "OFFSCREEN_CANCEL_JOB"
+  payload: OffscreenJobIdentity
+}
+
+export type OffscreenCancelJobResponse =
+  | { success: true; canceled: boolean; jobId: string; attempt: number }
+  | ErrorResponse
+
+export interface OffscreenParseSeriesHtmlMessage {
+  type: "OFFSCREEN_PARSE_SERIES_HTML"
+  payload: {
+    siteIntegrationId: string
+    seriesUrl: string
+    html: string
+    language?: string
+  }
+}
+
+export type OffscreenParseSeriesHtmlResponse =
+  | {
+      success: true
+      seriesMetadata?: unknown
+      chapterList?: unknown
+      metadataError?: string
+      chapterListError?: string
+    }
+  | ErrorResponse

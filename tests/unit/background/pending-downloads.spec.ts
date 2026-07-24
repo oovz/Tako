@@ -1,153 +1,246 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
- 
-import { createPendingDownloadsStore } from '@/entrypoints/background/pending-downloads'
- 
-type SessionStore = Record<string, unknown>
-let sessionStore: SessionStore = {}
-const storageGet = vi.fn()
-const storageSet = vi.fn()
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-async function flushPersistenceChain(): Promise<void> {
-  for (let i = 0; i < 8; i += 1) {
-    await Promise.resolve()
-  }
+import { createPendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
+import {
+  LOCAL_STORAGE_KEYS,
+  SESSION_STORAGE_KEYS,
+} from "@/src/runtime/storage-keys"
+import type { PendingOutputRecord } from "@/src/types/queue-state"
+
+let localStore: Record<string, unknown> = {}
+let sessionStore: Record<string, unknown> = {}
+
+function preparedRecord(
+  overrides: Partial<PendingOutputRecord> = {}
+): Omit<PendingOutputRecord, "downloadId"> & { state: "prepared" } {
+  return {
+    outputId: "job-1:archive:0",
+    jobId: "job-1",
+    attempt: 1,
+    taskId: "task-1",
+    chapterId: "chapter-1",
+    blobUrl: "blob:output-1",
+    filename: "Series/Chapter 1.cbz",
+    outputIndex: 0,
+    outputCount: 1,
+    outputKind: "archive",
+    state: "prepared",
+    createdAt: 1_000,
+    ...overrides,
+  } as Omit<PendingOutputRecord, "downloadId"> & { state: "prepared" }
 }
 
-async function waitForStorageSetCalls(expectedCalls: number): Promise<void> {
-  for (let i = 0; i < 20 && storageSet.mock.calls.length < expectedCalls; i += 1) {
-    await flushPersistenceChain()
-  }
-}
-
-function installChromeStorageMock() {
-  const chromeMock = {
-    storage: {
-      session: {
-        get: storageGet,
-        set: storageSet,
-      },
-    },
-  } as unknown as typeof chrome
-
-  storageGet.mockImplementation(async (key: string) => {
-          return { [key]: sessionStore[key] }
-  })
-  storageSet.mockImplementation(async (value: Record<string, unknown>) => {
-    Object.assign(sessionStore, value)
-  })
-
-  vi.stubGlobal('chrome', chromeMock)
-}
-
-describe('pendingDownloads store', () => {
+describe("pending native output store", () => {
   beforeEach(() => {
-    storageGet.mockReset()
-    storageSet.mockReset()
+    localStore = {}
     sessionStore = {}
-    installChromeStorageMock()
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn(async (key: string) => ({ [key]: localStore[key] })),
+          set: vi.fn(async (values: Record<string, unknown>) => {
+            Object.assign(localStore, structuredClone(values))
+          }),
+          remove: vi.fn(async (key: string) => {
+            delete localStore[key]
+          }),
+        },
+        session: {
+          get: vi.fn(async (key: string) => ({ [key]: sessionStore[key] })),
+          remove: vi.fn(async (key: string) => {
+            delete sessionStore[key]
+          }),
+        },
+      },
+    } as unknown as typeof chrome)
   })
 
-  it('writes pending downloads to session storage immediately', async () => {
+  it("persists intent before attaching the Chrome download id", async () => {
     const store = createPendingDownloadsStore()
 
-    store.set(101, 'blob:one')
-    store.set(202, 'blob:two')
-
-    await waitForStorageSetCalls(2)
-
-    expect(sessionStore.pendingDownloads).toEqual({
-      '101': 'blob:one',
-      '202': 'blob:two',
+    await store.prepare(preparedRecord())
+    expect(localStore[LOCAL_STORAGE_KEYS.pendingOutputs]).toEqual({
+      "job-1:archive:0": expect.objectContaining({
+        state: "prepared",
+      }),
     })
+    expect(
+      (
+        localStore[LOCAL_STORAGE_KEYS.pendingOutputs] as Record<
+          string,
+          PendingOutputRecord
+        >
+      )["job-1:archive:0"]
+    ).not.toHaveProperty("downloadId")
+
+    await store.attachDownload("job-1:archive:0", 101)
+    expect(store.get(101)).toEqual(
+      expect.objectContaining({ downloadId: 101, state: "in_progress" })
+    )
+    expect(store.getByOutputId("job-1:archive:0")).toEqual(
+      expect.objectContaining({ downloadId: 101, state: "in_progress" })
+    )
   })
 
-  it('removes IDs and persists the updated map immediately', async () => {
+  it("keeps the first record for a duplicate output id", async () => {
     const store = createPendingDownloadsStore()
+    const first = await store.prepare(preparedRecord())
+    const duplicate = await store.prepare(
+      preparedRecord({ blobUrl: "blob:unexpected-duplicate" })
+    )
 
-    store.set(101, 'blob:one')
-    store.set(202, 'blob:two')
-    store.remove(101)
-
-    await waitForStorageSetCalls(3)
-
-    expect(sessionStore.pendingDownloads).toEqual({
-      '202': 'blob:two',
-    })
-    expect(store.get(101)).toBeUndefined()
-    expect(store.get(202)).toBe('blob:two')
+    expect(duplicate).toEqual(first)
+    expect(store.snapshot()).toHaveProperty("size", 1)
   })
 
-  it('hydrates in-memory cache from session backup', async () => {
-    sessionStore.pendingDownloads = {
-      '900': 'blob:nine',
+  it("hydrates rich records from durable local storage", async () => {
+    localStore[LOCAL_STORAGE_KEYS.pendingOutputs] = {
+      "job-1:archive:0": {
+        ...preparedRecord(),
+        downloadId: 900,
+        state: "in_progress",
+      },
     }
-
     const store = createPendingDownloadsStore()
 
     await store.hydrate()
 
-    expect(store.get(900)).toBe('blob:nine')
+    expect(store.get(900)).toEqual(
+      expect.objectContaining({ outputId: "job-1:archive:0" })
+    )
   })
 
-  it('replaces stale in-memory entries when hydrating from the current session snapshot', async () => {
-    const store = createPendingDownloadsStore()
-
-    store.set(101, 'blob:stale')
-    await waitForStorageSetCalls(1)
-
-    sessionStore.pendingDownloads = {
-      '202': 'blob:fresh',
+  it("migrates the legacy session Blob map as cleanup-only records", async () => {
+    sessionStore[SESSION_STORAGE_KEYS.pendingDownloads] = {
+      "77": "blob:legacy",
     }
+    const store = createPendingDownloadsStore()
 
     await store.hydrate()
 
-    expect(store.get(101)).toBeUndefined()
-    expect(store.get(202)).toBe('blob:fresh')
-  })
-
-  it('serializes session persistence writes in mutation order', async () => {
-    const pendingWrites: Array<() => void> = []
-    storageSet.mockImplementation((value: Record<string, unknown>) => {
-      return new Promise<void>((resolve) => {
-        pendingWrites.push(() => {
-          Object.assign(sessionStore, value)
-          resolve()
-        })
+    expect(store.get(77)).toEqual(
+      expect.objectContaining({
+        outputId: "legacy:77",
+        jobId: "legacy",
+        blobUrl: "blob:legacy",
       })
-    })
+    )
+    expect(sessionStore[SESSION_STORAGE_KEYS.pendingDownloads]).toBeUndefined()
+  })
 
+  it("keeps the first terminal result and releases only terminal, revoked records", async () => {
     const store = createPendingDownloadsStore()
+    await store.prepare(preparedRecord())
+    await store.attachDownload("job-1:archive:0", 101)
 
-    store.set(101, 'blob:one')
-    store.set(202, 'blob:two')
+    await store.markTerminal(101, "interrupted", "network failed")
+    await store.markTerminal(101, "complete")
+    expect(store.get(101)).toEqual(
+      expect.objectContaining({
+        state: "interrupted",
+        error: "network failed",
+      })
+    )
 
-    await flushPersistenceChain()
+    await store.releaseJob("job-1")
+    expect(store.get(101)).toBeDefined()
+    await store.markBlobRevoked("job-1:archive:0")
+    await store.releaseJob("job-1")
+    expect(store.get(101)).toBeUndefined()
+  })
 
-    expect(storageSet).toHaveBeenCalledTimes(1)
-    expect(storageSet.mock.calls[0]?.[0]).toEqual({
-      pendingDownloads: {
-        '101': 'blob:one',
-      },
+  it("waits for native terminal states and includes pre-handoff failures", async () => {
+    const store = createPendingDownloadsStore()
+    await store.prepare(preparedRecord({ outputCount: 2 }))
+    await store.attachDownload("job-1:archive:0", 101)
+    const summaryPromise = store.waitForJobOutputs({
+      jobId: "job-1",
+      requested: 2,
+      failedBeforeHandoff: 1,
     })
 
-    pendingWrites.shift()?.()
-    await flushPersistenceChain()
+    await store.markTerminal(101, "complete")
 
-    expect(storageSet).toHaveBeenCalledTimes(2)
-    expect(storageSet.mock.calls[1]?.[0]).toEqual({
-      pendingDownloads: {
-        '101': 'blob:one',
-        '202': 'blob:two',
-      },
+    await expect(summaryPromise).resolves.toEqual({
+      requested: 2,
+      committed: 1,
+      failed: 1,
+      completedDownloadIds: [101],
     })
+  })
 
-    pendingWrites.shift()?.()
-    await flushPersistenceChain()
+  it("does not expose an intent whose durable write failed", async () => {
+    const store = createPendingDownloadsStore()
+    vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(
+      new Error("storage write failed")
+    )
 
-    expect(sessionStore.pendingDownloads).toEqual({
-      '101': 'blob:one',
-      '202': 'blob:two',
+    await expect(store.prepare(preparedRecord())).rejects.toThrow(
+      "storage write failed"
+    )
+    expect(store.snapshot()).toHaveProperty("size", 0)
+
+    await expect(store.prepare(preparedRecord())).resolves.toMatchObject({
+      state: "prepared",
     })
+  })
+
+  it("keeps a prepared record retryable when download-id persistence fails", async () => {
+    const store = createPendingDownloadsStore()
+    await store.prepare(preparedRecord())
+    vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(
+      new Error("attachment write failed")
+    )
+
+    await expect(store.attachDownload("job-1:archive:0", 101)).rejects.toThrow(
+      "attachment write failed"
+    )
+    expect(store.get(101)).toBeUndefined()
+    expect(store.getByOutputId("job-1:archive:0")).toMatchObject({
+      state: "prepared",
+    })
+    expect(store.getByOutputId("job-1:archive:0")).not.toHaveProperty(
+      "downloadId"
+    )
+
+    await expect(
+      store.attachDownload("job-1:archive:0", 101)
+    ).resolves.toMatchObject({ state: "in_progress", downloadId: 101 })
+  })
+
+  it("does not double-count a pre-handoff failure record", async () => {
+    const store = createPendingDownloadsStore()
+    await store.prepare(preparedRecord())
+    await store.markPreparedInterrupted(
+      "job-1:archive:0",
+      "Chrome rejected the handoff"
+    )
+
+    await expect(
+      store.waitForJobOutputs({
+        jobId: "job-1",
+        requested: 1,
+        failedBeforeHandoff: 1,
+      })
+    ).resolves.toEqual({
+      requested: 1,
+      committed: 0,
+      failed: 1,
+      completedDownloadIds: [],
+    })
+  })
+
+  it("prunes a terminal record regardless of release/revocation order", async () => {
+    const store = createPendingDownloadsStore()
+    await store.prepare(preparedRecord())
+    await store.attachDownload("job-1:archive:0", 101)
+    await store.markTerminal(101, "complete")
+
+    await store.releaseJob("job-1")
+    expect(store.getByOutputId("job-1:archive:0")).toMatchObject({
+      accountedAt: expect.any(Number),
+    })
+    await store.markBlobRevoked("job-1:archive:0")
+    expect(store.getByOutputId("job-1:archive:0")).toBeUndefined()
   })
 })
-

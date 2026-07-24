@@ -1,36 +1,43 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { DestinationService } from '@/entrypoints/background/destination'
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
-import { DOWNLOAD_ROOT_HANDLE_ID } from '@/src/storage/fs-access'
+import {
+  DestinationService,
+  getDestinationIssues,
+  recordDestinationIssue,
+} from "@/entrypoints/background/destination"
+import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 
 const mocks = vi.hoisted(() => ({
-  getSettings: vi.fn(),
-  updateSettings: vi.fn(),
   loadDownloadRootHandle: vi.fn(),
-  clearDownloadRootHandle: vi.fn(async () => undefined),
-  emitError: vi.fn(async () => undefined),
+  detectFsaCapabilities: vi.fn(() => ({
+    directoryPicker: true,
+    handlePermissionQuery: true,
+    handlePermissionRequest: true,
+  })),
+  queryFsaPermission: vi.fn(),
+  notifyDestinationActionRequired: vi.fn(),
 }))
 
-vi.mock('@/src/storage/settings-service', () => ({
+vi.mock("@/src/storage/settings-service", () => ({
   settingsService: {
-    getSettings: mocks.getSettings,
-    updateSettings: mocks.updateSettings,
+    getSettings: vi.fn(async () => ({ notifications: true })),
   },
 }))
 
-vi.mock('@/src/storage/fs-access', () => ({
+vi.mock("@/entrypoints/background/notification-service", () => ({
+  getNotificationService: () => ({
+    notifyDestinationActionRequired: mocks.notifyDestinationActionRequired,
+  }),
+}))
+
+vi.mock("@/src/storage/fs-access", () => ({
   loadDownloadRootHandle: mocks.loadDownloadRootHandle,
-  clearDownloadRootHandle: mocks.clearDownloadRootHandle,
-  DOWNLOAD_ROOT_HANDLE_ID: 'download-root',
+  detectFsaCapabilities: mocks.detectFsaCapabilities,
+  queryFsaPermission: mocks.queryFsaPermission,
+  DOWNLOAD_ROOT_HANDLE_ID: "download-root",
 }))
 
-vi.mock('@/src/runtime/errors', () => ({
-  addPersistentError: mocks.emitError,
-}))
-
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -39,100 +46,100 @@ vi.mock('@/src/runtime/logger', () => ({
   },
 }))
 
-describe('DestinationService fallback behavior', () => {
-  const storageLocalSet = vi.fn(async () => undefined)
+describe("DestinationService explicit destination contract", () => {
+  let storage: Record<string, unknown>
 
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal('chrome', {
+    storage = {}
+    vi.stubGlobal("chrome", {
       storage: {
         local: {
-          set: storageLocalSet,
+          get: vi.fn(async (key: string) => ({ [key]: storage[key] })),
+          set: vi.fn(async (value: Record<string, unknown>) => {
+            Object.assign(storage, value)
+          }),
         },
       },
     })
   })
 
-  it('disables custom destination and persists fsaError banner state on fallback', async () => {
-    mocks.getSettings.mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      downloads: {
-        ...DEFAULT_SETTINGS.downloads,
-        downloadMode: 'custom',
-        customDirectoryEnabled: true,
-        customDirectoryHandleId: 'handle-1',
-      },
-    })
-
+  it("keeps a frozen Downloads API task independent from FSA state", async () => {
     const service = new DestinationService()
-    await service.clearCustomDirectoryAndFallback('Custom Folder Missing', 'Folder handle disappeared')
+    const context = {
+      taskId: "task-downloads",
+      destination: "downloads-api" as const,
+    }
 
-    expect(mocks.updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        downloads: expect.objectContaining({
-          downloadMode: 'browser',
-          customDirectoryEnabled: false,
-          customDirectoryHandleId: null,
-        }),
-      }),
-    )
-    expect(mocks.clearDownloadRootHandle).toHaveBeenCalledTimes(1)
-    expect(mocks.emitError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        code: 'FSA_HANDLE_INVALID',
-        severity: 'warning',
-      }),
-    )
-    expect(storageLocalSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        [LOCAL_STORAGE_KEYS.fsaError]: expect.objectContaining({
-          active: true,
-          message: 'Custom Folder Missing: Folder handle disappeared',
-        }),
-      }),
-    )
+    await expect(service.preflight(context)).resolves.toEqual({ ready: true })
+    await expect(service.getEffectiveDestination(context)).resolves.toEqual({
+      kind: "downloads",
+    })
+    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
   })
 
-  it('resolves the fixed persisted download-root handle when legacy settings omitted the handle id', async () => {
-    const handle = { name: 'Downloads' } as FileSystemDirectoryHandle
-
-    mocks.getSettings.mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      downloads: {
-        ...DEFAULT_SETTINGS.downloads,
-        downloadMode: 'custom',
-        customDirectoryEnabled: true,
-        customDirectoryHandleId: null,
-      },
-    })
-    mocks.loadDownloadRootHandle.mockResolvedValue(handle)
-
+  it("reports a missing custom destination without changing global settings", async () => {
+    mocks.loadDownloadRootHandle.mockResolvedValue(undefined)
     const service = new DestinationService()
-    await expect(service.getEffectiveDestination()).resolves.toEqual({
-      kind: 'custom',
+    const context = {
+      taskId: "task-fsa",
+      chapterId: "chapter-1",
+      destination: "file-system-access" as const,
+    }
+
+    await expect(service.preflight(context)).resolves.toEqual({
+      ready: false,
+      reason: "not_configured",
+    })
+    expect(await getDestinationIssues()).toEqual([])
+  })
+
+  it("resolves the fixed persisted download-root handle for an authorized FSA task", async () => {
+    const handle = { name: "Downloads" } as FileSystemDirectoryHandle
+    mocks.loadDownloadRootHandle.mockResolvedValue(handle)
+    mocks.queryFsaPermission.mockResolvedValue("granted")
+    const context = {
+      taskId: "task-fsa",
+      destination: "file-system-access" as const,
+    }
+
+    await expect(
+      new DestinationService().getEffectiveDestination(context)
+    ).resolves.toEqual({
+      kind: "custom",
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
       handle,
     })
   })
 
-  it('is a no-op when custom destination is already disabled', async () => {
-    mocks.getSettings.mockResolvedValue({
-      ...DEFAULT_SETTINGS,
-      downloads: {
-        ...DEFAULT_SETTINGS.downloads,
-        downloadMode: 'browser',
-        customDirectoryEnabled: false,
-        customDirectoryHandleId: null,
-      },
-    })
+  it("honors an explicit task-scoped Downloads API override", async () => {
+    const context = {
+      taskId: "task-fsa",
+      destination: "file-system-access" as const,
+      destinationOverride: "downloads-api" as const,
+    }
 
-    const service = new DestinationService()
-    await service.clearCustomDirectoryAndFallback('Custom Folder Missing', 'Folder handle disappeared')
+    await expect(
+      new DestinationService().getEffectiveDestination(context)
+    ).resolves.toEqual({ kind: "downloads" })
+    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
+  })
 
-    expect(mocks.updateSettings).not.toHaveBeenCalled()
-    expect(mocks.clearDownloadRootHandle).not.toHaveBeenCalled()
-    expect(mocks.emitError).not.toHaveBeenCalled()
-    expect(storageLocalSet).not.toHaveBeenCalled()
+  it("deduplicates a repeated issue without resetting its timestamp", async () => {
+    const context = {
+      taskId: "task-fsa",
+      chapterId: "chapter-1",
+      destination: "file-system-access" as const,
+    }
+    const failure = { ready: false, reason: "permission_denied" } as const
+
+    const original = await recordDestinationIssue(context, failure)
+    expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
+    const repeated = await recordDestinationIssue(context, failure)
+
+    expect(repeated).toEqual(original)
+    expect(repeated.occurredAt).toBe(original.occurredAt)
+    expect(await getDestinationIssues()).toHaveLength(1)
+    expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
   })
 })
-

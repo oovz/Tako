@@ -1,24 +1,24 @@
-import type { ExtensionSettings } from './settings-types';
+import type { ExtensionSettings } from "./settings-types"
 
 // Ref: https://github.com/vitejs/vite/blob/main/docs/guide/env-and-mode.md
-const IS_DEV_BUILD = (import.meta as { env?: { DEV?: boolean } }).env?.DEV ?? false;
+const IS_DEV_BUILD =
+  (import.meta as { env?: { DEV?: boolean } }).env?.DEV ?? false
 
 // Single source of truth for default settings.
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   downloads: {
-    downloadMode: 'browser',
-    customDirectoryEnabled: false,
+    destination: "downloads-api",
     customDirectoryHandleId: null,
-    pathTemplate: 'TMD/<SERIES_TITLE>',
-    defaultFormat: 'cbz',
-    fileNameTemplate: '<CHAPTER_TITLE>',
-    overwriteExisting: false,
+    pathTemplate: "TMD/<SERIES_TITLE>",
+    defaultFormat: "cbz",
+    fileNameTemplate: "<CHAPTER_TITLE>",
+    conflictPolicy: "uniquify",
     suppressSaveAsDialog: true,
     includeComicInfo: true,
     includeCoverImage: true, // Cover image inclusion enabled by default
     // Image filename normalization defaults
     normalizeImageFilenames: true,
-    imagePaddingDigits: 'auto',
+    imagePaddingDigits: "auto",
   },
   globalPolicy: {
     image: { concurrency: 2, delayMs: 500 },
@@ -26,8 +26,10 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   },
   globalRetries: { image: 3, chapter: 3 },
   notifications: true,
+  motionPreference: "system",
+  uiLanguage: "auto",
   advanced: {
-    logLevel: IS_DEV_BUILD ? 'debug' : 'warn',
+    logLevel: IS_DEV_BUILD ? "debug" : "warn",
     storageCleanupDays: 30,
   },
-};
+}

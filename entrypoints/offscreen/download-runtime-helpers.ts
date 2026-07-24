@@ -1,17 +1,22 @@
-import logger from '@/src/runtime/logger'
-import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
-import { scheduleForIntegrationScope } from '@/src/runtime/rate-limit'
-import type { RateLimitPolicySnapshot } from '@/src/runtime/rate-limit'
-import { loadDownloadRootHandle, verifyPermission } from '@/src/storage/fs-access'
-import { sendThrottledDownloadApiRequest } from './helpers'
-import type { ChapterDownloadImageResult } from './chapter-processing'
+import logger from "@/src/runtime/logger"
+import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
+import { scheduleForIntegrationScope } from "@/src/runtime/rate-limit"
+import type { RateLimitPolicySnapshot } from "@/src/runtime/rate-limit"
+import {
+  loadDownloadRootHandle,
+  queryFsaPermission,
+} from "@/src/storage/fs-access"
+import { sendDownloadApiRequest } from "./helpers"
+import type { ChapterDownloadImageResult } from "./chapter-processing"
 
 export type CoverImageAsset = {
   data: ArrayBuffer
   mimeType: string
 }
 
-type ImageRetryHooks = { onAttemptStart?: (attempt: number) => void | Promise<void> }
+type ImageRetryHooks = {
+  onAttemptStart?: (attempt: number) => void | Promise<void>
+}
 
 export async function prefetchCoverImage(input: {
   coverUrl?: string
@@ -20,9 +25,20 @@ export async function prefetchCoverImage(input: {
   rateLimitSettings?: RateLimitPolicySnapshot
   signal?: AbortSignal
   onActivity?: () => void | Promise<void>
-  withImageRetries: <T>(fn: () => Promise<T>, hooks?: ImageRetryHooks) => Promise<T>
+  withImageRetries: <T>(
+    fn: () => Promise<T>,
+    hooks?: ImageRetryHooks
+  ) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { coverUrl, integrationId, integrationContext, rateLimitSettings, signal, onActivity, withImageRetries } = input
+  const {
+    coverUrl,
+    integrationId,
+    integrationContext,
+    rateLimitSettings,
+    signal,
+    onActivity,
+    withImageRetries,
+  } = input
   if (!coverUrl || !integrationId) {
     return undefined
   }
@@ -42,24 +58,27 @@ export async function prefetchCoverImage(input: {
     }
     const result = await withImageRetries<ChapterDownloadImageResult>(
       () =>
-        scheduleForIntegrationScope(integrationId, 'image', () =>
-          OffscreenIntegration.chapter.downloadImage(coverUrl, {
-            signal,
-            onBytesReceived: reportActivity,
-            context: {
-              ...(integrationContext ?? {}),
-              ...(rateLimitSettings ? { rateLimitSettings } : {}),
-            },
-          }),
-          rateLimitSettings?.image,
+        scheduleForIntegrationScope(
+          integrationId,
+          "image",
+          () =>
+            OffscreenIntegration.chapter.downloadImage(coverUrl, {
+              signal,
+              onBytesReceived: reportActivity,
+              context: {
+                ...(integrationContext ?? {}),
+                ...(rateLimitSettings ? { rateLimitSettings } : {}),
+              },
+            }),
+          rateLimitSettings?.image
         ),
       {
         onAttemptStart: reportActivity,
-      },
+      }
     )
     return { data: result.data, mimeType: result.mimeType }
   } catch (error) {
-    logger.debug('Single chapter cover image fetch failed (non-fatal):', error)
+    logger.debug("Single chapter cover image fetch failed (non-fatal):", error)
     return undefined
   }
 }
@@ -72,9 +91,21 @@ export async function prefetchOptionalCoverImage(input: {
   rateLimitSettings?: RateLimitPolicySnapshot
   signal?: AbortSignal
   onActivity?: () => void | Promise<void>
-  withImageRetries: <T>(fn: () => Promise<T>, hooks?: ImageRetryHooks) => Promise<T>
+  withImageRetries: <T>(
+    fn: () => Promise<T>,
+    hooks?: ImageRetryHooks
+  ) => Promise<T>
 }): Promise<CoverImageAsset | undefined> {
-  const { includeCoverImage = true, coverUrl, integrationId, integrationContext, rateLimitSettings, signal, onActivity, withImageRetries } = input
+  const {
+    includeCoverImage = true,
+    coverUrl,
+    integrationId,
+    integrationContext,
+    rateLimitSettings,
+    signal,
+    onActivity,
+    withImageRetries,
+  } = input
   if (!includeCoverImage) {
     return undefined
   }
@@ -90,36 +121,82 @@ export async function prefetchOptionalCoverImage(input: {
   })
 }
 
-export async function resolveWritableDownloadRoot(input: {
-  onFallback: () => Promise<void>
-}): Promise<FileSystemDirectoryHandle | null> {
-  const { onFallback } = input
+export async function resolveWritableDownloadRoot(_input?: {
+  taskId?: string
+  chapter?: unknown
+  totalImages?: number
+}): Promise<FileSystemDirectoryHandle> {
+  void _input
   const dir = await loadDownloadRootHandle()
   if (!dir) {
-    await onFallback()
-    return null
+    throw new Error("Custom folder is not configured")
   }
 
-  if (!(await verifyPermission(dir, true))) {
-    await onFallback()
-    return null
+  const permission = await queryFsaPermission(dir, true)
+  if (permission !== "granted") {
+    throw new Error(
+      permission === "prompt"
+        ? "Custom folder permission is required"
+        : "Custom folder is unavailable"
+    )
   }
 
   return dir
 }
 
-export function requestBrowserBlobDownload(input: {
+export async function requestBrowserBlobDownload(input: {
+  jobId: string
+  attempt: number
+  outputId: string
   taskId: string
   chapterId: string
   blob: Blob
   filename: string
-}): Promise<Awaited<ReturnType<typeof sendThrottledDownloadApiRequest>>> {
-  const { taskId, chapterId, blob, filename } = input
-  const fileUrl = URL.createObjectURL(blob)
-  return sendThrottledDownloadApiRequest({
+  outputIndex: number
+  outputCount: number
+  outputKind: "archive" | "image"
+  signal?: AbortSignal
+}): Promise<Awaited<ReturnType<typeof sendDownloadApiRequest>>> {
+  const {
+    jobId,
+    attempt,
+    outputId,
     taskId,
     chapterId,
-    fileUrl,
+    blob,
     filename,
-  })
+    outputIndex,
+    outputCount,
+    outputKind,
+    signal,
+  } = input
+  if (signal?.aborted) {
+    throw new Error("job-cancelled")
+  }
+  const fileUrl = URL.createObjectURL(blob)
+  // A runtime transport failure is ambiguous: the Service Worker may have
+  // already called downloads.download() and died before returning the
+  // acceptance response. Rejections therefore leave the Blob alive for the
+  // identity-bound replay or durable pending-output recovery to reconcile.
+  const response = await sendDownloadApiRequest(
+    {
+      jobId,
+      attempt,
+      outputId,
+      taskId,
+      chapterId,
+      fileUrl,
+      filename,
+      outputIndex,
+      outputCount,
+      outputKind,
+    },
+    signal
+  )
+
+  if (!response.success) {
+    URL.revokeObjectURL(fileUrl)
+  }
+
+  return response
 }
