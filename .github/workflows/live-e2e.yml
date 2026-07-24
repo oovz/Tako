@@ -14,6 +14,15 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Live test scope
+        required: true
+        default: ci
+        type: choice
+        options:
+          - ci
+          - full
 
 permissions:
   contents: read
@@ -25,23 +34,34 @@ concurrency:
 jobs:
   live-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Live end-to-end tests
-        run: pnpm test:live:ci
+        run: pnpm exec playwright install --with-deps chromium-tip-of-tree
+      - name: Bounded live API canary
+        if: github.event_name != 'workflow_dispatch' || inputs.suite == 'ci'
+        run: xvfb-run -a pnpm test:live:ci
+      - name: Full live browser and download suite
+        if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
+        run: xvfb-run -a pnpm test:live:full
       - name: Upload live E2E artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: live-e2e-artifacts
           path: |

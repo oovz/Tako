@@ -9,7 +9,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -21,38 +21,109 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  verify:
-    uses: ./.github/workflows/quality-e2e.yml
-
-  release:
-    needs: verify
+  resolve:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+    permissions:
+      contents: read
+    outputs:
+      checkout_sha: ${{ steps.resolve.outputs.checkout_sha }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ref: ${{ inputs.release_tag || github.ref }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Resolve release tag to an immutable commit
+        id: resolve
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REQUESTED_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          $tag = $env:REQUESTED_TAG
+          if ($tag -cnotmatch '^v.+') {
+            throw "Release tag must start with v. Got: $tag"
+          }
+
+          git show-ref --verify --quiet "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag does not exist: $tag"
+          }
+
+          $checkoutSha = (git rev-list -n 1 "refs/tags/$tag").Trim()
+          if ([string]::IsNullOrWhiteSpace($checkoutSha)) {
+            throw "Could not resolve release tag to a commit: $tag"
+          }
+          if ($env:EVENT_NAME -ceq 'push' -and $checkoutSha -cne $env:EVENT_SHA) {
+            throw "Tag push SHA does not match resolved tag. Event: $($env:EVENT_SHA); resolved: $checkoutSha"
+          }
+
+          @(
+            "checkout_sha=$checkoutSha"
+            "release_tag=$tag"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  verify:
+    needs: resolve
+    uses: ./.github/workflows/quality-e2e.yml
+    with:
+      checkout_ref: ${{ needs.resolve.outputs.checkout_sha }}
+
+  release:
+    needs:
+      - resolve
+      - verify
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+      RELEASE_SHA: ${{ needs.resolve.outputs.checkout_sha }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.resolve.outputs.checkout_sha }}
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 22
           cache: pnpm
       - name: Validate release tag
         shell: pwsh
         run: |
-          if ($env:RELEASE_TAG -notmatch '^v') {
-            throw "Release tag must start with 'v'. Got: $env:RELEASE_TAG"
+          $resolvedTagSha = (git rev-list -n 1 "refs/tags/$env:RELEASE_TAG").Trim()
+          if ($resolvedTagSha -cne $env:RELEASE_SHA) {
+            throw "Release tag moved after resolution. Expected: $($env:RELEASE_SHA); got: $resolvedTagSha"
+          }
+
+          $packageVersion = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$packageVersion"
+          if ($env:RELEASE_TAG -cne $expectedTag) {
+            throw "Release tag must match package.json exactly. Expected: $expectedTag; got: $env:RELEASE_TAG"
           }
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build release bundle
         run: pnpm zip
+      - name: Validate packaged manifest version
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+          $manifestPath = '.output/chrome-mv3/manifest.json'
+          if (-not (Test-Path -LiteralPath $manifestPath)) {
+            throw "Packaged manifest not found at $manifestPath"
+          }
+
+          $manifestVersion = (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).version
+          if ($manifestVersion -cne $packageVersion) {
+            throw "Packaged manifest version must match package.json. Package: $packageVersion; manifest: $manifestVersion"
+          }
       - name: Prepare release asset and commit notes
         id: prepare_release
         shell: pwsh
@@ -101,7 +172,7 @@ jobs:
             "previous_tag=$previousTag"
           ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Publish GitHub release
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           TAG_NAME: ${{ env.RELEASE_TAG }}
           RELEASE_ASSET_PATH: ${{ steps.prepare_release.outputs.asset_path }}
@@ -142,30 +213,15 @@ jobs:
 
             const releaseBody = bodySections.join('\n');
 
-            let release;
-            try {
-              const existingRelease = await github.request('GET /repos/{owner}/{repo}/releases/tags/{tag}', {
-                owner,
-                repo,
-                tag,
-              });
+            const releases = await github.paginate('GET /repos/{owner}/{repo}/releases', {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            let release = releases.find((candidate) => candidate.tag_name === tag);
+            const isNewRelease = !release;
 
-              release = (
-                await github.request('PATCH /repos/{owner}/{repo}/releases/{release_id}', {
-                  owner,
-                  repo,
-                  release_id: existingRelease.data.id,
-                  name: releaseName,
-                  body: releaseBody,
-                  draft: false,
-                  prerelease: false,
-                })
-              ).data;
-            } catch (error) {
-              if (error.status !== 404) {
-                throw error;
-              }
-
+            if (isNewRelease) {
               release = (
                 await github.request('POST /repos/{owner}/{repo}/releases', {
                   owner,
@@ -173,37 +229,65 @@ jobs:
                   tag_name: tag,
                   name: releaseName,
                   body: releaseBody,
-                  draft: false,
+                  draft: true,
                   prerelease: false,
                 })
               ).data;
             }
 
-            const existingAssets = await github.request('GET /repos/{owner}/{repo}/releases/{release_id}/assets', {
+            const existingAssets = await github.paginate('GET /repos/{owner}/{repo}/releases/{release_id}/assets', {
               owner,
               repo,
               release_id: release.id,
+              per_page: 100,
             });
 
-            for (const asset of existingAssets.data) {
-              if (asset.name === assetName) {
-                await github.request('DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}', {
-                  owner,
-                  repo,
-                  asset_id: asset.id,
-                });
+            const assetData = fs.readFileSync(assetPath);
+            const stagedAssetName = isNewRelease
+              ? assetName
+              : `${assetName}.staged-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`;
+            const uploadUrl = release.upload_url.replace(
+              '{?name,label}',
+              `?name=${encodeURIComponent(stagedAssetName)}`,
+            );
+
+            const uploadedAsset = (
+              await github.request({
+                method: 'POST',
+                url: uploadUrl,
+                headers: {
+                  'content-type': 'application/zip',
+                  'content-length': String(assetData.length),
+                },
+                data: assetData,
+              })
+            ).data;
+
+            if (!isNewRelease) {
+              for (const asset of existingAssets) {
+                if (asset.name === assetName) {
+                  await github.request('DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}', {
+                    owner,
+                    repo,
+                    asset_id: asset.id,
+                  });
+                }
               }
+
+              await github.request('PATCH /repos/{owner}/{repo}/releases/assets/{asset_id}', {
+                owner,
+                repo,
+                asset_id: uploadedAsset.id,
+                name: assetName,
+              });
             }
 
-            const assetData = fs.readFileSync(assetPath);
-            const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(assetName)}`);
-
-            await github.request({
-              method: 'POST',
-              url: uploadUrl,
-              headers: {
-                'content-type': 'application/zip',
-                'content-length': String(assetData.length),
-              },
-              data: assetData,
+            await github.request('PATCH /repos/{owner}/{repo}/releases/{release_id}', {
+              owner,
+              repo,
+              release_id: release.id,
+              name: releaseName,
+              body: releaseBody,
+              draft: false,
+              prerelease: false,
             });

@@ -23,3 +23,5 @@ concurrency:
 jobs:
   quality-e2e:
     uses: ./.github/workflows/quality-e2e.yml
+    with:
+      checkout_ref: ${{ github.sha }}

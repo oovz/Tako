@@ -1,17 +1,44 @@
-import { defineConfig } from "wxt";
-import tailwindcss from "@tailwindcss/vite";
-import path from "path";
-import {
-  generateContentScriptMatches,
-  generateContentScriptExcludeMatches,
-} from "./src/site-integrations/manifest";
+import { defineConfig } from "wxt"
+import tailwindcss from "@tailwindcss/vite"
+import path from "path"
+import istanbul from "vite-plugin-istanbul"
+import { generateRequiredHostPermissions } from "./src/site-integrations/manifest"
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
 
   // Configure Vite
-  vite: () => ({
-    plugins: [tailwindcss()],
+  vite: (configEnv) => ({
+    define: {
+      __TAKO_E2E_STATE_SEED__: JSON.stringify(
+        configEnv.mode === "e2e-test" &&
+          process.env.TAKO_E2E_STATE_SEED === "true"
+      ),
+    },
+    plugins: [
+      tailwindcss(),
+      // Instrument extension source for Istanbul-based E2E coverage.
+      // Only active when building for coverage (E2E_COVERAGE=true) to keep
+      // production and normal dev builds clean and fast.
+      ...(process.env.E2E_COVERAGE === "true"
+        ? [
+            istanbul({
+              include: ["src/**/*", "entrypoints/**/*", "components/**/*"],
+              exclude: [
+                "node_modules",
+                ".output",
+                "tests",
+                "**/*.d.ts",
+                "src/types/**",
+                "src/runtime/generated/**",
+              ],
+              extension: [".js", ".ts", ".tsx"],
+              requireEnv: false,
+              forceBuildInstrument: true,
+            }),
+          ]
+        : []),
+    ],
     build: {
       // Vite's modulepreload helper touches document/window. Extension service
       // workers have neither, and background runtimes are lazy-loaded there.
@@ -24,91 +51,82 @@ export default defineConfig({
     },
   }),
 
-  // Use build hook to inject content script matches from unified manifest (SSOT)
-  hooks: {
-    'build:manifestGenerated': (_wxt, manifest) => {
-      // Generate matches from site integration manifest (SSOT)
-      const matches = generateContentScriptMatches();
-      const excludeMatches = generateContentScriptExcludeMatches();
+  // Configure manifest. Isolated Playwright builds pre-grant the optional
+  // wildcard permission so mocked and live MangaDex workflows can exercise the
+  // enabled integration. Production keeps the user-gesture permission flow.
+  manifest: ({ mode }) => {
+    const isLiveTest = mode === "live-test"
+    // A test environment variable alone must never make a normal production
+    // artifact more permissive. The deterministic state seeder and its broad
+    // mock-host permission exist only in WXT's isolated e2e-test output.
+    const isDeterministicE2e =
+      mode === "e2e-test" && process.env.TAKO_E2E_STATE_SEED === "true"
+    const grantsBroadHttpsForIsolatedTest = isLiveTest || isDeterministicE2e
 
-      // Find and update the main content script entry by its output path
-      // This avoids hardcoding domain names which would defeat SSOT
-      if (!manifest.content_scripts || manifest.content_scripts.length === 0) {
-        return;
-      }
-
-      for (const cs of manifest.content_scripts) {
-        // Identify main content script by its js file path
-        const isMainContentScript = cs.js?.some(js =>
-          js.includes('content-scripts/content.js') || js === 'content-scripts/content.js'
-        );
-        if (isMainContentScript) {
-          cs.matches = matches;
-          if (excludeMatches.length > 0) {
-            cs.exclude_matches = excludeMatches;
-          }
-        }
-      }
-    },
-  },
-
-  // Configure manifest
-  manifest: {
-    name: "__MSG_extName__",
-    version: "1.5.5",
-    description: "__MSG_extDescription__",
-    default_locale: "en",
-    minimum_chrome_version: "122",
-    permissions: [
-      "storage",
-      "unlimitedStorage",
-      "downloads",
-      "offscreen",
-      "sidePanel",
-      "scripting",
-      "tabs",
-      "webNavigation",
-      "notifications",
-      "alarms",
-      "declarativeNetRequest", // Required for session DNR referer rewrites on image CDN fetches
-      "cookies"  // Required for chrome.cookies.getAll() — Pixiv Comic auth cookie forwarding
-    ],
-    background: {
-      type: "module"
-    },
-    side_panel: {
-      default_path: "sidepanel.html"
-    },
-    host_permissions: [
-      // See wiki/Permissions.md for why each permission is needed.
-      "<all_urls>"
-    ],
-    action: {
-      default_title: "__MSG_extName__",
-      default_icon: {
+    return {
+      name: "__MSG_extName__",
+      version: "1.6.0",
+      description: "__MSG_extDescription__",
+      default_locale: "en",
+      minimum_chrome_version: "150",
+      permissions: [
+        "storage",
+        "unlimitedStorage",
+        "downloads",
+        "offscreen",
+        "sidePanel",
+        "scripting",
+        "tabs",
+        "webNavigation",
+        "notifications",
+        "alarms",
+        "declarativeNetRequest", // Required for session DNR referer rewrites on image CDN fetches
+      ],
+      background: {
+        type: "module",
+      },
+      side_panel: {
+        default_path: "sidepanel.html",
+      },
+      host_permissions: grantsBroadHttpsForIsolatedTest
+        ? [...generateRequiredHostPermissions(), "https://*/*"]
+        : generateRequiredHostPermissions(),
+      optional_host_permissions: grantsBroadHttpsForIsolatedTest
+        ? []
+        : [
+            // MangaDex@Home returns dynamic HTTPS image-node origins. MangaDex is
+            // disabled by default and requests this access only when the user enables it.
+            "https://*/*",
+          ],
+      action: {
+        default_title: "__MSG_extName__",
+        default_icon: {
+          "16": "icon/16.png",
+          "32": "icon/32.png",
+          "48": "icon/48.png",
+          "96": "icon/96.png",
+          "128": "icon/128.png",
+        },
+      },
+      icons: {
         "16": "icon/16.png",
         "32": "icon/32.png",
         "48": "icon/48.png",
         "96": "icon/96.png",
         "128": "icon/128.png",
       },
-    },
-    icons: {
-      "16": "icon/16.png",
-      "32": "icon/32.png",
-      "48": "icon/48.png",
-      "96": "icon/96.png",
-      "128": "icon/128.png",
-    },
-    // offscreen.html removed from web_accessible_resources (2026-02-06):
-    // Offscreen docs are loaded internally via chrome.offscreen.createDocument(),
-    // not accessed by web pages.
-    web_accessible_resources: [],
+      // offscreen.html removed from web_accessible_resources (2026-02-06):
+      // Offscreen docs are loaded internally via chrome.offscreen.createDocument(),
+      // not accessed by web pages.
+      web_accessible_resources: [],
+    }
   },
 
   // Configure frontend framework
   webExt: {
-    startUrls: ["https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter"],
+    startUrls: [
+      "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter",
+    ],
     disabled: false,
   },
 
@@ -118,4 +136,4 @@ export default defineConfig({
       port: 51730,
     },
   },
-});
+})
