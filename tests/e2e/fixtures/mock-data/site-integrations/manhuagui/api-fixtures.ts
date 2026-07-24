@@ -21,23 +21,23 @@
  * as a decode failure.)
  */
 
-import { compressToBase64 } from '../../../../../shared/manhuagui-compress';
-import { MANHUAGUI_CONFIG_SCRIPT_DOMAIN } from '../../../test-domains-constants';
+import { compressToBase64 } from "../../../../../shared/manhuagui-compress"
+import { MANHUAGUI_CONFIG_SCRIPT_DOMAIN } from "../../../test-domains-constants"
 
 /**
  * URL path the mock serves the reader-config script at. Matches the regex
  * `chapter-viewer` uses: `<script src=".../scripts/config_*.js">`.
  */
-export const MANHUAGUI_CONFIG_SCRIPT_PATH = '/scripts/config_16.js';
-export const MANHUAGUI_CONFIG_SCRIPT_URL = `https://${MANHUAGUI_CONFIG_SCRIPT_DOMAIN}${MANHUAGUI_CONFIG_SCRIPT_PATH}`;
+export const MANHUAGUI_CONFIG_SCRIPT_PATH = "/scripts/config_16.js"
+export const MANHUAGUI_CONFIG_SCRIPT_URL = `https://${MANHUAGUI_CONFIG_SCRIPT_DOMAIN}${MANHUAGUI_CONFIG_SCRIPT_PATH}`
 
 /**
  * Single image host the mock uses. `i.hamreus.com` is the lowest-weighted
  * default host in production; pinning to a single host keeps the Playwright
  * route pattern narrow.
  */
-export const MANHUAGUI_MOCK_IMAGE_HOST = 'i';
-export const MANHUAGUI_MOCK_IMAGE_DOMAIN = `${MANHUAGUI_MOCK_IMAGE_HOST}.hamreus.com`;
+export const MANHUAGUI_MOCK_IMAGE_HOST = "i"
+export const MANHUAGUI_MOCK_IMAGE_DOMAIN = `${MANHUAGUI_MOCK_IMAGE_HOST}.hamreus.com`
 
 /**
  * Minimal reader-config script. The parser in
@@ -47,16 +47,16 @@ export const MANHUAGUI_MOCK_IMAGE_DOMAIN = `${MANHUAGUI_MOCK_IMAGE_HOST}.hamreus
  * a one-line IIFE that assigns the shape the parser expects.
  */
 export function buildManhuaguiReaderConfigScript(): string {
-  return `;var _cfg={curServ:0,curHost:0,picserv:[{name:"自动",hosts:[{h:"${MANHUAGUI_MOCK_IMAGE_HOST}",w:1}]}]};`;
+  return `;var _cfg={curServ:0,curHost:0,picserv:[{name:"自动",hosts:[{h:"${MANHUAGUI_MOCK_IMAGE_HOST}",w:1}]}]};`
 }
 
 export interface ManhuaguiPackedImageData {
-  path: string;
-  files: string[];
+  path: string
+  files: string[]
   sl: {
-    e: string;
-    m: string;
-  };
+    e: string
+    m: string
+  }
 }
 
 /**
@@ -67,7 +67,7 @@ export interface ManhuaguiPackedImageData {
  * be alphanumeric (so `\b\w+\b` tokenization is stable) and unlikely to
  * appear in any JSON payload.
  */
-const MANHUAGUI_UNUSED_PACKED_TOKEN = 'zzzmockdictzzz';
+const MANHUAGUI_UNUSED_PACKED_TOKEN = "zzzmockdictzzz"
 
 /**
  * Build a packed `window["eval"](function(p,a,c,k,e,d){...}(...))` block
@@ -84,13 +84,15 @@ const MANHUAGUI_UNUSED_PACKED_TOKEN = 'zzzmockdictzzz';
  * as a decode failure, so we must use `count=1` + a valid compressed
  * dictionary instead.
  */
-export function buildManhuaguiPackedPayloadScript(imgData: ManhuaguiPackedImageData): string {
+export function buildManhuaguiPackedPayloadScript(
+  imgData: ManhuaguiPackedImageData
+): string {
   // JSON.stringify guarantees both valid JSON AND no single-quote characters
   // that would otherwise terminate the outer 'TEMPLATE' literal prematurely.
-  const jsonPayload = JSON.stringify(imgData);
-  const template = `SMH.imgData(${jsonPayload}).preInit()`;
-  const rawKeys = compressToBase64(MANHUAGUI_UNUSED_PACKED_TOKEN);
-  return `window["eval"](function(p,a,c,k,e,d){return p}('${template}',10,1,'${rawKeys}'['split']('|'),0,{}))`;
+  const jsonPayload = JSON.stringify(imgData)
+  const template = `SMH.imgData(${jsonPayload}).preInit()`
+  const rawKeys = compressToBase64(MANHUAGUI_UNUSED_PACKED_TOKEN)
+  return `window["eval"](function(p,a,c,k,e,d){return p}('${template}',10,1,'${rawKeys}'['split']('|'),0,{}))`
 }
 
 /**
@@ -99,13 +101,16 @@ export function buildManhuaguiPackedPayloadScript(imgData: ManhuaguiPackedImageD
  * = signature). The mocked image host ignores these entirely — they only
  * need to deserialize.
  */
-export function buildManhuaguiChapterSlMetadata(chapterId: string): { e: string; m: string } {
+export function buildManhuaguiChapterSlMetadata(chapterId: string): {
+  e: string
+  m: string
+} {
   return {
     // Epoch in the distant future so no downstream validator ever treats
     // the URL as expired.
-    e: '9999999999',
+    e: "9999999999",
     m: `mock-sig-${chapterId}`,
-  };
+  }
 }
 
 /**
@@ -114,6 +119,9 @@ export function buildManhuaguiChapterSlMetadata(chapterId: string): { e: string;
  * mock mirrors that structure so the production path normalizer has a
  * realistic input to sanitize.
  */
-export function buildManhuaguiChapterPathSegment(seriesId: string, chapterId: string): string {
-  return `/ps1/f/mock/${seriesId}/${chapterId}/`;
+export function buildManhuaguiChapterPathSegment(
+  seriesId: string,
+  chapterId: string
+): string {
+  return `/ps1/f/mock/${seriesId}/${chapterId}/`
 }

@@ -8,32 +8,36 @@
  * `.series-header-title` element.
  */
 
-import type { SiteIntegrationSeriesData, SiteIntegrationSeriesDataset } from '../../types';
+import type {
+  SiteIntegrationSeriesData,
+  SiteIntegrationSeriesDataset,
+} from "../../types"
 
 export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'SHONENJUMPPLUS_BASIC_SERIES',
-  description: 'Basic Shonen Jump+ series with full metadata',
+  id: "SHONENJUMPPLUS_BASIC_SERIES",
+  description: "Basic Shonen Jump+ series with full metadata",
   series: {
-    siteId: 'shonenjumpplus',
-    seriesId: '3269754496649675685',
-    seriesTitle: 'テスト連載',
-    author: 'テスト作者',
-    description: 'A Shonen Jump+ fixture series used by e2e tests.',
-    coverUrl: 'https://cdn-ak-img.shonenjumpplus.test/covers/3269754496649675685/thumb.jpg',
+    siteId: "shonenjumpplus",
+    seriesId: "3269754496649675685",
+    seriesTitle: "テスト連載",
+    author: "テスト作者",
+    description: "A Shonen Jump+ fixture series used by e2e tests.",
+    coverUrl:
+      "https://cdn-ak-img.shonenjumpplus.com/public/series-thumbnail/4401-test.jpg",
   },
-  chapterDatasetId: 'SHONENJUMPPLUS_BASIC',
-};
+  chapterDatasetId: "SHONENJUMPPLUS_BASIC",
+}
 
 export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'SHONENJUMPPLUS_MINIMAL_SERIES',
-  description: 'Shonen Jump+ series with a single chapter',
+  id: "SHONENJUMPPLUS_MINIMAL_SERIES",
+  description: "Shonen Jump+ series with a single chapter",
   series: {
-    siteId: 'shonenjumpplus',
-    seriesId: '3269754496649675702',
-    seriesTitle: 'Minimal Series',
+    siteId: "shonenjumpplus",
+    seriesId: "3269754496649675702",
+    seriesTitle: "Minimal Series",
   },
-  chapterDatasetId: 'SHONENJUMPPLUS_SMALL',
-};
+  chapterDatasetId: "SHONENJUMPPLUS_SMALL",
+}
 
 /**
  * Aggregate IDs are a separate identifier embedded in the DOM via
@@ -41,19 +45,19 @@ export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
  * API endpoints are scoped by aggregate id, not episode id.
  */
 export const SERIES_AGGREGATE_IDS: Record<string, string> = {
-  [BASIC_SERIES.series.seriesId]: '4401',
-  [MINIMAL_SERIES.series.seriesId]: '4402',
-};
+  [BASIC_SERIES.series.seriesId]: "4401",
+  [MINIMAL_SERIES.series.seriesId]: "4402",
+}
 
 export function createShonenJumpPlusSeries(
-  overrides: Partial<SiteIntegrationSeriesData>,
+  overrides: Partial<SiteIntegrationSeriesData>
 ): SiteIntegrationSeriesData {
   return {
-    siteId: overrides.siteId || 'shonenjumpplus',
+    siteId: overrides.siteId || "shonenjumpplus",
     seriesId: overrides.seriesId || BASIC_SERIES.series.seriesId,
-    seriesTitle: overrides.seriesTitle || 'テスト連載',
+    seriesTitle: overrides.seriesTitle || "テスト連載",
     author: overrides.author,
     description: overrides.description,
     coverUrl: overrides.coverUrl,
-  };
+  }
 }

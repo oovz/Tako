@@ -6,90 +6,98 @@
  * Chapter URLs follow: https://www.manhuagui.com/comic/{seriesId}/{chapterId}.html
  */
 
-import type { SiteIntegrationSeriesData, SiteIntegrationSeriesDataset } from '../../types';
+import type {
+  SiteIntegrationSeriesData,
+  SiteIntegrationSeriesDataset,
+} from "../../types"
 
 export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'MANHUAGUI_BASIC_SERIES',
-  description: 'Basic Manhuagui series with full metadata (no adult gate)',
+  id: "MANHUAGUI_BASIC_SERIES",
+  description: "Basic Manhuagui series with full metadata (no adult gate)",
   series: {
-    siteId: 'manhuagui',
-    seriesId: '55555',
-    seriesTitle: 'テスト漫画',
-    author: '测试作者',
-    description: 'A Manhuagui fixture series used by e2e tests.',
-    coverUrl: 'https://cf.mhgui.test/cpic/b/55555.jpg',
-    status: '连载中',
+    siteId: "manhuagui",
+    seriesId: "55555",
+    seriesTitle: "テスト漫画",
+    author: "测试作者",
+    description: "A Manhuagui fixture series used by e2e tests.",
+    coverUrl: "https://cf.mhgui.com/cpic/b/55555.jpg",
+    status: "连载中",
   },
-  chapterDatasetId: 'MANHUAGUI_BASIC',
-};
+  chapterDatasetId: "MANHUAGUI_BASIC",
+}
 
 export const ADULT_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'MANHUAGUI_ADULT_SERIES',
-  description: 'Adult-gated Manhuagui series (chapter list is lz-string-compressed in #__VIEWSTATE)',
+  id: "MANHUAGUI_ADULT_SERIES",
+  description:
+    "Adult-gated Manhuagui series (chapter list is lz-string-compressed in #__VIEWSTATE)",
   series: {
-    siteId: 'manhuagui',
-    seriesId: '77777',
-    seriesTitle: 'Gated Series',
-    author: '测试作者',
-    description: 'Adult-gated Manhuagui fixture.',
-    coverUrl: 'https://cf.mhgui.test/cpic/b/77777.jpg',
-    status: '已完结',
+    siteId: "manhuagui",
+    seriesId: "77777",
+    seriesTitle: "Gated Series",
+    author: "测试作者",
+    description: "Adult-gated Manhuagui fixture.",
+    coverUrl: "https://cf.mhgui.com/cpic/b/77777.jpg",
+    status: "已完结",
   },
-  chapterDatasetId: 'MANHUAGUI_ADULT',
-};
+  chapterDatasetId: "MANHUAGUI_ADULT",
+}
 
 export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'MANHUAGUI_MINIMAL_SERIES',
-  description: 'Manhuagui series with a single chapter',
+  id: "MANHUAGUI_MINIMAL_SERIES",
+  description: "Manhuagui series with a single chapter",
   series: {
-    siteId: 'manhuagui',
-    seriesId: '66666',
-    seriesTitle: 'Minimal Series',
-    status: '连载中',
+    siteId: "manhuagui",
+    seriesId: "66666",
+    seriesTitle: "Minimal Series",
+    status: "连载中",
   },
-  chapterDatasetId: 'MANHUAGUI_SMALL',
-};
+  chapterDatasetId: "MANHUAGUI_SMALL",
+}
 
 export const CATEGORY_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'MANHUAGUI_CATEGORY_SERIES',
-  description: 'Manhuagui reference series with single issues, extras, and chapters category headings',
+  id: "MANHUAGUI_CATEGORY_SERIES",
+  description:
+    "Manhuagui reference series with single issues, extras, and chapters category headings",
   series: {
-    siteId: 'manhuagui',
-    seriesId: '21243',
-    seriesTitle: '八田百田',
-    author: 'はやみねかおる',
-    description: 'Reference-style Manhuagui fixture with nonnumeric category headings.',
-    coverUrl: 'https://cf.mhgui.test/cpic/b/21243.jpg',
-    status: '连载中',
+    siteId: "manhuagui",
+    seriesId: "21243",
+    seriesTitle: "八田百田",
+    author: "はやみねかおる",
+    description:
+      "Reference-style Manhuagui fixture with nonnumeric category headings.",
+    coverUrl: "https://cf.mhgui.com/cpic/b/21243.jpg",
+    status: "连载中",
   },
-  chapterDatasetId: 'MANHUAGUI_CATEGORY',
-};
+  chapterDatasetId: "MANHUAGUI_CATEGORY",
+}
 
 export const KIMETSU_SERIES: SiteIntegrationSeriesDataset = {
-  id: 'MANHUAGUI_KIMETSU_SERIES',
-  description: 'Manhuagui 19430 reference series with single-book, single-chapter, and extra category headings',
+  id: "MANHUAGUI_KIMETSU_SERIES",
+  description:
+    "Manhuagui 19430 reference series with single-book, single-chapter, and extra category headings",
   series: {
-    siteId: 'manhuagui',
-    seriesId: '19430',
-    seriesTitle: '鬼灭之刃',
-    author: '吾峠呼世晴',
-    description: 'Reference-style Manhuagui fixture matching https://www.manhuagui.com/comic/19430/.',
-    coverUrl: 'https://cf.mhgui.test/cpic/b/19430.jpg',
-    status: '已完结',
+    siteId: "manhuagui",
+    seriesId: "19430",
+    seriesTitle: "鬼灭之刃",
+    author: "吾峠呼世晴",
+    description:
+      "Reference-style Manhuagui fixture matching https://www.manhuagui.com/comic/19430/.",
+    coverUrl: "https://cf.mhgui.com/cpic/b/19430.jpg",
+    status: "已完结",
   },
-  chapterDatasetId: 'MANHUAGUI_KIMETSU',
-};
+  chapterDatasetId: "MANHUAGUI_KIMETSU",
+}
 
 export function createManhuaguiSeries(
-  overrides: Partial<SiteIntegrationSeriesData>,
+  overrides: Partial<SiteIntegrationSeriesData>
 ): SiteIntegrationSeriesData {
   return {
-    siteId: overrides.siteId || 'manhuagui',
+    siteId: overrides.siteId || "manhuagui",
     seriesId: overrides.seriesId || BASIC_SERIES.series.seriesId,
-    seriesTitle: overrides.seriesTitle || 'テスト漫画',
+    seriesTitle: overrides.seriesTitle || "テスト漫画",
     author: overrides.author,
     description: overrides.description,
     coverUrl: overrides.coverUrl,
     status: overrides.status,
-  };
+  }
 }

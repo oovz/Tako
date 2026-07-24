@@ -1,36 +1,42 @@
 /**
  * @file state-helpers.ts
  * @description Helpers for managing and inspecting chrome.storage.session state during E2E tests
- * 
+ *
  * ARCHITECTURE: Site-Specific Mock Data
  * - Uses site-integration-specific mock data from ./mock-data/site-integrations (mangadex)
  * - Each site integration has realistic URLs and HTML structures matching actual sites
  * - Shared data (download tasks, settings) in ./mock-data/shared
  */
 
-import { expect, type Page, type BrowserContext } from '@playwright/test';
-import { projectToQueueView } from '@/src/runtime/projection';
-import { DEFAULT_SETTINGS } from '../../../src/storage/default-settings';
-import { getExternalTabInitStorageKey } from '../../../src/runtime/external-tab-init';
-import { SESSION_STORAGE_KEYS } from '../../../src/runtime/storage-keys';
-import type { DownloadTaskState, GlobalAppState, QueueTaskSummary } from '../../../src/types/queue-state';
-import type { MangaPageState } from '../../../src/types/tab-state';
-import { StateAction } from '../../../src/types/state-actions';
-import type { InitializeTabReadyPayload } from '../../../src/types/state-action-tab-payloads';
-import { MANGADEX_GENERIC_SERIES_URL } from './test-domains';
+import { expect, type Page, type BrowserContext } from "@playwright/test"
+import { SESSION_STORAGE_KEYS } from "../../../src/runtime/storage-keys"
+import type {
+  DownloadTaskState,
+  GlobalAppState,
+} from "../../../src/types/queue-state"
+import type { MangaPageState } from "../../../src/types/tab-state"
+import { StateAction } from "../../../src/types/state-actions"
+import type { InitializeTabReadyPayload } from "../../../src/types/state-action-tab-payloads"
+import { MANGADEX_GENERIC_SERIES_URL } from "./test-domains"
 
-type InitializeTabActionPayload = Omit<InitializeTabReadyPayload, 'context'>;
+type InitializeTabActionPayload = Omit<InitializeTabReadyPayload, "context">
 
 function isBackgroundWorkerUrl(url: string): boolean {
-  return url.startsWith('chrome-extension://') && /\/background(?:\.js)?$/i.test(url);
+  return (
+    url.startsWith("chrome-extension://") && /\/background(?:\.js)?$/i.test(url)
+  )
 }
 
-async function getServiceWorker(context: BrowserContext): Promise<import('@playwright/test').Worker> {
-  const expectedName = 'Tako Manga Downloader'
-  const isOurWorker = async (sw: import('@playwright/test').Worker): Promise<boolean> => {
+async function getServiceWorker(
+  context: BrowserContext
+): Promise<import("@playwright/test").Worker> {
+  const expectedName = "Tako Manga Downloader"
+  const isOurWorker = async (
+    sw: import("@playwright/test").Worker
+  ): Promise<boolean> => {
     // Check URL first — works even when the MV3 service worker has been
     // terminated (ephemeral lifetime) and evaluate() would fail.
-    if (isBackgroundWorkerUrl(sw.url())) return true;
+    if (isBackgroundWorkerUrl(sw.url())) return true
     try {
       const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
       return name === expectedName
@@ -40,21 +46,23 @@ async function getServiceWorker(context: BrowserContext): Promise<import('@playw
   }
 
   for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context.serviceWorkers().filter((sw) => sw.url().startsWith('chrome-extension://'))
+    const candidates = context
+      .serviceWorkers()
+      .filter((sw) => sw.url().startsWith("chrome-extension://"))
     for (const sw of candidates) {
       if (await isOurWorker(sw)) return sw
     }
 
     try {
-      await context.waitForEvent('serviceworker', { timeout: 1000 })
+      await context.waitForEvent("serviceworker", { timeout: 1000 })
     } catch {
       void 0
     }
   }
 
-  const seenWorkerUrls = context.serviceWorkers().map((sw) => sw.url());
+  const seenWorkerUrls = context.serviceWorkers().map((sw) => sw.url())
   throw new Error(
-    `Service worker not found - extension may not be loaded. Seen workers: ${JSON.stringify(seenWorkerUrls)}`,
+    `Service worker not found - extension may not be loaded. Seen workers: ${JSON.stringify(seenWorkerUrls)}`
   )
 }
 
@@ -62,7 +70,7 @@ async function getServiceWorker(context: BrowserContext): Promise<import('@playw
  * Helper to create a new page in the context
  */
 export async function createPage(context: BrowserContext): Promise<Page> {
-  return await context.newPage();
+  return await context.newPage()
 }
 
 type SidepanelHarnessOptions = {
@@ -80,6 +88,55 @@ export async function bindSidepanelHarness(
   }
 }
 
+export async function openSidepanelViaChromeApi(
+  context: BrowserContext,
+  extensionId: string,
+  tabId: number
+): Promise<{ supported: boolean; error: string | null }> {
+  const controller = await context.newPage()
+  try {
+    await controller.goto(`chrome-extension://${extensionId}/options.html`, {
+      waitUntil: "domcontentloaded",
+    })
+    const supported = await controller.evaluate(
+      () => typeof chrome.sidePanel?.open === "function"
+    )
+    if (!supported) return { supported: false, error: null }
+
+    await controller.evaluate((targetTabId: number) => {
+      const button = document.createElement("button")
+      button.id = "playwright-open-side-panel"
+      button.textContent = "Open side panel"
+      button.addEventListener("click", () => {
+        void chrome.sidePanel
+          .open({ tabId: targetTabId })
+          .then(() => {
+            document.body.dataset.sidePanelResult = "opened"
+          })
+          .catch((error: unknown) => {
+            document.body.dataset.sidePanelResult =
+              error instanceof Error ? error.message : String(error)
+          })
+      })
+      document.body.append(button)
+    }, tabId)
+
+    await controller.locator("#playwright-open-side-panel").click()
+    await controller.waitForFunction(
+      () => document.body.dataset.sidePanelResult !== undefined
+    )
+    const result = await controller.evaluate(
+      () => document.body.dataset.sidePanelResult ?? "Unknown result"
+    )
+    return {
+      supported: true,
+      error: result === "opened" ? null : result,
+    }
+  } finally {
+    await controller.close()
+  }
+}
+
 export async function openSidepanelHarness(
   context: BrowserContext,
   extensionId: string,
@@ -87,10 +144,14 @@ export async function openSidepanelHarness(
   options: SidepanelHarnessOptions = {}
 ): Promise<Page> {
   const sidepanelPage = await context.newPage()
-  await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })
+  await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+    waitUntil: "domcontentloaded",
+  })
   // Wait for React to mount before binding, so event listeners are registered
   // before bringToFront triggers tabs.onActivated.
-  await sidepanelPage.locator('#root').waitFor({ state: 'visible', timeout: 15_000 })
+  await sidepanelPage
+    .locator("#root")
+    .waitFor({ state: "visible", timeout: 15_000 })
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
   return sidepanelPage
 }
@@ -100,8 +161,10 @@ export async function reloadSidepanelHarness(
   boundPage: Page,
   options: SidepanelHarnessOptions = {}
 ): Promise<void> {
-  await sidepanelPage.reload({ waitUntil: 'domcontentloaded' })
-  await sidepanelPage.locator('#root').waitFor({ state: 'visible', timeout: 15_000 })
+  await sidepanelPage.reload({ waitUntil: "domcontentloaded" })
+  await sidepanelPage
+    .locator("#root")
+    .waitFor({ state: "visible", timeout: 15_000 })
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
 }
 
@@ -112,103 +175,113 @@ export async function initializeTabViaAction(
   payload: InitializeTabActionPayload,
   navigateToUrl: string = MANGADEX_GENERIC_SERIES_URL
 ): Promise<number> {
-  const expectedSiteId = payload.siteIntegrationId;
-  const expectedSeriesId = payload.mangaId;
-  const expectedSeriesTitle = payload.seriesTitle;
-  const expectedChaptersCount = payload.chapters?.length ?? 0;
+  const expectedSiteId = payload.siteIntegrationId
+  const expectedSeriesId = payload.mangaId
+  const expectedSeriesTitle = payload.seriesTitle
+  const expectedChaptersCount = payload.chapters?.length ?? 0
 
-  const isExpectedState = (state: MangaPageState | undefined): state is MangaPageState => {
-    if (!state) return false;
-    if (state.seriesTitle !== expectedSeriesTitle) return false;
-    if (state.siteIntegrationId !== expectedSiteId) return false;
-    if (state.mangaId !== expectedSeriesId) return false;
-    if (!Array.isArray(state.chapters)) return false;
-    if (!Array.isArray(state.volumes)) return false;
+  const isExpectedState = (
+    state: MangaPageState | undefined
+  ): state is MangaPageState => {
+    if (!state) return false
+    if (state.seriesTitle !== expectedSeriesTitle) return false
+    if (state.siteIntegrationId !== expectedSiteId) return false
+    if (state.mangaId !== expectedSeriesId) return false
+    if (!Array.isArray(state.chapters)) return false
+    if (!Array.isArray(state.volumes)) return false
 
     // Allow richer chapter sets if content scripts refresh with fuller data
     // during initialization races.
-    return state.chapters.length >= expectedChaptersCount;
-  };
+    return state.chapters.length >= expectedChaptersCount
+  }
 
   if (!expectedSiteId || !expectedSeriesId || !expectedSeriesTitle) {
-    throw new Error('initializeTabViaAction requires ready INITIALIZE_TAB payload with site+series fields');
+    throw new Error(
+      "initializeTabViaAction requires ready INITIALIZE_TAB payload with site+series fields"
+    )
   }
 
   const tabId = await getTabId(page, context)
-  await markExternalTabInitializationForTest(context, tabId)
   if (page.url() !== navigateToUrl) {
-    await page.goto(navigateToUrl, { waitUntil: 'domcontentloaded' })
+    await page.goto(navigateToUrl, { waitUntil: "domcontentloaded" })
   }
   const sendInitAction = async (): Promise<void> => {
     const ext = await context.newPage()
-    await ext.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })
-    await ext.evaluate(async ({ tabId, payload, action }) => {
-      await chrome.runtime.sendMessage({
-        type: 'STATE_ACTION',
-        action,
-        payload: {
-          context: 'ready',
-          ...payload,
-        },
-        tabId,
-        timestamp: Date.now(),
+    try {
+      await ext.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+        waitUntil: "domcontentloaded",
       })
-    }, { tabId, payload, action: StateAction.INITIALIZE_TAB })
-    await ext.close()
-  }
-
-  const waitForInitState = async (timeoutMs: number): Promise<MangaPageState | undefined> => {
-    let lastState: MangaPageState | undefined
-    try {
-      await expect.poll(async () => {
-        lastState = await getSessionState<MangaPageState>(context, `tab_${tabId}`)
-        return isExpectedState(lastState)
-      }, { timeout: timeoutMs, intervals: [100] }).toBe(true)
-    } catch {
-      // Soft wait: return the last-seen state so the caller can retry
-      // initialization rather than abort on the first timeout.
-    }
-    return lastState
-  }
-
-  const restoreFocusAndWaitForProjectedContext = async (timeoutMs: number): Promise<void> => {
-    await focusTab(context, tabId)
-    try {
-      await page.bringToFront()
-    } catch {
-      void 0
-    }
-
-    try {
-      await expect.poll(async () => {
-        const activeContext = await getSessionState<MangaPageState | { seriesTitle?: string; mangaId?: string }>(context, 'activeTabContext')
-        return !!(
-          activeContext
-          && activeContext.seriesTitle === expectedSeriesTitle
-          && (activeContext as { mangaId?: string }).mangaId === expectedSeriesId
+      const response = await ext.evaluate(
+        async ({ tabId, payload, action }) => {
+          const issuedAt = Date.now()
+          return await chrome.runtime.sendMessage({
+            type: "STATE_ACTION",
+            action,
+            commandId: crypto.randomUUID(),
+            issuedAt,
+            payload: {
+              context: "ready",
+              ...payload,
+            },
+            tabId,
+            timestamp: issuedAt,
+          })
+        },
+        { tabId, payload, action: StateAction.INITIALIZE_TAB }
+      )
+      if (
+        !response ||
+        typeof response !== "object" ||
+        !("success" in response)
+      ) {
+        throw new Error(
+          "INITIALIZE_TAB returned an invalid background response"
         )
-      }, { timeout: timeoutMs, intervals: [100] }).toBe(true)
-    } catch {
-      // Soft wait: best-effort focus/restore; callers proceed regardless.
+      }
+      if (response.success !== true) {
+        throw new Error(
+          `INITIALIZE_TAB was rejected: ${
+            "error" in response && typeof response.error === "string"
+              ? response.error
+              : "unknown error"
+          }`
+        )
+      }
+    } finally {
+      await ext.close()
     }
   }
 
   await sendInitAction()
-  const firstState = await waitForInitState(15000)
-  if (isExpectedState(firstState)) {
-    await restoreFocusAndWaitForProjectedContext(5000)
-    return tabId
-  }
+  await expect
+    .poll(
+      async () =>
+        isExpectedState(
+          await getSessionState<MangaPageState>(context, `tab_${tabId}`)
+        ),
+      { timeout: 15_000, intervals: [100] }
+    )
+    .toBe(true)
 
-  await markExternalTabInitializationForTest(context, tabId)
-  await sendInitAction()
-  const retryState = await waitForInitState(10000)
-  if (isExpectedState(retryState)) {
-    await restoreFocusAndWaitForProjectedContext(5000)
-    return tabId
-  }
+  await focusTab(context, tabId)
+  await page.bringToFront()
+  await expect
+    .poll(
+      async () => {
+        const activeContext = await getSessionState<
+          MangaPageState | { seriesTitle?: string; mangaId?: string }
+        >(context, "activeTabContext")
+        return !!(
+          activeContext &&
+          activeContext.seriesTitle === expectedSeriesTitle &&
+          (activeContext as { mangaId?: string }).mangaId === expectedSeriesId
+        )
+      },
+      { timeout: 5_000, intervals: [100] }
+    )
+    .toBe(true)
 
-  throw new Error(`initializeTabViaAction: timed out waiting for tab_${tabId} state (last state: ${JSON.stringify(retryState)})`)
+  return tabId
 }
 
 /**
@@ -216,7 +289,7 @@ export async function initializeTabViaAction(
  */
 export async function closePage(page: Page): Promise<void> {
   if (!page.isClosed()) {
-    await page.close();
+    await page.close()
   }
 }
 
@@ -227,31 +300,31 @@ export async function getSessionState<T = unknown>(
   context: BrowserContext,
   key: string
 ): Promise<T | undefined> {
-  const worker = await getServiceWorker(context);
+  const worker = await getServiceWorker(context)
 
   return await worker.evaluate(async (storageKey: string) => {
     // In rare cases chrome.storage may not yet be fully available; treat as missing state.
-    const maxAttempts = 10;
-    const delayMs = 100;
+    const maxAttempts = 10
+    const delayMs = 100
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if ((chrome as any)?.storage?.session) {
-        const result = await chrome.storage.session.get(storageKey);
-        return result[storageKey] as T | undefined;
+        const result = await chrome.storage.session.get(storageKey)
+        return result[storageKey] as T | undefined
       }
 
-      if (typeof setTimeout === 'function') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (typeof setTimeout === "function") {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       } else {
-        const start = Date.now();
+        const start = Date.now()
         while (Date.now() - start < delayMs) {
-          void 0;
+          void 0
         }
       }
     }
 
-    return undefined;
-  }, key);
+    return undefined
+  }, key)
 }
 
 /**
@@ -262,203 +335,342 @@ export async function setSessionState<T = unknown>(
   key: string,
   value: T
 ): Promise<void> {
-  const worker = await getServiceWorker(context);
+  const worker = await getServiceWorker(context)
 
   // Use JSON serialization to pass complex objects
-  const serializedValue = JSON.stringify(value);
-  await worker.evaluate(async ({ key: storageKey, value: serialized }: { key: string; value: string }) => {
-    const parsedValue = JSON.parse(serialized);
-    const maxAttempts = 10;
-    const delayMs = 100;
+  const serializedValue = JSON.stringify(value)
+  await worker.evaluate(
+    async ({
+      key: storageKey,
+      value: serialized,
+    }: {
+      key: string
+      value: string
+    }) => {
+      const parsedValue = JSON.parse(serialized)
+      const maxAttempts = 10
+      const delayMs = 100
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if ((chrome as any)?.storage?.session) {
-        await chrome.storage.session.set({ [storageKey]: parsedValue });
-        return;
-      }
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if ((chrome as any)?.storage?.session) {
+          await chrome.storage.session.set({ [storageKey]: parsedValue })
+          return
+        }
 
-      if (typeof setTimeout === 'function') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      } else {
-        const start = Date.now();
-        while (Date.now() - start < delayMs) {
-          void 0;
+        if (typeof setTimeout === "function") {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        } else {
+          const start = Date.now()
+          while (Date.now() - start < delayMs) {
+            void 0
+          }
         }
       }
-    }
-  }, { key, value: serializedValue });
+    },
+    { key, value: serializedValue }
+  )
 }
 
 export async function setLocalState<T = unknown>(
   context: BrowserContext,
   key: string,
-  value: T,
+  value: T
 ): Promise<void> {
   const worker = await getServiceWorker(context)
 
   const serializedValue = JSON.stringify(value)
-  await worker.evaluate(async ({ key: storageKey, value: serialized }: { key: string; value: string }) => {
-    const parsedValue = JSON.parse(serialized)
-    const maxAttempts = 10
-    const delayMs = 100
+  await worker.evaluate(
+    async ({
+      key: storageKey,
+      value: serialized,
+    }: {
+      key: string
+      value: string
+    }) => {
+      const parsedValue = JSON.parse(serialized)
+      const maxAttempts = 10
+      const delayMs = 100
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if ((chrome as any)?.storage?.local) {
-        await chrome.storage.local.set({ [storageKey]: parsedValue })
-        return
-      }
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if ((chrome as any)?.storage?.local) {
+          await chrome.storage.local.set({ [storageKey]: parsedValue })
+          return
+        }
 
-      if (typeof setTimeout === 'function') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs))
-      } else {
-        const start = Date.now()
-        while (Date.now() - start < delayMs) {
-          void 0
+        if (typeof setTimeout === "function") {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        } else {
+          const start = Date.now()
+          while (Date.now() - start < delayMs) {
+            void 0
+          }
         }
       }
-    }
-  }, { key, value: serializedValue })
+    },
+    { key, value: serializedValue }
+  )
 }
 
 export async function seedDownloadQueueState(
   page: Page,
-  queue: DownloadTaskState[],
+  queue: DownloadTaskState[]
 ): Promise<void> {
-  const context = page.context()
+  await seedDownloadQueueStateInContext(page.context(), queue)
+}
+
+export async function seedDownloadQueueStateInContext(
+  context: BrowserContext,
+  queue: DownloadTaskState[]
+): Promise<void> {
   const ids = queue.map((task) => task.id).sort()
-  const projected = projectToQueueView(queue)
+  const queueViewIds = [
+    ...queue
+      .filter((task) => task.status === "downloading")
+      .toSorted((left, right) => left.created - right.created),
+    ...queue.filter((task) => task.status === "queued"),
+  ].map((task) => task.id)
+  const historyViewIds = queue
+    .filter(
+      (task) =>
+        task.status === "completed" ||
+        task.status === "partial_success" ||
+        task.status === "failed" ||
+        task.status === "canceled"
+    )
+    .toSorted((left, right) => (right.completed ?? 0) - (left.completed ?? 0))
+    .slice(0, 5)
+    .map((task) => task.id)
   const worker = await getServiceWorker(context)
 
-  if (queue.some((task) => task.status === 'downloading')) {
+  if (queue.some((task) => task.status === "downloading")) {
+    // Resolving a ServiceWorker only proves that Chromium started it, not that
+    // the extension's initialization barrier has completed. Let startup reach
+    // its first durable projection before creating the synthetic offscreen
+    // context, so recovery cannot discover a half-created test document.
+    await waitForGlobalState(
+      context,
+      (state) => Array.isArray(state.downloadQueue),
+      { timeout: 15_000 }
+    )
     await ensureOffscreenAliveForActiveQueue(context)
   }
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const existing = await getGlobalState(context)
-    const next = {
-      ...(existing ?? {}),
-      downloadQueue: queue,
-      settings: existing?.settings ?? DEFAULT_SETTINGS,
-      lastActivity: Date.now(),
-    }
+  const extensionId = new URL(worker.url()).host
+  const senderPage = await context.newPage()
 
-    await setLocalState(context, 'downloadQueue', queue)
-    await setSessionState(context, SESSION_STORAGE_KEYS.globalState, next as GlobalAppState)
-    await setSessionState(context, 'queueView', projected.queueView as QueueTaskSummary[])
-    await setSessionState(context, 'lastOffscreenActivity', next.lastActivity)
+  try {
+    await senderPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+      waitUntil: "domcontentloaded",
+    })
 
-    try {
-      await waitForGlobalState(context, (state) => {
-        const seededQueue = state.downloadQueue ?? []
-        if (seededQueue.length !== queue.length) {
-          return false
-        }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await senderPage.evaluate(
+        async (downloadQueue: DownloadTaskState[]) =>
+          (await chrome.runtime.sendMessage({
+            type: "E2E_SEED_DOWNLOAD_QUEUE",
+            payload: { downloadQueue },
+          })) as { success?: boolean; error?: string } | undefined,
+        queue
+      )
 
-        const queueIds = seededQueue.map((task) => task.id).sort()
-        return queueIds.length === ids.length && queueIds.every((id, index) => id === ids[index])
-      }, { timeout: 15000 })
-
-      const localQueueSeeded = await worker.evaluate(async (expectedIds: string[]) => {
-        const result = await chrome.storage.local.get('downloadQueue') as {
-          downloadQueue?: Array<{ id?: string }>
-        }
-        const queue = Array.isArray(result.downloadQueue) ? result.downloadQueue : []
-        const queueIds = queue
-          .map((task) => (typeof task?.id === 'string' ? task.id : null))
-          .filter((id): id is string => id !== null)
-          .sort()
-
-        return queueIds.length === expectedIds.length
-          && queueIds.every((id, index) => id === expectedIds[index])
-      }, ids)
-
-      if (!localQueueSeeded) {
-        throw new Error('downloadQueue not seeded yet')
+      if (!response?.success) {
+        throw new Error(
+          response?.error ??
+            "E2E queue seed adapter is unavailable; verify the mocked E2E build flag"
+        )
       }
 
-      return
-    } catch (error) {
-      if (attempt === 2) {
-        throw error
-      }
+      try {
+        await waitForGlobalState(
+          context,
+          (state) => {
+            const seededQueue = state.downloadQueue ?? []
+            if (seededQueue.length !== queue.length) {
+              return false
+            }
 
-      await new Promise((resolve) => setTimeout(resolve, 150))
+            const queueIds = seededQueue.map((task) => task.id).sort()
+            return (
+              queueIds.length === ids.length &&
+              queueIds.every((id, index) => id === ids[index])
+            )
+          },
+          { timeout: 15000 }
+        )
+
+        const verificationWorker = await getServiceWorker(context)
+        const storageStateMatches = await verificationWorker.evaluate(
+          async ({
+            expectedIds,
+            expectedQueue,
+            expectedQueueViewIds,
+            expectedHistoryViewIds,
+          }: {
+            expectedIds: string[]
+            expectedQueue: unknown[]
+            expectedQueueViewIds: string[]
+            expectedHistoryViewIds: string[]
+          }) => {
+            const [localResult, sessionResult] = await Promise.all([
+              chrome.storage.local.get("downloadQueue"),
+              chrome.storage.session.get([
+                "globalState",
+                "queueView",
+                "historyView",
+              ]),
+            ])
+            const result = localResult as {
+              downloadQueue?: unknown[]
+            }
+            const localQueue = Array.isArray(result.downloadQueue)
+              ? result.downloadQueue
+              : []
+            const queueIds = localQueue
+              .map((task) => {
+                if (
+                  typeof task !== "object" ||
+                  task === null ||
+                  !("id" in task)
+                ) {
+                  return null
+                }
+                return typeof task.id === "string" ? task.id : null
+              })
+              .filter((id): id is string => id !== null)
+              .sort()
+            const globalState = sessionResult.globalState as
+              { downloadQueue?: unknown[] } | undefined
+            const globalQueue = Array.isArray(globalState?.downloadQueue)
+              ? globalState.downloadQueue
+              : []
+            const queueView = Array.isArray(sessionResult.queueView)
+              ? sessionResult.queueView
+              : []
+            const historyView = Array.isArray(sessionResult.historyView)
+              ? sessionResult.historyView
+              : []
+            const summaryIds = (summaries: unknown[]): string[] =>
+              summaries
+                .map((summary) => {
+                  if (
+                    typeof summary !== "object" ||
+                    summary === null ||
+                    !("id" in summary)
+                  ) {
+                    return null
+                  }
+                  return typeof summary.id === "string" ? summary.id : null
+                })
+                .filter((id): id is string => id !== null)
+            const canonicalize = (value: unknown): unknown => {
+              if (Array.isArray(value)) {
+                return value.map(canonicalize)
+              }
+              if (typeof value !== "object" || value === null) {
+                return value
+              }
+              return Object.fromEntries(
+                Object.entries(value)
+                  .sort(([left], [right]) => left.localeCompare(right))
+                  .map(([key, nestedValue]) => [key, canonicalize(nestedValue)])
+              )
+            }
+            const expectedSerialized = JSON.stringify(
+              canonicalize(expectedQueue)
+            )
+
+            return (
+              queueIds.length === expectedIds.length &&
+              queueIds.every((id, index) => id === expectedIds[index]) &&
+              JSON.stringify(canonicalize(localQueue)) === expectedSerialized &&
+              JSON.stringify(canonicalize(globalQueue)) ===
+                expectedSerialized &&
+              JSON.stringify(summaryIds(queueView)) ===
+                JSON.stringify(expectedQueueViewIds) &&
+              JSON.stringify(summaryIds(historyView)) ===
+                JSON.stringify(expectedHistoryViewIds)
+            )
+          },
+          {
+            expectedIds: ids,
+            expectedQueue: queue,
+            expectedQueueViewIds: queueViewIds,
+            expectedHistoryViewIds: historyViewIds,
+          }
+        )
+
+        if (!storageStateMatches) {
+          throw new Error("background-owned queue state did not converge")
+        }
+
+        return
+      } catch (error) {
+        if (attempt === 2) {
+          throw error
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 150))
+      }
     }
+  } finally {
+    await senderPage.close()
   }
 }
 
-export async function ensureOffscreenAliveForActiveQueue(context: BrowserContext): Promise<void> {
+export async function ensureOffscreenAliveForActiveQueue(
+  context: BrowserContext
+): Promise<void> {
   const worker = await getServiceWorker(context)
 
   await worker.evaluate(async () => {
-    const now = Date.now()
-    await chrome.storage.session.set({ lastOffscreenActivity: now })
-
     type RuntimeGetContexts = (params: {
-      contextTypes: Array<'OFFSCREEN_DOCUMENT'>
+      contextTypes: Array<"OFFSCREEN_DOCUMENT">
       documentUrls: string[]
     }) => Promise<unknown[]>
 
-    const runtimeWithGetContexts = chrome.runtime as unknown as { getContexts?: RuntimeGetContexts }
-    const offscreenUrl = chrome.runtime.getURL('offscreen.html')
+    const runtimeWithGetContexts = chrome.runtime as unknown as {
+      getContexts?: RuntimeGetContexts
+    }
+    const offscreenUrl = chrome.runtime.getURL("offscreen.html")
     const existingContexts = runtimeWithGetContexts.getContexts
       ? await runtimeWithGetContexts.getContexts({
-          contextTypes: ['OFFSCREEN_DOCUMENT'],
+          contextTypes: ["OFFSCREEN_DOCUMENT"],
           documentUrls: [offscreenUrl],
         })
       : []
 
-    if (Array.isArray(existingContexts) && existingContexts.length > 0) {
-      return
+    if (!Array.isArray(existingContexts) || existingContexts.length === 0) {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: [
+          chrome.offscreen.Reason.BLOBS,
+          chrome.offscreen.Reason.WORKERS,
+        ],
+        justification:
+          "Keep seeded downloading tasks alive during Playwright E2E queue/history scenarios",
+      })
     }
 
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: [
-        chrome.offscreen.Reason.BLOBS,
-        chrome.offscreen.Reason.WORKERS,
-      ],
-      justification: 'Keep seeded downloading tasks alive during Playwright E2E queue/history scenarios',
-    })
-  })
-}
-
-/**
- * Mark a tab as externally initialized so the content script consumes the next duplicate init attempt.
- */
-export async function markExternalTabInitializationForTest(
-  context: BrowserContext,
-  tabId: number
-): Promise<void> {
-  await setSessionState(context, getExternalTabInitStorageKey(tabId), Date.now())
-}
-
-/**
- * Send a message to the content script for a specific tab
- */
-export async function sendContentMessage(
-  context: BrowserContext,
-  tabId: number,
-  message: unknown
-): Promise<void> {
-  const worker = await getServiceWorker(context);
-
-  let lastError: unknown;
-  try {
-    await expect(async () => {
+    // createDocument resolves before the offscreen page is guaranteed to have
+    // registered its runtime listener. Wait for the lifecycle handshake before
+    // sending the seed action that initializes the Service Worker; otherwise
+    // startup recovery can observe the context but race its status listener.
+    for (let attempt = 0; attempt < 50; attempt++) {
       try {
-        await worker.evaluate(async ({ id, msg }: { id: number; msg: unknown }) => {
-          await chrome.tabs.sendMessage(id, msg as any);
-        }, { id: tabId, msg: message });
-      } catch (err) {
-        // Content script might not be ready yet; wait and retry
-        lastError = err;
-        throw err;
+        const response = (await chrome.runtime.sendMessage({
+          type: "OFFSCREEN_STATUS",
+        })) as { success?: boolean } | undefined
+        if (response?.success) {
+          return
+        }
+      } catch {
+        // The receiving end is not registered yet.
       }
-    }).toPass({ timeout: 3000, intervals: [200] });
-  } catch {
-    throw lastError instanceof Error ? lastError : new Error('Failed to send content message');
-  }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+
+    throw new Error("Offscreen document did not register its status listener")
+  })
 }
 
 /**
@@ -468,8 +680,8 @@ export async function getTabState(
   page: Page,
   context: BrowserContext
 ): Promise<MangaPageState | undefined> {
-  const tabId = await getTabId(page, context);
-  return await getSessionState<MangaPageState>(context, `tab_${tabId}`);
+  const tabId = await getTabId(page, context)
+  return await getSessionState<MangaPageState>(context, `tab_${tabId}`)
 }
 
 /**
@@ -478,113 +690,159 @@ export async function getTabState(
 export async function getGlobalState(
   context: BrowserContext
 ): Promise<GlobalAppState | undefined> {
-  return await getSessionState<GlobalAppState>(context, SESSION_STORAGE_KEYS.globalState);
+  return await getSessionState<GlobalAppState>(
+    context,
+    SESSION_STORAGE_KEYS.globalState
+  )
 }
 
 /**
  * Get tab ID from Playwright Page object
- * 
+ *
  * Uses Chrome DevTools Protocol to reliably get the tab ID from Playwright's page object.
  * This works for all page types (web pages, extension pages) in E2E tests.
  */
-export async function getTabId(page: Page, context: BrowserContext): Promise<number> {
-  const worker = await getServiceWorker(context);
+export async function getTabId(
+  page: Page,
+  context: BrowserContext
+): Promise<number> {
+  const worker = await getServiceWorker(context)
 
   try {
-    await page.bringToFront();
+    await page.bringToFront()
   } catch {
     // Ignore focus errors and continue with best-effort tab resolution
   }
-  
+
   // Ensure page has a stable URL to match tabs against
-  let pageUrl = page.url();
-  if (!pageUrl || pageUrl === 'about:blank') {
+  let pageUrl = page.url()
+  if (!pageUrl || pageUrl === "about:blank") {
     try {
-      await page.waitForLoadState('domcontentloaded', { timeout: 3000 });
-      pageUrl = page.url();
+      await page.waitForLoadState("domcontentloaded", { timeout: 3000 })
+      pageUrl = page.url()
     } catch {
       // keep as-is
     }
   }
 
   // Wait until chrome.tabs.query is available in the worker, then query for this page's tab by URL
-  let chromeTabId: number | undefined;
+  let chromeTabId: number | undefined
   try {
-    await expect.poll(async () => {
-      const tabsAvailable = await worker.evaluate(() => !!(chrome as any)?.tabs && typeof (chrome as any).tabs.query === 'function').catch(() => false);
-      if (!tabsAvailable) {
-        return false;
-      }
-      const targetUrl = pageUrl;
-      chromeTabId = await worker.evaluate(async (u: string | undefined) => {
-        const tabs = await chrome.tabs.query({});
-        const wins = await chrome.windows.getAll({ populate: true, windowTypes: ['normal'] });
-        const lastFocused = wins.find(w => w.focused) || wins[0];
-        const active = lastFocused?.tabs?.find(t => t.active);
-
-        const normalizeUrl = (value: string | undefined): string | undefined => {
-          if (!value) {
-            return undefined;
+    await expect
+      .poll(
+        async () => {
+          const tabsAvailable = await worker
+            .evaluate(
+              () =>
+                !!(chrome as any)?.tabs &&
+                typeof (chrome as any).tabs.query === "function"
+            )
+            .catch(() => false)
+          if (!tabsAvailable) {
+            return false
           }
+          const targetUrl = pageUrl
+          chromeTabId = await worker
+            .evaluate(async (u: string | undefined) => {
+              const tabs = await chrome.tabs.query({})
+              const wins = await chrome.windows.getAll({
+                populate: true,
+                windowTypes: ["normal"],
+              })
+              const lastFocused = wins.find((w) => w.focused) || wins[0]
+              const active = lastFocused?.tabs?.find((t) => t.active)
 
-          try {
-            const parsed = new URL(value);
-            parsed.hash = '';
-            parsed.search = '';
-            parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-            return parsed.toString();
-          } catch {
-            return value;
-          }
-        };
+              const normalizeUrl = (
+                value: string | undefined
+              ): string | undefined => {
+                if (!value) {
+                  return undefined
+                }
 
-        const normalizedTarget = normalizeUrl(u);
+                try {
+                  const parsed = new URL(value)
+                  parsed.hash = ""
+                  parsed.search = ""
+                  parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/"
+                  return parsed.toString()
+                } catch {
+                  return value
+                }
+              }
 
-        if (active && typeof active.id === 'number' && (!u || active.url === u)) {
-          return active.id;
-        }
+              const normalizedTarget = normalizeUrl(u)
 
-        if (u) {
-          const matches = tabs.filter(t => t.url === u);
-          if (matches.length === 1 && typeof matches[0]?.id === 'number') {
-            return matches[0].id;
-          }
+              if (
+                active &&
+                typeof active.id === "number" &&
+                (!u || active.url === u)
+              ) {
+                return active.id
+              }
 
-          const activeMatch = matches.find(t => t.active && typeof t.id === 'number');
-          if (activeMatch && typeof activeMatch.id === 'number') {
-            return activeMatch.id;
-          }
+              if (u) {
+                const matches = tabs.filter((t) => t.url === u)
+                if (
+                  matches.length === 1 &&
+                  typeof matches[0]?.id === "number"
+                ) {
+                  return matches[0].id
+                }
 
-          if (normalizedTarget) {
-            const normalizedMatches = tabs.filter((tab) => normalizeUrl(tab.url) === normalizedTarget);
-            if (normalizedMatches.length === 1 && typeof normalizedMatches[0]?.id === 'number') {
-              return normalizedMatches[0].id;
-            }
+                const activeMatch = matches.find(
+                  (t) => t.active && typeof t.id === "number"
+                )
+                if (activeMatch && typeof activeMatch.id === "number") {
+                  return activeMatch.id
+                }
 
-            const normalizedActiveMatch = normalizedMatches.find((tab) => tab.active && typeof tab.id === 'number');
-            if (normalizedActiveMatch && typeof normalizedActiveMatch.id === 'number') {
-              return normalizedActiveMatch.id;
-            }
-          }
+                if (normalizedTarget) {
+                  const normalizedMatches = tabs.filter(
+                    (tab) => normalizeUrl(tab.url) === normalizedTarget
+                  )
+                  if (
+                    normalizedMatches.length === 1 &&
+                    typeof normalizedMatches[0]?.id === "number"
+                  ) {
+                    return normalizedMatches[0].id
+                  }
 
-          return undefined;
-        }
+                  const normalizedActiveMatch = normalizedMatches.find(
+                    (tab) => tab.active && typeof tab.id === "number"
+                  )
+                  if (
+                    normalizedActiveMatch &&
+                    typeof normalizedActiveMatch.id === "number"
+                  ) {
+                    return normalizedActiveMatch.id
+                  }
+                }
 
-        // Fallback: choose the active tab in the last focused normal window
-        return (active?.id as number | undefined) ?? (tabs[0]?.id as number | undefined);
-      }, targetUrl).catch(() => undefined);
+                return undefined
+              }
 
-      return !!chromeTabId;
-    }, { timeout: 2000, intervals: [100] }).toBe(true);
+              // Fallback: choose the active tab in the last focused normal window
+              return (
+                (active?.id as number | undefined) ??
+                (tabs[0]?.id as number | undefined)
+              )
+            }, targetUrl)
+            .catch(() => undefined)
+
+          return !!chromeTabId
+        },
+        { timeout: 2000, intervals: [100] }
+      )
+      .toBe(true)
   } catch {
     // fall through; chromeTabId may still be undefined below
   }
-  
+
   if (!chromeTabId) {
-    throw new Error('Tab ID is undefined');
+    throw new Error("Tab ID is undefined")
   }
-  
-  return chromeTabId;
+
+  return chromeTabId
 }
 
 /**
@@ -594,20 +852,20 @@ export async function focusTab(
   context: BrowserContext,
   tabId: number
 ): Promise<void> {
-  const worker = await getServiceWorker(context);
+  const worker = await getServiceWorker(context)
 
   await worker.evaluate(async (id: number) => {
     try {
-      const tab = await chrome.tabs.get(id);
-      const winId = tab.windowId;
-      if (typeof winId === 'number') {
-        await chrome.windows.update(winId, { focused: true }).catch(() => {});
+      const tab = await chrome.tabs.get(id)
+      const winId = tab.windowId
+      if (typeof winId === "number") {
+        await chrome.windows.update(winId, { focused: true }).catch(() => {})
       }
-      await chrome.tabs.update(id, { active: true }).catch(() => {});
+      await chrome.tabs.update(id, { active: true }).catch(() => {})
     } catch {
       // ignore
     }
-  }, tabId);
+  }, tabId)
 }
 
 /**
@@ -619,23 +877,34 @@ export async function waitForTabState(
   condition: (state: MangaPageState) => boolean,
   options: { timeout?: number } = {}
 ): Promise<MangaPageState> {
-  const timeout = options.timeout ?? 10000;
-  let matchedState: MangaPageState | undefined;
+  const timeout = options.timeout ?? 10000
+  let matchedState: MangaPageState | undefined
 
-  await expect.poll(async () => {
-    const state = await getTabState(page, context);
-    if (state && condition(state)) {
-      matchedState = state;
-      return true;
-    }
-    return false;
-  }, { timeout, intervals: [100], message: `Timeout waiting for tab state condition after ${timeout}ms` }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const state = await getTabState(page, context)
+        if (state && condition(state)) {
+          matchedState = state
+          return true
+        }
+        return false
+      },
+      {
+        timeout,
+        intervals: [100],
+        message: `Timeout waiting for tab state condition after ${timeout}ms`,
+      }
+    )
+    .toBe(true)
 
   if (!matchedState) {
-    throw new Error(`Timeout waiting for tab state condition after ${timeout}ms`);
+    throw new Error(
+      `Timeout waiting for tab state condition after ${timeout}ms`
+    )
   }
 
-  return matchedState;
+  return matchedState
 }
 
 /**
@@ -648,23 +917,37 @@ export async function waitForTabStateById(
   condition: (state: MangaPageState) => boolean,
   options: { timeout?: number } = {}
 ): Promise<MangaPageState> {
-  const timeout = options.timeout ?? 10000;
-  let matchedState: MangaPageState | undefined;
+  const timeout = options.timeout ?? 10000
+  let matchedState: MangaPageState | undefined
 
-  await expect.poll(async () => {
-    const state = await getSessionState<MangaPageState>(context, `tab_${tabId}`);
-    if (state && condition(state)) {
-      matchedState = state;
-      return true;
-    }
-    return false;
-  }, { timeout, intervals: [100], message: `Timeout waiting for tab ${tabId} state condition after ${timeout}ms` }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const state = await getSessionState<MangaPageState>(
+          context,
+          `tab_${tabId}`
+        )
+        if (state && condition(state)) {
+          matchedState = state
+          return true
+        }
+        return false
+      },
+      {
+        timeout,
+        intervals: [100],
+        message: `Timeout waiting for tab ${tabId} state condition after ${timeout}ms`,
+      }
+    )
+    .toBe(true)
 
   if (!matchedState) {
-    throw new Error(`Timeout waiting for tab ${tabId} state condition after ${timeout}ms`);
+    throw new Error(
+      `Timeout waiting for tab ${tabId} state condition after ${timeout}ms`
+    )
   }
 
-  return matchedState;
+  return matchedState
 }
 
 /**
@@ -676,20 +959,47 @@ export async function waitForTabSeriesTitle(
   context: BrowserContext,
   tabId: number,
   expectedTitle: string,
-  options: { timeout?: number } = {},
+  options: { timeout?: number } = {}
 ): Promise<void> {
-  const timeout = options.timeout ?? 15000;
+  const timeout = options.timeout ?? 15000
 
   try {
-    await expect.poll(async () => {
-      const state = await getSessionState<{ seriesTitle?: string }>(context, `tab_${tabId}`);
-      return state?.seriesTitle === expectedTitle;
-    }, { timeout, intervals: [150] }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const state = await getSessionState<{ seriesTitle?: string }>(
+            context,
+            `tab_${tabId}`
+          )
+          return state?.seriesTitle === expectedTitle
+        },
+        { timeout, intervals: [150] }
+      )
+      .toBe(true)
   } catch {
-    const finalState = await getSessionState(context, `tab_${tabId}`);
+    const [finalState, resolutionError] = await Promise.all([
+      getSessionState(context, `tab_${tabId}`),
+      getSessionState(context, `seriesContextError_${tabId}`),
+    ])
+    const worker = context
+      .serviceWorkers()
+      .find((candidate) => candidate.url().startsWith("chrome-extension://"))
+    const workerDiagnostics = worker
+      ? await worker
+          .evaluate(async (targetTabId) => {
+            const [tab, enablement, activeContext, title] = await Promise.all([
+              chrome.tabs.get(targetTabId).catch(() => null),
+              chrome.storage.local.get("siteIntegrationEnablement"),
+              chrome.storage.session.get("activeTabContextByWindow"),
+              chrome.action.getTitle({ tabId: targetTabId }).catch(() => null),
+            ])
+            return { tab, enablement, activeContext, title }
+          }, tabId)
+          .catch(() => null)
+      : null
     throw new Error(
-      `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)})`,
-    );
+      `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)}, resolution error: ${JSON.stringify(resolutionError)}, worker diagnostics: ${JSON.stringify(workerDiagnostics)})`
+    )
   }
 }
 
@@ -700,20 +1010,25 @@ export async function waitForTabSeriesTitle(
 export async function waitForTabStateCleared(
   context: BrowserContext,
   tabId: number,
-  options: { timeout?: number } = {},
+  options: { timeout?: number } = {}
 ): Promise<void> {
-  const timeout = options.timeout ?? 15000;
+  const timeout = options.timeout ?? 15000
 
   try {
-    await expect.poll(async () => {
-      const state = await getSessionState(context, `tab_${tabId}`);
-      return !state;
-    }, { timeout, intervals: [150] }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const state = await getSessionState(context, `tab_${tabId}`)
+          return !state
+        },
+        { timeout, intervals: [150] }
+      )
+      .toBe(true)
   } catch {
-    const finalState = await getSessionState(context, `tab_${tabId}`);
+    const finalState = await getSessionState(context, `tab_${tabId}`)
     throw new Error(
-      `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`,
-    );
+      `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`
+    )
   }
 }
 
@@ -725,20 +1040,53 @@ export async function waitForGlobalState(
   condition: (state: GlobalAppState) => boolean,
   options: { timeout?: number } = {}
 ): Promise<GlobalAppState> {
-  const timeout = options.timeout ?? 10000;
-  const startTime = Date.now();
-  let lastState: GlobalAppState | undefined;
+  const timeout = options.timeout ?? 10000
+  let lastState: GlobalAppState | undefined
+  let lastError: unknown
 
-  while (Date.now() - startTime < timeout) {
-    const state = await getGlobalState(context);
-    lastState = state;
-    if (state && condition(state)) {
-      return state;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  try {
+    await expect
+      .poll(
+        async () => {
+          try {
+            const state = await getGlobalState(context)
+            lastState = state
+            lastError = undefined
+            return state ? condition(state) : false
+          } catch (error) {
+            // Capture errors (e.g. service worker terminated mid-poll) so they
+            // surface in the timeout message instead of being silently swallowed
+            // by expect.poll. The poll will retry on the next interval.
+            lastError = error
+            return false
+          }
+        },
+        { timeout, intervals: [100] }
+      )
+      .toBe(true)
+  } catch {
+    // expect.poll's `message` option is evaluated at call time (before any
+    // polling), so we rethrow here with the actual final lastState/lastError
+    // to preserve the diagnostic quality of the original while-loop error.
+    const errorDetail =
+      lastError instanceof Error
+        ? lastError.message
+        : lastError
+          ? String(lastError)
+          : undefined
+    throw new Error(
+      `Timeout waiting for global state condition after ${timeout}ms. Last state: ${JSON.stringify(lastState)}${errorDetail ? `. Last error: ${errorDetail}` : ""}`
+    )
   }
 
-  throw new Error(`Timeout waiting for global state condition after ${timeout}ms. Last state: ${JSON.stringify(lastState)}`);
+  // After poll succeeds, lastState is the matching state
+  if (!lastState) {
+    throw new Error(
+      "waitForGlobalState: state became available but lastState was undefined"
+    )
+  }
+
+  return lastState
 }
 
 /**
@@ -752,53 +1100,55 @@ export async function mockMangaPageState(
   page: Page,
   context: BrowserContext,
   partialState: Partial<MangaPageState>,
-  navigateToUrl: string = 'about:blank'
+  navigateToUrl: string = "about:blank"
 ): Promise<void> {
   // Navigate to safe URL if not already there
   if (page.url() !== navigateToUrl) {
-    await page.goto(navigateToUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(navigateToUrl, { waitUntil: "domcontentloaded" })
   }
-  
-  const tabId = await getTabId(page, context);
-  
+
+  const tabId = await getTabId(page, context)
+
   const defaultState: MangaPageState = {
-    siteIntegrationId: 'mangadex',
-    mangaId: '106937',
-    seriesTitle: 'Hunter x Hunter',
+    siteIntegrationId: "mangadex",
+    mangaId: "106937",
+    seriesTitle: "Hunter x Hunter",
     chapters: [],
     volumes: [],
     lastUpdated: Date.now(),
     ...partialState,
-  };
+  }
 
-  await setSessionState(context, `tab_${tabId}`, defaultState);
+  await setSessionState(context, `tab_${tabId}`, defaultState)
 }
 
 /**
  * Clear all session storage (useful for test cleanup)
  */
-export async function clearSessionStorage(context: BrowserContext): Promise<void> {
-  const worker = await getServiceWorker(context);
+export async function clearSessionStorage(
+  context: BrowserContext
+): Promise<void> {
+  const worker = await getServiceWorker(context)
   await worker.evaluate(async () => {
-    const maxAttempts = 10;
-    const delayMs = 100;
+    const maxAttempts = 10
+    const delayMs = 100
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if ((chrome as any)?.storage?.session) {
-        await chrome.storage.session.clear();
-        return;
+        await chrome.storage.session.clear()
+        return
       }
 
-      if (typeof setTimeout === 'function') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (typeof setTimeout === "function") {
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       } else {
-        const start = Date.now();
+        const start = Date.now()
         while (Date.now() - start < delayMs) {
-          void 0;
+          void 0
         }
       }
     }
-  });
+  })
 }
 
 /**
@@ -810,31 +1160,51 @@ export async function sendStateAction(
   payload: unknown,
   tabId?: number
 ): Promise<void> {
-  const worker = await getServiceWorker(context);
-  await worker.evaluate(async (args: { action: string; payload: unknown; tabId?: number }) => {
-    const maxAttempts = 10;
-    const delayMs = 100;
+  const worker = await getServiceWorker(context)
+  await worker.evaluate(
+    async (args: { action: string; payload: unknown; tabId?: number }) => {
+      const maxAttempts = 10
+      const delayMs = 100
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if ((chrome as any)?.runtime?.sendMessage) {
-        await chrome.runtime.sendMessage({
-          type: 'STATE_ACTION',
-          action: args.action,
-          payload: args.payload,
-          tabId: args.tabId,
-          timestamp: Date.now(),
-        });
-        return;
-      }
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if ((chrome as any)?.runtime?.sendMessage) {
+          const response = await chrome.runtime.sendMessage({
+            type: "STATE_ACTION",
+            action: args.action,
+            commandId: crypto.randomUUID(),
+            issuedAt: Date.now(),
+            payload: args.payload,
+            tabId: args.tabId,
+            timestamp: Date.now(),
+          })
+          if (
+            !response ||
+            typeof response !== "object" ||
+            !("success" in response) ||
+            response.success !== true
+          ) {
+            const error =
+              response &&
+              typeof response === "object" &&
+              "error" in response &&
+              typeof response.error === "string"
+                ? response.error
+                : "unknown error"
+            throw new Error(`STATE_ACTION was rejected: ${error}`)
+          }
+          return
+        }
 
-      if (typeof setTimeout === 'function') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      } else {
-        const start = Date.now();
-        while (Date.now() - start < delayMs) {
-          void 0;
+        if (typeof setTimeout === "function") {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+        } else {
+          const start = Date.now()
+          while (Date.now() - start < delayMs) {
+            void 0
+          }
         }
       }
-    }
-  }, { action, payload, tabId });
+    },
+    { action, payload, tabId }
+  )
 }

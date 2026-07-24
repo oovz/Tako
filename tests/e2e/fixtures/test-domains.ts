@@ -34,6 +34,7 @@ export {
   SHONENJUMPPLUS_BASE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
+  LIVE_MANHUAGUI_ADULT_REFERENCE_URL,
   MANHUAGUI_TEST_DOMAIN,
   MANHUAGUI_BASE_URL,
   MANHUAGUI_CONFIG_SCRIPT_DOMAIN,
@@ -47,10 +48,10 @@ export {
   buildShonenJumpPlusUrl,
   buildManhuaguiUrl,
   buildComicNettaiUrl,
-} from './test-domains-constants';
+} from "./test-domains-constants"
 
-export { registerTestRoutes } from './routes';
+export { registerTestRoutes } from "./routes"
 
 // `MANGADEX_API_DOMAIN` historically lived in this file. Re-export from the
 // mock-data module where it now resides to preserve the public import path.
-export { MANGADEX_API_DOMAIN } from './mock-data/site-integrations/mangadex';
+export { MANGADEX_API_DOMAIN } from "./mock-data/site-integrations/mangadex"

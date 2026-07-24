@@ -1,20 +1,20 @@
 /**
  * @file index.ts
  * @description Main export for all E2E mock data
- * 
+ *
  * Site-Specific Architecture:
  * - Site integration mock data organized by site (mangadex)
  * - Shared mock data for site-agnostic features (download tasks, settings)
- * 
+ *
  * Usage Examples:
  * ```typescript
  * // Import site-specific data
  * import { Mangadex } from './fixtures/mock-data';
- * 
+ *
  * // Use site-integration-specific chapters
  * const chapters = Mangadex.BASIC_CHAPTERS.chapters;
  * const series = Mangadex.BASIC_SERIES.series;
- * 
+ *
  * // Use shared data
  * import { PENDING_TASK, CBZ_SETTINGS } from './fixtures/mock-data';
  * ```
@@ -24,11 +24,11 @@
 // Site-Integration-Specific Mock Data (Site-Specific)
 // ============================================================================
 
-export * as Mangadex from './site-integrations/mangadex';
-export * as PixivComic from './site-integrations/pixiv-comic';
-export * as ShonenJumpPlus from './site-integrations/shonenjumpplus';
-export * as Manhuagui from './site-integrations/manhuagui';
-export * as ComicNettai from './site-integrations/comicnettai';
+export * as Mangadex from "./site-integrations/mangadex"
+export * as PixivComic from "./site-integrations/pixiv-comic"
+export * as ShonenJumpPlus from "./site-integrations/shonenjumpplus"
+export * as Manhuagui from "./site-integrations/manhuagui"
+export * as ComicNettai from "./site-integrations/comicnettai"
 
 // ============================================================================
 // Shared mock data utilities and types
@@ -50,4 +50,4 @@ export type {
   MockSettingsPreset,
   DeepPartial,
   MockDataFactory,
-} from './types';
+} from "./types"

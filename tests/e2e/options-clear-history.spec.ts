@@ -1,11 +1,11 @@
-import { test, expect } from './fixtures/extension'
-import { seedDownloadQueueState } from './fixtures/state-helpers'
-import { createTaskSettingsSnapshot } from '@/src/runtime/settings-snapshot'
-import { DEFAULT_SETTINGS } from '../../src/storage/default-settings'
-import type { DownloadTaskState } from '../../src/types/queue-state'
-import type { ChapterState } from '../../src/types/tab-state'
+import { test, expect } from "./fixtures/extension"
+import { seedDownloadQueueState } from "./fixtures/state-helpers"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "../../src/storage/default-settings"
+import type { DownloadTaskState } from "../../src/types/queue-state"
+import type { ChapterState } from "../../src/types/tab-state"
 
-function makeChapter(id: string, status: ChapterState['status']): ChapterState {
+function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
   return {
     id,
     url: `https://example.com/${id}`,
@@ -16,78 +16,112 @@ function makeChapter(id: string, status: ChapterState['status']): ChapterState {
   }
 }
 
-function makeTask(id: string, status: DownloadTaskState['status']): DownloadTaskState {
+function makeTask(
+  id: string,
+  status: DownloadTaskState["status"]
+): DownloadTaskState {
   const now = Date.now()
   return {
     id,
-    siteIntegrationId: 'mangadex',
+    siteIntegrationId: "mangadex",
     mangaId: `series-${id}`,
     seriesTitle: `Series ${id}`,
-    chapters: [makeChapter(id, status === 'queued' ? 'queued' : status === 'downloading' ? 'downloading' : 'completed')],
+    chapters: [
+      makeChapter(
+        id,
+        status === "queued"
+          ? "queued"
+          : status === "downloading"
+            ? "downloading"
+            : "completed"
+      ),
+    ],
     status,
     created: now,
-    completed: status === 'queued' || status === 'downloading' ? undefined : now,
-    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, 'mangadex'),
+    completed:
+      status === "queued" || status === "downloading" ? undefined : now,
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
   }
 }
 
-test.describe('Options Downloads history management', () => {
-  test('clear all history removes only terminal tasks and keeps active/queued', async ({ page, extensionId }) => {
+test.describe("Options Downloads history management", () => {
+  test("clear all history removes only terminal tasks and keeps active/queued", async ({
+    page,
+    extensionId,
+  }) => {
     const seededQueue: DownloadTaskState[] = [
-      makeTask('active', 'downloading'),
-      makeTask('queued', 'queued'),
-      makeTask('done', 'completed'),
-      makeTask('partial', 'partial_success'),
-      makeTask('failed', 'failed'),
-      makeTask('canceled', 'canceled'),
+      makeTask("active", "downloading"),
+      makeTask("queued", "queued"),
+      makeTask("done", "completed"),
+      makeTask("partial", "partial_success"),
+      makeTask("failed", "failed"),
+      makeTask("canceled", "canceled"),
     ]
 
-    await page.goto(`chrome-extension://${extensionId}/options.html?tab=downloads`, { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('#root')).toBeVisible({ timeout: 10000 })
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      { waitUntil: "domcontentloaded" }
+    )
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
 
     await seedDownloadQueueState(page, seededQueue)
 
-    await page.getByRole('button', { name: 'Downloads' }).click()
+    await page.getByRole("button", { name: "Downloads" }).click()
 
-    await expect(page.getByText('Series done')).toBeVisible()
-    await expect(page.getByText('Series failed')).toBeVisible()
-    await expect(page.getByText('Series active')).toBeVisible()
+    await expect(page.getByText("Series done")).toBeVisible()
+    await expect(page.getByText("Series failed")).toBeVisible()
+    await expect(page.getByText("Series active")).toBeVisible()
 
-    await page.getByRole('button', { name: 'Clear All History' }).click()
-    await page.getByRole('button', { name: 'Yes, Clear All' }).click()
+    await page.getByRole("button", { name: "Clear All History" }).click()
+    await page.getByRole("button", { name: "Yes, Clear All" }).click()
 
-    await expect(page.getByText('Series done')).toHaveCount(0)
-    await expect(page.getByText('Series failed')).toHaveCount(0)
-    await expect(page.getByText('Series partial')).toHaveCount(0)
-    await expect(page.getByText('Series canceled')).toHaveCount(0)
+    await expect(page.getByText("Series done")).toHaveCount(0)
+    await expect(page.getByText("Series failed")).toHaveCount(0)
+    await expect(page.getByText("Series partial")).toHaveCount(0)
+    await expect(page.getByText("Series canceled")).toHaveCount(0)
 
-    await expect(page.getByText('Series active')).toBeVisible()
-    await expect(page.getByText('Series queued')).toBeVisible()
+    await expect(page.getByText("Series active")).toBeVisible()
+    await expect(page.getByText("Series queued")).toBeVisible()
 
     const remainingStatuses = await page.evaluate(async () => {
-      const result = await chrome.storage.local.get('downloadQueue')
+      const result = await chrome.storage.local.get("downloadQueue")
       const queue = (result.downloadQueue ?? []) as Array<{ status: string }>
       return queue.map((task) => task.status)
     })
 
-    expect(remainingStatuses).toEqual(['downloading', 'queued'])
+    expect(remainingStatuses).toEqual(["downloading", "queued"])
   })
 
-  test('rejects CLEAR_ALL_HISTORY from sidepanel sender context', async ({ page, extensionId }) => {
+  test("rejects CLEAR_ALL_HISTORY from sidepanel sender context", async ({
+    page,
+    extensionId,
+  }) => {
     const seededQueue: DownloadTaskState[] = [
-      makeTask('active', 'downloading'),
-      makeTask('done', 'completed'),
+      makeTask("active", "downloading"),
+      makeTask("done", "completed"),
     ]
 
-    await page.goto(`chrome-extension://${extensionId}/options.html?tab=downloads`, { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('#root')).toBeVisible({ timeout: 10000 })
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      { waitUntil: "domcontentloaded" }
+    )
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
     await seedDownloadQueueState(page, seededQueue)
 
     const sidepanelPage = await page.context().newPage()
-    await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded' })
+    await sidepanelPage.goto(
+      `chrome-extension://${extensionId}/sidepanel.html`,
+      { waitUntil: "domcontentloaded" }
+    )
 
     const clearResult = await sidepanelPage.evaluate(async () => {
-      return await chrome.runtime.sendMessage({ type: 'CLEAR_ALL_HISTORY', payload: {} }) as {
+      const issuedAt = Date.now()
+      return (await chrome.runtime.sendMessage({
+        type: "CLEAR_ALL_HISTORY",
+        commandId: crypto.randomUUID(),
+        issuedAt,
+        payload: {},
+      })) as {
         success?: boolean
         error?: string
       }
@@ -96,14 +130,14 @@ test.describe('Options Downloads history management', () => {
     await sidepanelPage.close()
 
     expect(clearResult.success).toBe(false)
-    expect(clearResult.error).toContain('only available from Options page')
+    expect(clearResult.error).toContain("only available from Options page")
 
     const remainingStatuses = await page.evaluate(async () => {
-      const result = await chrome.storage.local.get('downloadQueue')
+      const result = await chrome.storage.local.get("downloadQueue")
       const queue = (result.downloadQueue ?? []) as Array<{ status: string }>
       return queue.map((task) => task.status)
     })
 
-    expect(remainingStatuses).toEqual(['downloading', 'completed'])
+    expect(remainingStatuses).toEqual(["downloading", "completed"])
   })
 })

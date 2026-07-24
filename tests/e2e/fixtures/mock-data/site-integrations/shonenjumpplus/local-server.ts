@@ -10,50 +10,59 @@
  *      in offscreen and reads `<script id="episode-json">` to discover
  *      image URLs. The content-script-level chapter-list API endpoints
  *      (`/api/viewer/...`) also live on this host and are served here.
- *   2. The image CDN (`cdn-ak-img.shonenjumpplus.com`) + the fallback
- *      host we use for mock images. Served as the shared 1x1 PNG.
+ *   2. The image CDN (`cdn-ak-img.shonenjumpplus.com`). Its mocked response
+ *      is a deterministic, non-trivial tile-scrambled PNG so the download
+ *      workflow verifies reconstruction rather than a tiny-image bypass.
  *
  * Main-frame navigations to `shonenjumpplus.com/episode/{id}` bypass DNR
  * (we exclude `main_frame`) and are still handled by the Playwright
  * route registrar in `./routes.ts`.
  */
 
-import type { DnrRedirectRule } from '../../../dnr-test-redirects';
-import type { LocalMockServerHandle, MockRouteHandler } from '../../../local-mock-server';
-import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from '../../shared';
+import type { DnrRedirectRule } from "../../../dnr-test-redirects"
+import type {
+  LocalMockServerHandle,
+  MockRouteHandler,
+} from "../../../local-mock-server"
 import {
   buildPaginationReadableProductsResponse,
   buildReadableProductPaginationInfoResponse,
-} from './api-fixtures';
-import { BASIC_CHAPTERS, SMALL_SERIES } from './chapter-data';
-import { BASIC_SERIES, MINIMAL_SERIES, SERIES_AGGREGATE_IDS } from './series-data';
+} from "./api-fixtures"
+import { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"
+import {
+  BASIC_SERIES,
+  MINIMAL_SERIES,
+  SERIES_AGGREGATE_IDS,
+} from "./series-data"
+import {
+  cloneShonenJumpPlusScrambledPng,
+  SHONEN_JUMP_PLUS_SCRAMBLED_PNG_MIME_TYPE,
+} from "./scrambled-image-fixture"
 
-export const SHONENJUMPPLUS_LOCAL_SITE_PREFIX = '/__sjp/site';
-export const SHONENJUMPPLUS_LOCAL_IMAGE_PREFIX = '/__sjp/img';
+export const SHONENJUMPPLUS_LOCAL_SITE_PREFIX = "/__sjp/site"
+export const SHONENJUMPPLUS_LOCAL_IMAGE_PREFIX = "/__sjp/img"
 
 /** Assigned DNR rule ids within the reserved 9000–9999 test range. */
-const SHONENJUMPPLUS_SITE_RULE_ID = 9400;
-const SHONENJUMPPLUS_IMAGE_RULE_ID = 9401;
+const SHONENJUMPPLUS_SITE_RULE_ID = 9400
+const SHONENJUMPPLUS_IMAGE_RULE_ID = 9401
 
 /**
  * Mock page image URL. Points at `cdn-ak-img.shonenjumpplus.com` so the
  * host-level DNR rule catches it. Using the production hostname in the
- * mock fixture also lets us exercise the
- * `isShonenJumpPlusPageImageUrl` branch of the descrambler even though
- * the 1x1 PNG path returns the buffer unchanged (tile width floors to
- * zero under `GIGAVIEWER_MULTIPLE`).
+ * mock fixture ensures `isScrambledShonenJumpPlusPageUrl` dispatches through
+ * the actual reconstruction path.
  */
 function buildMockPageImageUrl(episodeId: string, pageIndex: number): string {
-  return `https://cdn-ak-img.shonenjumpplus.com/public/page/${episodeId}/${pageIndex}.png`;
+  return `https://cdn-ak-img.shonenjumpplus.com/public/page/${episodeId}/${pageIndex}.png`
 }
 
 function encodeDataValueAttribute(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 /**
@@ -61,34 +70,33 @@ function encodeDataValueAttribute(value: string): string {
  * `pageStructure.pages` array so the background integration's
  * `extractImageUrlsFromEpisodeJsonScript` returns real mock URLs.
  *
- * No `contentStart` / `contentEnd` seed tokens are emitted — the
- * descrambler still runs because the image URL matches
- * `cdn-ak-img.shonenjumpplus.com/public/page/...`, but the 1x1 PNG
- * makes it a no-op in practice (see `GIGAVIEWER_MULTIPLE` branch).
+ * The image URL follows the production `/public/page/` path, causing the
+ * offscreen adapter to run its tile reconstruction before archive creation.
  */
 function buildEpisodeHtmlWithMockPages(options: {
-  episodeId: string;
-  seriesTitle: string;
-  aggregateId: string;
-  pageCount: number;
+  episodeId: string
+  seriesTitle: string
+  aggregateId: string
+  pageCount: number
+  thumbnailUri?: string
 }): string {
   const pages = Array.from({ length: options.pageCount }, (_, index) => ({
-    type: 'main',
+    type: "main",
     src: buildMockPageImageUrl(options.episodeId, index + 1),
-  }));
+  }))
 
   const episodeJson = JSON.stringify({
     readableProduct: {
       series: {
         id: options.aggregateId,
         title: options.seriesTitle,
-        thumbnailUri: '',
+        thumbnailUri: options.thumbnailUri ?? "",
       },
       pageStructure: { pages },
     },
-  });
+  })
 
-  const encoded = encodeDataValueAttribute(episodeJson);
+  const encoded = encodeDataValueAttribute(episodeJson)
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -106,7 +114,7 @@ function buildEpisodeHtmlWithMockPages(options: {
   ></div>
   <script id="episode-json" type="application/json" data-value="${encoded}"></script>
 </body>
-</html>`;
+</html>`
 }
 
 /**
@@ -115,29 +123,36 @@ function buildEpisodeHtmlWithMockPages(options: {
  * download path still produces a consistent HTML shape.
  */
 function resolveSeriesContextForEpisode(episodeId: string): {
-  seriesTitle: string;
-  aggregateId: string;
+  seriesTitle: string
+  aggregateId: string
+  thumbnailUri?: string
 } {
-  const basic = BASIC_CHAPTERS.chapters.find((chapter) => chapter.id === episodeId);
+  const basic = BASIC_CHAPTERS.chapters.find(
+    (chapter) => chapter.id === episodeId
+  )
   if (basic) {
     return {
       seriesTitle: BASIC_SERIES.series.seriesTitle,
       aggregateId: SERIES_AGGREGATE_IDS[BASIC_SERIES.series.seriesId]!,
-    };
+      thumbnailUri: BASIC_SERIES.series.coverUrl,
+    }
   }
-  const small = SMALL_SERIES.chapters.find((chapter) => chapter.id === episodeId);
+  const small = SMALL_SERIES.chapters.find(
+    (chapter) => chapter.id === episodeId
+  )
   if (small) {
     return {
       seriesTitle: MINIMAL_SERIES.series.seriesTitle,
       aggregateId: SERIES_AGGREGATE_IDS[MINIMAL_SERIES.series.seriesId]!,
-    };
+      thumbnailUri: MINIMAL_SERIES.series.coverUrl,
+    }
   }
   // Mirror the existing `routes.ts` fallback so unknown ids still
   // produce a syntactically valid episode page.
   return {
     seriesTitle: `Series ${episodeId}`,
     aggregateId: `agg-${episodeId}`,
-  };
+  }
 }
 
 /**
@@ -146,96 +161,98 @@ function resolveSeriesContextForEpisode(episodeId: string): {
  * navigations to `/episode/{id}` are not redirected here.
  */
 const shonenJumpPlusSiteHandler: MockRouteHandler = (req) => {
-  const pathname = req.pathnameAfterPrefix;
+  const pathname = req.pathnameAfterPrefix
 
   // `/api/viewer/readable_product_pagination_information`
-  if (pathname === '/api/viewer/readable_product_pagination_information') {
-    const aggregateId = req.url.searchParams.get('aggregate_id') ?? '';
+  if (pathname === "/api/viewer/readable_product_pagination_information") {
+    const aggregateId = req.url.searchParams.get("aggregate_id") ?? ""
     return {
       status: 200,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
+      headers: { "content-type": "application/json; charset=utf-8" },
       body: buildReadableProductPaginationInfoResponse(aggregateId),
-    };
+    }
   }
 
   // `/api/viewer/pagination_readable_products`
-  if (pathname === '/api/viewer/pagination_readable_products') {
-    const aggregateId = req.url.searchParams.get('aggregate_id') ?? '';
-    const offset = Number(req.url.searchParams.get('offset') ?? '0') || 0;
-    const limit = Number(req.url.searchParams.get('limit') ?? '50') || 50;
+  if (pathname === "/api/viewer/pagination_readable_products") {
+    const aggregateId = req.url.searchParams.get("aggregate_id") ?? ""
+    const offset = Number(req.url.searchParams.get("offset") ?? "0") || 0
+    const limit = Number(req.url.searchParams.get("limit") ?? "50") || 50
     return {
       status: 200,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
+      headers: { "content-type": "application/json; charset=utf-8" },
       body: buildPaginationReadableProductsResponse(aggregateId, offset, limit),
-    };
+    }
   }
 
   // `/episode/{id}` or `/episode/{id}/...` — return HTML with
   // embedded episode-json containing mock pages so
   // `resolveImageUrls` finds downloadable URLs.
-  const episodeMatch = pathname.match(/^\/episode\/(\d+)\/?$/);
+  const episodeMatch = pathname.match(/^\/episode\/(\d+)\/?$/)
   if (episodeMatch) {
-    const episodeId = episodeMatch[1];
-    const { seriesTitle, aggregateId } = resolveSeriesContextForEpisode(episodeId);
+    const episodeId = episodeMatch[1]
+    const { seriesTitle, aggregateId, thumbnailUri } =
+      resolveSeriesContextForEpisode(episodeId)
     return {
       status: 200,
-      headers: { 'content-type': 'text/html; charset=utf-8' },
+      headers: { "content-type": "text/html; charset=utf-8" },
       body: buildEpisodeHtmlWithMockPages({
         episodeId,
         seriesTitle,
         aggregateId,
         pageCount: 1,
+        thumbnailUri,
       }),
-    };
+    }
   }
 
   // Unknown `/api/*` → JSON 404 so the integration fails fast.
-  if (pathname.startsWith('/api/')) {
+  if (pathname.startsWith("/api/")) {
     return {
       status: 404,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-      body: { error: 'not_mocked', path: pathname },
-    };
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: { error: "not_mocked", path: pathname },
+    }
   }
 
   // Everything else: a minimal placeholder HTML.
   return {
     status: 200,
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { "content-type": "text/html; charset=utf-8" },
     body: '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Shonen Jump+</title></head><body></body></html>',
-  };
-};
+  }
+}
 
-/** cdn-ak-img.shonenjumpplus.com handler — returns the shared 1x1 PNG. */
+/** cdn-ak-img.shonenjumpplus.com handler — returns a tile-scrambled PNG. */
 const shonenJumpPlusImageHandler: MockRouteHandler = () => ({
   status: 200,
-  headers: { 'content-type': SMALL_PNG_MIME_TYPE },
-  body: cloneSmallPngBytes(),
-});
+  headers: { "content-type": SHONEN_JUMP_PLUS_SCRAMBLED_PNG_MIME_TYPE },
+  body: cloneShonenJumpPlusScrambledPng(),
+})
 
 /**
  * Register the Shonen Jump+ handlers on the given local mock server
  * and return the DNR redirect rules.
  */
 export function registerShonenJumpPlusLocalServerHandlers(
-  server: LocalMockServerHandle,
+  server: LocalMockServerHandle
 ): DnrRedirectRule[] {
-  server.addRoute(SHONENJUMPPLUS_LOCAL_SITE_PREFIX, shonenJumpPlusSiteHandler);
-  server.addRoute(SHONENJUMPPLUS_LOCAL_IMAGE_PREFIX, shonenJumpPlusImageHandler);
+  server.addRoute(SHONENJUMPPLUS_LOCAL_SITE_PREFIX, shonenJumpPlusSiteHandler)
+  server.addRoute(SHONENJUMPPLUS_LOCAL_IMAGE_PREFIX, shonenJumpPlusImageHandler)
 
-  const base = server.url;
+  const base = server.url
   return [
     {
       id: SHONENJUMPPLUS_SITE_RULE_ID,
-      regexFilter: '^https?://(?:www\\.)?shonenjumpplus\\.com/(.*)$',
+      regexFilter: "^https?://(?:www\\.)?shonenjumpplus\\.com/(.*)$",
       regexSubstitution: `${base}${SHONENJUMPPLUS_LOCAL_SITE_PREFIX}/\\1`,
     },
     {
       id: SHONENJUMPPLUS_IMAGE_RULE_ID,
       // Match the production image hosts (cdn-ak-img and any similar
       // subdomain on shonenjumpplus.com).
-      regexFilter: '^https?://[a-z0-9-]+\\.shonenjumpplus\\.com/(.*)$',
+      regexFilter: "^https?://[a-z0-9-]+\\.shonenjumpplus\\.com/(.*)$",
       regexSubstitution: `${base}${SHONENJUMPPLUS_LOCAL_IMAGE_PREFIX}/\\1`,
     },
-  ];
+  ]
 }

@@ -10,31 +10,35 @@
  * `@/src/site-integrations/shonenjumpplus/index.ts`.
  */
 
-import { BASIC_CHAPTERS, SMALL_SERIES } from './chapter-data';
-import { BASIC_SERIES, MINIMAL_SERIES, SERIES_AGGREGATE_IDS } from './series-data';
+import { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"
+import {
+  BASIC_SERIES,
+  MINIMAL_SERIES,
+  SERIES_AGGREGATE_IDS,
+} from "./series-data"
 
 function resolveChaptersByAggregateId(aggregateId: string) {
   if (aggregateId === SERIES_AGGREGATE_IDS[BASIC_SERIES.series.seriesId]) {
-    return BASIC_CHAPTERS.chapters;
+    return BASIC_CHAPTERS.chapters
   }
   if (aggregateId === SERIES_AGGREGATE_IDS[MINIMAL_SERIES.series.seriesId]) {
-    return SMALL_SERIES.chapters;
+    return SMALL_SERIES.chapters
   }
-  return [];
+  return []
 }
 
 /**
  * `/api/viewer/readable_product_pagination_information` response.
  */
 export function buildReadableProductPaginationInfoResponse(
-  aggregateId: string,
+  aggregateId: string
 ): Record<string, unknown> {
-  const chapters = resolveChaptersByAggregateId(aggregateId);
-  const perPage = 50;
+  const chapters = resolveChaptersByAggregateId(aggregateId)
+  const perPage = 50
   return {
     per_page: perPage,
     readable_products_count: chapters.length,
-  };
+  }
 }
 
 /**
@@ -45,16 +49,19 @@ export function buildReadableProductPaginationInfoResponse(
 export function buildPaginationReadableProductsResponse(
   aggregateId: string,
   offset: number,
-  limit: number,
+  limit: number
 ): Array<Record<string, unknown>> {
-  const chapters = resolveChaptersByAggregateId(aggregateId);
-  const reversed = [...chapters].reverse();
-  const slice = reversed.slice(offset, offset + limit);
+  const chapters = resolveChaptersByAggregateId(aggregateId)
+  const reversed = [...chapters].reverse()
+  const slice = reversed.slice(offset, offset + limit)
 
   return slice.map((chapter) => ({
     readable_product_id: chapter.id,
     viewer_uri: `/episode/${chapter.id}`,
     title: chapter.title,
-    status: { label: 'Free', rental_price: null, buy_price: null },
-  }));
+    status:
+      chapter.locked === true
+        ? { label: "is_rentable", rental_price: 40, buy_price: null }
+        : { label: "is_free", rental_price: null, buy_price: null },
+  }))
 }

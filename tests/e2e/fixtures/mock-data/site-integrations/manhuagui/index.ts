@@ -10,7 +10,7 @@ export {
   SMALL_SERIES,
   CATEGORY_CHAPTERS,
   KIMETSU_CHAPTERS,
-} from './chapter-data';
+} from "./chapter-data"
 
 // Series data
 export {
@@ -20,7 +20,7 @@ export {
   CATEGORY_SERIES,
   KIMETSU_SERIES,
   createManhuaguiSeries,
-} from './series-data';
+} from "./series-data"
 
 // HTML fixtures
 export {
@@ -34,7 +34,7 @@ export {
   buildManhuaguiChapterPageHtml,
   buildManhuaguiSeriesPageHtml,
   buildManhuaguiAdultSeriesPageHtml,
-} from './html-fixtures';
+} from "./html-fixtures"
 
 // API fixtures (reader config + packed payload builders)
 export {
@@ -46,16 +46,19 @@ export {
   buildManhuaguiPackedPayloadScript,
   buildManhuaguiChapterSlMetadata,
   buildManhuaguiChapterPathSegment,
-} from './api-fixtures';
-export type { ManhuaguiPackedImageData } from './api-fixtures';
+} from "./api-fixtures"
+export type { ManhuaguiPackedImageData } from "./api-fixtures"
 
 // Image fixtures
 export {
   MOCK_IMAGES_PER_CHAPTER,
   buildManhuaguiImageFilenames,
-} from './image-fixtures';
+} from "./image-fixtures"
 
 // Route registrar
-export { registerManhuaguiRoutes } from './routes';
+export { registerManhuaguiRoutes } from "./routes"
 
-export type { SiteIntegrationChapterData, SiteIntegrationSeriesData } from '../../types';
+export type {
+  SiteIntegrationChapterData,
+  SiteIntegrationSeriesData,
+} from "../../types"

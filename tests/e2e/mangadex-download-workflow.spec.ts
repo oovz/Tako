@@ -15,14 +15,14 @@
  * assembly will flip this spec red before it reaches production.
  */
 
-import { test, expect } from './fixtures/extension';
+import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
   waitForTabSeriesTitle,
   waitForTabStateById,
-} from './fixtures/state-helpers';
-import { MANGADEX_BASE_URL } from './fixtures/test-domains';
-import { Mangadex } from './fixtures/mock-data';
+} from "./fixtures/state-helpers"
+import { MANGADEX_BASE_URL } from "./fixtures/test-domains"
+import { Mangadex } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,
   openOptionsPage,
@@ -32,47 +32,55 @@ import {
   startSingleChapterDownload,
   waitForCbzArtifact,
   waitForTerminalTask,
-} from './fixtures/download-workflow-helpers';
+} from "./fixtures/download-workflow-helpers"
 
-test.describe('MangaDex download workflow (mocked)', () => {
-  test.describe.configure({ timeout: 120_000 });
+test.describe("MangaDex download workflow (mocked)", () => {
+  test.describe.configure({ timeout: 120_000 })
 
-  test('completes a single-chapter download to the custom OPFS folder', async ({ context, extensionId, page }) => {
-    const series = Mangadex.BASIC_SERIES.series;
-    const seriesUrl = `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`;
+  test("completes a single-chapter download to the custom OPFS folder", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const series = Mangadex.BASIC_SERIES.series
+    const seriesUrl = `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`
 
-    await page.goto(seriesUrl, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
 
     // Wait for content-script-driven tab state to populate so the download
     // message has a valid tab reference + chapter list to pick from.
-    await waitForTabSeriesTitle(context, tabId, series.seriesTitle);
+    await waitForTabSeriesTitle(context, tabId, series.seriesTitle)
     const tabState = await waitForTabStateById(
       page,
       context,
       tabId,
-      (state) => Array.isArray(state.chapters) && state.chapters.length > 0,
-    );
+      (state) => Array.isArray(state.chapters) && state.chapters.length > 0
+    )
 
-    const firstChapter = tabState.chapters.find((chapter) => chapter.locked !== true);
+    const firstChapter = tabState.chapters.find(
+      (chapter) => chapter.locked !== true
+    )
     if (!firstChapter) {
-      throw new Error(`No downloadable chapter found for series ${series.seriesId}`);
+      throw new Error(
+        `No downloadable chapter found for series ${series.seriesId}`
+      )
     }
 
-    const optionsPage = await openOptionsPage(context, extensionId);
+    const optionsPage = await openOptionsPage(context, extensionId)
     try {
-      await seedMangadexSessionPreferences(optionsPage, series.seriesId);
-      const seededDirectoryName = await seedCustomDirectoryHandle(optionsPage);
+      await seedMangadexSessionPreferences(optionsPage, series.seriesId)
+      const seededDirectoryName = await seedCustomDirectoryHandle(optionsPage)
       await persistCustomModeDownloadSettings(optionsPage, {
         mangadex: {
           autoReadMangaDexSettings: true,
-          imageQuality: 'data',
+          imageQuality: "data",
         },
-      });
+      })
 
       const taskId = await startSingleChapterDownload(optionsPage, {
         sourceTabId: tabId,
-        siteIntegrationId: 'mangadex',
+        siteIntegrationId: "mangadex",
         mangaId: series.seriesId,
         seriesTitle: series.seriesTitle,
         chapter: {
@@ -86,20 +94,47 @@ test.describe('MangaDex download workflow (mocked)', () => {
           volumeNumber: firstChapter.volumeNumber,
           language: firstChapter.language,
         },
-      });
+      })
 
-      const task = await waitForTerminalTask(context, taskId);
-      assertTaskSucceeded(task);
+      const task = await waitForTerminalTask(context, taskId)
+      assertTaskSucceeded(task)
+      await expect
+        .poll(
+          () =>
+            optionsPage.evaluate(async (chapterId) => {
+              const stored =
+                await chrome.storage.local.get("downloadedChapters")
+              return Array.isArray(stored.downloadedChapters)
+                ? stored.downloadedChapters.some(
+                    (record: unknown) =>
+                      typeof record === "object" &&
+                      record !== null &&
+                      (record as { chapterId?: unknown }).chapterId ===
+                        chapterId
+                  )
+                : false
+            }, firstChapter.id),
+          {
+            message:
+              "the completed chapter should be persisted for Side Panel markers",
+            timeout: 5_000,
+          }
+        )
+        .toBe(true)
 
       // Custom-mode downloads never use chrome.downloads, so
       // `lastSuccessfulDownloadId` stays undefined — this is also a
       // defensive check that we actually went through the OPFS path.
-      expect(task.lastSuccessfulDownloadId).toBeUndefined();
+      expect(task.lastSuccessfulDownloadId).toBeUndefined()
 
-      const files = await waitForCbzArtifact(optionsPage, seededDirectoryName);
-      expect(files.some((file) => file.path.toLowerCase().endsWith('.cbz') && file.size > 0)).toBe(true);
+      const files = await waitForCbzArtifact(optionsPage, seededDirectoryName)
+      expect(
+        files.some(
+          (file) => file.path.toLowerCase().endsWith(".cbz") && file.size > 0
+        )
+      ).toBe(true)
     } finally {
-      await optionsPage.close();
+      await optionsPage.close()
     }
-  });
-});
+  })
+})

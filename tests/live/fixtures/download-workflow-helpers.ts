@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Page } from "@playwright/test"
 
 /**
  * Shared helpers for live download/metadata specs.
@@ -19,16 +19,22 @@ import type { Page } from '@playwright/test'
 export async function resolveCandidateTabIds(
   optionsPage: Page,
   preferredTabId: number,
-  targetHref: string,
+  targetHref: string
 ): Promise<number[]> {
   return await optionsPage.evaluate(
-    async ({ preferredTabId: preferredId, targetHref: href }: { preferredTabId: number; targetHref: string }) => {
+    async ({
+      preferredTabId: preferredId,
+      targetHref: href,
+    }: {
+      preferredTabId: number
+      targetHref: string
+    }) => {
       const target = new URL(href)
       const allTabs = await chrome.tabs.query({})
 
       const urlMatchedIds = allTabs
         .filter((tab) => {
-          if (typeof tab.id !== 'number' || !tab.url) {
+          if (typeof tab.id !== "number" || !tab.url) {
             return false
           }
 
@@ -38,9 +44,11 @@ export async function resolveCandidateTabIds(
               return false
             }
 
-            return url.pathname === target.pathname
-              || url.pathname.startsWith(target.pathname)
-              || target.pathname.startsWith(url.pathname)
+            return (
+              url.pathname === target.pathname ||
+              url.pathname.startsWith(target.pathname) ||
+              target.pathname.startsWith(url.pathname)
+            )
           } catch {
             return false
           }
@@ -48,35 +56,10 @@ export async function resolveCandidateTabIds(
         .map((tab) => tab.id as number)
 
       return [preferredId, ...urlMatchedIds].filter(
-        (id, index, arr): id is number => typeof id === 'number' && arr.indexOf(id) === index,
+        (id, index, arr): id is number =>
+          typeof id === "number" && arr.indexOf(id) === index
       )
     },
-    { preferredTabId, targetHref },
+    { preferredTabId, targetHref }
   )
-}
-
-/**
- * Reinject the content script into candidate tabs.
- *
- * Retries up to 3 times per tab with a 750ms back-off to handle
- * transient tab-state issues (e.g. tab still navigating).
- */
-export async function reinjectContentScript(optionsPage: Page, candidateTabIds: number[]): Promise<void> {
-  await optionsPage.evaluate(async (ids: number[]) => {
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-    for (const tabId of ids) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ['content-scripts/content.js'],
-          })
-          break
-        } catch {
-          await wait(750)
-        }
-      }
-    }
-  }, candidateTabIds)
 }

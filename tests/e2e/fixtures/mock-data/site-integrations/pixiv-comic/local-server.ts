@@ -24,22 +24,26 @@
  * Playwright route registrar in `./routes.ts`.
  */
 
-import type { DnrRedirectRule } from '../../../dnr-test-redirects';
-import type { LocalMockServerHandle, MockRouteHandler, MockRouteResponse } from '../../../local-mock-server';
-import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from '../../shared';
+import type { DnrRedirectRule } from "../../../dnr-test-redirects"
+import type {
+  LocalMockServerHandle,
+  MockRouteHandler,
+  MockRouteResponse,
+} from "../../../local-mock-server"
+import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 import {
   buildPixivEpisodesV2Response,
   buildPixivWorkV5Response,
-} from './api-fixtures';
-import { BASIC_CHAPTERS, SMALL_SERIES } from './chapter-data';
-import { BASIC_SERIES, MINIMAL_SERIES } from './series-data';
+} from "./api-fixtures"
+import { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"
+import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
 
-export const PIXIV_COMIC_LOCAL_SITE_PREFIX = '/__pc/site';
-export const PIXIV_COMIC_LOCAL_IMAGE_PREFIX = '/__pc/img';
+export const PIXIV_COMIC_LOCAL_SITE_PREFIX = "/__pc/site"
+export const PIXIV_COMIC_LOCAL_IMAGE_PREFIX = "/__pc/img"
 
 /** Assigned DNR rule ids within the reserved 9000–9999 test range. */
-const PIXIV_COMIC_SITE_RULE_ID = 9300;
-const PIXIV_COMIC_IMAGE_RULE_ID = 9301;
+const PIXIV_COMIC_SITE_RULE_ID = 9300
+const PIXIV_COMIC_IMAGE_RULE_ID = 9301
 
 /**
  * Deterministic Next.js build id embedded in the mocked homepage HTML.
@@ -48,7 +52,7 @@ const PIXIV_COMIC_IMAGE_RULE_ID = 9301;
  * homepage and the `/_next/data/{buildId}/...` handler use the same
  * value the pipeline resolves successfully.
  */
-const MOCK_PIXIV_BUILD_ID = 'mockPixivBuildId123';
+const MOCK_PIXIV_BUILD_ID = "mockPixivBuildId123"
 
 /**
  * Deterministic per-chapter "salt". Production uses this value to
@@ -56,30 +60,30 @@ const MOCK_PIXIV_BUILD_ID = 'mockPixivBuildId123';
  * `read_v4` handler ignores the header entirely so any non-empty value
  * satisfies `fetchPixivSalt`.
  */
-const MOCK_PIXIV_SALT = 'mock-pixiv-salt';
+const MOCK_PIXIV_SALT = "mock-pixiv-salt"
 
 /**
  * Mock chapter image URL. Points at the pximg image host so the DNR
  * redirect for `img-comic.pximg.net` catches it.
  */
 function buildMockImageUrl(storyId: string, pageIndex: number): string {
-  return `https://img-comic.pximg.net/mock/${storyId}/${pageIndex}.png`;
+  return `https://img-comic.pximg.net/mock/${storyId}/${pageIndex}.png`
 }
 
 function htmlResponse(body: string): MockRouteResponse {
   return {
     status: 200,
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { "content-type": "text/html; charset=utf-8" },
     body,
-  };
+  }
 }
 
 function jsonResponse(body: object): MockRouteResponse {
   return {
     status: 200,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { "content-type": "application/json; charset=utf-8" },
     body,
-  };
+  }
 }
 
 /**
@@ -99,7 +103,7 @@ const HOMEPAGE_WITH_BUILD_ID_HTML = `<!DOCTYPE html>
 <body>
   <div id="__next"><main>Pixiv Comic Home</main></div>
 </body>
-</html>`;
+</html>`
 
 /**
  * Resolve a deterministic per-chapter page list for the given story id.
@@ -109,9 +113,9 @@ const HOMEPAGE_WITH_BUILD_ID_HTML = `<!DOCTYPE html>
  */
 function resolveMockPageCountForStory(storyId: string): number {
   const known = [...BASIC_CHAPTERS.chapters, ...SMALL_SERIES.chapters].find(
-    (chapter) => chapter.id === storyId,
-  );
-  return known ? 1 : 1;
+    (chapter) => chapter.id === storyId
+  )
+  return known ? 1 : 1
 }
 
 /**
@@ -121,10 +125,10 @@ function resolveMockPageCountForStory(storyId: string): number {
  * the subsequent `read_v4` call doesn't return its own `pages`.
  */
 function buildStorySaltResponse(storyId: string): Record<string, unknown> {
-  const pageCount = resolveMockPageCountForStory(storyId);
+  const pageCount = resolveMockPageCountForStory(storyId)
   const pages = Array.from({ length: pageCount }, (_, index) => ({
     url: buildMockImageUrl(storyId, index + 1),
-  }));
+  }))
   return {
     pageProps: {
       salt: MOCK_PIXIV_SALT,
@@ -132,7 +136,7 @@ function buildStorySaltResponse(storyId: string): Record<string, unknown> {
         reading_episode: { pages },
       },
     },
-  };
+  }
 }
 
 /**
@@ -142,14 +146,14 @@ function buildStorySaltResponse(storyId: string): Record<string, unknown> {
  * `tmdPixivKey` fragment is present).
  */
 function buildReadV4Response(storyId: string): Record<string, unknown> {
-  const pageCount = resolveMockPageCountForStory(storyId);
+  const pageCount = resolveMockPageCountForStory(storyId)
   const pages = Array.from({ length: pageCount }, (_, index) => ({
     url: buildMockImageUrl(storyId, index + 1),
-  }));
+  }))
   return {
     pages,
     reading_episode: { pages },
-  };
+  }
 }
 
 /**
@@ -158,9 +162,9 @@ function buildReadV4Response(storyId: string): Record<string, unknown> {
  * the existing Playwright-route behavior.
  */
 function resolveWorkIdForMetadata(workId: string): string {
-  if (workId === BASIC_SERIES.series.seriesId) return workId;
-  if (workId === MINIMAL_SERIES.series.seriesId) return workId;
-  return workId;
+  if (workId === BASIC_SERIES.series.seriesId) return workId
+  if (workId === MINIMAL_SERIES.series.seriesId) return workId
+  return workId
 }
 
 /**
@@ -169,84 +173,90 @@ function resolveWorkIdForMetadata(workId: string): string {
  * `/works/{id}` are not redirected here (see module header).
  */
 const pixivComicSiteHandler: MockRouteHandler = (req) => {
-  const pathname = req.pathnameAfterPrefix;
+  const pathname = req.pathnameAfterPrefix
 
   // Homepage — must embed `/_next/static/{buildId}/_buildManifest.js`.
-  if (pathname === '/' || pathname === '') {
-    return htmlResponse(HOMEPAGE_WITH_BUILD_ID_HTML);
+  if (pathname === "/" || pathname === "") {
+    return htmlResponse(HOMEPAGE_WITH_BUILD_ID_HTML)
   }
 
   // `/_next/data/{buildId}/viewer/stories/{storyId}.json`
   const saltMatch = pathname.match(
-    /^\/_next\/data\/([^/]+)\/viewer\/stories\/(\d+)\.json$/,
-  );
+    /^\/_next\/data\/([^/]+)\/viewer\/stories\/(\d+)\.json$/
+  )
   if (saltMatch) {
-    const [, , storyId] = saltMatch;
-    return jsonResponse(buildStorySaltResponse(storyId));
+    const [, , storyId] = saltMatch
+    return jsonResponse(buildStorySaltResponse(storyId))
   }
 
   // `/api/app/episodes/{storyId}/read_v4`
-  const readV4Match = pathname.match(/^\/api\/app\/episodes\/(\d+)\/read_v4$/);
+  const readV4Match = pathname.match(/^\/api\/app\/episodes\/(\d+)\/read_v4$/)
   if (readV4Match) {
-    const [, storyId] = readV4Match;
-    return jsonResponse(buildReadV4Response(storyId));
+    const [, storyId] = readV4Match
+    return jsonResponse(buildReadV4Response(storyId))
   }
 
   // `/api/app/works/v5/{workId}`
-  const workV5Match = pathname.match(/^\/api\/app\/works\/v5\/(\d+)$/);
+  const workV5Match = pathname.match(/^\/api\/app\/works\/v5\/(\d+)$/)
   if (workV5Match) {
-    return jsonResponse(buildPixivWorkV5Response(resolveWorkIdForMetadata(workV5Match[1])));
+    return jsonResponse(
+      buildPixivWorkV5Response(resolveWorkIdForMetadata(workV5Match[1]))
+    )
   }
 
   // `/api/app/works/{workId}/episodes/v2`
-  const episodesV2Match = pathname.match(/^\/api\/app\/works\/(\d+)\/episodes\/v2$/);
+  const episodesV2Match = pathname.match(
+    /^\/api\/app\/works\/(\d+)\/episodes\/v2$/
+  )
   if (episodesV2Match) {
-    return jsonResponse(buildPixivEpisodesV2Response(resolveWorkIdForMetadata(episodesV2Match[1])));
+    return jsonResponse(
+      buildPixivEpisodesV2Response(resolveWorkIdForMetadata(episodesV2Match[1]))
+    )
   }
 
   // Any other /api/app/* → 404 JSON so the integration fails fast
   // instead of hanging waiting for a response.
-  if (pathname.startsWith('/api/')) {
+  if (pathname.startsWith("/api/")) {
     return {
       status: 404,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-      body: { error: 'not_mocked', path: pathname },
-    };
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: { error: "not_mocked", path: pathname },
+    }
   }
 
   // Everything else returns the homepage placeholder (helps
   // future-proof against miscellaneous non-API fetches).
-  return htmlResponse(HOMEPAGE_WITH_BUILD_ID_HTML);
-};
+  return htmlResponse(HOMEPAGE_WITH_BUILD_ID_HTML)
+}
 
 /** img-comic.pximg.net handler — returns the shared 1x1 PNG. */
 const pixivComicImageHandler: MockRouteHandler = () => ({
   status: 200,
-  headers: { 'content-type': SMALL_PNG_MIME_TYPE },
+  headers: { "content-type": SMALL_PNG_MIME_TYPE },
   body: cloneSmallPngBytes(),
-});
+})
 
 /**
  * Register the Pixiv Comic handlers on the given local mock server and
  * return the DNR redirect rules.
  */
 export function registerPixivComicLocalServerHandlers(
-  server: LocalMockServerHandle,
+  server: LocalMockServerHandle
 ): DnrRedirectRule[] {
-  server.addRoute(PIXIV_COMIC_LOCAL_SITE_PREFIX, pixivComicSiteHandler);
-  server.addRoute(PIXIV_COMIC_LOCAL_IMAGE_PREFIX, pixivComicImageHandler);
+  server.addRoute(PIXIV_COMIC_LOCAL_SITE_PREFIX, pixivComicSiteHandler)
+  server.addRoute(PIXIV_COMIC_LOCAL_IMAGE_PREFIX, pixivComicImageHandler)
 
-  const base = server.url;
+  const base = server.url
   return [
     {
       id: PIXIV_COMIC_SITE_RULE_ID,
-      regexFilter: '^https?://comic\\.pixiv\\.net/(.*)$',
+      regexFilter: "^https?://comic\\.pixiv\\.net/(.*)$",
       regexSubstitution: `${base}${PIXIV_COMIC_LOCAL_SITE_PREFIX}/\\1`,
     },
     {
       id: PIXIV_COMIC_IMAGE_RULE_ID,
-      regexFilter: '^https?://(?:[a-z0-9-]+\\.)?img-comic\\.pximg\\.net/(.*)$',
+      regexFilter: "^https?://(?:[a-z0-9-]+\\.)?img-comic\\.pximg\\.net/(.*)$",
       regexSubstitution: `${base}${PIXIV_COMIC_LOCAL_IMAGE_PREFIX}/\\1`,
     },
-  ];
+  ]
 }

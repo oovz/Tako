@@ -9,14 +9,14 @@ export {
   SMALL_SERIES,
   createMangadexChapter,
   createMangadexChapters,
-} from './chapter-data';
+} from "./chapter-data"
 
 // Series data
 export {
   BASIC_SERIES,
   MINIMAL_SERIES,
   createMangadexSeries,
-} from './series-data';
+} from "./series-data"
 
 // HTML fixtures
 export {
@@ -25,7 +25,7 @@ export {
   CHAPTER_PAGE_HTML,
   MANGADEX_HTML,
   MANGADEX_MINIMAL_HTML,
-} from './html-fixtures';
+} from "./html-fixtures"
 
 // API response builders + custom fixtures
 export {
@@ -34,7 +34,7 @@ export {
   buildMangadexFeedResponse,
   buildMangadexSeriesResponse,
   resolveMangadexChapterDataset,
-} from './api-fixtures';
+} from "./api-fixtures"
 
 // Image fixtures
 export {
@@ -45,10 +45,13 @@ export {
   buildMangadexChapterImageFilenames,
   buildAtHomeServerResponse,
   resolveMangadexDownloadableChapterIds,
-} from './image-fixtures';
+} from "./image-fixtures"
 
 // Route registrar
-export { registerMangadexRoutes } from './routes';
+export { registerMangadexRoutes } from "./routes"
 
 // Re-export types for convenience
-export type { SiteIntegrationChapterData, SiteIntegrationSeriesData } from '../../types';
+export type {
+  SiteIntegrationChapterData,
+  SiteIntegrationSeriesData,
+} from "../../types"

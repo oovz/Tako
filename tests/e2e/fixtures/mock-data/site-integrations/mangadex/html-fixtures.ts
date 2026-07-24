@@ -1,11 +1,11 @@
 /**
  * @file html-fixtures.ts
  * @description HTML fixtures for MangaDex route mocking
- * 
+ *
  * Simplified HTML structures for MangaDex testing
  */
 
-import type { HTMLFixtures } from '../../types';
+import type { HTMLFixtures } from "../../types"
 
 /**
  * Simplified series page HTML matching MangaDex structure
@@ -51,7 +51,7 @@ export const SERIES_PAGE_HTML = `
   </div>
 </body>
 </html>
-`;
+`
 
 /**
  * Minimal series page for basic testing
@@ -72,7 +72,7 @@ export const MINIMAL_SERIES_PAGE_HTML = `
   </div>
 </body>
 </html>
-`;
+`
 
 /**
  * Chapter page HTML
@@ -94,7 +94,7 @@ export const CHAPTER_PAGE_HTML = `
   </div>
 </body>
 </html>
-`;
+`
 
 /**
  * HTML fixtures export
@@ -102,7 +102,7 @@ export const CHAPTER_PAGE_HTML = `
 export const MANGADEX_HTML: HTMLFixtures = {
   seriesPageHtml: SERIES_PAGE_HTML,
   chapterPageHtml: CHAPTER_PAGE_HTML,
-};
+}
 
 /**
  * Minimal HTML fixtures for basic tests
@@ -110,4 +110,4 @@ export const MANGADEX_HTML: HTMLFixtures = {
 export const MANGADEX_MINIMAL_HTML: HTMLFixtures = {
   seriesPageHtml: MINIMAL_SERIES_PAGE_HTML,
   chapterPageHtml: CHAPTER_PAGE_HTML,
-};
+}

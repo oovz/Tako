@@ -9,10 +9,13 @@
  * Layer-1 mocks can omit it.
  */
 
-import { BASIC_SERIES, MINIMAL_SERIES } from './series-data';
+import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
 
-export function buildPixivComicWorkPageHtml(workId: string, title: string): string {
-  const canonicalUrl = `https://comic.pixiv.net/works/${workId}`;
+export function buildPixivComicWorkPageHtml(
+  workId: string,
+  title: string
+): string {
+  const canonicalUrl = `https://comic.pixiv.net/works/${workId}`
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -31,18 +34,18 @@ export function buildPixivComicWorkPageHtml(workId: string, title: string): stri
     </main>
   </div>
 </body>
-</html>`;
+</html>`
 }
 
 export const BASIC_WORK_PAGE_HTML = buildPixivComicWorkPageHtml(
   BASIC_SERIES.series.seriesId,
-  BASIC_SERIES.series.seriesTitle,
-);
+  BASIC_SERIES.series.seriesTitle
+)
 
 export const MINIMAL_WORK_PAGE_HTML = buildPixivComicWorkPageHtml(
   MINIMAL_SERIES.series.seriesId,
-  MINIMAL_SERIES.series.seriesTitle,
-);
+  MINIMAL_SERIES.series.seriesTitle
+)
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <html lang="ja">
@@ -53,7 +56,7 @@ export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <body>
   <div id="__next"><main>Pixiv Comic Home</main></div>
 </body>
-</html>`;
+</html>`
 
 /**
  * Viewer HTML shell used for `/viewer/stories/{id}` routes. Layer-1 mocks
@@ -69,4 +72,4 @@ export const VIEWER_PAGE_HTML = `<!DOCTYPE html>
 <body>
   <div id="__next"><main>Viewer</main></div>
 </body>
-</html>`;
+</html>`

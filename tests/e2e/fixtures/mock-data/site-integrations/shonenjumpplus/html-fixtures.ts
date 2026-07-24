@@ -14,24 +14,29 @@
  * episode-json builder with real page entries and scramble seeds.
  */
 
-import { BASIC_SERIES, MINIMAL_SERIES, SERIES_AGGREGATE_IDS } from './series-data';
+import {
+  BASIC_SERIES,
+  MINIMAL_SERIES,
+  SERIES_AGGREGATE_IDS,
+} from "./series-data"
 
 interface BuildEpisodePageHtmlOptions {
-  episodeId: string;
-  seriesTitle: string;
-  aggregateId: string;
-  author?: string;
-  description?: string;
-  thumbnailUri?: string;
+  episodeId: string
+  seriesTitle: string
+  aggregateId: string
+  author?: string
+  description?: string
+  thumbnailUri?: string
+  openGraphImage?: string
 }
 
 function encodeDataValueAttribute(json: string): string {
   return json
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 /**
@@ -40,13 +45,15 @@ function encodeDataValueAttribute(json: string): string {
  * selectors is intentional (matches the real page noise) but nothing else
  * is required for extraction.
  */
-export function buildShonenJumpPlusEpisodePageHtml(options: BuildEpisodePageHtmlOptions): string {
+export function buildShonenJumpPlusEpisodePageHtml(
+  options: BuildEpisodePageHtmlOptions
+): string {
   const episodeJson = JSON.stringify({
     readableProduct: {
       series: {
         id: options.aggregateId,
         title: options.seriesTitle,
-        thumbnailUri: options.thumbnailUri ?? '',
+        thumbnailUri: options.thumbnailUri ?? "",
       },
       pageStructure: {
         // Layer-1 mocks intentionally leave pages empty — download pipeline
@@ -54,9 +61,9 @@ export function buildShonenJumpPlusEpisodePageHtml(options: BuildEpisodePageHtml
         pages: [],
       },
     },
-  });
+  })
 
-  const encodedEpisodeJson = encodeDataValueAttribute(episodeJson);
+  const encodedEpisodeJson = encodeDataValueAttribute(episodeJson)
 
   return `<!DOCTYPE html>
 <html lang="ja">
@@ -64,14 +71,14 @@ export function buildShonenJumpPlusEpisodePageHtml(options: BuildEpisodePageHtml
   <meta charset="utf-8">
   <title>${options.seriesTitle} - 第1話 | 少年ジャンプ+</title>
   <meta property="og:title" content="${options.seriesTitle}">
-  ${options.thumbnailUri ? `<meta property="og:image" content="${options.thumbnailUri}">` : ''}
-  ${options.description ? `<meta property="og:description" content="${options.description}">` : ''}
+  ${options.openGraphImage || options.thumbnailUri ? `<meta property="og:image" content="${options.openGraphImage ?? options.thumbnailUri}">` : ""}
+  ${options.description ? `<meta property="og:description" content="${options.description}">` : ""}
 </head>
 <body>
   <header class="series-header">
     <h1 class="series-header-title">${options.seriesTitle}</h1>
-    ${options.author ? `<p class="series-header-author">${options.author}</p>` : ''}
-    ${options.description ? `<p class="series-header-description">${options.description}</p>` : ''}
+    ${options.author ? `<p class="series-header-author">${options.author}</p>` : ""}
+    ${options.description ? `<p class="series-header-description">${options.description}</p>` : ""}
   </header>
   <div
     class="js-readable-products-pagination"
@@ -79,7 +86,7 @@ export function buildShonenJumpPlusEpisodePageHtml(options: BuildEpisodePageHtml
   ></div>
   <script id="episode-json" type="application/json" data-value="${encodedEpisodeJson}"></script>
 </body>
-</html>`;
+</html>`
 }
 
 export const BASIC_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
@@ -89,13 +96,14 @@ export const BASIC_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
   author: BASIC_SERIES.series.author,
   description: BASIC_SERIES.series.description,
   thumbnailUri: BASIC_SERIES.series.coverUrl,
-});
+  openGraphImage: BASIC_SERIES.series.coverUrl,
+})
 
 export const MINIMAL_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
   episodeId: MINIMAL_SERIES.series.seriesId,
   seriesTitle: MINIMAL_SERIES.series.seriesTitle,
   aggregateId: SERIES_AGGREGATE_IDS[MINIMAL_SERIES.series.seriesId]!,
-});
+})
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <html lang="ja">
@@ -106,4 +114,4 @@ export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <body>
   <main>Shonen Jump+ Home</main>
 </body>
-</html>`;
+</html>`

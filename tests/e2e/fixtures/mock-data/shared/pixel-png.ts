@@ -13,16 +13,16 @@
  * - Archive assembly (fflate) produces a well-formed ZIP/CBZ the spec can
  *   verify via OPFS directory inspection.
  */
-import { Buffer } from 'node:buffer';
+import { Buffer } from "node:buffer"
 
 // Standard 67-byte 1x1 transparent RGBA PNG. Base64 payload is byte-for-byte
 // reproducible; do not hand-edit — regenerate with a PNG encoder if you need
 // a different pixel and paste the new base64 here.
 const SMALL_PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII="
 
-export const SMALL_PNG_BYTES: Buffer = Buffer.from(SMALL_PNG_BASE64, 'base64');
-export const SMALL_PNG_MIME_TYPE = 'image/png';
+export const SMALL_PNG_BYTES: Buffer = Buffer.from(SMALL_PNG_BASE64, "base64")
+export const SMALL_PNG_MIME_TYPE = "image/png"
 
 /**
  * Convenience: Playwright's `route.fulfill` accepts Buffer for `body`. Using
@@ -30,5 +30,5 @@ export const SMALL_PNG_MIME_TYPE = 'image/png';
  * ever wrap the payload.
  */
 export function cloneSmallPngBytes(): Buffer {
-  return Buffer.from(SMALL_PNG_BYTES);
+  return Buffer.from(SMALL_PNG_BYTES)
 }

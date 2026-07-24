@@ -18,15 +18,15 @@
  *   the happy path green so regressions don't lurk behind the gate).
  */
 
-import { test, expect } from './fixtures/extension';
-import type { BrowserContext } from '@playwright/test';
+import { test, expect } from "./fixtures/extension"
+import type { BrowserContext } from "@playwright/test"
 import {
   getTabId,
   waitForTabSeriesTitle,
   waitForTabStateById,
-} from './fixtures/state-helpers';
-import { MANHUAGUI_BASE_URL } from './fixtures/test-domains';
-import { Manhuagui } from './fixtures/mock-data';
+} from "./fixtures/state-helpers"
+import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains"
+import { Manhuagui } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,
   openOptionsPage,
@@ -35,81 +35,103 @@ import {
   startSingleChapterDownload,
   waitForCbzArtifact,
   waitForTerminalTask,
-} from './fixtures/download-workflow-helpers';
+} from "./fixtures/download-workflow-helpers"
 
-async function readExtensionSessionRules(context: BrowserContext, extensionId: string) {
-  const worker = context.serviceWorkers().find((candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`))
-    ?? await context.waitForEvent('serviceworker', {
+async function readExtensionSessionRules(
+  context: BrowserContext,
+  extensionId: string
+) {
+  const worker =
+    context
+      .serviceWorkers()
+      .find((candidate) =>
+        candidate.url().startsWith(`chrome-extension://${extensionId}/`)
+      ) ??
+    (await context.waitForEvent("serviceworker", {
       timeout: 10_000,
-      predicate: (candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`),
-    });
+      predicate: (candidate) =>
+        candidate.url().startsWith(`chrome-extension://${extensionId}/`),
+    }))
 
-  return await worker.evaluate(async () => chrome.declarativeNetRequest.getSessionRules());
+  return await worker.evaluate(async () =>
+    chrome.declarativeNetRequest.getSessionRules()
+  )
 }
 
-test.describe('Manhuagui download workflow (mocked)', () => {
-  test.describe.configure({ timeout: 120_000 });
+test.describe("Manhuagui download workflow (mocked)", () => {
+  test.describe.configure({ timeout: 120_000 })
 
-  test('installs the Hamreus image referer rewrite needed by extension-context downloads', async ({ context, extensionId }) => {
-    const rules = await readExtensionSessionRules(context, extensionId);
-    const manhuaguiRule = rules.find((rule) => rule.id === 41002);
+  test("installs the Hamreus image referer rewrite needed by extension-context downloads", async ({
+    context,
+    extensionId,
+  }) => {
+    const rules = await readExtensionSessionRules(context, extensionId)
+    const manhuaguiRule = rules.find((rule) => rule.id === 41002)
 
     expect(manhuaguiRule).toEqual(
       expect.objectContaining({
         action: expect.objectContaining({
           requestHeaders: [
             {
-              header: 'referer',
-              operation: 'set',
-              value: 'https://www.manhuagui.com/',
+              header: "referer",
+              operation: "set",
+              value: "https://www.manhuagui.com/",
             },
           ],
         }),
         condition: expect.objectContaining({
           requestDomains: expect.arrayContaining([
-            'i.hamreus.com',
-            'eu.hamreus.com',
-            'eu1.hamreus.com',
-            'eu2.hamreus.com',
-            'us.hamreus.com',
-            'us1.hamreus.com',
-            'us2.hamreus.com',
-            'us3.hamreus.com',
+            "i.hamreus.com",
+            "eu.hamreus.com",
+            "eu1.hamreus.com",
+            "eu2.hamreus.com",
+            "us.hamreus.com",
+            "us1.hamreus.com",
+            "us2.hamreus.com",
+            "us3.hamreus.com",
           ]),
-          resourceTypes: expect.arrayContaining(['xmlhttprequest', 'other']),
+          resourceTypes: expect.arrayContaining(["xmlhttprequest", "other"]),
         }),
-      }),
-    );
-  });
+      })
+    )
+  })
 
-  test('completes a single-chapter download through the packed-payload pipeline', async ({ context, extensionId, page }) => {
-    const series = Manhuagui.BASIC_SERIES.series;
-    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${series.seriesId}/`;
+  test("completes a single-chapter download through the packed-payload pipeline", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const series = Manhuagui.BASIC_SERIES.series
+    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${series.seriesId}/`
 
-    await page.goto(seriesUrl, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
 
-    await waitForTabSeriesTitle(context, tabId, series.seriesTitle);
+    await waitForTabSeriesTitle(context, tabId, series.seriesTitle)
     const tabState = await waitForTabStateById(
       page,
       context,
       tabId,
-      (state) => Array.isArray(state.chapters) && state.chapters.length > 0,
-    );
+      (state) => Array.isArray(state.chapters) && state.chapters.length > 0
+    )
 
-    const firstChapter = tabState.chapters.find((chapter) => chapter.locked !== true);
+    const firstChapter = tabState.chapters.find(
+      (chapter) => chapter.locked !== true
+    )
     if (!firstChapter) {
-      throw new Error(`No downloadable chapter found for series ${series.seriesId}`);
+      throw new Error(
+        `No downloadable chapter found for series ${series.seriesId}`
+      )
     }
 
-    const optionsPage = await openOptionsPage(context, extensionId);
+    const optionsPage = await openOptionsPage(context, extensionId)
     try {
-      const seededDirectoryName = await seedCustomDirectoryHandle(optionsPage);
-      await persistCustomModeDownloadSettings(optionsPage);
+      const seededDirectoryName = await seedCustomDirectoryHandle(optionsPage)
+      await persistCustomModeDownloadSettings(optionsPage)
 
       const taskId = await startSingleChapterDownload(optionsPage, {
         sourceTabId: tabId,
-        siteIntegrationId: 'manhuagui',
+        siteIntegrationId: "manhuagui",
         mangaId: series.seriesId,
         seriesTitle: series.seriesTitle,
         chapter: {
@@ -123,16 +145,20 @@ test.describe('Manhuagui download workflow (mocked)', () => {
           volumeNumber: firstChapter.volumeNumber,
           language: firstChapter.language,
         },
-      });
+      })
 
-      const task = await waitForTerminalTask(context, taskId);
-      assertTaskSucceeded(task);
-      expect(task.lastSuccessfulDownloadId).toBeUndefined();
+      const task = await waitForTerminalTask(context, taskId)
+      assertTaskSucceeded(task)
+      expect(task.lastSuccessfulDownloadId).toBeUndefined()
 
-      const files = await waitForCbzArtifact(optionsPage, seededDirectoryName);
-      expect(files.some((file) => file.path.toLowerCase().endsWith('.cbz') && file.size > 0)).toBe(true);
+      const files = await waitForCbzArtifact(optionsPage, seededDirectoryName)
+      expect(
+        files.some(
+          (file) => file.path.toLowerCase().endsWith(".cbz") && file.size > 0
+        )
+      ).toBe(true)
     } finally {
-      await optionsPage.close();
+      await optionsPage.close()
     }
-  });
-});
+  })
+})

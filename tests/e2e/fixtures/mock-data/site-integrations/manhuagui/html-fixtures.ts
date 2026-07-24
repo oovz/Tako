@@ -18,81 +18,114 @@
  * that wraps the image URLs with `eval(function(p,a,c,k,e,d){…})(…)`.
  */
 
-import { compressToBase64 } from '../../../../../shared/manhuagui-compress';
+import { compressToBase64 } from "../../../../../shared/manhuagui-compress"
 import {
   MANHUAGUI_CONFIG_SCRIPT_URL,
   buildManhuaguiChapterPathSegment,
   buildManhuaguiChapterSlMetadata,
   buildManhuaguiPackedPayloadScript,
   type ManhuaguiPackedImageData,
-} from './api-fixtures';
-import { ADULT_CHAPTERS, BASIC_CHAPTERS, CATEGORY_CHAPTERS, KIMETSU_CHAPTERS, SMALL_SERIES } from './chapter-data';
-import { buildManhuaguiImageFilenames } from './image-fixtures';
-import { ADULT_SERIES, BASIC_SERIES, CATEGORY_SERIES, KIMETSU_SERIES, MINIMAL_SERIES } from './series-data';
+} from "./api-fixtures"
+import {
+  ADULT_CHAPTERS,
+  BASIC_CHAPTERS,
+  CATEGORY_CHAPTERS,
+  KIMETSU_CHAPTERS,
+  SMALL_SERIES,
+} from "./chapter-data"
+import { buildManhuaguiImageFilenames } from "./image-fixtures"
+import {
+  ADULT_SERIES,
+  BASIC_SERIES,
+  CATEGORY_SERIES,
+  KIMETSU_SERIES,
+  MINIMAL_SERIES,
+} from "./series-data"
 
 interface SeriesPageChapterGroup {
-  volumeLabel: string;
-  chapters: Array<{ id: string; url: string; title: string; displayTitle?: string }>;
-  beforeListHtml?: string;
+  volumeLabel: string
+  chapters: Array<{
+    id: string
+    url: string
+    title: string
+    displayTitle?: string
+  }>
+  beforeListHtml?: string
 }
 
 interface BuildSeriesPageHtmlOptions {
-  seriesId: string;
-  seriesTitle: string;
-  author?: string;
-  description?: string;
-  coverUrl?: string;
-  status?: string;
-  groups: SeriesPageChapterGroup[];
+  seriesId: string
+  seriesTitle: string
+  author?: string
+  description?: string
+  coverUrl?: string
+  status?: string
+  groups: SeriesPageChapterGroup[]
 }
 
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 function renderChapterListBlocks(groups: SeriesPageChapterGroup[]): string {
   return groups
-    .map((group) => `
+    .map((group) =>
+      `
       <h4>${escapeHtml(group.volumeLabel)}</h4>
-      ${group.beforeListHtml ?? ''}
+      ${group.beforeListHtml ?? ""}
       <div class="chapter-list">
         <ul>
           ${group.chapters
             .map(
               (chapter) =>
-                `<li><a href="${escapeHtml(new URL(chapter.url).pathname)}" title="${escapeHtml(chapter.title)}"><span>${chapter.displayTitle ?? escapeHtml(chapter.title)}</span></a></li>`,
+                `<li><a href="${escapeHtml(new URL(chapter.url).pathname)}" title="${escapeHtml(chapter.title)}"><span>${chapter.displayTitle ?? escapeHtml(chapter.title)}</span></a></li>`
             )
-            .join('\n          ')}
+            .join("\n          ")}
         </ul>
       </div>
-    `.trim())
-    .join('\n');
+    `.trim()
+    )
+    .join("\n")
 }
 
 function groupChaptersByVolume(
-  chapters: ReadonlyArray<{ id: string; url: string; title: string; volumeLabel?: string }>,
-  defaultVolumeLabel = '单话',
+  chapters: ReadonlyArray<{
+    id: string
+    url: string
+    title: string
+    volumeLabel?: string
+  }>,
+  defaultVolumeLabel = "单话"
 ): SeriesPageChapterGroup[] {
-  const groups = new Map<string, SeriesPageChapterGroup>();
+  const groups = new Map<string, SeriesPageChapterGroup>()
   for (const chapter of chapters) {
-    const label = chapter.volumeLabel ?? defaultVolumeLabel;
-    let group = groups.get(label);
+    const label = chapter.volumeLabel ?? defaultVolumeLabel
+    let group = groups.get(label)
     if (!group) {
-      group = { volumeLabel: label, chapters: [] };
-      groups.set(label, group);
+      group = { volumeLabel: label, chapters: [] }
+      groups.set(label, group)
     }
-    group.chapters.push({ id: chapter.id, url: chapter.url, title: chapter.title });
+    group.chapters.push({
+      id: chapter.id,
+      url: chapter.url,
+      title: chapter.title,
+    })
   }
-  return [...groups.values()];
+  return [...groups.values()]
 }
 
-function renderSeriesPageFrame(options: BuildSeriesPageHtmlOptions, chapterSection: string): string {
-  const metaOgImage = options.coverUrl ? `<meta property="og:image" content="${escapeHtml(options.coverUrl)}">` : '';
+function renderSeriesPageFrame(
+  options: BuildSeriesPageHtmlOptions,
+  chapterSection: string
+): string {
+  const metaOgImage = options.coverUrl
+    ? `<meta property="og:image" content="${escapeHtml(options.coverUrl)}">`
+    : ""
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -106,28 +139,30 @@ function renderSeriesPageFrame(options: BuildSeriesPageHtmlOptions, chapterSecti
     <div class="book-title">
       <h1>${escapeHtml(options.seriesTitle)}</h1>
     </div>
-    ${options.coverUrl ? `<div class="hcover"><img src="${escapeHtml(options.coverUrl)}" alt="cover"></div>` : ''}
+    ${options.coverUrl ? `<div class="hcover"><img src="${escapeHtml(options.coverUrl)}" alt="cover"></div>` : ""}
     <ul class="detail-list">
       <li><span></span></li>
       <li><span></span></li>
       <li><span></span></li>
       <li><span></span></li>
-      <li><span>${options.author ? `<a>${escapeHtml(options.author)}</a>` : ''}</span></li>
+      <li><span>${options.author ? `<a>${escapeHtml(options.author)}</a>` : ""}</span></li>
       <li><span></span></li>
       <li><span></span></li>
-      <li><span>${options.status ? escapeHtml(options.status) : ''}</span></li>
+      <li><span>${options.status ? escapeHtml(options.status) : ""}</span></li>
     </ul>
-    ${options.description ? `<div id="intro-all">${escapeHtml(options.description)}</div>` : ''}
+    ${options.description ? `<div id="intro-all">${escapeHtml(options.description)}</div>` : ""}
   </div>
   <div class="chapter cf mt16">
     ${chapterSection}
   </div>
 </body>
-</html>`;
+</html>`
 }
 
-export function buildManhuaguiSeriesPageHtml(options: BuildSeriesPageHtmlOptions): string {
-  return renderSeriesPageFrame(options, renderChapterListBlocks(options.groups));
+export function buildManhuaguiSeriesPageHtml(
+  options: BuildSeriesPageHtmlOptions
+): string {
+  return renderSeriesPageFrame(options, renderChapterListBlocks(options.groups))
 }
 
 /**
@@ -135,18 +170,20 @@ export function buildManhuaguiSeriesPageHtml(options: BuildSeriesPageHtmlOptions
  * real chapter markup in `#__VIEWSTATE`. The production
  * `resolveAdultChapterDocument` decodes this exact payload shape.
  */
-export function buildManhuaguiAdultSeriesPageHtml(options: BuildSeriesPageHtmlOptions): string {
-  const hiddenMarkup = `<div class="chapter">${renderChapterListBlocks(options.groups)}</div>`;
-  const compressedViewState = compressToBase64(hiddenMarkup);
+export function buildManhuaguiAdultSeriesPageHtml(
+  options: BuildSeriesPageHtmlOptions
+): string {
+  const hiddenMarkup = `<div class="chapter">${renderChapterListBlocks(options.groups)}</div>`
+  const compressedViewState = compressToBase64(hiddenMarkup)
 
   const gateFragment = `
   <div id="checkAdult">
     <p>本漫画包含敏感内容,请确认是否继续浏览</p>
   </div>
   <input id="__VIEWSTATE" value="${escapeHtml(compressedViewState)}">
-  `;
+  `
 
-  return renderSeriesPageFrame(options, gateFragment);
+  return renderSeriesPageFrame(options, gateFragment)
 }
 
 export const BASIC_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
@@ -157,7 +194,7 @@ export const BASIC_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   coverUrl: BASIC_SERIES.series.coverUrl,
   status: BASIC_SERIES.series.status,
   groups: groupChaptersByVolume(BASIC_CHAPTERS.chapters),
-});
+})
 
 export const ADULT_SERIES_PAGE_HTML = buildManhuaguiAdultSeriesPageHtml({
   seriesId: ADULT_SERIES.series.seriesId,
@@ -167,14 +204,14 @@ export const ADULT_SERIES_PAGE_HTML = buildManhuaguiAdultSeriesPageHtml({
   coverUrl: ADULT_SERIES.series.coverUrl,
   status: ADULT_SERIES.series.status,
   groups: groupChaptersByVolume(ADULT_CHAPTERS.chapters),
-});
+})
 
 export const MINIMAL_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   seriesId: MINIMAL_SERIES.series.seriesId,
   seriesTitle: MINIMAL_SERIES.series.seriesTitle,
   status: MINIMAL_SERIES.series.status,
   groups: groupChaptersByVolume(SMALL_SERIES.chapters),
-});
+})
 
 export const CATEGORY_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   seriesId: CATEGORY_SERIES.series.seriesId,
@@ -184,7 +221,7 @@ export const CATEGORY_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   coverUrl: CATEGORY_SERIES.series.coverUrl,
   status: CATEGORY_SERIES.series.status,
   groups: groupChaptersByVolume(CATEGORY_CHAPTERS.chapters),
-});
+})
 
 export const KIMETSU_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   seriesId: KIMETSU_SERIES.series.seriesId,
@@ -195,46 +232,53 @@ export const KIMETSU_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   status: KIMETSU_SERIES.series.status,
   groups: [
     {
-      volumeLabel: '单行本',
-      chapters: [{
-        id: '585094',
-        url: KIMETSU_CHAPTERS.chapters[0]!.url,
-        title: '第01卷',
-        displayTitle: '第01卷<i>190p</i>',
-      }],
+      volumeLabel: "单行本",
+      chapters: [
+        {
+          id: "585094",
+          url: KIMETSU_CHAPTERS.chapters[0]!.url,
+          title: "第01卷",
+          displayTitle: "第01卷<i>190p</i>",
+        },
+      ],
     },
     {
-      volumeLabel: '单话',
-      beforeListHtml: '<div class="chapter-page cf mt10"><a>1-26</a><a>27-116</a><a>117-206</a></div>',
-      chapters: [{
-        id: '219425',
-        url: KIMETSU_CHAPTERS.chapters[1]!.url,
-        title: '第01回',
-        displayTitle: '第01回<i>54p</i>',
-      }],
+      volumeLabel: "单话",
+      beforeListHtml:
+        '<div class="chapter-page cf mt10"><a>1-26</a><a>27-116</a><a>117-206</a></div>',
+      chapters: [
+        {
+          id: "219425",
+          url: KIMETSU_CHAPTERS.chapters[1]!.url,
+          title: "第01回",
+          displayTitle: "第01回<i>54p</i>",
+        },
+      ],
     },
     {
-      volumeLabel: '番外篇',
-      chapters: [{
-        id: '494877',
-        url: KIMETSU_CHAPTERS.chapters[2]!.url,
-        title: '20卷附录',
-        displayTitle: '20卷附录<i>8p</i>',
-      }],
+      volumeLabel: "番外篇",
+      chapters: [
+        {
+          id: "494877",
+          url: KIMETSU_CHAPTERS.chapters[2]!.url,
+          title: "20卷附录",
+          displayTitle: "20卷附录<i>8p</i>",
+        },
+      ],
     },
   ],
-});
+})
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>漫画柜</title></head>
 <body><main>Manhuagui Home</main></body>
-</html>`;
+</html>`
 
 interface BuildChapterPageHtmlOptions {
-  seriesId: string;
-  chapterId: string;
-  files?: string[];
+  seriesId: string
+  chapterId: string
+  files?: string[]
 }
 
 /**
@@ -254,14 +298,16 @@ interface BuildChapterPageHtmlOptions {
  * anywhere in the HTML. We keep the rest of the document lightweight so
  * HTML decoding stays fast.
  */
-export function buildManhuaguiChapterPageHtml(options: BuildChapterPageHtmlOptions): string {
-  const files = options.files ?? buildManhuaguiImageFilenames();
+export function buildManhuaguiChapterPageHtml(
+  options: BuildChapterPageHtmlOptions
+): string {
+  const files = options.files ?? buildManhuaguiImageFilenames()
   const imgData: ManhuaguiPackedImageData = {
     path: buildManhuaguiChapterPathSegment(options.seriesId, options.chapterId),
     files,
     sl: buildManhuaguiChapterSlMetadata(options.chapterId),
-  };
-  const packedScript = buildManhuaguiPackedPayloadScript(imgData);
+  }
+  const packedScript = buildManhuaguiPackedPayloadScript(imgData)
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -274,11 +320,11 @@ export function buildManhuaguiChapterPageHtml(options: BuildChapterPageHtmlOptio
   <div id="mangaBox"></div>
   <script>${packedScript}</script>
 </body>
-</html>`;
+</html>`
 }
 
 /** Backward-compatible alias for call sites from Phase-2 Layer-1 specs. */
 export const CHAPTER_PAGE_PLACEHOLDER_HTML = buildManhuaguiChapterPageHtml({
   seriesId: BASIC_SERIES.series.seriesId,
   chapterId: BASIC_CHAPTERS.chapters[0]!.id,
-});
+})

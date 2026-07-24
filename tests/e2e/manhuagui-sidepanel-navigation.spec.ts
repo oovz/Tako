@@ -1,114 +1,261 @@
-import { test, expect } from './fixtures/extension';
+import { test, expect } from "./fixtures/extension"
 import {
   getSessionState,
   getTabId,
   openSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateCleared,
-} from './fixtures/state-helpers';
-import { MANHUAGUI_BASE_URL } from './fixtures/test-domains';
-import { Manhuagui } from './fixtures/mock-data';
+} from "./fixtures/state-helpers"
+import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains"
+import { Manhuagui } from "./fixtures/mock-data"
 
-test.describe('Manhuagui side panel navigation workflows (mocked)', () => {
-  test('front page -> series page initializes tab state', async ({ context, extensionId, page }) => {
-    await page.goto(MANHUAGUI_BASE_URL, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
+  test("front page -> series page initializes tab state", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    await page.goto(MANHUAGUI_BASE_URL, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page);
-    await expect(sp.locator('#root')).toBeVisible();
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
 
-    await page.bringToFront();
+    await page.bringToFront()
 
-    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.BASIC_SERIES.series.seriesId}/`;
-    await page.goto(seriesUrl, { waitUntil: 'domcontentloaded' });
+    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.BASIC_SERIES.series.seriesId}/`
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
 
-    await waitForTabSeriesTitle(context, tabId, Manhuagui.BASIC_SERIES.series.seriesTitle);
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.BASIC_SERIES.series.seriesTitle
+    )
 
-    await sp.close();
-  });
+    const series = Manhuagui.BASIC_SERIES.series
+    const state = await getSessionState<{
+      metadata?: { coverUrl?: string }
+    }>(context, `tab_${tabId}`)
+    expect(state?.metadata?.coverUrl).toBe(series.coverUrl)
 
-  test('adult-gated series resolves chapter list via __VIEWSTATE fallback', async ({ context, extensionId, page }) => {
-    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.ADULT_SERIES.series.seriesId}/`;
+    const cover = sp.getByRole("img", { name: series.seriesTitle })
+    await expect(cover).toHaveAttribute("src", series.coverUrl!)
+    await expect
+      .poll(() =>
+        cover.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0
+        )
+      )
+      .toBe(true)
 
-    await page.goto(seriesUrl, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+    await sp.close()
+  })
 
-    const sp = await openSidepanelHarness(context, extensionId, page);
-    await expect(sp.locator('#root')).toBeVisible();
-    await page.bringToFront();
+  test("adult-gated series stays visible but exposes no hidden chapters without consent", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.ADULT_SERIES.series.seriesId}/`
 
-    await waitForTabSeriesTitle(context, tabId, Manhuagui.ADULT_SERIES.series.seriesTitle);
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
 
-    // The adult-gate fixture ships two chapters in the lz-string-compressed
-    // __VIEWSTATE. Verify both surface in the projected chapter list so a
-    // regression in `resolveAdultChapterDocument` trips this spec.
-    const state = await getSessionState<{ chapters?: Array<{ id?: string }> }>(context, `tab_${tabId}`);
-    const chapterIds = (state?.chapters ?? []).map((chapter) => chapter.id).filter((id): id is string => typeof id === 'string');
-    expect(chapterIds).toEqual(expect.arrayContaining(['700001', '700002']));
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await page.bringToFront()
 
-    await sp.close();
-  });
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.ADULT_SERIES.series.seriesTitle
+    )
 
-  test('category headings render as volume labels in the chapter selector', async ({ context, extensionId, page }) => {
-    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.CATEGORY_SERIES.series.seriesId}/`;
+    // Consent is read-only. The extension must not decode hidden __VIEWSTATE
+    // chapters or synthesize the site's adult-consent cookie.
+    const state = await getSessionState<{ chapters?: Array<{ id?: string }> }>(
+      context,
+      `tab_${tabId}`
+    )
+    const chapterIds = (state?.chapters ?? [])
+      .map((chapter) => chapter.id)
+      .filter((id): id is string => typeof id === "string")
+    expect(chapterIds).toEqual([])
 
-    await page.goto(seriesUrl, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+    await sp.close()
+  })
 
-    const sp = await openSidepanelHarness(context, extensionId, page);
-    await expect(sp.locator('#root')).toBeVisible();
-    await page.bringToFront();
+  test("refreshes from the visible chapter DOM after the adult gate is accepted", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.ADULT_SERIES.series.seriesId}/`
+    const expectedChapter = Manhuagui.ADULT_CHAPTERS.chapters[0]!
 
-    await waitForTabSeriesTitle(context, tabId, Manhuagui.CATEGORY_SERIES.series.seriesTitle);
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await page.bringToFront()
+
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.ADULT_SERIES.series.seriesTitle
+    )
+    await expect(page.locator("#checkAdult")).toHaveCount(1)
+
+    // Model Manhuagui's own gate behavior: the page replaces the gate with
+    // DOM the user can already see. The extension observes that replacement;
+    // it never reads or synthesizes the site's consent cookie or viewstate.
+    await page.evaluate((chapter) => {
+      const gate = document.querySelector("#checkAdult")
+      const container = document.querySelector(".chapter")
+      if (!gate || !container) {
+        throw new Error("Mock adult-gate page is missing expected elements")
+      }
+
+      const heading = document.createElement("h4")
+      heading.textContent = "单话"
+      const list = document.createElement("div")
+      list.className = "chapter-list"
+      const listItems = document.createElement("ul")
+      const item = document.createElement("li")
+      const anchor = document.createElement("a")
+      anchor.href = new URL(chapter.url).pathname
+      anchor.title = chapter.title
+      anchor.textContent = chapter.title
+      item.append(anchor)
+      listItems.append(item)
+      list.append(listItems)
+      gate.replaceWith(heading, list)
+    }, expectedChapter)
+
+    await expect
+      .poll(async () => {
+        const state = await getSessionState<{
+          chapters?: Array<{ id?: string }>
+        }>(context, `tab_${tabId}`)
+        return state?.chapters?.some(
+          (chapter) => chapter.id === expectedChapter.id
+        )
+      })
+      .toBe(true)
+
+    await sp.close()
+  })
+
+  test("category headings render as volume labels in the chapter selector", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.CATEGORY_SERIES.series.seriesId}/`
+
+    await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
+
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await page.bringToFront()
+
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.CATEGORY_SERIES.series.seriesTitle
+    )
 
     const state = await getSessionState<{
-      volumes?: Array<{ id?: string; title?: string; label?: string }>;
-      chapters?: Array<{ id?: string; volumeId?: string; volumeLabel?: string; volumeNumber?: number }>;
-    }>(context, `tab_${tabId}`);
+      volumes?: Array<{ id?: string; title?: string; label?: string }>
+      chapters?: Array<{
+        id?: string
+        volumeId?: string
+        volumeLabel?: string
+        volumeNumber?: number
+      }>
+    }>(context, `tab_${tabId}`)
     expect(state?.volumes).toEqual([
-      { id: 'manhuagui-volume-1', title: '单行本', label: '单行本' },
-      { id: 'manhuagui-volume-2', title: '番外篇', label: '番外篇' },
-      { id: 'manhuagui-volume-3', title: '单话', label: '单话' },
-    ]);
-    expect(state?.chapters?.map((chapter) => ({
-      id: chapter.id,
-      volumeId: chapter.volumeId,
-      volumeLabel: chapter.volumeLabel,
-      volumeNumber: chapter.volumeNumber,
-    }))).toEqual(expect.arrayContaining([
-      { id: '378325', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
-      { id: '363932', volumeId: 'manhuagui-volume-2', volumeLabel: '番外篇', volumeNumber: undefined },
-      { id: '357842', volumeId: 'manhuagui-volume-3', volumeLabel: '单话', volumeNumber: undefined },
-    ]));
+      { id: "manhuagui-volume-1", title: "单行本", label: "单行本" },
+      { id: "manhuagui-volume-2", title: "番外篇", label: "番外篇" },
+      { id: "manhuagui-volume-3", title: "单话", label: "单话" },
+    ])
+    expect(
+      state?.chapters?.map((chapter) => ({
+        id: chapter.id,
+        volumeId: chapter.volumeId,
+        volumeLabel: chapter.volumeLabel,
+        volumeNumber: chapter.volumeNumber,
+      }))
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          id: "378325",
+          volumeId: "manhuagui-volume-1",
+          volumeLabel: "单行本",
+          volumeNumber: undefined,
+        },
+        {
+          id: "363932",
+          volumeId: "manhuagui-volume-2",
+          volumeLabel: "番外篇",
+          volumeNumber: undefined,
+        },
+        {
+          id: "357842",
+          volumeId: "manhuagui-volume-3",
+          volumeLabel: "单话",
+          volumeNumber: undefined,
+        },
+      ])
+    )
 
-    await sp.getByRole('button', { name: /Select Chapters/i }).click();
-    const volumeRows = sp.locator('[data-testid="inline-item"][data-kind="volume"]');
-    await expect(volumeRows).toHaveCount(3);
-    await expect(volumeRows).toContainText(['单行本', '番外篇', '单话']);
-    await expect(volumeRows).not.toContainText(['Volume 1', 'Volume 2', 'Volume 3']);
+    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    const volumeRows = sp.locator(
+      '[data-testid="inline-item"][data-kind="volume"]'
+    )
+    await expect(volumeRows).toHaveCount(3)
+    await expect(volumeRows).toContainText(["单行本", "番外篇", "单话"])
+    await expect(volumeRows).not.toContainText([
+      "Volume 1",
+      "Volume 2",
+      "Volume 3",
+    ])
 
-    await sp.close();
-  });
+    await sp.close()
+  })
 
-  test('series -> front page -> different series reinitializes tab state', async ({ context, extensionId, page }) => {
-    const series1Url = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.BASIC_SERIES.series.seriesId}/`;
-    const series2Url = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.MINIMAL_SERIES.series.seriesId}/`;
+  test("series -> front page -> different series reinitializes tab state", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const series1Url = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.BASIC_SERIES.series.seriesId}/`
+    const series2Url = `${MANHUAGUI_BASE_URL}/comic/${Manhuagui.MINIMAL_SERIES.series.seriesId}/`
 
-    await page.goto(series1Url, { waitUntil: 'domcontentloaded' });
-    const tabId = await getTabId(page, context);
+    await page.goto(series1Url, { waitUntil: "domcontentloaded" })
+    const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page);
-    await expect(sp.locator('#root')).toBeVisible();
-    await page.bringToFront();
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await page.bringToFront()
 
-    await waitForTabSeriesTitle(context, tabId, Manhuagui.BASIC_SERIES.series.seriesTitle);
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.BASIC_SERIES.series.seriesTitle
+    )
 
-    await page.goto(MANHUAGUI_BASE_URL, { waitUntil: 'domcontentloaded' });
-    await waitForTabStateCleared(context, tabId);
+    await page.goto(MANHUAGUI_BASE_URL, { waitUntil: "domcontentloaded" })
+    await waitForTabStateCleared(context, tabId)
 
-    await page.goto(series2Url, { waitUntil: 'domcontentloaded' });
-    await waitForTabSeriesTitle(context, tabId, Manhuagui.MINIMAL_SERIES.series.seriesTitle);
+    await page.goto(series2Url, { waitUntil: "domcontentloaded" })
+    await waitForTabSeriesTitle(
+      context,
+      tabId,
+      Manhuagui.MINIMAL_SERIES.series.seriesTitle
+    )
 
-    await sp.close();
-  });
-});
+    await sp.close()
+  })
+})
