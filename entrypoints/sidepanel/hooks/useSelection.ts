@@ -1,24 +1,29 @@
-import { useCallback, useRef } from 'react'
-import type { VolumeOrChapter, SidePanelChapter } from '../types'
+import { useCallback, useRef } from "react"
+import type { VolumeOrChapter, SidePanelChapter } from "../types"
 
 interface UseSelectionOptions {
   items: VolumeOrChapter[]
-  setItems: (items: VolumeOrChapter[]) => void
+  setSelectedChapterIds: (chapterIds: string[]) => void
+  setCollapsedGroups: (updater: (prev: Set<string>) => Set<string>) => void
   tabId: number | undefined
   isDownloading: boolean
 }
 
 interface UseSelectionReturn {
-  handleChapterSelect: (chapterId: string, checked: boolean, isShiftClick?: boolean) => void
-  handleSelectAll: (forceSelect?: boolean | 'indeterminate') => void
+  handleChapterSelect: (
+    chapterId: string,
+    checked: boolean,
+    isShiftClick?: boolean
+  ) => void
+  handleSelectAll: (forceSelect?: boolean | "indeterminate") => void
   handleVolumeToggle: (groupId: string) => void
   handleVolumeSelectAll: (groupId: string) => void
 }
 
 function getAllChapters(items: VolumeOrChapter[]): SidePanelChapter[] {
   const chapters: SidePanelChapter[] = []
-  items.forEach(item => {
-    if ('chapters' in item) {
+  items.forEach((item) => {
+    if ("chapters" in item) {
       chapters.push(...item.chapters)
     } else {
       chapters.push(item)
@@ -27,132 +32,163 @@ function getAllChapters(items: VolumeOrChapter[]): SidePanelChapter[] {
   return chapters
 }
 
-function applySelectionToItems(
-  items: VolumeOrChapter[],
-  chapterIds: Set<string>,
-  selected: boolean,
-): VolumeOrChapter[] {
-  return items.map((item) => {
-    if ('chapters' in item) {
-      return {
-        ...item,
-        chapters: item.chapters.map((chapter) => {
-          if (chapter.locked === true) {
-            return chapter.selected ? { ...chapter, selected: false } : chapter
-          }
-
-          return chapterIds.has(chapter.id) ? { ...chapter, selected } : chapter
-        }),
-      }
+/**
+ * Compute the next set of selected chapter IDs after applying a selection
+ * change to the given chapter IDs. Locked chapters are always excluded.
+ */
+function computeNextSelectedIds(
+  currentSelected: Set<string>,
+  targetIds: string[],
+  selected: boolean
+): string[] {
+  const next = new Set(currentSelected)
+  for (const id of targetIds) {
+    if (selected) {
+      next.add(id)
+    } else {
+      next.delete(id)
     }
-
-    if (item.locked === true) {
-      return item.selected ? { ...item, selected: false } : item
-    }
-
-    return chapterIds.has(item.id) ? { ...item, selected } : item
-  })
+  }
+  return Array.from(next)
 }
 
-export function __applySelectionToItemsForTests(
-  items: VolumeOrChapter[],
-  chapterIds: Set<string>,
-  selected: boolean,
-): VolumeOrChapter[] {
-  return applySelectionToItems(items, chapterIds, selected)
-}
-
-export function useSelection({ items, setItems, tabId, isDownloading }: UseSelectionOptions): UseSelectionReturn {
+export function useSelection({
+  items,
+  setSelectedChapterIds,
+  setCollapsedGroups,
+  tabId,
+  isDownloading,
+}: UseSelectionOptions): UseSelectionReturn {
   const lastClickedIndexRef = useRef<number>(-1)
 
-  const itemsRef = useRef(items)
-  const setItemsRef = useRef(setItems)
-  const tabIdRef = useRef(tabId)
-  const isDownloadingRef = useRef(isDownloading)
+  const handleChapterSelect = useCallback(
+    (chapterId: string, checked: boolean, isShiftClick = false) => {
+      if (isDownloading || tabId == null) return
 
-  itemsRef.current = items
-  setItemsRef.current = setItems
-  tabIdRef.current = tabId
-  isDownloadingRef.current = isDownloading
-  
-  const handleChapterSelect = useCallback((chapterId: string, checked: boolean, isShiftClick = false) => {
-    if (isDownloadingRef.current || tabIdRef.current == null) return
-    
-    const allChapters = getAllChapters(itemsRef.current)
-    const clickedIndex = allChapters.findIndex(ch => ch.id === chapterId)
-    
-    if (clickedIndex === -1) return
-    if (allChapters[clickedIndex].locked === true) return
-    
-    let chapterIdsToUpdate: string[]
-    
-    if (isShiftClick && lastClickedIndexRef.current !== -1) {
-      const start = Math.min(lastClickedIndexRef.current, clickedIndex)
-      const end = Math.max(lastClickedIndexRef.current, clickedIndex)
-      chapterIdsToUpdate = allChapters
-        .slice(start, end + 1)
-        .filter(ch => ch.locked !== true)
-        .map(ch => ch.id)
-    } else {
-      chapterIdsToUpdate = [allChapters[clickedIndex].id]
-      lastClickedIndexRef.current = clickedIndex
-    }
+      const allChapters = getAllChapters(items)
+      const clickedIndex = allChapters.findIndex((ch) => ch.id === chapterId)
 
-    if (chapterIdsToUpdate.length === 0) return
+      if (clickedIndex === -1) return
+      if (allChapters[clickedIndex].locked === true) return
 
-    const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), checked)
-    setItemsRef.current(updatedItems)
-  }, [])
-  
-  const handleSelectAll = useCallback((forceSelect?: boolean | 'indeterminate') => {
-    if (isDownloadingRef.current || tabIdRef.current == null) return
-    
-    const allChapters = getAllChapters(itemsRef.current)
-    const selectableChapters = allChapters.filter(ch => ch.locked !== true)
-    const allSelected = selectableChapters.length > 0 && selectableChapters.every(ch => ch.selected)
-    // If forceSelect is a boolean, use it; otherwise toggle (ignore 'indeterminate')
-    const newSelected = typeof forceSelect === 'boolean' ? forceSelect : !allSelected
-    
-    const chapterIdsToUpdate = selectableChapters.map(ch => ch.id)
+      let chapterIdsToUpdate: string[]
 
-    if (chapterIdsToUpdate.length === 0) return
-
-    const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), newSelected)
-
-    setItemsRef.current(updatedItems)
-  }, [])
-  
-  const handleVolumeToggle = useCallback((groupId: string) => {
-    if (isDownloadingRef.current || tabIdRef.current == null) return
-
-    const updatedItems = itemsRef.current.map(item => {
-      if ('chapters' in item && item.groupId === groupId) {
-        return { ...item, collapsed: !item.collapsed }
+      if (isShiftClick && lastClickedIndexRef.current !== -1) {
+        const start = Math.min(lastClickedIndexRef.current, clickedIndex)
+        const end = Math.max(lastClickedIndexRef.current, clickedIndex)
+        chapterIdsToUpdate = allChapters
+          .slice(start, end + 1)
+          .filter((ch) => ch.locked !== true)
+          .map((ch) => ch.id)
+      } else {
+        chapterIdsToUpdate = [allChapters[clickedIndex].id]
+        lastClickedIndexRef.current = clickedIndex
       }
-      return item
-    })
-    setItemsRef.current(updatedItems)
-  }, [])
-  
-  const handleVolumeSelectAll = useCallback((groupId: string) => {
-    if (isDownloadingRef.current || tabIdRef.current == null) return
-    
-    const volume = itemsRef.current.find(item => 'chapters' in item && item.groupId === groupId)
-    if (!volume || !('chapters' in volume)) return
-    
-    const selectableChapters = volume.chapters.filter(ch => ch.locked !== true)
-    const allSelected = selectableChapters.length > 0 && selectableChapters.every(ch => ch.selected)
-    const newSelected = !allSelected
-    
-    const chapterIdsToUpdate = selectableChapters.map(ch => ch.id)
 
-    if (chapterIdsToUpdate.length === 0) return
+      if (chapterIdsToUpdate.length === 0) return
 
-    const updatedItems = applySelectionToItems(itemsRef.current, new Set(chapterIdsToUpdate), newSelected)
+      // Compute next selected IDs from current items state
+      const currentSelected = new Set(
+        allChapters
+          .filter((ch) => ch.selected && ch.locked !== true)
+          .map((ch) => ch.id)
+      )
+      const nextIds = computeNextSelectedIds(
+        currentSelected,
+        chapterIdsToUpdate,
+        checked
+      )
+      setSelectedChapterIds(nextIds)
+    },
+    [isDownloading, items, setSelectedChapterIds, tabId]
+  )
 
-    setItemsRef.current(updatedItems)
-  }, [])
-  
+  const handleSelectAll = useCallback(
+    (forceSelect?: boolean | "indeterminate") => {
+      if (isDownloading || tabId == null) return
+
+      const allChapters = getAllChapters(items)
+      const selectableChapters = allChapters.filter((ch) => ch.locked !== true)
+      const allSelected =
+        selectableChapters.length > 0 &&
+        selectableChapters.every((ch) => ch.selected)
+      // If forceSelect is a boolean, use it; otherwise toggle (ignore 'indeterminate')
+      const newSelected =
+        typeof forceSelect === "boolean" ? forceSelect : !allSelected
+
+      const chapterIdsToUpdate = selectableChapters.map((ch) => ch.id)
+
+      if (chapterIdsToUpdate.length === 0) return
+
+      const currentSelected = new Set(
+        allChapters
+          .filter((ch) => ch.selected && ch.locked !== true)
+          .map((ch) => ch.id)
+      )
+      const nextIds = computeNextSelectedIds(
+        currentSelected,
+        chapterIdsToUpdate,
+        newSelected
+      )
+      setSelectedChapterIds(nextIds)
+    },
+    [isDownloading, items, setSelectedChapterIds, tabId]
+  )
+
+  const handleVolumeToggle = useCallback(
+    (groupId: string) => {
+      if (isDownloading || tabId == null) return
+
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev)
+        if (next.has(groupId)) {
+          next.delete(groupId)
+        } else {
+          next.add(groupId)
+        }
+        return next
+      })
+    },
+    [isDownloading, setCollapsedGroups, tabId]
+  )
+
+  const handleVolumeSelectAll = useCallback(
+    (groupId: string) => {
+      if (isDownloading || tabId == null) return
+
+      const volume = items.find(
+        (item) => "chapters" in item && item.groupId === groupId
+      )
+      if (!volume || !("chapters" in volume)) return
+
+      const selectableChapters = volume.chapters.filter(
+        (ch) => ch.locked !== true
+      )
+      const allSelected =
+        selectableChapters.length > 0 &&
+        selectableChapters.every((ch) => ch.selected)
+      const newSelected = !allSelected
+
+      const chapterIdsToUpdate = selectableChapters.map((ch) => ch.id)
+
+      if (chapterIdsToUpdate.length === 0) return
+
+      const allChapters = getAllChapters(items)
+      const currentSelected = new Set(
+        allChapters
+          .filter((ch) => ch.selected && ch.locked !== true)
+          .map((ch) => ch.id)
+      )
+      const nextIds = computeNextSelectedIds(
+        currentSelected,
+        chapterIdsToUpdate,
+        newSelected
+      )
+      setSelectedChapterIds(nextIds)
+    },
+    [isDownloading, items, setSelectedChapterIds, tabId]
+  )
+
   return {
     handleChapterSelect,
     handleSelectAll,

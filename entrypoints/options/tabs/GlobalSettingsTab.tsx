@@ -3,14 +3,15 @@
  * Advanced/debug settings are in the About/Debug section.
  */
 
-import React from 'react'
+import React from "react"
 import type { ExtensionSettings } from "@/src/storage/settings-types"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
-import { t } from '@/src/runtime/i18n'
-import { GlobalNotificationsSection } from '@/entrypoints/options/components/GlobalNotificationsSection'
-import { GlobalPerformanceSection } from '@/entrypoints/options/components/GlobalPerformanceSection'
-import { GlobalRetrySection } from '@/entrypoints/options/components/GlobalRetrySection'
-import { GlobalStorageFormatSection } from '@/entrypoints/options/components/GlobalStorageFormatSection'
+import { t } from "@/src/runtime/i18n"
+import { GlobalNotificationsSection } from "@/entrypoints/options/components/GlobalNotificationsSection"
+import { GlobalPerformanceSection } from "@/entrypoints/options/components/GlobalPerformanceSection"
+import { GlobalRetrySection } from "@/entrypoints/options/components/GlobalRetrySection"
+import { GlobalStorageFormatSection } from "@/entrypoints/options/components/GlobalStorageFormatSection"
+import { GlobalInterfacePreferencesSection } from "@/entrypoints/options/components/GlobalInterfacePreferencesSection"
 
 interface GlobalSettingsTabProps {
   settings: ExtensionSettings
@@ -21,37 +22,59 @@ export function GlobalSettingsTab({
   settings,
   onChange,
 }: GlobalSettingsTabProps) {
-
   // Helper to update nested settings
-  const updateDownloads = (updates: Partial<ExtensionSettings['downloads']>) => {
+  const updateDownloads = (
+    updates: Partial<ExtensionSettings["downloads"]>
+  ) => {
     onChange({ downloads: { ...settings.downloads, ...updates } })
   }
 
   const showNoArchiveWarning =
-    settings.downloads.defaultFormat === 'none' &&
-    settings.downloads.downloadMode === 'browser'
+    settings.downloads.defaultFormat === "none" &&
+    settings.downloads.destination === "downloads-api"
 
   // Update global rate limiting policies
-  const updateGlobalPolicy = (scope: 'image' | 'chapter', policy: Partial<RateScopePolicy>) => {
+  const updateGlobalPolicy = (
+    scope: "image" | "chapter",
+    policy: Partial<RateScopePolicy>
+  ) => {
     onChange({
       globalPolicy: {
         ...settings.globalPolicy,
-        [scope]: { ...settings.globalPolicy[scope], ...policy }
-      }
+        [scope]: { ...settings.globalPolicy[scope], ...policy },
+      },
     })
   }
 
   // Update global retry counts
-  const updateGlobalRetries = (updates: Partial<ExtensionSettings['globalRetries']>) => {
+  const updateGlobalRetries = (
+    updates: Partial<ExtensionSettings["globalRetries"]>
+  ) => {
     onChange({ globalRetries: { ...settings.globalRetries, ...updates } })
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">{t('options_generalSettings')}</h1>
-        <p className="text-sm text-muted-foreground">{t('options_generalSettingsDesc')}</p>
+        <h1
+          id="options-global-heading"
+          className="text-2xl font-semibold text-foreground"
+        >
+          {t("options_generalSettings")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("options_generalSettingsDesc")}
+        </p>
       </div>
+
+      <GlobalInterfacePreferencesSection
+        motionPreference={settings.motionPreference}
+        uiLanguage={settings.uiLanguage}
+        onMotionPreferenceChange={(motionPreference) =>
+          onChange({ motionPreference })
+        }
+        onUiLanguageChange={(uiLanguage) => onChange({ uiLanguage })}
+      />
 
       {/* Section 1: Storage & Formats */}
       <GlobalStorageFormatSection
@@ -64,8 +87,10 @@ export function GlobalSettingsTab({
       <GlobalPerformanceSection
         chapterPolicy={settings.globalPolicy.chapter}
         imagePolicy={settings.globalPolicy.image}
-        onChapterPolicyChange={(policy) => updateGlobalPolicy('chapter', policy)}
-        onImagePolicyChange={(policy) => updateGlobalPolicy('image', policy)}
+        onChapterPolicyChange={(policy) =>
+          updateGlobalPolicy("chapter", policy)
+        }
+        onImagePolicyChange={(policy) => updateGlobalPolicy("image", policy)}
       />
 
       {/* Section 3: Retry Settings */}

@@ -11,6 +11,7 @@
   "common_cancel": { "message": "取消" },
   "common_dismiss": { "message": "关闭" },
   "common_remove": { "message": "移除" },
+  "common_undo": { "message": "撤销" },
   "common_restart": { "message": "重新开始" },
   "common_error": { "message": "错误" },
   "common_warning": { "message": "警告" },
@@ -37,12 +38,20 @@
   "sidepanel_openOptionsActionItem": { "message": "打开选项（有待处理事项）" },
 
   "sidepanel_noSeriesDetected": { "message": "未检测到漫画" },
-  "sidepanel_openSupportedPage": { "message": "打开一个受支持的漫画系列页面以开始使用。" },
+  "sidepanel_openSupportedPage": {
+    "message": "打开一个受支持的漫画系列页面以开始使用。"
+  },
   "sidepanel_pageNotRecognized": { "message": "此页面未被识别为漫画系列" },
   "sidepanel_selectChapters": { "message": "选择章节" },
   "sidepanel_closeSelection": { "message": "关闭选择" },
   "sidepanel_noChapters": { "message": "无章节" },
   "sidepanel_noChaptersFound": { "message": "未找到章节" },
+  "sidepanel_selectedChaptersUnavailable": {
+    "message": "所选章节已不可用。"
+  },
+  "sidepanel_enqueueFailed": {
+    "message": "无法将下载添加到队列。"
+  },
   "sidepanel_chaptersCount": {
     "message": "$COUNT$ 章",
     "placeholders": { "count": { "content": "$1" } }
@@ -57,10 +66,14 @@
   },
   "sidepanel_volumeSelectAllAria": {
     "message": "选择卷 $TITLE$ 的全部 $COUNT$ 章",
-    "placeholders": { "title": { "content": "$1" }, "count": { "content": "$2" } }
+    "placeholders": {
+      "title": { "content": "$1" },
+      "count": { "content": "$2" }
+    }
   },
 
   "sidepanel_selectChaptersLabel": { "message": "选择章节" },
+  "sidepanel_skipToContent": { "message": "跳到主要内容" },
   "sidepanel_selectedCount": {
     "message": "已选 $COUNT$",
     "placeholders": { "count": { "content": "$1" } }
@@ -76,13 +89,19 @@
     "message": "下载 ($COUNT$)",
     "placeholders": { "count": { "content": "$1" } }
   },
-  "sidepanel_selectChaptersHint": { "message": "在上方选择章节并点击下载以加入队列" },
+  "sidepanel_selectChaptersHint": {
+    "message": "在上方选择章节并点击下载以加入队列"
+  },
   "sidepanel_noDownloadsYet": { "message": "暂无下载" },
-  "sidepanel_useSelectChapters": { "message": "使用上方的\"选择章节\"开始下载" },
+  "sidepanel_useSelectChapters": {
+    "message": "使用上方的\"选择章节\"开始下载"
+  },
   "sidepanel_recentHistory": { "message": "最近历史" },
   "sidepanel_viewFullHistory": { "message": "查看完整历史" },
   "sidepanel_viewAll": { "message": "查看全部" },
-  "sidepanel_emptyQueue": { "message": "暂无下载。从任意受支持的漫画标签页开始下载即可在此查看。" },
+  "sidepanel_emptyQueue": {
+    "message": "暂无下载。从任意受支持的漫画标签页开始下载即可在此查看。"
+  },
 
   "sidepanel_cancelDownload": { "message": "取消下载" },
   "sidepanel_cancelingDownload": { "message": "正在取消下载" },
@@ -92,25 +111,74 @@
   "sidepanel_restartAllChapters": { "message": "重新开始所有章节" },
   "sidepanel_moveToTop": { "message": "移至顶部" },
   "sidepanel_moveTaskToTop": { "message": "将任务移至顶部" },
+  "sidepanel_moreActions": { "message": "更多操作" },
+  "sidepanel_taskRemovedFromQueue": {
+    "message": "已从队列中移除任务"
+  },
+  "sidepanel_historyRemoved": { "message": "已从历史记录中移除" },
+  "sidepanel_undoFailed": { "message": "无法撤销此操作" },
   "sidepanel_cancelThisDownload": { "message": "取消此下载？" },
-  "sidepanel_cancelProgressWarning": { "message": "正在下载的章节进度可能会丢失。" },
+  "sidepanel_cancelProgressWarning": {
+    "message": "正在下载的章节进度可能会丢失。"
+  },
 
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下载",
-    "placeholders": { "count": { "content": "$1" }, "unit": { "content": "$2" } }
+    "placeholders": {
+      "count": { "content": "$1" },
+      "unit": { "content": "$2" }
+    }
   },
   "sidepanel_chapterPosition": {
     "message": "第 $POS$/$TOTAL$ 章",
     "placeholders": { "pos": { "content": "$1" }, "total": { "content": "$2" } }
   },
+  "progressStage_preparing": { "message": "正在准备章节" },
+  "progressStage_resolving": { "message": "正在获取章节信息" },
+  "progressStage_downloading": {
+    "message": "正在下载第 $CURRENT$/$TOTAL$ 张图片",
+    "placeholders": {
+      "current": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
+  },
+  "progressStage_transforming": {
+    "message": "正在处理第 $CURRENT$/$TOTAL$ 张图片",
+    "placeholders": {
+      "current": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
+  },
+  "progressStage_archiving": { "message": "正在创建压缩包" },
+  "progressStage_saving": { "message": "正在保存文件" },
 
-  "sidepanel_tabNotSupported": { "message": "此标签页不受支持（例如浏览器/扩展内部页面或被策略阻止）。" },
+  "sidepanel_tabNotSupported": {
+    "message": "此标签页不受支持（例如浏览器/扩展内部页面或被策略阻止）。"
+  },
   "sidepanel_noMangaFound": { "message": "此页面未找到漫画。" },
   "sidepanel_siteNotSupported": { "message": "此网站暂不受支持。" },
 
-  "sidepanel_fsaBannerTitle": { "message": "自定义下载文件夹需要关注" },
-  "sidepanel_fsaBannerDefault": { "message": "您的自定义文件夹句柄已失效。请重新选择文件夹以继续使用自定义下载目标模式。" },
-  "sidepanel_reSelect": { "message": "重新选择" },
+  "destinationIssue_title": { "message": "下载文件夹需要处理" },
+  "destinationIssue_permissionRequired": {
+    "message": "请再次授权访问所选文件夹，以继续此任务。"
+  },
+  "destinationIssue_folderMissing": {
+    "message": "请重新选择下载文件夹，以继续此任务。"
+  },
+  "destinationIssue_writeFailed": {
+    "message": "Tako 无法写入所选下载文件夹。"
+  },
+  "destinationIssue_unsupported": {
+    "message": "此浏览器无法使用所选的自定义文件夹。"
+  },
+  "destinationIssue_diskFull": { "message": "所选下载文件夹的可用空间不足。" },
+  "destinationIssue_fixFolder": { "message": "修复文件夹" },
+  "destinationIssue_grantAccess": { "message": "再次授权" },
+  "destinationIssue_chooseFolder": { "message": "选择其他文件夹" },
+  "destinationIssue_continueDownloads": { "message": "改用浏览器下载" },
+  "destinationIssue_cancelTask": { "message": "取消任务" },
+  "destinationIssue_actionFailed": { "message": "无法更新受阻任务" },
+  "destinationIssue_accessGranted": { "message": "已恢复文件夹访问权限" },
 
   "sidepanel_initFailed": { "message": "扩展初始化失败" },
 
@@ -134,6 +202,40 @@
 
   "failureCategory_network": { "message": "网络：" },
   "failureCategory_download": { "message": "下载：" },
+  "downloadError_networkUnavailable": { "message": "网络连接不可用。" },
+  "downloadError_providerRateLimited": {
+    "message": "该站点正在限制请求，请稍后重试。"
+  },
+  "downloadError_providerChanged": { "message": "该站点可能已发生变化。" },
+  "downloadError_chapterUnavailable": { "message": "该章节已不可用。" },
+  "downloadError_folderPermissionRequired": {
+    "message": "需要授予所选文件夹的访问权限。"
+  },
+  "downloadError_folderUnavailable": {
+    "message": "所选文件夹已不可用。"
+  },
+  "downloadError_folderWriteFailed": {
+    "message": "Tako 无法写入所选文件夹。"
+  },
+  "downloadError_diskFull": { "message": "磁盘空间不足。" },
+  "downloadError_browserDownloadInterrupted": {
+    "message": "浏览器未能完成输出文件的保存。"
+  },
+  "downloadError_archiveCreationFailed": {
+    "message": "Tako 无法创建压缩包。"
+  },
+  "downloadError_unknown": {
+    "message": "下载失败。技术详情可在扩展程序控制台中查看。"
+  },
+  "progressStage_preparingNextChapter": { "message": "正在准备下一章" },
+  "sidepanel_persistentError": {
+    "message": "扩展程序需要处理问题。技术详情可在扩展程序控制台中查看。"
+  },
+  "errorBoundary_title": { "message": "出现问题" },
+  "errorBoundary_description": {
+    "message": "发生意外错误。技术详情可在扩展程序控制台中查看。"
+  },
+  "errorBoundary_tryAgain": { "message": "重试" },
 
   "options_takoSettings": { "message": "Tako 设置" },
   "options_takoVersion": {
@@ -149,7 +251,9 @@
   "options_loadingDownloads": { "message": "正在加载下载..." },
 
   "options_generalSettings": { "message": "常规设置" },
-  "options_generalSettingsDesc": { "message": "配置下载格式、性能、重试和通知。" },
+  "options_generalSettingsDesc": {
+    "message": "配置下载格式、性能、重试和通知。"
+  },
 
   "options_storageFormats": { "message": "存储与格式" },
   "options_storageFormatsDesc": { "message": "选择归档格式和文件组织选项。" },
@@ -158,22 +262,32 @@
   "options_includeCoverImage": { "message": "包含系列封面" },
   "options_includeCoverImageDesc": { "message": "将封面图片保存到归档文件中" },
   "options_normalizeFilenames": { "message": "规范化文件名" },
-  "options_normalizeFilenamesDesc": { "message": "将图片重命名为 001.jpg, 002.jpg..." },
+  "options_normalizeFilenamesDesc": {
+    "message": "将图片重命名为 001.jpg, 002.jpg..."
+  },
   "options_overwriteExisting": { "message": "覆盖已有文件" },
   "options_overwriteExistingDesc": { "message": "如果文件已存在则替换" },
   "options_suppressSaveAs": { "message": "禁止另存为对话框" },
-  "options_suppressSaveAsDesc": { "message": "保存到已配置的浏览器下载路径，不打开 Chrome 的文件选择器" },
+  "options_suppressSaveAsDesc": {
+    "message": "保存到已配置的浏览器下载路径，不打开 Chrome 的文件选择器"
+  },
   "options_directoryPathTemplate": { "message": "目录路径模板" },
-  "options_directoryPathTemplateDesc": { "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>" },
+  "options_directoryPathTemplateDesc": {
+    "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
+  },
   "options_filenameTemplate": { "message": "文件名模板" },
-  "options_filenameTemplateDesc": { "message": "归档/文件夹名称的模板。支持相同宏以及 <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3>。" },
+  "options_filenameTemplateDesc": {
+    "message": "归档/文件夹名称的模板。支持相同宏以及 <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3>。"
+  },
   "options_imageFilenamePadding": { "message": "图片文件名补零" },
   "options_imagePaddingAuto": { "message": "自动（基于图片总数）" },
   "options_imagePadding2": { "message": "2 位数 (01-99)" },
   "options_imagePadding3": { "message": "3 位数 (001-999)" },
   "options_imagePadding4": { "message": "4 位数 (0001-9999)" },
   "options_imagePadding5": { "message": "5 位数 (00001-99999)" },
-  "options_imagePaddingDesc": { "message": "规范化图片文件名的补零位数（例如 001.jpg, 002.jpg）。" },
+  "options_imagePaddingDesc": {
+    "message": "规范化图片文件名的补零位数（例如 001.jpg, 002.jpg）。"
+  },
 
   "options_archiveFormat": { "message": "归档格式" },
   "options_cbzArchive": { "message": "CBZ 归档" },
@@ -182,8 +296,12 @@
   "options_zipArchiveDesc": { "message": "标准压缩文件夹" },
   "options_noArchive": { "message": "不归档" },
   "options_noArchiveDesc": { "message": "单独的图片文件" },
-  "options_noArchiveWarningTitle": { "message": "不归档 + 默认下载会使下载栏杂乱" },
-  "options_noArchiveWarningDesc": { "message": "使用\"不归档\"格式配合默认下载位置会为每张图片创建单独的 Chrome 下载条目。建议启用自定义下载文件夹以避免下载栏杂乱。" },
+  "options_noArchiveWarningTitle": {
+    "message": "不归档 + 默认下载会使下载栏杂乱"
+  },
+  "options_noArchiveWarningDesc": {
+    "message": "使用\"不归档\"格式配合默认下载位置会为每张图片创建单独的 Chrome 下载条目。建议启用自定义下载文件夹以避免下载栏杂乱。"
+  },
 
   "options_performance": { "message": "性能" },
   "options_performanceDesc": { "message": "控制下载速度和并发限制。" },
@@ -205,26 +323,56 @@
   "options_notifications": { "message": "通知" },
   "options_notificationsDesc": { "message": "控制浏览器通知行为。" },
   "options_enableNotifications": { "message": "启用通知" },
-  "options_enableNotificationsDesc": { "message": "在下载完成和出错时显示浏览器通知。" },
+  "options_enableNotificationsDesc": {
+    "message": "在下载完成和出错时显示浏览器通知。"
+  },
+
+  "options_interfacePreferences": { "message": "界面" },
+  "options_interfacePreferencesDesc": {
+    "message": "选择 Tako 扩展页面使用的语言和动态效果。"
+  },
+  "options_uiLanguage": { "message": "语言" },
+  "options_uiLanguageDesc": {
+    "message": "应用于 Tako 的侧边栏和设置。扩展名称仍由 Chrome 本地化。"
+  },
+  "options_languageAutomatic": { "message": "自动（浏览器语言）" },
+  "options_motionPreference": { "message": "动态效果" },
+  "options_motionPreferenceDesc": {
+    "message": "选择跟随系统设置或减少动态效果。"
+  },
+  "options_motionSystem": { "message": "跟随系统设置" },
+  "options_motionReduce": { "message": "减少动态效果" },
 
   "options_downloadsTitle": { "message": "下载" },
   "options_downloadsDesc": { "message": "管理下载目标和监控活跃任务。" },
 
   "options_downloadDestination": { "message": "下载目标" },
   "options_useCustomFolder": { "message": "使用自定义文件夹（文件系统访问）" },
+  "options_fsaUnsupported": {
+    "message": "此浏览器不支持自定义文件夹。仍可使用浏览器下载。"
+  },
+  "options_conflictPolicy": { "message": "现有文件" },
+  "options_conflictOverwrite": { "message": "覆盖现有文件" },
+  "options_conflictUniquify": { "message": "使用唯一名称保留两个文件" },
+  "options_conflictPolicyHelp": {
+    "message": "此策略同时适用于浏览器下载和自定义文件夹。"
+  },
   "options_currentFolder": {
     "message": "当前文件夹：$NAME$",
     "placeholders": { "name": { "content": "$1" } }
   },
-  "options_noCustomFolder": { "message": "未选择自定义文件夹。使用默认浏览器下载。" },
-  "options_customFolderOverwrite": { "message": "自定义文件夹模式始终覆盖同名文件。" },
+  "options_noCustomFolder": {
+    "message": "未选择自定义文件夹。使用默认浏览器下载。"
+  },
+  "options_customFolderOverwrite": {
+    "message": "自定义文件夹模式始终覆盖同名文件。"
+  },
   "options_changeFolder": { "message": "更改文件夹" },
   "options_selectFolder": { "message": "选择文件夹" },
   "options_useBrowserDownloads": { "message": "使用浏览器下载" },
-  "options_customFolderIgnoresOverwrite": { "message": "自定义文件夹模式忽略覆盖设置，始终替换所选文件夹中的同名文件。" },
-
-  "options_fsaBannerTitle": { "message": "自定义下载文件夹需要关注" },
-  "options_fsaBannerDefault": { "message": "您的自定义文件夹句柄已失效。请重新选择文件夹以继续使用自定义下载目标模式。" },
+  "options_customFolderIgnoresOverwrite": {
+    "message": "自定义文件夹模式忽略覆盖设置，始终替换所选文件夹中的同名文件。"
+  },
 
   "options_historyStorageUsage": {
     "message": "历史记录存储用量约：$SIZE$",
@@ -241,10 +389,15 @@
   "options_openMangaPage": { "message": "打开漫画系列页面开始下载。" },
 
   "options_cancelThisDownload": { "message": "取消此下载？" },
-  "options_cancelProgressWarning": { "message": "正在下载的章节进度可能会丢失。" },
+  "options_cancelProgressWarning": {
+    "message": "正在下载的章节进度可能会丢失。"
+  },
   "options_chaptersCount": {
     "message": "$COMPLETED$/$TOTAL$ 章",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_createdAt": {
     "message": "创建于 $TIMESTAMP$",
@@ -267,15 +420,24 @@
 
   "options_taskSummaryCompleted": {
     "message": "✅ 已完成（$TOTAL$ 章）",
-    "placeholders": { "total": { "content": "$1" }, "plural": { "content": "$2" } }
+    "placeholders": {
+      "total": { "content": "$1" },
+      "plural": { "content": "$2" }
+    }
   },
   "options_taskSummaryFailed": {
     "message": "❌ 已失败（$COMPLETED$/$TOTAL$ 章已保存）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskSummaryCanceled": {
     "message": "⚠ 已取消（$COMPLETED$/$TOTAL$ 章已保存）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskSummaryQueued": {
     "message": "$TOTAL$ 章已排队",
@@ -283,11 +445,17 @@
   },
   "options_taskSummaryDownloading": {
     "message": "正在下载 $COMPLETED$/$TOTAL$ 章",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskSummaryPartial": {
     "message": "⚠ 部分完成（$COMPLETED$/$TOTAL$ 章已保存）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskSummaryDefault": {
     "message": "$TOTAL$ 章",
@@ -296,15 +464,24 @@
 
   "options_chapterImagesSummary": {
     "message": "$SUCCEEDED$/$TOTAL$ 张图片",
-    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "succeeded": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_chapterImagesPartial": {
     "message": "$SUCCEEDED$/$TOTAL$ 张图片（$FAILED$ 张失败）",
-    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+    "placeholders": {
+      "succeeded": { "content": "$1" },
+      "total": { "content": "$2" },
+      "failed": { "content": "$3" }
+    }
   },
 
   "options_clearHistoryTitle": { "message": "清除所有下载历史？" },
-  "options_clearHistoryDesc": { "message": "这将永久删除所有下载历史。已下载的文件不受影响。" },
+  "options_clearHistoryDesc": {
+    "message": "这将永久删除所有下载历史。已下载的文件不受影响。"
+  },
   "options_noKeepHistory": { "message": "否，保留历史" },
   "options_yesClearAll": { "message": "是，全部清除" },
 
@@ -315,14 +492,19 @@
   "options_storageUsed": { "message": "已用存储" },
   "options_localStorageUsage": { "message": "本地存储用量" },
   "options_manageHistoryData": { "message": "管理历史数据" },
-  "options_manageHistoryDesc": { "message": "删除已存储的章节历史记录，不影响已保存到磁盘的文件。" },
+  "options_manageHistoryDesc": {
+    "message": "删除已存储的章节历史记录，不影响已保存到磁盘的文件。"
+  },
   "options_clearAllHistoryLabel": { "message": "清除全部历史" },
   "options_clearAllHistorySubtext": { "message": "删除所有系列的所有下载历史" },
   "options_clearEverything": { "message": "全部清除" },
   "options_clearAllDownloadHistory": { "message": "清除所有下载历史？" },
   "options_clearAllConfirm": {
     "message": "这将永久删除 $CHAPTERS$ 章、$SERIES$ 个系列的记录。",
-    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+    "placeholders": {
+      "chapters": { "content": "$1" },
+      "series": { "content": "$2" }
+    }
   },
   "options_actionCannotBeUndone": { "message": "此操作无法撤销。" },
   "options_clearSpecificSeries": { "message": "清除特定系列" },
@@ -339,11 +521,16 @@
     "message": "$COUNT$ 个集成",
     "placeholders": { "count": { "content": "$1" } }
   },
-  "options_siteIntegrationsDesc": { "message": "在不影响全局下载配置的情况下调整站点特定默认值、自定义设置和启用状态。" },
+  "options_siteIntegrationsDesc": {
+    "message": "在不影响全局下载配置的情况下调整站点特定默认值、自定义设置和启用状态。"
+  },
   "options_searchIntegrations": { "message": "按名称或域名搜索站点集成..." },
   "options_activeOverrides": {
     "message": "您有 $COUNT$ 个$WORD$的活跃覆盖。",
-    "placeholders": { "count": { "content": "$1" }, "word": { "content": "$2" } }
+    "placeholders": {
+      "count": { "content": "$1" },
+      "word": { "content": "$2" }
+    }
   },
   "options_noIntegrationsFound": { "message": "未找到集成" },
   "options_trySearchingElse": { "message": "尝试搜索其他内容" },
@@ -356,7 +543,9 @@
   "options_noArchiveIndividualFiles": { "message": "不归档（单独文件）" },
   "options_downloadPathTemplate": { "message": "下载路径模板" },
   "options_leaveEmptyGlobal": { "message": "留空以使用全局路径" },
-  "options_useMacrosLike": { "message": "使用宏如 <SERIES_TITLE>、<CHAPTER_NUMBER>" },
+  "options_useMacrosLike": {
+    "message": "使用宏如 <SERIES_TITLE>、<CHAPTER_NUMBER>"
+  },
   "options_rateLimitingImages": { "message": "速率限制 - 图片" },
   "options_rateLimitingChapters": { "message": "速率限制 - 章节" },
   "options_retrySettingsLabel": { "message": "重试设置" },
@@ -402,7 +591,10 @@
   "options_globalBadge": { "message": "全局" },
   "options_concurrentDelay": {
     "message": "$CONCURRENCY$ 并发，$DELAY$ms 延迟",
-    "placeholders": { "concurrency": { "content": "$1" }, "delay": { "content": "$2" } }
+    "placeholders": {
+      "concurrency": { "content": "$1" },
+      "delay": { "content": "$2" }
+    }
   },
 
   "options_aboutDebug": { "message": "关于 & 调试" },
@@ -410,14 +602,18 @@
   "options_debugSettings": { "message": "调试设置" },
   "options_debugSettingsDesc": { "message": "调试选项。" },
   "options_logLevel": { "message": "日志级别" },
-  "options_logLevelDesc": { "message": "控制台详细程度。使用 \"debug\" 进行故障排除。" },
+  "options_logLevelDesc": {
+    "message": "控制台详细程度。使用 \"debug\" 进行故障排除。"
+  },
   "options_logLevelError": { "message": "错误" },
   "options_logLevelWarn": { "message": "警告" },
   "options_logLevelInfo": { "message": "信息" },
   "options_logLevelDebug": { "message": "调试" },
 
   "options_chromeWebStoreUpdates": { "message": "Chrome 应用商店更新" },
-  "options_webStoreUpdateDesc": { "message": "通过 Chrome 的扩展更新服务手动检查更新。" },
+  "options_webStoreUpdateDesc": {
+    "message": "通过 Chrome 的扩展更新服务手动检查更新。"
+  },
   "options_installedVersion": {
     "message": "已安装版本 $VERSION$",
     "placeholders": { "version": { "content": "$1" } }
@@ -426,7 +622,9 @@
   "options_checkForUpdates": { "message": "检查更新" },
   "options_applyUpdate": { "message": "应用更新" },
   "options_openStoreListing": { "message": "打开商店页面" },
-  "options_autoUpdateNote": { "message": "Chrome 也会每隔几小时自动检查已安装扩展的更新。" },
+  "options_autoUpdateNote": {
+    "message": "Chrome 也会每隔几小时自动检查已安装扩展的更新。"
+  },
 
   "updateCheck_unavailable": { "message": "更新检查不可用" },
   "updateCheck_failed": { "message": "更新检查失败" },
@@ -441,7 +639,9 @@
   },
   "updateCheck_anUpdate": { "message": "一个更新" },
   "updateCheck_throttled": { "message": "检查被限流" },
-  "updateCheck_throttledDesc": { "message": "Chrome 限制了重复的更新检查。请稍后再试。" },
+  "updateCheck_throttledDesc": {
+    "message": "Chrome 限制了重复的更新检查。请稍后再试。"
+  },
   "updateCheck_noUpdate": { "message": "无可用更新" },
   "updateCheck_noUpdateDesc": {
     "message": "Chrome 未返回版本 $VERSION$ 的可安装更新。这不会将未打包或本地修改的构建与公开的 Web 商店页面进行比较。",
@@ -449,10 +649,33 @@
   },
 
   "options_unsavedChanges": { "message": "您有未保存的更改" },
+  "options_externalChangesTitle": { "message": "设置已在其他位置更改" },
+  "options_externalChangesDescription": {
+    "message": "此草稿打开期间，另一个扩展程序页面更新了设置。您可以重新加载已保存的值，或保留编辑并将其合并到最新设置中。"
+  },
+  "options_externalChangesReload": { "message": "重新加载设置" },
+  "options_externalChangesKeepMine": { "message": "保留我的更改" },
+  "options_externalChangesSaveBlocked": {
+    "message": "请先处理外部设置更改，然后再保存。"
+  },
+  "options_externalChangesChangedAgain": {
+    "message": "处理期间设置再次发生变化。请查看提示后重试。"
+  },
+  "options_externalChangesKept": {
+    "message": "您的编辑已与最新设置合并。"
+  },
+  "options_externalChangesReloaded": {
+    "message": "已重新加载最新设置。"
+  },
+  "options_externalChangesResolveFailed": {
+    "message": "无法处理外部设置更改。"
+  },
   "options_discard": { "message": "放弃" },
   "options_saveChanges": { "message": "保存更改" },
   "options_discardUnsavedChanges": { "message": "放弃未保存的更改？" },
-  "options_discardWarning": { "message": "所有未保存的更改将丢失。此操作无法撤销。" },
+  "options_discardWarning": {
+    "message": "所有未保存的更改将丢失。此操作无法撤销。"
+  },
   "options_discardChanges": { "message": "放弃更改" },
 
   "options_invalidTemplate": { "message": "无效模板" },
@@ -477,7 +700,9 @@
 
   "options_includeCover": { "message": "包含系列封面" },
   "options_includeCoverDesc": { "message": "将封面图像保存到压缩包内" },
-  "options_pathTemplateMacros": { "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>" },
+  "options_pathTemplateMacros": {
+    "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
+  },
   "options_imagePadding": { "message": "图片文件名填充" },
   "options_paddingAuto": { "message": "自动（根据图片总数）" },
   "options_padding2": { "message": "2位数（01-99）" },
@@ -487,7 +712,9 @@
   "options_openMangaToDownload": { "message": "打开漫画系列页面开始下载。" },
   "options_keepHistory": { "message": "否，保留历史" },
   "options_clearAll": { "message": "是，全部清除" },
-  "options_chromeWebStoreUpdatesDesc": { "message": "通过 Chrome 的扩展更新服务手动检查更新。" },
+  "options_chromeWebStoreUpdatesDesc": {
+    "message": "通过 Chrome 的扩展更新服务手动检查更新。"
+  },
   "options_updateCheckUnavailable": { "message": "更新检查不可用" },
   "options_updateCheckFailed": { "message": "更新检查失败" },
   "options_version": {
@@ -501,7 +728,9 @@
     "placeholders": { "version": { "content": "$1" } }
   },
   "options_checkThrottled": { "message": "检查被限流" },
-  "options_checkThrottledDesc": { "message": "Chrome 限制了频繁的更新检查。请稍后再试。" },
+  "options_checkThrottledDesc": {
+    "message": "Chrome 限制了频繁的更新检查。请稍后再试。"
+  },
   "options_noUpdateAvailable": { "message": "无可用更新" },
   "options_noUpdateAvailableDesc": {
     "message": "Chrome 未返回版本 $VERSION$ 的可安装更新。此检查不会将解包或本地修改的构建与公共 Web Store 列表进行比较。",
@@ -519,11 +748,17 @@
   },
   "options_taskFailed": {
     "message": "❌ 失败（已保存 $COMPLETED$/$TOTAL$ 章）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskCanceled": {
     "message": "⚠ 已取消（已保存 $COMPLETED$/$TOTAL$ 章）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskQueued": {
     "message": "$TOTAL$ 章已排队",
@@ -531,11 +766,17 @@
   },
   "options_taskDownloading": {
     "message": "正在下载 $COMPLETED$/$TOTAL$ 章",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskPartial": {
     "message": "⚠ 部分完成（已保存 $COMPLETED$/$TOTAL$ 章）",
-    "placeholders": { "completed": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "completed": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
   "options_taskDefaultChapters": {
     "message": "$TOTAL$ 章",
@@ -543,17 +784,29 @@
   },
   "options_imagesFailed": {
     "message": "$SUCCEEDED$/$TOTAL$ 张图片（$FAILED$ 张失败）",
-    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" }, "failed": { "content": "$3" } }
+    "placeholders": {
+      "succeeded": { "content": "$1" },
+      "total": { "content": "$2" },
+      "failed": { "content": "$3" }
+    }
   },
   "options_imagesSummary": {
     "message": "$SUCCEEDED$/$TOTAL$ 张图片",
-    "placeholders": { "succeeded": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "succeeded": { "content": "$1" },
+      "total": { "content": "$2" }
+    }
   },
-  "options_manageHistoryDataDesc": { "message": "删除存储的章节历史记录，不影响已保存到磁盘的文件。" },
+  "options_manageHistoryDataDesc": {
+    "message": "删除存储的章节历史记录，不影响已保存到磁盘的文件。"
+  },
   "options_clearAllHistoryDesc": { "message": "删除所有系列的下载历史" },
   "options_clearAllWarning": {
     "message": "这将永久删除 $CHAPTERS$ 章跨 $SERIES$ 个系列的记录。",
-    "placeholders": { "chapters": { "content": "$1" }, "series": { "content": "$2" } }
+    "placeholders": {
+      "chapters": { "content": "$1" },
+      "series": { "content": "$2" }
+    }
   },
   "options_cannotBeUndone": { "message": "此操作无法撤销。" },
   "options_clearSpecificSeriesDesc": { "message": "删除单个系列的下载历史" },
@@ -562,19 +815,35 @@
     "message": "$COUNT$ 章",
     "placeholders": { "count": { "content": "$1" } }
   },
-  "options_searchSiteIntegrations": { "message": "按名称或域名搜索站点集成..." },
+  "options_searchSiteIntegrations": {
+    "message": "按名称或域名搜索站点集成..."
+  },
   "options_overrides": { "message": "覆盖" },
   "options_integrationsPlural": { "message": "个集成" },
   "options_integrationSingular": { "message": "个集成" },
   "options_cbzFull": { "message": "CBZ（漫画存档）" },
   "options_zip": { "message": "ZIP" },
   "options_noArchiveFull": { "message": "不压缩（单独文件）" },
-  "options_useMacros": { "message": "使用宏如 <SERIES_TITLE>、<CHAPTER_NUMBER>" },
+  "options_useMacros": {
+    "message": "使用宏如 <SERIES_TITLE>、<CHAPTER_NUMBER>"
+  },
   "options_disabled": { "message": "已禁用" },
   "options_override": { "message": "覆盖" },
   "options_enabled": { "message": "已启用" },
   "options_enableIntegration": {
     "message": "启用 $NAME$",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_broadHostPermissionDescription": {
+    "message": "$NAME$ 使用动态选择的图片服务器。启用时会请求访问 HTTPS 网站的权限。",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_toastIntegrationHostPermissionDenied": {
+    "message": "未授予 HTTPS 网站访问权限，$NAME$ 将保持禁用。",
+    "placeholders": { "name": { "content": "$1" } }
+  },
+  "options_toastIntegrationHostPermissionFailed": {
+    "message": "无法为 $NAME$ 请求 HTTPS 网站访问权限，请重试。",
     "placeholders": { "name": { "content": "$1" } }
   },
   "options_hide": { "message": "隐藏" },
@@ -590,5 +859,24 @@
   "options_defaultValue": {
     "message": "默认：$VALUE$",
     "placeholders": { "value": { "content": "$1" } }
-  }
+  },
+  "settings_customFolderRequired": {
+    "message": "自定义下载模式需要先选择文件夹。"
+  },
+  "settings_customFolderPermissionDenied": {
+    "message": "所选文件夹的访问权限被拒绝。请选择其他文件夹或授予权限。"
+  },
+  "settings_validateCustomFolderFailed": {
+    "message": "无法验证自定义文件夹：$DETAIL$",
+    "placeholders": { "detail": { "content": "$1" } }
+  },
+  "settings_invalidDownloadMode": { "message": "下载模式无效" },
+  "settings_customFolderClearedFallback": {
+    "message": "自定义文件夹已清除，已切换为浏览器下载。"
+  },
+  "settings_customFolderPermissionLostFallback": {
+    "message": "已失去自定义文件夹的访问权限，已切换为浏览器下载。"
+  },
+  "settings_unknownError": { "message": "未知错误" },
+  "background_settingsSyncFailed": { "message": "无法将设置同步到状态" }
 }

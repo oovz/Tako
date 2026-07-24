@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
-import { isRecord, type StorageValue } from '@/src/shared/type-guards'
-import logger from '@/src/runtime/logger'
+import { useCallback, useEffect, useState } from "react"
+import { isRecord, type StorageValue } from "@/src/shared/type-guards"
+import logger from "@/src/runtime/logger"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { createCommandEnvelope } from "@/src/runtime/command-envelope"
 
-export type UIPersistentErrorSeverity = 'warning' | 'error'
+export type UIPersistentErrorSeverity = "warning" | "error"
 
 export interface UIPersistentError {
   code: string
@@ -11,19 +13,23 @@ export interface UIPersistentError {
   ts: number
 }
 
-const STORAGE_KEY = 'persistent_errors'
+const STORAGE_KEY = LOCAL_STORAGE_KEYS.persistentErrors
 
 function parseErrors(raw: unknown): UIPersistentError[] {
   if (!Array.isArray(raw)) return []
   const now = Date.now()
   const errors: UIPersistentError[] = []
   for (const item of raw) {
-    if (isRecord(item) && typeof item.code === 'string' && typeof item.message === 'string') {
+    if (
+      isRecord(item) &&
+      typeof item.code === "string" &&
+      typeof item.message === "string"
+    ) {
       errors.push({
         code: item.code,
         message: item.message,
-        severity: item.severity === 'error' ? 'error' : 'warning',
-        ts: typeof item.ts === 'number' ? item.ts : now,
+        severity: item.severity === "error" ? "error" : "warning",
+        ts: typeof item.ts === "number" ? item.ts : now,
       })
     }
   }
@@ -38,11 +44,11 @@ export function useErrors() {
 
     const load = async () => {
       try {
-        const result = await chrome.storage.local.get(STORAGE_KEY) as Record<string, StorageValue>
+        const result = await chrome.storage.local.get(STORAGE_KEY)
         if (!isMounted) return
         setErrors(parseErrors(result[STORAGE_KEY]))
       } catch (error) {
-        logger.error('Failed to load persistent errors from storage:', error)
+        logger.error("Failed to load persistent errors from storage:", error)
       }
     }
 
@@ -51,9 +57,9 @@ export function useErrors() {
 
     const listener = (
       changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string,
+      areaName: string
     ) => {
-      if (areaName !== 'local') return
+      if (areaName !== "local") return
       const change = changes[STORAGE_KEY]
       if (!change) return
       const next = change.newValue as StorageValue | undefined
@@ -71,13 +77,19 @@ export function useErrors() {
   const acknowledgeError = useCallback(async (code: string) => {
     if (!code) return
     try {
-      await chrome.runtime.sendMessage({ type: 'ACKNOWLEDGE_ERROR', payload: { code } })
+      await chrome.runtime.sendMessage({
+        type: "ACKNOWLEDGE_ERROR",
+        ...createCommandEnvelope(),
+        payload: { code },
+      })
     } catch (error) {
-      logger.debug('Failed to send ACKNOWLEDGE_ERROR message, updating local state optimistically:', error)
+      logger.debug(
+        "Failed to send ACKNOWLEDGE_ERROR message, updating local state optimistically:",
+        error
+      )
       setErrors((prev) => prev.filter((e) => e.code !== code))
     }
   }, [])
 
   return { errors, acknowledgeError }
 }
-

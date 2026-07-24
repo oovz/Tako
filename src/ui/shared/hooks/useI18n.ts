@@ -2,14 +2,18 @@
  * React hook for internationalization.
  *
  * Returns a stable `t` function and the current UI locale.
- * Chrome's i18n is synchronous and locale is fixed at startup, so this
- * hook does not trigger re-renders on locale change — it simply provides
- * a convenient accessor for use in React components.
+ * The translation function is stable, while the external-store subscription
+ * repaints consumers after a manual locale finishes loading.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from "react"
 
-import { t as tFn, getUILanguage } from '@/src/runtime/i18n'
+import {
+  t as tFn,
+  getUILanguage,
+  getI18nSnapshot,
+  subscribeI18n,
+} from "@/src/runtime/i18n"
 
 export interface UseI18nResult {
   /** Translate a message key. See src/runtime/i18n.ts for details. */
@@ -19,13 +23,14 @@ export interface UseI18nResult {
 }
 
 export function useI18n(): UseI18nResult {
-  const locale = useMemo(() => getUILanguage(), [])
+  useSyncExternalStore(subscribeI18n, getI18nSnapshot, getI18nSnapshot)
+  const locale = getUILanguage()
 
   return useMemo(
     () => ({
       t: tFn,
       locale,
     }),
-    [locale],
+    [locale]
   )
 }

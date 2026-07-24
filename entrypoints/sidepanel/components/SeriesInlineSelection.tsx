@@ -1,28 +1,43 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useMemo } from "react"
 
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { cn } from '@/src/shared/utils'
-import type { SidePanelChapter } from '@/entrypoints/sidepanel/types'
-import type { ChapterSelectionsBySeries } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
-import type { SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
-import { useSelection } from '@/entrypoints/sidepanel/hooks/useSelection'
-import { useDownload } from '@/entrypoints/sidepanel/hooks/useDownload'
-import { buildSeriesKey, useChapterSelections } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
-import { ChapterSelector } from '@/entrypoints/sidepanel/components/ChapterSelector'
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { cn } from "@/src/shared/utils"
+import type {
+  InlineSelectionPresentationBySeries,
+  InlineSelectionPresentationState,
+  InlineSelectionViewMode,
+  SidePanelChapter,
+} from "@/entrypoints/sidepanel/types"
+import type { ChapterSelectionsBySeries } from "@/entrypoints/sidepanel/hooks/useChapterSelections"
+import type { SidepanelSeriesContextData } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
+import { useSelection } from "@/entrypoints/sidepanel/hooks/useSelection"
+import { useDownload } from "@/entrypoints/sidepanel/hooks/useDownload"
 import {
+  buildSeriesKey,
+  useChapterSelections,
+} from "@/entrypoints/sidepanel/hooks/useChapterSelections"
+import { ChapterSelector } from "@/entrypoints/sidepanel/components/ChapterSelector"
+import {
+  buildInlineSelectionItems,
   getExpandedGroupKeys,
   getInlineSelectionViewSummary,
-  syncInlineSelectionItems,
-} from '@/entrypoints/sidepanel/components/series-inline-selection-helpers'
-import { Check, Download } from 'lucide-react'
-import { t } from '@/src/runtime/i18n'
+  updateInlineSelectionPresentation,
+} from "@/entrypoints/sidepanel/components/series-inline-selection-helpers"
+import { Check, Download } from "lucide-react"
+import { t } from "@/src/runtime/i18n"
 
 interface SeriesInlineSelectionProps {
   data: SidepanelSeriesContextData
   chapterSelectionsBySeries: ChapterSelectionsBySeries
-  setChapterSelectionsBySeries: React.Dispatch<React.SetStateAction<ChapterSelectionsBySeries>>
+  setChapterSelectionsBySeries: React.Dispatch<
+    React.SetStateAction<ChapterSelectionsBySeries>
+  >
+  presentationBySeries: InlineSelectionPresentationBySeries
+  setPresentationBySeries: React.Dispatch<
+    React.SetStateAction<InlineSelectionPresentationBySeries>
+  >
   onAfterStart?: () => void
 }
 
@@ -30,68 +45,110 @@ export function SeriesInlineSelection({
   data,
   chapterSelectionsBySeries,
   setChapterSelectionsBySeries,
+  presentationBySeries,
+  setPresentationBySeries,
   onAfterStart,
 }: SeriesInlineSelectionProps) {
   const seriesKey = useMemo(
     () => buildSeriesKey(data.siteId, data.seriesId),
-    [data.siteId, data.seriesId],
+    [data.siteId, data.seriesId]
   )
-  const { selectedChapterIds, setSelectedChapterIds, clearSeriesSelections } = useChapterSelections(
-    seriesKey,
-    chapterSelectionsBySeries,
-    setChapterSelectionsBySeries,
+  const { selectedChapterIds, setSelectedChapterIds, clearSeriesSelections } =
+    useChapterSelections(
+      seriesKey,
+      chapterSelectionsBySeries,
+      setChapterSelectionsBySeries
+    )
+
+  const presentation = seriesKey ? presentationBySeries[seriesKey] : undefined
+  const collapsedGroups = useMemo(
+    () => new Set(presentation?.collapsedGroupIds ?? []),
+    [presentation?.collapsedGroupIds]
+  )
+  const viewMode: InlineSelectionViewMode = presentation?.viewMode ?? "volumes"
+
+  const updatePresentation = useCallback(
+    (
+      update: (
+        previous: InlineSelectionPresentationState
+      ) => InlineSelectionPresentationState
+    ) => {
+      setPresentationBySeries((previousBySeries) =>
+        updateInlineSelectionPresentation(previousBySeries, seriesKey, update)
+      )
+    },
+    [seriesKey, setPresentationBySeries]
   )
 
-  const [items, setItems] = useState(() => syncInlineSelectionItems(data.items, selectedChapterIds))
+  const setCollapsedGroupsUpdater = useCallback(
+    (updater: (prev: Set<string>) => Set<string>) => {
+      updatePresentation((previous) => {
+        const nextCollapsedGroups = updater(new Set(previous.collapsedGroupIds))
+        const collapsedGroupIds = [...nextCollapsedGroups]
+        const isUnchanged =
+          collapsedGroupIds.length === previous.collapsedGroupIds.length &&
+          collapsedGroupIds.every(
+            (groupId, index) => groupId === previous.collapsedGroupIds[index]
+          )
+        return isUnchanged ? previous : { ...previous, collapsedGroupIds }
+      })
+    },
+    [updatePresentation]
+  )
 
-  useEffect(() => {
-    setItems(previousItems => syncInlineSelectionItems(data.items, selectedChapterIds, previousItems))
-  }, [data.items, selectedChapterIds])
+  // `items` is a pure derivation from the three sources of truth:
+  //   1. `data.items` — the raw chapter/volume data from the page
+  //   2. `selectedChapterIds` — the selection state (owned by parent)
+  //   3. `collapsedGroups` — series-scoped presentation state (owned by parent)
+  // No effects, no circular dependencies, no extra renders.
+  const items = useMemo(
+    () =>
+      buildInlineSelectionItems(
+        data.items,
+        selectedChapterIds,
+        collapsedGroups
+      ),
+    [data.items, selectedChapterIds, collapsedGroups]
+  )
 
-  useEffect(() => {
-    const nextSelected = items.flatMap((item) => {
-      if ('chapters' in item) {
-        return item.chapters.filter((chapter) => chapter.selected).map((chapter) => chapter.id)
-      }
-
-      return item.selected ? [item.id] : []
-    })
-
-    setSelectedChapterIds(nextSelected)
-  }, [items, setSelectedChapterIds])
-
-  const downloadHook = useDownload({ tabId: data.tabId, mangaState: data.mangaState })
+  const downloadHook = useDownload({
+    tabId: data.tabId,
+    mangaState: data.mangaState,
+  })
   const download = downloadHook
 
   // Selection controls remain available while prior tasks exist.
   // The UI only blocks during the active enqueue request.
   const selection = useSelection({
     items,
-    setItems,
+    setSelectedChapterIds,
+    setCollapsedGroups: setCollapsedGroupsUpdater,
     tabId: data.tabId,
     isDownloading: download.isEnqueuing, // Only block during actual enqueue request
   })
 
   const allChapters = useMemo(() => {
     const chapters: SidePanelChapter[] = []
-    items.forEach(item => {
-      if ('chapters' in item) chapters.push(...item.chapters)
+    items.forEach((item) => {
+      if ("chapters" in item) chapters.push(...item.chapters)
       else chapters.push(item)
     })
     return chapters
   }, [items])
 
   const { selectedCount, selectableCount } = useMemo(() => {
-    const selectableChapters = allChapters.filter(ch => ch.locked !== true)
+    const selectableChapters = allChapters.filter((ch) => ch.locked !== true)
     return {
-      selectedCount: selectableChapters.filter(ch => ch.selected).length,
+      selectedCount: selectableChapters.filter((ch) => ch.selected).length,
       selectableCount: selectableChapters.length,
     }
   }, [allChapters])
 
-  const [viewMode, setViewMode] = useState<'volumes' | 'chapters'>('volumes')
   const expandedGroups = useMemo(() => getExpandedGroupKeys(items), [items])
-  const viewSummary = useMemo(() => getInlineSelectionViewSummary(items), [items])
+  const viewSummary = useMemo(
+    () => getInlineSelectionViewSummary(items),
+    [items]
+  )
 
   if (data.blockingMessage) {
     return null
@@ -104,7 +161,7 @@ export function SeriesInlineSelection({
           <div className="h-4 w-24 bg-muted rounded animate-pulse" />
         </div>
         <div className="flex-1 p-3 flex flex-col gap-2">
-          {[1, 2, 3, 4].map(i => (
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-8 bg-muted rounded animate-pulse" />
           ))}
         </div>
@@ -138,15 +195,19 @@ export function SeriesInlineSelection({
               >
                 <Checkbox
                   id="select-all-ctx"
-                  checked={selectedCount > 0 && selectedCount === selectableCount}
+                  checked={
+                    selectedCount > 0 && selectedCount === selectableCount
+                  }
                   onCheckedChange={selection.handleSelectAll}
                   disabled={download.isEnqueuing || selectableCount === 0}
                 />
-                <span>{t('sidepanel_selectChaptersLabel')}</span>
+                <span>{t("sidepanel_selectChaptersLabel")}</span>
               </label>
             </div>
             <span className="shrink-0 text-xs text-muted-foreground">
-              {selectedCount > 0 ? t('sidepanel_selectedCount', [String(selectedCount)]) : t('sidepanel_availableCount', [String(selectableCount)])}
+              {selectedCount > 0
+                ? t("sidepanel_selectedCount", [String(selectedCount)])
+                : t("sidepanel_availableCount", [String(selectableCount)])}
             </span>
           </div>
 
@@ -155,23 +216,29 @@ export function SeriesInlineSelection({
               type="single"
               value={viewMode}
               onValueChange={(value) => {
-                if (value === 'volumes' || value === 'chapters') setViewMode(value)
+                if (value === "volumes" || value === "chapters") {
+                  updatePresentation((previous) =>
+                    previous.viewMode === value
+                      ? previous
+                      : { ...previous, viewMode: value }
+                  )
+                }
               }}
               className="rounded-md bg-muted p-1"
             >
               <ToggleGroupItem
                 value="volumes"
-                aria-label={t('sidepanel_volumes')}
-                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
+                aria-label={t("sidepanel_volumes")}
+                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
-                {t('sidepanel_volumes')}
+                {t("sidepanel_volumes")}
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="chapters"
-                aria-label={t('sidepanel_allChapters')}
-                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 motion-reduce:transition-none hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
+                aria-label={t("sidepanel_allChapters")}
+                className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
               >
-                {t('sidepanel_allChapters')}
+                {t("sidepanel_allChapters")}
               </ToggleGroupItem>
             </ToggleGroup>
           )}
@@ -188,28 +255,39 @@ export function SeriesInlineSelection({
         onVolumeSelectAll={selection.handleVolumeSelectAll}
       />
 
+      {download.errorMessage && (
+        <p
+          role="alert"
+          className="border-t border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+        >
+          {download.errorMessage}
+        </p>
+      )}
+
       <div
         className={cn(
-          'overflow-hidden border-t border-border bg-background transition-[max-height,opacity] duration-200 ease-out motion-reduce:transition-none',
-          selectedCount > 0 && !download.isEnqueuing ? 'max-h-[64px] opacity-100' : 'max-h-0 opacity-0',
+          "overflow-hidden border-t border-border bg-background transition-[max-height,opacity] duration-200 ease-out",
+          selectedCount > 0 && !download.isEnqueuing
+            ? "max-h-[64px] opacity-100"
+            : "max-h-0 opacity-0"
         )}
       >
         <div className="h-[64px] px-3 py-2.5">
           <Button
             type="button"
-            className="h-10 w-full gap-2 text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none"
+            className="h-10 w-full gap-2 text-sm font-semibold transition-colors duration-150"
             onClick={handleStart}
             disabled={download.isEnqueuing}
           >
             {download.showSuccess ? (
               <>
                 <Check className="size-4" />
-                {t('sidepanel_addedToQueue')}
+                {t("sidepanel_addedToQueue")}
               </>
             ) : (
               <>
                 <Download className="size-4" />
-                {t('sidepanel_downloadCount', [String(selectedCount)])}
+                {t("sidepanel_downloadCount", [String(selectedCount)])}
               </>
             )}
           </Button>
@@ -218,4 +296,3 @@ export function SeriesInlineSelection({
     </div>
   )
 }
-

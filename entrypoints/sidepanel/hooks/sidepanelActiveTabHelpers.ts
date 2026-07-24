@@ -2,13 +2,13 @@ import {
   isExtensionUrl,
   isInternalUrl,
   resolveTabUrlForSupportCheck,
-} from '@/src/shared/tab-url-helpers'
+} from "@/src/shared/tab-url-helpers"
 
 export { isExtensionUrl, isInternalUrl, resolveTabUrlForSupportCheck }
 
 export function resolveTrackedTabId(
   previousTrackedTabId: number | undefined,
-  activeTab: Pick<chrome.tabs.Tab, 'id' | 'url' | 'pendingUrl'> | undefined,
+  activeTab: Pick<chrome.tabs.Tab, "id" | "url" | "pendingUrl"> | undefined
 ): number | undefined {
   const activeUrl = resolveTabUrlForSupportCheck(activeTab)
 
@@ -16,5 +16,5 @@ export function resolveTrackedTabId(
     return previousTrackedTabId
   }
 
-  return typeof activeTab?.id === 'number' ? activeTab.id : undefined
+  return typeof activeTab?.id === "number" ? activeTab.id : undefined
 }

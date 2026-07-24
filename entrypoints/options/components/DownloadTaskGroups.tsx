@@ -1,9 +1,16 @@
-import { AlertCircle, CheckCircle, Clock, Download, XCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Download,
+  XCircle,
+} from "lucide-react"
 
-import { Card, CardContent } from '@/components/ui/card'
-import { DownloadTaskSection } from '@/entrypoints/options/components/DownloadTaskSection'
-import type { DownloadTaskState } from '@/src/types/queue-state'
-import { t } from '@/src/runtime/i18n'
+import { Card, CardContent } from "@/components/ui/card"
+import { DownloadTaskSection } from "@/entrypoints/options/components/DownloadTaskSection"
+import type { DownloadTaskState } from "@/src/types/queue-state"
+import { t } from "@/src/runtime/i18n"
+import type { DownloadTaskActionResult } from "@/entrypoints/options/download-task-actions"
 
 interface DownloadTaskGroupsProps {
   tasks: DownloadTaskState[]
@@ -12,7 +19,7 @@ interface DownloadTaskGroupsProps {
   completedTasks: DownloadTaskState[]
   failedTasks: DownloadTaskState[]
   canceledTasks: DownloadTaskState[]
-  onCancel: (taskId: string) => Promise<void>
+  onCancel: (taskId: string) => Promise<DownloadTaskActionResult>
   onRetry: (taskId: string) => Promise<void>
   onRestart: (taskId: string) => Promise<void>
   onRemove: (taskId: string) => Promise<void>
@@ -35,7 +42,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Download className="size-4" />}
         tasks={activeTasks}
-        title={t('options_activeDownloads')}
+        title={t("options_activeDownloads")}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -45,7 +52,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<Clock className="size-4" />}
         tasks={queuedTasks}
-        title={t('options_queued')}
+        title={t("options_queued")}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -55,7 +62,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<CheckCircle className="size-4" />}
         tasks={completedTasks}
-        title={t('options_completed')}
+        title={t("options_completed")}
         titleClassName="text-primary"
         onCancel={onCancel}
         onRetry={onRetry}
@@ -66,7 +73,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<XCircle className="size-4" />}
         tasks={failedTasks}
-        title={t('options_failedPartial')}
+        title={t("options_failedPartial")}
         titleClassName="text-destructive"
         onCancel={onCancel}
         onRetry={onRetry}
@@ -77,7 +84,7 @@ export function DownloadTaskGroups({
       <DownloadTaskSection
         icon={<AlertCircle className="size-4" />}
         tasks={canceledTasks}
-        title={t('options_canceled')}
+        title={t("options_canceled")}
         onCancel={onCancel}
         onRetry={onRetry}
         onRestart={onRestart}
@@ -88,9 +95,11 @@ export function DownloadTaskGroups({
         <Card>
           <CardContent className="p-12 text-center">
             <Download className="size-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">{t('sidepanel_noDownloadsYet')}</h3>
+            <h3 className="text-lg font-medium mb-2">
+              {t("sidepanel_noDownloadsYet")}
+            </h3>
             <p className="text-sm text-muted-foreground">
-              {t('options_openMangaToDownload')}
+              {t("options_openMangaToDownload")}
             </p>
           </CardContent>
         </Card>

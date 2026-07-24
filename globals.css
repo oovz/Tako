@@ -1,6 +1,6 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
-@import "tw-animate-css";
+@import 'tw-animate-css';
 
 @theme inline {
   --color-background: var(--background);
@@ -110,7 +110,7 @@
 
   /* Enhanced focus for buttons */
   button:focus-visible,
-  [role="button"]:focus-visible {
+  [role='button']:focus-visible {
     @apply outline-2 outline-offset-2 outline-primary ring-2 ring-primary/20;
   }
 
@@ -147,29 +147,51 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html,
+  html *,
+  html *::before,
+  html *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html[data-tako-motion='reduce'],
+html[data-tako-motion='reduce'] *,
+html[data-tako-motion='reduce'] *::before,
+html[data-tako-motion='reduce'] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 /* UI/UX Enhancement: Animation utilities */
 @layer utilities {
   /* Fade and slide animations */
   .animate-in {
     animation: animate-in 0.2s ease-out;
   }
-  
+
   .fade-in {
     --tw-enter-opacity: 0;
   }
-  
+
   .slide-in-from-right-4 {
     --tw-enter-translate-x: 1rem;
   }
-  
+
   .slide-in-from-bottom-2 {
     --tw-enter-translate-y: 0.5rem;
   }
-  
+
   .duration-200 {
     animation-duration: 0.2s;
   }
-  
+
   .duration-300 {
     animation-duration: 0.3s;
   }
@@ -177,7 +199,10 @@
   @keyframes animate-in {
     from {
       opacity: var(--tw-enter-opacity, 1);
-      transform: translate(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0));
+      transform: translate(
+        var(--tw-enter-translate-x, 0),
+        var(--tw-enter-translate-y, 0)
+      );
     }
     to {
       opacity: 1;
@@ -187,15 +212,17 @@
 
   /* Smooth expand/collapse */
   .expand-collapse {
-    transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+    transition:
+      max-height 0.3s ease-out,
+      opacity 0.2s ease-out;
     overflow: hidden;
   }
-  
+
   .expand-collapse.collapsed {
     max-height: 0;
     opacity: 0;
   }
-  
+
   .expand-collapse.expanded {
     opacity: 1;
   }

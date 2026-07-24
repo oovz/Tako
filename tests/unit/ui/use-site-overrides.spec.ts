@@ -1,19 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from "vitest"
 
-import { __shouldReloadSiteOverridesForTests } from '@/src/ui/shared/hooks/useSiteOverrides'
+import { __shouldReloadSiteOverridesForTests } from "@/src/ui/shared/hooks/useSiteOverrides"
 
-describe('useSiteOverrides helpers', () => {
-  it('reloads only when the canonical site overrides storage key changes in local storage', () => {
-    const storageKey = 'siteOverrides:canonical-test'
+describe("useSiteOverrides helpers", () => {
+  it("reloads only when the canonical site overrides storage key changes in local storage", () => {
+    const storageKey = "siteOverrides:canonical-test"
 
     expect(
       __shouldReloadSiteOverridesForTests(
         {
           [storageKey]: { newValue: {} },
         } as Record<string, chrome.storage.StorageChange>,
-        'local',
-        storageKey,
-      ),
+        "local",
+        storageKey
+      )
     ).toBe(true)
 
     expect(
@@ -21,9 +21,9 @@ describe('useSiteOverrides helpers', () => {
         {
           siteOverrides: { newValue: {} },
         } as Record<string, chrome.storage.StorageChange>,
-        'local',
-        storageKey,
-      ),
+        "local",
+        storageKey
+      )
     ).toBe(false)
 
     expect(
@@ -31,10 +31,9 @@ describe('useSiteOverrides helpers', () => {
         {
           [storageKey]: { newValue: {} },
         } as Record<string, chrome.storage.StorageChange>,
-        'sync',
-        storageKey,
-      ),
+        "sync",
+        storageKey
+      )
     ).toBe(false)
   })
 })
-

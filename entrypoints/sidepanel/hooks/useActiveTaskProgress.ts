@@ -1,126 +1,40 @@
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
-import { z } from 'zod'
+import { useEffect, useRef, useState } from "react"
 
-export interface ActiveTaskProgress {
-  taskId: string
-  imagesProcessed: number
-  totalImages: number
-  activeChapterCount: number
-  activeChapters: Array<{
-    chapterId: string
-    chapterTitle?: string
-    imagesProcessed: number
-    totalImages: number
-    updatedAt?: number
-  }>
-  chapterId?: string
-  chapterTitle?: string
-  status: 'downloading' | 'completed' | 'failed' | 'partial_success'
-}
+import {
+  ACTIVE_TASK_PROGRESS_PORT_NAME,
+  normalizeActiveTaskProgress,
+  normalizeActiveTaskProgressPortMessage,
+  type ActiveTaskProgressSnapshot,
+} from "@/src/runtime/active-task-progress"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 
-const ACTIVE_TASK_PROGRESS_STATUSES = [
-  'downloading',
-  'completed',
-  'failed',
-  'partial_success',
-] as const satisfies ReadonlyArray<ActiveTaskProgress['status']>
+export type ActiveTaskProgress = ActiveTaskProgressSnapshot
 
-const ActiveTaskProgressStatusSchema = z.enum(ACTIVE_TASK_PROGRESS_STATUSES)
-
-const ActiveChapterSnapshotSchema = z.object({
-  chapterId: z.string(),
-  chapterTitle: z.string().optional(),
-  imagesProcessed: z.number().optional(),
-  totalImages: z.number().optional(),
-  updatedAt: z.number().optional(),
-})
-
-const ActiveTaskProgressStorageSchema = z.object({
-  taskId: z.string(),
-  imagesProcessed: z.number(),
-  totalImages: z.number(),
-  activeChapterCount: z.number().optional(),
-  activeChapters: z.array(z.unknown()).optional(),
-  chapterId: z.string().optional(),
-  chapterTitle: z.string().optional(),
-  status: ActiveTaskProgressStatusSchema,
-})
-
-export function normalizeActiveTaskProgress(value: unknown): ActiveTaskProgress | null {
-  const parsed = ActiveTaskProgressStorageSchema.safeParse(value)
-  if (!parsed.success) {
-    return null
-  }
-
-  const data = parsed.data
-
-  const normalizedChapterTitle = typeof data.chapterTitle === 'string' ? data.chapterTitle.trim() : ''
-  const normalizedActiveChapters: ActiveTaskProgress['activeChapters'] = []
-  if (Array.isArray(data.activeChapters)) {
-    for (const item of data.activeChapters) {
-      const chapterParsed = ActiveChapterSnapshotSchema.safeParse(item)
-      if (!chapterParsed.success) {
-        continue
-      }
-
-      const chapter = chapterParsed.data
-
-      const itemTitle = typeof chapter.chapterTitle === 'string' ? chapter.chapterTitle.trim() : ''
-      normalizedActiveChapters.push({
-        chapterId: chapter.chapterId,
-        chapterTitle: itemTitle.length > 0 ? itemTitle : undefined,
-        imagesProcessed: typeof chapter.imagesProcessed === 'number' ? Math.max(0, chapter.imagesProcessed) : 0,
-        totalImages: typeof chapter.totalImages === 'number' ? Math.max(0, chapter.totalImages) : 0,
-        updatedAt: typeof chapter.updatedAt === 'number' ? chapter.updatedAt : undefined,
-      })
-    }
-  }
-
-  const fallbackChapterId = typeof data.chapterId === 'string' ? data.chapterId : undefined
-  const fallbackSingleChapter = fallbackChapterId
-    ? [{
-      chapterId: fallbackChapterId,
-      chapterTitle: normalizedChapterTitle.length > 0 ? normalizedChapterTitle : undefined,
-      imagesProcessed: Math.max(0, data.imagesProcessed),
-      totalImages: Math.max(0, data.totalImages),
-    }]
-    : []
-
-  const activeChapters = normalizedActiveChapters.length > 0 ? normalizedActiveChapters : fallbackSingleChapter
-  // Prefer the normalized chapter snapshot count when present; payload count can lag under races.
-  const payloadChapterCount = typeof data.activeChapterCount === 'number'
-    ? Math.max(0, data.activeChapterCount)
+function normalizeProgressRevision(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
     : 0
-  const activeChapterCount = activeChapters.length > 0
-    ? activeChapters.length
-    : payloadChapterCount
-
-  const aggregateProgress = activeChapters.length > 0
-    ? activeChapters.reduce(
-      (acc, chapter) => {
-        acc.imagesProcessed += chapter.imagesProcessed
-        acc.totalImages += chapter.totalImages
-        return acc
-      },
-      { imagesProcessed: 0, totalImages: 0 },
-    )
-    : {
-      imagesProcessed: Math.max(0, data.imagesProcessed),
-      totalImages: Math.max(0, data.totalImages),
-    }
-
-  return {
-    taskId: data.taskId,
-    chapterId: fallbackChapterId,
-    chapterTitle: normalizedChapterTitle.length > 0 ? normalizedChapterTitle : undefined,
-    imagesProcessed: aggregateProgress.imagesProcessed,
-    totalImages: aggregateProgress.totalImages,
-    activeChapterCount,
-    activeChapters,
-    status: data.status,
-  }
 }
+
+function normalizeProgressGeneration(value: unknown): string {
+  return typeof value === "string" && value.length > 0 ? value : "legacy"
+}
+
+export function shouldAcceptProgressRevision(input: {
+  currentGeneration: string | null
+  currentRevision: number
+  nextGeneration: string
+  nextRevision: number
+  allowEqual?: boolean
+}): boolean {
+  if (input.currentGeneration !== input.nextGeneration) return true
+  return input.allowEqual
+    ? input.nextRevision >= input.currentRevision
+    : input.nextRevision > input.currentRevision
+}
+
+export { normalizeActiveTaskProgress }
 
 export interface UseActiveTaskProgressResult {
   progress: ActiveTaskProgress | null
@@ -128,16 +42,154 @@ export interface UseActiveTaskProgressResult {
 }
 
 export function useActiveTaskProgress(): UseActiveTaskProgressResult {
-  const { value: progress, hydrated } = useChromeStorageValue<ActiveTaskProgress | null>({
-    areaName: 'session',
-    key: SESSION_STORAGE_KEYS.activeTaskProgress,
-    initialValue: null,
-    parse: normalizeActiveTaskProgress,
-  })
+  const { value: storedProgress, hydrated: progressHydrated } =
+    useChromeStorageValue<ActiveTaskProgress | null>({
+      areaName: "session",
+      key: SESSION_STORAGE_KEYS.activeTaskProgress,
+      initialValue: null,
+      parse: normalizeActiveTaskProgress,
+    })
+  const { value: storedRevision, hydrated: revisionHydrated } =
+    useChromeStorageValue<number>({
+      areaName: "session",
+      key: SESSION_STORAGE_KEYS.activeTaskProgressRevision,
+      initialValue: 0,
+      parse: normalizeProgressRevision,
+    })
+  const { value: storedGeneration, hydrated: generationHydrated } =
+    useChromeStorageValue<string>({
+      areaName: "session",
+      key: SESSION_STORAGE_KEYS.activeTaskProgressGeneration,
+      initialValue: "legacy",
+      parse: normalizeProgressGeneration,
+    })
+  const hydrated = progressHydrated && revisionHydrated && generationHydrated
+  const [progress, setProgress] = useState<ActiveTaskProgress | null>(null)
+  const latestRevisionRef = useRef(0)
+  const latestGenerationRef = useRef<string | null>(null)
+  const livePortConnectedRef = useRef(false)
 
-  return {
-    progress,
-    hydrated,
-  }
+  useEffect(() => {
+    if (!hydrated) return
+    if (livePortConnectedRef.current) return
+    const generation =
+      storedGeneration !== "legacy"
+        ? storedGeneration
+        : (storedProgress?.generation ?? "legacy")
+    const revision = Math.max(storedRevision, storedProgress?.revision ?? 0)
+    if (
+      !shouldAcceptProgressRevision({
+        currentGeneration: latestGenerationRef.current,
+        currentRevision: latestRevisionRef.current,
+        nextGeneration: generation,
+        nextRevision: revision,
+        allowEqual: true,
+      })
+    ) {
+      return
+    }
+    latestGenerationRef.current = generation
+    latestRevisionRef.current = revision
+    setProgress(storedProgress)
+  }, [hydrated, storedGeneration, storedProgress, storedRevision])
+
+  useEffect(() => {
+    if (!hydrated) return
+    let disposed = false
+    let port: chrome.runtime.Port | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    const applySnapshot = (
+      generation: string,
+      revision: number,
+      value: unknown
+    ): void => {
+      if (
+        !shouldAcceptProgressRevision({
+          currentGeneration: latestGenerationRef.current,
+          currentRevision: latestRevisionRef.current,
+          nextGeneration: generation,
+          nextRevision: revision,
+        })
+      ) {
+        return
+      }
+      const normalized = normalizeActiveTaskProgress(value)
+      if (value !== null && !normalized) return
+      latestGenerationRef.current = generation
+      latestRevisionRef.current = revision
+      setProgress(normalized)
+    }
+
+    const rereadSnapshot = async (): Promise<void> => {
+      const stored = await chrome.storage.session.get([
+        SESSION_STORAGE_KEYS.activeTaskProgress,
+        SESSION_STORAGE_KEYS.activeTaskProgressRevision,
+        SESSION_STORAGE_KEYS.activeTaskProgressGeneration,
+      ])
+      const storedProgressValue = normalizeActiveTaskProgress(
+        stored[SESSION_STORAGE_KEYS.activeTaskProgress]
+      )
+      const storedGenerationValue = normalizeProgressGeneration(
+        stored[SESSION_STORAGE_KEYS.activeTaskProgressGeneration]
+      )
+      const generation =
+        storedGenerationValue !== "legacy"
+          ? storedGenerationValue
+          : (storedProgressValue?.generation ?? "legacy")
+      const revision = normalizeProgressRevision(
+        stored[SESSION_STORAGE_KEYS.activeTaskProgressRevision]
+      )
+      applySnapshot(generation, revision, storedProgressValue)
+    }
+
+    const scheduleReconnect = (): void => {
+      if (disposed) return
+      reconnectTimer = setTimeout(connect, 250)
+    }
+
+    const connect = (): void => {
+      if (disposed) return
+      try {
+        const connectedPort = chrome.runtime.connect({
+          name: ACTIVE_TASK_PROGRESS_PORT_NAME,
+        })
+        port = connectedPort
+        connectedPort.onMessage.addListener((message: unknown) => {
+          if (disposed || port !== connectedPort) return
+          const parsed = normalizeActiveTaskProgressPortMessage(message)
+          if (!parsed) return
+          livePortConnectedRef.current = true
+          applySnapshot(parsed.generation, parsed.revision, parsed.progress)
+        })
+        connectedPort.onDisconnect.addListener(() => {
+          if (port !== connectedPort) return
+          port = null
+          livePortConnectedRef.current = false
+          if (disposed) return
+          void rereadSnapshot()
+            .catch(() => undefined)
+            .finally(scheduleReconnect)
+        })
+      } catch {
+        // Session snapshots remain the recovery transport when a Port cannot
+        // be opened (for example while the extension is reloading).
+        void rereadSnapshot()
+          .catch(() => undefined)
+          .finally(scheduleReconnect)
+      }
+    }
+
+    // The storage hooks above hydrate first. Only then do we subscribe to live
+    // events, so any event older than the recovery snapshot can be rejected.
+    connect()
+    return () => {
+      disposed = true
+      livePortConnectedRef.current = false
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      port?.disconnect()
+    }
+  }, [hydrated])
+
+  return { progress, hydrated }
 }
-

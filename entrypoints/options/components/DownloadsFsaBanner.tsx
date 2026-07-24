@@ -1,37 +1,79 @@
-import { Folder } from 'lucide-react'
+import { Folder, ShieldCheck } from "lucide-react"
 
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import type { FsaErrorState } from '@/entrypoints/options/hooks/useDownloadsTabState'
-import { t } from '@/src/runtime/i18n'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { getDestinationIssueMessageKey } from "@/src/runtime/destination-issue-state"
+import { t } from "@/src/runtime/i18n"
+import type { DestinationIssue } from "@/src/types/queue-state"
 
 interface DownloadsFsaBannerProps {
-  fsaError: FsaErrorState
-  isPickingFolder: boolean
+  issue: DestinationIssue
+  taskTitle?: string
+  isWorking: boolean
+  onGrantAccess: () => Promise<void>
   onPickFolder: () => Promise<void>
-  onDismiss: () => Promise<void>
+  onContinueInDownloads: () => Promise<void>
+  onCancelTask: () => Promise<void>
 }
 
-export function DownloadsFsaBanner({ fsaError, isPickingFolder, onPickFolder, onDismiss }: DownloadsFsaBannerProps) {
+export function DownloadsFsaBanner({
+  issue,
+  taskTitle,
+  isWorking,
+  onGrantAccess,
+  onPickFolder,
+  onContinueInDownloads,
+  onCancelTask,
+}: DownloadsFsaBannerProps) {
   return (
     <Card className="border-destructive/40 bg-destructive/5">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium text-destructive">{t('sidepanel_fsaBannerTitle')}</p>
-            <p className="text-xs text-muted-foreground">
-              {fsaError.message || t('sidepanel_fsaBannerDefault')}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onPickFolder} disabled={isPickingFolder}>
-              <Folder data-icon="inline-start" className="size-3.5" />
-              {t('sidepanel_reSelect')}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => void onDismiss()}>
-              {t('common_dismiss')}
-            </Button>
-          </div>
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-destructive">
+            {t("destinationIssue_title")}
+          </p>
+          {taskTitle && (
+            <p className="text-xs font-medium text-foreground">{taskTitle}</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {t(getDestinationIssueMessageKey(issue.kind))}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onGrantAccess()}
+            disabled={isWorking}
+          >
+            <ShieldCheck data-icon="inline-start" className="size-3.5" />
+            {t("destinationIssue_grantAccess")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void onPickFolder()}
+            disabled={isWorking}
+          >
+            <Folder data-icon="inline-start" className="size-3.5" />
+            {t("destinationIssue_chooseFolder")}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void onContinueInDownloads()}
+            disabled={isWorking}
+          >
+            {t("destinationIssue_continueDownloads")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void onCancelTask()}
+            disabled={isWorking}
+          >
+            {t("destinationIssue_cancelTask")}
+          </Button>
         </div>
       </CardContent>
     </Card>

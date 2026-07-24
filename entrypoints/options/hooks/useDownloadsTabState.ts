@@ -1,43 +1,60 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from "react"
 
-import { toast } from 'sonner'
+import { toast } from "sonner"
 
-import logger from '@/src/runtime/logger'
-import { normalizePersistedDownloadTask } from '@/src/runtime/persisted-download-task'
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import type { DownloadTaskState } from '@/src/types/queue-state'
-import { StateAction } from '@/src/types/state-actions'
+import logger from "@/src/runtime/logger"
+import { normalizePersistedDownloadTask } from "@/src/runtime/persisted-download-task"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type { DownloadTaskState } from "@/src/types/queue-state"
+import { StateAction } from "@/src/types/state-actions"
 import type {
   RestartTaskMessage,
   RestartTaskResponse,
   RetryFailedChaptersMessage,
   RetryFailedChaptersResponse,
-} from '@/src/types/runtime-command-messages'
-import type { StateActionMessage, StateActionResponse } from '@/src/types/state-action-message'
-import { isRecord } from '@/src/shared/type-guards'
-import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
-import { t } from '@/src/runtime/i18n'
+} from "@/src/types/runtime-command-messages"
+import type {
+  StateActionMessage,
+  StateActionResponse,
+} from "@/src/types/state-action-message"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import { t } from "@/src/runtime/i18n"
+import { requestDownloadTaskCancellation } from "@/entrypoints/options/download-task-actions"
+import { createCommandEnvelope } from "@/src/runtime/command-envelope"
+import { normalizeDestinationIssues } from "@/src/runtime/destination-issue-state"
+import type { DestinationIssue } from "@/src/types/queue-state"
+import type { PendingUndoReceipt } from "@/src/types/queue-state"
+import {
+  getPendingUndoReceipt,
+  undoPendingAction,
+} from "@/src/runtime/state-actions"
 
-export type FsaErrorState = {
-  active?: boolean
-  message?: string
+function showOptionsUndoToast(receipt: PendingUndoReceipt): void {
+  toast(
+    receipt.type === "cancel_queued"
+      ? t("sidepanel_taskRemovedFromQueue")
+      : t("sidepanel_historyRemoved"),
+    {
+      duration: Math.max(1, receipt.expiresAt - Date.now()),
+      action: {
+        label: t("common_undo"),
+        onClick: () => {
+          void undoPendingAction(receipt.token).catch((error) => {
+            logger.error("[DOWNLOADS TAB] Failed to undo task action:", error)
+            toast.error(t("sidepanel_undoFailed"))
+          })
+        },
+      },
+    }
+  )
 }
 
 export function normalizeDownloadQueueState(raw: unknown): DownloadTaskState[] {
   return Array.isArray(raw)
-    ? raw.map(normalizePersistedDownloadTask).filter((task): task is DownloadTaskState => task !== null)
+    ? raw
+        .map(normalizePersistedDownloadTask)
+        .filter((task): task is DownloadTaskState => task !== null)
     : []
-}
-
-export function normalizeFsaErrorState(raw: unknown): FsaErrorState | null {
-  if (!isRecord(raw)) {
-    return null
-  }
-
-  return {
-    active: raw.active === true,
-    message: typeof raw.message === 'string' ? raw.message : undefined,
-  }
 }
 
 async function readHistoryStorageBytes(): Promise<number> {
@@ -46,136 +63,179 @@ async function readHistoryStorageBytes(): Promise<number> {
 
 export function useDownloadsTabState() {
   const [historyStorageBytes, setHistoryStorageBytes] = useState(0)
-  const { value: tasks, hydrated: tasksHydrated } = useChromeStorageValue<DownloadTaskState[]>({
-    areaName: 'local',
+  const { value: tasks, hydrated: tasksHydrated } = useChromeStorageValue<
+    DownloadTaskState[]
+  >({
+    areaName: "local",
     key: LOCAL_STORAGE_KEYS.downloadQueue,
     initialValue: [],
     parse: normalizeDownloadQueueState,
   })
-  const { value: fsaError, hydrated: fsaErrorHydrated } = useChromeStorageValue<FsaErrorState | null>({
-    areaName: 'local',
-    key: LOCAL_STORAGE_KEYS.fsaError,
-    initialValue: null,
-    parse: normalizeFsaErrorState,
-  })
-
-  const refreshHistoryStorageBytes = useCallback(async () => {
-    const bytes = await readHistoryStorageBytes()
-    setHistoryStorageBytes(bytes)
-  }, [])
+  const { value: destinationIssues, hydrated: destinationIssuesHydrated } =
+    useChromeStorageValue<DestinationIssue[]>({
+      areaName: "local",
+      key: LOCAL_STORAGE_KEYS.destinationIssues,
+      initialValue: [],
+      parse: normalizeDestinationIssues,
+    })
 
   useEffect(() => {
     if (!tasksHydrated) {
       return
     }
 
-    void refreshHistoryStorageBytes().catch((error) => {
-      logger.debug('[DOWNLOADS TAB] Failed to refresh history storage usage (non-fatal):', error)
-    })
-  }, [tasks, tasksHydrated, refreshHistoryStorageBytes])
+    let canceled = false
+    void readHistoryStorageBytes()
+      .then((bytes) => {
+        if (!canceled) {
+          setHistoryStorageBytes(bytes)
+        }
+      })
+      .catch((error) => {
+        logger.debug(
+          "[DOWNLOADS TAB] Failed to refresh history storage usage (non-fatal):",
+          error
+        )
+      })
 
-  const isLoading = !tasksHydrated || !fsaErrorHydrated
+    return () => {
+      canceled = true
+    }
+  }, [tasks, tasksHydrated])
+
+  const isLoading = !tasksHydrated || !destinationIssuesHydrated
+  const destinationIssue = destinationIssues[0] ?? null
 
   const cancelTask = useCallback(async (taskId: string) => {
-    try {
-      const response = await chrome.runtime.sendMessage<StateActionMessage, StateActionResponse>({
-        type: 'STATE_ACTION',
-        action: StateAction.CANCEL_DOWNLOAD_TASK,
-        payload: { taskId },
-      })
-      if (!response || response.success === false) {
-        toast.error(response?.error || t('options_toastCancelFailed'))
-      }
-    } catch (error) {
-      logger.error('[DOWNLOADS TAB] Failed to cancel task:', error)
-      toast.error(t('options_toastCancelFailed'))
-    }
+    const result = await requestDownloadTaskCancellation(taskId)
+    if (result.success && result.undo) showOptionsUndoToast(result.undo)
+    if (!result.success) toast.error(t("options_toastCancelFailed"))
+    return result
   }, [])
 
   const retryTask = useCallback(async (taskId: string) => {
     try {
-      const response = await chrome.runtime.sendMessage<RetryFailedChaptersMessage, RetryFailedChaptersResponse>({
-        type: 'RETRY_FAILED_CHAPTERS',
+      const response = await chrome.runtime.sendMessage<
+        RetryFailedChaptersMessage,
+        RetryFailedChaptersResponse
+      >({
+        type: "RETRY_FAILED_CHAPTERS",
+        ...createCommandEnvelope(),
         payload: { taskId },
       })
       if (!response || response.success === false) {
-        toast.error(response?.error || t('options_toastRetryFailed'))
+        toast.error(t("options_toastRetryFailed"))
       }
     } catch (error) {
-      logger.error('[DOWNLOADS TAB] Failed to retry task:', error)
-      toast.error(t('options_toastRetryFailed'))
+      logger.error("[DOWNLOADS TAB] Failed to retry task:", error)
+      toast.error(t("options_toastRetryFailed"))
     }
   }, [])
 
   const restartTask = useCallback(async (taskId: string) => {
     try {
-      const response = await chrome.runtime.sendMessage<RestartTaskMessage, RestartTaskResponse>({
-        type: 'RESTART_TASK',
+      const response = await chrome.runtime.sendMessage<
+        RestartTaskMessage,
+        RestartTaskResponse
+      >({
+        type: "RESTART_TASK",
+        ...createCommandEnvelope(),
         payload: { taskId },
       })
       if (!response || response.success === false) {
-        toast.error(response?.error || t('options_toastRestartFailed'))
+        toast.error(t("options_toastRestartFailed"))
       }
     } catch (error) {
-      logger.error('[DOWNLOADS TAB] Failed to restart task:', error)
-      toast.error(t('options_toastRestartFailed'))
+      logger.error("[DOWNLOADS TAB] Failed to restart task:", error)
+      toast.error(t("options_toastRestartFailed"))
     }
   }, [])
 
   const removeTask = useCallback(async (taskId: string) => {
     try {
-      const response = await chrome.runtime.sendMessage<StateActionMessage, StateActionResponse>({
-        type: 'STATE_ACTION',
+      const response = await chrome.runtime.sendMessage<
+        StateActionMessage,
+        StateActionResponse
+      >({
+        type: "STATE_ACTION",
+        ...createCommandEnvelope(),
         action: StateAction.REMOVE_DOWNLOAD_TASK,
         payload: { taskId },
       })
       if (!response || response.success === false) {
-        toast.error(response?.error || t('options_toastRemoveFailed'))
+        toast.error(t("options_toastRemoveFailed"))
+        return
       }
+      const undo = getPendingUndoReceipt(response)
+      if (undo) showOptionsUndoToast(undo)
     } catch (error) {
-      logger.error('[DOWNLOADS TAB] Failed to remove task:', error)
-      toast.error(t('options_toastRemoveFailed'))
+      logger.error("[DOWNLOADS TAB] Failed to remove task:", error)
+      toast.error(t("options_toastRemoveFailed"))
     }
   }, [])
 
   const clearAllHistory = useCallback(async (): Promise<boolean> => {
     try {
-      const response: { success?: boolean; error?: string } = await chrome.runtime.sendMessage({
-        type: 'CLEAR_ALL_HISTORY',
-        payload: {},
-      })
+      const response: { success?: boolean; error?: string } =
+        await chrome.runtime.sendMessage({
+          type: "CLEAR_ALL_HISTORY",
+          ...createCommandEnvelope(),
+          payload: {},
+        })
       if (!response?.success) {
-        throw new Error(response?.error || 'Failed to clear history')
+        throw new Error(response?.error || "Failed to clear history")
       }
       return true
     } catch (error) {
-      logger.error('[DOWNLOADS TAB] Failed to clear history:', error)
+      logger.error("[DOWNLOADS TAB] Failed to clear history:", error)
+      toast.error(t("options_toastClearHistoryFailed"))
       return false
     }
   }, [])
 
-  const dismissFsaBanner = useCallback(async () => {
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'ACKNOWLEDGE_ERROR',
-        payload: { code: 'FSA_HANDLE_INVALID' },
-      })
-    } catch (error) {
-      logger.debug('[DOWNLOADS TAB] Failed to persist FSA banner dismissal (non-fatal):', error)
-    }
-  }, [])
+  const sendDestinationTaskAction = useCallback(
+    async (
+      taskId: string,
+      action:
+        | StateAction.RETRY_DESTINATION_TASK
+        | StateAction.CONTINUE_TASK_IN_DOWNLOADS
+    ) => {
+      try {
+        const response = await chrome.runtime.sendMessage<
+          StateActionMessage,
+          StateActionResponse
+        >({
+          type: "STATE_ACTION",
+          action,
+          ...createCommandEnvelope(),
+          payload: { taskId },
+        })
+        if (!response?.success) {
+          throw new Error(response?.error || "Destination task action failed")
+        }
+        return true
+      } catch (error) {
+        logger.error("[DOWNLOADS TAB] Destination task action failed:", error)
+        toast.error(t("destinationIssue_actionFailed"))
+        return false
+      }
+    },
+    []
+  )
 
   return {
     tasks,
     isLoading,
-    fsaError,
+    destinationIssue,
     historyStorageBytes,
     cancelTask,
     retryTask,
     restartTask,
     removeTask,
     clearAllHistory,
-    dismissFsaBanner,
+    retryDestinationTask: (taskId: string) =>
+      sendDestinationTaskAction(taskId, StateAction.RETRY_DESTINATION_TASK),
+    continueTaskInDownloads: (taskId: string) =>
+      sendDestinationTaskAction(taskId, StateAction.CONTINUE_TASK_IN_DOWNLOADS),
   }
 }
-

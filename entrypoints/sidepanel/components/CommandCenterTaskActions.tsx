@@ -1,15 +1,39 @@
-import { ArrowUp, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
+import {
+  ArrowUp,
+  Loader2,
+  MoreHorizontal,
+  RotateCcw,
+  Trash2,
+  XCircle,
+} from "lucide-react"
 
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/runtime/i18n'
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import type { QueueTaskSummary } from "@/src/types/queue-state"
+import { t } from "@/src/runtime/i18n"
+import {
+  getTaskActionPlan,
+  type CommandCenterTaskActionId,
+} from "./command-center-queue-helpers"
 
 interface CommandCenterTaskActionsProps {
   taskId: string
-  status: QueueTaskSummary['status']
-  isRetried: boolean
+  status: QueueTaskSummary["status"]
   isCanceling: boolean
+  isRetrying?: boolean
+  isRestarting?: boolean
+  isRemoving?: boolean
+  isMoving?: boolean
   canCancel: boolean
   canRetryFailed: boolean
   canRestart: boolean
@@ -22,11 +46,43 @@ interface CommandCenterTaskActionsProps {
   onRemoveTask?: (taskId: string) => void
 }
 
+function actionLabel(action: CommandCenterTaskActionId): string {
+  switch (action) {
+    case "cancel":
+      return t("sidepanel_cancelDownload")
+    case "retry-failed":
+      return t("sidepanel_retryFailedChapters")
+    case "restart":
+      return t("sidepanel_restartAllChapters")
+    case "move-to-top":
+      return t("sidepanel_moveTaskToTop")
+    case "remove":
+      return t("common_remove")
+  }
+}
+
+function actionIcon(action: CommandCenterTaskActionId) {
+  switch (action) {
+    case "cancel":
+      return <XCircle aria-hidden="true" data-icon="inline-start" />
+    case "retry-failed":
+    case "restart":
+      return <RotateCcw aria-hidden="true" data-icon="inline-start" />
+    case "move-to-top":
+      return <ArrowUp aria-hidden="true" data-icon="inline-start" />
+    case "remove":
+      return <Trash2 aria-hidden="true" data-icon="inline-start" />
+  }
+}
+
 export function CommandCenterTaskActions({
   taskId,
   status,
-  isRetried,
   isCanceling,
+  isRetrying = false,
+  isRestarting = false,
+  isRemoving = false,
+  isMoving = false,
   canCancel,
   canRetryFailed,
   canRestart,
@@ -38,106 +94,117 @@ export function CommandCenterTaskActions({
   onMoveTaskToTop,
   onRemoveTask,
 }: CommandCenterTaskActionsProps) {
+  const plan = getTaskActionPlan(status, {
+    canCancel,
+    canRetryFailed,
+    canRestart,
+    canMoveToTop,
+    canRemove,
+  })
+
+  const isPending = (action: CommandCenterTaskActionId): boolean =>
+    (action === "cancel" && isCanceling) ||
+    (action === "retry-failed" && isRetrying) ||
+    (action === "restart" && isRestarting) ||
+    (action === "remove" && isRemoving) ||
+    (action === "move-to-top" && isMoving)
+
+  const invoke = (action: CommandCenterTaskActionId) => {
+    switch (action) {
+      case "cancel":
+        onBeginCancel(taskId)
+        break
+      case "retry-failed":
+        onRetryFailed?.(taskId)
+        break
+      case "restart":
+        onRestartTask?.(taskId)
+        break
+      case "move-to-top":
+        onMoveTaskToTop?.(taskId)
+        break
+      case "remove":
+        onRemoveTask?.(taskId)
+        break
+    }
+  }
+
+  const renderPrimary = (action: CommandCenterTaskActionId) => {
+    const pending = isPending(action)
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-label={
+              pending && action === "cancel"
+                ? t("sidepanel_cancelingDownload")
+                : actionLabel(action)
+            }
+            variant="ghost"
+            size="icon"
+            className={
+              action === "cancel"
+                ? "size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                : "size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
+            }
+            onClick={() => invoke(action)}
+            disabled={pending}
+          >
+            {pending ? (
+              <Loader2
+                aria-hidden="true"
+                data-icon="inline-start"
+                className="animate-spin"
+              />
+            ) : (
+              actionIcon(action)
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="text-xs">
+          {actionLabel(action)}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
   return (
     <div className="flex items-center gap-0.5">
-      {isCanceling ? (
-        <Button aria-label={t('sidepanel_cancelingDownload')} variant="ghost" size="icon" className="size-6" disabled>
-          <Loader2 aria-hidden="true" data-icon="inline-start" className="animate-spin" />
-        </Button>
-      ) : canCancel ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
+      {plan.primary ? renderPrimary(plan.primary) : null}
+      {plan.overflow.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button
-              aria-label={t('common_cancel')}
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => onBeginCancel(taskId)}
-            >
-              <XCircle aria-hidden="true" data-icon="inline-start" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {t('sidepanel_cancelDownload')}
-          </TooltipContent>
-        </Tooltip>
-      ) : null}
-
-      {status === 'partial_success' && !isRetried && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t('sidepanel_retryFailed')}
+              aria-label={t("sidepanel_moreActions")}
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => onRetryFailed?.(taskId)}
-              disabled={!canRetryFailed}
             >
-              <RotateCcw aria-hidden="true" data-icon="inline-start" />
+              <MoreHorizontal aria-hidden="true" data-icon="inline-start" />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {t('sidepanel_retryFailedChapters')}
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {canRestart && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t('sidepanel_restartTask')}
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => onRestartTask?.(taskId)}
-            >
-              <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {t('sidepanel_restartAllChapters')}
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {canMoveToTop && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t('sidepanel_moveTaskToTop')}
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
-              onClick={() => onMoveTaskToTop?.(taskId)}
-            >
-              <ArrowUp aria-hidden="true" data-icon="inline-start" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {t('sidepanel_moveToTop')}
-          </TooltipContent>
-        </Tooltip>
-      )}
-
-      {canRemove && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t('common_remove')}
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => onRemoveTask?.(taskId)}
-            >
-              <Trash2 aria-hidden="true" data-icon="inline-start" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="text-xs">
-            {t('common_remove')}
-          </TooltipContent>
-        </Tooltip>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {plan.overflow.map((action) => (
+              <DropdownMenuItem
+                key={action}
+                disabled={isPending(action)}
+                className={
+                  action === "cancel" || action === "remove"
+                    ? "text-destructive focus:text-destructive"
+                    : undefined
+                }
+                onSelect={() => invoke(action)}
+              >
+                {isPending(action) ? (
+                  <Loader2 aria-hidden="true" className="animate-spin" />
+                ) : (
+                  actionIcon(action)
+                )}
+                {actionLabel(action)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   )

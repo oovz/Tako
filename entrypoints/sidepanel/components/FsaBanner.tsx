@@ -1,86 +1,121 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState } from "react"
 
-import { AlertTriangle, Folder } from 'lucide-react'
+import { AlertTriangle, Folder } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { openOptionsPage } from '@/src/runtime/open-options'
-import { LOCAL_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
-import logger from '@/src/runtime/logger'
-import { t } from '@/src/runtime/i18n'
-
-interface FsaErrorState {
-  active?: boolean
-  message?: string
-}
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { createCommandEnvelope } from "@/src/runtime/command-envelope"
+import {
+  getDestinationIssueMessageKey,
+  normalizeDestinationIssues,
+} from "@/src/runtime/destination-issue-state"
+import { t } from "@/src/runtime/i18n"
+import logger from "@/src/runtime/logger"
+import { openOptionsPage } from "@/src/runtime/open-options"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type { DestinationIssue } from "@/src/types/queue-state"
+import { StateAction } from "@/src/types/state-actions"
+import type {
+  StateActionMessage,
+  StateActionResponse,
+} from "@/src/types/state-action-message"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 
 interface FsaBannerProps {
   className?: string
 }
 
-function normalizeFsaErrorState(raw: unknown): FsaErrorState | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return null
-  }
-
-  const candidate = raw as { active?: unknown; message?: unknown }
-  return {
-    active: candidate.active === true,
-    message: typeof candidate.message === 'string' ? candidate.message : undefined,
-  }
-}
-
 export function FsaBanner({ className }: FsaBannerProps) {
-  const { value: fsaError } = useChromeStorageValue<FsaErrorState | null>({
-    areaName: 'local',
-    key: LOCAL_STORAGE_KEYS.fsaError,
-    initialValue: null,
-    parse: normalizeFsaErrorState,
+  const [pendingAction, setPendingAction] = useState<StateAction | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const { value: destinationIssues } = useChromeStorageValue<
+    DestinationIssue[]
+  >({
+    areaName: "local",
+    key: LOCAL_STORAGE_KEYS.destinationIssues,
+    initialValue: [],
+    parse: normalizeDestinationIssues,
   })
-
-  const dismiss = useCallback(async () => {
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'ACKNOWLEDGE_ERROR',
-        payload: { code: 'FSA_HANDLE_INVALID' },
-      })
-    } catch (error) {
-      logger.debug('[FsaBanner] Failed to acknowledge FSA error (non-fatal):', error)
-    }
-  }, [])
+  const issue = destinationIssues[0]
 
   const openOptions = useCallback(async () => {
     try {
-      await openOptionsPage('downloads')
+      await openOptionsPage("downloads")
     } catch (error) {
-      logger.debug('[FsaBanner] Failed to open options (non-fatal):', error)
+      logger.debug("[FsaBanner] Failed to open options (non-fatal):", error)
     }
   }, [])
 
-  if (!fsaError?.active) {
-    return null
-  }
+  const sendTaskAction = useCallback(
+    async (action: StateAction) => {
+      if (!issue || pendingAction !== null) return
+      setPendingAction(action)
+      setActionError(null)
+      try {
+        const response = await chrome.runtime.sendMessage<
+          StateActionMessage,
+          StateActionResponse
+        >({
+          type: "STATE_ACTION",
+          action,
+          ...createCommandEnvelope(),
+          payload: { taskId: issue.taskId },
+        })
+        if (!response?.success) {
+          throw new Error(response?.error || "Task action failed")
+        }
+      } catch (error) {
+        logger.warn("[FsaBanner] Destination task action failed", error)
+        setActionError(t("destinationIssue_actionFailed"))
+      } finally {
+        setPendingAction(null)
+      }
+    },
+    [issue, pendingAction]
+  )
+
+  if (!issue) return null
 
   return (
     <Alert variant="destructive" className={className}>
       <AlertTriangle className="size-4" />
-      <AlertTitle>{t('sidepanel_fsaBannerTitle')}</AlertTitle>
-      <AlertDescription className="flex items-start justify-between gap-3">
-        <span>
-          {fsaError.message || t('sidepanel_fsaBannerDefault')}
+      <AlertTitle>{t("destinationIssue_title")}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3">
+        <span className="min-w-0 break-words">
+          {t(getDestinationIssueMessageKey(issue.kind))}
         </span>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex max-w-full flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={openOptions}>
             <Folder data-icon="inline-start" className="size-3.5" />
-            {t('sidepanel_reSelect')}
+            {t("destinationIssue_fixFolder")}
           </Button>
-          <Button variant="ghost" size="sm" onClick={dismiss}>
-            {t('common_dismiss')}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pendingAction !== null}
+            onClick={() =>
+              void sendTaskAction(StateAction.CONTINUE_TASK_IN_DOWNLOADS)
+            }
+          >
+            {t("destinationIssue_continueDownloads")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pendingAction !== null}
+            onClick={() =>
+              void sendTaskAction(StateAction.CANCEL_DOWNLOAD_TASK)
+            }
+          >
+            {t("destinationIssue_cancelTask")}
           </Button>
         </div>
+        {actionError && (
+          <span role="alert" className="text-sm font-medium">
+            {actionError}
+          </span>
+        )}
       </AlertDescription>
     </Alert>
   )
 }
-

@@ -1,8 +1,8 @@
-import React from 'react'
+import React from "react"
 
-import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
-import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/runtime/i18n'
+import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
+import type { QueueTaskSummary } from "@/src/types/queue-state"
+import { t } from "@/src/runtime/i18n"
 
 export interface HistorySectionProps {
   tasks: QueueTaskSummary[]
@@ -11,6 +11,9 @@ export interface HistorySectionProps {
   onRetryFailed: (taskId: string) => void
   onRestartTask: (taskId: string) => void
   onRemoveTask: (taskId: string) => void
+  retryingTaskIds?: Set<string>
+  restartingTaskIds?: Set<string>
+  removingTaskIds?: Set<string>
 }
 
 export function HistorySection({
@@ -20,6 +23,9 @@ export function HistorySection({
   onRetryFailed,
   onRestartTask,
   onRemoveTask,
+  retryingTaskIds,
+  restartingTaskIds,
+  removingTaskIds,
 }: HistorySectionProps) {
   if (tasks.length === 0) {
     return null
@@ -28,14 +34,14 @@ export function HistorySection({
   return (
     <section
       aria-labelledby="sidepanel-recent-history-title"
-      className="min-h-0 flex-shrink overflow-y-auto border-t border-border/60"
+      className="min-h-[98px] max-h-[50%] shrink-0 overflow-y-auto border-t border-border/60"
     >
       <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
         <h2
           id="sidepanel-recent-history-title"
           className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
         >
-          {t('sidepanel_recentHistory')}
+          {t("sidepanel_recentHistory")}
         </h2>
         {!isInlineSelectionOpen && (
           <button
@@ -43,7 +49,7 @@ export function HistorySection({
             onClick={onViewFullHistory}
             className="text-[10px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
           >
-            {t('sidepanel_viewFullHistory')}
+            {t("sidepanel_viewFullHistory")}
           </button>
         )}
       </div>
@@ -52,8 +58,10 @@ export function HistorySection({
         onRetryFailed={onRetryFailed}
         onRestartTask={onRestartTask}
         onRemoveTask={onRemoveTask}
+        retryingTaskIds={retryingTaskIds}
+        restartingTaskIds={restartingTaskIds}
+        removingTaskIds={removingTaskIds}
       />
     </section>
   )
 }
-

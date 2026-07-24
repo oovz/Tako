@@ -1,18 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from "vitest"
 
-import { HistorySection } from '@/entrypoints/sidepanel/components/HistorySection'
-import type { QueueTaskSummary } from '@/src/types/queue-state'
+import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
+import type { QueueTaskSummary } from "@/src/types/queue-state"
 
 function makeHistoryTask(id: string): QueueTaskSummary {
   return {
     id,
     seriesKey: `mangadex#${id}`,
     seriesTitle: `Series ${id}`,
-    siteIntegration: 'mangadex',
-    status: 'completed',
+    siteIntegration: "mangadex",
+    status: "completed",
     chapters: { total: 1, completed: 1, unsuccessful: 0 },
     timestamps: { created: 1, completed: 2 },
-    failureReason: undefined,
     failureCategory: undefined,
     isRetried: false,
     isRetryTask: false,
@@ -20,10 +19,14 @@ function makeHistoryTask(id: string): QueueTaskSummary {
   }
 }
 
-describe('HistorySection layout', () => {
-  it('uses flexible height instead of a fixed recent-history cap', () => {
+describe("HistorySection layout", () => {
+  it("reserves enough height for the header and one history row", () => {
     const element = HistorySection({
-      tasks: [makeHistoryTask('one'), makeHistoryTask('two'), makeHistoryTask('three')],
+      tasks: [
+        makeHistoryTask("one"),
+        makeHistoryTask("two"),
+        makeHistoryTask("three"),
+      ],
       isInlineSelectionOpen: false,
       onViewFullHistory: vi.fn(),
       onRetryFailed: vi.fn(),
@@ -32,9 +35,9 @@ describe('HistorySection layout', () => {
     })
 
     expect(element).not.toBeNull()
-    expect(element?.props.className).not.toContain('max-h-56')
-    expect(element?.props.className).not.toContain('flex-shrink-0')
-    expect(element?.props.className).toContain('min-h-0')
-    expect(element?.props.className).toContain('overflow-y-auto')
+    expect(element?.props.className).not.toContain("max-h-56")
+    expect(element?.props.className).toContain("shrink-0")
+    expect(element?.props.className).toContain("min-h-[98px]")
+    expect(element?.props.className).toContain("overflow-y-auto")
   })
 })

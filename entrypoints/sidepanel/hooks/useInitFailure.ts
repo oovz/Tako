@@ -1,6 +1,6 @@
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
-import { isRecord } from '@/src/shared/type-guards'
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import { isRecord } from "@/src/shared/type-guards"
 
 export interface InitFailureState {
   initFailed: boolean
@@ -18,7 +18,7 @@ export function normalizeInitFailureState(raw: unknown): InitFailureState {
 
   const initFailed = raw[SESSION_STORAGE_KEYS.initFailed] === true
   const rawError = raw[SESSION_STORAGE_KEYS.initError]
-  const error = typeof rawError === 'string' ? rawError : undefined
+  const error = typeof rawError === "string" ? rawError : undefined
 
   return {
     initFailed,
@@ -28,7 +28,7 @@ export function normalizeInitFailureState(raw: unknown): InitFailureState {
 
 export function useInitFailure(): InitFailureState {
   const { value } = useChromeStorageValue({
-    areaName: 'session',
+    areaName: "session",
     key: [SESSION_STORAGE_KEYS.initFailed, SESSION_STORAGE_KEYS.initError],
     initialValue: DEFAULT_INIT_FAILURE_STATE,
     parse: normalizeInitFailureState,
@@ -36,4 +36,3 @@ export function useInitFailure(): InitFailureState {
 
   return value
 }
-

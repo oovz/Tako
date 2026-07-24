@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from "react"
 
-import { DownloadErrorCategorySchema, DownloadTaskStatusSchema } from '@/src/shared/download-contract'
-import { SESSION_STORAGE_KEYS } from '@/src/runtime/storage-keys'
-import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { useChromeStorageValue } from '@/src/ui/shared/hooks/useChromeStorageValue'
-import { z } from 'zod'
-
-const SKELETON_TIMEOUT_MS = 500
+import {
+  DownloadTaskStatusSchema,
+  normalizeDownloadErrorCategory,
+} from "@/src/shared/download-contract"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type { QueueTaskSummary } from "@/src/types/queue-state"
+import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import { isRecord } from "@/src/shared/type-guards"
+import { z } from "zod"
 
 const QueueTaskSummaryStorageSchema = z.object({
   id: z.string(),
@@ -24,7 +26,6 @@ const QueueTaskSummaryStorageSchema = z.object({
     created: z.number(),
     completed: z.number().optional(),
   }),
-  failureReason: z.unknown().optional(),
   failureCategory: z.unknown().optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
@@ -44,7 +45,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
     seriesKey: data.seriesKey,
     seriesTitle: data.seriesTitle,
     siteIntegration: data.siteIntegration,
-    coverUrl: typeof data.coverUrl === 'string' ? data.coverUrl : undefined,
+    coverUrl: typeof data.coverUrl === "string" ? data.coverUrl : undefined,
     status: data.status,
     chapters: {
       total: data.chapters.total,
@@ -55,13 +56,14 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
       created: data.timestamps.created,
       completed: data.timestamps.completed,
     },
-    failureReason: typeof data.failureReason === 'string' ? data.failureReason : undefined,
-    failureCategory: DownloadErrorCategorySchema.safeParse(data.failureCategory).success
-      ? DownloadErrorCategorySchema.parse(data.failureCategory)
-      : undefined,
-    isRetried: typeof data.isRetried === 'boolean' ? data.isRetried : undefined,
-    isRetryTask: typeof data.isRetryTask === 'boolean' ? data.isRetryTask : undefined,
-    lastSuccessfulDownloadId: typeof data.lastSuccessfulDownloadId === 'number' ? data.lastSuccessfulDownloadId : undefined,
+    failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
+    isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
+    isRetryTask:
+      typeof data.isRetryTask === "boolean" ? data.isRetryTask : undefined,
+    lastSuccessfulDownloadId:
+      typeof data.lastSuccessfulDownloadId === "number"
+        ? data.lastSuccessfulDownloadId
+        : undefined,
   }
 }
 
@@ -70,7 +72,47 @@ export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
     return []
   }
 
-  return value.map(normalizeQueueTaskSummary).filter((task): task is QueueTaskSummary => task !== null)
+  return value
+    .map(normalizeQueueTaskSummary)
+    .filter((task): task is QueueTaskSummary => task !== null)
+}
+
+function isTerminalTask(task: QueueTaskSummary): boolean {
+  return (
+    task.status === "completed" ||
+    task.status === "partial_success" ||
+    task.status === "failed" ||
+    task.status === "canceled"
+  )
+}
+
+export function normalizeHistoryView(value: unknown): QueueTaskSummary[] {
+  return normalizeQueueView(value)
+    .filter(isTerminalTask)
+    .sort(
+      (left, right) =>
+        (right.timestamps.completed ?? 0) - (left.timestamps.completed ?? 0)
+    )
+    .slice(0, 5)
+}
+
+interface QueueProjectionStorageValue {
+  queueView: QueueTaskSummary[]
+  historyView: QueueTaskSummary[]
+}
+
+export function normalizeQueueProjection(
+  value: unknown
+): QueueProjectionStorageValue {
+  if (!isRecord(value)) {
+    return { queueView: [], historyView: [] }
+  }
+
+  const queue = normalizeQueueView(value[SESSION_STORAGE_KEYS.queueView])
+  return {
+    queueView: queue.filter((task) => !isTerminalTask(task)),
+    historyView: normalizeHistoryView(value[SESSION_STORAGE_KEYS.historyView]),
+  }
 }
 
 export interface UseQueueViewResult {
@@ -85,48 +127,26 @@ export interface UseQueueViewResult {
 }
 
 export function useQueueView(): UseQueueViewResult {
-  const { value: queueView, hydrated } = useChromeStorageValue<QueueTaskSummary[]>({
-    areaName: 'session',
-    key: SESSION_STORAGE_KEYS.queueView,
-    initialValue: [],
-    parse: normalizeQueueView,
-  })
-
-  const [showSkeleton, setShowSkeleton] = useState(true)
-
-  useEffect(() => {
-    if (!hydrated) {
-      return
-    }
-
-    if (queueView.length > 0) {
-      setShowSkeleton(false)
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setShowSkeleton(false)
-    }, SKELETON_TIMEOUT_MS)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [hydrated, queueView.length])
+  const { value: projection, hydrated } =
+    useChromeStorageValue<QueueProjectionStorageValue>({
+      areaName: "session",
+      key: [SESSION_STORAGE_KEYS.queueView, SESSION_STORAGE_KEYS.historyView],
+      initialValue: { queueView: [], historyView: [] },
+      parse: normalizeQueueProjection,
+    })
+  const { queueView, historyView } = projection
 
   const activeTasks = useMemo(
-    () => queueView.filter((task) => task.status === 'downloading'),
-    [queueView],
+    () => queueView.filter((task) => task.status === "downloading"),
+    [queueView]
   )
 
   const queuedTasks = useMemo(
-    () => queueView.filter((task) => task.status === 'queued'),
-    [queueView],
+    () => queueView.filter((task) => task.status === "queued"),
+    [queueView]
   )
 
-  const historyTasks = useMemo(
-    () => queueView.filter((task) => task.status === 'completed' || task.status === 'partial_success' || task.status === 'failed' || task.status === 'canceled').slice(0, 5),
-    [queueView],
-  )
+  const historyTasks = useMemo(() => historyView, [historyView])
 
   return {
     queueView,
@@ -136,7 +156,6 @@ export function useQueueView(): UseQueueViewResult {
     activeCount: activeTasks.length,
     queuedCount: queuedTasks.length,
     hydrated,
-    isLoading: !hydrated || showSkeleton,
+    isLoading: !hydrated,
   }
 }
-

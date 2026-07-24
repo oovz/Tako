@@ -1,14 +1,14 @@
-import { useCallback, useMemo } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
+import { useCallback, useMemo } from "react"
+import type { Dispatch, SetStateAction } from "react"
 
-import { composeSeriesKey } from '@/src/runtime/queue-task-summary'
+import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
 
 export type ChapterSelectionsBySeries = Record<string, string[]>
 
 function normalizeSelections(chapterIds: string[]): string[] {
   const unique = new Set<string>()
   chapterIds.forEach((chapterId) => {
-    if (typeof chapterId === 'string' && chapterId.length > 0) {
+    if (typeof chapterId === "string" && chapterId.length > 0) {
       unique.add(chapterId)
     }
   })
@@ -29,7 +29,10 @@ function areEqualSelections(left: string[], right: string[]): boolean {
   return true
 }
 
-export function buildSeriesKey(siteId: string | undefined, seriesId: string | undefined): string | undefined {
+export function buildSeriesKey(
+  siteId: string | undefined,
+  seriesId: string | undefined
+): string | undefined {
   if (!siteId || !seriesId) {
     return undefined
   }
@@ -39,7 +42,7 @@ export function buildSeriesKey(siteId: string | undefined, seriesId: string | un
 
 export function getSelectionsForSeries(
   chapterSelectionsBySeries: ChapterSelectionsBySeries,
-  seriesKey: string | undefined,
+  seriesKey: string | undefined
 ): string[] {
   if (!seriesKey) {
     return []
@@ -51,7 +54,7 @@ export function getSelectionsForSeries(
 export function setSelectionsForSeries(
   chapterSelectionsBySeries: ChapterSelectionsBySeries,
   seriesKey: string | undefined,
-  chapterIds: string[],
+  chapterIds: string[]
 ): ChapterSelectionsBySeries {
   if (!seriesKey) {
     return chapterSelectionsBySeries
@@ -75,7 +78,7 @@ export function setSelectionsForSeries(
 
 export function clearSelectionsForSeries(
   chapterSelectionsBySeries: ChapterSelectionsBySeries,
-  seriesKey: string | undefined,
+  seriesKey: string | undefined
 ): ChapterSelectionsBySeries {
   if (!seriesKey || !(seriesKey in chapterSelectionsBySeries)) {
     return chapterSelectionsBySeries
@@ -89,19 +92,28 @@ export function clearSelectionsForSeries(
 export function useChapterSelections(
   seriesKey: string | undefined,
   chapterSelectionsBySeries: ChapterSelectionsBySeries,
-  setChapterSelectionsBySeries: Dispatch<SetStateAction<ChapterSelectionsBySeries>>,
+  setChapterSelectionsBySeries: Dispatch<
+    SetStateAction<ChapterSelectionsBySeries>
+  >
 ) {
   const selectedChapterIds = useMemo(
     () => getSelectionsForSeries(chapterSelectionsBySeries, seriesKey),
-    [chapterSelectionsBySeries, seriesKey],
+    [chapterSelectionsBySeries, seriesKey]
   )
 
-  const setSelectedChapterIds = useCallback((chapterIds: string[]) => {
-    setChapterSelectionsBySeries((previousSelections) => setSelectionsForSeries(previousSelections, seriesKey, chapterIds))
-  }, [seriesKey, setChapterSelectionsBySeries])
+  const setSelectedChapterIds = useCallback(
+    (chapterIds: string[]) => {
+      setChapterSelectionsBySeries((previousSelections) =>
+        setSelectionsForSeries(previousSelections, seriesKey, chapterIds)
+      )
+    },
+    [seriesKey, setChapterSelectionsBySeries]
+  )
 
   const clearSeriesSelections = useCallback(() => {
-    setChapterSelectionsBySeries((previousSelections) => clearSelectionsForSeries(previousSelections, seriesKey))
+    setChapterSelectionsBySeries((previousSelections) =>
+      clearSelectionsForSeries(previousSelections, seriesKey)
+    )
   }, [seriesKey, setChapterSelectionsBySeries])
 
   return {

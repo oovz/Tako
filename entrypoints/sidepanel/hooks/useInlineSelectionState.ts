@@ -1,30 +1,30 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from "react"
 
-import type { ChapterSelectionsBySeries } from '@/entrypoints/sidepanel/hooks/useChapterSelections'
+import type { ChapterSelectionsBySeries } from "@/entrypoints/sidepanel/hooks/useChapterSelections"
+import type { InlineSelectionPresentationBySeries } from "@/entrypoints/sidepanel/types"
 import {
   isExtensionUrl,
   resolveTabUrlForSupportCheck,
-} from '@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers'
-import logger from '@/src/runtime/logger'
-
-export function shouldMountInlineSelection(isInlineSelectionOpen: boolean): boolean {
-  return isInlineSelectionOpen
-}
+} from "@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers"
+import logger from "@/src/runtime/logger"
 
 export function useInlineSelectionState() {
-  const [chapterSelectionsBySeries, setChapterSelectionsBySeries] = useState<ChapterSelectionsBySeries>({})
+  const [chapterSelectionsBySeries, setChapterSelectionsBySeries] =
+    useState<ChapterSelectionsBySeries>({})
+  const [presentationBySeries, setPresentationBySeries] =
+    useState<InlineSelectionPresentationBySeries>({})
   const [isInlineSelectionOpen, setIsInlineSelectionOpen] = useState(false)
 
   const closeInlineSelection = useCallback(() => {
     setIsInlineSelectionOpen(false)
   }, [])
 
-  const toggleInlineSelection = useCallback(() => {
-    setIsInlineSelectionOpen((previousValue) => !previousValue)
+  const setInlineSelectionOpen = useCallback((open: boolean) => {
+    setIsInlineSelectionOpen(open)
   }, [])
 
   useEffect(() => {
-    const handleActivated = (activeInfo: chrome.tabs.TabActiveInfo) => {
+    const handleActivated = (activeInfo: chrome.tabs.OnActivatedInfo) => {
       void (async () => {
         try {
           const activeTab = await chrome.tabs.get(activeInfo.tabId)
@@ -41,8 +41,8 @@ export function useInlineSelectionState() {
 
     const handleUpdated = (
       _tabId: number,
-      changeInfo: chrome.tabs.TabChangeInfo,
-      tab: chrome.tabs.Tab,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
     ) => {
       const nextUrl = changeInfo.url ?? resolveTabUrlForSupportCheck(tab)
       if (!changeInfo.url || isExtensionUrl(nextUrl)) return
@@ -54,7 +54,7 @@ export function useInlineSelectionState() {
       chrome.tabs.onActivated.addListener(handleActivated)
       chrome.tabs.onUpdated.addListener(handleUpdated)
     } catch (error) {
-      logger.error('[CommandCenter] Failed to attach tab listeners:', error)
+      logger.error("[CommandCenter] Failed to attach tab listeners:", error)
     }
 
     return () => {
@@ -67,12 +67,36 @@ export function useInlineSelectionState() {
     }
   }, [closeInlineSelection])
 
+  useEffect(() => {
+    if (!isInlineSelectionOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Element &&
+        target.closest(
+          '[data-sidepanel-selection-region], [aria-controls="inline-selection-panel"]'
+        )
+      ) {
+        return
+      }
+
+      closeInlineSelection()
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true)
+    }
+  }, [closeInlineSelection, isInlineSelectionOpen])
+
   return {
     chapterSelectionsBySeries,
     setChapterSelectionsBySeries,
+    presentationBySeries,
+    setPresentationBySeries,
     isInlineSelectionOpen,
     closeInlineSelection,
-    toggleInlineSelection,
+    setInlineSelectionOpen,
   }
 }
-

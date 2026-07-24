@@ -1,31 +1,29 @@
-import { useRef } from 'react'
-import { Download } from 'lucide-react'
+import { useCallback, useMemo, useRef } from "react"
+import { Download } from "lucide-react"
 
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useVirtualizer } from "@tanstack/react-virtual"
 
-import { cn } from '@/src/shared/utils'
-import { createCappedRangeExtractor } from '@/src/ui/shared/virtualization/cap-range-extractor'
-import { HistorySection } from '@/entrypoints/sidepanel/components/HistorySection'
-import { CommandCenterQueue } from '@/entrypoints/sidepanel/components/CommandCenterQueue'
-import type { ActiveTaskProgress as ActiveTaskProgressState } from '@/entrypoints/sidepanel/hooks/useActiveTaskProgress'
-import type { QueueTaskSummary } from '@/src/types/queue-state'
-import { t } from '@/src/runtime/i18n'
-
-// Target render budget for queued rows. The range extractor trims overscan down
-// to this count, but it still preserves every viewport-visible row if an
-// unusually tall panel can show more than 18 rows at once.
-const MAX_QUEUE_DOM_ITEMS = 18
+import { cn } from "@/src/shared/utils"
+import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
+import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
+import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
+import type { QueueTaskSummary } from "@/src/types/queue-state"
+import { t } from "@/src/runtime/i18n"
+import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
 
 interface SidePanelQueueRegionProps {
-  activeTasks: QueueTaskSummary[]
-  queuedTasks: QueueTaskSummary[]
+  queueTasks: QueueTaskSummary[]
   historyTasks: QueueTaskSummary[]
   isLoading: boolean
   isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
+  retryingTaskIds: Set<string>
+  restartingTaskIds: Set<string>
+  removingTaskIds: Set<string>
+  movingTaskIds: Set<string>
   activeTaskProgress: ActiveTaskProgressState | null
   showActiveProgress: boolean
-  onCancelTask: (taskId: string) => void | Promise<void>
+  onCancelTask: (taskId: string) => CancelTaskResult | Promise<CancelTaskResult>
   onRetryFailed: (taskId: string) => void | Promise<void>
   onRestartTask: (taskId: string) => void | Promise<void>
   onMoveTaskToTop: (taskId: string) => void | Promise<void>
@@ -34,12 +32,15 @@ interface SidePanelQueueRegionProps {
 }
 
 export function SidePanelQueueRegion({
-  activeTasks,
-  queuedTasks,
+  queueTasks,
   historyTasks,
   isLoading,
   isInlineSelectionOpen,
   cancelingTaskIds,
+  retryingTaskIds,
+  restartingTaskIds,
+  removingTaskIds,
+  movingTaskIds,
   activeTaskProgress,
   showActiveProgress,
   onCancelTask,
@@ -50,82 +51,144 @@ export function SidePanelQueueRegion({
   onViewFullHistory,
 }: SidePanelQueueRegionProps) {
   const queueScrollRef = useRef<HTMLDivElement | null>(null)
-
+  const visibleQueueTasks = useMemo(
+    () =>
+      isInlineSelectionOpen
+        ? queueTasks.filter((task) => task.status === "downloading")
+        : queueTasks,
+    [isInlineSelectionOpen, queueTasks]
+  )
+  // React Compiler safely skips this component because TanStack Virtual returns
+  // imperative functions whose identities cannot be compiler-memoized.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const queueVirtualizer = useVirtualizer({
-    count: queuedTasks.length,
+    count: visibleQueueTasks.length,
     getScrollElement: () => queueScrollRef.current,
     estimateSize: () => 78,
-    overscan: 4,
-    // Cap overscan rows while preserving every viewport-visible row.
-    rangeExtractor: createCappedRangeExtractor(MAX_QUEUE_DOM_ITEMS),
+    overscan: 6,
+    // Use stable task IDs as keys so the virtualizer's measurement cache
+    // survives reordering (e.g. moveTaskToTop) without DOM reuse bugs.
+    getItemKey: (index) => visibleQueueTasks[index]?.id ?? index,
   })
 
-  const hasAnyTask = activeTasks.length > 0 || queuedTasks.length > 0 || historyTasks.length > 0
+  const measureQueueRow = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element) return
+      queueVirtualizer.measureElement(element)
+    },
+    [queueVirtualizer]
+  )
+
+  const hasAnyTask = queueTasks.length > 0 || historyTasks.length > 0
+  const firstQueuedTaskId = queueTasks.find(
+    (task) => task.status === "queued"
+  )?.id
+
+  const renderTask = (task: QueueTaskSummary) => (
+    <CommandCenterQueue
+      tasks={[task]}
+      activeTaskProgress={
+        task.status === "downloading" ? activeTaskProgress : null
+      }
+      showActiveProgress={task.status === "downloading" && showActiveProgress}
+      firstQueuedTaskId={firstQueuedTaskId}
+      onCancelTask={onCancelTask}
+      cancelingTaskIds={cancelingTaskIds}
+      retryingTaskIds={retryingTaskIds}
+      restartingTaskIds={restartingTaskIds}
+      removingTaskIds={removingTaskIds}
+      movingTaskIds={movingTaskIds}
+      onRetryFailed={onRetryFailed}
+      onRestartTask={onRestartTask}
+      onMoveTaskToTop={onMoveTaskToTop}
+      onRemoveTask={onRemoveTask}
+    />
+  )
 
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col bg-background', isInlineSelectionOpen && 'flex-shrink-0')}>
-      {isLoading && (
-        <div className="flex flex-col gap-2 p-3" aria-label="queue-loading-skeleton">
-          <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
-          <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
-          <div className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30" />
-        </div>
+    <div
+      data-sidepanel-queue-region
+      className={cn(
+        "flex min-h-0 shrink-0 flex-col bg-background",
+        isInlineSelectionOpen ? "grow-0" : "grow"
       )}
-
-      {!isLoading && activeTasks.length > 0 && (
-        <div className="flex-shrink-0 border-y border-border/50">
-          <CommandCenterQueue
-            tasks={activeTasks}
-            activeTaskProgress={activeTaskProgress}
-            showActiveProgress={showActiveProgress}
-            onCancelTask={onCancelTask}
-            cancelingTaskIds={cancelingTaskIds}
-            onRetryFailed={onRetryFailed}
-            onRestartTask={onRestartTask}
-            onRemoveTask={onRemoveTask}
+    >
+      {isLoading && !isInlineSelectionOpen && (
+        <div
+          className="flex flex-col gap-2 p-3"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label={t("common_loading")}
+        >
+          <div
+            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+            aria-hidden="true"
+          />
+          <div
+            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+            aria-hidden="true"
+          />
+          <div
+            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+            aria-hidden="true"
           />
         </div>
       )}
 
-      {!isLoading && queuedTasks.length > 0 && (
-        <div ref={queueScrollRef} className="min-h-0 flex-1 overflow-y-auto border-b border-border/50">
-          <div
-            style={{
-              height: `${queueVirtualizer.getTotalSize()}px`,
-              position: 'relative',
-            }}
-          >
-            {queueVirtualizer.getVirtualItems().map((item) => {
-              const task = queuedTasks[item.index]
-              if (!task) return null
+      {!isLoading && visibleQueueTasks.length > 0 && (
+        <div
+          ref={queueScrollRef}
+          data-queue-scroll-container
+          className="min-h-0 flex-1 overflow-y-auto border-y border-border/50"
+        >
+          {visibleQueueTasks.length <= 24 ? (
+            visibleQueueTasks.map((task, index) => (
+              <div
+                key={task.id}
+                data-index={index}
+                data-queue-task-id={task.id}
+              >
+                {renderTask(task)}
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                height: `${queueVirtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {queueVirtualizer.getVirtualItems().map((item) => {
+                const task = visibleQueueTasks[item.index]
+                if (!task) return null
 
-              return (
-                <div
-                  key={task.id}
-                  data-index={item.index}
-                  ref={queueVirtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${item.start}px)`,
-                  }}
-                >
-                  <CommandCenterQueue
-                    tasks={[task]}
-                    onCancelTask={onCancelTask}
-                    cancelingTaskIds={cancelingTaskIds}
-                    onMoveTaskToTop={onMoveTaskToTop}
-                  />
-                </div>
-              )
-            })}
-          </div>
+                return (
+                  <div
+                    key={task.id}
+                    data-index={item.index}
+                    data-queue-task-id={task.id}
+                    ref={measureQueueRow}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${item.start}px)`,
+                      contentVisibility: "auto",
+                      containIntrinsicSize: "auto 78px",
+                    }}
+                  >
+                    {renderTask(task)}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {!isLoading && (
+      {!isLoading && !isInlineSelectionOpen && (
         <HistorySection
           tasks={historyTasks}
           isInlineSelectionOpen={isInlineSelectionOpen}
@@ -133,23 +196,23 @@ export function SidePanelQueueRegion({
           onRetryFailed={onRetryFailed}
           onRestartTask={onRestartTask}
           onRemoveTask={onRemoveTask}
+          retryingTaskIds={retryingTaskIds}
+          restartingTaskIds={restartingTaskIds}
+          removingTaskIds={removingTaskIds}
         />
-      )}
-
-      {!isLoading && isInlineSelectionOpen && !hasAnyTask && (
-        <div className="px-3 py-3 bg-muted/20 border-t border-border/50">
-          <p className="text-xs text-muted-foreground text-center">
-            {t('sidepanel_selectChaptersHint')}
-          </p>
-        </div>
       )}
 
       {!isLoading && !isInlineSelectionOpen && !hasAnyTask && (
         <div className="p-6 text-center">
-          <Download className="size-8 mx-auto mb-2 text-muted-foreground/50" aria-hidden="true" />
-          <h3 className="font-medium text-sm mb-1">{t('sidepanel_noDownloadsYet')}</h3>
+          <Download
+            className="size-8 mx-auto mb-2 text-muted-foreground/50"
+            aria-hidden="true"
+          />
+          <h3 className="font-medium text-sm mb-1">
+            {t("sidepanel_noDownloadsYet")}
+          </h3>
           <p className="text-xs text-muted-foreground">
-            {t('sidepanel_useSelectChapters')}
+            {t("sidepanel_useSelectChapters")}
           </p>
         </div>
       )}

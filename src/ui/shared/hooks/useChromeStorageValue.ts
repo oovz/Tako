@@ -1,7 +1,7 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from "react"
 
 export interface UseChromeStorageValueOptions<T> {
-  areaName: 'session' | 'local'
+  areaName: "session" | "local"
   key: string | string[]
   initialValue: T
   parse: (raw: unknown) => T
@@ -21,13 +21,15 @@ function createSnapshot<T>(value: T, hydrated: boolean): StorageSnapshot<T> {
   return { value, hydrated }
 }
 
-function getStorageArea(areaName: 'session' | 'local'): chrome.storage.StorageArea {
-  return areaName === 'session' ? chrome.storage.session : chrome.storage.local
+function getStorageArea(
+  areaName: "session" | "local"
+): chrome.storage.StorageArea {
+  return areaName === "session" ? chrome.storage.session : chrome.storage.local
 }
 
 function hasRelevantKeyChange(
   key: string | string[],
-  changes: Record<string, chrome.storage.StorageChange>,
+  changes: Record<string, chrome.storage.StorageChange>
 ): boolean {
   if (Array.isArray(key)) {
     return key.some((item) => item in changes)
@@ -52,7 +54,10 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
   }
 
   const setSnapshot = (nextValue: T, hydrated: boolean): void => {
-    if (snapshot.hydrated === hydrated && Object.is(snapshot.value, nextValue)) {
+    if (
+      snapshot.hydrated === hydrated &&
+      Object.is(snapshot.value, nextValue)
+    ) {
       return
     }
 
@@ -72,7 +77,7 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
     const readId = ++latestReadId
 
     try {
-      const result = await getStorageArea(areaName).get(key) as Record<string, unknown>
+      const result = await getStorageArea(areaName).get(key)
       if (readId !== latestReadId) {
         return
       }
@@ -90,7 +95,7 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
 
   const handleStorageChange = (
     changes: Record<string, chrome.storage.StorageChange>,
-    changedAreaName: chrome.storage.AreaName,
+    changedAreaName: chrome.storage.AreaName
   ): void => {
     if (changedAreaName !== areaName) {
       return
@@ -160,19 +165,32 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
   }
 }
 
-export function __createChromeStorageStoreForTests<T>(options: UseChromeStorageValueOptions<T>) {
+export function __createChromeStorageStoreForTests<T>(
+  options: UseChromeStorageValueOptions<T>
+) {
   return createChromeStorageStore(options)
 }
 
 export function useChromeStorageValue<T>(
-  options: UseChromeStorageValueOptions<T>,
+  options: UseChromeStorageValueOptions<T>
 ): UseChromeStorageValueResult<T> {
-  const keySignature = Array.isArray(options.key) ? options.key.join('\u0000') : options.key
+  const { areaName, key, initialValue, parse } = options
+  const keySignature = JSON.stringify(key)
+  const [stableInitialValue] = useState(() => initialValue)
 
-  const store = useMemo(
-    () => createChromeStorageStore(options),
-    [options.areaName, keySignature, options.parse],
+  const store = useMemo(() => {
+    const stableKey = JSON.parse(keySignature) as string | string[]
+    return createChromeStorageStore({
+      areaName,
+      key: stableKey,
+      initialValue: stableInitialValue,
+      parse,
+    })
+  }, [areaName, keySignature, parse, stableInitialValue])
+
+  return useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
   )
-
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
 }

@@ -1,19 +1,23 @@
-import React, { useState } from 'react'
+import React, { useState } from "react"
 
-import { List, ChevronDown, BookOpen, Layers, AlertCircle } from 'lucide-react'
-import { cn } from '@/src/shared/utils'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import type { SidepanelSeriesContextData } from '@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext'
-import { getSiteIntegrationDisplayName } from '@/src/site-integrations/manifest'
-import type { Volume } from '@/entrypoints/sidepanel/types'
-import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from '@/entrypoints/sidepanel/messages'
-import { t } from '@/src/runtime/i18n'
+import { List, ChevronDown, BookOpen, Layers, AlertCircle } from "lucide-react"
+import { cn } from "@/src/shared/utils"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { CollapsibleTrigger } from "@/components/ui/collapsible"
+import type { SidepanelSeriesContextData } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
+import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
+import type { Volume } from "@/entrypoints/sidepanel/types"
+import {
+  NO_MANGA_FOUND_MSG,
+  TAB_NOT_SUPPORTED_MSG,
+} from "@/entrypoints/sidepanel/messages"
+import { t } from "@/src/runtime/i18n"
 
 interface SeriesContextCardProps {
   data: SidepanelSeriesContextData
   isExpanded: boolean
-  onToggleInlineSelection: () => void
+  triggerRef?: React.Ref<HTMLButtonElement>
 }
 
 export interface SeriesCardMessageState {
@@ -21,32 +25,38 @@ export interface SeriesCardMessageState {
   description: string
 }
 
-export function resolveSeriesCardMessage(blockingMessage: string | undefined): SeriesCardMessageState | null {
+export function resolveSeriesCardMessage(
+  blockingMessage: string | undefined
+): SeriesCardMessageState | null {
   if (!blockingMessage) {
     return null
   }
 
   if (blockingMessage === TAB_NOT_SUPPORTED_MSG) {
     return {
-      title: t('sidepanel_noSeriesDetected'),
-      description: t('sidepanel_openSupportedPage'),
+      title: t("sidepanel_noSeriesDetected"),
+      description: t("sidepanel_openSupportedPage"),
     }
   }
 
   if (blockingMessage === NO_MANGA_FOUND_MSG) {
     return {
-      title: t('sidepanel_pageNotRecognized'),
-      description: t('sidepanel_openSupportedPage'),
+      title: t("sidepanel_pageNotRecognized"),
+      description: t("sidepanel_openSupportedPage"),
     }
   }
 
   return {
-    title: t('sidepanel_pageNotRecognized'),
-    description: blockingMessage,
+    title: t("sidepanel_pageNotRecognized"),
+    description: t("sidepanel_openSupportedPage"),
   }
 }
 
-export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }: SeriesContextCardProps) {
+export function SeriesContextCard({
+  data,
+  isExpanded,
+  triggerRef,
+}: SeriesContextCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const messageState = resolveSeriesCardMessage(data.blockingMessage)
 
@@ -76,14 +86,16 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
           <BookOpen className="size-8" />
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
-          <h2 className="font-bold text-base leading-tight">{messageState.title}</h2>
+          <h2 className="font-bold text-base leading-tight">
+            {messageState.title}
+          </h2>
           <p className="text-sm text-muted-foreground mt-1.5">
             {messageState.description}
           </p>
           <Button
             type="button"
             size="sm"
-            variant={isExpanded ? 'secondary' : 'default'}
+            variant={isExpanded ? "secondary" : "default"}
             className={cn(
               "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
               isExpanded && "ring-1 ring-border"
@@ -91,10 +103,9 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
             disabled
             aria-expanded={isExpanded}
             aria-controls="inline-selection-panel"
-            onClick={onToggleInlineSelection}
           >
             <List className="size-4" />
-            {t('sidepanel_selectChapters')}
+            {t("sidepanel_selectChapters")}
           </Button>
         </div>
       </div>
@@ -108,27 +119,31 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
           <BookOpen className="size-8" />
         </div>
         <div className="flex flex-1 flex-col justify-center min-w-0">
-          <h2 className="font-bold text-base leading-tight">{t('sidepanel_noSeriesDetected')}</h2>
+          <h2 className="font-bold text-base leading-tight">
+            {t("sidepanel_noSeriesDetected")}
+          </h2>
           <p className="text-sm text-muted-foreground mt-1.5">
-            {t('sidepanel_openSupportedPage')}
+            {t("sidepanel_openSupportedPage")}
           </p>
         </div>
       </div>
     )
   }
 
-  const coverSrc = data.coverUrl || chrome.runtime.getURL('icon/128.png')
+  const coverSrc = data.coverUrl || chrome.runtime.getURL("icon/128.png")
   const subtitleParts: string[] = []
   if (data.author) subtitleParts.push(data.author)
-  if (data.siteId) subtitleParts.push(getSiteIntegrationDisplayName(data.siteId))
-  const subtitle = subtitleParts.join(' · ')
+  if (data.siteId)
+    subtitleParts.push(getSiteIntegrationDisplayName(data.siteId))
+  const subtitle = subtitleParts.join(" · ")
 
   const volumeItems = data.items.filter(
-    (item): item is Volume => 'chapters' in item,
+    (item): item is Volume => "chapters" in item
   )
-  const chaptersCount = data.items.reduce((acc, item) => (
-    'chapters' in item ? acc + item.chapters.length : acc + 1
-  ), 0)
+  const chaptersCount = data.items.reduce(
+    (acc, item) => ("chapters" in item ? acc + item.chapters.length : acc + 1),
+    0
+  )
   const volumeCount = volumeItems.length
 
   const hasNoChapters = chaptersCount === 0
@@ -149,34 +164,50 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
             draggable={false}
           />
         )}
-        {!imageLoaded && <div className="absolute inset-0 bg-muted animate-pulse" />}
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-muted animate-pulse" />
+        )}
       </div>
 
       {/* Content */}
       <div className="flex flex-1 flex-col justify-between min-w-0">
         <div>
-          <h2 className="font-bold text-base leading-tight truncate" title={data.mangaTitle}>
+          <h2
+            className="font-bold text-base leading-tight truncate"
+            title={data.mangaTitle}
+          >
             {data.mangaTitle}
           </h2>
           {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5 truncate">{subtitle}</p>
+            <p className="text-sm text-muted-foreground mt-0.5 truncate">
+              {subtitle}
+            </p>
           )}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {hasNoChapters ? (
-              <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground">
+              <Badge
+                variant="secondary"
+                className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground"
+              >
                 <AlertCircle className="size-3" />
-                {t('sidepanel_noChaptersFound')}
+                {t("sidepanel_noChaptersFound")}
               </Badge>
             ) : (
               <>
-                <Badge variant="secondary" className="text-[10px] h-5 px-2 py-0 gap-1 shadow-sm">
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] h-5 px-2 py-0 gap-1 shadow-sm"
+                >
                   <BookOpen className="size-3" />
-                  {t('sidepanel_chaptersCount', [String(chaptersCount)])}
+                  {t("sidepanel_chaptersCount", [String(chaptersCount)])}
                 </Badge>
                 {volumeCount > 0 && (
-                  <Badge variant="outline" className="text-[10px] h-5 px-2 py-0 gap-1">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] h-5 px-2 py-0 gap-1"
+                  >
                     <Layers className="size-3" />
-                    {t('sidepanel_volumesCount', [String(volumeCount)])}
+                    {t("sidepanel_volumesCount", [String(volumeCount)])}
                   </Badge>
                 )}
               </>
@@ -185,38 +216,43 @@ export function SeriesContextCard({ data, isExpanded, onToggleInlineSelection }:
         </div>
 
         {/* Select Chapters button */}
-        <Button
-          type="button"
-          size="sm"
-          variant={isExpanded ? 'secondary' : 'default'}
-          className={cn(
-            "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
-            isExpanded && "ring-1 ring-border"
-          )}
-          disabled={hasNoChapters || !!data.blockingMessage || data.tabId == null}
-          aria-expanded={isExpanded}
-          aria-controls="inline-selection-panel"
-          onClick={onToggleInlineSelection}
-        >
-          {hasNoChapters ? (
-            <>
-              <List className="size-4" />
-              {t('sidepanel_noChapters')}
-            </>
-          ) : isExpanded ? (
-            <>
-              <ChevronDown className="size-4" />
-              {t('sidepanel_closeSelection')}
-            </>
-          ) : (
-            <>
-              <List className="size-4" />
-              {t('sidepanel_selectChapters')}
-            </>
-          )}
-        </Button>
+        <CollapsibleTrigger asChild>
+          <Button
+            ref={triggerRef}
+            type="button"
+            size="sm"
+            variant={isExpanded ? "secondary" : "default"}
+            className={cn(
+              "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
+              isExpanded && "ring-1 ring-border"
+            )}
+            disabled={
+              hasNoChapters || !!data.blockingMessage || data.tabId == null
+            }
+            aria-expanded={isExpanded}
+            aria-controls="inline-selection-panel"
+          >
+            {hasNoChapters ? (
+              <>
+                <List className="size-4" />
+                {t("sidepanel_noChapters")}
+              </>
+            ) : (
+              <>
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform duration-200 ease-out",
+                    isExpanded && "rotate-180"
+                  )}
+                />
+                {isExpanded
+                  ? t("sidepanel_closeSelection")
+                  : t("sidepanel_selectChapters")}
+              </>
+            )}
+          </Button>
+        </CollapsibleTrigger>
       </div>
     </div>
   )
 }
-
