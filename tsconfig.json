@@ -3,12 +3,11 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
+    "types": ["chrome"],
     "paths": {
+      "@": ["."],
       "@/*": ["./*"]
     }
   },
-  "exclude": [
-    "manga-scraper-architecture"
-  ]
+  "exclude": ["manga-scraper-architecture"]
 }
