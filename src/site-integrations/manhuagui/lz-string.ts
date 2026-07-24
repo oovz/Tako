@@ -1,133 +1,148 @@
-const KEY_STR_BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-const baseReverseDictionary: Record<string, Record<string, number>> = {};
+const KEY_STR_BASE64 =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+const baseReverseDictionary: Record<string, Record<string, number>> = {}
+const MAX_COMPRESSED_INPUT_LENGTH = 1024 * 1024
+const MAX_DECOMPRESSED_OUTPUT_LENGTH = 4 * 1024 * 1024
 
 function getBaseValue(alphabet: string, character: string): number {
   if (!baseReverseDictionary[alphabet]) {
-    baseReverseDictionary[alphabet] = {};
+    baseReverseDictionary[alphabet] = {}
     for (let index = 0; index < alphabet.length; index += 1) {
-      baseReverseDictionary[alphabet][alphabet.charAt(index)] = index;
+      baseReverseDictionary[alphabet][alphabet.charAt(index)] = index
     }
   }
 
-  return baseReverseDictionary[alphabet][character] ?? 0;
+  return baseReverseDictionary[alphabet][character] ?? 0
 }
 
 function decompress(
   length: number,
   resetValue: number,
-  getNextValue: (index: number) => number,
+  getNextValue: (index: number) => number
 ): string | null {
-  const dictionary: string[] = [];
-  const result: string[] = [];
+  const dictionary: string[] = []
+  const result: string[] = []
+  let resultLength = 0
 
-  let enlargeIn = 4;
-  let dictSize = 4;
-  let numBits = 3;
-  let entry = '';
+  let enlargeIn = 4
+  let dictSize = 4
+  let numBits = 3
+  let entry: string
   const data = {
     value: getNextValue(0),
     position: resetValue,
     index: 1,
-  };
+  }
 
   const readBits = (bitCount: number): number => {
-    let bits = 0;
-    const maxpower = 2 ** bitCount;
-    let power = 1;
+    let bits = 0
+    const maxpower = 2 ** bitCount
+    let power = 1
 
     while (power !== maxpower) {
-      const resb = data.value & data.position;
-      data.position >>= 1;
+      const resb = data.value & data.position
+      data.position >>= 1
 
       if (data.position === 0) {
-        data.position = resetValue;
-        data.value = getNextValue(data.index++);
+        data.position = resetValue
+        data.value = getNextValue(data.index++)
       }
 
-      bits |= (resb > 0 ? 1 : 0) * power;
-      power <<= 1;
+      bits |= (resb > 0 ? 1 : 0) * power
+      power <<= 1
     }
 
-    return bits;
-  };
+    return bits
+  }
 
   for (let iteration = 0; iteration < 3; iteration += 1) {
-    dictionary[iteration] = String(iteration);
+    dictionary[iteration] = String(iteration)
   }
 
-  const next = readBits(2);
-  let c: string;
+  const next = readBits(2)
+  let c: string
   switch (next) {
     case 0:
-      c = String.fromCharCode(readBits(8));
-      break;
+      c = String.fromCharCode(readBits(8))
+      break
     case 1:
-      c = String.fromCharCode(readBits(16));
-      break;
+      c = String.fromCharCode(readBits(16))
+      break
     case 2:
-      return '';
+      return ""
     default:
-      return null;
+      return null
   }
 
-  dictionary[3] = c;
-  let w = c;
-  result.push(c);
+  dictionary[3] = c
+  let w = c
+  result.push(c)
+  resultLength += c.length
 
   while (true) {
     if (data.index > length) {
-      return '';
+      return ""
     }
 
-    const bits = readBits(numBits);
-    let current = bits;
+    const bits = readBits(numBits)
+    let current = bits
 
     if (current === 0) {
-      dictionary[dictSize++] = String.fromCharCode(readBits(8));
-      current = dictSize - 1;
-      enlargeIn -= 1;
+      dictionary[dictSize++] = String.fromCharCode(readBits(8))
+      current = dictSize - 1
+      enlargeIn -= 1
     } else if (current === 1) {
-      dictionary[dictSize++] = String.fromCharCode(readBits(16));
-      current = dictSize - 1;
-      enlargeIn -= 1;
+      dictionary[dictSize++] = String.fromCharCode(readBits(16))
+      current = dictSize - 1
+      enlargeIn -= 1
     } else if (current === 2) {
-      return result.join('');
+      return result.join("")
     }
 
     if (enlargeIn === 0) {
-      enlargeIn = 2 ** numBits;
-      numBits += 1;
+      enlargeIn = 2 ** numBits
+      numBits += 1
     }
 
     if (dictionary[current]) {
-      entry = dictionary[current]!;
+      entry = dictionary[current]!
     } else if (current === dictSize) {
-      entry = w + w.charAt(0);
+      entry = w + w.charAt(0)
     } else {
-      return null;
+      return null
     }
 
-    result.push(entry);
+    resultLength += entry.length
+    if (resultLength > MAX_DECOMPRESSED_OUTPUT_LENGTH) {
+      return null
+    }
+    result.push(entry)
 
-    dictionary[dictSize++] = w + entry.charAt(0);
-    enlargeIn -= 1;
-    w = entry;
+    dictionary[dictSize++] = w + entry.charAt(0)
+    enlargeIn -= 1
+    w = entry
 
     if (enlargeIn === 0) {
-      enlargeIn = 2 ** numBits;
-      numBits += 1;
+      enlargeIn = 2 ** numBits
+      numBits += 1
     }
   }
 }
 
 export function decompressFromBase64(input: string): string | null {
   if (input == null) {
-    return '';
+    return ""
   }
 
-  if (input === '') {
-    return null;
+  if (input === "") {
+    return null
   }
 
-  return decompress(input.length, 32, (index) => getBaseValue(KEY_STR_BASE64, input.charAt(index)));
+  if (input.length > MAX_COMPRESSED_INPUT_LENGTH) {
+    return null
+  }
+
+  return decompress(input.length, 32, (index) =>
+    getBaseValue(KEY_STR_BASE64, input.charAt(index))
+  )
 }

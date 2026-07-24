@@ -1,1 +1,1 @@
-export * from './pixiv-comic/index'
+export * from "./pixiv-comic/index"

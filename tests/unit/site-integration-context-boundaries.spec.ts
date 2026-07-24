@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import fs from 'node:fs'
-import path from 'node:path'
+import { describe, expect, it } from "vitest"
+import fs from "node:fs"
+import path from "node:path"
 
 const workspaceRoot = process.cwd()
-const sourceExtensions = ['.ts', '.tsx']
+const sourceExtensions = [".ts", ".tsx"]
 
 function toProjectPath(filePath: string): string {
-  return path.relative(workspaceRoot, filePath).replace(/\\/g, '/')
+  return path.relative(workspaceRoot, filePath).replace(/\\/g, "/")
 }
 
 function resolveSourceFile(candidate: string): string | null {
@@ -32,11 +32,11 @@ function resolveSourceFile(candidate: string): string | null {
 }
 
 function resolveImport(fromFile: string, specifier: string): string | null {
-  if (specifier.startsWith('@/')) {
+  if (specifier.startsWith("@/")) {
     return resolveSourceFile(path.join(workspaceRoot, specifier.slice(2)))
   }
 
-  if (specifier.startsWith('.')) {
+  if (specifier.startsWith(".")) {
     return resolveSourceFile(path.resolve(path.dirname(fromFile), specifier))
   }
 
@@ -44,7 +44,7 @@ function resolveImport(fromFile: string, specifier: string): string | null {
 }
 
 function readImportSpecifiers(filePath: string): string[] {
-  const source = fs.readFileSync(filePath, 'utf8')
+  const source = fs.readFileSync(filePath, "utf8")
   const specifiers: string[] = []
   const importPattern =
     /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g
@@ -63,9 +63,17 @@ function collectReachableSourceFiles(rootFiles: string[]): string[] {
   const seen = new Set<string>()
   const queue = rootFiles.map((file) => path.join(workspaceRoot, file))
 
+  for (const rootFile of queue) {
+    if (!fs.existsSync(rootFile)) {
+      throw new Error(
+        `Declared runtime graph root does not exist: ${toProjectPath(rootFile)}`
+      )
+    }
+  }
+
   while (queue.length > 0) {
     const current = queue.shift()
-    if (!current || seen.has(current) || !fs.existsSync(current)) {
+    if (!current || seen.has(current)) {
       continue
     }
 
@@ -85,57 +93,79 @@ function collectReachableSourceFiles(rootFiles: string[]): string[] {
 function expectNoReachableFiles(
   reachableFiles: string[],
   forbiddenPattern: RegExp,
-  contextName: string,
+  contextName: string
 ): void {
-  const forbiddenFiles = reachableFiles.filter((file) => forbiddenPattern.test(file))
-  expect(forbiddenFiles, `${contextName} reached wrong-context files:\n${forbiddenFiles.join('\n')}`).toEqual([])
+  const forbiddenFiles = reachableFiles.filter((file) =>
+    forbiddenPattern.test(file)
+  )
+  expect(
+    forbiddenFiles,
+    `${contextName} reached wrong-context files:\n${forbiddenFiles.join("\n")}`
+  ).toEqual([])
 }
 
-describe('site integration context boundaries', () => {
-  it('keeps content, background, and offscreen site runtime graphs separated', () => {
-    const contentFiles = collectReachableSourceFiles([
-      'entrypoints/content/content-runtime.ts',
-      'src/runtime/site-integration-content-initialization.ts',
-    ])
+describe("site integration context boundaries", () => {
+  it("keeps background and offscreen site runtime graphs separated", () => {
     const backgroundFiles = collectReachableSourceFiles([
-      'entrypoints/background/background-startup.ts',
-      'entrypoints/background/background-message-router.ts',
-      'entrypoints/background/download-queue-runner.ts',
-      'src/runtime/background-site-integration-initialization.ts',
+      "entrypoints/background/background-startup.ts",
+      "entrypoints/background/background-message-router.ts",
+      "entrypoints/background/download-queue-runner.ts",
+      "src/runtime/background-site-integration-initialization.ts",
     ])
     const offscreenFiles = collectReachableSourceFiles([
-      'entrypoints/offscreen/main.ts',
-      'src/runtime/site-integration-offscreen-initialization.ts',
+      "entrypoints/offscreen/main.ts",
+      "src/runtime/site-integration-offscreen-initialization.ts",
     ])
 
-    expectNoReachableFiles(
-      contentFiles,
-      /^src\/site-integrations\/[^/]+\/(?:background|offscreen)-runtime\.ts$/,
-      'content',
-    )
     expectNoReachableFiles(
       backgroundFiles,
       /^src\/site-integrations\/[^/]+\/(?:content|offscreen)-runtime\.ts$/,
-      'background',
+      "background"
     )
     expectNoReachableFiles(
       offscreenFiles,
       /^src\/site-integrations\/[^/]+\/(?:content|background)-runtime\.ts$/,
-      'offscreen',
+      "offscreen"
     )
   })
 
-  it('does not use dynamic site runtime loading in production source', () => {
+  it("has no resident content runtime artifacts", () => {
+    const obsoletePaths = [
+      "entrypoints/content/index.ts",
+      "entrypoints/content/content-runtime.ts",
+      "entrypoints/content/content-helpers.ts",
+      "entrypoints/content/content-types.ts",
+      "src/runtime/site-integration-content-initialization.ts",
+      "src/runtime/generated/site-integration-content-registry.ts",
+      "src/site-integrations/mangadex/content-runtime.ts",
+      "src/site-integrations/pixiv-comic/content-runtime.ts",
+      "src/site-integrations/shonenjumpplus/content-runtime.ts",
+      "src/site-integrations/manhuagui/content-runtime.ts",
+      "src/site-integrations/comicnettai/content-runtime.ts",
+    ]
+
+    expect(
+      obsoletePaths.filter((file) =>
+        fs.existsSync(path.join(workspaceRoot, file))
+      )
+    ).toEqual([])
+  })
+
+  it("does not use dynamic site runtime loading in production source", () => {
     const runtimeFiles = collectReachableSourceFiles([
-      'entrypoints/content/content-runtime.ts',
-      'entrypoints/background/background-startup.ts',
-      'entrypoints/offscreen/main.ts',
+      "entrypoints/background/background-startup.ts",
+      "entrypoints/offscreen/main.ts",
     ])
     const offenders = runtimeFiles.filter((file) => {
-      const source = fs.readFileSync(path.join(workspaceRoot, file), 'utf8')
-      return /import\.meta\.glob|import\s*\(\s*['"][^'"]*site-integration/.test(source)
+      const source = fs.readFileSync(path.join(workspaceRoot, file), "utf8")
+      return /import\.meta\.glob|import\s*\(\s*['"][^'"]*site-integration/.test(
+        source
+      )
     })
 
-    expect(offenders, `Dynamic site runtime loading found:\n${offenders.join('\n')}`).toEqual([])
+    expect(
+      offenders,
+      `Dynamic site runtime loading found:\n${offenders.join("\n")}`
+    ).toEqual([])
   })
 })

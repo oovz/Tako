@@ -2,25 +2,33 @@ import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
   ParseImageUrlsFromHtmlInput,
-} from '@/src/types/site-integrations'
+} from "@/src/types/site-integrations"
 import {
   downloadPixivChapterImage,
   parsePixivImageUrlsFromHtml,
   processPixivImageUrls,
   resolvePixivChapterImageUrls,
-} from './chapter-api'
+} from "./chapter-api"
 
 const offscreen: OffscreenIntegration = {
-  name: 'Pixiv Comic Offscreen',
+  name: "Pixiv Comic Offscreen",
   chapter: {
-    async resolveImageUrls(chapter, context, settingsSnapshot): Promise<string[]> {
+    async resolveImageUrls(
+      chapter,
+      context,
+      settingsSnapshot
+    ): Promise<string[]> {
       return resolvePixivChapterImageUrls(chapter, {
-        ...(context as { taskId?: string; cookieHeader?: string } | undefined),
-        ...(settingsSnapshot ? { rateLimitSettings: settingsSnapshot.rateLimitSettings } : {}),
+        ...(context as { taskId?: string } | undefined),
+        ...(settingsSnapshot
+          ? { rateLimitSettings: settingsSnapshot.rateLimitSettings }
+          : {}),
       })
     },
 
-    parseImageUrlsFromHtml(input: ParseImageUrlsFromHtmlInput): Promise<string[]> {
+    parseImageUrlsFromHtml(
+      input: ParseImageUrlsFromHtmlInput
+    ): Promise<string[]> {
       return parsePixivImageUrlsFromHtml(input)
     },
 
@@ -34,14 +42,17 @@ const offscreen: OffscreenIntegration = {
         signal?: AbortSignal
         context?: Record<string, unknown>
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-      },
+      }
     ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-      return downloadPixivChapterImage(imageUrl, { ...opts, skipRateLimit: true })
+      return downloadPixivChapterImage(imageUrl, {
+        ...opts,
+        skipRateLimit: true,
+      })
     },
   },
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: 'pixiv-comic',
+  id: "pixiv-comic",
   offscreen,
 }

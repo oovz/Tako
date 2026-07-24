@@ -1,22 +1,63 @@
-import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import React from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, it, vi } from "vitest"
 
-vi.mock('@/components/ui/collapsible', () => ({
-  Collapsible: ({ children }: { children: React.ReactNode }) => React.createElement('div', { 'data-collapsible': 'mock' }, children),
-  CollapsibleTrigger: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-  CollapsibleContent: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+vi.mock("@/components/ui/collapsible", () => ({
+  Collapsible: ({ children }: { children: React.ReactNode }) =>
+    React.createElement("div", { "data-collapsible": "mock" }, children),
+  CollapsibleTrigger: ({ children }: { children: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
 }))
 
-import { SiteIntegrationCard } from '@/entrypoints/options/components/SiteIntegrationCard'
-import { SiteIntegrationManagementTab } from '@/entrypoints/options/tabs/SiteIntegrationManagementTab'
-import { getSiteIntegrationManifestById } from '@/src/site-integrations/manifest'
-import { siteIntegrationRegistry } from '@/src/runtime/site-integration-registry'
-import { DEFAULT_SETTINGS } from '@/src/storage/default-settings'
+import { SiteIntegrationCard } from "@/entrypoints/options/components/SiteIntegrationCard"
+import { SiteIntegrationManagementTab } from "@/entrypoints/options/tabs/SiteIntegrationManagementTab"
+import {
+  assertValidSettingsFieldSchema,
+  getSiteIntegrationManifestById,
+  type SettingsFieldSchema,
+} from "@/src/site-integrations/manifest"
+import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
+import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
 
-describe('Site integration custom settings contract', () => {
-  it('renders dynamic custom setting controls with per-setting enable toggle', () => {
-    const mangadex = getSiteIntegrationManifestById('mangadex')
+describe("Site integration custom settings contract", () => {
+  it("requires a non-empty, internally consistent option set", () => {
+    expect(() =>
+      assertValidSettingsFieldSchema({
+        id: "languages",
+        label: "Languages",
+        type: "multiselect",
+        defaultValue: [],
+      } as unknown as SettingsFieldSchema)
+    ).toThrow(/requires non-empty options/)
+
+    expect(() =>
+      assertValidSettingsFieldSchema({
+        id: "quality",
+        label: "Quality",
+        type: "select",
+        defaultValue: "missing",
+        options: [{ label: "Data saver", value: "data-saver" }],
+      })
+    ).toThrow(/Invalid value/)
+
+    expect(() =>
+      assertValidSettingsFieldSchema({
+        id: "languages",
+        label: "Languages",
+        type: "multiselect",
+        defaultValue: [],
+        options: [
+          { label: "English", value: "en" },
+          { label: "English duplicate", value: "en" },
+        ],
+      })
+    ).toThrow(/duplicate option value/)
+  })
+
+  it("renders dynamic custom setting controls with per-setting enable toggle", () => {
+    const mangadex = getSiteIntegrationManifestById("mangadex")
     expect(mangadex).toBeDefined()
 
     const html = renderToStaticMarkup(
@@ -30,7 +71,7 @@ describe('Site integration custom settings contract', () => {
         isEnabled: true,
         override: undefined,
         globalDefaults: {
-          outputFormat: 'cbz',
+          outputFormat: "cbz",
           imagePolicy: { concurrency: 2, delayMs: 500 },
           chapterPolicy: { concurrency: 1, delayMs: 500 },
         },
@@ -38,18 +79,18 @@ describe('Site integration custom settings contract', () => {
         onEnabledChange: vi.fn(),
         onSiteIntegrationSettingsChange: vi.fn(),
         onChange: vi.fn(),
-      }),
+      })
     )
 
-    expect(html).toContain('Custom settings')
-    expect(html).toContain('Enabled')
-    expect(html).toContain('Enable override')
+    expect(html).toContain("Custom settings")
+    expect(html).toContain("Enabled")
+    expect(html).toContain("Enable override")
     expect(html).toContain('for="mangadex-custom-imageQuality-enabled"')
     expect(html).toContain('id="mangadex-custom-imageQuality-enabled"')
-    expect(html).toContain('Image quality')
+    expect(html).toContain("Image quality")
   })
 
-  it('renders the Site Integrations tab from manifest data before registry initialization', () => {
+  it("renders the Site Integrations tab from manifest data before registry initialization", () => {
     siteIntegrationRegistry.clear()
 
     const html = renderToStaticMarkup(
@@ -61,11 +102,11 @@ describe('Site integration custom settings contract', () => {
         onSiteIntegrationSettingsChange: vi.fn(),
         onSiteIntegrationEnablementChange: vi.fn(),
         onChange: vi.fn(),
-      }),
+      })
     )
 
     expect(html).toContain('data-testid="site-integration-card-mangadex"')
     expect(html).toContain('data-testid="site-integration-card-manhuagui"')
-    expect(html).not.toContain('v1.0.0')
+    expect(html).not.toContain("v1.0.0")
   })
 })

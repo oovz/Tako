@@ -1,33 +1,47 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from "vitest"
 import {
   canonicalStorageKey,
   mockStorageData,
   siteIntegrationEnablementService,
-} from './site-integration-enablement-service-test-setup'
+} from "./site-integration-enablement-service-test-setup"
 
 export function registerSiteIntegrationEnablementServiceCases(): void {
-  describe('site-integration-enablement-service', () => {
-    it('stores enablement in the canonical storage key', async () => {
+  describe("site-integration-enablement-service", () => {
+    it("serializes concurrent enablement updates", async () => {
+      await Promise.all([
+        siteIntegrationEnablementService.setEnabled("site-a", true),
+        siteIntegrationEnablementService.setEnabled("site-b", false),
+      ])
+
+      await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual({
+        "site-a": true,
+        "site-b": false,
+      })
+    })
+
+    it("stores enablement in the canonical storage key", async () => {
       await siteIntegrationEnablementService.setAll({ mangadex: false })
 
       expect(mockStorageData[canonicalStorageKey]).toEqual({ mangadex: false })
     })
 
-    it('ignores legacy siteIntegrationOverrides data when canonical enablement is absent', async () => {
+    it("ignores legacy siteIntegrationOverrides data when canonical enablement is absent", async () => {
       mockStorageData.siteIntegrationOverrides = {
         mangadex: false,
-        'pixiv-comic': true,
+        "pixiv-comic": true,
       }
 
-      await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual({})
+      await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual(
+        {}
+      )
       expect(mockStorageData[canonicalStorageKey]).toBeUndefined()
       expect(mockStorageData.siteIntegrationOverrides).toEqual({
         mangadex: false,
-        'pixiv-comic': true,
+        "pixiv-comic": true,
       })
     })
 
-    it('returns canonical enablement data when both canonical and legacy keys exist', async () => {
+    it("returns canonical enablement data when both canonical and legacy keys exist", async () => {
       mockStorageData[canonicalStorageKey] = {
         mangadex: true,
       }

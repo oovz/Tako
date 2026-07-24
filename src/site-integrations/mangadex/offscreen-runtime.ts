@@ -2,25 +2,27 @@ import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
   ParseImageUrlsFromHtmlInput,
-} from '@/src/types/site-integrations'
+} from "@/src/types/site-integrations"
 import {
   downloadMangadexChapterImage,
   parseMangadexImageUrlsFromHtml,
   processMangadexImageUrls,
   resolveMangadexChapterImageUrls,
-} from './chapter-api'
+} from "./chapter-api"
 
 const offscreen: OffscreenIntegration = {
-  name: 'MangaDex API Offscreen',
+  name: "MangaDex API Offscreen",
   chapter: {
     async resolveImageUrls(
       chapter: { id: string; url: string },
-      context?: Record<string, unknown>,
+      context?: Record<string, unknown>
     ): Promise<string[]> {
       return resolveMangadexChapterImageUrls(chapter, context)
     },
 
-    async parseImageUrlsFromHtml(input: ParseImageUrlsFromHtmlInput): Promise<string[]> {
+    async parseImageUrlsFromHtml(
+      input: ParseImageUrlsFromHtmlInput
+    ): Promise<string[]> {
       return parseMangadexImageUrlsFromHtml(input)
     },
 
@@ -34,7 +36,7 @@ const offscreen: OffscreenIntegration = {
         signal?: AbortSignal
         context?: Record<string, unknown>
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-      },
+      }
     ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
       return downloadMangadexChapterImage(imageUrl, opts)
     },
@@ -42,6 +44,6 @@ const offscreen: OffscreenIntegration = {
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: 'mangadex',
+  id: "mangadex",
   offscreen,
 }

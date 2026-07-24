@@ -1,21 +1,40 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { parseEpisodeIdFromUrl, parseWorkId } from '@/src/site-integrations/pixiv-comic/page-context'
+import {
+  parseEpisodeIdFromUrl,
+  parseWorkId,
+} from "@/src/site-integrations/pixiv-comic/page-context"
 import {
   PIXIV_BASE_URL,
   createPixivAppHeaders,
-  resolvePixivCookieHeader,
   sanitizePixivHtmlText,
-} from '@/src/site-integrations/pixiv-comic/shared'
+} from "@/src/site-integrations/pixiv-comic/shared"
+vi.mock("@/src/runtime/rate-limit", () => {
+  const rateLimitedFetchByUrlScope = vi.fn(
+    async (
+      url: string,
+      _scope?: unknown,
+      _init?: RequestInit,
+      _policy?: unknown
+    ) => {
+      throw new Error(`Unexpected fetch: ${url}`)
+    }
+  )
 
-vi.mock('@/src/runtime/rate-limit', () => ({
-  rateLimitedFetchByUrlScope: vi.fn(async (url: string) => {
-    throw new Error(`Unexpected fetch: ${url}`)
-  }),
-  getRateLimitPolicyFromContext: vi.fn(() => undefined),
-}))
+  return {
+    rateLimitedFetchByUrlScope,
+    rateLimitedFetchForIntegration: (
+      _integrationId: string,
+      url: string,
+      scope: unknown,
+      init?: RequestInit,
+      policy?: unknown
+    ) => rateLimitedFetchByUrlScope(url, scope, init, policy),
+    getRateLimitPolicyFromContext: vi.fn(() => undefined),
+  }
+})
 
-vi.mock('@/src/runtime/logger', () => ({
+vi.mock("@/src/runtime/logger", () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -25,27 +44,28 @@ vi.mock('@/src/runtime/logger', () => ({
 }))
 
 async function importModule() {
-  return await import('@/src/site-integrations/pixiv-comic/series-api')
+  return await import("@/src/site-integrations/pixiv-comic/series-api")
 }
 
 async function importChapterApi() {
-  return await import('@/src/site-integrations/pixiv-comic/chapter-api')
+  return await import("@/src/site-integrations/pixiv-comic/chapter-api")
 }
 
-const { rateLimitedFetchByUrlScope } = await import('@/src/runtime/rate-limit')
+const { rateLimitedFetchByUrlScope } = await import("@/src/runtime/rate-limit")
 
-const PIXIV_WORK_ID = '9999001'
+const PIXIV_WORK_ID = "9999001"
 const PIXIV_WORK_V5_RESPONSE = {
   data: {
     official_work: {
       id: 9999001,
-      name: 'テスト作品',
-      author: 'テスト作者',
-      description: 'A Pixiv Comic fixture work used by e2e tests.',
+      name: "テスト作品",
+      author: "テスト作者",
+      description: "A Pixiv Comic fixture work used by e2e tests.",
       image: {
-        main: 'https://img-comic.test/works/9999001/cover_main.jpg',
-        main_big: 'https://img-comic.test/works/9999001/cover_main_big.jpg',
-        thumbnail: 'https://img-comic.test/works/9999001/cover_thumb.jpg',
+        main: "https://img-comic.pximg.net/works/9999001/cover_main.jpg",
+        main_big:
+          "https://img-comic.pximg.net/works/9999001/cover_main_big.jpg",
+        thumbnail: "https://img-comic.pximg.net/works/9999001/cover_thumb.jpg",
       },
     },
   },
@@ -55,33 +75,33 @@ const PIXIV_EPISODES_V2_RESPONSE = {
   data: {
     episodes: [
       {
-        state: 'readable',
+        state: "readable",
         episode: {
           id: 70001,
-          numbering_title: '第1話',
-          sub_title: '出発',
-          viewer_path: '/viewer/stories/70001',
-          state: 'readable',
+          numbering_title: "第1話",
+          sub_title: "出発",
+          viewer_path: "/viewer/stories/70001",
+          state: "readable",
         },
       },
       {
-        state: 'readable',
+        state: "readable",
         episode: {
           id: 70002,
-          numbering_title: '第2話',
-          sub_title: '邂逅',
-          viewer_path: '/viewer/stories/70002',
-          state: 'readable',
+          numbering_title: "第2話",
+          sub_title: "邂逅",
+          viewer_path: "/viewer/stories/70002",
+          state: "readable",
         },
       },
       {
-        state: 'locked',
+        state: "locked",
         episode: {
           id: 70003,
-          numbering_title: '第3話',
-          sub_title: '嵐の夜',
-          viewer_path: '/viewer/stories/70003',
-          state: 'locked',
+          numbering_title: "第3話",
+          sub_title: "嵐の夜",
+          viewer_path: "/viewer/stories/70003",
+          state: "locked",
         },
       },
     ],
@@ -89,24 +109,28 @@ const PIXIV_EPISODES_V2_RESPONSE = {
 }
 
 function mockFetchResponse(url: string, body: unknown, status = 200): void {
-  vi.mocked(rateLimitedFetchByUrlScope).mockImplementationOnce(async (reqUrl: string) => {
-    if (reqUrl === url) {
-      return {
-        ok: true,
-        status,
-        statusText: 'OK',
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: async () => body,
-        text: async () => JSON.stringify(body),
-        arrayBuffer: async () => new ArrayBuffer(0),
-        clone: function () { return this },
-      } as Response
+  vi.mocked(rateLimitedFetchByUrlScope).mockImplementationOnce(
+    async (reqUrl: string) => {
+      if (reqUrl === url) {
+        return {
+          ok: true,
+          status,
+          statusText: "OK",
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => body,
+          text: async () => JSON.stringify(body),
+          arrayBuffer: async () => new ArrayBuffer(0),
+          clone: function () {
+            return this
+          },
+        } as Response
+      }
+      throw new Error(`Unexpected fetch URL: ${reqUrl}`)
     }
-    throw new Error(`Unexpected fetch URL: ${reqUrl}`)
-  })
+  )
 }
 
-describe('Pixiv Comic site integration', () => {
+describe("Pixiv Comic site integration", () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -115,73 +139,90 @@ describe('Pixiv Comic site integration', () => {
     vi.restoreAllMocks()
   })
 
-  describe('shared utilities', () => {
-    it('exposes the correct base URL', () => {
-      expect(PIXIV_BASE_URL).toBe('https://comic.pixiv.net')
+  describe("shared utilities", () => {
+    it("exposes the correct base URL", () => {
+      expect(PIXIV_BASE_URL).toBe("https://comic.pixiv.net")
     })
 
-    it('creates app headers with required Pixiv Comic fields', () => {
+    it("creates app headers with required Pixiv Comic fields", () => {
       const headers = createPixivAppHeaders()
-      expect(headers['x-requested-with']).toBe('pixivcomic')
-      expect(headers['x-referer']).toBe(PIXIV_BASE_URL)
+      expect(headers["x-requested-with"]).toBe("pixivcomic")
+      expect(headers["x-referer"]).toBe(PIXIV_BASE_URL)
     })
 
-    it('resolves a valid cookie header from context', () => {
-      expect(resolvePixivCookieHeader({ cookieHeader: 'session=abc' })).toBe('session=abc')
-      expect(resolvePixivCookieHeader({ cookieHeader: '  ' })).toBeUndefined()
-      expect(resolvePixivCookieHeader({})).toBeUndefined()
-      expect(resolvePixivCookieHeader(undefined)).toBeUndefined()
-    })
-
-    it('sanitizes HTML text by stripping tags and collapsing whitespace', () => {
-      expect(sanitizePixivHtmlText('<p>Hello<br/>World</p>')).toBe('Hello World')
+    it("sanitizes HTML text by stripping tags and collapsing whitespace", () => {
+      expect(sanitizePixivHtmlText("<p>Hello<br/>World</p>")).toBe(
+        "Hello World"
+      )
       expect(sanitizePixivHtmlText(undefined)).toBeUndefined()
-      expect(sanitizePixivHtmlText('')).toBeUndefined()
-      expect(sanitizePixivHtmlText('<div>  </div>')).toBeUndefined()
+      expect(sanitizePixivHtmlText("")).toBeUndefined()
+      expect(sanitizePixivHtmlText("<div>  </div>")).toBeUndefined()
     })
   })
 
-  describe('page-context', () => {
-    it('extracts work id from /works/{id} path', () => {
-      expect(parseWorkId('/works/9999001')).toBe('9999001')
-      expect(parseWorkId('/works/123')).toBe('123')
-      expect(parseWorkId('/viewer/stories/70001')).toBeNull()
-      expect(parseWorkId('/')).toBeNull()
+  describe("page-context", () => {
+    it("extracts work id from /works/{id} path", () => {
+      expect(parseWorkId("/works/9999001")).toBe("9999001")
+      expect(parseWorkId("/works/123")).toBe("123")
+      expect(parseWorkId("/works/123/")).toBe("123")
+      expect(parseWorkId("/works/123anything")).toBeNull()
+      expect(parseWorkId("/works/123/chapters")).toBeNull()
+      expect(parseWorkId("/viewer/stories/70001")).toBeNull()
+      expect(parseWorkId("/")).toBeNull()
     })
 
-    it('extracts episode id from viewer/stories URLs', () => {
-      expect(parseEpisodeIdFromUrl('https://comic.pixiv.net/viewer/stories/70001')).toBe('70001')
-      expect(parseEpisodeIdFromUrl('https://comic.pixiv.net/episodes/70002')).toBe('70002')
-      expect(parseEpisodeIdFromUrl('https://comic.pixiv.net/works/9999001')).toBeNull()
+    it("extracts episode id from viewer/stories URLs", () => {
+      expect(
+        parseEpisodeIdFromUrl("https://comic.pixiv.net/viewer/stories/70001")
+      ).toBe("70001")
+      expect(
+        parseEpisodeIdFromUrl("https://comic.pixiv.net/episodes/70002")
+      ).toBe("70002")
+      expect(
+        parseEpisodeIdFromUrl("https://comic.pixiv.net/works/9999001")
+      ).toBeNull()
+      expect(
+        parseEpisodeIdFromUrl("https://attacker.example/viewer/stories/70001")
+      ).toBeNull()
+      expect(
+        parseEpisodeIdFromUrl(
+          "https://comic.pixiv.net/viewer/stories/70001/anything"
+        )
+      ).toBeNull()
     })
   })
 
-  describe('series-api', () => {
-    it('fetches series metadata from the works/v5 API', async () => {
+  describe("series-api", () => {
+    it("fetches series metadata from the works/v5 API", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/v5/${PIXIV_WORK_ID}`
       mockFetchResponse(apiUrl, PIXIV_WORK_V5_RESPONSE)
 
       const { fetchPixivSeriesMetadata } = await importModule()
       const metadata = await fetchPixivSeriesMetadata(PIXIV_WORK_ID)
 
-      expect(metadata.title).toBe('テスト作品')
-      expect(metadata.author).toBe('テスト作者')
-      expect(metadata.language).toBe('ja')
-      expect(metadata.readingDirection).toBe('rtl')
-      expect(metadata.coverUrl).toBe('https://img-comic.test/works/9999001/cover_main_big.jpg')
+      expect(metadata.title).toBe("テスト作品")
+      expect(metadata.author).toBe("テスト作者")
+      expect(metadata.language).toBe("ja")
+      expect(metadata.readingDirection).toBe("rtl")
+      expect(metadata.coverUrl).toBe(
+        "https://img-comic.pximg.net/works/9999001/cover_main_big.jpg"
+      )
     })
 
-    it('throws when official_work is missing from the API response', async () => {
+    it("throws when official_work is missing from the API response", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/v5/${PIXIV_WORK_ID}`
       mockFetchResponse(apiUrl, { data: {} })
 
       const { fetchPixivSeriesMetadata } = await importModule()
-      await expect(fetchPixivSeriesMetadata(PIXIV_WORK_ID)).rejects.toThrow(
-        'Pixiv Comic API may have changed (official_work missing)',
-      )
+      await expect(
+        fetchPixivSeriesMetadata(PIXIV_WORK_ID)
+      ).rejects.toMatchObject({
+        category: "provider_changed",
+        message: "Pixiv Comic API may have changed (official_work missing)",
+      })
     })
 
-    it('fetches chapter list from episodes/v2 API with correct ordering', async () => {
+    it("fetches chapter list from episodes/v2 API with correct ordering", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
       mockFetchResponse(apiUrl, PIXIV_EPISODES_V2_RESPONSE)
 
@@ -190,9 +231,11 @@ describe('Pixiv Comic site integration', () => {
       const chapters = Array.isArray(result) ? result : result.chapters
 
       expect(chapters).toHaveLength(3)
-      expect(chapters[0]!.id).toBe('70001')
-      expect(chapters[0]!.title).toBe('第1話 出発')
-      expect(chapters[0]!.url).toBe('https://comic.pixiv.net/viewer/stories/70001')
+      expect(chapters[0]!.id).toBe("70001")
+      expect(chapters[0]!.title).toBe("第1話 出発")
+      expect(chapters[0]!.url).toBe(
+        "https://comic.pixiv.net/viewer/stories/70001"
+      )
       expect(chapters[0]!.locked).toBe(false)
       expect(chapters[2]!.locked).toBe(true)
       if (!Array.isArray(result)) {
@@ -200,29 +243,29 @@ describe('Pixiv Comic site integration', () => {
       }
     })
 
-    it('deduplicates chapters by id, preferring unlocked over locked', async () => {
+    it("deduplicates chapters by id, preferring unlocked over locked", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
       const responseWithDupes = {
         data: {
           episodes: [
             {
-              state: 'locked',
+              state: "locked",
               episode: {
                 id: 70001,
-                numbering_title: '第1話',
-                sub_title: '出発',
-                viewer_path: '/viewer/stories/70001',
-                state: 'locked',
+                numbering_title: "第1話",
+                sub_title: "出発",
+                viewer_path: "/viewer/stories/70001",
+                state: "locked",
               },
             },
             {
-              state: 'readable',
+              state: "readable",
               episode: {
                 id: 70001,
-                numbering_title: '第1話',
-                sub_title: '出発',
-                viewer_path: '/viewer/stories/70001',
-                state: 'readable',
+                numbering_title: "第1話",
+                sub_title: "出発",
+                viewer_path: "/viewer/stories/70001",
+                state: "readable",
               },
             },
           ],
@@ -238,7 +281,7 @@ describe('Pixiv Comic site integration', () => {
       expect(chapters[0]!.locked).toBe(false)
     })
 
-    it('returns empty chapter list when API returns no episodes', async () => {
+    it("returns empty chapter list when API returns no episodes", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
       mockFetchResponse(apiUrl, { data: { episodes: [] } })
 
@@ -248,66 +291,160 @@ describe('Pixiv Comic site integration', () => {
 
       expect(chapters).toEqual([])
     })
+
+    it("throws when the episodes field is missing instead of treating schema drift as an empty work", async () => {
+      const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
+      mockFetchResponse(apiUrl, { data: {} })
+
+      const { fetchPixivChapterList } = await importModule()
+      await expect(fetchPixivChapterList(PIXIV_WORK_ID)).rejects.toMatchObject({
+        category: "provider_changed",
+        message: "Pixiv Comic API may have changed (episodes missing)",
+      })
+    })
+
+    it("fails closed for unknown or not-yet-started episode access", async () => {
+      const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
+      mockFetchResponse(apiUrl, {
+        data: {
+          episodes: [
+            {
+              episode: {
+                id: 70004,
+                numbering_title: "第4話",
+                viewer_path: "/viewer/stories/70004",
+              },
+            },
+            {
+              state: "readable",
+              episode: {
+                id: 70005,
+                numbering_title: "第5話",
+                viewer_path: "/viewer/stories/70005",
+                read_start_at: Math.floor(Date.now() / 1000) + 3600,
+              },
+            },
+          ],
+        },
+      })
+
+      const { fetchPixivChapterList } = await importModule()
+      const result = await fetchPixivChapterList(PIXIV_WORK_ID)
+      const chapters = Array.isArray(result) ? result : result.chapters
+      expect(chapters.map((chapter) => chapter.locked)).toEqual([true, true])
+    })
   })
 
-  describe('chapter-api utilities', () => {
-    it('parses image URLs from chapter HTML', async () => {
+  describe("chapter-api utilities", () => {
+    it("parses image URLs from chapter HTML", async () => {
       const { parsePixivImageUrlsFromHtml } = await importChapterApi()
-      const html = '<div><img src="https://img.pixiv.net/page1.jpg"><img src="https://img.pixiv.net/page2.png"></div>'
-      const urls = await parsePixivImageUrlsFromHtml({ chapterId: '70001', chapterUrl: 'https://comic.pixiv.net/viewer/stories/70001', chapterHtml: html })
+      const html =
+        '<div><img src="https://img-comic.pximg.net/page1.jpg"><img src="https://public-img-comic.pximg.net/page2.png"></div>'
+      const urls = await parsePixivImageUrlsFromHtml({
+        chapterId: "70001",
+        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
+        chapterHtml: html,
+      })
       expect(urls).toEqual([
-        'https://img.pixiv.net/page1.jpg',
-        'https://img.pixiv.net/page2.png',
+        "https://img-comic.pximg.net/page1.jpg",
+        "https://public-img-comic.pximg.net/page2.png",
       ])
     })
 
-    it('returns empty array when no image URLs are found in HTML', async () => {
+    it("preserves signed query strings and ignores unrelated image origins in HTML fallback", async () => {
       const { parsePixivImageUrlsFromHtml } = await importChapterApi()
-      const urls = await parsePixivImageUrlsFromHtml({ chapterId: '70001', chapterUrl: 'https://comic.pixiv.net/viewer/stories/70001', chapterHtml: '<div>no images</div>' })
+      const urls = await parsePixivImageUrlsFromHtml({
+        chapterId: "70001",
+        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
+        chapterHtml: [
+          '<img src="https://img-comic.pximg.net/page1.jpg?Expires=1&amp;Signature=abc">',
+          '<img src="https://attacker.example/tracker.png?chapter=70001">',
+          '<img src="https://comic.pixiv.net/assets/logo.png">',
+          '<img src="http://img-comic.pximg.net/insecure.jpg">',
+        ].join(""),
+      })
+
+      expect(urls).toEqual([
+        "https://img-comic.pximg.net/page1.jpg?Expires=1&Signature=abc",
+      ])
+    })
+
+    it("returns empty array when no image URLs are found in HTML", async () => {
+      const { parsePixivImageUrlsFromHtml } = await importChapterApi()
+      const urls = await parsePixivImageUrlsFromHtml({
+        chapterId: "70001",
+        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
+        chapterHtml: "<div>no images</div>",
+      })
       expect(urls).toEqual([])
     })
 
-    it('filters invalid image URLs via processPixivImageUrls', async () => {
+    it("filters invalid image URLs via processPixivImageUrls", async () => {
       const { processPixivImageUrls } = await importChapterApi()
       const urls = await processPixivImageUrls([
-        'https://img.pixiv.net/page1.jpg',
-        'not-a-url',
-        'https://img.pixiv.net/page2.png',
+        "https://img.pixiv.net/page1.jpg",
+        "not-a-url",
+        "https://img.pixiv.net/page2.png",
       ])
       expect(urls).toEqual([
-        'https://img.pixiv.net/page1.jpg',
-        'https://img.pixiv.net/page2.png',
+        "https://img.pixiv.net/page1.jpg",
+        "https://img.pixiv.net/page2.png",
       ])
     })
 
-    it('offscreen image downloads use the outer image scheduler without re-entering the URL limiter', async () => {
-      const { offscreenSiteAdapter } = await import('@/src/site-integrations/pixiv-comic/offscreen-runtime')
+    it("offscreen image downloads use the outer image scheduler without re-entering the URL limiter", async () => {
+      const { offscreenSiteAdapter } =
+        await import("@/src/site-integrations/pixiv-comic/offscreen-runtime")
       const payload = new Uint8Array([1, 2, 3]).buffer
-      const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers({ 'content-type': 'image/jpeg' }),
-        body: null,
-        arrayBuffer: async () => payload,
-      } as unknown as Response))
-      vi.stubGlobal('fetch', fetch)
+      const fetch = vi.fn(
+        async (_input: RequestInfo | URL, _init?: RequestInit) =>
+          ({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            headers: new Headers({ "content-type": "image/jpeg" }),
+            body: null,
+            arrayBuffer: async () => payload,
+          }) as unknown as Response
+      )
+      vi.stubGlobal("fetch", fetch)
 
       const image = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
-        'https://img-comic.pximg.net/path/page.jpg',
-        { signal: new AbortController().signal, context: undefined },
+        "https://img-comic.pximg.net/path/page.jpg",
+        { signal: new AbortController().signal, context: undefined }
       )
 
-      expect(image.filename).toBe('page.jpg')
-      expect(image.mimeType).toBe('image/jpeg')
+      expect(image.filename).toBe("page.jpg")
+      expect(image.mimeType).toBe("image/jpeg")
       expect(rateLimitedFetchByUrlScope).not.toHaveBeenCalled()
       const [, init] = fetch.mock.calls.at(-1) ?? []
       expect(init).toMatchObject({
-        credentials: 'include',
-        referrer: 'https://comic.pixiv.net/',
-        referrerPolicy: 'strict-origin-when-cross-origin',
+        credentials: "include",
+        referrer: "https://comic.pixiv.net/",
+        referrerPolicy: "strict-origin-when-cross-origin",
       })
-      expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(AbortSignal)
+      expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(
+        AbortSignal
+      )
+    })
+
+    it("builds the aggregate integration from the production runtime adapters", async () => {
+      const { pixivComicIntegration, pixivComicBackgroundIntegration } =
+        await import("@/src/site-integrations/pixiv-comic")
+      const { backgroundSiteAdapter } =
+        await import("@/src/site-integrations/pixiv-comic/background-runtime")
+      const { offscreenSiteAdapter } =
+        await import("@/src/site-integrations/pixiv-comic/offscreen-runtime")
+
+      expect(pixivComicIntegration.background).toBe(
+        pixivComicBackgroundIntegration
+      )
+      expect(pixivComicBackgroundIntegration.series).toBe(
+        backgroundSiteAdapter.background.series
+      )
+      expect(pixivComicBackgroundIntegration.chapter).toBe(
+        offscreenSiteAdapter.offscreen.chapter
+      )
     })
   })
 })

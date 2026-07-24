@@ -1,16 +1,84 @@
 import type {
   BackgroundSiteAdapter,
+  SeriesDataResolutionResult,
   ServiceWorkerIntegration,
-} from '@/src/types/site-integrations'
+} from "@/src/types/site-integrations"
+import type { SeriesMetadata } from "@/src/types/series-metadata"
+import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
+import { parseTrustedShonenJumpPlusEpisodeUrl } from "./urls"
+import { parseAggregateIdFromHtml } from "./page-context"
+import { readEpisodeJsonSeriesMetadataFromHtml } from "./episode-json"
+import { fetchShonenJumpPlusChapterList } from "./series-api"
+import { ProviderContractError } from "../provider-contract-error"
 
-// No SW-side API calls needed for Shonen Jump+ — the content script extracts
-// all series metadata and chapter data from the page DOM. This adapter exists
-// to satisfy the BackgroundSiteAdapter interface shape required by the registry.
+function resolveShonenJumpPlusError(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
+}
+
+async function resolveShonenJumpPlusSeriesData(input: {
+  seriesUrl: string
+  seriesId?: string
+  language?: string
+}): Promise<SeriesDataResolutionResult> {
+  const trusted = parseTrustedShonenJumpPlusEpisodeUrl(input.seriesUrl)
+  if (!trusted) {
+    throw new Error(
+      "Shonen Jump+ URL is not a supported episode page (/episode/{id})."
+    )
+  }
+  const episodeId = trusted.episodeId
+
+  const response = await rateLimitedFetchForIntegration(
+    "shonenjumpplus",
+    input.seriesUrl,
+    "chapter",
+    { credentials: "omit" }
+  )
+  if (!response.ok) {
+    throw new Error(
+      `Shonen Jump+ episode page could not be loaded (HTTP ${response.status}).`
+    )
+  }
+
+  const { html } = await decodeHtmlResponse(response)
+  const aggregateId = parseAggregateIdFromHtml(html)
+  if (!aggregateId) {
+    throw new ProviderContractError(
+      "Shonen Jump+ aggregate ID not found in episode page HTML."
+    )
+  }
+
+  const json = readEpisodeJsonSeriesMetadataFromHtml(html)
+  const seriesMetadata: SeriesMetadata = {
+    title: json.seriesTitle ?? `Shonen Jump+ ${episodeId}`,
+    coverUrl: json.seriesThumbnailUri,
+    language: input.language ?? "ja",
+    readingDirection: "rtl",
+  }
+
+  let chapterList: Awaited<ReturnType<typeof fetchShonenJumpPlusChapterList>>
+  try {
+    chapterList = await fetchShonenJumpPlusChapterList(aggregateId, episodeId)
+  } catch (error) {
+    return {
+      seriesId: aggregateId,
+      seriesMetadata,
+      chapterListError: resolveShonenJumpPlusError(error),
+    }
+  }
+
+  return { seriesId: aggregateId, seriesMetadata, chapterList }
+}
+
 const background: ServiceWorkerIntegration = {
-  name: 'Shonen Jump+ Background',
+  name: "Shonen Jump+ Background",
+  series: {
+    resolveSeriesData: resolveShonenJumpPlusSeriesData,
+  },
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: 'shonenjumpplus',
+  id: "shonenjumpplus",
   background,
 }

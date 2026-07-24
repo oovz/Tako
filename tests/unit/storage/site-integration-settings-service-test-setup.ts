@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi } from "vitest"
 
 export const mockStorageData: Record<string, unknown> = {}
 
@@ -28,15 +28,16 @@ globalThis.chrome = {
   },
 } as typeof chrome
 
-export let siteIntegrationSettingsService: typeof import('@/src/storage/site-integration-settings-service').siteIntegrationSettingsService
-export let siteIntegrationSettingsStorageKey: typeof import('@/src/storage/site-integration-settings-service').SITE_INTEGRATION_SETTINGS_STORAGE_KEY
+export let siteIntegrationSettingsService: typeof import("@/src/storage/site-integration-settings-service").siteIntegrationSettingsService
+export let siteIntegrationSettingsStorageKey: typeof import("@/src/storage/site-integration-settings-service").SITE_INTEGRATION_SETTINGS_STORAGE_KEY
 
 export async function resetSiteIntegrationSettingsServiceTestEnvironment(): Promise<void> {
   vi.clearAllMocks()
-  Object.keys(mockStorageData).forEach(key => delete mockStorageData[key])
+  Object.keys(mockStorageData).forEach((key) => delete mockStorageData[key])
 
   vi.resetModules()
-  const module = await import('@/src/storage/site-integration-settings-service')
+  const module = await import("@/src/storage/site-integration-settings-service")
   siteIntegrationSettingsService = module.siteIntegrationSettingsService
-  siteIntegrationSettingsStorageKey = module.SITE_INTEGRATION_SETTINGS_STORAGE_KEY
+  siteIntegrationSettingsStorageKey =
+    module.SITE_INTEGRATION_SETTINGS_STORAGE_KEY
 }

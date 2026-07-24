@@ -1,1 +1,1 @@
-export * from './mangadex/index'
+export * from "./mangadex/index"

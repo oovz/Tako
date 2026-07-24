@@ -1,1 +1,1 @@
-export * from './shonenjumpplus/index'
+export * from "./shonenjumpplus/index"

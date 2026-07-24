@@ -1,26 +1,29 @@
-import logger from '@/src/runtime/logger';
-import { rateLimitedFetchByUrlScope } from '@/src/runtime/rate-limit';
-import type { EffectivePolicy } from '@/src/runtime/rate-limit';
-import { toAbsoluteUrl } from './shared';
-import { sanitizeLabel } from '@/src/shared/site-integration-utils';
+import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import type { EffectivePolicy } from "@/src/runtime/rate-limit"
+import {
+  MANHUAGUI_CONFIG_HOST,
+  MANHUAGUI_IMAGE_HOSTS,
+  toAbsoluteUrl,
+} from "./shared"
+import { sanitizeLabel } from "@/src/shared/site-integration-utils"
 
 /**
  * Weighted image host (e.g. `eu`, `us1`) used to build `{host}.hamreus.com`
  * image URLs. Hosts with weight <= 0 are skipped during host selection.
  */
 export type ReaderHostConfig = {
-  name: string;
-  weight: number;
-};
+  name: string
+  weight: number
+}
 
 /**
  * Logical service that groups hosts (e.g. "自动" / "电信" / "联通"). The chapter
  * HTML's `curServ` index selects which service's host list to use.
  */
 export type ReaderServiceConfig = {
-  name: string;
-  hosts: ReaderHostConfig[];
-};
+  name: string
+  hosts: ReaderHostConfig[]
+}
 
 /**
  * Fully-resolved reader configuration derived from the live `config_*.js`
@@ -28,147 +31,144 @@ export type ReaderServiceConfig = {
  * selected service and host at page load time.
  */
 export type ReaderConfig = {
-  curHost: number;
-  curServ: number;
-  services: ReaderServiceConfig[];
-};
+  curHost: number
+  curServ: number
+  services: ReaderServiceConfig[]
+}
 
 /**
  * Fallback reader config used when the external `config_*.js` script cannot be
  * fetched or parsed. Derived from Manhuagui's shipped defaults so that at least
  * one host candidate is always available for URL construction.
  */
-export const DEFAULT_READER_CONFIG: ReaderConfig = {
-  curHost: 0,
-  curServ: 0,
-  services: [
-    {
-      name: '自动',
-      hosts: [
-        { name: 'i', weight: 0.1 },
-        { name: 'eu', weight: 4 },
-        { name: 'eu1', weight: 4 },
-        { name: 'eu2', weight: 4 },
-        { name: 'us', weight: 1 },
-        { name: 'us1', weight: 1 },
-        { name: 'us2', weight: 1 },
-        { name: 'us3', weight: 1 },
-      ],
-    },
-    {
-      name: '电信',
-      hosts: [
-        { name: 'eu', weight: 1 },
-        { name: 'eu1', weight: 1 },
-        { name: 'eu2', weight: 1 },
-      ],
-    },
-    {
-      name: '联通',
-      hosts: [
-        { name: 'us', weight: 1 },
-        { name: 'us1', weight: 1 },
-        { name: 'us2', weight: 1 },
-        { name: 'us3', weight: 1 },
-      ],
-    },
-  ],
-};
-
-const CONFIG_SCRIPT_URL_REGEX = /<script[^>]+src=["']([^"'<>]*\/scripts\/config_[^"'<>]+\.js)["'][^>]*>/i;
+const CONFIG_SCRIPT_URL_REGEX =
+  /<script[^>]+src=["']([^"'<>]*\/scripts\/config_[^"'<>]+\.js)["'][^>]*>/i
 
 /**
  * Decode arbitrary response bytes using the encoding declared by the
  * `Content-Type` charset, defaulting to UTF-8. Used for the `config_*.js`
  * JavaScript response where we cannot rely on `<meta charset>` inspection.
  */
-function decodeTextBytes(bytes: Uint8Array, contentType: string | null): string {
-  const encodingMatch = contentType?.match(/charset\s*=\s*([^;\s]+)/i)?.[1];
-  const encoding = sanitizeLabel(encodingMatch ?? '') || 'utf-8';
+function decodeTextBytes(
+  bytes: Uint8Array,
+  contentType: string | null
+): string {
+  const encodingMatch = contentType?.match(/charset\s*=\s*([^;\s]+)/i)?.[1]
+  const encoding = sanitizeLabel(encodingMatch ?? "") || "utf-8"
 
   try {
-    return new TextDecoder(encoding).decode(bytes);
+    return new TextDecoder(encoding).decode(bytes)
   } catch {
-    return new TextDecoder('utf-8').decode(bytes);
+    return new TextDecoder("utf-8").decode(bytes)
   }
 }
 
 function extractConfigScriptUrl(chapterHtml: string): string | undefined {
-  return toAbsoluteUrl(chapterHtml.match(CONFIG_SCRIPT_URL_REGEX)?.[1]);
+  const url = toAbsoluteUrl(chapterHtml.match(CONFIG_SCRIPT_URL_REGEX)?.[1])
+  if (!url) return undefined
+  const parsed = new URL(url)
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== MANHUAGUI_CONFIG_HOST
+  ) {
+    throw new Error("Manhuagui reader config origin is not allowed")
+  }
+  return parsed.toString()
 }
 
 function parseHostWeight(value: string): number {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 /**
  * Parse the inline JavaScript in `config_*.js` to extract the picserv service
  * list. Schema is brittle on purpose: we pin the exact `{name:"…",hosts:[…]}`
- * literal so we fail loudly (and fall back to {@link DEFAULT_READER_CONFIG})
- * if Manhuagui changes its config format.
+ * literal so we fail loudly if Manhuagui changes its config format.
  */
 function parseReaderConfigScript(scriptText: string): ReaderConfig {
-  const serviceMatches = [...scriptText.matchAll(/\{name:"([^"]+)",hosts:\[((?:\{h:"[^"]+",w:[0-9.]+\},?)+)\]\}/g)];
+  const serviceMatches = [
+    ...scriptText.matchAll(
+      /\{name:"([^"]+)",hosts:\[((?:\{h:"[^"]+",w:[0-9.]+\},?)+)\]\}/g
+    ),
+  ]
   if (serviceMatches.length === 0) {
-    throw new Error('Manhuagui config format changed (picserv hosts missing)');
+    throw new Error("Manhuagui config format changed (picserv hosts missing)")
   }
 
   const services = serviceMatches.map((serviceMatch) => {
-    const [, serviceName, hostsBlock] = serviceMatch;
-    const hosts = [...(hostsBlock ?? '').matchAll(/\{h:"([^"]+)",w:([0-9.]+)\}/g)].map((hostMatch) => ({
-      name: hostMatch[1] ?? '',
-      weight: parseHostWeight(hostMatch[2] ?? '0'),
-    })).filter((host) => host.name);
+    const [, serviceName, hostsBlock] = serviceMatch
+    const hosts = [
+      ...(hostsBlock ?? "").matchAll(/\{h:"([^"]+)",w:([0-9.]+)\}/g),
+    ]
+      .map((hostMatch) => ({
+        name: hostMatch[1] ?? "",
+        weight: parseHostWeight(hostMatch[2] ?? "0"),
+      }))
+      .filter(
+        (host) =>
+          host.name && MANHUAGUI_IMAGE_HOSTS.has(`${host.name}.hamreus.com`)
+      )
 
     if (!serviceName || hosts.length === 0) {
-      throw new Error('Manhuagui config format changed (picserv host entry missing)');
+      throw new Error(
+        "Manhuagui config format changed (picserv host entry missing)"
+      )
     }
 
     return {
       name: serviceName,
       hosts,
-    } satisfies ReaderServiceConfig;
-  });
+    } satisfies ReaderServiceConfig
+  })
 
-  const curServ = Number.parseInt(scriptText.match(/curServ:(\d+)/)?.[1] ?? '', 10);
-  const curHost = Number.parseInt(scriptText.match(/curHost:(\d+)/)?.[1] ?? '', 10);
+  const curServ = Number.parseInt(
+    scriptText.match(/curServ:(\d+)/)?.[1] ?? "",
+    10
+  )
+  const curHost = Number.parseInt(
+    scriptText.match(/curHost:(\d+)/)?.[1] ?? "",
+    10
+  )
 
   return {
     curHost: Number.isFinite(curHost) ? curHost : 0,
     curServ: Number.isFinite(curServ) ? curServ : 0,
     services,
-  };
+  }
 }
 
 /**
  * Fetch the current Manhuagui reader config by locating the `config_*.js`
- * script reference in chapter HTML and parsing it. Returns
- * {@link DEFAULT_READER_CONFIG} on any failure so image-URL construction can
- * still proceed with sensible defaults.
+ * script reference in chapter HTML and parsing it. Failures are surfaced so a
+ * stale host map cannot mask a site format or delivery change.
  */
-export async function fetchReaderConfig(chapterHtml: string, chapterPolicy?: EffectivePolicy): Promise<ReaderConfig> {
-  const configScriptUrl = extractConfigScriptUrl(chapterHtml);
+export async function fetchReaderConfig(
+  chapterHtml: string,
+  chapterPolicy?: EffectivePolicy
+): Promise<ReaderConfig> {
+  const configScriptUrl = extractConfigScriptUrl(chapterHtml)
   if (!configScriptUrl) {
-    return DEFAULT_READER_CONFIG;
+    throw new Error("Manhuagui reader config script missing")
   }
 
-  try {
-    const response = await rateLimitedFetchByUrlScope(configScriptUrl, 'chapter', undefined, chapterPolicy);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const buffer = await response.arrayBuffer();
-    const scriptText = decodeTextBytes(new Uint8Array(buffer), response.headers.get('content-type'));
-    return parseReaderConfigScript(scriptText);
-  } catch (error) {
-    logger.warn('[manhuagui] Failed to fetch or parse reader config script, using default host map', {
-      configScriptUrl,
-      error,
-    });
-    return DEFAULT_READER_CONFIG;
+  const response = await rateLimitedFetchForIntegration(
+    "manhuagui",
+    configScriptUrl,
+    "chapter",
+    { credentials: "omit" },
+    chapterPolicy
+  )
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
+
+  const buffer = await response.arrayBuffer()
+  const scriptText = decodeTextBytes(
+    new Uint8Array(buffer),
+    response.headers.get("content-type")
+  )
+  return parseReaderConfigScript(scriptText)
 }
 
 /**
@@ -177,20 +177,22 @@ export async function fetchReaderConfig(chapterHtml: string, chapterPolicy?: Eff
  * falls back to the first host with weight > 0, then the first listed host.
  */
 export function selectReaderHost(config: ReaderConfig): string {
-  const service = config.services[config.curServ] ?? config.services[0] ?? DEFAULT_READER_CONFIG.services[0];
+  const service = config.services[config.curServ]
   if (!service) {
-    throw new Error('Manhuagui config format changed (no image host services available)');
+    throw new Error(
+      "Manhuagui config format changed (selected service is unavailable)"
+    )
   }
 
-  const currentHost = service.hosts[config.curHost];
+  const currentHost = service.hosts[config.curHost]
   if (currentHost && currentHost.weight > 0) {
-    return currentHost.name;
+    return currentHost.name
   }
 
-  const firstAvailableHost = service.hosts.find((host) => host.weight > 0) ?? service.hosts[0];
+  const firstAvailableHost = service.hosts.find((host) => host.weight > 0)
   if (!firstAvailableHost) {
-    throw new Error('Manhuagui config format changed (no image hosts available)');
+    throw new Error("Manhuagui config format changed (no enabled image hosts)")
   }
 
-  return firstAvailableHost.name;
+  return firstAvailableHost.name
 }

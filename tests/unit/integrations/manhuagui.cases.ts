@@ -1,207 +1,227 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from "vitest"
 import {
   captureBrowserGlobals,
   compressToBase64,
-  installChromeMock,
   makeHtmlResponse,
   mockRateLimitedFetch,
   restoreBrowserGlobals,
-  restoreChromeMock,
   setTestDocument,
   setTestWindow,
-} from './manhuagui-test-setup';
+} from "./manhuagui-test-setup"
+import {
+  extractChapterListFromDocument,
+  extractSeriesMetadataFromDocument,
+} from "@/src/site-integrations/manhuagui/series-dom"
+import { parseSeriesIdFromPath } from "@/src/site-integrations/manhuagui/shared"
 
 type MockChapterGroup = {
-  groupTitle: string;
-  links: Array<Record<string, unknown>>;
-  beforeList?: Array<Record<string, unknown>>;
-};
+  groupTitle: string
+  links: Array<Record<string, unknown>>
+  beforeList?: Array<Record<string, unknown>>
+}
 
 function buildMockChapterContainer(chapterGroups: MockChapterGroup[]) {
   const children = chapterGroups.flatMap((group) => [
-    { tagName: 'H4', textContent: group.groupTitle },
+    { tagName: "H4", textContent: group.groupTitle },
     ...(group.beforeList ?? []),
     {
-      tagName: 'DIV',
-      className: 'chapter-list cf mt10',
-      querySelectorAll: (selector: string) => (selector === 'li > a, a' ? group.links : []),
+      tagName: "DIV",
+      className: "chapter-list cf mt10",
+      querySelectorAll: (selector: string) =>
+        selector === "li > a, a" ? group.links : [],
     },
-  ]);
+  ])
 
-  return { children };
+  return { children }
 }
 
 function queryChapterContainers(selector: string, chapterContainer: unknown) {
-  if (selector === '.chapter') {
-    return [chapterContainer];
+  if (selector === ".chapter") {
+    return [chapterContainer]
   }
 
-  return [];
+  return []
 }
 
 function buildSeriesDocument() {
   const detailSpans = [
-    { textContent: '2024', querySelectorAll: () => [] },
-    { textContent: '', querySelectorAll: () => [{ textContent: '日本' }] },
-    { textContent: '', querySelectorAll: () => [{ textContent: '少年' }] },
-    { textContent: '', querySelectorAll: () => [{ textContent: '冒险' }, { textContent: '奇幻' }] },
-    { textContent: '', querySelectorAll: () => [{ textContent: '荒木飞吕彦' }] },
-    { textContent: '别名', querySelectorAll: () => [] },
-    { textContent: '最新', querySelectorAll: () => [] },
-    { textContent: '连载中', querySelectorAll: () => [] },
-    { textContent: '2026-04-15', querySelectorAll: () => [] },
-  ];
+    { textContent: "2024", querySelectorAll: () => [] },
+    { textContent: "", querySelectorAll: () => [{ textContent: "日本" }] },
+    { textContent: "", querySelectorAll: () => [{ textContent: "少年" }] },
+    {
+      textContent: "",
+      querySelectorAll: () => [
+        { textContent: "冒险" },
+        { textContent: "奇幻" },
+      ],
+    },
+    {
+      textContent: "",
+      querySelectorAll: () => [{ textContent: "荒木飞吕彦" }],
+    },
+    { textContent: "别名", querySelectorAll: () => [] },
+    { textContent: "最新", querySelectorAll: () => [] },
+    { textContent: "连载中", querySelectorAll: () => [] },
+    { textContent: "2026-04-15", querySelectorAll: () => [] },
+  ]
 
   const chapterGroups = [
     {
-      groupTitle: '单话',
+      groupTitle: "单话",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/28004/760111.html',
-          textContent: '第2话 重逢',
+          href: "https://www.manhuagui.com/comic/28004/760111.html",
+          textContent: "第2话 重逢",
         },
         {
-          href: 'https://www.manhuagui.com/comic/28004/760110.html',
-          textContent: '第1话 启程',
+          href: "https://www.manhuagui.com/comic/28004/760110.html",
+          textContent: "第1话 启程",
+        },
+        {
+          href: "https://www.manhuagui.com/comic/28004/760109.html",
+          textContent: "",
         },
       ],
     },
     {
-      groupTitle: '单行本',
+      groupTitle: "单行本",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/28004/760210.html',
-          textContent: '第1卷',
+          href: "https://www.manhuagui.com/comic/28004/760210.html",
+          textContent: "第1卷",
         },
       ],
     },
-  ];
-  const chapterContainer = buildMockChapterContainer(chapterGroups);
+  ]
+  const chapterContainer = buildMockChapterContainer(chapterGroups)
 
   return {
     querySelector: (selector: string) => {
-      if (selector === '.book-cont') {
+      if (selector === ".book-cont") {
         return {
           querySelector: (nested: string) => {
-            if (nested === '.book-title h1') return { textContent: '测试漫画' };
-            if (nested === '.book-title h2') return { textContent: 'Test Manga Alias' };
+            if (nested === ".book-title h1") return { textContent: "测试漫画" }
+            if (nested === ".book-title h2")
+              return { textContent: "Test Manga Alias" }
 
-            if (nested === '.hcover img') {
+            if (nested === ".hcover img") {
               return {
-                getAttribute: (name: string) => (name === 'src' ? '//cf.hamreus.com/covers/test.jpg' : null),
-              };
+                getAttribute: (name: string) =>
+                  name === "src" ? "//cf.mhgui.com/cpic/h/28004.jpg" : null,
+              }
             }
 
-            if (nested === '#intro-all') {
+            if (nested === "#intro-all") {
               return {
-                textContent: '这是一个系列简介。',
-              };
+                textContent: "这是一个系列简介。",
+              }
             }
 
-            return null;
+            return null
           },
-        };
+        }
       }
 
-      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
-        return null;
+      if (selector === "#checkAdult" || selector === "#__VIEWSTATE") {
+        return null
       }
 
-      return null;
+      return null
     },
     querySelectorAll: (selector: string) => {
-      if (selector === '.detail-list span') {
-        return detailSpans;
+      if (selector === ".detail-list span") {
+        return detailSpans
       }
 
-      return queryChapterContainers(selector, chapterContainer);
+      return queryChapterContainers(selector, chapterContainer)
     },
-  };
+  }
 }
 
 function buildAdultWarningDocument(encodedViewState: string) {
   return {
     querySelector: (selector: string) => {
-      if (selector === '#checkAdult') {
-        return { textContent: '成人内容提示' };
+      if (selector === "#checkAdult") {
+        return { textContent: "成人内容提示" }
       }
 
-      if (selector === '#__VIEWSTATE') {
+      if (selector === "#__VIEWSTATE") {
         return {
-          getAttribute: (name: string) => (name === 'value' ? encodedViewState : null),
-        };
+          getAttribute: (name: string) =>
+            name === "value" ? encodedViewState : null,
+        }
       }
 
-      if (selector === '.book-cont') {
-        return null;
+      if (selector === ".book-cont") {
+        return null
       }
 
-      return null;
+      return null
     },
     querySelectorAll: () => [],
-  };
+  }
 }
 
 function buildCategorizedSeriesDocument() {
   const chapterGroups = [
     {
-      groupTitle: '单行本',
+      groupTitle: "单行本",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/21243/378329.html',
-          textContent: '第03卷(完)144p',
+          href: "https://www.manhuagui.com/comic/21243/378329.html",
+          textContent: "第03卷(完)144p",
         },
         {
-          href: 'https://www.manhuagui.com/comic/21243/378328.html',
-          textContent: '第02卷160p',
+          href: "https://www.manhuagui.com/comic/21243/378328.html",
+          textContent: "第02卷160p",
         },
         {
-          href: 'https://www.manhuagui.com/comic/21243/378327.html',
-          textContent: '第01卷142p',
+          href: "https://www.manhuagui.com/comic/21243/378327.html",
+          textContent: "第01卷142p",
         },
       ],
     },
     {
-      groupTitle: '番外篇',
+      groupTitle: "番外篇",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/21243/308995.html',
-          textContent: '第3卷单行…25p',
+          href: "https://www.manhuagui.com/comic/21243/308995.html",
+          textContent: "第3卷单行…25p",
         },
         {
-          href: 'https://www.manhuagui.com/comic/21243/284921.html',
-          textContent: '番外篇239p',
+          href: "https://www.manhuagui.com/comic/21243/284921.html",
+          textContent: "番外篇239p",
         },
       ],
     },
     {
-      groupTitle: '单话',
+      groupTitle: "单话",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/21243/307984.html',
-          textContent: '新篇088p',
+          href: "https://www.manhuagui.com/comic/21243/307984.html",
+          textContent: "新篇088p",
         },
         {
-          href: 'https://www.manhuagui.com/comic/21243/284923.html',
-          textContent: '新篇0731p',
+          href: "https://www.manhuagui.com/comic/21243/284923.html",
+          textContent: "新篇0731p",
         },
       ],
     },
-  ];
-  const chapterContainer = buildMockChapterContainer(chapterGroups);
+  ]
+  const chapterContainer = buildMockChapterContainer(chapterGroups)
 
   return {
     querySelector: (selector: string) => {
-      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
-        return null;
+      if (selector === "#checkAdult" || selector === "#__VIEWSTATE") {
+        return null
       }
 
-      return null;
+      return null
     },
     querySelectorAll: (selector: string) => {
-      return queryChapterContainers(selector, chapterContainer);
+      return queryChapterContainers(selector, chapterContainer)
     },
-  };
+  }
 }
 
 function buildPageCountSeriesDocument() {
@@ -209,18 +229,18 @@ function buildPageCountSeriesDocument() {
     href: string,
     chapterTitle: string,
     pageCountText: string,
-    titleAttribute: string | null = chapterTitle,
+    titleAttribute: string | null = chapterTitle
   ) => ({
     href,
     textContent: `${chapterTitle}${pageCountText}`,
     getAttribute: (name: string) => {
-      if (name === 'href') return href;
-      if (name === 'title') return titleAttribute;
-      return null;
+      if (name === "href") return href
+      if (name === "title") return titleAttribute
+      return null
     },
     querySelector: (selector: string) => {
-      if (selector !== 'span') {
-        return null;
+      if (selector !== "span") {
+        return null
       }
 
       return {
@@ -229,295 +249,362 @@ function buildPageCountSeriesDocument() {
           { nodeType: 3, textContent: chapterTitle },
           { nodeType: 1, textContent: pageCountText },
         ],
-      };
+      }
     },
-  });
+  })
 
   const chapterGroups = [
     {
-      groupTitle: '单话',
+      groupTitle: "单话",
       links: [
-        makeChapterAnchor('https://www.manhuagui.com/comic/19430/100002.html', '第02回', '25p', null),
-        makeChapterAnchor('https://www.manhuagui.com/comic/19430/100001.html', '第01回', '54p'),
+        makeChapterAnchor(
+          "https://www.manhuagui.com/comic/19430/100002.html",
+          "第02回",
+          "25p",
+          null
+        ),
+        makeChapterAnchor(
+          "https://www.manhuagui.com/comic/19430/100001.html",
+          "第01回",
+          "54p"
+        ),
       ],
     },
-  ];
-  const chapterContainer = buildMockChapterContainer(chapterGroups);
+  ]
+  const chapterContainer = buildMockChapterContainer(chapterGroups)
 
   return {
     querySelector: (selector: string) => {
-      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
-        return null;
+      if (selector === "#checkAdult" || selector === "#__VIEWSTATE") {
+        return null
       }
 
-      return null;
+      return null
     },
     querySelectorAll: (selector: string) => {
-      return queryChapterContainers(selector, chapterContainer);
+      return queryChapterContainers(selector, chapterContainer)
     },
-  };
+  }
 }
 
 function buildPaginatedCategorySeriesDocument() {
   const singleTalkPager = {
-    tagName: 'DIV',
-    className: 'chapter-page cf mt10',
-    textContent: '1-26 27-116 117-206',
-  };
+    tagName: "DIV",
+    className: "chapter-page cf mt10",
+    textContent: "1-26 27-116 117-206",
+  }
 
   const chapterGroups = [
     {
-      groupTitle: '单行本',
+      groupTitle: "单行本",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/19430/585094.html',
-          textContent: '第01卷190p',
-          getAttribute: (name: string) => (name === 'href' ? 'https://www.manhuagui.com/comic/19430/585094.html' : null),
+          href: "https://www.manhuagui.com/comic/19430/585094.html",
+          textContent: "第01卷190p",
+          getAttribute: (name: string) =>
+            name === "href"
+              ? "https://www.manhuagui.com/comic/19430/585094.html"
+              : null,
         },
       ],
     },
     {
-      groupTitle: '单话',
+      groupTitle: "单话",
       beforeList: [singleTalkPager],
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/19430/219425.html',
-          textContent: '第01回54p',
+          href: "https://www.manhuagui.com/comic/19430/219425.html",
+          textContent: "第01回54p",
           getAttribute: (name: string) => {
-            if (name === 'href') return 'https://www.manhuagui.com/comic/19430/219425.html';
-            if (name === 'title') return '第01回';
-            return null;
+            if (name === "href")
+              return "https://www.manhuagui.com/comic/19430/219425.html"
+            if (name === "title") return "第01回"
+            return null
           },
         },
       ],
     },
     {
-      groupTitle: '番外篇',
+      groupTitle: "番外篇",
       links: [
         {
-          href: 'https://www.manhuagui.com/comic/19430/494877.html',
-          textContent: '20卷附录8p',
-          getAttribute: (name: string) => (name === 'href' ? 'https://www.manhuagui.com/comic/19430/494877.html' : null),
+          href: "https://www.manhuagui.com/comic/19430/494877.html",
+          textContent: "20卷附录8p",
+          getAttribute: (name: string) =>
+            name === "href"
+              ? "https://www.manhuagui.com/comic/19430/494877.html"
+              : null,
         },
       ],
     },
-  ];
-  const chapterContainer = buildMockChapterContainer(chapterGroups);
+  ]
+  const chapterContainer = buildMockChapterContainer(chapterGroups)
 
   return {
     querySelector: (selector: string) => {
-      if (selector === '#checkAdult' || selector === '#__VIEWSTATE') {
-        return null;
+      if (selector === "#checkAdult" || selector === "#__VIEWSTATE") {
+        return null
       }
 
-      return null;
+      return null
     },
     querySelectorAll: (selector: string) => {
-      return queryChapterContainers(selector, chapterContainer);
+      return queryChapterContainers(selector, chapterContainer)
     },
-  };
+  }
 }
 
 const readerConfigScript = `
   pVars={page:1,curServ:0,priServ:3,curHost:3,curFunc:0,curFile:"",manga:{preLoadNumber:1}};
   SMH.picserv=function(){var t=[{name:"自动",hosts:[{h:"i",w:.1},{h:"eu",w:4},{h:"eu1",w:4},{h:"eu2",w:4},{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]},{name:"电信",hosts:[{h:"eu",w:1},{h:"eu1",w:1},{h:"eu2",w:1}]},{name:"联通",hosts:[{h:"us",w:1},{h:"us1",w:1},{h:"us2",w:1},{h:"us3",w:1}]}],n=[],i=[],r=0;return{}}();
-`;
+`
 
-function buildPackedChapterHtml(rawKeys: string, path = '/ps4/z/zhoushuhz_jjx/第01回/') {
+function buildPackedChapterHtml(
+  rawKeys: string,
+  path = "/ps4/z/zhoushuhz_jjx/第01回/"
+) {
   return `
     <script src="//cf.mhgui.com/scripts/config_TEST.js"></script>
     <script>
       window["eval"](function(p,a,c,k,e,d){return p;}('SMH.imgData({"files":["001.jpg.webp","002.jpg.webp"],"path":"${path}","sl":{"e":1712345678,"m":"abc123"}}).preInit();',62,0,'${rawKeys}'['split']('|'),0,{}))
     </script>
-  `;
+  `
 }
 
 export function registerManhuaguiCases(): void {
-  describe('Manhuagui integration', () => {
-    it('extracts series id from /comic/{id}/ pages', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/28004/' } });
+  describe("Manhuagui integration", () => {
+    it("extracts series id from /comic/{id}/ pages", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({ location: { pathname: "/comic/28004/" } })
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      expect(manhuaguiIntegration.content.series.getSeriesId()).toBe('28004');
+      expect(parseSeriesIdFromPath(window.location.pathname)).toBe("28004")
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('extracts metadata from the series page structure', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/28004/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildSeriesDocument());
+    it("extracts metadata from the series page structure", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({
+        location: {
+          pathname: "/comic/28004/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(buildSeriesDocument())
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractSeriesMetadata = manhuaguiIntegration.content.series.extractSeriesMetadata;
-      expect(extractSeriesMetadata).toBeDefined();
-      if (!extractSeriesMetadata) {
-        throw new Error('Expected extractSeriesMetadata to be defined');
-      }
-
-      const metadata = extractSeriesMetadata();
+      const metadata = extractSeriesMetadataFromDocument(document)
       expect(metadata).toMatchObject({
-        title: '测试漫画',
-        author: '荒木飞吕彦',
-        description: '这是一个系列简介。',
-        coverUrl: 'https://cf.hamreus.com/covers/test.jpg',
-        alternativeTitles: ['Test Manga Alias'],
-        status: '连载中',
+        title: "测试漫画",
+        author: "荒木飞吕彦",
+        description: "这是一个系列简介。",
+        coverUrl: "https://cf.mhgui.com/cpic/h/28004.jpg",
+        alternativeTitles: ["Test Manga Alias"],
+        status: "连载中",
         year: 2024,
-        genres: ['冒险', '奇幻'],
-        language: 'zh',
-        readingDirection: 'rtl',
-      });
+        genres: ["冒险", "奇幻"],
+        language: "zh",
+      })
+      expect(metadata.readingDirection).toBeUndefined()
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('extracts grouped chapter lists from the series DOM', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/28004/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildSeriesDocument());
+    it("extracts grouped chapter lists from the series DOM", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({
+        location: {
+          pathname: "/comic/28004/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(buildSeriesDocument())
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
+      const chapterResult = extractChapterListFromDocument(document)
+      const chapters = Array.isArray(chapterResult)
+        ? chapterResult
+        : chapterResult.chapters
 
-      const chapterResult = await extractChapterList();
-      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
-
-      expect(chapters).toHaveLength(3);
-      expect(chapters.map(chapter => chapter.id)).toEqual(['760110', '760111', '760210']);
+      expect(chapters).toHaveLength(4)
+      expect(chapters.map((chapter) => chapter.id)).toEqual([
+        "760110",
+        "760111",
+        "760109",
+        "760210",
+      ])
       expect(chapters[0]).toMatchObject({
-        title: '第1话 启程',
+        title: "第1话 启程",
         chapterNumber: 1,
-        volumeLabel: '单话',
-        url: 'https://www.manhuagui.com/comic/28004/760110.html',
-      });
+        volumeLabel: "单话",
+        url: "https://www.manhuagui.com/comic/28004/760110.html",
+      })
+      expect(chapters[0]?.comicInfo?.Manga).toBeUndefined()
       expect(chapters[2]).toMatchObject({
-        title: '第1卷',
+        title: "Chapter 760109",
+        chapterLabel: "Chapter 760109",
+      })
+      expect(chapters[3]).toMatchObject({
+        title: "第1卷",
         chapterNumber: 1,
-        volumeLabel: '单行本',
-      });
+        volumeLabel: "单行本",
+      })
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('removes Manhuagui page-count suffixes from chapter titles and labels', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/19430/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildPageCountSeriesDocument());
+    it("removes Manhuagui page-count suffixes from chapter titles and labels", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({
+        location: {
+          pathname: "/comic/19430/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(buildPageCountSeriesDocument())
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
+      const chapterResult = extractChapterListFromDocument(document)
+      const chapters = Array.isArray(chapterResult)
+        ? chapterResult
+        : chapterResult.chapters
 
-      const chapterResult = await extractChapterList();
-      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
-
-      expect(chapters).toHaveLength(2);
+      expect(chapters).toHaveLength(2)
       expect(chapters[0]).toMatchObject({
-        id: '100001',
-        title: '第01回',
-        chapterLabel: '第01回',
+        id: "100001",
+        title: "第01回",
+        chapterLabel: "第01回",
         chapterNumber: 1,
-        volumeLabel: '单话',
-      });
-      expect(chapters[0]?.comicInfo.Title).toBe('第01回');
+        volumeLabel: "单话",
+      })
+      expect(chapters[0]?.comicInfo.Title).toBe("第01回")
       expect(chapters[1]).toMatchObject({
-        id: '100002',
-        title: '第02回',
-        chapterLabel: '第02回',
+        id: "100002",
+        title: "第02回",
+        chapterLabel: "第02回",
         chapterNumber: 2,
-      });
+      })
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('returns Manhuagui series category headings as explicit volumes', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/21243/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildCategorizedSeriesDocument());
+    it("returns Manhuagui series category headings as explicit volumes", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({
+        location: {
+          pathname: "/comic/21243/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(buildCategorizedSeriesDocument())
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
-
-      const chapterResult = await extractChapterList();
-      expect(Array.isArray(chapterResult)).toBe(false);
+      const chapterResult = extractChapterListFromDocument(document)
+      expect(Array.isArray(chapterResult)).toBe(false)
       if (Array.isArray(chapterResult)) {
-        throw new Error('Expected Manhuagui extractChapterList to return chapters with volumes');
+        throw new Error(
+          "Expected Manhuagui extractChapterList to return chapters with volumes"
+        )
       }
 
       expect(chapterResult.volumes).toEqual([
-        { id: 'manhuagui-volume-1', title: '单行本', label: '单行本' },
-        { id: 'manhuagui-volume-2', title: '番外篇', label: '番外篇' },
-        { id: 'manhuagui-volume-3', title: '单话', label: '单话' },
-      ]);
-      expect(chapterResult.chapters).toHaveLength(7);
+        { id: "manhuagui-volume-1", title: "单行本", label: "单行本" },
+        { id: "manhuagui-volume-2", title: "番外篇", label: "番外篇" },
+        { id: "manhuagui-volume-3", title: "单话", label: "单话" },
+      ])
+      expect(chapterResult.chapters).toHaveLength(7)
       expect(
         chapterResult.chapters.map((chapter) => ({
           id: chapter.id,
           volumeId: chapter.volumeId,
           volumeLabel: chapter.volumeLabel,
           volumeNumber: chapter.volumeNumber,
-        })),
+        }))
       ).toEqual([
-        { id: '378327', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
-        { id: '378328', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
-        { id: '378329', volumeId: 'manhuagui-volume-1', volumeLabel: '单行本', volumeNumber: undefined },
-        { id: '308995', volumeId: 'manhuagui-volume-2', volumeLabel: '番外篇', volumeNumber: undefined },
-        { id: '284921', volumeId: 'manhuagui-volume-2', volumeLabel: '番外篇', volumeNumber: undefined },
-        { id: '307984', volumeId: 'manhuagui-volume-3', volumeLabel: '单话', volumeNumber: undefined },
-        { id: '284923', volumeId: 'manhuagui-volume-3', volumeLabel: '单话', volumeNumber: undefined },
-      ]);
+        {
+          id: "378327",
+          volumeId: "manhuagui-volume-1",
+          volumeLabel: "单行本",
+          volumeNumber: undefined,
+        },
+        {
+          id: "378328",
+          volumeId: "manhuagui-volume-1",
+          volumeLabel: "单行本",
+          volumeNumber: undefined,
+        },
+        {
+          id: "378329",
+          volumeId: "manhuagui-volume-1",
+          volumeLabel: "单行本",
+          volumeNumber: undefined,
+        },
+        {
+          id: "308995",
+          volumeId: "manhuagui-volume-2",
+          volumeLabel: "番外篇",
+          volumeNumber: undefined,
+        },
+        {
+          id: "284921",
+          volumeId: "manhuagui-volume-2",
+          volumeLabel: "番外篇",
+          volumeNumber: undefined,
+        },
+        {
+          id: "307984",
+          volumeId: "manhuagui-volume-3",
+          volumeLabel: "单话",
+          volumeNumber: undefined,
+        },
+        {
+          id: "284923",
+          volumeId: "manhuagui-volume-3",
+          volumeLabel: "单话",
+          volumeNumber: undefined,
+        },
+      ])
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('uses the nearest preceding category heading when pagination controls sit before a chapter list', async () => {
-      const snapshot = captureBrowserGlobals();
-      setTestWindow({ location: { pathname: '/comic/19430/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildPaginatedCategorySeriesDocument());
+    it("uses the nearest preceding category heading when pagination controls sit before a chapter list", async () => {
+      const snapshot = captureBrowserGlobals()
+      setTestWindow({
+        location: {
+          pathname: "/comic/19430/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(buildPaginatedCategorySeriesDocument())
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
-
-      const chapterResult = await extractChapterList();
-      expect(Array.isArray(chapterResult)).toBe(false);
+      const chapterResult = extractChapterListFromDocument(document)
+      expect(Array.isArray(chapterResult)).toBe(false)
       if (Array.isArray(chapterResult)) {
-        throw new Error('Expected Manhuagui extractChapterList to return chapters with volumes');
+        throw new Error(
+          "Expected Manhuagui extractChapterList to return chapters with volumes"
+        )
       }
 
-      const volumes = chapterResult.volumes ?? [];
-      expect(volumes.map((volume) => volume.title)).toEqual(['单行本', '单话', '番外篇']);
-      expect(chapterResult.chapters.map((chapter) => ({
-        id: chapter.id,
-        title: chapter.title,
-        volumeLabel: chapter.volumeLabel,
-      }))).toEqual([
-        { id: '585094', title: '第01卷190p', volumeLabel: '单行本' },
-        { id: '219425', title: '第01回', volumeLabel: '单话' },
-        { id: '494877', title: '20卷附录8p', volumeLabel: '番外篇' },
-      ]);
+      const volumes = chapterResult.volumes ?? []
+      expect(volumes.map((volume) => volume.title)).toEqual([
+        "单行本",
+        "单话",
+        "番外篇",
+      ])
+      expect(
+        chapterResult.chapters.map((chapter) => ({
+          id: chapter.id,
+          title: chapter.title,
+          volumeLabel: chapter.volumeLabel,
+        }))
+      ).toEqual([
+        { id: "585094", title: "第01卷190p", volumeLabel: "单行本" },
+        { id: "219425", title: "第01回", volumeLabel: "单话" },
+        { id: "494877", title: "20卷附录8p", volumeLabel: "番外篇" },
+      ])
 
-      restoreBrowserGlobals(snapshot);
-    });
+      restoreBrowserGlobals(snapshot)
+    })
 
-    it('decodes adult chapter lists from __VIEWSTATE content when the warning page is shown', async () => {
-      const snapshot = captureBrowserGlobals();
+    it("does not expose adult chapters hidden behind the site warning", async () => {
+      const snapshot = captureBrowserGlobals()
       const adultChapterMarkup = `
         <h4>限制级</h4>
         <div class="chapter-list" id="chapter-list-1">
@@ -526,54 +613,61 @@ export function registerManhuaguiCases(): void {
             <li><a href="/comic/21243/900002.html">第2话 余烬</a></li>
           </ul>
         </div>
-      `;
+      `
 
       class MockDomParser {
         parseFromString(_html: string) {
-          const chapterContainer = buildMockChapterContainer([{
-            groupTitle: '限制级',
-            links: [
-              { href: 'https://www.manhuagui.com/comic/21243/900001.html', textContent: '第1话 夜幕' },
-              { href: 'https://www.manhuagui.com/comic/21243/900002.html', textContent: '第2话 余烬' },
-            ],
-          }]);
+          const chapterContainer = buildMockChapterContainer([
+            {
+              groupTitle: "限制级",
+              links: [
+                {
+                  href: "https://www.manhuagui.com/comic/21243/900001.html",
+                  textContent: "第1话 夜幕",
+                },
+                {
+                  href: "https://www.manhuagui.com/comic/21243/900002.html",
+                  textContent: "第2话 余烬",
+                },
+              ],
+            },
+          ])
 
           return {
             querySelector: () => null,
             querySelectorAll: (selector: string) => {
-              return queryChapterContainers(selector, chapterContainer);
+              return queryChapterContainers(selector, chapterContainer)
             },
-          };
+          }
         }
       }
 
-      setTestWindow({ location: { pathname: '/comic/21243/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildAdultWarningDocument(compressToBase64(adultChapterMarkup)));
-      Object.defineProperty(globalThis, 'DOMParser', {
+      setTestWindow({
+        location: {
+          pathname: "/comic/21243/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(
+        buildAdultWarningDocument(compressToBase64(adultChapterMarkup))
+      )
+      Object.defineProperty(globalThis, "DOMParser", {
         value: MockDomParser,
         configurable: true,
-      });
+      })
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
+      const chapterResult = extractChapterListFromDocument(document)
+      const chapters = Array.isArray(chapterResult)
+        ? chapterResult
+        : chapterResult.chapters
 
-      const chapterResult = await extractChapterList();
-      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
+      expect(chapters).toEqual([])
 
-      expect(chapters).toHaveLength(2);
-      expect(chapters.map(chapter => chapter.id)).toEqual(['900001', '900002']);
-      expect(chapters[0]?.volumeLabel).toBe('限制级');
-      expect(chapters[0]?.url).toBe('https://www.manhuagui.com/comic/21243/900001.html');
+      restoreBrowserGlobals(snapshot)
+    })
 
-      restoreBrowserGlobals(snapshot);
-    });
-
-    it('resolves relative adult __VIEWSTATE chapter links against Manhuagui instead of about:blank', async () => {
-      const snapshot = captureBrowserGlobals();
+    it("does not decode relative chapter links from adult __VIEWSTATE", async () => {
+      const snapshot = captureBrowserGlobals()
       const adultChapterMarkup = `
         <h4>限制级</h4>
         <div class="chapter-list" id="chapter-list-1">
@@ -581,229 +675,202 @@ export function registerManhuaguiCases(): void {
             <li><a href="/comic/21243/900001.html">第1话 夜幕</a></li>
           </ul>
         </div>
-      `;
+      `
 
       class MockDomParser {
         parseFromString(_html: string) {
-          const chapterContainer = buildMockChapterContainer([{
-            groupTitle: '限制级',
-            links: [
-              {
-                href: 'about:blank/comic/21243/900001.html',
-                getAttribute: (name: string) => (name === 'href' ? '/comic/21243/900001.html' : null),
-                textContent: '第1话 夜幕',
-              },
-            ],
-          }]);
+          const chapterContainer = buildMockChapterContainer([
+            {
+              groupTitle: "限制级",
+              links: [
+                {
+                  href: "about:blank/comic/21243/900001.html",
+                  getAttribute: (name: string) =>
+                    name === "href" ? "/comic/21243/900001.html" : null,
+                  textContent: "第1话 夜幕",
+                },
+              ],
+            },
+          ])
 
           return {
             querySelector: () => null,
             querySelectorAll: (selector: string) => {
-              return queryChapterContainers(selector, chapterContainer);
+              return queryChapterContainers(selector, chapterContainer)
             },
-          };
+          }
         }
       }
 
-      setTestWindow({ location: { pathname: '/comic/21243/', origin: 'https://www.manhuagui.com' } });
-      setTestDocument(buildAdultWarningDocument(compressToBase64(adultChapterMarkup)));
-      Object.defineProperty(globalThis, 'DOMParser', {
+      setTestWindow({
+        location: {
+          pathname: "/comic/21243/",
+          origin: "https://www.manhuagui.com",
+        },
+      })
+      setTestDocument(
+        buildAdultWarningDocument(compressToBase64(adultChapterMarkup))
+      )
+      Object.defineProperty(globalThis, "DOMParser", {
         value: MockDomParser,
         configurable: true,
-      });
+      })
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const extractChapterList = manhuaguiIntegration.content.series.extractChapterList;
-      expect(extractChapterList).toBeDefined();
-      if (!extractChapterList) {
-        throw new Error('Expected extractChapterList to be defined');
-      }
+      const chapterResult = extractChapterListFromDocument(document)
+      const chapters = Array.isArray(chapterResult)
+        ? chapterResult
+        : chapterResult.chapters
 
-      const chapterResult = await extractChapterList();
-      const chapters = Array.isArray(chapterResult) ? chapterResult : chapterResult.chapters;
+      expect(chapters).toEqual([])
 
-      expect(chapters).toHaveLength(1);
-      expect(chapters[0]).toMatchObject({
-        id: '900001',
-        url: 'https://www.manhuagui.com/comic/21243/900001.html',
-      });
+      restoreBrowserGlobals(snapshot)
+    })
 
-      restoreBrowserGlobals(snapshot);
-    });
+    it("parses packed viewer HTML into hamreus image URLs using the site config script", async () => {
+      const compressedKeys = compressToBase64("")
+      const chapterHtml = buildPackedChapterHtml(compressedKeys)
+      mockRateLimitedFetch.mockResolvedValueOnce(
+        makeHtmlResponse(
+          readerConfigScript,
+          "application/javascript; charset=utf-8"
+        )
+      )
 
-    it('parses packed viewer HTML into hamreus image URLs using the site config script', async () => {
-      const compressedKeys = compressToBase64('');
-      const chapterHtml = buildPackedChapterHtml(compressedKeys);
-      mockRateLimitedFetch.mockResolvedValueOnce(makeHtmlResponse(readerConfigScript, 'application/javascript; charset=utf-8'));
-
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const urls = await manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml?.({
-        chapterId: '760110',
-        chapterUrl: 'https://www.manhuagui.com/comic/28004/760110.html',
-        chapterHtml,
-      });
+      const { manhuaguiIntegration } =
+        await import("@/src/site-integrations/manhuagui")
+      const urls =
+        await manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml?.({
+          chapterId: "760110",
+          chapterUrl: "https://www.manhuagui.com/comic/28004/760110.html",
+          chapterHtml,
+        })
 
       expect(urls).toEqual([
-        'https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/001.jpg.webp?e=1712345678&m=abc123',
-        'https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/002.jpg.webp?e=1712345678&m=abc123',
-      ]);
+        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/001.jpg.webp?e=1712345678&m=abc123",
+        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/002.jpg.webp?e=1712345678&m=abc123",
+      ])
       expect(mockRateLimitedFetch).toHaveBeenCalledWith(
-        'https://cf.mhgui.com/scripts/config_TEST.js',
-        'chapter',
-        undefined,
-        undefined,
-      );
-    });
+        "manhuagui",
+        "https://cf.mhgui.com/scripts/config_TEST.js",
+        "chapter",
+        { credentials: "omit" },
+        undefined
+      )
+    })
 
-    it('resolveImageUrls fetches chapter HTML and the config script to reconstruct filePath', async () => {
-      const compressedKeys = compressToBase64('');
+    it("resolveImageUrls fetches chapter HTML and the config script to reconstruct filePath", async () => {
+      const compressedKeys = compressToBase64("")
       mockRateLimitedFetch
-        .mockResolvedValueOnce(makeHtmlResponse(buildPackedChapterHtml(compressedKeys, '/ps4/z/zhoushuhz_jjx/第02回/')))
-        .mockResolvedValueOnce(makeHtmlResponse(readerConfigScript, 'application/javascript; charset=utf-8'));
+        .mockResolvedValueOnce(
+          makeHtmlResponse(
+            buildPackedChapterHtml(
+              compressedKeys,
+              "/ps4/z/zhoushuhz_jjx/第02回/"
+            )
+          )
+        )
+        .mockResolvedValueOnce(
+          makeHtmlResponse(
+            readerConfigScript,
+            "application/javascript; charset=utf-8"
+          )
+        )
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const urls = await manhuaguiIntegration.background.chapter.resolveImageUrls?.({
-        id: '760111',
-        url: 'https://www.manhuagui.com/comic/28004/760111.html',
-      });
+      const { manhuaguiIntegration } =
+        await import("@/src/site-integrations/manhuagui")
+      const urls =
+        await manhuaguiIntegration.background.chapter.resolveImageUrls?.({
+          id: "760111",
+          url: "https://www.manhuagui.com/comic/28004/760111.html",
+        })
 
       expect(urls).toEqual([
-        'https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第02回/001.jpg.webp?e=1712345678&m=abc123',
-        'https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第02回/002.jpg.webp?e=1712345678&m=abc123',
-      ]);
+        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第02回/001.jpg.webp?e=1712345678&m=abc123",
+        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第02回/002.jpg.webp?e=1712345678&m=abc123",
+      ])
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         1,
-        'https://www.manhuagui.com/comic/28004/760111.html',
-        'chapter',
+        "manhuagui",
+        "https://www.manhuagui.com/comic/28004/760111.html",
+        "chapter",
         undefined,
-        undefined,
-      );
+        undefined
+      )
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         2,
-        'https://cf.mhgui.com/scripts/config_TEST.js',
-        'chapter',
-        undefined,
-        undefined,
-      );
-    });
+        "manhuagui",
+        "https://cf.mhgui.com/scripts/config_TEST.js",
+        "chapter",
+        { credentials: "omit" },
+        undefined
+      )
+    })
 
-    it('downloads hamreus images with the Manhuagui referrer contract', async () => {
+    it("downloads hamreus images with the Manhuagui referrer contract", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,
-        headers: { get: (name: string) => (name === 'content-type' ? 'image/webp' : null) },
+        headers: {
+          get: (name: string) =>
+            name === "content-type" ? "image/webp" : null,
+        },
         arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
-      });
+      })
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-      const result = await manhuaguiIntegration.background.chapter.downloadImage(
-        'https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456',
-      );
+      const { manhuaguiIntegration } =
+        await import("@/src/site-integrations/manhuagui")
+      const result =
+        await manhuaguiIntegration.background.chapter.downloadImage(
+          "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
+        )
 
       expect(result).toMatchObject({
-        filename: '003.jpg',
-        mimeType: 'image/webp',
-      });
-      expect(result.data.byteLength).toBe(4);
+        filename: "003.jpg",
+        mimeType: "image/webp",
+      })
+      expect(result.data.byteLength).toBe(4)
 
-      const [requestUrl, scope, requestInit] = mockRateLimitedFetch.mock.calls[0] as [string, string, RequestInit];
-      expect(requestUrl).toBe('https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456');
-      expect(scope).toBe('image');
-      expect(requestInit.referrer).toBe('https://www.manhuagui.com/');
-      expect(requestInit.referrerPolicy).toBe('strict-origin-when-cross-origin');
+      const [integrationId, requestUrl, scope, requestInit] =
+        mockRateLimitedFetch.mock.calls[0] as [
+          string,
+          string,
+          string,
+          RequestInit,
+        ]
+      expect(integrationId).toBe("manhuagui")
+      expect(requestUrl).toBe(
+        "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
+      )
+      expect(scope).toBe("image")
+      expect(requestInit.referrer).toBe("https://www.manhuagui.com/")
+      expect(requestInit.referrerPolicy).toBe("strict-origin-when-cross-origin")
       expect(requestInit.headers).toEqual({
-        referer: 'https://www.manhuagui.com/',
-      });
-    });
+        referer: "https://www.manhuagui.com/",
+      })
+    })
 
-    it('rejects non-raster image responses before returning downloaded image data', async () => {
+    it("rejects non-raster image responses before returning downloaded image data", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,
-        headers: { get: (name: string) => (name === 'content-type' ? 'text/html; charset=utf-8' : null) },
-        arrayBuffer: async () => new TextEncoder().encode('<html>captcha</html>').buffer,
-      });
+        headers: {
+          get: (name: string) =>
+            name === "content-type" ? "text/html; charset=utf-8" : null,
+        },
+        arrayBuffer: async () =>
+          new TextEncoder().encode("<html>captcha</html>").buffer,
+      })
 
-      const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
+      const { manhuaguiIntegration } =
+        await import("@/src/site-integrations/manhuagui")
 
       await expect(
         manhuaguiIntegration.background.chapter.downloadImage(
-          'https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456',
-        ),
-      ).rejects.toThrow('Unsupported MIME type: text/html');
-    });
+          "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
+        )
+      ).rejects.toThrow("Unsupported MIME type: text/html")
+    })
 
-    describe('adult-gate cookie priming', () => {
-      it('prepareDispatchContext sets the isAdult cookie on .manhuagui.com', async () => {
-        const cookieSet = vi.fn().mockResolvedValue({});
-        const snapshot = installChromeMock({ cookies: { set: cookieSet } });
-
-        try {
-          const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-          const dispatchContext = await manhuaguiIntegration.background.prepareDispatchContext?.({
-            taskId: 'task-1',
-            seriesKey: 'manhuagui#28004',
-            chapter: { id: '760110', url: 'https://www.manhuagui.com/comic/28004/760110.html', title: '第1话 启程', comicInfo: {} },
-            settingsSnapshot: {} as never,
-          });
-
-          expect(dispatchContext).toBeUndefined();
-          expect(cookieSet).toHaveBeenCalledTimes(1);
-          const [cookiePayload] = cookieSet.mock.calls[0] as [chrome.cookies.SetDetails];
-          expect(cookiePayload).toMatchObject({
-            url: 'https://www.manhuagui.com',
-            name: 'isAdult',
-            value: '1',
-            domain: '.manhuagui.com',
-            path: '/',
-          });
-          expect(typeof cookiePayload.expirationDate).toBe('number');
-          const secondsFromNow = (cookiePayload.expirationDate ?? 0) - Math.floor(Date.now() / 1000);
-          expect(secondsFromNow).toBeGreaterThan(60 * 60 * 24 * 360);
-          expect(secondsFromNow).toBeLessThan(60 * 60 * 24 * 370);
-        } finally {
-          restoreChromeMock(snapshot);
-        }
-      });
-
-      it('prepareDispatchContext no-ops gracefully when chrome.cookies is unavailable', async () => {
-        const previousChrome = (globalThis as { chrome?: unknown }).chrome;
-        (globalThis as { chrome?: unknown }).chrome = {} as unknown as typeof chrome;
-
-        try {
-          const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-          await expect(
-            manhuaguiIntegration.background.prepareDispatchContext?.({
-              taskId: 'task-1',
-              seriesKey: 'manhuagui#28004',
-              chapter: { id: '760110', url: 'https://www.manhuagui.com/comic/28004/760110.html', title: '第1话 启程', comicInfo: {} },
-              settingsSnapshot: {} as never,
-            }),
-          ).resolves.toBeUndefined();
-        } finally {
-          (globalThis as { chrome?: unknown }).chrome = previousChrome;
-        }
-      });
-
-      it('prepareDispatchContext swallows chrome.cookies.set rejections', async () => {
-        const cookieSet = vi.fn().mockRejectedValue(new Error('quota exceeded'));
-        const snapshot = installChromeMock({ cookies: { set: cookieSet } });
-
-        try {
-          const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-          await expect(
-            manhuaguiIntegration.background.prepareDispatchContext?.({
-              taskId: 'task-1',
-              seriesKey: 'manhuagui#28004',
-              chapter: { id: '760110', url: 'https://www.manhuagui.com/comic/28004/760110.html', title: '第1话 启程', comicInfo: {} },
-              settingsSnapshot: {} as never,
-            }),
-          ).resolves.toBeUndefined();
-          expect(cookieSet).toHaveBeenCalledTimes(1);
-        } finally {
-          restoreChromeMock(snapshot);
-        }
-      });
-
-      it('parseImageUrlsFromHtml raises an actionable age-gate error when the cookie was not honored', async () => {
+    describe("adult-gate handling", () => {
+      it("parseImageUrlsFromHtml raises an actionable age-gate error when the cookie was not honored", async () => {
         const ageGateHtml = `
           <html>
             <body>
@@ -813,49 +880,25 @@ export function registerManhuaguiCases(): void {
               </div>
             </body>
           </html>
-        `;
+        `
 
-        const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-        const parseImageUrlsFromHtml = manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml;
-        expect(parseImageUrlsFromHtml).toBeDefined();
+        const { manhuaguiIntegration } =
+          await import("@/src/site-integrations/manhuagui")
+        const parseImageUrlsFromHtml =
+          manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml
+        expect(parseImageUrlsFromHtml).toBeDefined()
         if (!parseImageUrlsFromHtml) {
-          throw new Error('Expected parseImageUrlsFromHtml to be defined');
+          throw new Error("Expected parseImageUrlsFromHtml to be defined")
         }
 
         await expect(
           parseImageUrlsFromHtml({
-            chapterId: '760110',
-            chapterUrl: 'https://www.manhuagui.com/comic/28004/760110.html',
+            chapterId: "760110",
+            chapterUrl: "https://www.manhuagui.com/comic/28004/760110.html",
             chapterHtml: ageGateHtml,
-          }),
-        ).rejects.toThrow(/age-gate not bypassed/);
-      });
-
-      it('resolveImageUrls proactively primes the adult cookie before fetching the chapter', async () => {
-        const cookieSet = vi.fn().mockResolvedValue({});
-        const snapshot = installChromeMock({ cookies: { set: cookieSet } });
-
-        try {
-          const { manhuaguiIntegration } = await import('@/src/site-integrations/manhuagui');
-          await manhuaguiIntegration.background.prepareDispatchContext?.({
-            taskId: 'task-1',
-            seriesKey: 'manhuagui#28004',
-            chapter: { id: '760110', url: 'https://www.manhuagui.com/comic/28004/760110.html', title: '第1话 启程', comicInfo: {} },
-            settingsSnapshot: {} as never,
-          });
-
-          expect(cookieSet).toHaveBeenCalledWith(
-            expect.objectContaining({
-              url: 'https://www.manhuagui.com',
-              name: 'isAdult',
-              value: '1',
-              domain: '.manhuagui.com',
-            }),
-          );
-        } finally {
-          restoreChromeMock(snapshot);
-        }
-      });
-    });
-  });
+          })
+        ).rejects.toThrow(/complete the site consent prompt/)
+      })
+    })
+  })
 }

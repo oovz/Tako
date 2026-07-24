@@ -1,9 +1,9 @@
-import { beforeEach } from 'vitest';
-import { registerManhuaguiCases } from './manhuagui.cases';
-import { resetManhuaguiTestEnvironment } from './manhuagui-test-setup';
+import { beforeEach } from "vitest"
+import { registerManhuaguiCases } from "./manhuagui.cases"
+import { resetManhuaguiTestEnvironment } from "./manhuagui-test-setup"
 
 beforeEach(() => {
-  resetManhuaguiTestEnvironment();
-});
+  resetManhuaguiTestEnvironment()
+})
 
-registerManhuaguiCases();
+registerManhuaguiCases()

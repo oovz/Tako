@@ -1,228 +1,218 @@
 /**
  * Unit tests for site-integration-registry.ts
- * 
+ *
  * Tests the idempotent registration behavior to prevent duplicate logs
  * when the same site integration is registered multiple times (e.g., during HMR).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { SiteIntegration } from '@/src/types/site-integrations'
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import type { RuntimeSiteIntegration } from "@/src/types/site-integrations"
 
 // Mock the logger
-vi.mock('@/src/runtime/logger', () => ({
-    default: {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-    },
+vi.mock("@/src/runtime/logger", () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
 }))
 
 /**
  * Helper to create a valid mock SiteIntegration with all required properties
  */
-function createMockSiteIntegration(id: string): SiteIntegration {
-    return {
-        id,
-        content: {
-            name: 'Test',
-            series: {
-                getSeriesId: () => 'id',
-                extractSeriesMetadata: () => ({ title: 'Test' }),
-                extractChapterList: () => [],
-            },
-        },
-        background: {
-            name: 'Test Background',
-            chapter: {
-                parseImageUrlsFromHtml: async () => [],
-                processImageUrls: async () => [],
-                downloadImage: async () => ({ data: new ArrayBuffer(0), filename: 'test.jpg', mimeType: 'image/jpeg' }),
-            },
-        },
-    }
+function createMockSiteIntegration(id: string): RuntimeSiteIntegration {
+  return {
+    id,
+    background: {
+      name: "Test Background",
+    },
+  }
 }
 
-describe('SiteIntegrationRegistry idempotent registration', () => {
-    let siteIntegrationRegistry: typeof import('@/src/runtime/site-integration-registry').siteIntegrationRegistry
-    let loggerMock: typeof import('@/src/runtime/logger').default
+describe("SiteIntegrationRegistry idempotent registration", () => {
+  let siteIntegrationRegistry: typeof import("@/src/runtime/site-integration-registry").siteIntegrationRegistry
+  let loggerMock: typeof import("@/src/runtime/logger").default
 
-    beforeEach(async () => {
-        // Reset module registry to get fresh singleton state
-        vi.resetModules()
+  beforeEach(async () => {
+    // Reset module registry to get fresh singleton state
+    vi.resetModules()
 
-        // Re-setup mocks
-        vi.doMock('@/src/runtime/logger', () => ({
-            default: {
-                info: vi.fn(),
-                warn: vi.fn(),
-                error: vi.fn(),
-                debug: vi.fn(),
-            },
-        }))
+    // Re-setup mocks
+    vi.doMock("@/src/runtime/logger", () => ({
+      default: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      },
+    }))
 
-        const registryModule = await import('@/src/runtime/site-integration-registry')
-        const loggerModule = await import('@/src/runtime/logger')
+    const registryModule =
+      await import("@/src/runtime/site-integration-registry")
+    const loggerModule = await import("@/src/runtime/logger")
 
-        siteIntegrationRegistry = registryModule.siteIntegrationRegistry
-        loggerMock = loggerModule.default
-        siteIntegrationRegistry.clear() // Clear any existing registrations
+    siteIntegrationRegistry = registryModule.siteIntegrationRegistry
+    loggerMock = loggerModule.default
+    siteIntegrationRegistry.clear() // Clear any existing registrations
+  })
+
+  it("logs metadata-only registration at debug level on first call", () => {
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
     })
 
-    it('logs metadata-only registration at debug level on first call', () => {
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-        })
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      "📋 Registering site integration metadata: Test Integration"
+    )
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      "📋 Site integration metadata test-integration registered"
+    )
+    expect(loggerMock.info).not.toHaveBeenCalled()
+  })
 
-        expect(loggerMock.debug).toHaveBeenCalledWith(
-            '📋 Registering site integration metadata: Test Integration'
-        )
-        expect(loggerMock.debug).toHaveBeenCalledWith(
-            '📋 Site integration metadata test-integration registered'
-        )
-        expect(loggerMock.info).not.toHaveBeenCalled()
+  it("skips duplicate metadata-only registration without logging info", () => {
+    // First registration (metadata-only)
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
     })
 
-    it('skips duplicate metadata-only registration without logging info', () => {
-        // First registration (metadata-only)
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-        })
+    vi.clearAllMocks()
 
-        vi.clearAllMocks()
-
-        // Second registration (same metadata-only)
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-        })
-
-        // Should log debug skip message, not info registration
-        expect(loggerMock.debug).toHaveBeenCalledWith(
-            '⏭️ Site integration metadata test-integration already registered, skipping'
-        )
-        expect(loggerMock.info).not.toHaveBeenCalledWith(
-            expect.stringContaining('Registering site integration')
-        )
+    // Second registration (same metadata-only)
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
     })
 
-    it('skips duplicate full site integration registration for the same id', () => {
-        const mockIntegration = createMockSiteIntegration('test-integration')
+    // Should log debug skip message, not info registration
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      "⏭️ Site integration metadata test-integration already registered, skipping"
+    )
+    expect(loggerMock.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Registering site integration")
+    )
+  })
 
-        // First registration
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
+  it("skips duplicate full site integration registration for the same id", () => {
+    const mockIntegration = createMockSiteIntegration("test-integration")
 
-        vi.clearAllMocks()
-
-        // Second registration (same id)
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
-
-        // Should log debug skip message, not info registration
-        expect(loggerMock.debug).toHaveBeenCalledWith(
-            '⏭️ Site integration test-integration already registered, skipping'
-        )
-        expect(loggerMock.info).not.toHaveBeenCalledWith(
-            expect.stringContaining('Registering site integration')
-        )
+    // First registration
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+      integration: mockIntegration,
     })
 
-    it('upgrades metadata-only registration to full site integration', () => {
-        // First registration (metadata-only)
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-        })
+    vi.clearAllMocks()
 
-        vi.clearAllMocks()
-
-        const mockIntegration = createMockSiteIntegration('test-integration')
-
-        // Second registration (with full site integration)
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
-
-        // Should log info because it's upgrading from metadata-only to full runtime registration
-        expect(loggerMock.info).toHaveBeenCalledWith(
-            '📝 Registering site integration runtime: Test Integration'
-        )
-
-        // Verify the integration was updated
-        const info = siteIntegrationRegistry.findById('test-integration')
-        expect(info?.integration).toBeDefined()
+    // Second registration (same id)
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+      integration: mockIntegration,
     })
 
-    it('does not log metadata-only registration as a completed runtime registration', () => {
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-        })
+    // Should log debug skip message, not info registration
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      "⏭️ Site integration test-integration already registered, skipping"
+    )
+    expect(loggerMock.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Registering site integration")
+    )
+  })
 
-        const mockIntegration = createMockSiteIntegration('test-integration')
-
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
-
-        const successfulRegistrationLogs = vi.mocked(loggerMock.info).mock.calls
-            .map(([message]) => message)
-            .filter(message => String(message).includes('registered successfully'))
-
-        expect(successfulRegistrationLogs).toEqual([
-            '✅ Site integration test-integration registered successfully',
-        ])
+  it("upgrades metadata-only registration to full site integration", () => {
+    // First registration (metadata-only)
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
     })
 
-    it('keeps an existing full integration when duplicate metadata differs', () => {
-        const mockIntegration = createMockSiteIntegration('test-integration')
+    vi.clearAllMocks()
 
-        // First registration
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
+    const mockIntegration = createMockSiteIntegration("test-integration")
 
-        vi.clearAllMocks()
-
-        // Second registration with different display metadata
-        siteIntegrationRegistry.register({
-            id: 'test-integration',
-            name: 'Renamed Test Integration',
-            author: 'Test',
-            integration: mockIntegration,
-        })
-
-        expect(loggerMock.debug).toHaveBeenCalledWith(
-            '⏭️ Site integration test-integration already registered, skipping'
-        )
-        expect(loggerMock.info).not.toHaveBeenCalledWith(
-            expect.stringContaining('Registering site integration')
-        )
-        expect(siteIntegrationRegistry.findById('test-integration')?.name).toBe('Test Integration')
+    // Second registration (with full site integration)
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+      integration: mockIntegration,
     })
+
+    // Should log info because it's upgrading from metadata-only to full runtime registration
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "📝 Registering site integration runtime: Test Integration"
+    )
+
+    // Verify the integration was updated
+    const info = siteIntegrationRegistry.findById("test-integration")
+    expect(info?.integration).toBeDefined()
+  })
+
+  it("does not log metadata-only registration as a completed runtime registration", () => {
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+    })
+
+    const mockIntegration = createMockSiteIntegration("test-integration")
+
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+      integration: mockIntegration,
+    })
+
+    const successfulRegistrationLogs = vi
+      .mocked(loggerMock.info)
+      .mock.calls.map(([message]) => message)
+      .filter((message) => String(message).includes("registered successfully"))
+
+    expect(successfulRegistrationLogs).toEqual([
+      "✅ Site integration test-integration registered successfully",
+    ])
+  })
+
+  it("keeps an existing full integration when duplicate metadata differs", () => {
+    const mockIntegration = createMockSiteIntegration("test-integration")
+
+    // First registration
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Test Integration",
+      author: "Test",
+      integration: mockIntegration,
+    })
+
+    vi.clearAllMocks()
+
+    // Second registration with different display metadata
+    siteIntegrationRegistry.register({
+      id: "test-integration",
+      name: "Renamed Test Integration",
+      author: "Test",
+      integration: mockIntegration,
+    })
+
+    expect(loggerMock.debug).toHaveBeenCalledWith(
+      "⏭️ Site integration test-integration already registered, skipping"
+    )
+    expect(loggerMock.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Registering site integration")
+    )
+    expect(siteIntegrationRegistry.findById("test-integration")?.name).toBe(
+      "Test Integration"
+    )
+  })
 })
-

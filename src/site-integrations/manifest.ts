@@ -1,84 +1,126 @@
 /**
  * Unified Site Integration Manifest - Single Source of Truth (SSOT)
- * 
+ *
  * This file is the authoritative source for all site integration metadata including:
  * - Site integration identification (id, name, author)
  * - URL patterns (domains, seriesMatches, excludeMatches)
  * - Rate limit policies
  * - Behavioral flags (handlesOwnRetries)
- * 
- * All other systems (site-integration initialization, url-matcher, WXT content scripts)
+ *
+ * All other systems (site-integration initialization, URL matching, permissions,
+ * and static background/offscreen registries)
  * derive their configuration from this manifest.
- * 
+ *
  * To add a new site integration:
  * 1. Add entry to SITE_INTEGRATION_MANIFESTS below
  * 2. Create implementation in src/site-integrations/
  * 3. Add the site runtime exports to the static per-context registries under src/runtime/
  */
 
-import type { RateScopePolicy } from '../types/rate-policy';
+import type { RateScopePolicy } from "../types/rate-policy"
 
 export interface SiteIntegrationUrlPatterns {
-  domains: string[];
-  seriesMatches: string[];
-  excludeMatches?: string[];
+  domains: string[]
+  seriesMatches: string[]
+  excludeMatches?: string[]
 }
 
-const MANGADEX_DOMAINS: string[] = Array.from(
-  new Set<string>(['mangadex.org'])
-);
+const MANGADEX_DOMAINS: string[] = Array.from(new Set<string>(["mangadex.org"]))
 
-const PIXIV_COMIC_DOMAINS: string[] = ['comic.pixiv.net'];
-const SHONEN_JUMP_PLUS_DOMAINS: string[] = ['shonenjumpplus.com'];
-const MANHUAGUI_DOMAINS: string[] = ['www.manhuagui.com', 'manhuagui.com'];
-const COMICNETTAI_DOMAINS: string[] = ['www.comicnettai.com'];
+const PIXIV_COMIC_DOMAINS: string[] = ["comic.pixiv.net"]
+const SHONEN_JUMP_PLUS_DOMAINS: string[] = ["shonenjumpplus.com"]
+const MANHUAGUI_DOMAINS: string[] = ["www.manhuagui.com", "manhuagui.com"]
+const COMICNETTAI_DOMAINS: string[] = ["www.comicnettai.com"]
 
-export type SettingsFieldType = 'boolean' | 'string' | 'number' | 'select' | 'multiselect';
+export type SettingsFieldType =
+  "boolean" | "string" | "number" | "select" | "multiselect"
 
-export interface SettingsFieldSchema {
-  id: string;
-  label: string;
-  description?: string;
-  type: SettingsFieldType;
-  defaultValue: string | number | boolean | string[];
-  options?: Array<{ label: string; value: string }>;
+export type SiteIntegrationMaturity = "experimental" | "stable"
+export type SiteIntegrationImplementationType =
+  "official-api" | "unofficial-api" | "dom-scraping" | "hybrid"
+
+interface SettingsFieldBase {
+  id: string
+  label: string
+  description?: string
 }
+
+export interface SettingsFieldOption {
+  label: string
+  value: string
+}
+
+export type SettingsFieldSchema =
+  | (SettingsFieldBase & {
+      type: "boolean"
+      defaultValue: boolean
+      options?: never
+    })
+  | (SettingsFieldBase & {
+      type: "string"
+      defaultValue: string
+      options?: never
+    })
+  | (SettingsFieldBase & {
+      type: "number"
+      defaultValue: number
+      options?: never
+    })
+  | (SettingsFieldBase & {
+      type: "select"
+      defaultValue: string
+      options: [SettingsFieldOption, ...SettingsFieldOption[]]
+    })
+  | (SettingsFieldBase & {
+      type: "multiselect"
+      defaultValue: string[]
+      options: [SettingsFieldOption, ...SettingsFieldOption[]]
+    })
 
 /**
  * Complete site integration manifest - all metadata in one place
  */
 export interface SiteIntegrationManifest {
   // Identity
-  id: string;
-  name: string;
-  author: string;
+  id: string
+  name: string
+  author: string
+  version: string
+  maturity: SiteIntegrationMaturity
+  shipped: boolean
+  enabledByDefault: boolean
+  implementationType: SiteIntegrationImplementationType
 
   // URL Patterns
-  patterns: SiteIntegrationUrlPatterns;
+  patterns: SiteIntegrationUrlPatterns
 
   // Rate limiting policies (site integration defaults, can be overridden by user settings)
   policyDefaults: {
-    image: RateScopePolicy;
-    chapter: RateScopePolicy;
-  };
+    image: RateScopePolicy
+    chapter: RateScopePolicy
+  }
 
   // Behavioral flags
   /**
    * When true, the extension's default retry wrapper is skipped.
    * The site integration implements internal retry logic (e.g., MangaDex parses X-RateLimit-Retry-After).
    */
-  handlesOwnRetries?: boolean;
+  handlesOwnRetries?: boolean
 
-  /**
-   * Developer-level integration toggle. Defaults to true when omitted.
-   */
-  enabled?: boolean;
+  /** Whether the resolver must read live page state through a one-shot probe. */
+  requiresPageProbe: boolean
+
+  /** Exact HTTPS origins used by provider APIs and fixed asset hosts. */
+  requiredOrigins: string[]
+
+  /** Whether this integration needs the optional HTTPS-wide asset permission. */
+  requiresBroadHttpsPermission?: boolean
 
   /**
    * Optional integration-specific custom settings shown in Options.
    * Values are persisted in chrome.storage.local under siteIntegrationSettings[siteId][fieldId].
    */
-  customSettings?: SettingsFieldSchema[];
+  customSettings?: SettingsFieldSchema[]
 
   /**
    * Runtime surfaces implemented by this integration.
@@ -87,27 +129,38 @@ export interface SiteIntegrationManifest {
    * runtime files required by each browser extension context.
    */
   runtimes: {
-    content: boolean;
-    background: boolean;
-    offscreen: boolean;
-  };
+    background: boolean
+    offscreen: boolean
+  }
 }
 
 /**
  * All site integration manifests - THE SINGLE SOURCE OF TRUTH
- * 
+ *
  * This is the only place where site integration configuration is defined.
  * All other files must derive their data from this array.
  */
 export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
-    id: 'mangadex',
-    name: 'MangaDex API',
-    author: 'TMD Team',
+    id: "mangadex",
+    name: "MangaDex API",
+    author: "TMD Team",
+    version: "1.1.0",
+    maturity: "stable",
+    shipped: true,
+    enabledByDefault: false,
+    implementationType: "official-api",
+    requiresPageProbe: true,
+    requiredOrigins: [
+      "https://mangadex.org/*",
+      "https://*.mangadex.org/*",
+      "https://api.mangadex.network/*",
+    ],
+    requiresBroadHttpsPermission: true,
     patterns: {
       domains: MANGADEX_DOMAINS,
-      seriesMatches: ['/title/*'],
-      excludeMatches: ['/chapter/*'],
+      seriesMatches: ["/title/*"],
+      excludeMatches: ["/chapter/*"],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 500 },
@@ -116,129 +169,268 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
     handlesOwnRetries: true,
     customSettings: [
       {
-        id: 'imageQuality',
-        label: 'Image quality',
-        description: 'Choose MangaDex image quality preference.',
-        type: 'select',
-        defaultValue: 'data-saver',
+        id: "imageQuality",
+        label: "Image quality",
+        description: "Choose MangaDex image quality preference.",
+        type: "select",
+        defaultValue: "data-saver",
         options: [
-          { label: 'Data saver', value: 'data-saver' },
-          { label: 'Full quality', value: 'data' },
+          { label: "Data saver", value: "data-saver" },
+          { label: "Full quality", value: "data" },
         ],
       },
       {
-        id: 'chapterLanguageFilter',
-        label: 'Chapter language filter',
-        description: 'Preferred chapter languages (BCP-47 codes).',
-        type: 'multiselect',
+        id: "chapterLanguageFilter",
+        label: "Chapter language filter",
+        description: "Preferred chapter languages (BCP-47 codes).",
+        type: "multiselect",
         defaultValue: [],
         options: [
-          { label: 'English (en)', value: 'en' },
-          { label: 'Japanese (ja)', value: 'ja' },
-          { label: 'Korean (ko)', value: 'ko' },
-          { label: 'Chinese (zh)', value: 'zh' },
+          { label: "English (en)", value: "en" },
+          { label: "Japanese (ja)", value: "ja" },
+          { label: "Korean (ko)", value: "ko" },
+          { label: "Chinese (zh)", value: "zh" },
         ],
       },
       {
-        id: 'autoReadMangaDexSettings',
-        label: 'Auto-read MangaDex website settings',
-        description: 'Use MangaDex website local settings when available.',
-        type: 'boolean',
+        id: "autoReadMangaDexSettings",
+        label: "Auto-read MangaDex website settings",
+        description: "Use MangaDex website local settings when available.",
+        type: "boolean",
         defaultValue: true,
       },
     ],
     runtimes: {
-      content: true,
       background: true,
       offscreen: true,
     },
   },
   {
-    id: 'pixiv-comic',
-    name: 'Pixiv Comic',
-    author: 'TMD Team',
+    id: "pixiv-comic",
+    name: "Pixiv Comic",
+    author: "TMD Team",
+    version: "1.1.0",
+    maturity: "stable",
+    shipped: true,
+    enabledByDefault: true,
+    implementationType: "unofficial-api",
+    requiresPageProbe: false,
+    requiredOrigins: [
+      "https://comic.pixiv.net/*",
+      "https://pximg.net/*",
+      "https://*.pximg.net/*",
+    ],
     patterns: {
       domains: PIXIV_COMIC_DOMAINS,
-      seriesMatches: ['/works/*', '/viewer/stories/*', '/episodes/*'],
+      seriesMatches: ["/works/*"],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 2000 },
     },
     runtimes: {
-      content: true,
       background: true,
       offscreen: true,
     },
   },
   {
-    id: 'shonenjumpplus',
-    name: 'Shonen Jump+',
-    author: 'TMD Team',
+    id: "shonenjumpplus",
+    name: "Shonen Jump+",
+    author: "TMD Team",
+    version: "1.1.0",
+    maturity: "stable",
+    shipped: true,
+    enabledByDefault: true,
+    implementationType: "hybrid",
+    requiresPageProbe: false,
+    requiredOrigins: [
+      "https://shonenjumpplus.com/*",
+      "https://cdn-ak-img.shonenjumpplus.com/*",
+      "https://cdn-ak.shonenjumpplus.com/*",
+    ],
     patterns: {
       domains: SHONEN_JUMP_PLUS_DOMAINS,
-      seriesMatches: ['/episode/*'],
+      // Only episode pages expose the SSR episode payload and pagination data
+      // used by the fetched-HTML resolver. Homepage and /series* catalog routes
+      // are intentionally unsupported.
+      seriesMatches: ["/episode/*"],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 2000 },
     },
     runtimes: {
-      content: true,
       background: true,
       offscreen: true,
     },
   },
   {
-    id: 'manhuagui',
-    name: 'Manhuagui',
-    author: 'TMD Team',
+    id: "manhuagui",
+    name: "Manhuagui",
+    author: "TMD Team",
+    version: "1.1.0",
+    maturity: "stable",
+    shipped: true,
+    enabledByDefault: true,
+    implementationType: "dom-scraping",
+    requiresPageProbe: true,
+    requiredOrigins: [
+      "https://www.manhuagui.com/*",
+      "https://manhuagui.com/*",
+      "https://cf.mhgui.com/*",
+      "https://hamreus.com/*",
+      "https://*.hamreus.com/*",
+    ],
     patterns: {
       domains: MANHUAGUI_DOMAINS,
-      seriesMatches: ['/comic/*'],
-      excludeMatches: ['/comic/*/*.html'],
+      seriesMatches: ["/comic/*"],
+      excludeMatches: ["/comic/*/*.html"],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 1000 },
     },
     runtimes: {
-      content: true,
       background: true,
       offscreen: true,
     },
   },
   {
-    id: 'comicnettai',
-    name: 'Comic Nettai',
-    author: 'TMD Team',
+    id: "comicnettai",
+    name: "Comic Nettai",
+    author: "TMD Team",
+    version: "1.1.0",
+    maturity: "stable",
+    shipped: true,
+    enabledByDefault: true,
+    implementationType: "hybrid",
+    requiresPageProbe: false,
+    requiredOrigins: [
+      "https://www.comicnettai.com/*",
+      "https://cdn.comicnettai.com/*",
+    ],
     patterns: {
       domains: COMICNETTAI_DOMAINS,
-      seriesMatches: ['/book/*'],
-      excludeMatches: ['/publus/*'],
+      seriesMatches: ["/book/*"],
+      excludeMatches: ["/publus/*"],
     },
     policyDefaults: {
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 1000 },
     },
     runtimes: {
-      content: true,
       background: true,
       offscreen: true,
     },
   },
 
   // Keep literal types for site integration IDs
-];
+]
+
+export function assertValidSettingsFieldValue(
+  schema: SettingsFieldSchema,
+  value: unknown
+): void {
+  const invalid = () => {
+    throw new Error(
+      `Invalid value for site integration setting "${schema.id}" (${schema.type})`
+    )
+  }
+
+  if (schema.type === "boolean") {
+    if (typeof value !== "boolean") invalid()
+    return
+  }
+  if (schema.type === "string") {
+    if (typeof value !== "string") invalid()
+    return
+  }
+  if (schema.type === "number") {
+    if (typeof value !== "number" || !Number.isFinite(value)) invalid()
+    return
+  }
+
+  const allowedValues = new Set(schema.options.map((option) => option.value))
+  if (schema.type === "select") {
+    if (typeof value !== "string" || !allowedValues.has(value)) invalid()
+    return
+  }
+
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (entry) => typeof entry !== "string" || !allowedValues.has(entry)
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    invalid()
+  }
+}
+
+export function assertValidSettingsFieldSchema(
+  schema: SettingsFieldSchema
+): void {
+  const runtimeSchema = schema as SettingsFieldBase & {
+    type: SettingsFieldType
+    options?: unknown
+  }
+  if (!schema.id.trim() || !schema.label.trim()) {
+    throw new Error("Site integration setting fields require id and label")
+  }
+
+  if (schema.type === "select" || schema.type === "multiselect") {
+    if (!Array.isArray(schema.options) || schema.options.length === 0) {
+      throw new Error(
+        `Site integration setting "${schema.id}" requires non-empty options`
+      )
+    }
+    const values = new Set<string>()
+    for (const option of schema.options) {
+      if (!option.label.trim() || !option.value.trim()) {
+        throw new Error(
+          `Site integration setting "${schema.id}" has an invalid option`
+        )
+      }
+      if (values.has(option.value)) {
+        throw new Error(
+          `Site integration setting "${schema.id}" has duplicate option value "${option.value}"`
+        )
+      }
+      values.add(option.value)
+    }
+  } else if (runtimeSchema.options !== undefined) {
+    throw new Error(
+      `Site integration setting "${runtimeSchema.id}" cannot declare options for type "${runtimeSchema.type}"`
+    )
+  }
+
+  assertValidSettingsFieldValue(schema, schema.defaultValue)
+}
+
+for (const manifest of SITE_INTEGRATION_MANIFESTS) {
+  const fieldIds = new Set<string>()
+  for (const field of manifest.customSettings ?? []) {
+    assertValidSettingsFieldSchema(field)
+    if (fieldIds.has(field.id)) {
+      throw new Error(
+        `Site integration "${manifest.id}" has duplicate setting id "${field.id}"`
+      )
+    }
+    fieldIds.add(field.id)
+  }
+}
 
 // Type for site integration IDs (derived from manifest)
-export type SiteIntegrationId = typeof SITE_INTEGRATION_MANIFESTS[number]['id'];
+export type SiteIntegrationId =
+  (typeof SITE_INTEGRATION_MANIFESTS)[number]["id"]
 
 /**
  * Get manifest by site integration ID
  */
-export function getSiteIntegrationManifestById(id: string): SiteIntegrationManifest | undefined {
-  return SITE_INTEGRATION_MANIFESTS.find(m => m.id === id);
+export function getSiteIntegrationManifestById(
+  id: string
+): SiteIntegrationManifest | undefined {
+  return SITE_INTEGRATION_MANIFESTS.find((m) => m.id === id)
 }
 
 /**
@@ -247,121 +439,77 @@ export function getSiteIntegrationManifestById(id: string): SiteIntegrationManif
  * Used in UI components to show readable names instead of raw IDs.
  */
 export function getSiteIntegrationDisplayName(siteId: string): string {
-  const manifest = getSiteIntegrationManifestById(siteId);
-  return manifest?.name ?? siteId;
+  const manifest = getSiteIntegrationManifestById(siteId)
+  return manifest?.name ?? siteId
 }
 
 /**
  * Get all supported domains across all site integrations
  */
 export function getAllSupportedDomains(): string[] {
-  const domains = new Set<string>();
+  const domains = new Set<string>()
   for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    if (manifest.enabled === false) {
-      continue;
+    if (!manifest.shipped) {
+      continue
     }
 
     for (const domain of manifest.patterns.domains) {
-      domains.add(domain);
+      domains.add(domain)
     }
   }
-  return [...domains];
+  return [...domains]
 }
 
 /**
  * Get pattern data for a specific site integration (backward compatible with site-patterns.ts)
  */
-export function getPatternBySiteIntegrationId(siteIntegrationId: string): SiteIntegrationUrlPatterns {
-  const manifest = getSiteIntegrationManifestById(siteIntegrationId);
+export function getPatternBySiteIntegrationId(
+  siteIntegrationId: string
+): SiteIntegrationUrlPatterns {
+  const manifest = getSiteIntegrationManifestById(siteIntegrationId)
   if (!manifest) {
-    throw new Error(`Unknown site integration ID: ${siteIntegrationId}`);
+    throw new Error(`Unknown site integration ID: ${siteIntegrationId}`)
   }
-  return manifest.patterns;
+  return manifest.patterns
 }
 
 /**
  * Get all patterns as a record (backward compatible with SITE_PATTERNS)
  */
-export function getAllSiteIntegrationPatterns(): Record<string, SiteIntegrationUrlPatterns> {
-  const patterns: Record<string, SiteIntegrationUrlPatterns> = {};
+export function getAllSiteIntegrationPatterns(): Record<
+  string,
+  SiteIntegrationUrlPatterns
+> {
+  const patterns: Record<string, SiteIntegrationUrlPatterns> = {}
   for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    if (manifest.enabled === false) {
-      continue;
+    if (!manifest.shipped) {
+      continue
     }
 
-    patterns[manifest.id] = manifest.patterns;
+    patterns[manifest.id] = manifest.patterns
   }
-  return patterns;
+  return patterns
 }
 
 /**
- * Generate content script match patterns for WXT/Chrome manifest.
- *
- * Chrome MV3 match patterns are exact-host by default: `*://example.com/*`
- * matches only `example.com`, NOT `www.example.com`. To match subdomains the
- * host must use a leading wildcard: `*://*.example.com/*` (which matches
- * subdomains only, NOT the apex). See:
- * https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns
- *
- * The runtime URL matcher (url-matcher.ts isDomainMatch) accepts both the apex
- * domain and any subdomain via `hostname === domain || hostname.endsWith('.' + domain)`.
- * The manifest must agree, otherwise Chrome will not inject the static content
- * script on subdomain pages that the runtime would accept (e.g. www.mangadex.org).
- *
- * Therefore, for each declared domain we emit BOTH the exact-host pattern and
- * the wildcard-subdomain pattern so the static injection covers the same set
- * of hosts the runtime matcher accepts.
- *
- * Format: `*://{domain}{path}` and `*://*.{domain}{path}`
+ * Host permissions required at installation for integrations that are enabled
+ * by default. Integrations that need broad, optional access are deliberately
+ * excluded and must request that access from a user gesture when enabled.
  */
-export function generateContentScriptMatches(): string[] {
-  const matches: string[] = [];
+export function generateRequiredHostPermissions(): string[] {
+  const origins = new Set<string>()
   for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    if (manifest.enabled === false) {
-      continue;
+    if (
+      !manifest.shipped ||
+      !manifest.enabledByDefault ||
+      manifest.requiresBroadHttpsPermission
+    ) {
+      continue
     }
 
-    for (const domain of manifest.patterns.domains) {
-      for (const path of manifest.patterns.seriesMatches) {
-        const exact = `*://${domain}${path}`;
-        const wildcard = `*://*.${domain}${path}`;
-        for (const pattern of [exact, wildcard]) {
-          if (!matches.includes(pattern)) {
-            matches.push(pattern);
-          }
-        }
-      }
+    for (const origin of manifest.requiredOrigins) {
+      origins.add(origin)
     }
   }
-  return matches;
-}
-
-/**
- * Generate content script exclude_matches patterns for WXT/Chrome manifest.
- *
- * Same subdomain rationale as generateContentScriptMatches: emit both the
- * exact-host and wildcard-subdomain exclude patterns so excludes stay
- * consistent with the runtime exclude logic across apex + subdomains.
- */
-export function generateContentScriptExcludeMatches(): string[] {
-  const excludes: string[] = [];
-  for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    if (manifest.enabled === false) {
-      continue;
-    }
-
-    const excludeMatches = manifest.patterns.excludeMatches ?? [];
-    for (const domain of manifest.patterns.domains) {
-      for (const path of excludeMatches) {
-        const exact = `*://${domain}${path}`;
-        const wildcard = `*://*.${domain}${path}`;
-        for (const pattern of [exact, wildcard]) {
-          if (!excludes.includes(pattern)) {
-            excludes.push(pattern);
-          }
-        }
-      }
-    }
-  }
-  return excludes;
+  return [...origins]
 }

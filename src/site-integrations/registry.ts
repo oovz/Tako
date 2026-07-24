@@ -2,7 +2,7 @@ import {
   SITE_INTEGRATION_MANIFESTS,
   getSiteIntegrationManifestById,
   type SiteIntegrationManifest,
-} from './manifest'
+} from "./manifest"
 
 export { SITE_INTEGRATION_MANIFESTS }
 
@@ -18,27 +18,29 @@ export function getUserSiteIntegrationEnablement(): SiteIntegrationEnablementMap
   return { ...userSiteIntegrationEnablement }
 }
 
-export function setUserSiteIntegrationEnablement(enablement: SiteIntegrationEnablementMap): void {
+export function setUserSiteIntegrationEnablement(
+  enablement: SiteIntegrationEnablementMap
+): void {
   userSiteIntegrationEnablement = { ...enablement }
 }
 
 export function isEnabled(
   id: string,
-  enablement: SiteIntegrationEnablementMap = userSiteIntegrationEnablement,
+  enablement: SiteIntegrationEnablementMap = userSiteIntegrationEnablement
 ): boolean {
   const manifest = getManifest(id)
   if (!manifest) {
     return false
   }
 
-  if (manifest.enabled === false) {
+  if (manifest.shipped === false) {
     return false
   }
 
   const overrideValue = enablement[id]
-  if (typeof overrideValue === 'boolean') {
+  if (typeof overrideValue === "boolean") {
     return overrideValue
   }
 
-  return true
+  return manifest.enabledByDefault
 }
