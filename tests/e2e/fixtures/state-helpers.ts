@@ -209,50 +209,64 @@ export async function initializeTabViaAction(
   if (page.url() !== navigateToUrl) {
     await page.goto(navigateToUrl, { waitUntil: "domcontentloaded" })
   }
-  const stateBeforeNavigationSettles = await getSessionState<MangaPageState>(
-    context,
-    `tab_${tabId}`
-  )
-  if (isExpectedState(stateBeforeNavigationSettles)) {
-    // Reinitialization after a same-URL reload can briefly observe the
-    // pre-navigation synthetic state. Wait until the background loading
-    // projection or provider result supersedes it before seeding again.
-    await expect
-      .poll(
-        async () =>
-          !isExpectedState(
-            await getSessionState<MangaPageState>(context, `tab_${tabId}`)
-          ),
-        { timeout: 15_000, intervals: [100] }
+  const worker = await getServiceWorker(context)
+  const readTargetProjection = () =>
+    worker.evaluate(async (targetTabId) => {
+      const tab = await chrome.tabs.get(targetTabId)
+      const session = await chrome.storage.session.get(
+        "activeTabContextByWindow"
       )
-      .toBe(true)
-  }
-  // Let the production navigation resolver consume the page's initial
-  // loading/DOMContentLoaded events before injecting scenario-specific state.
-  // Otherwise a legitimately delayed provider result can overwrite the E2E
-  // payload after this helper returns.
-  await expect
-    .poll(
-      async () => {
-        const state = await getSessionState<
-          MangaPageState & { loading?: boolean }
-        >(context, `tab_${tabId}`)
-        return state !== undefined && state.loading !== true
-      },
-      { timeout: 15_000, intervals: [100] }
-    )
-    .toBe(true)
+      const projections = session.activeTabContextByWindow as
+        | Record<
+            string,
+            {
+              activeTabId?: number
+              revision?: number
+              context?: {
+                loading?: boolean
+                chaptersLoading?: boolean
+              } | null
+            }
+          >
+        | undefined
+      const projection = projections?.[String(tab.windowId)]
+      return {
+        activeTabId: projection?.activeTabId,
+        chaptersLoading: projection?.context?.chaptersLoading === true,
+        loading: projection?.context?.loading === true,
+        revision: projection?.revision ?? -1,
+        tabComplete: tab.status === "complete",
+      }
+    }, tabId)
+
   const sendInitAction = async (): Promise<void> => {
     const ext = await context.newPage()
     try {
       await ext.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
         waitUntil: "domcontentloaded",
       })
+      const projectionBeforeFocus = await readTargetProjection()
       // Keep the target tab active while the extension page sends the action.
       // The production cache only publishes active-window context for an
       // active target; Playwright can still evaluate the inactive sender page.
       await focusTab(context, tabId)
       await page.bringToFront()
+      await expect
+        .poll(
+          async () => {
+            const projection = await readTargetProjection()
+            return (
+              projection.tabComplete &&
+              projection.activeTabId === tabId &&
+              projection.revision > projectionBeforeFocus.revision &&
+              !projection.loading &&
+              !projection.chaptersLoading
+            )
+          },
+          { timeout: 15_000, intervals: [100] }
+        )
+        .toBe(true)
+
       const response = await ext.evaluate(
         async ({ tabId, payload, action }) => {
           const issuedAt = Date.now()
@@ -305,13 +319,6 @@ export async function initializeTabViaAction(
     )
     .toBe(true)
 
-  await focusTab(context, tabId)
-  await page.bringToFront()
-  // Focusing the page intentionally triggers the production onActivated
-  // resolver. Apply the synthetic E2E payload after that activation so a
-  // provider result cached during extension startup cannot overwrite the
-  // scenario-specific state used by the test.
-  await sendInitAction()
   await expect
     .poll(
       async () => {
