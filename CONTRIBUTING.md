@@ -35,6 +35,26 @@ $env:TMD_TEST_E2E_BROWSER_CHANNEL = "msedge"
 pnpm test:e2e
 ```
 
+### E2E diagnostics
+
+When a mocked or live E2E failure crosses browser contexts, enable the opt-in
+diagnostic stream before running the smallest reproducing spec:
+
+```powershell
+pnpm test:e2e:diag -- tests/e2e/mangadex-sidepanel-navigation.spec.ts
+```
+
+The stream correlates console messages and uncaught errors from browser pages,
+worker console messages (including the MV3 service worker), integration requests
+and responses, failed requests, and requests received by the local mock server.
+Successful extension asset requests are omitted to keep the output focused.
+Diagnostics are disabled by default and do not change routing or test behavior.
+Set `TMD_TEST_E2E_DIAG=true` directly when using a different Playwright
+configuration, such as a live test configuration.
+
+Diagnostic output can include complete visited and requested URLs. Review it
+before attaching the output to an issue or sharing it outside the project.
+
 Run the targeted command first when iterating, then the broader suite before
 finishing:
 

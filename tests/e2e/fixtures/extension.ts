@@ -44,6 +44,7 @@ const pathToExtension = path.resolve(
     : "../../../.output/chrome-mv3-e2e-test"
 )
 const collectCoverage = process.env.E2E_COVERAGE === "true"
+const collectDiagnostics = process.env.TMD_TEST_E2E_DIAG === "true"
 const nycOutputDir = path.resolve(__dirname, "../../../.nyc_output/e2e")
 
 const BACKGROUND_WORKER_NAME = "Tako Manga Downloader"
@@ -53,6 +54,58 @@ type CoverageTargetKind = "page" | "worker"
 
 const collectedCoverageTargets = new WeakSet<object>()
 const coverageCloseHooks = new WeakSet<Page>()
+
+/**
+ * Install opt-in diagnostics at the context boundary so existing and future
+ * extension pages, target-site pages, and worker contexts are observed for the
+ * lifetime of the E2E fixture.
+ */
+function installE2EDiagnostics(context: BrowserContext): void {
+  if (!collectDiagnostics) return
+
+  context.on("console", (message) => {
+    const page = message.page()
+    if (page) {
+      console.log(
+        "[browser console]",
+        page.url(),
+        message.type(),
+        message.text()
+      )
+      return
+    }
+    console.log("[worker console]", message.type(), message.text())
+  })
+  context.on("weberror", (webError) => {
+    console.log(
+      "[browser error]",
+      webError.page()?.url() ?? "<unknown page>",
+      webError.error().message
+    )
+  })
+  context.on("request", (request) => {
+    if (request.url().startsWith("chrome-extension://")) return
+    console.log(
+      "[browser request]",
+      request.method(),
+      request.url(),
+      "resourceType=",
+      request.resourceType()
+    )
+  })
+  context.on("response", (response) => {
+    if (response.ok() && response.url().startsWith("chrome-extension://"))
+      return
+    console.log("[browser response]", response.status(), response.url())
+  })
+  context.on("requestfailed", (request) => {
+    console.log(
+      "[browser requestfailed]",
+      request.url(),
+      request.failure()?.errorText
+    )
+  })
+}
 
 async function writeCoverage(
   coverage: unknown,
@@ -407,6 +460,7 @@ async function setupExtensionContext(
       ],
     })
     contextForCleanup = context
+    installE2EDiagnostics(context)
     installCoverageHooks(context)
 
     if (!shouldUseMockRoutes && !shouldAllowNetwork) {
@@ -427,12 +481,6 @@ async function setupExtensionContext(
 
     const backgroundWorker = await resolveBackgroundWorker(context)
     backgroundWorkerForCleanup = backgroundWorker
-
-    if (process.env.TMD_TEST_E2E_DIAG === "true") {
-      backgroundWorker.on("console", (message) => {
-        console.log("[background console]", message.type(), message.text())
-      })
-    }
 
     // Parse from worker URL first; avoids evaluate races with suspended MV3 workers.
     let extensionId = backgroundWorker.url().split("/")[2] || ""
@@ -578,31 +626,6 @@ export const test = base.extend<{
     // Reuse the first page that launchPersistentContext creates
     // This prevents creating unnecessary tabs (launchPersistentContext already opens one tab)
     const page = context.pages()[0] || (await context.newPage())
-
-    // Opt-in E2E diagnostics for tracing page and mock-route failures.
-    if (process.env.TMD_TEST_E2E_DIAG === "true") {
-      page.on("console", (msg) => {
-        console.log("[page console]", msg.type(), msg.text())
-      })
-      page.on("pageerror", (err) => {
-        console.log("[page error]", err.message)
-      })
-      page.on("request", (req) => {
-        console.log(
-          "[page request]",
-          req.method(),
-          req.url(),
-          "resourceType=",
-          req.resourceType()
-        )
-      })
-      page.on("response", (res) => {
-        console.log("[page response]", res.status(), res.url())
-      })
-      page.on("requestfailed", (req) => {
-        console.log("[page requestfailed]", req.url(), req.failure()?.errorText)
-      })
-    }
 
     await use(page)
 

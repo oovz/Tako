@@ -26,6 +26,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:diag": "cross-env TMD_TEST_E2E_DIAG=true playwright test --config=playwright.config.ts",
     "test:e2e:headed": "playwright test --config=playwright.config.ts --headed",
     "test:e2e:coverage": "cross-env E2E_COVERAGE=true TMD_TEST_E2E_USE_MOCKS=true playwright test --config=playwright.config.ts",
     "test:live": "pnpm test:live:full",
