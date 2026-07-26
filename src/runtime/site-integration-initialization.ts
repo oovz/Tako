@@ -151,11 +151,21 @@ async function registerSiteIntegrationMetadata(): Promise<void> {
  * Safe to call from popup/background.
  * Uses singleton pattern to prevent duplicate calls.
  */
-export function initializeSiteIntegrationMetadataOnly(): Promise<void> {
-  if (metadataInitPromise) {
-    return metadataInitPromise
+export async function initializeSiteIntegrationMetadataOnly(): Promise<void> {
+  if (metadataInitialized) {
+    return
   }
 
-  metadataInitPromise = registerSiteIntegrationMetadata()
-  return metadataInitPromise
+  const initializationAttempt =
+    metadataInitPromise ?? registerSiteIntegrationMetadata()
+  metadataInitPromise = initializationAttempt
+
+  try {
+    await initializationAttempt
+  } catch (error) {
+    if (metadataInitPromise === initializationAttempt) {
+      metadataInitPromise = null
+    }
+    throw error
+  }
 }

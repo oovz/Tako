@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 const storageOnChangedAddListener = vi.fn()
+const storageLocalGetMock = vi.fn()
 const setUserSiteIntegrationEnablementMock = vi.fn()
 
 // Mock the site-integration registry before importing
@@ -38,10 +39,11 @@ describe("site-integration-initialization singleton pattern", () => {
   beforeEach(async () => {
     // Reset module registry to get fresh singleton state
     vi.resetModules()
+    storageLocalGetMock.mockResolvedValue({})
     vi.stubGlobal("chrome", {
       storage: {
         local: {
-          get: vi.fn(async () => ({})),
+          get: storageLocalGetMock,
         },
         onChanged: {
           addListener: storageOnChangedAddListener,
@@ -139,6 +141,24 @@ describe("site-integration-initialization singleton pattern", () => {
     expect(results).toHaveLength(3)
 
     // Should only register 5 site integrations total (not 15)
+    expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(5)
+  })
+
+  it("retries metadata initialization after a transient storage failure", async () => {
+    storageLocalGetMock
+      .mockRejectedValueOnce(new Error("storage temporarily unavailable"))
+      .mockResolvedValueOnce({})
+    const { initializeSiteIntegrationMetadataOnly } =
+      await import("@/src/runtime/site-integration-initialization")
+
+    await expect(initializeSiteIntegrationMetadataOnly()).rejects.toThrow(
+      "storage temporarily unavailable"
+    )
+    await expect(
+      initializeSiteIntegrationMetadataOnly()
+    ).resolves.toBeUndefined()
+
+    expect(storageLocalGetMock).toHaveBeenCalledTimes(2)
     expect(registerSiteIntegrationMock).toHaveBeenCalledTimes(5)
   })
 
