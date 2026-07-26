@@ -101,8 +101,8 @@ describe("handleInitializeTab", () => {
       "tab_15",
       "seriesContextError_15",
     ])
-    expect(sessionSet).toHaveBeenCalledWith({
-      [SESSION_STORAGE_KEYS.activeTabContext]: activeTabState,
+    expect(sessionSet).not.toHaveBeenCalledWith({
+      [SESSION_STORAGE_KEYS.activeTabContext]: null,
     })
     expect(
       (
@@ -188,17 +188,17 @@ describe("handleInitializeTab", () => {
           chapterLabel: "Ch. 1",
           language: undefined,
           chapterNumber: 1,
+          volumeId: undefined,
           volumeNumber: 2,
           volumeLabel: undefined,
         },
       ],
       undefined,
+      undefined,
+      false,
       undefined
     )
-    expect(sessionRemove).toHaveBeenCalledWith("seriesContextError_9")
-    expect(sessionSet).toHaveBeenLastCalledWith({
-      [SESSION_STORAGE_KEYS.activeTabContext]: tabState,
-    })
+    expect(sessionRemove).not.toHaveBeenCalledWith("seriesContextError_9")
   })
 
   it("forwards explicit integration-provided volumes to the state manager", async () => {
@@ -259,6 +259,8 @@ describe("handleInitializeTab", () => {
           index: 1,
           chapterLabel: undefined,
           chapterNumber: undefined,
+          language: undefined,
+          volumeId: undefined,
           volumeNumber: 2,
           volumeLabel: "Arc B",
         },
@@ -267,7 +269,9 @@ describe("handleInitializeTab", () => {
       [
         { id: "custom-volume-b", title: "Arc B", label: "Arc B" },
         { id: "custom-volume-a", title: "Arc A", label: "Arc A" },
-      ]
+      ],
+      false,
+      undefined
     )
   })
 
@@ -306,9 +310,17 @@ describe("handleInitializeTab", () => {
 
     expect(result).toEqual({ success: true, tabState })
     expect(sessionStore.tab_5).toEqual(activeTabState)
-    expect(sessionSet).toHaveBeenCalledWith({
-      [SESSION_STORAGE_KEYS.activeTabContext]: activeTabState,
-    })
+    expect(stateManager.initializeTabState).toHaveBeenCalledWith(
+      9,
+      "mangadex",
+      "inactive-series",
+      "Inactive Series",
+      [],
+      undefined,
+      undefined,
+      false,
+      undefined
+    )
     expect(sessionSet).not.toHaveBeenCalledWith({
       [SESSION_STORAGE_KEYS.activeTabContext]: tabState,
     })
@@ -390,6 +402,7 @@ describe("handleInitializeTab", () => {
           chapterLabel: undefined,
           language: undefined,
           chapterNumber: undefined,
+          volumeId: undefined,
           volumeNumber: undefined,
           volumeLabel: undefined,
           locked: true,
@@ -402,12 +415,15 @@ describe("handleInitializeTab", () => {
           chapterLabel: undefined,
           language: undefined,
           chapterNumber: undefined,
+          volumeId: undefined,
           volumeNumber: undefined,
           volumeLabel: undefined,
           locked: false,
         },
       ],
       undefined,
+      undefined,
+      false,
       undefined
     )
   })

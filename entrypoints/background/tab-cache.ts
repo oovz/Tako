@@ -18,6 +18,17 @@ type TabContextError = { error: string }
 export type TabContextCacheValue = MangaPageState | TabContextError | null
 export type ActiveTabContextValue = TabContextCacheValue | { loading: true }
 
+interface ProjectionCommitOptions {
+  requestId?: number
+  windowId?: number
+  supersedeInFlight?: boolean
+}
+
+interface ProjectionMutationResult {
+  applied: boolean
+  projected: boolean
+}
+
 // Maximum number of tab contexts to keep in the in-memory cache.
 // Tabs beyond this limit are evicted on the next set (LRU-style via
 // Map insertion order). In practice users rarely have more than ~50
@@ -341,47 +352,28 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     }
   }
 
-  const commitActiveTabContext = async (
+  const commitTabContextMutation = async (
     tabId: number,
-    context: ProjectedTabContext,
-    options?: {
-      requestId?: number
-      windowId?: number
-      supersedeInFlight?: boolean
-    }
-  ): Promise<boolean> => {
-    let windowId = options?.windowId
-    let isActiveInWindow = false
-
-    try {
+    options: ProjectionCommitOptions | undefined,
+    mutation: () => Promise<ProjectedTabContext>
+  ): Promise<ProjectionMutationResult> =>
+    projectionMutations.run(async () => {
       const activeTabs = await dependencies.queryActiveTabs()
-      const activeTab = activeTabs.find((t) => t.id === tabId)
-      if (activeTab) {
-        isActiveInWindow = true
-        if (
-          typeof windowId !== "number" &&
-          typeof activeTab.windowId === "number"
-        ) {
-          windowId = activeTab.windowId
+      const activeTab = activeTabs.find((tab) => tab.id === tabId)
+      const windowId = options?.windowId ?? activeTab?.windowId
+
+      if (!activeTab || typeof windowId !== "number") {
+        if (typeof options?.requestId === "number") {
+          return { applied: false, projected: false }
         }
+
+        const context = await mutation()
+        if (!isLoadingContext(context)) {
+          setCacheEntry(tabId, context)
+        }
+        return { applied: true, projected: false }
       }
-    } catch {
-      // ignore
-    }
 
-    if (typeof windowId !== "number") {
-      windowId = await getWindowIdForTab(tabId, options?.windowId)
-    }
-
-    if (typeof windowId !== "number" || !isActiveInWindow) {
-      // The tab is not the active tab in any window; only update the cache.
-      if (!isLoadingContext(context)) {
-        setCacheEntry(tabId, context)
-      }
-      return false
-    }
-
-    return projectionMutations.run(async () => {
       const existing = await readActiveTabContextByWindow()
       const currentWindowContext = existing[windowId]
       const currentRevision = currentWindowContext?.revision ?? 0
@@ -398,8 +390,10 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
           currentRevision,
           currentActiveTabId: currentWindowContext?.activeTabId,
         })
-        return false
+        return { applied: false, projected: false }
       }
+
+      const context = await mutation()
 
       // A direct, externally supplied tab context is authoritative for the
       // current page. Advance the revision so a resolver that began before
@@ -418,9 +412,19 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
       await writeWindowContext(
         buildWindowContext(windowId, tabId, context, requestId)
       )
-      return true
+      return { applied: true, projected: true }
     })
-  }
+
+  const commitActiveTabContext = async (
+    tabId: number,
+    context: ProjectedTabContext,
+    options?: ProjectionCommitOptions
+  ): Promise<boolean> =>
+    (
+      await commitTabContextMutation(tabId, options, () =>
+        Promise.resolve(context)
+      )
+    ).projected
 
   return {
     getCachedContext(tabId: number): TabContextCacheValue | undefined {
@@ -433,6 +437,14 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
 
     deleteCachedContext(tabId: number): void {
       cache.delete(tabId)
+    },
+
+    async commitTabContextMutation(
+      tabId: number,
+      options: ProjectionCommitOptions | undefined,
+      mutation: () => Promise<ProjectedTabContext>
+    ): Promise<boolean> {
+      return (await commitTabContextMutation(tabId, options, mutation)).applied
     },
 
     async handleTabActivated(tabId: number, windowId?: number): Promise<void> {
@@ -488,18 +500,24 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
             url: changeInfo.url,
           }
         )
-        cache.delete(tabId)
-        // Drop the external-init mark alongside tab state so a sticky
-        // mark from the previous URL cannot suppress the content-script
-        // initialization for the new page.
-        await dependencies.removeSession([
-          `tab_${tabId}`,
-          `seriesContextError_${tabId}`,
-          `${SESSION_STORAGE_KEYS.externalTabInitPrefix}${tabId}`,
-        ])
+        await projectionMutations.run(async () => {
+          cache.delete(tabId)
+          // Serialize invalidation with resolver commits so a result from the
+          // previous URL cannot recreate tab state after navigation cleared it.
+          await dependencies.removeSession([
+            `tab_${tabId}`,
+            `seriesContextError_${tabId}`,
+          ])
+        })
       }
 
-      if (changeInfo.url || changeInfo.status === "complete") {
+      // A completed update must not allocate a new projection revision. A
+      // DOM-ready resolver may already own the active loading revision, and
+      // advancing it here would make that valid provider result look stale
+      // and force an unnecessary second resolution. URL changes still
+      // reproject immediately so stale/unsupported UI cannot survive a
+      // navigation.
+      if (changeInfo.url) {
         await syncFromActiveTabs()
       }
     },
@@ -536,11 +554,7 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     async syncActiveTabContext(
       tabId?: number,
       context?: ActiveTabContextValue,
-      options?: {
-        requestId?: number
-        windowId?: number
-        supersedeInFlight?: boolean
-      }
+      options?: ProjectionCommitOptions
     ): Promise<boolean> {
       if (typeof tabId === "number") {
         const committed = await commitActiveTabContext(

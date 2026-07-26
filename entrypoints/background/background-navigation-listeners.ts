@@ -34,6 +34,7 @@ interface NavigationListenerTabContextCache {
 }
 
 interface RegisterBackgroundNavigationListenersDependencies {
+  ensureSiteIntegrationMetadataInitialized: () => Promise<void>
   ensureStateManagerInitialized: () => Promise<void>
   getStateManager: () => CentralizedStateManager
   tabContextCache: NavigationListenerTabContextCache
@@ -71,16 +72,17 @@ export function registerBackgroundNavigationListeners(
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.url || changeInfo.status) {
         enqueueTabUpdate(tabId, async () => {
-          await deps.ensureStateManagerInitialized()
-          await deps.tabContextCache.handleTabUpdated(tabId, changeInfo)
+          await deps.ensureSiteIntegrationMetadataInitialized()
+          const invalidatesContext =
+            Boolean(changeInfo.url) || changeInfo.status === "loading"
+          if (invalidatesContext) {
+            await deps.tabContextCache.handleTabUpdated(tabId, changeInfo)
+          }
           const url = changeInfo.url ?? tab.url ?? null
           void deps.tabUiCoordinator.updateActionForTab(tabId, url)
           void deps.tabUiCoordinator.updateSidePanelForTab(tabId)
 
-          if (
-            tab.active &&
-            (changeInfo.url || changeInfo.status === "loading")
-          ) {
+          if (tab.active && changeInfo.status === "loading") {
             await deps.tabContextCache.projectLoadingForTab(tabId, tab.windowId)
           }
 
@@ -105,9 +107,14 @@ export function registerBackgroundNavigationListeners(
           if (url && !isInternalUrl(url) && !matchUrl(url)) {
             try {
               deps.tabContextCache.setCachedContext(tabId, null)
+              await chrome.storage.session.remove(`seriesContextError_${tabId}`)
+              // Navigation freshness does not depend on queue/state recovery.
+              // Delay only the state-manager cleanup that needs that runtime;
+              // cache invalidation and the side-panel projection above happen
+              // immediately for the newly unsupported URL.
+              await deps.ensureStateManagerInitialized()
               await deps.getStateManager().clearTabState(tabId)
               deps.tabContextCache.deleteCachedContext(tabId)
-              await chrome.storage.session.remove(`seriesContextError_${tabId}`)
               logger.info(
                 `background: onUpdated unsupported URL detected, clearing tab state for tab ${tabId}`
               )
@@ -133,14 +140,16 @@ export function registerBackgroundNavigationListeners(
       if (details.tabId < 0 || details.frameId !== 0) return
 
       void (async () => {
-        await deps.ensureStateManagerInitialized()
+        await deps.ensureSiteIntegrationMetadataInitialized()
         const tab = await chrome.tabs.get(details.tabId)
         const url = details.url ?? tab.url ?? ""
         if (!tab.active || isInternalUrl(url) || !matchUrl(url)) return
 
         // Series pages are generally usable at DOM readiness, while ad-heavy
         // hosts can delay `tabs.onUpdated(status=complete)` for a long time.
-        // The resolver coalesces this with any fallback complete event.
+        // Start the provider work without waiting for queue recovery. The
+        // resolver waits for the state manager only when it needs to commit.
+        // It coalesces this with any fallback complete event.
         await deps.tabContextResolver.resolveTabContext(details.tabId, {
           windowId: tab.windowId,
           allowCached: false,
@@ -160,6 +169,7 @@ export function registerBackgroundNavigationListeners(
     chrome.webNavigation.onCommitted.addListener((details) => {
       if (details.tabId >= 0 && details.frameId === 0) {
         void (async () => {
+          await deps.ensureSiteIntegrationMetadataInitialized()
           await deps.ensureStateManagerInitialized()
           const resolvedUrl =
             details.url ?? (await chrome.tabs.get(details.tabId)).url ?? ""
@@ -212,6 +222,7 @@ export function registerBackgroundNavigationListeners(
     chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
       if (details.tabId >= 0 && details.frameId === 0) {
         ;(async () => {
+          await deps.ensureSiteIntegrationMetadataInitialized()
           await deps.ensureStateManagerInitialized()
           const url =
             details.url ?? (await chrome.tabs.get(details.tabId)).url ?? ""
@@ -226,9 +237,9 @@ export function registerBackgroundNavigationListeners(
             deps.tabContextCache.setCachedContext(details.tabId, null)
             await deps.getStateManager().clearTabState(details.tabId)
             deps.tabContextCache.deleteCachedContext(details.tabId)
-            await chrome.storage.session.remove(
-              `seriesContextError_${details.tabId}`
-            )
+            await chrome.storage.session.remove([
+              `seriesContextError_${details.tabId}`,
+            ])
             await deps.tabContextCache.handleTabUpdated(details.tabId, { url })
 
             const tab = await chrome.tabs.get(details.tabId)
@@ -267,6 +278,8 @@ export function registerBackgroundNavigationListeners(
       })
       void (async () => {
         try {
+          const integrationMetadata =
+            deps.ensureSiteIntegrationMetadataInitialized()
           let initializationCompletedAt: number | undefined
           const initialization = deps
             .ensureStateManagerInitialized()
@@ -291,17 +304,33 @@ export function registerBackgroundNavigationListeners(
               error
             )
           )
+          const tabPromise = chrome.tabs.get(activeInfo.tabId)
+          // Action and Side Panel availability are URL-based, so do not make
+          // them wait for a page probe or provider request. This is especially
+          // important when activation wakes a cold MV3 service worker.
+          void tabPromise
+            .then(async (tab) => {
+              await integrationMetadata
+              return Promise.all([
+                deps.tabUiCoordinator.updateActionForTab(
+                  activeInfo.tabId,
+                  tab.url || null
+                ),
+                deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId),
+              ])
+            })
+            .catch((error) =>
+              logger.debug(
+                "Unable to synchronize tab UI during activation",
+                error
+              )
+            )
           await deps.tabContextResolver.resolveTabContext(activeInfo.tabId, {
             windowId: activeInfo.windowId,
             allowCached: true,
           })
           const resolutionCompletedAt = performance.now()
-          const tab = await chrome.tabs.get(activeInfo.tabId)
-          await deps.tabUiCoordinator.updateActionForTab(
-            activeInfo.tabId,
-            tab?.url || null
-          )
-          await deps.tabUiCoordinator.updateSidePanelForTab(activeInfo.tabId)
+          const tab = await tabPromise
           let sanitizedUrl: string | undefined
           try {
             const parsedUrl = tab?.url ? new URL(tab.url) : undefined
@@ -350,7 +379,8 @@ export function registerBackgroundNavigationListeners(
   try {
     chrome.tabs
       .query({})
-      .then((tabs) => {
+      .then(async (tabs) => {
+        await deps.ensureSiteIntegrationMetadataInitialized()
         for (const tab of tabs) {
           if (typeof tab.id === "number") {
             void deps.tabUiCoordinator.updateActionForTab(
@@ -359,12 +389,17 @@ export function registerBackgroundNavigationListeners(
             )
             void deps.tabUiCoordinator.updateSidePanelForTab(tab.id)
             if (tab.active) {
-              void deps.ensureStateManagerInitialized().then(() =>
-                deps.tabContextResolver.resolveTabContext(tab.id!, {
+              void deps.tabContextResolver
+                .resolveTabContext(tab.id, {
                   windowId: tab.windowId,
                   allowCached: true,
                 })
-              )
+                .catch((error) =>
+                  logger.debug(
+                    "Initial active-tab context resolution failed",
+                    error
+                  )
+                )
             }
           }
         }

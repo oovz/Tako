@@ -207,6 +207,10 @@ export async function processStateAction(
           {
             requestId: message.requestId,
             windowId: message.windowId,
+            // A direct INITIALIZE_TAB action is authoritative for its tab.
+            // Advance the projection revision so provider work that started
+            // before this message cannot overwrite the newer context.
+            supersedeInFlight: typeof message.requestId !== "number",
           }
         )
 

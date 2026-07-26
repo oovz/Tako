@@ -277,10 +277,15 @@ export class CentralizedStateManager {
 
   private async syncActiveTabContext(
     tabId: number,
-    context: MangaPageState | null
+    context: MangaPageState | null,
+    options?: {
+      requestId?: number
+      windowId?: number
+      supersedeInFlight?: boolean
+    }
   ): Promise<void> {
     try {
-      await tabContextCache.syncActiveTabContext(tabId, context)
+      await tabContextCache.syncActiveTabContext(tabId, context, options)
     } catch (error) {
       logger.debug("Failed to sync active tab context (non-fatal):", error)
     }
@@ -455,77 +460,100 @@ export class CentralizedStateManager {
     seriesTitle: string,
     chapters: Omit<ChapterState, "status" | "lastUpdated">[],
     metadata?: MangaPageState["metadata"],
-    volumes?: MangaPageState["volumes"]
-  ): Promise<void> {
+    volumes?: MangaPageState["volumes"],
+    chaptersLoading?: boolean,
+    initializationOptions?: {
+      requestId?: number
+      windowId?: number
+      supersedeInFlight?: boolean
+      chapterListNotice?: MangaPageState["chapterListNotice"]
+    }
+  ): Promise<boolean> {
+    const { chapterListNotice, ...projectionOptions } =
+      initializationOptions ?? {}
     const lockKey = `tab_${tabId}_init`
     const releaseLock = await this.acquireLock(lockKey)
 
     try {
-      // Check if state already exists for this tab (inside lock to prevent race)
-      const existingState = await this.getTabState(tabId)
+      return await tabContextCache.commitTabContextMutation(
+        tabId,
+        initializationOptions ? projectionOptions : undefined,
+        async () => {
+          const existingState = await this.getTabState(tabId)
 
-      if (
-        existingState &&
-        existingState.siteIntegrationId === siteId &&
-        existingState.mangaId === seriesId
-      ) {
-        // State exists for same manga - preserve runtime chapter status while updating chapter list
-        logger.info(
-          `🔄 Updating existing state for tab ${tabId}: ${seriesTitle}`
-        )
+          if (
+            existingState &&
+            existingState.siteIntegrationId === siteId &&
+            existingState.mangaId === seriesId
+          ) {
+            logger.info(
+              `🔄 Updating existing state for tab ${tabId}: ${seriesTitle}`
+            )
 
-        // Preserve runtime chapter state strictly by canonical chapter ID.
-        const existingChapterStates = new Map<string, ChapterState>()
-        existingState.chapters.forEach((chapter) => {
-          existingChapterStates.set(chapter.id, chapter)
-        })
+            const existingChapterStates = new Map<string, ChapterState>()
+            existingState.chapters.forEach((chapter) => {
+              existingChapterStates.set(chapter.id, chapter)
+            })
 
-        // Update state with new chapter list while preserving runtime chapter state
-        const updatedState: MangaPageState = {
-          ...existingState,
-          seriesTitle, // Update title in case it changed
-          chapters: chapters.map((chapter) => {
-            const existingChapter = existingChapterStates.get(chapter.id)
-            return {
-              ...chapter,
-              // Preserve status and other runtime state if chapter exists, otherwise default to queued
-              status: existingChapter?.status ?? "queued",
-              errorMessage: existingChapter?.errorMessage,
-              totalImages: existingChapter?.totalImages,
-              imagesFailed: existingChapter?.imagesFailed,
-              lastUpdated: existingChapter?.lastUpdated || Date.now(),
+            const updatedState: MangaPageState = {
+              ...existingState,
+              seriesTitle,
+              chapters: chapters.map((chapter) => {
+                const existingChapter = existingChapterStates.get(chapter.id)
+                return {
+                  ...chapter,
+                  status: existingChapter?.status ?? "queued",
+                  errorMessage: existingChapter?.errorMessage,
+                  totalImages: existingChapter?.totalImages,
+                  imagesFailed: existingChapter?.imagesFailed,
+                  lastUpdated: existingChapter?.lastUpdated || Date.now(),
+                }
+              }),
+              volumes: resolveVolumeStates(chapters, volumes),
+              metadata: metadata ?? existingState.metadata,
+              ...(typeof chaptersLoading === "boolean"
+                ? { chaptersLoading }
+                : {}),
+              ...(chapterListNotice
+                ? { chapterListNotice }
+                : { chapterListNotice: undefined }),
+              lastUpdated: Date.now(),
             }
-          }),
-          volumes: resolveVolumeStates(chapters, volumes),
-          metadata: metadata ?? existingState.metadata,
-          lastUpdated: Date.now(),
+
+            await chrome.storage.session.remove(`seriesContextError_${tabId}`)
+            await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState })
+            logger.info(
+              `✅ Updated ${updatedState.chapters.length} chapters for tab ${tabId}`
+            )
+            return updatedState
+          }
+
+          logger.info(
+            `🆕 Creating fresh state for tab ${tabId}: ${seriesTitle}`
+          )
+
+          const initialState: MangaPageState = {
+            siteIntegrationId: siteId,
+            mangaId: seriesId,
+            seriesTitle,
+            chapters: initializeChapterStates(chapters),
+            volumes: resolveVolumeStates(chapters, volumes),
+            metadata,
+            ...(typeof chaptersLoading === "boolean"
+              ? { chaptersLoading }
+              : {}),
+            ...(chapterListNotice ? { chapterListNotice } : {}),
+            lastUpdated: Date.now(),
+          }
+
+          await chrome.storage.session.remove(`seriesContextError_${tabId}`)
+          await chrome.storage.session.set({ [`tab_${tabId}`]: initialState })
+          logger.info(
+            `🆕 Initialized fresh state for tab ${tabId}: ${seriesTitle}`
+          )
+          return initialState
         }
-
-        await chrome.storage.session.set({ [`tab_${tabId}`]: updatedState })
-        await this.syncActiveTabContext(tabId, updatedState)
-        logger.info(
-          `✅ Updated ${updatedState.chapters.length} chapters for tab ${tabId}`
-        )
-      } else {
-        // No existing state or different manga - create fresh state
-        logger.info(`🆕 Creating fresh state for tab ${tabId}: ${seriesTitle}`)
-
-        const initialState: MangaPageState = {
-          siteIntegrationId: siteId,
-          mangaId: seriesId,
-          seriesTitle,
-          chapters: initializeChapterStates(chapters),
-          volumes: resolveVolumeStates(chapters, volumes),
-          metadata,
-          lastUpdated: Date.now(),
-        }
-
-        await chrome.storage.session.set({ [`tab_${tabId}`]: initialState })
-        await this.syncActiveTabContext(tabId, initialState)
-        logger.info(
-          `🆕 Initialized fresh state for tab ${tabId}: ${seriesTitle}`
-        )
-      }
+      )
     } finally {
       releaseLock()
     }
@@ -1245,8 +1273,17 @@ export class CentralizedStateManager {
    * Clear state for tab (when tab is closed)
    */
   async clearTabState(tabId: number): Promise<void> {
-    await chrome.storage.session.remove(`tab_${tabId}`)
-    await this.syncActiveTabContext(tabId, null)
+    await tabContextCache.commitTabContextMutation(
+      tabId,
+      undefined,
+      async () => {
+        await chrome.storage.session.remove([
+          `tab_${tabId}`,
+          `seriesContextError_${tabId}`,
+        ])
+        return null
+      }
+    )
     logger.debug(`🗑️ Cleared state for tab ${tabId}`)
   }
 

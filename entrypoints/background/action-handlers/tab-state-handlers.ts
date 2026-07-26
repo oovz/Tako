@@ -6,10 +6,7 @@
 
 import { CentralizedStateManager } from "@/src/runtime/centralized-state"
 import { InitializeTabPayloadSchema } from "@/src/runtime/state-action-schemas"
-import {
-  tabContextCache,
-  type TabContextCacheValue,
-} from "@/entrypoints/background/tab-cache"
+import { tabContextCache } from "@/entrypoints/background/tab-cache"
 import type {
   InitializeTabPayload,
   InitializeTabReadyPayload,
@@ -27,18 +24,6 @@ interface SyncCachedProjectionOptions {
   requestId?: number
   windowId?: number
   supersedeInFlight?: boolean
-}
-
-async function syncCachedProjection(
-  tabId: number,
-  value: TabContextCacheValue,
-  options?: SyncCachedProjectionOptions
-): Promise<void> {
-  await tabContextCache.syncActiveTabContext(tabId, value, {
-    requestId: options?.requestId,
-    windowId: options?.windowId,
-    supersedeInFlight: options?.supersedeInFlight,
-  })
 }
 
 type InitializeTabChapter = NonNullable<
@@ -67,51 +52,42 @@ export async function handleInitializeTab(
   tabId: number,
   options?: HandleInitializeTabOptions
 ): Promise<{ success: boolean; tabState?: unknown }> {
-  if (
-    typeof options?.requestId === "number" &&
-    typeof options.windowId === "number" &&
-    !(await tabContextCache.isRequestIdCurrent(
-      options.windowId,
-      options.requestId
-    ))
-  ) {
-    return { success: true }
-  }
-
   const tabStateStorageKey = getTabStateStorageKey(tabId)
   const tabErrorStorageKey = getTabErrorStorageKey(tabId)
 
   const parsedPayload = InitializeTabPayloadSchema.safeParse(payload)
   if (!parsedPayload.success) {
-    await chrome.storage.session.remove(tabStateStorageKey)
-    await chrome.storage.session.set({
-      [tabErrorStorageKey]: "Invalid INITIALIZE_TAB payload",
+    await tabContextCache.commitTabContextMutation(tabId, options, async () => {
+      await chrome.storage.session.remove(tabStateStorageKey)
+      await chrome.storage.session.set({
+        [tabErrorStorageKey]: "Invalid INITIALIZE_TAB payload",
+      })
+      return { error: "Invalid INITIALIZE_TAB payload" }
     })
-    await syncCachedProjection(
-      tabId,
-      { error: "Invalid INITIALIZE_TAB payload" },
-      options
-    )
     return { success: false }
   }
 
   const typedPayload = parsedPayload.data
 
   if (typedPayload.context === "unsupported") {
-    await chrome.storage.session.remove([
-      tabStateStorageKey,
-      tabErrorStorageKey,
-    ])
-    await syncCachedProjection(tabId, null, options)
+    await tabContextCache.commitTabContextMutation(tabId, options, async () => {
+      await chrome.storage.session.remove([
+        tabStateStorageKey,
+        tabErrorStorageKey,
+      ])
+      return null
+    })
     return { success: true, tabState: null }
   }
 
   if (typedPayload.context === "error") {
-    await chrome.storage.session.remove(tabStateStorageKey)
-    await chrome.storage.session.set({
-      [tabErrorStorageKey]: typedPayload.error,
+    await tabContextCache.commitTabContextMutation(tabId, options, async () => {
+      await chrome.storage.session.remove(tabStateStorageKey)
+      await chrome.storage.session.set({
+        [tabErrorStorageKey]: typedPayload.error,
+      })
+      return { error: typedPayload.error }
     })
-    await syncCachedProjection(tabId, { error: typedPayload.error }, options)
     return { success: true, tabState: { error: typedPayload.error } }
   }
 
@@ -139,19 +115,25 @@ export async function handleInitializeTab(
       volumeLabel: ch.volumeLabel,
     })) || []
 
-  await stateManager.initializeTabState(
+  const applied = await stateManager.initializeTabState(
     tabId,
     siteId,
     seriesId,
     seriesTitle,
     chaptersState,
     metadata,
-    volumes
+    volumes,
+    typedPayload.chaptersLoading ?? false,
+    typedPayload.chapterListNotice
+      ? { ...options, chapterListNotice: typedPayload.chapterListNotice }
+      : options
   )
+  if (applied === false) {
+    return { success: true }
+  }
 
   const tabState = await stateManager.getTabState(tabId)
-  await chrome.storage.session.remove(tabErrorStorageKey)
-  await syncCachedProjection(tabId, tabState ?? null, options)
+
   return { success: true, tabState }
 }
 

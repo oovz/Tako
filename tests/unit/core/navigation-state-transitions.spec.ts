@@ -21,6 +21,10 @@ const mockSessionStorage: Record<string, unknown> = {}
 const mockLocalStorage: Record<string, unknown> = {}
 
 globalThis.chrome = {
+  tabs: {
+    query: vi.fn().mockResolvedValue([]),
+    get: vi.fn().mockRejectedValue(new Error("Tab not found")),
+  },
   storage: {
     local: {
       get: vi.fn().mockImplementation((keys?: string | string[] | null) => {

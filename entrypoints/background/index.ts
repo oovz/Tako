@@ -18,7 +18,7 @@ import logger from "@/src/runtime/logger"
 import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
 import {
   configureImageRefererRewriteRules,
-  initializeBackgroundRuntime,
+  beginBackgroundRuntimeInitialization,
 } from "@/entrypoints/background/background-startup"
 import {
   backgroundHandledMessages,
@@ -46,10 +46,78 @@ import {
   includesBroadHttpsPermission,
   reconcileBroadHttpsPermissionEnablement,
 } from "@/src/site-integrations/host-permission-service"
+import { initializeSiteIntegrationMetadataOnly } from "@/src/runtime/site-integration-initialization"
 import type { PendingOutputRecord } from "@/src/types/queue-state"
+import { setUserSiteIntegrationEnablement } from "@/src/site-integrations/registry"
+import { createSiteIntegrationSupportReadiness } from "@/entrypoints/background/site-integration-support-readiness"
 
 // Global state manager instance
 let stateManager!: CentralizedStateManager // set during initializeExtensionRuntime()
+let runtimeInitialized = false
+let resolveStateManagerReady!: () => void
+let rejectStateManagerReady!: (error: unknown) => void
+const stateManagerReady = new Promise<void>((resolve, reject) => {
+  resolveStateManagerReady = resolve
+  rejectStateManagerReady = reject
+})
+void stateManagerReady.catch(() => undefined)
+
+function publishStateManager(nextStateManager: CentralizedStateManager): void {
+  stateManager = nextStateManager
+  resolveStateManagerReady()
+}
+
+async function waitForStateManagerReady(): Promise<void> {
+  if (stateManager) return
+  await stateManagerReady
+}
+
+const siteIntegrationSupportReadiness =
+  createSiteIntegrationSupportReadiness({
+    reconcilePermissionEnablement: reconcileBroadHttpsPermissionEnablement,
+    initializeMetadata: initializeSiteIntegrationMetadataOnly,
+    applyEnablement: setUserSiteIntegrationEnablement,
+  })
+
+function ensureSiteIntegrationMetadataInitialized(): Promise<void> {
+  return siteIntegrationSupportReadiness.ensureInitialized()
+}
+
+async function reconcileIntegrationSupportAfterPermissionRemoval(): Promise<void> {
+  // Events arriving after this point must wait for the new permission snapshot,
+  // not the readiness promise that completed before Chrome removed access.
+  siteIntegrationSupportReadiness.invalidate()
+  await ensureSiteIntegrationMetadataInitialized()
+
+  const tabs = await chrome.tabs.query({})
+  const refreshes = tabs.flatMap((tab) => {
+    if (typeof tab.id !== "number") return []
+    const url = tab.url ?? tab.pendingUrl ?? ""
+    const updates: Promise<unknown>[] = [
+      tabUiCoordinator.updateActionForTab(tab.id, url),
+      tabUiCoordinator.updateSidePanelForTab(tab.id),
+    ]
+    if (tab.active) {
+      updates.push(
+        tabContextResolver.resolveTabContext(tab.id, {
+          windowId: tab.windowId,
+          allowCached: false,
+        })
+      )
+    }
+    return updates
+  })
+  const outcomes = await Promise.allSettled(refreshes)
+  for (const outcome of outcomes) {
+    if (outcome.status === "rejected") {
+      logger.debug(
+        "Failed to refresh tab support after permission removal:",
+        outcome.reason
+      )
+    }
+  }
+}
+
 const pendingDownloadsStore = createPendingDownloadsStore()
 configureDownloadQueueLifecycle({
   onQueueDrained: () => scheduleOffscreenCloseIfIdle(pendingDownloadsStore),
@@ -57,7 +125,7 @@ configureDownloadQueueLifecycle({
 })
 const tabUiCoordinator = createTabUiCoordinator()
 const initializationBarrier = createInitializationBarrier({
-  isInitialized: () => Boolean(stateManager),
+  isInitialized: () => runtimeInitialized,
   initialize: async () => {
     await initializeExtensionRuntime()
   },
@@ -65,7 +133,8 @@ const initializationBarrier = createInitializationBarrier({
 const tabContextResolver = createTabContextResolver({
   getStateManager: () => stateManager,
   tabContextCache,
-  beforeStateMutation: () => initializationBarrier.ensureInitialized(),
+  beforeResolution: ensureSiteIntegrationMetadataInitialized,
+  beforeStateMutation: waitForStateManagerReady,
 })
 
 async function requestBlobRevocation(
@@ -113,23 +182,31 @@ async function ensureStateManagerInitialized(): Promise<void> {
  * Initialize extension runtime services and state
  */
 async function initializeExtensionRuntime(): Promise<void> {
-  const initializedRuntime = await initializeBackgroundRuntime({
-    pendingDownloadsStore,
-    ensureLivenessAlarm,
-    ensureOffscreenDocumentReady,
-    requestBlobRevocation,
-  })
-  // Publish the state manager before this initialization barrier resolves.
-  // Queue activation may dispatch an offscreen job, but message/navigation
-  // handlers must never observe an initialized barrier with no manager.
-  stateManager = initializedRuntime.stateManager
+  try {
+    const initialization = await beginBackgroundRuntimeInitialization({
+      pendingDownloadsStore,
+      ensureLivenessAlarm,
+      ensureOffscreenDocumentReady,
+      requestBlobRevocation,
+    })
+    // Tab-context commits use only the initialized state manager. Publish it
+    // before queue/output recovery so a cold worker does not keep a supported
+    // Side Panel in Loading while unrelated recovery work completes.
+    publishStateManager(initialization.stateManager)
 
-  // Queue work remains asynchronous after the control plane is available.
-  // That avoids startup deadlocks while preserving a fully initialized message
-  // and tab-context path for events arriving during queue recovery.
-  void initializedRuntime.activateQueue().catch((error) => {
-    logger.error("Failed to activate the recovered download queue:", error)
-  })
+    const initializedRuntime = await initialization.initialized
+    runtimeInitialized = true
+
+    // Queue work remains asynchronous after the control plane is available.
+    // That avoids startup deadlocks while preserving a fully initialized message
+    // and tab-context path for events arriving during queue recovery.
+    void initializedRuntime.activateQueue().catch((error) => {
+      logger.error("Failed to activate the recovered download queue:", error)
+    })
+  } catch (error) {
+    rejectStateManagerReady(error)
+    throw error
+  }
 }
 
 /**
@@ -153,13 +230,6 @@ export default defineBackground({
   type: "module",
   main() {
     logger.info("Background script starting")
-
-    // Initialize architecture
-    ensureStateManagerInitialized().catch((error) => {
-      logger.error("Failed to initialize architecture:", error)
-    })
-
-    void configureImageRefererRewriteRules()
 
     // Configure side panel behavior: open on action click
     try {
@@ -247,6 +317,7 @@ export default defineBackground({
     // See: https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle
 
     registerBackgroundNavigationListeners({
+      ensureSiteIntegrationMetadataInitialized,
       ensureStateManagerInitialized,
       getStateManager: () => stateManager,
       tabContextCache,
@@ -268,18 +339,31 @@ export default defineBackground({
         return
       }
 
-      void reconcileBroadHttpsPermissionEnablement().catch((error) => {
-        logger.error(
-          "Failed to reconcile integration enablement after permission removal:",
-          error
-        )
-      })
+      void reconcileIntegrationSupportAfterPermissionRemoval().catch(
+        (error) => {
+          logger.error(
+            "Failed to reconcile integration enablement after permission removal:",
+            error
+          )
+        }
+      )
     })
 
     // Register rate-limit storage listener synchronously so limiter cache is
     // cleared on settings/overrides changes. Must run in main() (not module
     // scope) because entrypoints are imported in Node at build time.
     initRateLimitStorageListener()
+
+    // All event listeners above are registered during this synchronous main()
+    // turn. Start the asynchronous runtime work only after registration so an
+    // MV3 wakeup can dispatch navigation events immediately.
+    void ensureSiteIntegrationMetadataInitialized().catch((error) => {
+      logger.error("Failed to initialize site integration metadata:", error)
+    })
+    ensureStateManagerInitialized().catch((error) => {
+      logger.error("Failed to initialize architecture:", error)
+    })
+    void configureImageRefererRewriteRules()
 
     logger.info("Background script initialized")
   },

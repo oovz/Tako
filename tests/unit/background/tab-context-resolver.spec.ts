@@ -104,6 +104,55 @@ describe("tab context resolver", () => {
     expect(beforeStateMutation).not.toHaveBeenCalled()
   })
 
+  it("does not treat a cached metadata-only partial as terminal", async () => {
+    const cache = createCache()
+    cache.getCachedContext.mockReturnValue({
+      siteIntegrationId: "pixiv-comic",
+      mangaId: "123",
+      seriesTitle: "Cached metadata",
+      chapters: [],
+      volumes: [],
+      chaptersLoading: true,
+      lastUpdated: 1,
+    })
+    const resolver = createTabContextResolver({
+      getStateManager: () => ({}) as never,
+      tabContextCache: cache as never,
+    })
+
+    await resolver.resolveTabContext(9, { allowCached: true })
+
+    expect(cache.syncActiveTabContext).not.toHaveBeenCalled()
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+  })
+
+  it("waits for integration metadata before projecting loading", async () => {
+    const cache = createCache()
+    let releaseResolution: (() => void) | undefined
+    const beforeResolution = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseResolution = resolve
+        })
+    )
+    const resolver = createTabContextResolver({
+      getStateManager: () => ({}) as never,
+      tabContextCache: cache as never,
+      beforeResolution,
+    })
+
+    const resolution = resolver.resolveTabContext(9)
+    await vi.waitFor(() => expect(beforeResolution).toHaveBeenCalledOnce())
+    expect(cache.projectLoadingForTab).not.toHaveBeenCalled()
+    expect(mocks.matchUrl).not.toHaveBeenCalled()
+
+    releaseResolution?.()
+    await resolution
+
+    expect(beforeResolution).toHaveBeenCalledBefore(cache.projectLoadingForTab)
+    expect(cache.projectLoadingForTab).toHaveBeenCalledBefore(mocks.matchUrl)
+  })
+
   it("resolves provider data and commits a request-scoped tab payload", async () => {
     const cache = createCache()
     const stateManager = {} as never
@@ -120,6 +169,7 @@ describe("tab context resolver", () => {
       siteIntegrationId: "pixiv-comic",
       seriesUrl: "https://comic.pixiv.net/works/123",
       mangadexPreferences: undefined,
+      onPartial: expect.any(Function),
     })
     expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
       stateManager,
@@ -135,6 +185,126 @@ describe("tab context resolver", () => {
     expect(beforeStateMutation).toHaveBeenCalledBefore(
       mocks.handleInitializeTab
     )
+  })
+
+  it("waits for state-manager readiness before committing a partial result", async () => {
+    const cache = createCache()
+    let releaseStateManager: (() => void) | undefined
+    let stateManagerReady = false
+    const beforeStateMutation = vi.fn(() => {
+      if (stateManagerReady) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        releaseStateManager = () => {
+          stateManagerReady = true
+          resolve()
+        }
+      })
+    })
+    const stateManager = {
+      getTabState: vi.fn(async () => ({
+        siteIntegrationId: "pixiv-comic",
+        mangaId: "previous-series",
+        seriesTitle: "Previous",
+        chapters: [
+          {
+            id: "previous-chapter",
+            title: "Previous chapter",
+            url: "https://example.com/previous",
+            index: 1,
+            status: "queued",
+            lastUpdated: 1,
+          },
+        ],
+        volumes: [{ id: "previous-volume", title: "Previous volume" }],
+        lastUpdated: 1,
+      })),
+    }
+    const getStateManager = vi.fn(() => {
+      if (!stateManagerReady) {
+        throw new Error("State manager accessed before readiness")
+      }
+      return stateManager as never
+    })
+    mocks.resolveSeriesData.mockImplementationOnce(async (input) => {
+      const onPartial = (
+        input as {
+          onPartial: (value: {
+            seriesId: string
+            seriesMetadata: { title: string }
+          }) => Promise<void>
+        }
+      ).onPartial
+      await onPartial({
+        seriesId: "123",
+        seriesMetadata: { title: "Partial title" },
+      })
+      return {
+        seriesId: "123",
+        seriesMetadata: { title: "Final title" },
+        chapterList: { chapters: [], volumes: [] },
+      }
+    })
+    const resolver = createTabContextResolver({
+      getStateManager,
+      tabContextCache: cache as never,
+      beforeStateMutation,
+    })
+
+    const resolution = resolver.resolveTabContext(9)
+    await vi.waitFor(() => expect(beforeStateMutation).toHaveBeenCalledOnce())
+    expect(getStateManager).not.toHaveBeenCalled()
+
+    releaseStateManager?.()
+    await resolution
+
+    expect(mocks.handleInitializeTab).toHaveBeenNthCalledWith(
+      1,
+      stateManager,
+      expect.objectContaining({
+        context: "ready",
+        mangaId: "123",
+        chapters: [],
+        volumes: undefined,
+        chaptersLoading: true,
+      }),
+      9,
+      { requestId: 4, windowId: 3 }
+    )
+    expect(mocks.handleInitializeTab).toHaveBeenLastCalledWith(
+      stateManager,
+      expect.objectContaining({
+        context: "ready",
+        mangaId: "123",
+        chaptersLoading: undefined,
+      }),
+      9,
+      { requestId: 4, windowId: 3 }
+    )
+  })
+
+  it("coalesces callers while provider readiness is pending", async () => {
+    const cache = createCache()
+    let releaseReadiness: (() => void) | undefined
+    const readiness = new Promise<void>((resolve) => {
+      releaseReadiness = resolve
+    })
+    const beforeResolution = vi.fn(() => readiness)
+    const resolver = createTabContextResolver({
+      getStateManager: () => ({}) as never,
+      tabContextCache: cache as never,
+      beforeResolution,
+    })
+
+    const first = resolver.resolveTabContext(9)
+    await vi.waitFor(() => expect(beforeResolution).toHaveBeenCalledOnce())
+    const second = resolver.resolveTabContext(9)
+
+    releaseReadiness?.()
+    await Promise.all([first, second])
+
+    expect(beforeResolution).toHaveBeenCalledOnce()
+    expect(cache.projectLoadingForTab).toHaveBeenCalledOnce()
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
   })
 
   it("drops a stale provider result before state mutation", async () => {
@@ -271,7 +441,54 @@ describe("tab context resolver", () => {
             "This site’s series information could not be loaded. Try again.",
         },
         9,
-        { requestId: 4, windowId: 3 }
+        { requestId: 4, windowId: 3, supersedeInFlight: true }
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("rejects a late partial result after the resolution deadline", async () => {
+    vi.useFakeTimers()
+    try {
+      const cache = createCache()
+      let publishPartial:
+        | ((value: {
+            seriesId: string
+            seriesMetadata: { title: string }
+          }) => Promise<void>)
+        | undefined
+      mocks.resolveSeriesData.mockImplementation(
+        (input) =>
+          new Promise(() => {
+            publishPartial = (
+              input as {
+                onPartial: typeof publishPartial
+              }
+            ).onPartial
+          })
+      )
+      const resolver = createTabContextResolver({
+        getStateManager: () =>
+          ({ getTabState: vi.fn(async () => null) }) as never,
+        tabContextCache: cache as never,
+        resolutionTimeoutMs: 10,
+      })
+
+      const pending = resolver.resolveTabContext(9)
+      await vi.advanceTimersByTimeAsync(20)
+      await pending
+      await publishPartial?.({
+        seriesId: "123",
+        seriesMetadata: { title: "Too late" },
+      })
+
+      expect(mocks.handleInitializeTab).toHaveBeenCalledTimes(1)
+      expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ context: "error" }),
+        9,
+        { requestId: 4, windowId: 3, supersedeInFlight: true }
       )
     } finally {
       vi.useRealTimers()
@@ -309,7 +526,7 @@ describe("tab context resolver", () => {
         error: "This site’s series information could not be loaded. Try again.",
       },
       9,
-      { requestId: 4, windowId: 3 }
+      { requestId: 4, windowId: 3, supersedeInFlight: true }
     )
   })
 
@@ -343,7 +560,7 @@ describe("tab context resolver", () => {
         error: "This site’s series information could not be loaded. Try again.",
       },
       9,
-      { requestId: 4, windowId: 3 }
+      { requestId: 4, windowId: 3, supersedeInFlight: true }
     )
   })
 
@@ -386,6 +603,7 @@ describe("tab context resolver", () => {
         adultGatePresent: false,
         chapterHtml: '<div class="chapter"></div>',
       },
+      onPartial: expect.any(Function),
     })
   })
 })

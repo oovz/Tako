@@ -212,12 +212,21 @@ export interface InitializedBackgroundRuntime {
   activateQueue: () => Promise<void>
 }
 
-export function exposeAndActivateBackgroundRuntime(input: {
-  runtime: InitializedBackgroundRuntime
-  exposeStateManager: (stateManager: CentralizedStateManager) => void
-}): Promise<void> {
-  input.exposeStateManager(input.runtime.stateManager)
-  return input.runtime.activateQueue()
+export interface BackgroundRuntimeInitialization {
+  stateManager: CentralizedStateManager
+  initialized: Promise<InitializedBackgroundRuntime>
+}
+
+interface BackgroundRuntimeInitializationInput {
+  pendingDownloadsStore: PendingDownloadsStore
+  ensureLivenessAlarm: () => Promise<void>
+  ensureOffscreenDocumentReady: () => Promise<void>
+  requestBlobRevocation: (
+    record: Pick<
+      PendingOutputRecord,
+      "jobId" | "attempt" | "outputId" | "blobUrl"
+    >
+  ) => Promise<void>
 }
 
 function createQueueActivator(input: {
@@ -247,24 +256,11 @@ function createQueueActivator(input: {
   }
 }
 
-export async function initializeBackgroundRuntime(input: {
-  pendingDownloadsStore: PendingDownloadsStore
-  ensureLivenessAlarm: () => Promise<void>
-  ensureOffscreenDocumentReady: () => Promise<void>
-  requestBlobRevocation: (
-    record: Pick<
-      PendingOutputRecord,
-      "jobId" | "attempt" | "outputId" | "blobUrl"
-    >
-  ) => Promise<void>
-}): Promise<InitializedBackgroundRuntime> {
+async function completeBackgroundRuntimeInitialization(
+  input: BackgroundRuntimeInitializationInput,
+  stateManager: CentralizedStateManager
+): Promise<InitializedBackgroundRuntime> {
   try {
-    logger.info("Initializing extension runtime services and state...")
-
-    settingsSyncService.initialize()
-
-    const stateManager = await createStateManager()
-
     await recoverPendingUndoActions(stateManager)
 
     await input.pendingDownloadsStore.hydrate()
@@ -356,4 +352,30 @@ export async function initializeBackgroundRuntime(input: {
     logger.error("Failed to initialize extension runtime:", error)
     throw error
   }
+}
+
+export async function beginBackgroundRuntimeInitialization(
+  input: BackgroundRuntimeInitializationInput
+): Promise<BackgroundRuntimeInitialization> {
+  try {
+    logger.info("Initializing extension runtime services and state...")
+
+    settingsSyncService.initialize()
+
+    const stateManager = await createStateManager()
+    return {
+      stateManager,
+      initialized: completeBackgroundRuntimeInitialization(input, stateManager),
+    }
+  } catch (error) {
+    logger.error("Failed to initialize extension runtime:", error)
+    throw error
+  }
+}
+
+export async function initializeBackgroundRuntime(
+  input: BackgroundRuntimeInitializationInput
+): Promise<InitializedBackgroundRuntime> {
+  const initialization = await beginBackgroundRuntimeInitialization(input)
+  return await initialization.initialized
 }

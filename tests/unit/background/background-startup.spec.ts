@@ -199,6 +199,32 @@ describe("initializeBackgroundRuntime", () => {
     expect(mocks.settingsSyncInitialize).toHaveBeenCalledTimes(1)
   })
 
+  it("returns the initialized state manager before slow recovery completes", async () => {
+    const { beginBackgroundRuntimeInitialization } =
+      await import("@/entrypoints/background/background-startup")
+    let releaseHydration: (() => void) | undefined
+    mocks.hydratePendingDownloads.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          releaseHydration = () => resolve(undefined)
+        })
+    )
+    const startup = await beginBackgroundRuntimeInitialization({
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      ensureLivenessAlarm: async () => undefined,
+      ensureOffscreenDocumentReady: async () => undefined,
+      requestBlobRevocation: vi.fn(async () => undefined),
+    })
+
+    expect(startup.stateManager).toBeDefined()
+    await vi.waitFor(() =>
+      expect(mocks.hydratePendingDownloads).toHaveBeenCalledTimes(1)
+    )
+
+    releaseHydration?.()
+    await expect(startup.initialized).resolves.toBeDefined()
+  })
+
   it("releases terminal pending-output records after their accounting is durable", async () => {
     const { initializeBackgroundRuntime } =
       await import("@/entrypoints/background/background-startup")
@@ -472,27 +498,6 @@ describe("initializeBackgroundRuntime", () => {
       "active-task",
       ensureOffscreenDocumentReady
     )
-  })
-
-  it("exposes the state manager before recovered queue activation begins", async () => {
-    const stateManager = {
-      updateGlobalState: vi.fn(async () => undefined),
-    } as unknown as CentralizedStateManager
-    let exposedStateManager: CentralizedStateManager | undefined
-    const activateQueue = vi.fn(async () => {
-      expect(exposedStateManager).toBe(stateManager)
-    })
-    const { exposeAndActivateBackgroundRuntime } =
-      await import("@/entrypoints/background/background-startup")
-
-    await exposeAndActivateBackgroundRuntime({
-      runtime: { stateManager, activateQueue },
-      exposeStateManager: (value) => {
-        exposedStateManager = value
-      },
-    })
-
-    expect(activateQueue).toHaveBeenCalledTimes(1)
   })
 
   it("fails closed when an existing offscreen document returns malformed identity status", async () => {

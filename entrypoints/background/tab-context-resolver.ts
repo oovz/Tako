@@ -27,6 +27,7 @@ import { resolveTabUrlForSupportCheck } from "@/src/shared/tab-url-helpers"
 import { siteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
 import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
 import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
+import type { SeriesMetadata } from "@/src/types/series-metadata"
 
 type TabContextCache = ReturnType<typeof createTabContextCache>
 type TabContextResolutionOutcome = "completed" | "retry"
@@ -70,6 +71,10 @@ function withinTimeout<T>(
 
 function createUserFacingResolutionError(): string {
   return "This site’s series information could not be loaded. Try again."
+}
+
+function isIncompleteCachedContext(value: TabContextCacheValue): boolean {
+  return value !== null && !("error" in value) && value.chaptersLoading === true
 }
 
 class PageProbeUrlMismatchError extends Error {
@@ -123,6 +128,7 @@ export function createTabContextResolver(deps: {
   getStateManager: () => CentralizedStateManager
   tabContextCache: TabContextCache
   resolutionTimeoutMs?: number
+  beforeResolution?: () => Promise<void>
   beforeStateMutation?: () => Promise<void>
 }) {
   const resolutionTimeoutMs =
@@ -147,7 +153,11 @@ export function createTabContextResolver(deps: {
   async function initializeTabContext(
     payload: Parameters<typeof handleInitializeTab>[1],
     tabId: number,
-    request: { requestId: number; windowId?: number }
+    request: {
+      requestId: number
+      windowId?: number
+      supersedeInFlight?: boolean
+    }
   ): Promise<void> {
     await deps.beforeStateMutation?.()
     await handleInitializeTab(deps.getStateManager(), payload, tabId, request)
@@ -159,6 +169,7 @@ export function createTabContextResolver(deps: {
     options: ResolveTabContextOptions = {}
   ): Promise<TabContextResolutionOutcome> {
     const resolutionStartedAt = performance.now()
+    await deps.beforeResolution?.()
     let tab: chrome.tabs.Tab
     try {
       tab = await chrome.tabs.get(tabId)
@@ -205,7 +216,10 @@ export function createTabContextResolver(deps: {
         inMemory !== undefined
           ? inMemory
           : await deps.tabContextCache.readAndCache(tabId)
-      if (inMemory !== undefined || cached !== null) {
+      if (
+        (inMemory !== undefined || cached !== null) &&
+        !isIncompleteCachedContext(cached)
+      ) {
         await commitCachedContext(tabId, cached, requestId, windowId)
         logger.debug("[tab-context] Resolved active tab from cache", {
           tabId,
@@ -226,6 +240,7 @@ export function createTabContextResolver(deps: {
       return "completed"
     }
 
+    let acceptsPartialResults = true
     try {
       const deadlineAt = Date.now() + resolutionTimeoutMs
       const awaitWithinResolutionDeadline = <T>(operation: Promise<T>) =>
@@ -272,6 +287,66 @@ export function createTabContextResolver(deps: {
         probe
       )
 
+      const onPartial = async (partial: {
+        seriesId?: string
+        seriesMetadata?: SeriesMetadata
+      }) => {
+        if (
+          !acceptsPartialResults ||
+          !partial.seriesId ||
+          !partial.seriesMetadata
+        ) {
+          return
+        }
+
+        try {
+          await deps.beforeStateMutation?.()
+          if (!acceptsPartialResults) return
+
+          const currentTab = await awaitWithinResolutionDeadline(
+            chrome.tabs.get(tabId)
+          )
+          const currentUrl = resolveTabUrlForSupportCheck(currentTab)
+          const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
+            windowId,
+            requestId
+          )
+          if (!currentTab.active || currentUrl !== url || !isCurrent) {
+            logger.debug("Discarding stale partial tab context result", {
+              tabId,
+              requestId,
+            })
+            return
+          }
+
+          const stateManager = deps.getStateManager()
+          const existingState = await stateManager.getTabState(tabId)
+          const isSameSeries =
+            existingState?.siteIntegrationId === matched.integrationId &&
+            existingState.mangaId === partial.seriesId
+          const existingChapters = isSameSeries ? existingState.chapters : []
+          const partialPayload = resolveInitializeTabPayload({
+            siteIntegrationId: matched.integrationId,
+            rawMangaId: partial.seriesId,
+            chapters: existingChapters,
+            volumes: isSameSeries ? existingState.volumes : undefined,
+            seriesMetadata: partial.seriesMetadata,
+            chaptersLoading: true,
+          })
+
+          await handleInitializeTab(stateManager, partialPayload, tabId, {
+            requestId,
+            windowId,
+          })
+        } catch (error) {
+          logger.debug("Partial tab context commit failed", {
+            tabId,
+            requestId,
+            error,
+          })
+        }
+      }
+
       const result = await awaitWithinResolutionDeadline(
         resolveSiteIntegrationSeriesData({
           siteIntegrationId: matched.integrationId,
@@ -280,8 +355,10 @@ export function createTabContextResolver(deps: {
           ...(probe?.integrationContext
             ? { integrationContext: probe.integrationContext }
             : {}),
+          onPartial,
         })
       )
+      acceptsPartialResults = false
       const normalized = normalizeFetchedSeriesData(result.chapterList)
       const extractionError = result.metadataError ?? result.chapterListError
       const payload = resolveInitializeTabPayload({
@@ -291,6 +368,7 @@ export function createTabContextResolver(deps: {
         volumes: normalized.volumes,
         seriesMetadata: result.seriesMetadata,
         extractionError,
+        chapterListNotice: result.chapterListNotice,
       })
 
       const currentTab = await awaitWithinResolutionDeadline(
@@ -339,6 +417,7 @@ export function createTabContextResolver(deps: {
       })
       return "completed"
     } catch (error) {
+      acceptsPartialResults = false
       logger.error("Tab context resolution failed:", error)
       const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
         windowId,
@@ -350,7 +429,7 @@ export function createTabContextResolver(deps: {
       await initializeTabContext(
         { context: "error", error: createUserFacingResolutionError() },
         tabId,
-        { requestId, windowId }
+        { requestId, windowId, supersedeInFlight: true }
       )
       return "completed"
     }

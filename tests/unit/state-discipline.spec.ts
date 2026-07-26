@@ -233,6 +233,7 @@ describe("State discipline runtime guards", () => {
         {
           requestId: undefined,
           windowId: undefined,
+          supersedeInFlight: true,
         }
       )
     })

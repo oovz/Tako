@@ -295,7 +295,6 @@ describe("tab context cache", () => {
     expect(removeSession).toHaveBeenCalledWith([
       "tab_11",
       "seriesContextError_11",
-      `${SESSION_STORAGE_KEYS.externalTabInitPrefix}11`,
     ])
     expect(sessionStore.tab_11).toBeUndefined()
     expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
@@ -377,6 +376,23 @@ describe("tab context cache", () => {
     })
   })
 
+  it("does not supersede an in-flight loading revision when the tab completes", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+
+    const loading = await cache.projectLoadingForTab(11, 1)
+    expect(loading).toEqual({ requestId: 1 })
+
+    await cache.handleTabUpdated(11, { status: "complete" })
+
+    await expect(cache.isRequestIdCurrent(1, 1)).resolves.toBe(true)
+  })
+
   it("supersedes an in-flight resolver when an external context arrives", async () => {
     const cache = createTabContextCache({
       readSession,
@@ -412,6 +428,86 @@ describe("tab context cache", () => {
     expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContext]).toEqual({
       error: "external context",
     })
+  })
+
+  it("persists an authoritative inactive tab without replacing the active projection", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+    await cache.projectLoadingForTab(11, 1)
+    const inactiveState = {
+      siteIntegrationId: "mangadex",
+      mangaId: "inactive-series",
+      seriesTitle: "Inactive Series",
+      chapters: [],
+      volumes: [],
+      lastUpdated: 1,
+    }
+
+    await expect(
+      cache.commitTabContextMutation(
+        22,
+        { windowId: 1, supersedeInFlight: true },
+        async () => {
+          sessionStore.tab_22 = inactiveState
+          return inactiveState
+        }
+      )
+    ).resolves.toBe(true)
+
+    expect(sessionStore.tab_22).toEqual(inactiveState)
+    expect(
+      sessionStore[SESSION_STORAGE_KEYS.activeTabContextByWindow]
+    ).toMatchObject({
+      1: { activeTabId: 11, context: { loading: true }, revision: 1 },
+    })
+  })
+
+  it("serializes navigation invalidation after an in-progress tab-state commit", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      removeSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+    const loading = await cache.projectLoadingForTab(11, 1)
+    if (!loading) throw new Error("Expected a loading projection")
+    let releaseMutation: (() => void) | undefined
+    const mutationPaused = new Promise<void>((resolve) => {
+      releaseMutation = resolve
+    })
+
+    const staleCommit = cache.commitTabContextMutation(
+      11,
+      { windowId: 1, requestId: loading.requestId },
+      async () => {
+        await mutationPaused
+        const staleState = {
+          siteIntegrationId: "mangadex",
+          mangaId: "old-series",
+          seriesTitle: "Old Series",
+          chapters: [],
+          volumes: [],
+          lastUpdated: 1,
+        }
+        sessionStore.tab_11 = staleState
+        return staleState
+      }
+    )
+    const navigation = cache.handleTabUpdated(11, {
+      url: "https://mangadex.org/title/new-series",
+    })
+
+    releaseMutation?.()
+    await staleCommit
+    await navigation
+
+    expect(sessionStore.tab_11).toBeUndefined()
   })
 
   it("preserves concurrent projections for different windows", async () => {
