@@ -8,6 +8,12 @@ type LoggerConfig = {
   minLevel: LogLevel
 }
 
+type BufferedDebugEntry = {
+  msg: string
+  data: unknown
+  capturedAt: number
+}
+
 const LEVEL_RANK: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
@@ -21,14 +27,82 @@ const LEVEL_RANK: Record<LogLevel, number> = {
 const IS_DEV_BUILD =
   typeof import.meta.env !== "undefined" && import.meta.env.DEV === true
 const DEFAULT_LOG_LEVEL: LogLevel = IS_DEV_BUILD ? "debug" : "warn"
+const MAX_PENDING_DEBUG_ENTRIES = 50
 
 let forceDebug = false
 let config: LoggerConfig = { minLevel: DEFAULT_LOG_LEVEL }
+let hasAppliedPersistedSettings = false
+let pendingDebugEntries: BufferedDebugEntry[] = []
+
+function writeToConsole(level: LogLevel, msg: string, data?: unknown): void {
+  const prefix = `[TMD] ${msg}`
+  const payload = data !== undefined ? [prefix, data] : [prefix]
+  switch (level) {
+    case "debug":
+      console.debug(...payload)
+      return
+    case "info":
+      console.info(...payload)
+      return
+    case "warn":
+      console.warn(...payload)
+      return
+    case "error":
+      console.error(...payload)
+      return
+  }
+}
+
+function appendPendingDebugEntry(msg: string, data: unknown): void {
+  if (pendingDebugEntries.length >= MAX_PENDING_DEBUG_ENTRIES) {
+    pendingDebugEntries.shift()
+  }
+  pendingDebugEntries.push({ msg, data, capturedAt: performance.now() })
+}
+
+function addBufferedTiming(
+  data: unknown,
+  capturedAt: number
+): Record<string, unknown> {
+  const timing = {
+    bufferedForMs: Math.round(performance.now() - capturedAt),
+  }
+  if (
+    data &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    !(data instanceof Error)
+  ) {
+    return { ...(data as Record<string, unknown>), ...timing }
+  }
+  return data === undefined ? timing : { data, ...timing }
+}
+
+function flushPendingDebugEntries(): void {
+  const entries = pendingDebugEntries
+  pendingDebugEntries = []
+  for (const entry of entries) {
+    writeToConsole(
+      "debug",
+      entry.msg,
+      addBufferedTiming(entry.data, entry.capturedAt)
+    )
+  }
+}
+
+function settlePendingDebugEntries(): void {
+  if (config.minLevel === "debug") {
+    flushPendingDebugEntries()
+    return
+  }
+  pendingDebugEntries = []
+}
 
 export function setLoggerForceDebug(value: boolean): void {
   forceDebug = !!value
   if (forceDebug) {
     config = { minLevel: "debug" }
+    flushPendingDebugEntries()
   }
 }
 
@@ -43,6 +117,8 @@ export function computeLoggerConfig(advanced?: AdvancedSettings): LoggerConfig {
 
 export function applyAdvancedLoggerSettings(advanced?: AdvancedSettings): void {
   config = computeLoggerConfig(advanced)
+  hasAppliedPersistedSettings = true
+  settlePendingDebugEntries()
 }
 
 export function configureLogger(next: Partial<LoggerConfig>): void {
@@ -58,19 +134,17 @@ function shouldWrite(level: LogLevel): boolean {
 }
 
 function write(level: LogLevel, msg: string, data?: unknown) {
-  if (!shouldWrite(level)) return
-  const prefix = `[TMD] ${msg}`
-  const payload = data !== undefined ? [prefix, data] : [prefix]
-  switch (level) {
-    case "debug":
-      return console.debug(...payload)
-    case "info":
-      return console.info(...payload)
-    case "warn":
-      return console.warn(...payload)
-    case "error":
-      return console.error(...payload)
+  if (
+    level === "debug" &&
+    !hasAppliedPersistedSettings &&
+    !forceDebug &&
+    !shouldWrite(level)
+  ) {
+    appendPendingDebugEntry(msg, data)
+    return
   }
+  if (!shouldWrite(level)) return
+  writeToConsole(level, msg, data)
 }
 
 export const logger = {
