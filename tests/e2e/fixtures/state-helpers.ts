@@ -178,7 +178,8 @@ export async function initializeTabViaAction(
   const expectedSiteId = payload.siteIntegrationId
   const expectedSeriesId = payload.mangaId
   const expectedSeriesTitle = payload.seriesTitle
-  const expectedChaptersCount = payload.chapters?.length ?? 0
+  const expectedChapterIds =
+    payload.chapters?.map((chapter) => chapter.id) ?? []
 
   const isExpectedState = (
     state: MangaPageState | undefined
@@ -190,9 +191,12 @@ export async function initializeTabViaAction(
     if (!Array.isArray(state.chapters)) return false
     if (!Array.isArray(state.volumes)) return false
 
-    // Allow richer chapter sets if content scripts refresh with fuller data
-    // during initialization races.
-    return state.chapters.length >= expectedChaptersCount
+    return (
+      state.chapters.length === expectedChapterIds.length &&
+      state.chapters.every(
+        (chapter, index) => chapter.id === expectedChapterIds[index]
+      )
+    )
   }
 
   if (!expectedSiteId || !expectedSeriesId || !expectedSeriesTitle) {
@@ -205,12 +209,50 @@ export async function initializeTabViaAction(
   if (page.url() !== navigateToUrl) {
     await page.goto(navigateToUrl, { waitUntil: "domcontentloaded" })
   }
+  const stateBeforeNavigationSettles = await getSessionState<MangaPageState>(
+    context,
+    `tab_${tabId}`
+  )
+  if (isExpectedState(stateBeforeNavigationSettles)) {
+    // Reinitialization after a same-URL reload can briefly observe the
+    // pre-navigation synthetic state. Wait until the background loading
+    // projection or provider result supersedes it before seeding again.
+    await expect
+      .poll(
+        async () =>
+          !isExpectedState(
+            await getSessionState<MangaPageState>(context, `tab_${tabId}`)
+          ),
+        { timeout: 15_000, intervals: [100] }
+      )
+      .toBe(true)
+  }
+  // Let the production navigation resolver consume the page's initial
+  // loading/DOMContentLoaded events before injecting scenario-specific state.
+  // Otherwise a legitimately delayed provider result can overwrite the E2E
+  // payload after this helper returns.
+  await expect
+    .poll(
+      async () => {
+        const state = await getSessionState<
+          MangaPageState & { loading?: boolean }
+        >(context, `tab_${tabId}`)
+        return state !== undefined && state.loading !== true
+      },
+      { timeout: 15_000, intervals: [100] }
+    )
+    .toBe(true)
   const sendInitAction = async (): Promise<void> => {
     const ext = await context.newPage()
     try {
       await ext.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
         waitUntil: "domcontentloaded",
       })
+      // Keep the target tab active while the extension page sends the action.
+      // The production cache only publishes active-window context for an
+      // active target; Playwright can still evaluate the inactive sender page.
+      await focusTab(context, tabId)
+      await page.bringToFront()
       const response = await ext.evaluate(
         async ({ tabId, payload, action }) => {
           const issuedAt = Date.now()
@@ -265,6 +307,11 @@ export async function initializeTabViaAction(
 
   await focusTab(context, tabId)
   await page.bringToFront()
+  // Focusing the page intentionally triggers the production onActivated
+  // resolver. Apply the synthetic E2E payload after that activation so a
+  // provider result cached during extension startup cannot overwrite the
+  // scenario-specific state used by the test.
+  await sendInitAction()
   await expect
     .poll(
       async () => {
