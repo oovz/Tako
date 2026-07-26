@@ -19,7 +19,7 @@ export interface RequestTabContextRefreshMessage {
   payload?: {
     tabId?: number
     windowId?: number
-    reason?: "sidepanel-mount" | "manhuagui-adult-gate"
+    reason?: "sidepanel-mount"
   }
 }
 
@@ -69,6 +69,7 @@ export type FetchSeriesDataResponse =
       chapterList?: unknown
       metadataError?: string
       chapterListError?: string
+      chapterListNotice?: "adult-consent-required"
     }
   | ErrorResponse
 

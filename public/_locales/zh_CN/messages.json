@@ -46,6 +46,9 @@
   "sidepanel_closeSelection": { "message": "关闭选择" },
   "sidepanel_noChapters": { "message": "无章节" },
   "sidepanel_noChaptersFound": { "message": "未找到章节" },
+  "sidepanel_adultConsentRequired": {
+    "message": "请先接受 Manhuagui 的成人内容提示，然后重新加载此页面。"
+  },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "所选章节已不可用。"
   },

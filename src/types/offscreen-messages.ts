@@ -183,5 +183,6 @@ export type OffscreenParseSeriesHtmlResponse =
       chapterList?: unknown
       metadataError?: string
       chapterListError?: string
+      chapterListNotice?: "adult-consent-required"
     }
   | ErrorResponse

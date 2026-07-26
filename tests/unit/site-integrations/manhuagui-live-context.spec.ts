@@ -94,9 +94,16 @@ describe("Manhuagui live page context", () => {
     await expect(
       resolveSeriesData({
         seriesUrl,
-        integrationContext: { adultGatePresent: true },
+        integrationContext: {
+          adultGatePresent: true,
+          chapterHtml:
+            '<div id="checkAdult"></div><div class="chapter-list"><a href="/comic/21243/900001.html">Hidden chapter</a></div>',
+        },
       })
-    ).resolves.toMatchObject({ chapterList: { chapters: [] } })
+    ).resolves.toMatchObject({
+      chapterList: { chapters: [] },
+      chapterListNotice: "adult-consent-required",
+    })
 
     expect(mocks.resolveSeriesDataViaOffscreen).toHaveBeenCalledTimes(1)
   })

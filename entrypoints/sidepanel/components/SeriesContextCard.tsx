@@ -229,6 +229,11 @@ export function SeriesContextCard({
               </>
             )}
           </div>
+          {data.chapterListNotice === "adult-consent-required" && (
+            <p className="mt-2 text-xs leading-snug text-muted-foreground">
+              {t("sidepanel_adultConsentRequired")}
+            </p>
+          )}
         </div>
 
         {/* Select Chapters button */}

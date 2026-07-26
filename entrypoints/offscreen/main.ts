@@ -649,6 +649,7 @@ export class OffscreenWorker {
       chapterList: result.chapterList,
       metadataError: result.metadataError,
       chapterListError: result.chapterListError,
+      chapterListNotice: result.chapterListNotice,
     }
   }
 

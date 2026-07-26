@@ -7,7 +7,6 @@ export const SESSION_STORAGE_KEYS = {
   activeTaskProgress: "activeTaskProgress",
   activeTaskProgressRevision: "activeTaskProgressRevision",
   activeTaskProgressGeneration: "activeTaskProgressGeneration",
-  externalTabInitPrefix: "externalTabInit_",
   pendingDownloads: "pendingDownloads",
   initFailed: "initFailed",
   initError: "error",

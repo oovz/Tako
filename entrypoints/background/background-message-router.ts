@@ -309,7 +309,11 @@ export async function handleBackgroundMessage(
           }
         }
 
-        if (!isExtensionPageSender(sender)) {
+        const senderOrigin = classifySenderOrigin(
+          sender,
+          typeof chrome !== "undefined" ? chrome.runtime?.id : undefined
+        )
+        if (senderOrigin !== "extension-page") {
           return {
             success: false,
             error:
@@ -363,7 +367,7 @@ export async function handleBackgroundMessage(
         await deps.ensureStateManagerInitialized()
         await deps.tabContextResolver.resolveTabContext(tabId, {
           windowId: tab.windowId,
-          allowCached: true,
+          allowCached: false,
         })
         return { success: true }
       }
@@ -445,6 +449,7 @@ export async function handleBackgroundMessage(
             chapterList: result.chapterList,
             metadataError: result.metadataError,
             chapterListError: result.chapterListError,
+            chapterListNotice: result.chapterListNotice,
           }
         } catch (e: unknown) {
           const errorMessage =

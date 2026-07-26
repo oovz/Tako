@@ -37,6 +37,7 @@ export const FetchSeriesDataResponseSchema = z.union([
     chapterList: z.unknown().optional(),
     metadataError: z.string().optional(),
     chapterListError: z.string().optional(),
+    chapterListNotice: z.literal("adult-consent-required").optional(),
   }),
   ErrorResponseSchema,
 ])
@@ -125,7 +126,7 @@ export const ActionMessageSchema = z.discriminatedUnion("type", [
       .strictObject({
         tabId: z.number().int().nonnegative().optional(),
         windowId: z.number().int().nonnegative().optional(),
-        reason: z.enum(["sidepanel-mount", "manhuagui-adult-gate"]).optional(),
+        reason: z.enum(["sidepanel-mount"]).optional(),
       })
       .default({}),
   }),

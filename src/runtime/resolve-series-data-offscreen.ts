@@ -43,5 +43,6 @@ export async function resolveSeriesDataViaOffscreen(
     chapterList: response.chapterList,
     metadataError: response.metadataError,
     chapterListError: response.chapterListError,
+    chapterListNotice: response.chapterListNotice,
   }
 }

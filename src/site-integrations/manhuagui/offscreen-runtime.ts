@@ -31,6 +31,9 @@ const offscreen: OffscreenIntegration = {
       }
       try {
         result.chapterList = extractChapterListFromDocument(document)
+        if (document.querySelector("#checkAdult")) {
+          result.chapterListNotice = "adult-consent-required"
+        }
       } catch (error) {
         result.chapterListError =
           error instanceof Error ? error.message : String(error)

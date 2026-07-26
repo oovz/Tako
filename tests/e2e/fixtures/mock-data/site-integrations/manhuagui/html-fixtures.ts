@@ -8,10 +8,9 @@
  *   blocks. The content script reads `.book-cont .book-title h1`,
  *   `.detail-list span` items, and every `.chapter-list li > a`.
  * - Adult-gated series page: chapter list replaced by `<div id="checkAdult">`
- *   warning and the real chapter markup is lz-string-compressed into
- *   `<input id="__VIEWSTATE" value="...">`. The content script decodes the
- *   viewstate via `resolveAdultChapterDocument` and then runs the normal
- *   extractor against the decoded fragment.
+ *   and an opaque `__VIEWSTATE` payload. The extension deliberately leaves
+ *   that site-owned state untouched and waits for the user to consent and
+ *   reload the page.
  *
  * Chapter-viewer HTML (packed image payload) is NOT synthesized at Layer 1.
  * Phase 3 extends this module with a `buildManhuaguiChapterPageHtml` helper
@@ -166,9 +165,8 @@ export function buildManhuaguiSeriesPageHtml(
 }
 
 /**
- * Produce the adult-gated series page: warning banner + lz-string-compressed
- * real chapter markup in `#__VIEWSTATE`. The production
- * `resolveAdultChapterDocument` decodes this exact payload shape.
+ * Produce the adult-gated series page: warning banner plus an opaque
+ * lz-string-compressed `#__VIEWSTATE` value that production does not decode.
  */
 export function buildManhuaguiAdultSeriesPageHtml(
   options: BuildSeriesPageHtmlOptions
@@ -197,6 +195,16 @@ export const BASIC_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
 })
 
 export const ADULT_SERIES_PAGE_HTML = buildManhuaguiAdultSeriesPageHtml({
+  seriesId: ADULT_SERIES.series.seriesId,
+  seriesTitle: ADULT_SERIES.series.seriesTitle,
+  author: ADULT_SERIES.series.author,
+  description: ADULT_SERIES.series.description,
+  coverUrl: ADULT_SERIES.series.coverUrl,
+  status: ADULT_SERIES.series.status,
+  groups: groupChaptersByVolume(ADULT_CHAPTERS.chapters),
+})
+
+export const ADULT_UNGATED_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   seriesId: ADULT_SERIES.series.seriesId,
   seriesTitle: ADULT_SERIES.series.seriesTitle,
   author: ADULT_SERIES.series.author,

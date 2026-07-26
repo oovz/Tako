@@ -52,6 +52,9 @@
   "sidepanel_closeSelection": { "message": "選択を閉じる" },
   "sidepanel_noChapters": { "message": "章なし" },
   "sidepanel_noChaptersFound": { "message": "章が見つかりません" },
+  "sidepanel_adultConsentRequired": {
+    "message": "Manhuagui の成人向けコンテンツ確認に同意してから、このページを再読み込みしてください。"
+  },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "選択した章は利用できなくなりました。"
   },

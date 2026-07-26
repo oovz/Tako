@@ -13,6 +13,7 @@ function readManhuaguiLiveChapterHtml(
   integrationContext: Record<string, unknown> | undefined
 ): string | undefined {
   if (!integrationContext) return undefined
+  if (integrationContext.adultGatePresent === true) return undefined
   const chapterHtml = integrationContext.chapterHtml
   if (
     typeof chapterHtml !== "string" ||
@@ -82,7 +83,13 @@ async function resolveManhuaguiSeriesData(input: {
 
   if (!liveChapterHtml) {
     logger.debug("[manhuagui] Returning fetched chapter list", { seriesId })
-    return { ...resolved, seriesId }
+    return {
+      ...resolved,
+      seriesId,
+      ...(input.integrationContext?.adultGatePresent === true
+        ? { chapterListNotice: "adult-consent-required" as const }
+        : {}),
+    }
   }
 
   // The fetched response supplies stable metadata. Only replace its empty
@@ -101,8 +108,10 @@ async function resolveManhuaguiSeriesData(input: {
       seriesId,
       chapterCount: liveChapterList.chapters.length,
     })
+    const stableResolved = { ...resolved }
+    delete stableResolved.chapterListNotice
     return {
-      ...resolved,
+      ...stableResolved,
       seriesId,
       chapterList: liveResolved.chapterList,
       chapterListError: liveResolved.chapterListError,

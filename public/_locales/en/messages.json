@@ -52,6 +52,9 @@
   "sidepanel_closeSelection": { "message": "Close Selection" },
   "sidepanel_noChapters": { "message": "No chapters" },
   "sidepanel_noChaptersFound": { "message": "No chapters found" },
+  "sidepanel_adultConsentRequired": {
+    "message": "Accept Manhuagui’s adult-content prompt, then reload this page."
+  },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "The selected chapters are no longer available."
   },

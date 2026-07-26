@@ -244,8 +244,34 @@ describe("background message router branch behavior", () => {
 
     expect(resolveTabContext).toHaveBeenCalledWith(7, {
       windowId: 2,
-      allowCached: true,
+      allowCached: false,
     })
+  })
+
+  it("rejects REQUEST_TAB_CONTEXT_REFRESH from a content-script sender", async () => {
+    mocks.classifySenderOrigin.mockReturnValue("content-script")
+    const resolveTabContext = vi.fn(async () => undefined)
+    const harness = createHarness()
+    harness.deps.tabContextResolver = { resolveTabContext }
+
+    await expect(
+      handleBackgroundMessage(
+        {
+          type: "REQUEST_TAB_CONTEXT_REFRESH",
+          payload: { tabId: 8, windowId: 2 },
+        },
+        {
+          url: "https://www.manhuagui.com/comic/77777/",
+        } as chrome.runtime.MessageSender,
+        harness.deps
+      )
+    ).resolves.toEqual({
+      success: false,
+      error:
+        "REQUEST_TAB_CONTEXT_REFRESH is only accepted from extension pages",
+    })
+
+    expect(resolveTabContext).not.toHaveBeenCalled()
   })
 
   it("returns state-action failures with the handler reason", async () => {

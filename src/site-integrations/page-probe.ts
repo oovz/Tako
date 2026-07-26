@@ -108,44 +108,6 @@ export function collectApprovedPageProbeData(
         ...(chapterHtml ? { chapterHtml } : {}),
         adultGatePresent,
       }
-
-      if (adultGatePresent) {
-        // This function is injected in the isolated extension world. Keep a
-        // single short-lived observer only while the site owns the gate; once
-        // it has replaced the gate with visible chapter data, request one
-        // background refresh and immediately disconnect. This is deliberately
-        // not a resident site-wide content script.
-        const observerKey = "__takoManhuaguiAdultGateObserver"
-        const globals = globalThis as typeof globalThis &
-          Record<string, unknown>
-        if (
-          globals[observerKey] !== true &&
-          globalThis.document.documentElement
-        ) {
-          globals[observerKey] = true
-          const observer = new MutationObserver(() => {
-            const gateStillPresent =
-              !!globalThis.document.querySelector("#checkAdult")
-            const hasChapterList = !!globalThis.document.querySelector(
-              ".chapter .chapter-list"
-            )
-            if (gateStillPresent || !hasChapterList) return
-
-            observer.disconnect()
-            delete globals[observerKey]
-            void chrome.runtime
-              .sendMessage({
-                type: "REQUEST_TAB_CONTEXT_REFRESH",
-                payload: { reason: "manhuagui-adult-gate" },
-              })
-              .catch(() => undefined)
-          })
-          observer.observe(globalThis.document.documentElement, {
-            childList: true,
-            subtree: true,
-          })
-        }
-      }
     } catch {
       // Live DOM extraction is optional. The normal fetched-HTML resolver
       // still handles non-gated Manhuagui pages when the probe is unavailable.

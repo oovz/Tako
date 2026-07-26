@@ -73,19 +73,33 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
 
     // Consent is read-only. The extension must not decode hidden __VIEWSTATE
     // chapters or synthesize the site's adult-consent cookie.
-    const state = await getSessionState<{ chapters?: Array<{ id?: string }> }>(
-      context,
-      `tab_${tabId}`
-    )
+    await expect
+      .poll(async () => {
+        const state = await getSessionState<{
+          chapterListNotice?: string
+        }>(context, `tab_${tabId}`)
+        return state?.chapterListNotice
+      })
+      .toBe("adult-consent-required")
+    const state = await getSessionState<{
+      chapters?: Array<{ id?: string }>
+      chapterListNotice?: string
+    }>(context, `tab_${tabId}`)
     const chapterIds = (state?.chapters ?? [])
       .map((chapter) => chapter.id)
       .filter((id): id is string => typeof id === "string")
     expect(chapterIds).toEqual([])
+    expect(state?.chapterListNotice).toBe("adult-consent-required")
+    await expect(
+      sp.getByText(
+        "Accept Manhuagui’s adult-content prompt, then reload this page."
+      )
+    ).toBeVisible()
 
     await sp.close()
   })
 
-  test("refreshes from the visible chapter DOM after the adult gate is accepted", async ({
+  test("refreshes chapter state after the user accepts the adult gate and reloads the page", async ({
     context,
     extensionId,
     page,
@@ -106,31 +120,27 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     )
     await expect(page.locator("#checkAdult")).toHaveCount(1)
 
-    // Model Manhuagui's own gate behavior: the page replaces the gate with
-    // DOM the user can already see. The extension observes that replacement;
-    // it never reads or synthesizes the site's consent cookie or viewstate.
-    await page.evaluate((chapter) => {
-      const gate = document.querySelector("#checkAdult")
-      const container = document.querySelector(".chapter")
-      if (!gate || !container) {
-        throw new Error("Mock adult-gate page is missing expected elements")
-      }
+    // The extension does not observe or handle the adult-gate acceptance
+    // event. The user grants Manhuagui's own consent (here simulated by the
+    // cookie) and refreshes the page; the extension then resolves the newly
+    // ungated page like any other navigation.
+    await context.addCookies([
+      {
+        name: "isAdult",
+        value: "1",
+        domain: "www.manhuagui.com",
+        path: "/",
+      },
+    ])
+    await page.reload({ waitUntil: "domcontentloaded" })
 
-      const heading = document.createElement("h4")
-      heading.textContent = "单话"
-      const list = document.createElement("div")
-      list.className = "chapter-list"
-      const listItems = document.createElement("ul")
-      const item = document.createElement("li")
-      const anchor = document.createElement("a")
-      anchor.href = new URL(chapter.url).pathname
-      anchor.title = chapter.title
-      anchor.textContent = chapter.title
-      item.append(anchor)
-      listItems.append(item)
-      list.append(listItems)
-      gate.replaceWith(heading, list)
-    }, expectedChapter)
+    await expect(page.locator(".chapter-list").first()).toBeVisible()
+    await expect(page.locator("#checkAdult")).toHaveCount(0)
+    await expect(
+      sp.getByText(
+        "Accept Manhuagui’s adult-content prompt, then reload this page."
+      )
+    ).toHaveCount(0)
 
     await expect
       .poll(async () => {

@@ -24,6 +24,7 @@ import {
 } from "./api-fixtures"
 import {
   ADULT_SERIES_PAGE_HTML,
+  ADULT_UNGATED_SERIES_PAGE_HTML,
   BASIC_SERIES_PAGE_HTML,
   CATEGORY_SERIES_PAGE_HTML,
   HOME_PAGE_HTML,
@@ -79,10 +80,19 @@ export const registerManhuaguiRoutes: RouteRegistrar = async (
       const seriesMatch = url.pathname.match(/^\/comic\/(\d+)\/?$/)
       if (seriesMatch) {
         const seriesId = seriesMatch[1]
+        const cookieHeader = (await route.request().headerValue("cookie")) ?? ""
+        const hasAdultConsent = cookieHeader
+          .split(";")
+          .some((cookie) => cookie.trim() === "isAdult=1")
         if (seriesId === BASIC_SERIES.series.seriesId)
           return html(BASIC_SERIES_PAGE_HTML)
-        if (seriesId === ADULT_SERIES.series.seriesId)
-          return html(ADULT_SERIES_PAGE_HTML)
+        if (seriesId === ADULT_SERIES.series.seriesId) {
+          return html(
+            hasAdultConsent && route.request().resourceType() === "document"
+              ? ADULT_UNGATED_SERIES_PAGE_HTML
+              : ADULT_SERIES_PAGE_HTML
+          )
+        }
         if (seriesId === MINIMAL_SERIES.series.seriesId)
           return html(MINIMAL_SERIES_PAGE_HTML)
         if (seriesId === CATEGORY_SERIES.series.seriesId)
