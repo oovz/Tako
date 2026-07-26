@@ -63,43 +63,56 @@ export async function resolveSiteIntegrationSeriesData(
     )
   }
 
-  let metadataResult:
-    Awaited<ReturnType<typeof series.fetchSeriesMetadata>> | undefined
-  let metadataError: string | undefined
-  try {
-    metadataResult = await series.fetchSeriesMetadata(
-      input.seriesId,
-      input.language
-    )
-  } catch (error) {
-    metadataError = errorMessage(error)
-  }
-
-  if (metadataResult && input.onPartial) {
-    await input.onPartial({
-      seriesId: input.seriesId,
-      seriesMetadata: metadataResult,
-      chaptersLoading: true,
+  const metadataPromise = series.fetchSeriesMetadata(
+    input.seriesId,
+    input.language
+  )
+  let chapterListSettled = false
+  const chapterListPromise = series
+    .fetchChapterList(input.seriesId, input.language)
+    .finally(() => {
+      chapterListSettled = true
     })
-  }
+  const partialDeliveryPromise = metadataPromise.then(
+    async (seriesMetadata) => {
+      if (input.onPartial && !chapterListSettled) {
+        await input.onPartial({
+          seriesId: input.seriesId,
+          seriesMetadata,
+          chaptersLoading: true,
+        })
+      }
+    },
+    () => undefined
+  )
 
-  let chapterListResult:
-    Awaited<ReturnType<typeof series.fetchChapterList>> | undefined
-  let chapterListError: string | undefined
-  try {
-    chapterListResult = await series.fetchChapterList(
-      input.seriesId,
-      input.language
-    )
-  } catch (error) {
-    chapterListError = errorMessage(error)
+  const [metadataOutcome, chapterListOutcome, partialDeliveryOutcome] =
+    await Promise.allSettled([
+      metadataPromise,
+      chapterListPromise,
+      partialDeliveryPromise,
+    ])
+  if (partialDeliveryOutcome.status === "rejected") {
+    throw partialDeliveryOutcome.reason
   }
 
   return {
     seriesId: input.seriesId,
-    seriesMetadata: metadataResult,
-    chapterList: chapterListResult,
-    metadataError,
-    chapterListError,
+    seriesMetadata:
+      metadataOutcome.status === "fulfilled"
+        ? metadataOutcome.value
+        : undefined,
+    chapterList:
+      chapterListOutcome.status === "fulfilled"
+        ? chapterListOutcome.value
+        : undefined,
+    metadataError:
+      metadataOutcome.status === "rejected"
+        ? errorMessage(metadataOutcome.reason)
+        : undefined,
+    chapterListError:
+      chapterListOutcome.status === "rejected"
+        ? errorMessage(chapterListOutcome.reason)
+        : undefined,
   }
 }
