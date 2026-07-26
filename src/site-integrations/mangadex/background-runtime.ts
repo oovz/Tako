@@ -30,44 +30,57 @@ async function resolveMangadexSeriesData(
     throw new Error("Could not determine MangaDex series ID from the title URL")
   }
 
-  let metadataResult: Awaited<ReturnType<typeof fetchMangadexSeriesMetadata>>
-  let metadataError: string | undefined
-  try {
-    metadataResult = await fetchMangadexSeriesMetadata(seriesId, "interactive")
-  } catch (error) {
-    metadataError = resolutionError(error)
-    // Chapter list is dependent on a valid series identifier, so abort early.
-    return { seriesId, metadataError }
-  }
+  const metadataPromise = fetchMangadexSeriesMetadata(seriesId, "interactive")
+  let chapterListSettled = false
+  const chapterListPromise = fetchMangadexChapterList(
+    seriesId,
+    input.language,
+    input.mangadexPreferences,
+    "interactive"
+  ).finally(() => {
+    chapterListSettled = true
+  })
+  const partialDeliveryPromise = metadataPromise.then(
+    async (seriesMetadata) => {
+      if (input.onPartial && !chapterListSettled) {
+        await input.onPartial({
+          seriesId,
+          seriesMetadata,
+          chaptersLoading: true,
+        })
+      }
+    },
+    () => undefined
+  )
 
-  if (input.onPartial) {
-    await input.onPartial({
-      seriesId,
-      seriesMetadata: metadataResult,
-      chaptersLoading: true,
-    })
-  }
-
-  let chapterListResult:
-    Awaited<ReturnType<typeof fetchMangadexChapterList>> | undefined
-  let chapterListError: string | undefined
-  try {
-    chapterListResult = await fetchMangadexChapterList(
-      seriesId,
-      input.language,
-      input.mangadexPreferences,
-      "interactive"
-    )
-  } catch (error) {
-    chapterListError = resolutionError(error)
+  const [metadataOutcome, chapterListOutcome, partialDeliveryOutcome] =
+    await Promise.allSettled([
+      metadataPromise,
+      chapterListPromise,
+      partialDeliveryPromise,
+    ])
+  if (partialDeliveryOutcome.status === "rejected") {
+    throw partialDeliveryOutcome.reason
   }
 
   return {
     seriesId,
-    seriesMetadata: metadataResult,
-    chapterList: chapterListResult,
-    metadataError,
-    chapterListError,
+    seriesMetadata:
+      metadataOutcome.status === "fulfilled"
+        ? metadataOutcome.value
+        : undefined,
+    chapterList:
+      chapterListOutcome.status === "fulfilled"
+        ? chapterListOutcome.value
+        : undefined,
+    metadataError:
+      metadataOutcome.status === "rejected"
+        ? resolutionError(metadataOutcome.reason)
+        : undefined,
+    chapterListError:
+      chapterListOutcome.status === "rejected"
+        ? resolutionError(chapterListOutcome.reason)
+        : undefined,
   }
 }
 
