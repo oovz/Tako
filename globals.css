@@ -1,6 +1,6 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-@import 'tw-animate-css';
+@import "tw-animate-css";
 
 @theme inline {
   --color-background: var(--background);
@@ -110,7 +110,7 @@
 
   /* Enhanced focus for buttons */
   button:focus-visible,
-  [role='button']:focus-visible {
+  [role="button"]:focus-visible {
     @apply outline-2 outline-offset-2 outline-primary ring-2 ring-primary/20;
   }
 
@@ -159,10 +159,10 @@
   }
 }
 
-html[data-tako-motion='reduce'],
-html[data-tako-motion='reduce'] *,
-html[data-tako-motion='reduce'] *::before,
-html[data-tako-motion='reduce'] *::after {
+html[data-tako-motion="reduce"],
+html[data-tako-motion="reduce"] *,
+html[data-tako-motion="reduce"] *::before,
+html[data-tako-motion="reduce"] *::after {
   scroll-behavior: auto !important;
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;

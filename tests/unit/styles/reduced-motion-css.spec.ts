@@ -19,7 +19,7 @@ describe("global motion preference styles", () => {
 
     expect(css).toContain("@media (prefers-reduced-motion: reduce)")
     expect(css).not.toContain("html:not([data-tako-motion='full'])")
-    expect(css).toContain("html[data-tako-motion='reduce']")
+    expect(css).toMatch(/html\[data-tako-motion=(?:"reduce"|'reduce')\]/)
     expect(css).toContain("animation-duration: 0.01ms !important")
     expect(css).toContain("transition-duration: 0.01ms !important")
     expect(css).toContain("scroll-behavior: auto !important")
