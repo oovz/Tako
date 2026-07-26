@@ -26,6 +26,8 @@ export interface SidepanelSeriesContextData {
   mangaTitle: string
   seriesId?: string
   isLoading: boolean
+  isChaptersLoading: boolean
+  chapterListNotice?: "adult-consent-required"
   blockingMessage: string | undefined
   siteId: string | undefined
   author?: string
@@ -126,11 +128,14 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     if (recoveredTabWindowKeys.current.has(recoveryKey)) return
     recoveredTabWindowKeys.current.add(recoveryKey)
 
-    // A ready per-tab state is authoritative. Refreshing it on every Side
-    // Panel mount invalidates a correct resolver result and can replace an
-    // already-rendered chapter list with a loading projection. Recover only
-    // when the persisted snapshot is absent, unresolved, or failed.
-    if (activeTabContext.kind === "ready") return
+    // A complete ready state is authoritative. A metadata-only partial remains
+    // recoverable work and must not become terminal after a worker restart.
+    if (
+      activeTabContext.kind === "ready" &&
+      activeTabContext.mangaState.chaptersLoading !== true
+    ) {
+      return
+    }
 
     // A Side Panel can open after an MV3 worker restart or a dropped page
     // projection. Ask the background to own a fresh resolution instead of
@@ -141,7 +146,7 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
         payload: { tabId, windowId, reason: "sidepanel-mount" },
       })
       .catch(() => undefined)
-  }, [activeTabContext.kind, hydrated, tabId, windowId])
+  }, [activeTabContext, hydrated, tabId, windowId])
 
   const data = useMemo(() => {
     const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)

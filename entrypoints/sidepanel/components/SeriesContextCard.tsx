@@ -1,6 +1,13 @@
 import React, { useState } from "react"
 
-import { List, ChevronDown, BookOpen, Layers, AlertCircle } from "lucide-react"
+import {
+  List,
+  ChevronDown,
+  BookOpen,
+  Layers,
+  AlertCircle,
+  Loader2,
+} from "lucide-react"
 import { cn } from "@/src/shared/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -147,6 +154,7 @@ export function SeriesContextCard({
   const volumeCount = volumeItems.length
 
   const hasNoChapters = chaptersCount === 0
+  const isChaptersLoading = data.isChaptersLoading
 
   return (
     <div className="flex gap-4">
@@ -184,7 +192,15 @@ export function SeriesContextCard({
             </p>
           )}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {hasNoChapters ? (
+            {isChaptersLoading ? (
+              <Badge
+                variant="secondary"
+                className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground"
+              >
+                <Loader2 className="size-3 animate-spin" />
+                {t("common_loading")}
+              </Badge>
+            ) : hasNoChapters ? (
               <Badge
                 variant="secondary"
                 className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground"
@@ -227,27 +243,34 @@ export function SeriesContextCard({
               isExpanded && "ring-1 ring-border"
             )}
             disabled={
-              hasNoChapters || !!data.blockingMessage || data.tabId == null
+              !isExpanded &&
+              (hasNoChapters ||
+                isChaptersLoading ||
+                !!data.blockingMessage ||
+                data.tabId == null)
             }
             aria-expanded={isExpanded}
             aria-controls="inline-selection-panel"
           >
-            {hasNoChapters ? (
+            {isExpanded ? (
+              <>
+                <ChevronDown className="size-4 rotate-180 transition-transform duration-200 ease-out" />
+                {t("sidepanel_closeSelection")}
+              </>
+            ) : isChaptersLoading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {t("common_loading")}
+              </>
+            ) : hasNoChapters ? (
               <>
                 <List className="size-4" />
                 {t("sidepanel_noChapters")}
               </>
             ) : (
               <>
-                <ChevronDown
-                  className={cn(
-                    "size-4 transition-transform duration-200 ease-out",
-                    isExpanded && "rotate-180"
-                  )}
-                />
-                {isExpanded
-                  ? t("sidepanel_closeSelection")
-                  : t("sidepanel_selectChapters")}
+                <ChevronDown className="size-4 transition-transform duration-200 ease-out" />
+                {t("sidepanel_selectChapters")}
               </>
             )}
           </Button>

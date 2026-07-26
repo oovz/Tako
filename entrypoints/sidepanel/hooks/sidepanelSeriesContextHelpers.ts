@@ -18,6 +18,8 @@ export interface DerivedSidepanelSeriesContextData {
   mangaTitle: string
   seriesId?: string
   isLoading: boolean
+  isChaptersLoading: boolean
+  chapterListNotice?: "adult-consent-required"
   blockingMessage: string | undefined
   siteId: string | undefined
   author?: string
@@ -89,6 +91,8 @@ function getEmptySeriesContext(
     mangaTitle: "",
     seriesId: undefined,
     isLoading,
+    isChaptersLoading: false,
+    chapterListNotice: undefined,
     blockingMessage,
     siteId: undefined,
     author: undefined,
@@ -113,6 +117,8 @@ export function deriveSeriesContextFromActiveTabContext(
         mangaTitle: mangaState.seriesTitle,
         seriesId: mangaState.mangaId,
         isLoading: false,
+        isChaptersLoading: mangaState.chaptersLoading ?? false,
+        chapterListNotice: mangaState.chapterListNotice,
         blockingMessage: undefined,
         siteId: mangaState.siteIntegrationId,
         author: mangaState.metadata?.author,

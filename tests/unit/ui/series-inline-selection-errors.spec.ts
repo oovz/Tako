@@ -31,6 +31,7 @@ describe("SeriesInlineSelection enqueue errors", () => {
           mangaTitle: "Series 1",
           seriesId: "series-1",
           isLoading: false,
+          isChaptersLoading: false,
           blockingMessage: undefined,
           siteId: "mangadex",
         },

@@ -153,9 +153,15 @@ export function SeriesInlineSelection({
     return null
   }
 
-  if (data.isLoading) {
+  if (data.isLoading || data.isChaptersLoading) {
     return (
-      <div className="flex flex-col h-full">
+      <div
+        className="flex flex-col h-full"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label={t("common_loading")}
+      >
         <div className="px-3 py-2 bg-muted/50 border-b border-border">
           <div className="h-4 w-24 bg-muted rounded animate-pulse" />
         </div>
