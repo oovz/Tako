@@ -174,7 +174,7 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       extensionId,
       {
         siteIntegrationId: "mangadex",
-        mangaId: "mangadex:db692d58-4b13-4174-ae8c-30c515c0689c",
+        mangaId: "db692d58-4b13-4174-ae8c-30c515c0689c",
         seriesTitle: "Hunter x Hunter",
         chapters: baseChapters,
       },
@@ -428,6 +428,7 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       extensionId,
       {
         siteIntegrationId: "mangadex",
+        // MangaDex emits the bare title UUID as its canonical series identity.
         mangaId: "db692d58-4b13-4174-ae8c-30c515c0689c",
         seriesTitle: "Hunter x Hunter",
         chapters: baseChapters,
