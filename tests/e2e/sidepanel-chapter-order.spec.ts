@@ -349,6 +349,7 @@ test.describe("Side Panel chapter/volume order", () => {
 
     await setLocalState(context, "downloadedChapters", [
       {
+        siteIntegrationId: "mangadex",
         chapterId: "downloaded-chapter-1",
         url: "https://example.com/downloaded-chapter-1",
         title: "Downloaded Chapter 1",
