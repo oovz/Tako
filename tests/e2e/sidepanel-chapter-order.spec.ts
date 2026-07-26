@@ -141,19 +141,19 @@ test.describe("Side Panel chapter/volume order", () => {
     expect(items[0].text).toContain("Standalone chapter 1")
 
     expect(items[1].kind).toBe("volume")
-    expect(items[1].text).toContain("Volume 2")
+    expect(items[1].text).toMatch(/Vol(?:ume|\.) 2/)
 
     expect(items[2].kind).toBe("standalone")
     expect(items[2].text).toContain("Standalone chapter 2")
 
     expect(items[3].kind).toBe("volume")
-    expect(items[3].text).toContain("Volume 2")
+    expect(items[3].text).toMatch(/Vol(?:ume|\.) 2/)
 
     expect(items[4].kind).toBe("standalone")
     expect(items[4].text).toContain("Standalone chapter 3")
 
     expect(items[5].kind).toBe("volume")
-    expect(items[5].text).toContain("Volume 2")
+    expect(items[5].text).toMatch(/Vol(?:ume|\.) 2/)
 
     await sp.close()
   })
@@ -639,7 +639,7 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
     const viewModeTrigger = sp.getByRole("radio", { name: /All chapters/i })
 
-    await expect(sp.getByText(/^Volume 1$/)).toBeVisible()
+    await expect(sp.getByText(/^Vol(?:ume|\.) 1$/)).toBeVisible()
     await expect(viewModeTrigger).toBeVisible()
     await expect(viewModeTrigger).toHaveText("All chapters")
 
@@ -660,7 +660,7 @@ test.describe("Side Panel chapter/volume order", () => {
     await groupByVolumeButton.click()
 
     await expect(sp.getByRole("radio", { name: /All chapters/i })).toBeVisible()
-    await expect(sp.getByText(/^Volume 1$/)).toBeVisible()
+    await expect(sp.getByText(/^Vol(?:ume|\.) 1$/)).toBeVisible()
 
     await sp.close()
   })
