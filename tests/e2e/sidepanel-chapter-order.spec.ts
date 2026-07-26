@@ -207,12 +207,10 @@ test.describe("Side Panel chapter/volume order", () => {
         (element) => getComputedStyle(element).transitionProperty
       ),
     })
-    const expectNoLayoutTransition = async () => {
+    const expectComplementaryLayoutTransitions = async () => {
       const properties = await layoutTransitionProperties()
       for (const value of Object.values(properties)) {
-        expect(value).not.toMatch(
-          /flex-grow|height|max-height|grid-template-(rows|columns)/
-        )
+        expect(value).toMatch(/flex-grow/)
       }
     }
 
@@ -220,12 +218,16 @@ test.describe("Side Panel chapter/volume order", () => {
 
     await expect(panel).toHaveAttribute("data-state", "open")
     await expect(panel).toHaveAttribute("aria-hidden", "false")
-    await expectNoLayoutTransition()
+    await expectComplementaryLayoutTransitions()
     await expect
       .poll(() =>
-        panel.evaluate((element) => getComputedStyle(element).animationName)
+        selectionRegion.evaluate((element) =>
+          element
+            .getAnimations()
+            .some((animation) => animation.playState === "running")
+        )
       )
-      .not.toBe("none")
+      .toBe(true)
     await expect
       .poll(() =>
         queueRegion.evaluate((element) =>
@@ -249,12 +251,8 @@ test.describe("Side Panel chapter/volume order", () => {
       ariaHidden: "true",
       inert: true,
     })
-    await expectNoLayoutTransition()
-    await expect
-      .poll(() =>
-        panel.evaluate((element) => getComputedStyle(element).animationName)
-      )
-      .not.toBe("none")
+    await expectComplementaryLayoutTransitions()
+    expect(await panel.evaluate((element) => element.childElementCount)).toBe(1)
     await expect(panel).toBeHidden()
     await expect
       .poll(() => panel.evaluate((element) => element.childElementCount))
@@ -265,8 +263,8 @@ test.describe("Side Panel chapter/volume order", () => {
     await expect(panel).toBeVisible()
     await expect
       .poll(() =>
-        panel.evaluate((element) => {
-          const duration = getComputedStyle(element).animationDuration
+        selectionRegion.evaluate((element) => {
+          const duration = getComputedStyle(element).transitionDuration
           return (
             Number.parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000)
           )
@@ -294,16 +292,11 @@ test.describe("Side Panel chapter/volume order", () => {
     await expect(panel).toBeVisible()
     await expect
       .poll(() =>
-        panel.evaluate((element) => getComputedStyle(element).animationName)
-      )
-      .not.toBe("none")
-    await expect
-      .poll(() =>
         selectionRegion.evaluate(
           (element) => getComputedStyle(element).transitionProperty
         )
       )
-      .not.toMatch(/flex-grow|height|max-height|grid-template-(rows|columns)/)
+      .toMatch(/flex-grow/)
     await sp.getByRole("button", { name: /Close Selection/i }).click()
     await expect(panel).toBeHidden()
 
