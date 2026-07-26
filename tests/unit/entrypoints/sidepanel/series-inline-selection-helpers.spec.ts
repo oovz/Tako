@@ -8,6 +8,7 @@ import type {
 } from "@/entrypoints/sidepanel/types"
 import {
   buildInlineSelectionItems,
+  getExpandedGroupKeys,
   getInlineSelectionViewSummary,
   updateInlineSelectionPresentation,
 } from "@/entrypoints/sidepanel/components/series-inline-selection-helpers"
@@ -61,7 +62,7 @@ function makeVolume(
 }
 
 describe("series inline selection helpers", () => {
-  it("applies current selection and collapsed-group state", () => {
+  it("applies current selection without projecting collapse state into chapters", () => {
     const items: Volume[] = [
       makeVolume(1, "volume-1", [
         makeChapter({
@@ -79,11 +80,7 @@ describe("series inline selection helpers", () => {
       ]),
     ]
 
-    const syncedItems = buildInlineSelectionItems(
-      items,
-      ["v1-c1"],
-      new Set(["volume-1"])
-    )
+    const syncedItems = buildInlineSelectionItems(items, ["v1-c1"])
 
     const firstItem = syncedItems[0]
     const secondItem = syncedItems[1]
@@ -95,10 +92,14 @@ describe("series inline selection helpers", () => {
       throw new Error("Expected synced items to preserve volume groups")
     }
 
-    expect(firstItem.collapsed).toBe(true)
+    expect(firstItem.collapsed).toBe(false)
     expect(firstItem.chapters[0]?.selected).toBe(true)
     expect(secondItem.collapsed).toBe(false)
     expect(secondItem.chapters[0]?.selected).toBe(false)
+
+    expect(getExpandedGroupKeys(items, new Set(["volume-1"]))).toEqual(
+      new Set(["volume-2"])
+    )
   })
 
   it("summarizes grouped and standalone chapters for the selector toolbar", () => {

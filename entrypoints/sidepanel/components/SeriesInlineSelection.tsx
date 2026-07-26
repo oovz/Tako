@@ -96,19 +96,15 @@ export function SeriesInlineSelection({
     [updatePresentation]
   )
 
-  // `items` is a pure derivation from the three sources of truth:
+  // `items` is a pure derivation from the two data sources that affect chapter
+  // objects:
   //   1. `data.items` — the raw chapter/volume data from the page
   //   2. `selectedChapterIds` — the selection state (owned by parent)
-  //   3. `collapsedGroups` — series-scoped presentation state (owned by parent)
-  // No effects, no circular dependencies, no extra renders.
+  // Collapse presentation stays separate so a disclosure toggle does not clone
+  // every chapter in a large series.
   const items = useMemo(
-    () =>
-      buildInlineSelectionItems(
-        data.items,
-        selectedChapterIds,
-        collapsedGroups
-      ),
-    [data.items, selectedChapterIds, collapsedGroups]
+    () => buildInlineSelectionItems(data.items, selectedChapterIds),
+    [data.items, selectedChapterIds]
   )
 
   const downloadHook = useDownload({
@@ -144,7 +140,10 @@ export function SeriesInlineSelection({
     }
   }, [allChapters])
 
-  const expandedGroups = useMemo(() => getExpandedGroupKeys(items), [items])
+  const expandedGroups = useMemo(
+    () => getExpandedGroupKeys(data.items, collapsedGroups),
+    [data.items, collapsedGroups]
+  )
   const viewSummary = useMemo(
     () => getInlineSelectionViewSummary(items),
     [items]

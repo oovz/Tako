@@ -36,17 +36,15 @@ export function updateInlineSelectionPresentation(
 
 /**
  * Build the display items from raw data, applying selection state from
- * `selectedChapterIds` and collapse state from `collapsedGroups`.
+ * `selectedChapterIds`.
  *
- * This is a pure derivation — no side effects, no circular dependencies.
- * `previousCollapsedState` is pulled from the previous render's collapsed
- * groups set to preserve the user's expand/collapse choices across data
- * refreshes.
+ * Collapse state is intentionally not projected into every item. It is passed
+ * separately to ChapterSelector so toggling one volume does not clone every
+ * chapter in a large series.
  */
 export function buildInlineSelectionItems(
   items: VolumeOrChapter[],
-  selectedChapterIds: string[],
-  collapsedGroups: Set<string>
+  selectedChapterIds: string[]
 ): VolumeOrChapter[] {
   const selectedSet = new Set(selectedChapterIds)
 
@@ -54,7 +52,6 @@ export function buildInlineSelectionItems(
     if ("chapters" in item) {
       return {
         ...item,
-        collapsed: collapsedGroups.has(item.groupId),
         chapters: item.chapters.map((chapter) => ({
           ...chapter,
           selected:
@@ -70,10 +67,15 @@ export function buildInlineSelectionItems(
   })
 }
 
-export function getExpandedGroupKeys(items: VolumeOrChapter[]): Set<string> {
+export function getExpandedGroupKeys(
+  items: VolumeOrChapter[],
+  collapsedGroups: ReadonlySet<string>
+): Set<string> {
   return new Set(
     items.flatMap((item) =>
-      "chapters" in item && !item.collapsed ? [item.groupId] : []
+      "chapters" in item && !collapsedGroups.has(item.groupId)
+        ? [item.groupId]
+        : []
     )
   )
 }
