@@ -39,6 +39,8 @@ export const InitializeTabPayloadSchema = z.discriminatedUnion("context", [
     chapters: z.array(InitializeTabChapterSchema).optional().default([]),
     volumes: z.array(InitializeTabVolumeSchema).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    chaptersLoading: z.boolean().optional(),
+    chapterListNotice: z.literal("adult-consent-required").optional(),
   }),
   z.strictObject({
     context: z.literal("unsupported"),

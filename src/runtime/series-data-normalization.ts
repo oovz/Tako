@@ -33,6 +33,8 @@ export interface ResolveInitializeTabPayloadInput {
   volumes?: RawSeriesVolume[]
   seriesMetadata?: SeriesMetadata
   extractionError?: unknown
+  chaptersLoading?: boolean
+  chapterListNotice?: "adult-consent-required"
 }
 
 function normalizeRawChapter(value: unknown): RawSeriesChapter | null {
@@ -164,6 +166,8 @@ export function resolveInitializeTabPayload(
     })),
     volumes: input.volumes,
     metadata: input.seriesMetadata,
+    chaptersLoading: input.chaptersLoading,
+    chapterListNotice: input.chapterListNotice,
   }
   return payload
 }

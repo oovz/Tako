@@ -20,6 +20,8 @@ export interface InitializeTabReadyPayload {
   }>
   volumes?: VolumeState[]
   metadata?: SeriesMetadataSnapshot
+  chaptersLoading?: boolean
+  chapterListNotice?: "adult-consent-required"
 }
 
 export interface InitializeTabUnsupportedPayload {

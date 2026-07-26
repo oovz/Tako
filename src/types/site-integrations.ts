@@ -35,6 +35,11 @@ export interface SeriesDataResolutionInput {
    * integration is responsible for decoding this opaque record.
    */
   integrationContext?: Record<string, unknown>
+  /**
+   * Optional callback for partial results. Called when metadata is available
+   * but the chapter list is still being fetched.
+   */
+  onPartial?: (partial: SeriesDataResolutionResult) => void | Promise<void>
 }
 
 /**
@@ -49,6 +54,9 @@ export interface SeriesDataResolutionResult {
   chapterList?: unknown
   metadataError?: string
   chapterListError?: string
+  chapterListNotice?: "adult-consent-required"
+  /** When true, metadata is available but the chapter list is still loading. */
+  chaptersLoading?: boolean
 }
 
 export interface ServiceWorkerIntegration {

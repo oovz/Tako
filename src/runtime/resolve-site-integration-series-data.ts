@@ -9,6 +9,11 @@ export interface ResolveSiteIntegrationSeriesDataInput {
   language?: string
   mangadexPreferences?: MangadexPreferencesPayload
   integrationContext?: Record<string, unknown>
+  /**
+   * Optional callback for partial results. Called when metadata is available
+   * but the chapter list is still being fetched.
+   */
+  onPartial?: (partial: SeriesDataResolutionResult) => void | Promise<void>
 }
 
 function errorMessage(reason: unknown): string {
@@ -43,6 +48,7 @@ export async function resolveSiteIntegrationSeriesData(
       ...(input.integrationContext
         ? { integrationContext: input.integrationContext }
         : {}),
+      onPartial: input.onPartial,
     })
   }
 
@@ -57,25 +63,43 @@ export async function resolveSiteIntegrationSeriesData(
     )
   }
 
-  const [metadataResult, chapterListResult] = await Promise.allSettled([
-    series.fetchSeriesMetadata(input.seriesId, input.language),
-    series.fetchChapterList(input.seriesId, input.language),
-  ])
+  let metadataResult:
+    Awaited<ReturnType<typeof series.fetchSeriesMetadata>> | undefined
+  let metadataError: string | undefined
+  try {
+    metadataResult = await series.fetchSeriesMetadata(
+      input.seriesId,
+      input.language
+    )
+  } catch (error) {
+    metadataError = errorMessage(error)
+  }
+
+  if (metadataResult && input.onPartial) {
+    await input.onPartial({
+      seriesId: input.seriesId,
+      seriesMetadata: metadataResult,
+      chaptersLoading: true,
+    })
+  }
+
+  let chapterListResult:
+    Awaited<ReturnType<typeof series.fetchChapterList>> | undefined
+  let chapterListError: string | undefined
+  try {
+    chapterListResult = await series.fetchChapterList(
+      input.seriesId,
+      input.language
+    )
+  } catch (error) {
+    chapterListError = errorMessage(error)
+  }
+
   return {
     seriesId: input.seriesId,
-    seriesMetadata:
-      metadataResult.status === "fulfilled" ? metadataResult.value : undefined,
-    chapterList:
-      chapterListResult.status === "fulfilled"
-        ? chapterListResult.value
-        : undefined,
-    metadataError:
-      metadataResult.status === "rejected"
-        ? errorMessage(metadataResult.reason)
-        : undefined,
-    chapterListError:
-      chapterListResult.status === "rejected"
-        ? errorMessage(chapterListResult.reason)
-        : undefined,
+    seriesMetadata: metadataResult,
+    chapterList: chapterListResult,
+    metadataError,
+    chapterListError,
   }
 }

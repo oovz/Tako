@@ -33,6 +33,8 @@ export interface MangaPageState {
   chapters: ChapterState[]
   volumes: VolumeState[]
   metadata?: SeriesMetadataSnapshot
+  chaptersLoading?: boolean
+  chapterListNotice?: "adult-consent-required"
   lastUpdated: number
 }
 
