@@ -108,6 +108,20 @@ export interface ClearAllHistoryMessage extends Partial<CommandEnvelope> {
 export type ClearAllHistoryResponse =
   { success: true; removedCount?: number } | ErrorResponse
 
+export interface ClearPersistedDownloadHistoryMessage extends Partial<CommandEnvelope> {
+  type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY"
+  payload:
+    | { scope: "all" }
+    | {
+        scope: "series"
+        siteIntegrationId: string
+        seriesId: string
+      }
+}
+
+export type ClearPersistedDownloadHistoryResponse =
+  { success: true } | ErrorResponse
+
 export interface OpenOptionsMessage {
   type: "OPEN_OPTIONS"
   payload?: {

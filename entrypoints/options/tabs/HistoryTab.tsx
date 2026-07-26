@@ -33,6 +33,8 @@ import { Separator } from "@/components/ui/separator"
 import { t } from "@/src/runtime/i18n"
 import { formatBytes } from "@/entrypoints/options/components/downloads-tab-helpers"
 import { runConfirmedHistoryAction } from "@/entrypoints/options/hooks/history-dialog-action"
+import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
+import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
 
 interface HistoryStats {
   totalChapters: number
@@ -40,6 +42,7 @@ interface HistoryStats {
 }
 
 interface SeriesHistory {
+  siteIntegrationId: string
   seriesId: string
   seriesTitle: string
   chapterCount: number
@@ -49,7 +52,10 @@ interface HistoryTabProps {
   stats: HistoryStats | null
   series: SeriesHistory[]
   onClearAll: () => Promise<boolean>
-  onClearSeries: (seriesId: string) => Promise<boolean>
+  onClearSeries: (
+    siteIntegrationId: string,
+    seriesId: string
+  ) => Promise<boolean>
   onRefreshSeries: () => Promise<SeriesHistory[]>
   isClearing: boolean
   storageBytes?: number
@@ -77,8 +83,18 @@ export function HistoryTab({
 
   const handleClearSeries = async () => {
     if (!selectedSeriesToClear) return
+    const selectedSeries = localSeries.find(
+      (series) =>
+        composeSeriesKey(series.siteIntegrationId, series.seriesId) ===
+        selectedSeriesToClear
+    )
+    if (!selectedSeries) return
     await runConfirmedHistoryAction(
-      () => onClearSeries(selectedSeriesToClear),
+      () =>
+        onClearSeries(
+          selectedSeries.siteIntegrationId,
+          selectedSeries.seriesId
+        ),
       () => {
         setSelectedSeriesToClear("")
         setClearSeriesDialogOpen(false)
@@ -267,10 +283,26 @@ export function HistoryTab({
                           </div>
                         ) : (
                           localSeries.map((s) => (
-                            <SelectItem key={s.seriesId} value={s.seriesId}>
+                            <SelectItem
+                              key={composeSeriesKey(
+                                s.siteIntegrationId,
+                                s.seriesId
+                              )}
+                              value={composeSeriesKey(
+                                s.siteIntegrationId,
+                                s.seriesId
+                              )}
+                            >
                               <span className="flex items-center justify-between w-full gap-4">
-                                <span className="truncate max-w-[200px]">
-                                  {s.seriesTitle}
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="truncate max-w-[200px]">
+                                    {s.seriesTitle}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {getSiteIntegrationDisplayName(
+                                      s.siteIntegrationId
+                                    )}
+                                  </span>
                                 </span>
                                 <Badge
                                   variant="secondary"

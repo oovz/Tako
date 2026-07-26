@@ -31,6 +31,7 @@ import {
   reconcileAllPendingOutputs,
 } from "./native-output-finalizer"
 import { recoverPendingUndoActions } from "./pending-undo-coordinator"
+import { reconcileCompletedChapterHistory } from "./download-queue-finalization"
 
 const PIXIV_REFERER_REWRITE_RULE_ID = 41001
 const MANHUAGUI_REFERER_REWRITE_RULE_ID = 41002
@@ -334,6 +335,18 @@ async function completeBackgroundRuntimeInitialization(
     if (startupRecovery.initFailed) {
       throw new Error(
         startupRecovery.error ?? "Extension initialization failed"
+      )
+    }
+
+    try {
+      await reconcileCompletedChapterHistory(startupRecovery.queue)
+    } catch (error) {
+      // Downloaded history is a repairable projection of durable queue state.
+      // Do not block the worker or tab context if a storage write fails; the
+      // next startup will retry the same idempotent reconciliation.
+      logger.warn(
+        "Failed to reconcile completed chapter history during startup:",
+        error
       )
     }
 

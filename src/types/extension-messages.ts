@@ -4,6 +4,8 @@ import type {
   AcknowledgeErrorResponse,
   ClearAllHistoryMessage,
   ClearAllHistoryResponse,
+  ClearPersistedDownloadHistoryMessage,
+  ClearPersistedDownloadHistoryResponse,
   FetchSeriesDataMessage,
   FetchSeriesDataResponse,
   GetSettingsMessage,
@@ -73,6 +75,7 @@ export type ExtensionMessage =
   | RestartTaskMessage
   | MoveTaskToTopMessage
   | ClearAllHistoryMessage
+  | ClearPersistedDownloadHistoryMessage
   | OpenOptionsMessage
   | StartDownloadMessage
   | StateActionMessage
@@ -96,6 +99,7 @@ export type ExtensionMessageResponse =
   | RestartTaskResponse
   | MoveTaskToTopResponse
   | ClearAllHistoryResponse
+  | ClearPersistedDownloadHistoryResponse
   | OpenOptionsResponse
   | StartDownloadResponse
   | StateActionResponse

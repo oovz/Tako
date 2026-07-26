@@ -3,7 +3,10 @@ import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
 import { areNotificationsEnabled } from "@/entrypoints/background/notification-preferences"
 import { getNotificationService } from "@/entrypoints/background/notification-service"
 import { settingsService } from "@/src/storage/settings-service"
-import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
+import {
+  chapterPersistenceService,
+  composeDownloadedChapterKey,
+} from "@/src/storage/chapter-persistence-service"
 import type { DownloadTaskState } from "@/src/types/queue-state"
 import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 
@@ -77,6 +80,7 @@ export async function persistCompletedChapter(
   }
 
   await chapterPersistenceService.markChapterAsDownloaded({
+    siteIntegrationId: task.siteIntegrationId,
     chapterId: chapter.id,
     url: chapter.url,
     title: chapter.title,
@@ -88,6 +92,57 @@ export async function persistCompletedChapter(
     fileSize: 0,
     format: persistedFormat,
   })
+}
+
+/**
+ * Repair the downloaded-chapter projection from the durable queue after an
+ * interrupted service-worker run. This is idempotent and intentionally treats
+ * only fully completed chapters as downloaded.
+ */
+export async function reconcileCompletedChapterHistory(
+  tasks: DownloadTaskState[]
+): Promise<void> {
+  const existing = await chapterPersistenceService.getDownloadedChapters()
+  const persistedKeys = new Set(
+    existing.map((record) =>
+      composeDownloadedChapterKey(
+        record.siteIntegrationId,
+        record.seriesId,
+        record.chapterId
+      )
+    )
+  )
+
+  for (const task of tasks) {
+    for (const chapter of task.chapters) {
+      if (chapter.status !== "completed") continue
+
+      const key = composeDownloadedChapterKey(
+        task.siteIntegrationId,
+        task.mangaId,
+        chapter.id
+      )
+      if (persistedKeys.has(key)) continue
+      const restored =
+        await chapterPersistenceService.restoreChapterFromCompletedTask(
+          {
+            siteIntegrationId: task.siteIntegrationId,
+            chapterId: chapter.id,
+            url: chapter.url,
+            title: chapter.title,
+            seriesId: task.mangaId,
+            seriesTitle: task.seriesTitle,
+            chapterNumber: chapter.chapterNumber,
+            volumeNumber: chapter.volumeNumber,
+            downloadedAt: Date.now(),
+            fileSize: 0,
+            format: resolvePersistedFormat(task.settingsSnapshot),
+          },
+          chapter.lastUpdated
+        )
+      if (restored) persistedKeys.add(key)
+    }
+  }
 }
 
 async function persistCompletedChapters(

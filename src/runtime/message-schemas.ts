@@ -182,6 +182,18 @@ export const ActionMessageSchema = z.discriminatedUnion("type", [
     ...CommandEnvelopeShape,
     payload: z.object({}).default({}),
   }),
+  z.strictObject({
+    type: z.literal("CLEAR_PERSISTED_DOWNLOAD_HISTORY"),
+    ...CommandEnvelopeShape,
+    payload: z.discriminatedUnion("scope", [
+      z.strictObject({ scope: z.literal("all") }),
+      z.strictObject({
+        scope: z.literal("series"),
+        siteIntegrationId: z.string().min(1),
+        seriesId: z.string().min(1),
+      }),
+    ]),
+  }),
   z.object({
     type: z.literal("ACKNOWLEDGE_ERROR"),
     ...CommandEnvelopeShape,

@@ -6,6 +6,7 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
   describe("Downloaded Status Checks", () => {
     it("should distinguish downloaded chapters from undownloaded chapters", async () => {
       const downloadedRecord: DownloadedChapterRecord = {
+        siteIntegrationId: "mangadex",
         chapterId: "ch1",
         url: "https://example.com/ch1",
         title: "Chapter 1",
@@ -18,17 +19,26 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
       await chapterPersistenceService.markChapterAsDownloaded(downloadedRecord)
 
       const isChapter1Downloaded =
-        await chapterPersistenceService.isChapterDownloaded("ch1")
+        await chapterPersistenceService.isChapterDownloaded(
+          "mangadex",
+          "series-1",
+          "ch1"
+        )
       expect(isChapter1Downloaded).toBe(true)
 
       const isChapter2Downloaded =
-        await chapterPersistenceService.isChapterDownloaded("ch2")
+        await chapterPersistenceService.isChapterDownloaded(
+          "mangadex",
+          "series-1",
+          "ch2"
+        )
       expect(isChapter2Downloaded).toBe(false)
     })
 
     it("should support list-level downloaded status checks", async () => {
       const downloaded: DownloadedChapterRecord[] = [
         {
+          siteIntegrationId: "mangadex",
           chapterId: "ch1",
           url: "https://example.com/ch1",
           title: "Chapter 1",
@@ -38,6 +48,7 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
           format: "cbz",
         },
         {
+          siteIntegrationId: "mangadex",
           chapterId: "ch3",
           url: "https://example.com/ch3",
           title: "Chapter 3",
@@ -62,6 +73,8 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
         chapterList.map(async (ch) => ({
           ...ch,
           isDownloaded: await chapterPersistenceService.isChapterDownloaded(
+            "mangadex",
+            "series-1",
             ch.id
           ),
         }))
@@ -80,7 +93,11 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
       )
 
       await expect(
-        chapterPersistenceService.isChapterDownloaded("ch1")
+        chapterPersistenceService.isChapterDownloaded(
+          "mangadex",
+          "series-1",
+          "ch1"
+        )
       ).rejects.toThrow("Storage error")
     })
 
@@ -90,7 +107,10 @@ export function registerChapterPersistenceStatusAndErrorCases(): void {
       )
 
       await expect(
-        chapterPersistenceService.getDownloadedChaptersForSeries("series-1")
+        chapterPersistenceService.getDownloadedChaptersForSeries(
+          "mangadex",
+          "series-1"
+        )
       ).rejects.toThrow("Storage error")
     })
 

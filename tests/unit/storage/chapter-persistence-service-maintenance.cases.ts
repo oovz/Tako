@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { chapterPersistenceService } from "./chapter-persistence-service-test-setup"
+import {
+  chapterPersistenceService,
+  mockStorageData,
+} from "./chapter-persistence-service-test-setup"
 import type { DownloadedChapterRecord } from "./chapter-persistence-service-test-setup"
 
 export function registerChapterPersistenceMaintenanceCases(): void {
@@ -7,6 +10,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
     it("should clear all download history", async () => {
       const records: DownloadedChapterRecord[] = [
         {
+          siteIntegrationId: "mangadex",
           chapterId: "ch1",
           url: "https://example.com/ch1",
           title: "Chapter 1",
@@ -16,6 +20,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
           format: "cbz",
         },
         {
+          siteIntegrationId: "mangadex",
           chapterId: "ch2",
           url: "https://example.com/ch2",
           title: "Chapter 2",
@@ -39,6 +44,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
     it("should clear download history for specific series", async () => {
       const records: DownloadedChapterRecord[] = [
         {
+          siteIntegrationId: "mangadex",
           chapterId: "series1-ch1",
           url: "https://example.com/series1/ch1",
           title: "Chapter 1",
@@ -48,6 +54,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
           format: "cbz",
         },
         {
+          siteIntegrationId: "mangadex",
           chapterId: "series2-ch1",
           url: "https://example.com/series2/ch1",
           title: "Chapter 1",
@@ -62,16 +69,63 @@ export function registerChapterPersistenceMaintenanceCases(): void {
         await chapterPersistenceService.markChapterAsDownloaded(record)
       }
 
-      await chapterPersistenceService.clearSeriesDownloadHistory("series-1")
+      await chapterPersistenceService.clearSeriesDownloadHistory(
+        "mangadex",
+        "series-1"
+      )
 
       const allDownloaded =
         await chapterPersistenceService.getDownloadedChapters()
       expect(allDownloaded).toHaveLength(1)
       expect(allDownloaded[0].seriesId).toBe("series-2")
 
-      const series1History =
-        await chapterPersistenceService.getSeriesHistory("series-1")
+      const series1History = await chapterPersistenceService.getSeriesHistory(
+        "mangadex",
+        "series-1"
+      )
       expect(series1History).toBeNull()
+    })
+
+    it("prevents queue recovery from restoring cleared history until a later completion", async () => {
+      const record: DownloadedChapterRecord = {
+        siteIntegrationId: "mangadex",
+        chapterId: "chapter-1",
+        url: "https://mangadex.org/chapter/chapter-1",
+        title: "Chapter 1",
+        seriesId: "series-1",
+        seriesTitle: "Series",
+        downloadedAt: 1,
+        format: "cbz",
+      }
+
+      await chapterPersistenceService.clearSeriesDownloadHistory(
+        "mangadex",
+        "series-1"
+      )
+      const clearedAt =
+        mockStorageData.downloadHistoryClearCutoffs.bySeries[
+          "mangadex#series-1"
+        ]
+
+      expect(
+        await chapterPersistenceService.restoreChapterFromCompletedTask(
+          record,
+          clearedAt
+        )
+      ).toBe(false)
+      expect(await chapterPersistenceService.getDownloadedChapters()).toEqual(
+        []
+      )
+
+      expect(
+        await chapterPersistenceService.restoreChapterFromCompletedTask(
+          { ...record, downloadedAt: clearedAt + 1 },
+          clearedAt + 1
+        )
+      ).toBe(true)
+      expect(
+        await chapterPersistenceService.getDownloadedChapters()
+      ).toHaveLength(1)
     })
   })
 
@@ -83,6 +137,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
 
       const records: DownloadedChapterRecord[] = [
         {
+          siteIntegrationId: "mangadex",
           chapterId: "old",
           url: "https://example.com/old",
           title: "Old Chapter",
@@ -92,6 +147,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
           format: "cbz",
         },
         {
+          siteIntegrationId: "mangadex",
           chapterId: "recent",
           url: "https://example.com/recent",
           title: "Recent Chapter",
@@ -118,6 +174,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
       const recent = now - 30 * 24 * 60 * 60 * 1000
 
       const record: DownloadedChapterRecord = {
+        siteIntegrationId: "mangadex",
         chapterId: "ch1",
         url: "https://example.com/ch1",
         title: "Chapter 1",
@@ -139,6 +196,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
     it("should get storage statistics", async () => {
       const records: DownloadedChapterRecord[] = [
         {
+          siteIntegrationId: "mangadex",
           chapterId: "series1-ch1",
           url: "https://example.com/series1/ch1",
           title: "Chapter 1",
@@ -148,6 +206,7 @@ export function registerChapterPersistenceMaintenanceCases(): void {
           format: "cbz",
         },
         {
+          siteIntegrationId: "mangadex",
           chapterId: "series2-ch1",
           url: "https://example.com/series2/ch1",
           title: "Chapter 1",

@@ -18,6 +18,7 @@
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
+  openSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
@@ -101,19 +102,39 @@ test.describe("MangaDex download workflow (mocked)", () => {
       await expect
         .poll(
           () =>
-            optionsPage.evaluate(async (chapterId) => {
-              const stored =
-                await chrome.storage.local.get("downloadedChapters")
-              return Array.isArray(stored.downloadedChapters)
-                ? stored.downloadedChapters.some(
-                    (record: unknown) =>
-                      typeof record === "object" &&
-                      record !== null &&
-                      (record as { chapterId?: unknown }).chapterId ===
-                        chapterId
-                  )
-                : false
-            }, firstChapter.id),
+            optionsPage.evaluate(
+              async (expected) => {
+                const stored =
+                  await chrome.storage.local.get("downloadedChapters")
+                return Array.isArray(stored.downloadedChapters)
+                  ? stored.downloadedChapters.some(
+                      (record: unknown) =>
+                        typeof record === "object" &&
+                        record !== null &&
+                        (
+                          record as {
+                            siteIntegrationId?: unknown
+                            seriesId?: unknown
+                            chapterId?: unknown
+                          }
+                        ).siteIntegrationId === expected.siteIntegrationId &&
+                        (
+                          record as {
+                            seriesId?: unknown
+                            chapterId?: unknown
+                          }
+                        ).seriesId === expected.seriesId &&
+                        (record as { chapterId?: unknown }).chapterId ===
+                          expected.chapterId
+                    )
+                  : false
+              },
+              {
+                siteIntegrationId: "mangadex",
+                seriesId: series.seriesId,
+                chapterId: firstChapter.id,
+              }
+            ),
           {
             message:
               "the completed chapter should be persisted for Side Panel markers",
@@ -121,6 +142,45 @@ test.describe("MangaDex download workflow (mocked)", () => {
           }
         )
         .toBe(true)
+
+      let sidepanel = await openSidepanelHarness(context, extensionId, page)
+      try {
+        await expect(sidepanel.getByText(series.seriesTitle)).toBeVisible()
+        await sidepanel
+          .getByRole("button", { name: /Select Chapters/i })
+          .click()
+        const completedRow = sidepanel
+          .getByRole("checkbox", { name: firstChapter.title })
+          .locator("..")
+        await expect(
+          completedRow.locator("[data-downloaded-marker]")
+        ).toBeVisible()
+        await expect(sidepanel.locator("[data-downloaded-marker]")).toHaveCount(
+          1
+        )
+      } finally {
+        await sidepanel.close()
+      }
+
+      // Reopening the extension page rehydrates the persisted projection,
+      // covering both live notification and panel-reload behavior.
+      sidepanel = await openSidepanelHarness(context, extensionId, page)
+      try {
+        await sidepanel
+          .getByRole("button", { name: /Select Chapters/i })
+          .click()
+        const rehydratedCompletedRow = sidepanel
+          .getByRole("checkbox", { name: firstChapter.title })
+          .locator("..")
+        await expect(
+          rehydratedCompletedRow.locator("[data-downloaded-marker]")
+        ).toBeVisible()
+        await expect(sidepanel.locator("[data-downloaded-marker]")).toHaveCount(
+          1
+        )
+      } finally {
+        await sidepanel.close()
+      }
 
       // Custom-mode downloads never use chrome.downloads, so
       // `lastSuccessfulDownloadId` stays undefined — this is also a

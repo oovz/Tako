@@ -43,6 +43,8 @@ const mocks = vi.hoisted(() => ({
     finalized: [],
     pending: [],
   })),
+  reconcileCompletedChapterHistory: vi.fn(async () => undefined),
+  loggerWarn: vi.fn(),
   storageLocalGet: vi.fn<(key: string) => Promise<Record<string, unknown>>>(
     async () => ({ downloadQueue: [] })
   ),
@@ -69,7 +71,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
-    warn: vi.fn(),
+    warn: mocks.loggerWarn,
     error: vi.fn(),
     debug: vi.fn(),
   },
@@ -114,6 +116,10 @@ vi.mock("@/entrypoints/background/download-queue", () => ({
   resumeDownloadTask: mocks.resumeDownloadTask,
 }))
 
+vi.mock("@/entrypoints/background/download-queue-finalization", () => ({
+  reconcileCompletedChapterHistory: mocks.reconcileCompletedChapterHistory,
+}))
+
 vi.mock("@/entrypoints/background/offscreen-lifecycle", () => ({
   getOffscreenContexts: mocks.getOffscreenContexts,
   hasOffscreenDocument: mocks.hasOffscreenDocument,
@@ -149,6 +155,7 @@ describe("initializeBackgroundRuntime", () => {
       finalized: [],
       pending: [],
     })
+    mocks.reconcileCompletedChapterHistory.mockResolvedValue(undefined)
     mocks.storageLocalGet.mockResolvedValue({ downloadQueue: [] })
     mocks.storageLocalSet.mockResolvedValue(undefined)
     mocks.storageSessionSet.mockResolvedValue(undefined)
@@ -378,6 +385,28 @@ describe("initializeBackgroundRuntime", () => {
     expect(mocks.updateGlobalState).toHaveBeenCalledWith({
       settings: { downloads: { defaultFormat: "cbz" } },
     })
+  })
+
+  it("keeps runtime startup available when downloaded-history repair fails", async () => {
+    mocks.reconcileCompletedChapterHistory.mockRejectedValueOnce(
+      new Error("history storage unavailable")
+    )
+    const { initializeBackgroundRuntime } =
+      await import("@/entrypoints/background/background-startup")
+
+    await expect(
+      initializeBackgroundRuntime({
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        ensureLivenessAlarm: async () => undefined,
+        ensureOffscreenDocumentReady: async () => undefined,
+        requestBlobRevocation: vi.fn(async () => undefined),
+      })
+    ).resolves.toBeDefined()
+
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      "Failed to reconcile completed chapter history during startup:",
+      expect.objectContaining({ message: "history storage unavailable" })
+    )
   })
 
   it("applies the persisted UI language during service-worker startup", async () => {

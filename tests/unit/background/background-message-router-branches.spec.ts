@@ -20,6 +20,7 @@ function handleBackgroundMessage(
     "RESTART_TASK",
     "MOVE_TASK_TO_TOP",
     "CLEAR_ALL_HISTORY",
+    "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
   ])
   const enriched = commandTypes.has(message.type)
     ? ({
@@ -42,6 +43,8 @@ const mocks = vi.hoisted(() => ({
   restartTask: vi.fn(),
   moveTaskToTop: vi.fn(),
   clearAllHistory: vi.fn(),
+  clearAllDownloadHistory: vi.fn(),
+  clearSeriesDownloadHistory: vi.fn(),
   processStateAction: vi.fn(),
   handleOffscreenDownloadProgress: vi.fn(),
   getBackgroundSiteAdapterById: vi.fn(),
@@ -88,6 +91,13 @@ vi.mock("@/entrypoints/background/download-queue", () => ({
   restartTask: mocks.restartTask,
   moveTaskToTop: mocks.moveTaskToTop,
   clearAllHistory: mocks.clearAllHistory,
+}))
+
+vi.mock("@/src/storage/chapter-persistence-service", () => ({
+  chapterPersistenceService: {
+    clearAllDownloadHistory: mocks.clearAllDownloadHistory,
+    clearSeriesDownloadHistory: mocks.clearSeriesDownloadHistory,
+  },
 }))
 
 vi.mock("@/entrypoints/background/state-action-router", () => ({
@@ -897,6 +907,63 @@ describe("background message router branch behavior", () => {
         harness.deps
       )
     ).resolves.toEqual({ success: false, error: expected })
+  })
+
+  it("serializes persisted-history clears through the background service", async () => {
+    const harness = createHarness()
+
+    await expect(
+      handleBackgroundMessage(
+        {
+          type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
+          payload: { scope: "all" },
+        },
+        extensionSender,
+        harness.deps
+      )
+    ).resolves.toEqual({ success: true })
+    await expect(
+      handleBackgroundMessage(
+        {
+          type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
+          payload: {
+            scope: "series",
+            siteIntegrationId: "mangadex",
+            seriesId: "series-1",
+          },
+        },
+        extensionSender,
+        harness.deps
+      )
+    ).resolves.toEqual({ success: true })
+
+    expect(mocks.clearAllDownloadHistory).toHaveBeenCalledTimes(1)
+    expect(mocks.clearSeriesDownloadHistory).toHaveBeenCalledWith(
+      "mangadex",
+      "series-1"
+    )
+  })
+
+  it("rejects persisted-history clears outside the Options page", async () => {
+    mocks.isSenderFromOptionsPage.mockReturnValue(false)
+    const harness = createHarness()
+
+    await expect(
+      handleBackgroundMessage(
+        {
+          type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
+          payload: { scope: "all" },
+        },
+        extensionSender,
+        harness.deps
+      )
+    ).resolves.toEqual({
+      success: false,
+      error:
+        "CLEAR_PERSISTED_DOWNLOAD_HISTORY is only available from Options page",
+    })
+
+    expect(mocks.clearAllDownloadHistory).not.toHaveBeenCalled()
   })
 
   it("rejects malformed OPEN_OPTIONS destinations without using Chrome tabs", async () => {

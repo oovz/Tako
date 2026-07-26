@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import logger from "@/src/runtime/logger"
+import { createCommandEnvelope } from "@/src/runtime/command-envelope"
 import { isRecord } from "@/src/shared/type-guards"
 import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 import {
@@ -47,8 +48,13 @@ import {
   requestIntegrationHostPermission,
 } from "@/src/site-integrations/host-permission-service"
 import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
+import type {
+  ClearPersistedDownloadHistoryMessage,
+  ClearPersistedDownloadHistoryResponse,
+} from "@/src/types/runtime-command-messages"
 
 export interface SeriesHistory {
+  siteIntegrationId: string
   seriesId: string
   seriesTitle: string
   chapterCount: number
@@ -84,28 +90,13 @@ function stableSerialize(value: unknown): string {
 
 async function loadSeriesHistory(): Promise<SeriesHistory[]> {
   try {
-    const result = await chrome.storage.local.get(["seriesDownloadHistory"])
-    const rawHistory = result.seriesDownloadHistory
-    const allHistory = isRecord(rawHistory) ? rawHistory : {}
-
-    return Object.values(allHistory)
-      .map((entry) => {
-        if (!isRecord(entry)) return null
-        const seriesId =
-          typeof entry.seriesId === "string" ? entry.seriesId : ""
-        const seriesTitle =
-          typeof entry.seriesTitle === "string" ? entry.seriesTitle : ""
-        const downloadedChapters = Array.isArray(entry.downloadedChapters)
-          ? entry.downloadedChapters
-          : []
-        if (!seriesId || !seriesTitle) return null
-        return {
-          seriesId,
-          seriesTitle,
-          chapterCount: downloadedChapters.length,
-        }
-      })
-      .filter((entry): entry is SeriesHistory => entry !== null)
+    return (await chapterPersistenceService.getAllSeriesHistory())
+      .map((entry) => ({
+        siteIntegrationId: entry.siteIntegrationId,
+        seriesId: entry.seriesId,
+        seriesTitle: entry.seriesTitle,
+        chapterCount: entry.downloadedChapters.length,
+      }))
       .sort((a, b) => a.seriesTitle.localeCompare(b.seriesTitle))
   } catch (error) {
     logger.error("[OPTIONS] Failed to load series history:", error)
@@ -755,7 +746,17 @@ export function useOptionsPageState() {
   async function clearAllHistory(): Promise<boolean> {
     try {
       setIsClearing(true)
-      await chapterPersistenceService.clearAllDownloadHistory()
+      const response = await chrome.runtime.sendMessage<
+        ClearPersistedDownloadHistoryMessage,
+        ClearPersistedDownloadHistoryResponse
+      >({
+        type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
+        ...createCommandEnvelope(),
+        payload: { scope: "all" },
+      })
+      if (!response?.success) {
+        throw new Error(response?.error ?? "Unable to clear download history")
+      }
       const stats = await chapterPersistenceService.getStorageStats()
       setHistoryStats({
         totalChapters: stats.totalChapters,
@@ -774,10 +775,25 @@ export function useOptionsPageState() {
     }
   }
 
-  async function clearSeriesHistory(seriesId: string): Promise<boolean> {
+  async function clearSeriesHistory(
+    siteIntegrationId: string,
+    seriesId: string
+  ): Promise<boolean> {
     try {
       setIsClearing(true)
-      await chapterPersistenceService.clearSeriesDownloadHistory(seriesId)
+      const response = await chrome.runtime.sendMessage<
+        ClearPersistedDownloadHistoryMessage,
+        ClearPersistedDownloadHistoryResponse
+      >({
+        type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
+        ...createCommandEnvelope(),
+        payload: { scope: "series", siteIntegrationId, seriesId },
+      })
+      if (!response?.success) {
+        throw new Error(
+          response?.error ?? "Unable to clear series download history"
+        )
+      }
       const stats = await chapterPersistenceService.getStorageStats()
       setHistoryStats({
         totalChapters: stats.totalChapters,

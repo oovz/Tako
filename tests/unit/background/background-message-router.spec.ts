@@ -24,6 +24,7 @@ function handleBackgroundMessage(
     "RESTART_TASK",
     "MOVE_TASK_TO_TOP",
     "CLEAR_ALL_HISTORY",
+    "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
   ])
   const enriched = commandTypes.has(message.type)
     ? ({

@@ -23,6 +23,7 @@ export const LOCAL_STORAGE_KEYS = {
   settings: SETTINGS_STORAGE_KEYS.global,
   downloadedChapters: "downloadedChapters",
   seriesDownloadHistory: "seriesDownloadHistory",
+  downloadHistoryClearCutoffs: "downloadHistoryClearCutoffs",
   persistentErrors: "persistent_errors",
   activeDispatchLease: "activeDispatchLease",
   pendingOutputs: "pendingOutputs",

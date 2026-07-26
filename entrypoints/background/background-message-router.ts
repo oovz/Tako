@@ -40,6 +40,7 @@ import type {
 } from "@/src/types/state-action-message"
 import { applyUiLanguagePreference, t } from "@/src/runtime/i18n"
 import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
+import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 import type { PendingOutputRecord } from "@/src/types/queue-state"
 import type { OffscreenOutputReadyResponse } from "@/src/types/offscreen-messages"
 import {
@@ -77,6 +78,7 @@ const IDEMPOTENT_COMMAND_TYPES = new Set<ExtensionMessage["type"]>([
   "RESTART_TASK",
   "MOVE_TASK_TO_TOP",
   "CLEAR_ALL_HISTORY",
+  "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
 ])
 
 function readCommandId(message: ExtensionMessage): string | undefined {
@@ -141,6 +143,7 @@ export const backgroundHandledMessages = new Set<ExtensionMessage["type"]>([
   "RESTART_TASK",
   "MOVE_TASK_TO_TOP",
   "CLEAR_ALL_HISTORY",
+  "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
   "OPEN_OPTIONS",
   "START_DOWNLOAD",
   "OFFSCREEN_DOWNLOAD_PROGRESS",
@@ -946,6 +949,44 @@ export async function handleBackgroundMessage(
           const errorMessage =
             e instanceof Error ? e.message : "Unable to clear history"
           logger.error("Error handling CLEAR_ALL_HISTORY:", e)
+          return { success: false, error: errorMessage }
+        }
+      }
+      case "CLEAR_PERSISTED_DOWNLOAD_HISTORY": {
+        const parsedMessage = parseActionMessage(
+          message,
+          "CLEAR_PERSISTED_DOWNLOAD_HISTORY"
+        )
+        if (!parsedMessage) {
+          return {
+            success: false,
+            error: "Invalid CLEAR_PERSISTED_DOWNLOAD_HISTORY payload",
+          }
+        }
+
+        const optionsUrlPrefix = chrome.runtime.getURL("options.html")
+        if (!isSenderFromOptionsPage(sender, optionsUrlPrefix)) {
+          return {
+            success: false,
+            error:
+              "CLEAR_PERSISTED_DOWNLOAD_HISTORY is only available from Options page",
+          }
+        }
+
+        try {
+          if (parsedMessage.payload.scope === "all") {
+            await chapterPersistenceService.clearAllDownloadHistory()
+          } else {
+            await chapterPersistenceService.clearSeriesDownloadHistory(
+              parsedMessage.payload.siteIntegrationId,
+              parsedMessage.payload.seriesId
+            )
+          }
+          return { success: true }
+        } catch (e: unknown) {
+          const errorMessage =
+            e instanceof Error ? e.message : "Unable to clear download history"
+          logger.error("Error handling CLEAR_PERSISTED_DOWNLOAD_HISTORY:", e)
           return { success: false, error: errorMessage }
         }
       }

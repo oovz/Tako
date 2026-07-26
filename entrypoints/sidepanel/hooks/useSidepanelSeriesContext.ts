@@ -154,7 +154,11 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
 
     const downloadedChapterIds = new Set(
       downloadedChapters
-        .filter((chapter) => chapter.seriesId === derived.seriesId)
+        .filter(
+          (chapter) =>
+            chapter.siteIntegrationId === derived.siteId &&
+            chapter.seriesId === derived.seriesId
+        )
         .map((chapter) => chapter.chapterId)
     )
 
