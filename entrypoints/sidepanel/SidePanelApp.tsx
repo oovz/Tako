@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef } from "react"
+import {
+  type TransitionEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 import { t } from "@/src/runtime/i18n"
 import { useActiveTaskProgress } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
@@ -12,7 +18,7 @@ import {
 } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
+import { Collapsible } from "@/components/ui/collapsible"
 import { ErrorBanner } from "@/entrypoints/sidepanel/components/ErrorBanner"
 import { FsaBanner } from "@/entrypoints/sidepanel/components/FsaBanner"
 import { SidePanelHeader } from "@/entrypoints/sidepanel/components/SidePanelHeader"
@@ -25,6 +31,29 @@ import {
   applyUiPreferences,
   toDocumentLanguageTag,
 } from "@/src/ui/shared/ui-preferences"
+
+function prefersReducedMotion() {
+  if (typeof window === "undefined") return false
+
+  return (
+    document.documentElement.dataset.takoMotion === "reduce" ||
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  )
+}
+
+export const INLINE_SELECTION_LAYOUT_TRANSITION_PROPERTY = "flex-grow"
+
+export function shouldUnmountInlineSelectionAfterTransition(
+  event: Pick<TransitionEvent, "propertyName">,
+  isOpen: boolean,
+  state: "open" | "closed"
+): boolean {
+  return (
+    event.propertyName === INLINE_SELECTION_LAYOUT_TRANSITION_PROPERTY &&
+    !isOpen &&
+    state === "closed"
+  )
+}
 
 export function SidePanelApp() {
   const { value: uiPreferences, hydrated: uiPreferencesHydrated } =
@@ -47,11 +76,42 @@ export function SidePanelApp() {
     isInlineSelectionOpen,
     setInlineSelectionOpen,
   } = useInlineSelectionState()
+  const [isInlineSelectionPresent, setInlineSelectionPresent] = useState(
+    isInlineSelectionOpen
+  )
+  const isInlineSelectionVisible =
+    isInlineSelectionOpen || isInlineSelectionPresent
+  const updateInlineSelectionOpen = useCallback(
+    (open: boolean) => {
+      if (open || prefersReducedMotion()) {
+        setInlineSelectionPresent(open)
+      }
+      setInlineSelectionOpen(open)
+    },
+    [setInlineSelectionOpen]
+  )
   const inlineSelectionTriggerRef = useRef<HTMLButtonElement>(null)
   const closeInlineSelectionAndRestoreFocus = useCallback(() => {
-    setInlineSelectionOpen(false)
+    updateInlineSelectionOpen(false)
     inlineSelectionTriggerRef.current?.focus()
-  }, [setInlineSelectionOpen])
+  }, [updateInlineSelectionOpen])
+  const handleInlineSelectionTransitionEnd = useCallback(
+    (event: TransitionEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) return
+
+      const state = event.currentTarget.dataset.state as "open" | "closed"
+      if (
+        shouldUnmountInlineSelectionAfterTransition(
+          event,
+          isInlineSelectionOpen,
+          state
+        )
+      ) {
+        setInlineSelectionPresent(false)
+      }
+    },
+    [isInlineSelectionOpen]
+  )
   const {
     cancelingTaskIds,
     retryingTaskIds,
@@ -110,7 +170,7 @@ export function SidePanelApp() {
         >
           <Collapsible
             open={isInlineSelectionOpen}
-            onOpenChange={setInlineSelectionOpen}
+            onOpenChange={updateInlineSelectionOpen}
             className="contents"
           >
             {/* Context-aware Series Card */}
@@ -127,32 +187,35 @@ export function SidePanelApp() {
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
                 data-sidepanel-selection-region
-                className={`relative min-h-0 basis-0 ${
-                  isInlineSelectionOpen
-                    ? "grow overflow-hidden"
-                    : "grow-0 overflow-visible"
+                data-state={isInlineSelectionOpen ? "open" : "closed"}
+                className={`relative min-h-0 basis-0 overflow-hidden transition-[flex-grow] duration-[280ms] ease-out ${
+                  isInlineSelectionOpen ? "grow" : "grow-0"
                 }`}
+                onTransitionEnd={handleInlineSelectionTransitionEnd}
               >
-                <CollapsibleContent
+                <div
                   id="inline-selection-panel"
                   data-sidepanel-inline-selection
+                  data-state={isInlineSelectionOpen ? "open" : "closed"}
                   aria-hidden={!isInlineSelectionOpen}
                   inert={!isInlineSelectionOpen}
                   className="h-full min-h-0 overflow-hidden"
                 >
-                  <div className="border-t border-border bg-muted/30 flex flex-col h-full">
-                    <SeriesInlineSelection
-                      data={seriesData}
-                      chapterSelectionsBySeries={chapterSelectionsBySeries}
-                      setChapterSelectionsBySeries={
-                        setChapterSelectionsBySeries
-                      }
-                      presentationBySeries={presentationBySeries}
-                      setPresentationBySeries={setPresentationBySeries}
-                      onAfterStart={closeInlineSelectionAndRestoreFocus}
-                    />
-                  </div>
-                </CollapsibleContent>
+                  {isInlineSelectionVisible && (
+                    <div className="border-t border-border bg-muted/30 flex flex-col h-full">
+                      <SeriesInlineSelection
+                        data={seriesData}
+                        chapterSelectionsBySeries={chapterSelectionsBySeries}
+                        setChapterSelectionsBySeries={
+                          setChapterSelectionsBySeries
+                        }
+                        presentationBySeries={presentationBySeries}
+                        setPresentationBySeries={setPresentationBySeries}
+                        onAfterStart={closeInlineSelectionAndRestoreFocus}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Queue + History region */}

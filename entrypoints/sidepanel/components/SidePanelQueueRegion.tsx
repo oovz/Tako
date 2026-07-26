@@ -108,8 +108,9 @@ export function SidePanelQueueRegion({
   return (
     <div
       data-sidepanel-queue-region
+      data-state={isInlineSelectionOpen ? "open" : "closed"}
       className={cn(
-        "flex min-h-0 shrink-0 flex-col bg-background",
+        "flex min-h-0 basis-auto shrink-0 flex-col overflow-hidden bg-background transition-[flex-grow] duration-[280ms] ease-out",
         isInlineSelectionOpen ? "grow-0" : "grow"
       )}
     >

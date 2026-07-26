@@ -86,4 +86,20 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     expect(html).not.toContain("Series history")
     expect(html).not.toContain("Recent history")
   })
+
+  it("keeps active progress at intrinsic height while inline selection is open", () => {
+    const html = renderQueueRegion({
+      ...commonProps,
+      queueTasks: [
+        makeTask("active", "downloading"),
+        makeTask("queued", "queued"),
+      ],
+      isInlineSelectionOpen: true,
+    })
+
+    expect(html).toContain("basis-auto")
+    expect(html).toContain("grow-0")
+    expect(html).toContain("Series active")
+    expect(html).not.toContain("Series queued")
+  })
 })
