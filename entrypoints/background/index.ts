@@ -72,12 +72,11 @@ async function waitForStateManagerReady(): Promise<void> {
   await stateManagerReady
 }
 
-const siteIntegrationSupportReadiness =
-  createSiteIntegrationSupportReadiness({
-    reconcilePermissionEnablement: reconcileBroadHttpsPermissionEnablement,
-    initializeMetadata: initializeSiteIntegrationMetadataOnly,
-    applyEnablement: setUserSiteIntegrationEnablement,
-  })
+const siteIntegrationSupportReadiness = createSiteIntegrationSupportReadiness({
+  reconcilePermissionEnablement: reconcileBroadHttpsPermissionEnablement,
+  initializeMetadata: initializeSiteIntegrationMetadataOnly,
+  applyEnablement: setUserSiteIntegrationEnablement,
+})
 
 function ensureSiteIntegrationMetadataInitialized(): Promise<void> {
   return siteIntegrationSupportReadiness.ensureInitialized()

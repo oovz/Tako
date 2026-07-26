@@ -25,8 +25,7 @@ export function createSiteIntegrationSupportReadiness(
 
     let enablement: SiteIntegrationEnablementMap
     try {
-      const reconciliation =
-        await dependencies.reconcilePermissionEnablement()
+      const reconciliation = await dependencies.reconcilePermissionEnablement()
       enablement = reconciliation.enablement
       await dependencies.initializeMetadata()
     } catch (error) {

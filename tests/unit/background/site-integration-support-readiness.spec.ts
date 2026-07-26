@@ -26,8 +26,7 @@ describe("site integration support readiness", () => {
 
   it("hands stale callers to the invalidated attempt without applying stale enablement", async () => {
     let resolveFirst:
-      | ((value: { enablement: Record<string, boolean> }) => void)
-      | undefined
+      ((value: { enablement: Record<string, boolean> }) => void) | undefined
     const firstReconciliation = new Promise<{
       enablement: Record<string, boolean>
     }>((resolve) => {
