@@ -300,6 +300,7 @@ export function groupChapters(
 
   type VolumeNode = {
     kind: "volume"
+    volumeId?: string
     volumeNumber?: number
     title: string
     groupId: string
@@ -315,54 +316,83 @@ export function groupChapters(
   )
 
   if (volumes.length > 0 && hasExplicitVolumeMembership) {
-    const result: VolumeOrChapter[] = []
-    for (const volume of volumes) {
-      const volumeChapters = sidePanelChapters.filter(
-        (chapter) => chapter.volumeId === volume.id
-      )
-      if (volumeChapters.length === 0) {
-        continue
+    const volumeById = new Map(volumes.map((volume) => [volume.id, volume]))
+    const nodes: Array<VolumeNode | StandaloneNode> = []
+    const seenVolumeIds = new Set<string>()
+    let currentVolumeNode: VolumeNode | null = null
+
+    sidePanelChapters.forEach((chapter) => {
+      if (
+        typeof chapter.volumeId === "string" &&
+        volumeById.has(chapter.volumeId)
+      ) {
+        if (
+          currentVolumeNode &&
+          currentVolumeNode.volumeId === chapter.volumeId
+        ) {
+          currentVolumeNode.chapters.push(chapter)
+          return
+        }
+
+        const volume = volumeById.get(chapter.volumeId)!
+        const isFirstOccurrence = !seenVolumeIds.has(chapter.volumeId)
+        const groupId = isFirstOccurrence
+          ? chapter.volumeId
+          : `${chapter.volumeId}:${chapter.url}`
+        seenVolumeIds.add(chapter.volumeId)
+        const title =
+          volume.title ??
+          volume.label ??
+          chapter.volumeLabel ??
+          (chapter.volumeNumber !== undefined
+            ? `Volume ${chapter.volumeNumber}`
+            : "Volume")
+        currentVolumeNode = {
+          kind: "volume",
+          volumeId: chapter.volumeId,
+          volumeNumber: chapter.volumeNumber,
+          title,
+          groupId,
+          chapters: [chapter],
+        }
+        nodes.push(currentVolumeNode)
+        return
       }
 
-      const firstNumberedChapter = volumeChapters.find(
-        (chapter) => chapter.volumeNumber !== undefined
-      )
-      const volumeNumber = firstNumberedChapter?.volumeNumber
-      const title =
-        volume.title ??
-        volume.label ??
-        volumeChapters.find((chapter) => chapter.volumeLabel)?.volumeLabel ??
-        (volumeNumber !== undefined ? `Volume ${volumeNumber}` : "Volume")
-      const nextSelected = volumeChapters
-        .filter((chapter) => chapter.selected && chapter.locked !== true)
-        .map((chapter) => chapter.id)
+      currentVolumeNode = null
+      nodes.push({ kind: "standalone", chapter })
+    })
+
+    const result: VolumeOrChapter[] = []
+
+    nodes.forEach((node) => {
+      if (node.kind === "volume") {
+        const nextSelected = node.chapters
+          .filter((chapter) => chapter.selected && chapter.locked !== true)
+          .map((chapter) => chapter.id)
+
+        result.push({
+          number: node.volumeNumber,
+          title: node.title,
+          chapters: node.chapters.map((chapter) => ({
+            ...chapter,
+            selected:
+              chapter.locked === true
+                ? false
+                : nextSelected.includes(chapter.id),
+          })),
+          collapsed: previousCollapsedState.get(node.groupId) ?? true,
+          groupId: node.groupId,
+        })
+        return
+      }
 
       result.push({
-        number: volumeNumber,
-        title,
-        chapters: volumeChapters.map((chapter) => ({
-          ...chapter,
-          selected:
-            chapter.locked === true ? false : nextSelected.includes(chapter.id),
-        })),
-        collapsed: previousCollapsedState.get(volume.id) ?? true,
-        groupId: volume.id,
+        ...node.chapter,
+        isStandalone: true,
+        selected: node.chapter.locked === true ? false : node.chapter.selected,
       })
-    }
-
-    sidePanelChapters
-      .filter(
-        (chapter) =>
-          typeof chapter.volumeId !== "string" ||
-          !explicitVolumeIds.has(chapter.volumeId)
-      )
-      .forEach((chapter) => {
-        result.push({
-          ...chapter,
-          isStandalone: true,
-          selected: chapter.locked === true ? false : chapter.selected,
-        })
-      })
+    })
 
     return result
   }
