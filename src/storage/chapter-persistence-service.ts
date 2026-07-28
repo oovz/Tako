@@ -67,9 +67,111 @@ const DownloadedChapterRecordSchema = z.object({
   format: z.enum(VALID_FORMATS),
 })
 
+const LegacyDownloadedChapterRecordSchema = DownloadedChapterRecordSchema.omit({
+  siteIntegrationId: true,
+})
+
+const LegacySeriesDownloadHistorySchema = z.object({
+  seriesId: z.string(),
+  seriesTitle: z.string(),
+  lastUpdated: z.number(),
+  downloadedChapters: z.array(z.unknown()),
+})
+
+const CurrentSeriesDownloadHistoryMigrationSchema =
+  LegacySeriesDownloadHistorySchema.extend({
+    siteIntegrationId: z.string().min(1),
+  })
+
+const RELEASED_HISTORY_SITE_DOMAINS = [
+  {
+    siteIntegrationId: "mangadex",
+    domains: ["mangadex.org"],
+  },
+  {
+    siteIntegrationId: "pixiv-comic",
+    domains: ["comic.pixiv.net"],
+  },
+  {
+    siteIntegrationId: "shonenjumpplus",
+    domains: ["shonenjumpplus.com"],
+  },
+  {
+    siteIntegrationId: "manhuagui",
+    domains: ["manhuagui.com"],
+  },
+  {
+    siteIntegrationId: "comicnettai",
+    domains: ["comicnettai.com"],
+  },
+] as const
+
+function resolveReleasedHistorySiteIntegrationId(url: string): string {
+  let hostname: string
+  try {
+    hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "")
+  } catch {
+    return "legacy-unresolved"
+  }
+  if (!hostname) return "legacy-unresolved"
+
+  for (const integration of RELEASED_HISTORY_SITE_DOMAINS) {
+    if (
+      integration.domains.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+      )
+    ) {
+      return integration.siteIntegrationId
+    }
+  }
+
+  return `legacy:${hostname}`
+}
+
 function parseDownloadedChapter(raw: unknown): DownloadedChapterRecord | null {
   const parsed = DownloadedChapterRecordSchema.safeParse(raw)
   return parsed.success ? parsed.data : null
+}
+
+interface MigratedDownloadedChapters {
+  records: DownloadedChapterRecord[]
+  changed: boolean
+}
+
+function migrateDownloadedChapterEntries(
+  raw: unknown,
+  options: {
+    fallbackSiteIntegrationId?: string
+    invalidEntryMessage: string
+  }
+): MigratedDownloadedChapters {
+  if (raw === undefined) {
+    return { records: [], changed: false }
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(options.invalidEntryMessage)
+  }
+
+  let changed = false
+  const records = raw.map((entry) => {
+    const current = DownloadedChapterRecordSchema.safeParse(entry)
+    if (current.success) return current.data
+
+    const legacy = LegacyDownloadedChapterRecordSchema.safeParse(entry)
+    if (!legacy.success) {
+      throw new Error(options.invalidEntryMessage)
+    }
+
+    changed = true
+    return {
+      siteIntegrationId:
+        options.fallbackSiteIntegrationId ??
+        resolveReleasedHistorySiteIntegrationId(legacy.data.url),
+      ...legacy.data,
+    }
+  })
+
+  return { records, changed }
 }
 
 export const parseDownloadedChapters = (
@@ -115,6 +217,119 @@ const parseSeriesHistoryMap = (
   return entries
 }
 
+interface MigratedSeriesHistory {
+  history: Record<string, SeriesDownloadHistory>
+  changed: boolean
+}
+
+function appendMigratedSeriesHistory(
+  history: Record<string, SeriesDownloadHistory>,
+  incoming: SeriesDownloadHistory
+): void {
+  const key = composeSeriesKey(incoming.siteIntegrationId, incoming.seriesId)
+  const existing = history[key]
+  if (!existing) {
+    history[key] = incoming
+    return
+  }
+
+  const incomingIsNewer = incoming.lastUpdated >= existing.lastUpdated
+  history[key] = {
+    siteIntegrationId: incoming.siteIntegrationId,
+    seriesId: incoming.seriesId,
+    seriesTitle: incomingIsNewer ? incoming.seriesTitle : existing.seriesTitle,
+    lastUpdated: Math.max(existing.lastUpdated, incoming.lastUpdated),
+    downloadedChapters: [
+      ...existing.downloadedChapters,
+      ...incoming.downloadedChapters,
+    ],
+  }
+}
+
+function migrateSeriesHistoryEntries(
+  raw: unknown,
+  downloadedChapters: DownloadedChapterRecord[]
+): MigratedSeriesHistory {
+  if (raw === undefined) {
+    return { history: {}, changed: false }
+  }
+  const rawEntries = z.record(z.string(), z.unknown()).safeParse(raw)
+  if (!rawEntries.success) {
+    throw new Error("Invalid series download history")
+  }
+
+  let changed = false
+  const history: Record<string, SeriesDownloadHistory> = {}
+  for (const [storedKey, value] of Object.entries(rawEntries.data)) {
+    const current = CurrentSeriesDownloadHistoryMigrationSchema.safeParse(value)
+    if (current.success) {
+      const nested = migrateDownloadedChapterEntries(
+        current.data.downloadedChapters,
+        {
+          fallbackSiteIntegrationId: current.data.siteIntegrationId,
+          invalidEntryMessage: "Invalid series download history chapter entry",
+        }
+      )
+      const migrated: SeriesDownloadHistory = {
+        siteIntegrationId: current.data.siteIntegrationId,
+        seriesId: current.data.seriesId,
+        seriesTitle: current.data.seriesTitle,
+        lastUpdated: current.data.lastUpdated,
+        downloadedChapters: nested.records,
+      }
+      const expectedKey = composeSeriesKey(
+        migrated.siteIntegrationId,
+        migrated.seriesId
+      )
+      changed ||= nested.changed || storedKey !== expectedKey
+      appendMigratedSeriesHistory(history, migrated)
+      continue
+    }
+
+    const legacy = LegacySeriesDownloadHistorySchema.safeParse(value)
+    if (!legacy.success) {
+      throw new Error("Invalid series download history entry")
+    }
+    changed = true
+    const nested = migrateDownloadedChapterEntries(
+      legacy.data.downloadedChapters,
+      {
+        invalidEntryMessage: "Invalid series download history chapter entry",
+      }
+    )
+    const recordsBySite = new Map<string, DownloadedChapterRecord[]>()
+    for (const record of nested.records) {
+      const records = recordsBySite.get(record.siteIntegrationId) ?? []
+      records.push(record)
+      recordsBySite.set(record.siteIntegrationId, records)
+    }
+
+    if (recordsBySite.size === 0) {
+      const possibleSites = new Set(
+        downloadedChapters
+          .filter((record) => record.seriesId === legacy.data.seriesId)
+          .map((record) => record.siteIntegrationId)
+      )
+      recordsBySite.set(
+        possibleSites.size === 1 ? [...possibleSites][0] : "legacy-unresolved",
+        []
+      )
+    }
+
+    for (const [siteIntegrationId, records] of recordsBySite) {
+      appendMigratedSeriesHistory(history, {
+        siteIntegrationId,
+        seriesId: legacy.data.seriesId,
+        seriesTitle: legacy.data.seriesTitle,
+        lastUpdated: legacy.data.lastUpdated,
+        downloadedChapters: records,
+      })
+    }
+  }
+
+  return { history, changed }
+}
+
 const DownloadHistoryClearCutoffsSchema = z.object({
   allBefore: z.number().optional(),
   bySeries: z.record(z.string(), z.number()).default({}),
@@ -134,6 +349,38 @@ class ChapterPersistenceService {
   private readonly CLEAR_CUTOFFS_KEY =
     LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs
   private readonly mutationQueue = new StorageMutationQueue()
+
+  /**
+   * One-way migration for the providerless history schema shipped through
+   * v1.5.5. A successful run leaves only the current provider-scoped shape, so
+   * later startups detect no work and perform no write.
+   */
+  async migrateLegacyDownloadHistory(): Promise<boolean> {
+    return this.mutationQueue.run(async () => {
+      const result = await chrome.storage.local.get([
+        this.STORAGE_KEY,
+        this.SERIES_HISTORY_KEY,
+      ])
+      const downloaded = migrateDownloadedChapterEntries(
+        result[this.STORAGE_KEY],
+        {
+          invalidEntryMessage: "Invalid downloaded chapter history entry",
+        }
+      )
+      const series = migrateSeriesHistoryEntries(
+        result[this.SERIES_HISTORY_KEY],
+        downloaded.records
+      )
+      if (!downloaded.changed && !series.changed) return false
+
+      await chrome.storage.local.set({
+        [this.STORAGE_KEY]: downloaded.records,
+        [this.SERIES_HISTORY_KEY]: series.history,
+      })
+      logger.info("Migrated released download history to provider-scoped keys")
+      return true
+    })
+  }
 
   private async writeDownloadedChapterRecord(
     record: DownloadedChapterRecord

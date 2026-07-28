@@ -2,6 +2,10 @@ import { vi } from "vitest"
 
 export type DownloadedChapterRecord =
   import("@/src/storage/chapter-persistence-service").DownloadedChapterRecord
+export type LegacyDownloadedChapterRecord = Omit<
+  DownloadedChapterRecord,
+  "siteIntegrationId"
+>
 
 export const mockStorageData: Record<string, any> = {}
 

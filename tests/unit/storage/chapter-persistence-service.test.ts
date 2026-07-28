@@ -8,6 +8,7 @@
 import { beforeEach, describe } from "vitest"
 import { registerChapterPersistenceCrudCases } from "./chapter-persistence-service-crud.cases"
 import { registerChapterPersistenceMaintenanceCases } from "./chapter-persistence-service-maintenance.cases"
+import { registerChapterPersistenceMigrationCases } from "./chapter-persistence-service-migration.cases"
 import { registerChapterPersistenceStatusAndErrorCases } from "./chapter-persistence-service-status-errors.cases"
 import { resetChapterPersistenceServiceTestEnvironment } from "./chapter-persistence-service-test-setup"
 
@@ -17,6 +18,7 @@ describe("Chapter Persistence Service", () => {
   })
 
   registerChapterPersistenceCrudCases()
+  registerChapterPersistenceMigrationCases()
   registerChapterPersistenceMaintenanceCases()
   registerChapterPersistenceStatusAndErrorCases()
 })
