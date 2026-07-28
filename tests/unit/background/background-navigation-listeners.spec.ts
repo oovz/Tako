@@ -24,6 +24,7 @@ describe("background navigation listeners", () => {
   const onHistoryStateUpdated = vi.fn()
   const queryTabs = vi.fn()
   const getTab = vi.fn()
+  const getSession = vi.fn(async () => ({}))
   const removeSession = vi.fn(async () => undefined)
 
   function createDependencies() {
@@ -60,6 +61,7 @@ describe("background navigation listeners", () => {
         : null
     )
     queryTabs.mockResolvedValue([])
+    getSession.mockResolvedValue({})
     getTab.mockResolvedValue({
       id: 7,
       active: true,
@@ -80,7 +82,7 @@ describe("background navigation listeners", () => {
       },
       storage: {
         session: {
-          get: vi.fn(async () => ({})),
+          get: getSession,
           remove: removeSession,
         },
       },
@@ -452,6 +454,61 @@ describe("background navigation listeners", () => {
     )
     expect(deps.clearTabState).toHaveBeenCalledWith(7)
     expect(removeSession).toHaveBeenCalledWith(["seriesContextError_7"])
+  })
+
+  it("does not let a stale committed URL clear newer supported tab state", async () => {
+    const deps = createDependencies()
+    let releaseInitialization: (() => void) | undefined
+    deps.ensureStateManagerInitialized.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          releaseInitialization = () => resolve(undefined)
+        })
+    )
+    getSession.mockResolvedValue({
+      tab_7: {
+        siteIntegrationId: "mangadex",
+        mangaId: "new-series",
+        seriesTitle: "New Series",
+        chapters: [],
+        volumes: [],
+        lastUpdated: 2,
+      },
+    })
+    registerBackgroundNavigationListeners(deps)
+    const listener = onCommitted.mock.calls[0][0] as (details: {
+      tabId: number
+      frameId: number
+      url: string
+    }) => void
+
+    listener({
+      tabId: 7,
+      frameId: 0,
+      url: "https://example.com/old-unsupported-page",
+    })
+    await vi.waitFor(() =>
+      expect(deps.ensureStateManagerInitialized).toHaveBeenCalledTimes(1)
+    )
+
+    getTab.mockResolvedValue({
+      id: 7,
+      active: true,
+      windowId: 2,
+      url: "https://mangadex.org/title/new-series",
+    })
+    releaseInitialization?.()
+
+    await vi.waitFor(() =>
+      expect(deps.tabUiCoordinator.updateActionForTab).toHaveBeenCalledWith(
+        7,
+        "https://mangadex.org/title/new-series"
+      )
+    )
+    expect(deps.clearTabState).not.toHaveBeenCalled()
+    expect(deps.tabContextCache.setCachedContext).not.toHaveBeenCalled()
+    expect(deps.tabContextCache.deleteCachedContext).not.toHaveBeenCalled()
+    expect(removeSession).not.toHaveBeenCalled()
   })
 
   it("resolves active tabs discovered during service-worker startup", async () => {

@@ -171,8 +171,8 @@ export function registerBackgroundNavigationListeners(
         void (async () => {
           await deps.ensureSiteIntegrationMetadataInitialized()
           await deps.ensureStateManagerInitialized()
-          const resolvedUrl =
-            details.url ?? (await chrome.tabs.get(details.tabId)).url ?? ""
+          const tab = await chrome.tabs.get(details.tabId)
+          const resolvedUrl = tab.url ?? details.url ?? ""
           if (isInternalUrl(resolvedUrl)) {
             return
           }
@@ -188,6 +188,11 @@ export function registerBackgroundNavigationListeners(
             try {
               const storageKey = `tab_${details.tabId}`
               const existing = await chrome.storage.session.get(storageKey)
+              const currentTab = await chrome.tabs.get(details.tabId)
+              const currentUrl = currentTab.url ?? details.url ?? ""
+              if (currentUrl !== resolvedUrl || matchUrl(currentUrl)) {
+                return
+              }
               if (isMangaPageState(existing[storageKey])) {
                 logger.info(
                   `background: unsupported URL detected, clearing tab state for tab ${details.tabId}`
