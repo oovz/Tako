@@ -124,6 +124,7 @@ describe("download task finalization", () => {
       expect.objectContaining({
         chapterId: "missing-completed",
         seriesId: "series-1",
+        downloadedAt: 1,
       }),
       1
     )

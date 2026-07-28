@@ -134,7 +134,7 @@ export async function reconcileCompletedChapterHistory(
             seriesTitle: task.seriesTitle,
             chapterNumber: chapter.chapterNumber,
             volumeNumber: chapter.volumeNumber,
-            downloadedAt: Date.now(),
+            downloadedAt: chapter.lastUpdated,
             fileSize: 0,
             format: resolvePersistedFormat(task.settingsSnapshot),
           },
