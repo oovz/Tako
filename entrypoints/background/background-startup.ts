@@ -32,6 +32,7 @@ import {
 } from "./native-output-finalizer"
 import { recoverPendingUndoActions } from "./pending-undo-coordinator"
 import { reconcileCompletedChapterHistory } from "./download-queue-finalization"
+import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 
 const PIXIV_REFERER_REWRITE_RULE_ID = 41001
 const MANHUAGUI_REFERER_REWRITE_RULE_ID = 41002
@@ -262,6 +263,8 @@ async function completeBackgroundRuntimeInitialization(
   stateManager: CentralizedStateManager
 ): Promise<InitializedBackgroundRuntime> {
   try {
+    await chapterPersistenceService.migrateLegacyDownloadHistory()
+
     await recoverPendingUndoActions(stateManager)
 
     await input.pendingDownloadsStore.hydrate()

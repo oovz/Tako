@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
     pending: [],
   })),
   reconcileCompletedChapterHistory: vi.fn(async () => undefined),
+  migrateLegacyDownloadHistory: vi.fn(async () => false),
   loggerWarn: vi.fn(),
   storageLocalGet: vi.fn<(key: string) => Promise<Record<string, unknown>>>(
     async () => ({ downloadQueue: [] })
@@ -120,6 +121,12 @@ vi.mock("@/entrypoints/background/download-queue-finalization", () => ({
   reconcileCompletedChapterHistory: mocks.reconcileCompletedChapterHistory,
 }))
 
+vi.mock("@/src/storage/chapter-persistence-service", () => ({
+  chapterPersistenceService: {
+    migrateLegacyDownloadHistory: mocks.migrateLegacyDownloadHistory,
+  },
+}))
+
 vi.mock("@/entrypoints/background/offscreen-lifecycle", () => ({
   getOffscreenContexts: mocks.getOffscreenContexts,
   hasOffscreenDocument: mocks.hasOffscreenDocument,
@@ -156,6 +163,7 @@ describe("initializeBackgroundRuntime", () => {
       pending: [],
     })
     mocks.reconcileCompletedChapterHistory.mockResolvedValue(undefined)
+    mocks.migrateLegacyDownloadHistory.mockResolvedValue(false)
     mocks.storageLocalGet.mockResolvedValue({ downloadQueue: [] })
     mocks.storageLocalSet.mockResolvedValue(undefined)
     mocks.storageSessionSet.mockResolvedValue(undefined)
@@ -407,6 +415,47 @@ describe("initializeBackgroundRuntime", () => {
       "Failed to reconcile completed chapter history during startup:",
       expect.objectContaining({ message: "history storage unavailable" })
     )
+  })
+
+  it("migrates released history before reconciling the queue projection", async () => {
+    const callOrder: string[] = []
+    mocks.migrateLegacyDownloadHistory.mockImplementationOnce(async () => {
+      callOrder.push("migration")
+      return true
+    })
+    mocks.reconcileCompletedChapterHistory.mockImplementationOnce(async () => {
+      callOrder.push("reconciliation")
+    })
+    const { initializeBackgroundRuntime } =
+      await import("@/entrypoints/background/background-startup")
+
+    await initializeBackgroundRuntime({
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      ensureLivenessAlarm: async () => undefined,
+      ensureOffscreenDocumentReady: async () => undefined,
+      requestBlobRevocation: vi.fn(async () => undefined),
+    })
+
+    expect(callOrder).toEqual(["migration", "reconciliation"])
+  })
+
+  it("fails before reconciliation when released history cannot migrate", async () => {
+    mocks.migrateLegacyDownloadHistory.mockRejectedValueOnce(
+      new Error("invalid released history")
+    )
+    const { initializeBackgroundRuntime } =
+      await import("@/entrypoints/background/background-startup")
+
+    await expect(
+      initializeBackgroundRuntime({
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        ensureLivenessAlarm: async () => undefined,
+        ensureOffscreenDocumentReady: async () => undefined,
+        requestBlobRevocation: vi.fn(async () => undefined),
+      })
+    ).rejects.toThrow("invalid released history")
+
+    expect(mocks.reconcileCompletedChapterHistory).not.toHaveBeenCalled()
   })
 
   it("applies the persisted UI language during service-worker startup", async () => {
