@@ -65,7 +65,7 @@ export default defineConfig({
 
     return {
       name: "__MSG_extName__",
-      version: "1.6.0",
+      version: "1.6.1",
       description: "__MSG_extDescription__",
       default_locale: "en",
       minimum_chrome_version: "150",
