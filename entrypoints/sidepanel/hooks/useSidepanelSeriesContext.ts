@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { VolumeOrChapter } from "../types"
 import { useSidepanelTrackedTabId } from "@/entrypoints/sidepanel/hooks/useSidepanelTrackedTabId"
@@ -18,6 +18,8 @@ import {
   parseDownloadedChapters,
   type DownloadedChapterRecord,
 } from "@/src/storage/chapter-persistence-service"
+import type { RequestTabContextRefreshResponse } from "@/src/types/runtime-command-messages"
+import logger from "@/src/runtime/logger"
 
 export interface SidepanelSeriesContextData {
   tabId: number | undefined
@@ -34,39 +36,39 @@ export interface SidepanelSeriesContextData {
   coverUrl?: string
 }
 
+export async function resolveCurrentSidepanelWindowId(): Promise<
+  number | undefined
+> {
+  try {
+    const currentWindow = await chrome.windows.getCurrent()
+    if (typeof currentWindow?.id === "number") {
+      return currentWindow.id
+    }
+  } catch {
+    // Fall through to the side-panel tab lookup.
+  }
+
+  try {
+    const currentTab = await chrome.tabs.getCurrent()
+    return typeof currentTab?.windowId === "number"
+      ? currentTab.windowId
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function useCurrentWindowId(): number | undefined {
   const [windowId, setWindowId] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     let cancelled = false
 
-    const resolve = async () => {
-      try {
-        const currentWindow = await chrome.windows.getCurrent()
-        if (!cancelled) {
-          setWindowId(currentWindow?.id)
-          return
-        }
-      } catch {
-        // Fall through to tabs.getCurrent.
-      }
-
-      try {
-        const currentTab = await chrome.tabs.getCurrent()
-        if (!cancelled && currentTab?.windowId !== undefined) {
-          setWindowId(currentTab.windowId)
-          return
-        }
-      } catch {
-        // ignore
-      }
-
+    void resolveCurrentSidepanelWindowId().then((resolvedWindowId) => {
       if (!cancelled) {
-        setWindowId(undefined)
+        setWindowId(resolvedWindowId)
       }
-    }
-
-    void resolve()
+    })
 
     return () => {
       cancelled = true
@@ -76,10 +78,107 @@ function useCurrentWindowId(): number | undefined {
   return windowId
 }
 
+interface SeriesContextRecoveryObservation {
+  activeTabContext: ActiveTabContextValue
+  hydrated: boolean
+  tabId: number | undefined
+  windowId: number | undefined
+}
+
+function describeRecoverableSeriesContext(
+  activeTabContext: ActiveTabContextValue
+): string {
+  switch (activeTabContext.kind) {
+    case "ready":
+      return [
+        "ready",
+        activeTabContext.mangaState.siteIntegrationId,
+        activeTabContext.mangaState.mangaId,
+        activeTabContext.mangaState.lastUpdated,
+      ].join(":")
+    case "error":
+      return `error:${activeTabContext.error}`
+    default:
+      return activeTabContext.kind
+  }
+}
+
+export function createSeriesContextRecoveryCoordinator(input: {
+  requestRefresh: (target: {
+    tabId: number
+    windowId: number
+  }) => Promise<RequestTabContextRefreshResponse>
+}) {
+  let activeAttempt:
+    | {
+        key: string
+      }
+    | undefined
+
+  return {
+    async recoverIfNeeded(
+      observation: SeriesContextRecoveryObservation
+    ): Promise<void> {
+      if (
+        !observation.hydrated ||
+        typeof observation.tabId !== "number" ||
+        typeof observation.windowId !== "number"
+      ) {
+        return
+      }
+
+      if (
+        observation.activeTabContext.kind === "ready" &&
+        observation.activeTabContext.mangaState.chaptersLoading !== true
+      ) {
+        activeAttempt = undefined
+        return
+      }
+      const key = [
+        observation.windowId,
+        observation.tabId,
+        describeRecoverableSeriesContext(observation.activeTabContext),
+      ].join(":")
+      if (activeAttempt?.key === key) return
+
+      const attempt = { key }
+      activeAttempt = attempt
+      try {
+        const response = await input.requestRefresh({
+          tabId: observation.tabId,
+          windowId: observation.windowId,
+        })
+        if (!response.success && activeAttempt === attempt) {
+          activeAttempt = undefined
+        }
+      } catch (error) {
+        if (activeAttempt === attempt) {
+          activeAttempt = undefined
+        }
+        throw error
+      }
+    },
+  }
+}
+
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   const tabId = useSidepanelTrackedTabId()
   const windowId = useCurrentWindowId()
-  const recoveredTabWindowKeys = useRef(new Set<string>())
+  const recoveryCoordinator = useMemo(
+    () =>
+      createSeriesContextRecoveryCoordinator({
+        requestRefresh: ({ tabId: targetTabId, windowId: targetWindowId }) =>
+          chrome.runtime.sendMessage({
+            type: "REQUEST_TAB_CONTEXT_REFRESH",
+            payload: {
+              tabId: targetTabId,
+              windowId: targetWindowId,
+              reason: "sidepanel-mount",
+            },
+          }),
+      }),
+    []
+  )
   const storageKeys = useMemo(
     () =>
       typeof tabId === "number"
@@ -124,29 +223,20 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       return
     }
 
-    const recoveryKey = `${windowId}:${tabId}`
-    if (recoveredTabWindowKeys.current.has(recoveryKey)) return
-    recoveredTabWindowKeys.current.add(recoveryKey)
-
-    // A complete ready state is authoritative. A metadata-only partial remains
-    // recoverable work and must not become terminal after a worker restart.
-    if (
-      activeTabContext.kind === "ready" &&
-      activeTabContext.mangaState.chaptersLoading !== true
-    ) {
-      return
-    }
-
     // A Side Panel can open after an MV3 worker restart or a dropped page
     // projection. Ask the background to own a fresh resolution instead of
     // leaving a persisted loading snapshot on screen indefinitely.
-    void chrome.runtime
-      .sendMessage({
-        type: "REQUEST_TAB_CONTEXT_REFRESH",
-        payload: { tabId, windowId, reason: "sidepanel-mount" },
+    void recoveryCoordinator
+      .recoverIfNeeded({
+        activeTabContext,
+        hydrated,
+        tabId,
+        windowId,
       })
-      .catch(() => undefined)
-  }, [activeTabContext, hydrated, tabId, windowId])
+      .catch((error) =>
+        logger.debug("[sidepanel] Context refresh request failed", error)
+      )
+  }, [activeTabContext, hydrated, recoveryCoordinator, tabId, windowId])
 
   const data = useMemo(() => {
     const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)
