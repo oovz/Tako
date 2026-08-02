@@ -102,8 +102,11 @@ output handoffs return their prior result. On Service Worker wake:
    interrupted.
 
 The watchdog alarm uses `persistAcrossSessions: true` and is verified/recreated
-at initialization. Multiple missed heartbeats trigger `QUERY_JOB` before any
-recovery teardown.
+at initialization. It is armed for executing offscreen work or an active
+offscreen dispatch lease, not merely for a Chrome-owned download. Multiple
+missed heartbeats trigger `QUERY_JOB` before any recovery teardown. Native
+download completion is event-driven through `downloads.onChanged`, with startup
+reconciliation covering events missed while the Service Worker was stopped.
 
 ## Output transaction
 
@@ -113,12 +116,19 @@ recovery teardown.
 
 1. Offscreen creates a Blob URL and sends `OUTPUT_READY` with task, chapter,
    job, attempt, and output identity.
-2. Service Worker calls `chrome.downloads.download()`.
-3. The returned `downloadId` is persisted as an accepted pending output.
-4. Service Worker immediately searches that ID and also observes
-   `downloads.onChanged` to cover the fast-completion race.
+2. Service Worker persists a prepared output record, then calls
+   `chrome.downloads.download()`.
+3. A numeric `downloadId` means Chrome successfully started the download. Tako
+   keeps that ID observable even if the following local-storage write fails; the
+   prepared record remains restart-reconcilable by Blob URL.
+4. Service Worker observes `downloads.onChanged` and reconciles the durable ID
+   with `chrome.downloads.search()` after startup or a transient storage
+   failure.
 5. `complete` commits the output; `interrupted` records a typed output failure.
 6. Service Worker tells offscreen to revoke the Blob URL after terminal state.
+
+A pending native download is a durable wait state, not a liveness failure. Tako
+does not poll known long-running Chrome downloads with the offscreen watchdog.
 
 Canceling a task stops future dispatch and uncommitted pipeline work. It does
 not cancel native downloads already accepted by Chrome.
@@ -130,9 +140,11 @@ capability, handle presence, and `queryPermission({mode:'readwrite'})`. A write
 commits only after the writable stream closes successfully.
 
 Unsupported, prompt/denied, missing-folder, write, or disk-full failures persist
-a `DestinationIssue`, block further dispatch, and show repair actions. Tako
-never silently changes the destination. The user can explicitly re-grant,
-reselect, continue that task in Downloads, or cancel.
+a `DestinationIssue`, block further dispatch, and show repair actions. The queue
+transition and destination-issue mutation use one durable local-storage commit,
+followed by best-effort session projection and notification. Tako never silently
+changes the destination. The user can explicitly re-grant, reselect, continue
+that task in Downloads, or cancel.
 
 Both destinations use one `uniquify | overwrite` collision policy; `uniquify` is
 the default.

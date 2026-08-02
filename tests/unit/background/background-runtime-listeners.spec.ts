@@ -143,6 +143,29 @@ describe("registerBackgroundRuntimeListeners", () => {
     })
   })
 
+  it("fails registration when the required Downloads listener cannot be installed", () => {
+    downloadsOnChangedAddListener.mockImplementationOnce(() => {
+      throw new Error("downloads listener unavailable")
+    })
+
+    expect(() =>
+      registerBackgroundRuntimeListeners({
+        ensureStateManagerInitialized: vi.fn(async () => undefined),
+        isStateManagerReady: () => true,
+        getStateManager: vi.fn() as never,
+        pendingDownloadsStore: createPendingDownloadsStoreStub(),
+        requestBlobRevocation: vi.fn(async () => undefined),
+        tabContextCache: {
+          handleTabRemoved: vi.fn(async () => undefined),
+          handleTabReplaced: vi.fn(async () => undefined),
+        },
+        ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+        ensureLivenessAlarm: vi.fn(async () => undefined),
+        livenessAlarmName: "offscreen-liveness",
+      })
+    ).toThrow("downloads listener unavailable")
+  })
+
   it("routes only internal live-progress Ports to the progress bus", () => {
     registerBackgroundRuntimeListeners({
       ensureStateManagerInitialized: vi.fn(async () => undefined),
@@ -155,6 +178,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -192,6 +216,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -236,6 +261,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -292,6 +318,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -327,6 +354,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -372,6 +400,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 
@@ -397,6 +426,40 @@ describe("registerBackgroundRuntimeListeners", () => {
     )
   })
 
+  it("re-arms the one-shot liveness alarm when runtime initialization fails", async () => {
+    const initializationError = new Error("storage unavailable")
+    const ensureStateManagerInitialized = vi.fn(async () => {
+      throw initializationError
+    })
+    const ensureLivenessAlarm = vi.fn(async () => undefined)
+
+    registerBackgroundRuntimeListeners({
+      ensureStateManagerInitialized,
+      isStateManagerReady: () => false,
+      getStateManager: vi.fn() as never,
+      pendingDownloadsStore: createPendingDownloadsStoreStub(),
+      requestBlobRevocation: vi.fn(async () => undefined),
+      tabContextCache: {
+        handleTabRemoved: vi.fn(async () => undefined),
+        handleTabReplaced: vi.fn(async () => undefined),
+      },
+      ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm,
+      livenessAlarmName: "offscreen-liveness",
+    })
+
+    const alarmListener = alarmsOnAlarmAddListener.mock.calls.at(-1)?.[0] as (
+      alarm: chrome.alarms.Alarm
+    ) => void
+    alarmListener({ name: "offscreen-liveness" } as chrome.alarms.Alarm)
+
+    await vi.waitFor(() => {
+      expect(ensureLivenessAlarm).toHaveBeenCalledTimes(1)
+    })
+    expect(recoveryMocks.reconcileAllPendingOutputs).not.toHaveBeenCalled()
+    expect(recoveryMocks.recoverFromLivenessTimeout).not.toHaveBeenCalled()
+  })
+
   it("routes a persisted Undo alarm without running liveness recovery", async () => {
     const ensureStateManagerInitialized = vi.fn(async () => undefined)
     const stateManager = {} as never
@@ -412,6 +475,7 @@ describe("registerBackgroundRuntimeListeners", () => {
         handleTabReplaced: vi.fn(async () => undefined),
       },
       ensureOffscreenDocumentReady: vi.fn(async () => undefined),
+      ensureLivenessAlarm: vi.fn(async () => undefined),
       livenessAlarmName: "offscreen-liveness",
     })
 

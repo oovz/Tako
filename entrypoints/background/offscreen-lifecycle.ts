@@ -22,6 +22,10 @@ import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
 import { isDownloadTaskRunnerActive } from "@/entrypoints/background/download-task-runner-registry"
 import { clearActiveTaskProgress } from "@/entrypoints/background/active-task-progress-bus"
 import { normalizeInterruptedTask } from "@/entrypoints/background/task-lifecycle"
+import {
+  isExecutingDownloadTask,
+  isWatchdogEligibleTask,
+} from "@/src/runtime/download-task-execution-state"
 
 // Global state for offscreen document creation
 let creatingOffscreen: Promise<void> | null = null
@@ -60,17 +64,43 @@ async function closeOffscreenDocumentSafe(): Promise<void> {
 
 export async function ensureLivenessAlarm(): Promise<void> {
   const existing = await chrome.alarms.get(LIVENESS_ALARM_NAME)
-  if (
-    existing?.periodInMinutes === 0.5 &&
-    existing.persistAcrossSessions === true
-  ) {
+  if (existing && existing.periodInMinutes === undefined) {
     return
   }
   if (existing) await chrome.alarms.clear(LIVENESS_ALARM_NAME)
   await chrome.alarms.create(LIVENESS_ALARM_NAME, {
-    periodInMinutes: 0.5,
+    delayInMinutes: 0.5,
     persistAcrossSessions: true,
   })
+}
+
+export async function setLivenessAlarmArmed(shouldArm: boolean): Promise<void> {
+  if (shouldArm) {
+    await ensureLivenessAlarm()
+    return
+  }
+  await chrome.alarms.clear(LIVENESS_ALARM_NAME)
+}
+
+export async function refreshLivenessAlarmForDurableWork(
+  stateManager: CentralizedStateManager
+): Promise<void> {
+  const [globalState, lease] = await Promise.all([
+    stateManager.getGlobalState(),
+    activeDispatchLeaseStore.get(),
+  ])
+  const hasOffscreenExecutingTask = globalState.downloadQueue.some(
+    (task) =>
+      isExecutingDownloadTask(task) && task.browserDownloadWait === undefined
+  )
+  const hasOffscreenDispatchLease =
+    lease !== null &&
+    !globalState.downloadQueue.some(
+      (task) => task.id === lease.taskId && task.browserDownloadWait
+    )
+  await setLivenessAlarmArmed(
+    hasOffscreenExecutingTask || hasOffscreenDispatchLease
+  )
 }
 
 export async function queryOffscreenJob(): Promise<OffscreenJobState | null> {
@@ -111,9 +141,7 @@ export async function recoverFromLivenessTimeout(
   onRecover: (activeTaskId?: string) => Promise<void>
 ): Promise<void> {
   const globalState = await stateManager.getGlobalState()
-  const activeTasks = globalState.downloadQueue.filter(
-    (task) => task.status === "downloading"
-  )
+  const activeTasks = globalState.downloadQueue.filter(isWatchdogEligibleTask)
   if (activeTasks.length === 0) {
     return
   }
@@ -223,6 +251,7 @@ export async function recoverFromLivenessTimeout(
  * Ensure the offscreen document exists before work is dispatched.
  */
 export async function ensureOffscreenDocumentReady(): Promise<void> {
+  await ensureLivenessAlarm()
   if (await hasOffscreenDocument()) {
     logger.info("Offscreen document already present")
     return
@@ -235,7 +264,6 @@ export async function ensureOffscreenDocumentReady(): Promise<void> {
         chrome.offscreen.Reason.BLOBS,
         chrome.offscreen.Reason.WORKERS,
         chrome.offscreen.Reason.DOM_PARSER,
-        chrome.offscreen.Reason.DOM_SCRAPING,
       ],
       justification:
         "Create archives in a Web Worker (fflate), handle Blob-based downloads, and parse fetched series page HTML with DOMParser when no content script is available",

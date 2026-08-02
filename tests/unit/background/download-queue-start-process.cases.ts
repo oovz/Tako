@@ -3,16 +3,21 @@ import { chapterPersistenceService } from "@/src/storage/chapter-persistence-ser
 import type { DownloadTaskState } from "@/src/types/queue-state"
 import { describe, expect, it, vi } from "vitest"
 import {
+  createDestinationIssue,
   destinationService,
-  recordDestinationIssue,
-  recordDestinationRuntimeIssue,
+  issueKindForPreflight,
+  notifyDestinationIssue,
 } from "@/entrypoints/background/destination"
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
-import { configureDownloadQueueLifecycle } from "@/entrypoints/background/download-queue-runner"
+import {
+  configureDownloadQueueLifecycle,
+  resumeProviderPolicyBlockedQueue,
+} from "@/entrypoints/background/download-queue-runner"
 import {
   createChapter,
   makeTask,
   mockEnsureOffscreenReady,
+  mockEnsureSiteIntegrationNetworkReady,
   mockGlobalState,
   mockRuntimeSendMessage,
   mockStateManager,
@@ -21,9 +26,79 @@ import {
   testSettings,
 } from "./download-queue-test-setup"
 import { createPendingDownloadsStoreStub } from "./pending-output-test-helpers"
+import {
+  ProviderNetworkPolicyActionRequiredError,
+  ProviderNetworkPolicyPendingError,
+} from "@/src/site-integrations/session-rule-manager"
 
 export function registerDownloadQueueStartAndProcessCases(): void {
   describe("startDownloadTask", () => {
+    it.each([
+      { label: "new", resumeExistingTask: false },
+      { label: "recovered", resumeExistingTask: true },
+    ])(
+      "waits for provider network readiness before dispatching a $label task",
+      async ({ resumeExistingTask }) => {
+        let releaseReadiness!: () => void
+        const readiness = new Promise<void>((resolve) => {
+          releaseReadiness = resolve
+        })
+        mockEnsureSiteIntegrationNetworkReady.mockReturnValue(readiness)
+        const task = makeTask({
+          id: `task-network-ready-${String(resumeExistingTask)}`,
+          siteIntegrationId: "manhuagui",
+          status: resumeExistingTask ? "downloading" : "queued",
+        })
+        mockGlobalState.downloadQueue = [task]
+
+        const taskPromise = startDownloadTask(
+          mockStateManager,
+          task.id,
+          mockEnsureOffscreenReady,
+          resumeExistingTask
+        )
+        await vi.waitFor(() =>
+          expect(mockEnsureSiteIntegrationNetworkReady).toHaveBeenCalledWith(
+            "manhuagui"
+          )
+        )
+
+        expect(destinationService.preflight).not.toHaveBeenCalled()
+        expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+        expect(mockRuntimeSendMessage).not.toHaveBeenCalledWith(
+          expect.objectContaining({ type: "OFFSCREEN_DOWNLOAD_CHAPTER" })
+        )
+
+        releaseReadiness()
+        await taskPromise
+        expect(mockEnsureOffscreenReady).toHaveBeenCalled()
+      }
+    )
+
+    it("resumes the same recovered task after provider policy becomes ready", async () => {
+      const task = makeTask({
+        id: "task-provider-policy-resume",
+        siteIntegrationId: "manhuagui",
+        status: "queued",
+        activeBlock: "provider_network_policy_pending",
+      })
+      mockGlobalState.downloadQueue = [task]
+
+      await resumeProviderPolicyBlockedQueue(
+        mockStateManager,
+        mockEnsureOffscreenReady
+      )
+
+      expect(mockEnsureSiteIntegrationNetworkReady).toHaveBeenCalledWith(
+        "manhuagui"
+      )
+      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
+        task.id,
+        { activeBlock: undefined }
+      )
+      expect(mockEnsureOffscreenReady).toHaveBeenCalled()
+    })
+
     it("should start a valid download task", async () => {
       const task = makeTask({ id: "task-1" })
 
@@ -46,6 +121,70 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(mockStateManager.beginChapterDispatch).toHaveBeenCalled()
     })
 
+    it("returns a transient provider-policy failure to a blocked queued state", async () => {
+      const task = makeTask({
+        id: "task-provider-network-policy-pending",
+        siteIntegrationId: "manhuagui",
+        status: "queued",
+      })
+      mockGlobalState.downloadQueue = [task]
+      mockEnsureSiteIntegrationNetworkReady.mockRejectedValueOnce(
+        new ProviderNetworkPolicyPendingError(
+          "manhuagui",
+          new Error("DNR temporarily unavailable")
+        )
+      )
+
+      await startDownloadTask(
+        mockStateManager,
+        task.id,
+        mockEnsureOffscreenReady
+      )
+
+      expect(mockStateManager.transitionDownloadTask).toHaveBeenCalledWith(
+        task.id,
+        ["queued", "downloading"],
+        {
+          status: "queued",
+          activeBlock: "provider_network_policy_pending",
+          browserDownloadWait: undefined,
+        }
+      )
+      expect(mockGlobalState.downloadQueue[0]).toMatchObject({
+        status: "queued",
+        activeBlock: "provider_network_policy_pending",
+      })
+      expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+    })
+
+    it("terminalizes a definitive provider host-access denial", async () => {
+      const task = makeTask({
+        id: "task-provider-network-policy-action",
+        siteIntegrationId: "manhuagui",
+        status: "queued",
+      })
+      mockGlobalState.downloadQueue = [task]
+      mockEnsureSiteIntegrationNetworkReady.mockRejectedValueOnce(
+        new ProviderNetworkPolicyActionRequiredError(
+          "manhuagui",
+          "host_permission_denied"
+        )
+      )
+
+      await startDownloadTask(
+        mockStateManager,
+        task.id,
+        mockEnsureOffscreenReady
+      )
+
+      expect(mockGlobalState.downloadQueue[0]).toMatchObject({
+        status: "failed",
+        activeBlock: undefined,
+        completed: expect.any(Number),
+      })
+      expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+    })
+
     it("keeps a committed chapter successful when pending-output cleanup fails", async () => {
       const task = makeTask({ id: "task-cleanup-failure" })
       const pendingOutputsStore = createPendingDownloadsStoreStub()
@@ -54,6 +193,11 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         committed: 1,
         failed: 0,
         completedDownloadIds: [42],
+      })
+      pendingOutputsStore.describeJobWait.mockReturnValue({
+        downloadIds: [42],
+        since: Date.now(),
+        lastObservedAt: Date.now(),
       })
       pendingOutputsStore.releaseJob.mockRejectedValueOnce(
         new Error("transient storage failure")
@@ -91,6 +235,25 @@ export function registerDownloadQueueStartAndProcessCases(): void {
             outputs: { requested: 1, committed: 1, failed: 0 },
           })
         )
+        const updateTaskCalls = vi.mocked(mockStateManager.updateDownloadTask)
+          .mock.calls
+        const waitStateCallIndex = updateTaskCalls.findIndex(
+          ([taskId, updates]) =>
+            taskId === task.id &&
+            updates.browserDownloadWait?.downloadIds?.[0] === 42
+        )
+        const waitClearCallIndex = updateTaskCalls.findIndex(
+          ([taskId, updates], index) =>
+            index > waitStateCallIndex &&
+            taskId === task.id &&
+            Object.prototype.hasOwnProperty.call(
+              updates,
+              "browserDownloadWait"
+            ) &&
+            updates.browserDownloadWait === undefined
+        )
+        expect(waitStateCallIndex).toBeGreaterThanOrEqual(0)
+        expect(waitClearCallIndex).toBeGreaterThan(waitStateCallIndex)
       } finally {
         configureDownloadQueueLifecycle({
           onQueueDrained: null,
@@ -219,13 +382,14 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           activeBlock: "destination_action_required",
         })
       )
-      expect(recordDestinationIssue).toHaveBeenCalledWith(
+      expect(createDestinationIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: task.id,
           destination: "file-system-access",
         }),
-        { ready: false, reason: "permission_prompt" }
+        issueKindForPreflight({ ready: false, reason: "permission_prompt" })
       )
+      expect(notifyDestinationIssue).toHaveBeenCalled()
       expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
       expect(mockStateManager.beginChapterDispatch).not.toHaveBeenCalled()
     })
@@ -274,7 +438,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           outputs: { requested: 1, committed: 0, failed: 1 },
         })
       )
-      expect(recordDestinationRuntimeIssue).toHaveBeenCalledWith(
+      expect(createDestinationIssue).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: task.id,
           chapterId: task.chapters[0]?.id,
@@ -282,6 +446,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         }),
         "fsa_permission_required"
       )
+      expect(notifyDestinationIssue).toHaveBeenCalled()
     })
 
     it("maps a generic FSA write category to an actionable destination issue", async () => {
@@ -321,10 +486,11 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           errorCategory: "folder_write_failed",
         })
       )
-      expect(recordDestinationRuntimeIssue).toHaveBeenCalledWith(
+      expect(createDestinationIssue).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: task.id }),
         "fsa_write_failed"
       )
+      expect(notifyDestinationIssue).toHaveBeenCalled()
     })
 
     it("should allow multiple tasks from same tab", async () => {
@@ -1031,6 +1197,57 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         expect.objectContaining({ status: "downloading" })
       )
       expect(mockStateManager.updateDownloadingTaskChapter).toHaveBeenCalled()
+    })
+
+    it.each([
+      "destination_action_required",
+      "provider_network_policy_pending",
+    ] as const)(
+      "skips a queued task blocked by %s and starts the next runnable task",
+      async (activeBlock) => {
+        mockGlobalState.downloadQueue = [
+          makeTask({
+            id: "blocked-task",
+            activeBlock,
+          }),
+          makeTask({
+            id: "runnable-task",
+            mangaId: "series-2",
+          }),
+        ]
+
+        await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+
+        expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
+          "runnable-task",
+          expect.objectContaining({ status: "downloading" })
+        )
+        expect(mockStateManager.updateDownloadTask).not.toHaveBeenCalledWith(
+          "blocked-task",
+          expect.objectContaining({ status: "downloading" })
+        )
+      }
+    )
+
+    it("does not count a legacy blocked downloading task as the active slot", async () => {
+      mockGlobalState.downloadQueue = [
+        makeTask({
+          id: "blocked-task",
+          status: "downloading",
+          activeBlock: "provider_network_policy_pending",
+        }),
+        makeTask({
+          id: "runnable-task",
+          mangaId: "series-2",
+        }),
+      ]
+
+      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+
+      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
+        "runnable-task",
+        expect.objectContaining({ status: "downloading" })
+      )
     })
 
     it("should not start new tasks when an active task exists", async () => {

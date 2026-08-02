@@ -82,6 +82,18 @@ vi.mock("@/entrypoints/background/destination", () => ({
     getEffectiveDestination: vi.fn(async () => ({ kind: "downloads" })),
     preflight: vi.fn(async () => ({ ready: true })),
   },
+  createDestinationIssue: vi.fn((context, kind) => ({
+    id: `${context.taskId}:${context.chapterId ?? ""}:${kind}`,
+    ...context,
+    kind,
+    occurredAt: 1,
+  })),
+  issueKindForPreflight: vi.fn((result) =>
+    result.reason === "permission_prompt"
+      ? "fsa_permission_required"
+      : "fsa_folder_missing"
+  ),
+  notifyDestinationIssue: vi.fn(),
   clearDestinationIssuesForTask: vi.fn(),
   recordDestinationIssue: vi.fn(),
   recordDestinationRuntimeIssue: vi.fn(),

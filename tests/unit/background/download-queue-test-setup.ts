@@ -10,6 +10,12 @@ import type { MangaPageState, ChapterState } from "@/src/types/tab-state"
 import type { DownloadTaskStatus } from "@/src/shared/download-contract"
 import { vi } from "vitest"
 import { destinationService } from "@/entrypoints/background/destination"
+import { ensureSiteIntegrationNetworkReady } from "@/src/site-integrations/session-rule-manager"
+import { isExecutingDownloadTask } from "@/src/runtime/download-task-execution-state"
+
+export const mockEnsureSiteIntegrationNetworkReady = vi.mocked(
+  ensureSiteIntegrationNetworkReady
+)
 
 vi.mock("../../entrypoints/background/queue-helpers", () => ({
   resolveDownloadPlan: vi.fn().mockResolvedValue({
@@ -129,6 +135,7 @@ export const makeTask = (
     completed: overrides.completed,
     started: overrides.started,
     errorMessage: overrides.errorMessage,
+    activeBlock: overrides.activeBlock,
     lastSuccessfulDownloadId: overrides.lastSuccessfulDownloadId,
     isRetried: overrides.isRetried,
     isRetryTask: overrides.isRetryTask,
@@ -144,6 +151,9 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
     kind: "downloads",
   })
   vi.mocked(destinationService.preflight).mockResolvedValue({ ready: true })
+  if (vi.isMockFunction(mockEnsureSiteIntegrationNetworkReady)) {
+    mockEnsureSiteIntegrationNetworkReady.mockResolvedValue(undefined)
+  }
 
   mockGlobalState = {
     downloadQueue: [],
@@ -276,7 +286,7 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
         updates.status === "downloading" &&
         mockGlobalState.downloadQueue.some(
           (candidate) =>
-            candidate.id !== taskId && candidate.status === "downloading"
+            candidate.id !== taskId && isExecutingDownloadTask(candidate)
         )
       ) {
         return {
@@ -294,6 +304,16 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
       }
     }
   )
+
+  const transitionDownloadTaskWithDestinationIssuesMock = vi
+    .fn()
+    .mockImplementation(
+      async (
+        taskId: string,
+        allowedCurrentStatuses: readonly DownloadTaskStatus[],
+        updates: Partial<DownloadTaskState> & { status: DownloadTaskStatus }
+      ) => transitionDownloadTaskMock(taskId, allowedCurrentStatuses, updates)
+    )
 
   const beginChapterDispatchMock = vi
     .fn()
@@ -350,6 +370,8 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
     getTabState: vi.fn().mockResolvedValue(mockTabState),
     updateDownloadTask: updateDownloadTaskMock,
     transitionDownloadTask: transitionDownloadTaskMock,
+    transitionDownloadTaskWithDestinationIssues:
+      transitionDownloadTaskWithDestinationIssuesMock,
     beginChapterDispatch: beginChapterDispatchMock,
     updateDownloadTaskChapter: updateDownloadTaskChapterMock,
     updateDownloadingTaskChapter: updateDownloadingTaskChapterMock,

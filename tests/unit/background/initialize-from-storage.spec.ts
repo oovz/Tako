@@ -76,6 +76,7 @@ describe("initializeFromStorage", () => {
     const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
     const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
     const ensureLivenessAlarm = vi.fn(async () => {})
+    const setLivenessAlarmArmed = vi.fn(async (_shouldArm: boolean) => {})
 
     const result = await initializeFromStorage({
       readQueue: async () => queue,
@@ -85,6 +86,7 @@ describe("initializeFromStorage", () => {
       getOffscreenContexts: async () => [],
       getOffscreenActiveTaskIds: async () => [],
       ensureLivenessAlarm,
+      setLivenessAlarmArmed,
     })
 
     expect(result.initFailed).toBe(false)
@@ -114,8 +116,49 @@ describe("initializeFromStorage", () => {
     )
     expect(applyQueue).toHaveBeenCalledWith(persistedQueue)
 
-    expect(ensureLivenessAlarm).toHaveBeenCalledTimes(1)
+    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
+    expect(ensureLivenessAlarm).not.toHaveBeenCalled()
     expect(result.queueActivation).toEqual({ kind: "process-queue" })
+  })
+
+  it("preserves a provider-policy block across restart without treating it as active work", async () => {
+    const queue = [
+      makeTask({
+        id: "provider-blocked",
+        siteIntegrationId: "manhuagui",
+        status: "downloading",
+        activeBlock: "provider_network_policy_pending",
+      }),
+      makeTask({
+        id: "runnable-next",
+        status: "queued",
+        created: 2,
+      }),
+    ]
+    const writeQueue = vi.fn(async () => undefined)
+    const ensureLivenessAlarm = vi.fn(async () => undefined)
+    const setLivenessAlarmArmed = vi.fn(async () => undefined)
+
+    const result = await initializeFromStorage({
+      readQueue: async () => queue,
+      writeQueue,
+      writeSession: async () => undefined,
+      applyQueue: async () => undefined,
+      getOffscreenContexts: async () => [],
+      getOffscreenActiveTaskIds: async () => [],
+      ensureLivenessAlarm,
+      setLivenessAlarmArmed,
+    })
+
+    expect(result.queue[0]).toMatchObject({
+      id: "provider-blocked",
+      status: "queued",
+      activeBlock: "provider_network_policy_pending",
+    })
+    expect(result.queueActivation).toEqual({ kind: "process-queue" })
+    expect(ensureLivenessAlarm).not.toHaveBeenCalled()
+    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
+    expect(writeQueue).toHaveBeenCalledWith(result.queue)
   })
 
   it("marks initFailed in session when initialization throws", async () => {
@@ -400,6 +443,11 @@ describe("initializeFromStorage", () => {
     const task = makeTask({
       id: "native-pending",
       status: "downloading",
+      browserDownloadWait: {
+        downloadIds: [42],
+        since: 1,
+        lastObservedAt: 2,
+      },
       chapters: [
         {
           id: "chapter-1",
@@ -414,6 +462,7 @@ describe("initializeFromStorage", () => {
       ],
     })
     const writeQueue = vi.fn(async () => undefined)
+    const setLivenessAlarmArmed = vi.fn(async () => undefined)
 
     const result = await initializeFromStorage({
       readQueue: async () => [task],
@@ -436,13 +485,21 @@ describe("initializeFromStorage", () => {
         leaseExpiresAt: 3,
       }),
       hasReconcilablePendingOutputs: () => true,
+      hasPendingOutputWork: () => true,
+      setLivenessAlarmArmed,
       ensureLivenessAlarm: async () => undefined,
     })
 
     expect(result.queue[0]?.status).toBe("downloading")
     expect(result.queue[0]?.chapters[0]?.status).toBe("downloading")
+    expect(result.queue[0]?.browserDownloadWait).toEqual({
+      downloadIds: [42],
+      since: 1,
+      lastObservedAt: 2,
+    })
     expect(result.queueActivation).toBeUndefined()
     expect(writeQueue).not.toHaveBeenCalled()
+    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
   })
 
   it("releases a durably settled terminal job before resuming queue finalization", async () => {

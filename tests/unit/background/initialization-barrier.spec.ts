@@ -20,12 +20,12 @@ describe("createInitializationBarrier", () => {
     expect(initialize).toHaveBeenCalledTimes(1)
   })
 
-  it("does not retry initialization after a failure on the next call", async () => {
-    const fatalError = new Error("storage corruption")
+  it("coalesces concurrent callers and retries after a failed attempt", async () => {
+    const transientError = new Error("storage temporarily unavailable")
     let initialized = false
     const initialize = vi.fn(async () => {
       if (initialize.mock.calls.length === 1) {
-        throw fatalError
+        throw transientError
       }
 
       initialized = true
@@ -36,9 +36,16 @@ describe("createInitializationBarrier", () => {
       initialize,
     })
 
-    await expect(barrier.ensureInitialized()).rejects.toBe(fatalError)
-    await expect(barrier.ensureInitialized()).rejects.toBe(fatalError)
+    const firstAttempt = Promise.allSettled([
+      barrier.ensureInitialized(),
+      barrier.ensureInitialized(),
+    ])
+    await expect(firstAttempt).resolves.toEqual([
+      { status: "rejected", reason: transientError },
+      { status: "rejected", reason: transientError },
+    ])
 
-    expect(initialize).toHaveBeenCalledTimes(1)
+    await expect(barrier.ensureInitialized()).resolves.toBeUndefined()
+    expect(initialize).toHaveBeenCalledTimes(2)
   })
 })

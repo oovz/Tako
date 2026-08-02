@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ensureLivenessAlarm,
   LIVENESS_ALARM_NAME,
+  setLivenessAlarmArmed,
 } from "@/entrypoints/background/offscreen-lifecycle"
 
 describe("offscreen liveness activity behavior", () => {
@@ -26,12 +27,19 @@ describe("offscreen liveness activity behavior", () => {
     vi.unstubAllGlobals()
   })
 
-  it("creates the liveness alarm at 30-second interval", async () => {
+  it("creates a persistent one-shot liveness alarm", async () => {
     await ensureLivenessAlarm()
 
     expect(alarmsCreate).toHaveBeenCalledWith(LIVENESS_ALARM_NAME, {
-      periodInMinutes: 0.5,
+      delayInMinutes: 0.5,
       persistAcrossSessions: true,
     })
+  })
+
+  it("clears the liveness alarm while durable work is idle", async () => {
+    await setLivenessAlarmArmed(false)
+
+    expect(alarmsClear).toHaveBeenCalledWith(LIVENESS_ALARM_NAME)
+    expect(alarmsCreate).not.toHaveBeenCalled()
   })
 })

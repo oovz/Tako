@@ -50,7 +50,7 @@ export class DestinationPreflightError extends Error {
   }
 }
 
-function issueKindForPreflight(
+export function issueKindForPreflight(
   result: Exclude<DestinationPreflight, { ready: true }>
 ): DestinationIssueKind {
   switch (result.reason) {
@@ -73,6 +73,36 @@ export async function getDestinationIssues(): Promise<DestinationIssue[]> {
   return normalizeDestinationIssues(value)
 }
 
+export function createDestinationIssue(
+  context: DestinationContext,
+  kind: DestinationIssueKind
+): DestinationIssue {
+  return {
+    id: `${context.taskId}:${context.chapterId ?? ""}:${kind}`,
+    taskId: context.taskId,
+    chapterId: context.chapterId,
+    kind,
+    occurredAt: Date.now(),
+  }
+}
+
+export async function notifyDestinationIssue(
+  issue: DestinationIssue
+): Promise<void> {
+  try {
+    const settings = await settingsService.getSettings()
+    getNotificationService().notifyDestinationActionRequired({
+      issue,
+      notificationsEnabled: settings.notifications,
+    })
+  } catch (error) {
+    logger.debug(
+      "[DestinationService] Failed to show destination notification",
+      error
+    )
+  }
+}
+
 async function recordDestinationIssueKind(
   context: DestinationContext,
   kind: DestinationIssueKind
@@ -83,28 +113,11 @@ async function recordDestinationIssueKind(
     const existing = current.find((candidate) => candidate.id === issueId)
     if (existing) return existing
 
-    const issue: DestinationIssue = {
-      id: issueId,
-      taskId: context.taskId,
-      chapterId: context.chapterId,
-      kind,
-      occurredAt: Date.now(),
-    }
+    const issue = createDestinationIssue(context, kind)
     await chrome.storage.local.set({
       [LOCAL_STORAGE_KEYS.destinationIssues]: [...current, issue],
     })
-    try {
-      const settings = await settingsService.getSettings()
-      getNotificationService().notifyDestinationActionRequired({
-        issue,
-        notificationsEnabled: settings.notifications,
-      })
-    } catch (error) {
-      logger.debug(
-        "[DestinationService] Failed to show destination notification",
-        error
-      )
-    }
+    await notifyDestinationIssue(issue)
     return issue
   })
 }

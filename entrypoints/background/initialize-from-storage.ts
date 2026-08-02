@@ -6,6 +6,11 @@ import type { DownloadTaskState } from "@/src/types/queue-state"
 import type { ActiveDispatchLease } from "@/src/types/queue-state"
 import type { OffscreenJobState } from "@/src/types/offscreen-messages"
 import { notifyTerminalDownloadTask } from "@/entrypoints/background/download-queue-finalization"
+import {
+  isExecutingDownloadTask,
+  isRunnableQueuedTask,
+  normalizeDownloadTaskExecutionState,
+} from "@/src/runtime/download-task-execution-state"
 
 interface InitializeFromStorageDependencies {
   readQueue: () => Promise<DownloadTaskState[]>
@@ -23,6 +28,8 @@ interface InitializeFromStorageDependencies {
   }) => Promise<boolean>
   releasePendingOutputJob?: (jobId: string) => Promise<void>
   hasReconcilablePendingOutputs?: (task: DownloadTaskState) => boolean
+  hasPendingOutputWork?: () => boolean
+  setLivenessAlarmArmed?: (shouldArm: boolean) => Promise<void>
   ensureLivenessAlarm: () => Promise<void>
 }
 
@@ -39,11 +46,11 @@ export interface InitializeFromStorageResult {
 function findNextQueued(
   queue: DownloadTaskState[]
 ): DownloadTaskState | undefined {
-  return queue.find((task) => task.status === "queued")
+  return queue.find(isRunnableQueuedTask)
 }
 
 function hasActiveDownloadingTask(queue: DownloadTaskState[]): boolean {
-  return queue.some((task) => task.status === "downloading")
+  return queue.some(isExecutingDownloadTask)
 }
 
 function shouldPreferLatestQueueSnapshot(
@@ -93,13 +100,15 @@ export async function initializeFromStorage(
           : []
 
     const normalizationTime = Date.now()
-    let normalizedQueue = hydratedQueue.map((task) =>
-      task.status !== "queued" &&
-      task.status !== "downloading" &&
-      typeof task.completed !== "number"
-        ? { ...task, completed: normalizationTime }
-        : task
-    )
+    let normalizedQueue = hydratedQueue.map((task) => {
+      const taskWithCompletion =
+        task.status !== "queued" &&
+        task.status !== "downloading" &&
+        typeof task.completed !== "number"
+          ? { ...task, completed: normalizationTime }
+          : task
+      return normalizeDownloadTaskExecutionState(taskWithCompletion)
+    })
     let queueChanged = normalizedQueue.some(
       (task, index) => task !== hydratedQueue[index]
     )
@@ -107,13 +116,9 @@ export async function initializeFromStorage(
     let activeTaskToResume: string | undefined
     let recoveredActiveTaskId: string | undefined
     const interruptedTaskIds = new Set<string>()
-    const hadZombieTask = hydratedQueue.some(
-      (task) => task.status === "downloading"
-    )
+    const hadZombieTask = normalizedQueue.some(isExecutingDownloadTask)
     if (hadZombieTask) {
-      const downloadingTasks = normalizedQueue.filter(
-        (task) => task.status === "downloading"
-      )
+      const downloadingTasks = normalizedQueue.filter(isExecutingDownloadTask)
       const exactLifecycleEnabled =
         dependencies.getOffscreenJobState !== undefined &&
         dependencies.getActiveDispatchLease !== undefined
@@ -268,7 +273,25 @@ export async function initializeFromStorage(
       [SESSION_STORAGE_KEYS.initError]: null,
     })
 
-    await ensureLivenessAlarm()
+    const hasOffscreenExecutingTask = normalizedQueue.some(
+      (task) =>
+        isExecutingDownloadTask(task) && task.browserDownloadWait === undefined
+    )
+    const hasOffscreenDispatchLease =
+      activeLease !== null &&
+      !normalizedQueue.some(
+        (task) => task.id === activeLease.taskId && task.browserDownloadWait
+      )
+    const hasDurableActiveWork =
+      hasOffscreenExecutingTask ||
+      hasOffscreenDispatchLease ||
+      offscreenActiveTaskIds.length > 0
+    if (dependencies.setLivenessAlarmArmed) {
+      await dependencies.setLivenessAlarmArmed(hasDurableActiveWork)
+    } else {
+      // Compatibility for callers that have not adopted conditional arming.
+      await ensureLivenessAlarm()
+    }
 
     const nextQueuedTask = findNextQueued(normalizedQueue)
     const queueActivation: StartupQueueActivation | undefined =

@@ -11,6 +11,7 @@ vi.mock("@/src/runtime/logger", () => ({
 
 import {
   ensureOffscreenDocumentReady,
+  refreshLivenessAlarmForDurableWork,
   scheduleOffscreenCloseIfIdle,
 } from "@/entrypoints/background/offscreen-lifecycle"
 
@@ -39,7 +40,13 @@ describe("ensureOffscreenDocumentReady", () => {
         Reason: {
           BLOBS: "BLOBS",
           WORKERS: "WORKERS",
+          DOM_PARSER: "DOM_PARSER",
         },
+      },
+      alarms: {
+        get: vi.fn(async () => undefined),
+        clear: vi.fn(async () => true),
+        create: vi.fn(async () => undefined),
       },
       storage: {
         local: { get: vi.fn(async () => ({})) },
@@ -76,6 +83,17 @@ describe("ensureOffscreenDocumentReady", () => {
     await expect(ensureOffscreenDocumentReady()).resolves.toBeUndefined()
 
     expect(createDocument).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not arm the liveness alarm for native-download-only work", async () => {
+    const manager = {
+      getGlobalState: vi.fn(async () => ({ downloadQueue: [] })),
+    }
+
+    await refreshLivenessAlarmForDurableWork(manager as never)
+
+    expect(chrome.alarms.create).not.toHaveBeenCalled()
+    expect(chrome.alarms.clear).toHaveBeenCalled()
   })
 
   it("does not treat a hasDocument failure as proof that no offscreen document exists", async () => {

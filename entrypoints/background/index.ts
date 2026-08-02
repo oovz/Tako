@@ -16,10 +16,7 @@ import logger from "@/src/runtime/logger"
 
 // Import focused modules
 import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import {
-  configureImageRefererRewriteRules,
-  beginBackgroundRuntimeInitialization,
-} from "@/entrypoints/background/background-startup"
+import { beginBackgroundRuntimeInitialization } from "@/entrypoints/background/background-startup"
 import {
   backgroundHandledMessages,
   handleBackgroundMessage,
@@ -31,9 +28,14 @@ import {
   ensureOffscreenDocumentReady,
   LIVENESS_ALARM_NAME,
   ensureLivenessAlarm,
+  setLivenessAlarmArmed,
   scheduleOffscreenCloseIfIdle,
 } from "@/entrypoints/background/offscreen-lifecycle"
-import { configureDownloadQueueLifecycle } from "@/entrypoints/background/download-queue-runner"
+import {
+  configureDownloadQueueLifecycle,
+  failDisabledDnrProviderTasks,
+  resumeProviderPolicyBlockedQueue,
+} from "@/entrypoints/background/download-queue-runner"
 import { createPendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
 import { tabContextCache } from "@/entrypoints/background/tab-cache"
 import { createTabUiCoordinator } from "@/entrypoints/background/tab-ui-coordinator"
@@ -50,26 +52,39 @@ import { initializeSiteIntegrationMetadataOnly } from "@/src/runtime/site-integr
 import type { PendingOutputRecord } from "@/src/types/queue-state"
 import { setUserSiteIntegrationEnablement } from "@/src/site-integrations/registry"
 import { createSiteIntegrationSupportReadiness } from "@/entrypoints/background/site-integration-support-readiness"
+import { initializeSiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 
 // Global state manager instance
 let stateManager!: CentralizedStateManager // set during initializeExtensionRuntime()
 let runtimeInitialized = false
+let stateManagerPublishedForCurrentAttempt = false
 let resolveStateManagerReady!: () => void
 let rejectStateManagerReady!: (error: unknown) => void
-const stateManagerReady = new Promise<void>((resolve, reject) => {
-  resolveStateManagerReady = resolve
-  rejectStateManagerReady = reject
-})
-void stateManagerReady.catch(() => undefined)
+function createStateManagerReadyPromise(): Promise<void> {
+  const promise = new Promise<void>((resolve, reject) => {
+    resolveStateManagerReady = resolve
+    rejectStateManagerReady = reject
+  })
+  void promise.catch(() => undefined)
+  return promise
+}
+let stateManagerReady = createStateManagerReadyPromise()
 
 function publishStateManager(nextStateManager: CentralizedStateManager): void {
   stateManager = nextStateManager
+  stateManagerPublishedForCurrentAttempt = true
   resolveStateManagerReady()
 }
 
 async function waitForStateManagerReady(): Promise<void> {
-  if (stateManager) return
+  if (stateManagerPublishedForCurrentAttempt) return
   await stateManagerReady
+}
+
+function resetStateManagerReadinessAfterFailure(error: unknown): void {
+  stateManagerPublishedForCurrentAttempt = false
+  rejectStateManagerReady(error)
+  stateManagerReady = createStateManagerReadyPromise()
 }
 
 const siteIntegrationSupportReadiness = createSiteIntegrationSupportReadiness({
@@ -119,7 +134,10 @@ async function reconcileIntegrationSupportAfterPermissionRemoval(): Promise<void
 
 const pendingDownloadsStore = createPendingDownloadsStore()
 configureDownloadQueueLifecycle({
-  onQueueDrained: () => scheduleOffscreenCloseIfIdle(pendingDownloadsStore),
+  onQueueDrained: async () => {
+    await scheduleOffscreenCloseIfIdle(pendingDownloadsStore)
+    await setLivenessAlarmArmed(false)
+  },
   pendingOutputsStore: pendingDownloadsStore,
 })
 const tabUiCoordinator = createTabUiCoordinator()
@@ -185,6 +203,7 @@ async function initializeExtensionRuntime(): Promise<void> {
     const initialization = await beginBackgroundRuntimeInitialization({
       pendingDownloadsStore,
       ensureLivenessAlarm,
+      setLivenessAlarmArmed,
       ensureOffscreenDocumentReady,
       requestBlobRevocation,
     })
@@ -203,7 +222,7 @@ async function initializeExtensionRuntime(): Promise<void> {
       logger.error("Failed to activate the recovered download queue:", error)
     })
   } catch (error) {
-    rejectStateManagerReady(error)
+    resetStateManagerReadinessAfterFailure(error)
     throw error
   }
 }
@@ -248,15 +267,15 @@ export default defineBackground({
         sender: chrome.runtime.MessageSender,
         sendResponse: (response: ExtensionMessageResponse) => void
       ) => {
-        // CRITICAL: Synchronously return false for offscreen-targeted messages
-        // This allows the offscreen document's listener to receive and handle them
-        // Ref: https://developer.chrome.com/docs/extensions/develop/concepts/messaging
+        // Offscreen listeners receive runtime messages independently. Return
+        // false only to indicate that this background listener will not send
+        // an asynchronous response for offscreen-owned message types.
         if (
           offscreenOnlyMessages.includes(
             message.type as (typeof offscreenOnlyMessages)[number]
           )
         ) {
-          return false // Don't handle - let offscreen document receive it
+          return false
         }
 
         // Only keep channel open for message types background is responsible for.
@@ -296,6 +315,7 @@ export default defineBackground({
       requestBlobRevocation,
       tabContextCache,
       ensureOffscreenDocumentReady,
+      ensureLivenessAlarm,
       livenessAlarmName: LIVENESS_ALARM_NAME,
     })
 
@@ -308,11 +328,8 @@ export default defineBackground({
 
     // Removed keyboard shortcut open: per user stories, only extension icon opens the Side Panel
 
-    // REMOVED: setInterval polling (violates Chrome service worker guidelines)
-    // Queue processing is now event-driven:
-    // - Triggered immediately when tasks are added
-    // - Triggered when tasks complete/fail
-    // - Service worker can sleep when idle (30s timeout)
+    // Queue processing and native download completion are event-driven. The
+    // liveness alarm is reserved for active offscreen work and dispatch leases.
     // See: https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle
 
     registerBackgroundNavigationListeners({
@@ -353,6 +370,29 @@ export default defineBackground({
     // scope) because entrypoints are imported in Node at build time.
     initRateLimitStorageListener()
 
+    // Provider-specific DNR rules are declarative integration capabilities.
+    // Listener registration is synchronous; task dispatch consumes the
+    // returned readiness promise through the manager's provider-specific
+    // readiness barrier.
+    const initialSessionRuleReconciliation =
+      initializeSiteIntegrationSessionRuleManager({
+        onReconciled: async (enablement) => {
+          await ensureStateManagerInitialized()
+          await failDisabledDnrProviderTasks(
+            stateManager,
+            enablement,
+            ensureOffscreenDocumentReady
+          )
+          await resumeProviderPolicyBlockedQueue(
+            stateManager,
+            ensureOffscreenDocumentReady
+          )
+        },
+      })
+    void initialSessionRuleReconciliation.catch((error) => {
+      logger.warn("Initial provider session DNR reconciliation failed", error)
+    })
+
     // All event listeners above are registered during this synchronous main()
     // turn. Start the asynchronous runtime work only after registration so an
     // MV3 wakeup can dispatch navigation events immediately.
@@ -362,8 +402,6 @@ export default defineBackground({
     ensureStateManagerInitialized().catch((error) => {
       logger.error("Failed to initialize architecture:", error)
     })
-    void configureImageRefererRewriteRules()
-
     logger.info("Background script initialized")
   },
 })

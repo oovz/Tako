@@ -34,19 +34,6 @@ import { recoverPendingUndoActions } from "./pending-undo-coordinator"
 import { reconcileCompletedChapterHistory } from "./download-queue-finalization"
 import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 
-const PIXIV_REFERER_REWRITE_RULE_ID = 41001
-const MANHUAGUI_REFERER_REWRITE_RULE_ID = 41002
-const MANHUAGUI_IMAGE_DOMAINS = [
-  "i.hamreus.com",
-  "eu.hamreus.com",
-  "eu1.hamreus.com",
-  "eu2.hamreus.com",
-  "us.hamreus.com",
-  "us1.hamreus.com",
-  "us2.hamreus.com",
-  "us3.hamreus.com",
-]
-
 async function readPersistedDownloadQueue(): Promise<DownloadTaskState[]> {
   const result = await chrome.storage.local.get(
     LOCAL_STORAGE_KEYS.downloadQueue
@@ -141,74 +128,6 @@ async function syncSettingsToState(
   }
 }
 
-export async function configureImageRefererRewriteRules(): Promise<void> {
-  if (!chrome.declarativeNetRequest?.updateSessionRules) {
-    logger.debug(
-      "declarativeNetRequest API unavailable; skipping image referer rewrite rule setup"
-    )
-    return
-  }
-
-  try {
-    await chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [
-        PIXIV_REFERER_REWRITE_RULE_ID,
-        MANHUAGUI_REFERER_REWRITE_RULE_ID,
-      ],
-      addRules: [
-        {
-          id: PIXIV_REFERER_REWRITE_RULE_ID,
-          priority: 1,
-          action: {
-            type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
-            requestHeaders: [
-              {
-                header: "referer",
-                operation: chrome.declarativeNetRequest.HeaderOperation.SET,
-                value: "https://comic.pixiv.net/",
-              },
-            ],
-          },
-          condition: {
-            requestDomains: ["img-comic.pximg.net"],
-            resourceTypes: [
-              chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
-              chrome.declarativeNetRequest.ResourceType.OTHER,
-            ],
-          },
-        },
-        {
-          id: MANHUAGUI_REFERER_REWRITE_RULE_ID,
-          priority: 1,
-          action: {
-            type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
-            requestHeaders: [
-              {
-                header: "referer",
-                operation: chrome.declarativeNetRequest.HeaderOperation.SET,
-                value: "https://www.manhuagui.com/",
-              },
-            ],
-          },
-          condition: {
-            requestDomains: MANHUAGUI_IMAGE_DOMAINS,
-            resourceTypes: [
-              chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
-              chrome.declarativeNetRequest.ResourceType.OTHER,
-            ],
-          },
-        },
-      ],
-    })
-    logger.debug("Configured image referer rewrite session rules")
-  } catch (error) {
-    logger.warn(
-      "Failed to configure image referer rewrite rules (non-fatal)",
-      error
-    )
-  }
-}
-
 export interface InitializedBackgroundRuntime {
   stateManager: CentralizedStateManager
   activateQueue: () => Promise<void>
@@ -222,6 +141,7 @@ export interface BackgroundRuntimeInitialization {
 interface BackgroundRuntimeInitializationInput {
   pendingDownloadsStore: PendingDownloadsStore
   ensureLivenessAlarm: () => Promise<void>
+  setLivenessAlarmArmed?: (shouldArm: boolean) => Promise<void>
   ensureOffscreenDocumentReady: () => Promise<void>
   requestBlobRevocation: (
     record: Pick<
@@ -316,6 +236,7 @@ async function completeBackgroundRuntimeInitialization(
             chapter.dispatchAttempt === record.attempt
           )
         }),
+      setLivenessAlarmArmed: input.setLivenessAlarmArmed,
       getOffscreenActiveTaskIds: async () => {
         const status = await queryOffscreenStatus()
         if (status) {

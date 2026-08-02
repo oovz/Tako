@@ -2,15 +2,11 @@ export interface InitializationBarrier {
   ensureInitialized: () => Promise<void>
 }
 
-const toError = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("Extension initialization failed")
-
 export function createInitializationBarrier(input: {
   isInitialized: () => boolean
   initialize: () => Promise<void>
 }): InitializationBarrier {
   let initializationPromise: Promise<void> | null = null
-  let initializationError: Error | null = null
 
   return {
     async ensureInitialized(): Promise<void> {
@@ -18,18 +14,14 @@ export function createInitializationBarrier(input: {
         return
       }
 
-      if (initializationError) {
-        throw initializationError
-      }
-
       if (!initializationPromise) {
         initializationPromise = (async () => {
           try {
             await input.initialize()
-          } catch (error) {
-            initializationError = toError(error)
-            throw initializationError
           } finally {
+            // A rejected attempt is not durable service-worker state. The
+            // caller observes the failure, while a later event can retry the
+            // same initialization after a transient Chrome API/storage error.
             initializationPromise = null
           }
         })()

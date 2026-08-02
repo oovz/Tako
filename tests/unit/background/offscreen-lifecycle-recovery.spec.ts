@@ -52,10 +52,17 @@ function createLease(overrides: Partial<ActiveDispatchLease> = {}) {
   } satisfies ActiveDispatchLease
 }
 
-function createStateManager(active = true) {
+function createStateManager(
+  active = true,
+  activeBlock?:
+    | "destination_action_required"
+    | "provider_network_policy_pending"
+    | "provider_network_policy_action_required"
+) {
   const task = {
     id: "task-1",
     status: active ? ("downloading" as const) : ("failed" as const),
+    activeBlock,
     chapters: [
       {
         id: "chapter-1",
@@ -136,6 +143,27 @@ describe("recoverFromLivenessTimeout", () => {
 
     expect(mocks.getLease).not.toHaveBeenCalled()
     expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "provider_network_policy_pending",
+    "provider_network_policy_action_required",
+    "destination_action_required",
+  ] as const)("does not watchdog a task blocked by %s", async (activeBlock) => {
+    const { manager, transitionDownloadTask } = createStateManager(
+      true,
+      activeBlock
+    )
+
+    await recoverFromLivenessTimeout(
+      manager,
+      createPendingDownloadsStoreStub(),
+      vi.fn()
+    )
+
+    expect(mocks.getLease).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+    expect(transitionDownloadTask).not.toHaveBeenCalled()
   })
 
   it("does not query or recover an unexpired dispatch lease", async () => {

@@ -59,11 +59,53 @@ vi.mock("@/src/runtime/site-integration-registry", () => ({
 vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
   getBackgroundSiteAdapterById: vi.fn().mockResolvedValue(undefined),
 }))
+vi.mock("@/src/site-integrations/session-rule-manager", () => {
+  class ProviderNetworkPolicyPendingError extends Error {
+    readonly siteIntegrationId: string
+
+    constructor(siteIntegrationId: string) {
+      super("Provider network policy is temporarily unavailable")
+      this.siteIntegrationId = siteIntegrationId
+    }
+  }
+
+  class ProviderNetworkPolicyActionRequiredError extends Error {
+    readonly siteIntegrationId: string
+    readonly reason: "integration_disabled" | "host_permission_denied"
+
+    constructor(
+      siteIntegrationId: string,
+      reason: "integration_disabled" | "host_permission_denied"
+    ) {
+      super("Provider network policy requires user action")
+      this.siteIntegrationId = siteIntegrationId
+      this.reason = reason
+    }
+  }
+
+  return {
+    ensureSiteIntegrationNetworkReady: vi.fn(),
+    ProviderNetworkPolicyPendingError,
+    ProviderNetworkPolicyActionRequiredError,
+  }
+})
 vi.mock("@/entrypoints/background/destination", () => ({
   destinationService: {
     getEffectiveDestination: vi.fn(async () => ({ kind: "downloads" })),
     preflight: vi.fn(async () => ({ ready: true })),
   },
+  createDestinationIssue: vi.fn((context, kind) => ({
+    id: `${context.taskId}:${context.chapterId ?? ""}:${kind}`,
+    ...context,
+    kind,
+    occurredAt: 1,
+  })),
+  issueKindForPreflight: vi.fn((result) =>
+    result.reason === "permission_prompt"
+      ? "fsa_permission_required"
+      : "fsa_folder_missing"
+  ),
+  notifyDestinationIssue: vi.fn(),
   clearDestinationIssuesForTask: vi.fn(),
   recordDestinationIssue: vi.fn(),
   recordDestinationRuntimeIssue: vi.fn(),

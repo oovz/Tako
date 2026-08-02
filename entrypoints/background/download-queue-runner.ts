@@ -1,10 +1,6 @@
 import logger from "@/src/runtime/logger"
 import { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type {
-  OffscreenDownloadChapterMessage,
-  OffscreenDownloadChapterResponse,
-  OffscreenJobState,
-} from "@/src/types/offscreen-messages"
+import type { OffscreenDownloadChapterMessage } from "@/src/types/offscreen-messages"
 import {
   clearActiveTaskProgress,
   settleActiveTaskProgressChapter,
@@ -21,15 +17,16 @@ import {
   type ChapterDispatchOutcome,
 } from "./download-queue-finalization"
 import {
-  clearDestinationIssuesForTask,
+  createDestinationIssue,
   destinationService,
-  recordDestinationIssue,
-  recordDestinationRuntimeIssue,
+  issueKindForPreflight,
+  notifyDestinationIssue,
 } from "./destination"
-import { getBackgroundSiteAdapterById } from "@/src/runtime/background-site-integration-initialization"
 import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
-import { siteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
-import { queryOffscreenJob } from "./offscreen-lifecycle"
+import {
+  siteIntegrationEnablementService,
+  type SiteIntegrationEnablementMap,
+} from "@/src/storage/site-integration-enablement-service"
 import {
   activeDispatchLeaseStore,
   createDispatchLease,
@@ -38,6 +35,18 @@ import type { PendingDownloadsStore } from "./pending-downloads"
 import { runDownloadTaskSingleFlight } from "./download-task-runner-registry"
 import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
 import { normalizeInterruptedTask } from "./task-lifecycle"
+import { dispatchOffscreenChapterWithRecovery } from "./offscreen-chapter-dispatch"
+import { resolveSiteIntegrationDispatchContext } from "@/src/runtime/site-integration-dispatch-context"
+import {
+  ensureSiteIntegrationNetworkReady,
+  ProviderNetworkPolicyActionRequiredError,
+  ProviderNetworkPolicyPendingError,
+} from "@/src/site-integrations/session-rule-manager"
+import {
+  isExecutingDownloadTask,
+  isRunnableQueuedTask,
+} from "@/src/runtime/download-task-execution-state"
+import { getSiteIntegrationManifestById } from "@/src/site-integrations/manifest"
 
 // Current queue scheduling is intentionally single-task and single-chapter dispatch.
 // Re-enable chapter concurrency only after the scheduler, offscreen request
@@ -83,94 +92,37 @@ async function clearDispatchLeaseForTaskBestEffort(
   }
 }
 
-function isSameOffscreenJob(
-  job: OffscreenJobState,
-  message: OffscreenDownloadChapterMessage
-): boolean {
-  return (
-    job.jobId === message.payload.jobId &&
-    job.attempt === message.payload.attempt &&
-    job.taskId === message.payload.taskId &&
-    job.chapterId === message.payload.chapter.id
-  )
-}
-
-function responseFromTerminalJob(
-  job: OffscreenJobState | null,
-  message: OffscreenDownloadChapterMessage
-): OffscreenDownloadChapterResponse | undefined {
-  if (
-    !job ||
-    !isSameOffscreenJob(job, message) ||
-    job.status !== "terminal" ||
-    !job.outcome
-  ) {
-    return undefined
-  }
-
-  return {
-    success: true,
-    status: job.outcome.status,
-    errorMessage: job.outcome.errorMessage,
-    errorCategory: job.outcome.errorCategory,
-    imagesFailed: job.outcome.imagesFailed,
-    outputsRequested: job.outcome.outputsRequested,
-    outputsFailedBeforeHandoff: job.outcome.outputsFailedBeforeHandoff,
-    outputsCommitted: job.outcome.outputsCommitted,
-  }
-}
-
-async function queryTerminalJobResponse(
-  message: OffscreenDownloadChapterMessage
-): Promise<OffscreenDownloadChapterResponse | undefined> {
+async function cancelActiveDispatchForTaskBestEffort(
+  taskId: string
+): Promise<void> {
   try {
-    return responseFromTerminalJob(await queryOffscreenJob(), message)
+    const lease = await activeDispatchLeaseStore.get()
+    if (lease?.taskId !== taskId) return
+    try {
+      await chrome.runtime.sendMessage({
+        type: "OFFSCREEN_CANCEL_JOB",
+        payload: {
+          jobId: lease.jobId,
+          attempt: lease.attempt,
+          taskId: lease.taskId,
+          chapterId: lease.chapterId,
+        },
+      })
+    } catch (error) {
+      logger.debug(
+        "[Queue] Disabled provider job was no longer reachable for cancellation",
+        error
+      )
+    }
+    await activeDispatchLeaseStore.clear({
+      jobId: lease.jobId,
+      attempt: lease.attempt,
+    })
   } catch (error) {
-    logger.warn("[Queue] Unable to reconcile a closed dispatch channel", {
-      jobId: message.payload.jobId,
-      attempt: message.payload.attempt,
+    logger.warn("[Queue] Unable to cancel disabled provider dispatch", {
+      taskId,
       error,
     })
-    return undefined
-  }
-}
-
-/**
- * A response channel can close after the offscreen document accepted a job.
- * Re-query the exact identity and, while its durable lease is still current,
- * attach a new response channel by replaying the same idempotent envelope.
- */
-export async function dispatchOffscreenChapterWithRecovery(input: {
-  message: OffscreenDownloadChapterMessage
-  ensureOffscreenReady: () => Promise<void>
-  isDispatchStillCurrent: () => Promise<boolean>
-}): Promise<OffscreenDownloadChapterResponse> {
-  try {
-    return await chrome.runtime.sendMessage(input.message)
-  } catch (initialError) {
-    const recovered = await queryTerminalJobResponse(input.message)
-    if (recovered) return recovered
-
-    if (!(await input.isDispatchStillCurrent())) {
-      throw initialError
-    }
-
-    logger.warn("[Queue] Reattaching to accepted offscreen job", {
-      jobId: input.message.payload.jobId,
-      attempt: input.message.payload.attempt,
-    })
-    await input.ensureOffscreenReady()
-    if (!(await input.isDispatchStillCurrent())) {
-      throw initialError
-    }
-
-    try {
-      return await chrome.runtime.sendMessage(input.message)
-    } catch (retryError) {
-      const terminalResponse = await queryTerminalJobResponse(input.message)
-      if (terminalResponse) return terminalResponse
-      throw retryError
-    }
   }
 }
 
@@ -288,6 +240,18 @@ async function runDownloadTask(
       return
     }
 
+    // Session-scoped DNR rules are cleared on browser shutdown and extension
+    // update. DNR-dependent providers must not start destination/offscreen work
+    // until their current network policy has been installed. Providers without
+    // declared session rules return immediately.
+    await ensureSiteIntegrationNetworkReady(task.siteIntegrationId)
+    if (
+      task.activeBlock === "provider_network_policy_pending" ||
+      task.activeBlock === "provider_network_policy_action_required"
+    ) {
+      await stateManager.updateDownloadTask(taskId, { activeBlock: undefined })
+    }
+
     const taskDestinationContext = {
       taskId,
       destination: task.settingsSnapshot.destination,
@@ -297,10 +261,21 @@ async function runDownloadTask(
       taskDestinationContext
     )
     if (!destinationPreflight.ready) {
-      await recordDestinationIssue(taskDestinationContext, destinationPreflight)
-      await stateManager.updateDownloadTask(taskId, {
-        activeBlock: "destination_action_required",
-      })
+      const issue = createDestinationIssue(
+        taskDestinationContext,
+        issueKindForPreflight(destinationPreflight)
+      )
+      const transition =
+        await stateManager.transitionDownloadTaskWithDestinationIssues(
+          taskId,
+          ["queued", "downloading"],
+          {
+            status: "queued",
+            activeBlock: "destination_action_required",
+          },
+          { type: "upsert", issue }
+        )
+      if (transition.success) await notifyDestinationIssue(issue)
       await clearActiveTaskProgress()
       logger.info("[Queue]", {
         event: "DESTINATION_ACTION_REQUIRED",
@@ -310,8 +285,12 @@ async function runDownloadTask(
       return
     }
     if (task.activeBlock === "destination_action_required") {
-      await clearDestinationIssuesForTask(taskId)
-      await stateManager.updateDownloadTask(taskId, { activeBlock: undefined })
+      await stateManager.transitionDownloadTaskWithDestinationIssues(
+        taskId,
+        ["queued", "downloading"],
+        { status: "queued", activeBlock: undefined },
+        { type: "clear-task", taskId }
+      )
     }
 
     if (!(resumeExistingTask && task.status === "downloading")) {
@@ -469,29 +448,13 @@ async function runDownloadTask(
           dispatchPlan.book.siteId,
           dispatchPlan.book.seriesId
         )
-        let integrationContext: Record<string, unknown> | undefined
-        try {
-          const integration = await getBackgroundSiteAdapterById(
-            dispatchPlan.book.siteId
-          )
-          const backgroundSiteAdapter = integration?.background
-          if (backgroundSiteAdapter?.prepareDispatchContext) {
-            integrationContext =
-              await backgroundSiteAdapter.prepareDispatchContext({
-                taskId,
-                seriesKey,
-                chapter,
-                settingsSnapshot,
-              })
-          }
-        } catch (error) {
-          logger.debug("[Queue]", {
-            event: "PREPARE_DISPATCH_CONTEXT_FAILED",
-            taskId,
-            chapterId: chapter.id,
-            error,
-          })
-        }
+        const integrationContext = await resolveSiteIntegrationDispatchContext({
+          siteIntegrationId: dispatchPlan.book.siteId,
+          taskId,
+          seriesKey,
+          chapter,
+          settingsSnapshot,
+        })
 
         const dispatchMessage: OffscreenDownloadChapterMessage = {
           type: "OFFSCREEN_DOWNLOAD_CHAPTER",
@@ -579,12 +542,25 @@ async function runDownloadTask(
             }
             let outputSummary
             try {
+              const browserDownloadWait =
+                pendingOutputsStore.describeJobWait(jobId)
+              if (!browserDownloadWait) {
+                throw new Error(
+                  `Chrome download identities are unavailable for job ${jobId}`
+                )
+              }
+              await stateManager.updateDownloadTask(taskId, {
+                browserDownloadWait,
+              })
               outputSummary = await pendingOutputsStore.waitForJobOutputs({
                 jobId,
                 requested,
                 failedBeforeHandoff,
               })
             } finally {
+              await stateManager.updateDownloadTask(taskId, {
+                browserDownloadWait: undefined,
+              })
               // Native download completion is part of the local saving-phase
               // timing estimate, even though the Blob handoff already ended.
               await progressTimingEstimator.finish(jobId)
@@ -632,39 +608,43 @@ async function runDownloadTask(
             await stateManager.getGlobalState()
           ).downloadQueue.find((candidate) => candidate.id === taskId)
           if (blockedTask?.status === "downloading") {
-            const transition = await stateManager.transitionDownloadTask(
+            const destinationContext = {
               taskId,
-              ["downloading"],
-              {
-                status: "queued",
-                activeBlock: "destination_action_required",
-                errorMessage: chapterErrorMessage,
-                errorCategory: chapterErrorCategory,
-                chapters: blockedTask.chapters.map((taskChapter) =>
-                  taskChapter.id === chapter.id
-                    ? {
-                        ...taskChapter,
-                        status: "queued",
-                        errorMessage: chapterErrorMessage,
-                        errorCategory: chapterErrorCategory,
-                        imagesFailed,
-                        outputs: outputAccounting,
-                        lastUpdated: Date.now(),
-                      }
-                    : taskChapter
-                ),
-              }
+              chapterId: chapter.id,
+              destination: settingsSnapshot.destination,
+              destinationOverride: latestTask.destinationOverride,
+            } as const
+            const issue = createDestinationIssue(
+              destinationContext,
+              destinationIssueKind
             )
-            if (transition.success) {
-              await recordDestinationRuntimeIssue(
+            const transition =
+              await stateManager.transitionDownloadTaskWithDestinationIssues(
+                taskId,
+                ["downloading"],
                 {
-                  taskId,
-                  chapterId: chapter.id,
-                  destination: settingsSnapshot.destination,
-                  destinationOverride: latestTask.destinationOverride,
+                  status: "queued",
+                  activeBlock: "destination_action_required",
+                  errorMessage: chapterErrorMessage,
+                  errorCategory: chapterErrorCategory,
+                  chapters: blockedTask.chapters.map((taskChapter) =>
+                    taskChapter.id === chapter.id
+                      ? {
+                          ...taskChapter,
+                          status: "queued",
+                          errorMessage: chapterErrorMessage,
+                          errorCategory: chapterErrorCategory,
+                          imagesFailed,
+                          outputs: outputAccounting,
+                          lastUpdated: Date.now(),
+                        }
+                      : taskChapter
+                  ),
                 },
-                destinationIssueKind
+                { type: "upsert", issue }
               )
+            if (transition.success) {
+              await notifyDestinationIssue(issue)
               await releasePendingJobBestEffort(pendingOutputsStore, jobId)
               shouldStopDispatch = true
               return dispatchedJob
@@ -959,10 +939,36 @@ async function runDownloadTask(
       chapters: task.chapters.length,
     })
   } catch (error) {
+    if (error instanceof ProviderNetworkPolicyPendingError) {
+      const blockTransition = await stateManager.transitionDownloadTask(
+        taskId,
+        ["queued", "downloading"],
+        {
+          status: "queued",
+          activeBlock: "provider_network_policy_pending",
+          browserDownloadWait: undefined,
+        }
+      )
+      await clearActiveTaskProgress()
+      logger.warn("[Queue]", {
+        event: "PROVIDER_NETWORK_POLICY_PENDING",
+        taskId,
+        siteIntegrationId: error.siteIntegrationId,
+        reason: error.message,
+      })
+      if (blockTransition.success) {
+        scheduleQueueContinuation(stateManager, ensureOffscreenReady)
+      }
+      return
+    }
+
     logger.error("[Queue]", {
       event: "FAILED",
       taskId,
-      reason: "INTERNAL_ERROR",
+      reason:
+        error instanceof ProviderNetworkPolicyActionRequiredError
+          ? "PROVIDER_NETWORK_POLICY_ACTION_REQUIRED"
+          : "INTERNAL_ERROR",
       error,
     })
     const errorMessage =
@@ -1031,17 +1037,91 @@ export async function resumeDownloadTask(
   await startDownloadTask(stateManager, taskId, ensureOffscreenReady, true)
 }
 
+export async function resumeProviderPolicyBlockedQueue(
+  stateManager: CentralizedStateManager,
+  ensureOffscreenReady: () => Promise<void>
+): Promise<void> {
+  const globalState = await stateManager.getGlobalState()
+  const blockedTask = globalState.downloadQueue.find(
+    (task) =>
+      task.status === "queued" &&
+      task.activeBlock === "provider_network_policy_pending"
+  )
+  if (blockedTask) {
+    await resumeDownloadTask(stateManager, blockedTask.id, ensureOffscreenReady)
+    return
+  }
+
+  await processDownloadQueue(stateManager, ensureOffscreenReady)
+}
+
+export async function failDisabledDnrProviderTasks(
+  stateManager: CentralizedStateManager,
+  enablement: SiteIntegrationEnablementMap,
+  ensureOffscreenReady: () => Promise<void>
+): Promise<void> {
+  const globalState = await stateManager.getGlobalState()
+  const disabledTasks = globalState.downloadQueue.filter((task) => {
+    if (
+      (task.status !== "queued" && task.status !== "downloading") ||
+      task.browserDownloadWait
+    ) {
+      return false
+    }
+    const hasDnrPolicy =
+      (getSiteIntegrationManifestById(task.siteIntegrationId)?.network
+        ?.sessionRefererRules?.length ?? 0) > 0
+    return hasDnrPolicy && enablement[task.siteIntegrationId] === false
+  })
+
+  let transitioned = false
+  for (const task of disabledTasks) {
+    const interruptedTask = normalizeInterruptedTask(
+      task,
+      "Integration disabled"
+    )
+    const transition = await stateManager.transitionDownloadTask(
+      task.id,
+      ["queued", "downloading"],
+      {
+        status: interruptedTask.status,
+        chapters: interruptedTask.chapters,
+        activeBlock: undefined,
+        browserDownloadWait: undefined,
+        errorMessage: interruptedTask.errorMessage,
+        errorCategory: interruptedTask.errorCategory,
+        completed: interruptedTask.completed,
+      }
+    )
+    if (!transition.success) continue
+
+    transitioned = true
+    await cancelActiveDispatchForTaskBestEffort(task.id)
+    await notifyTerminalDownloadTask({
+      task: transition.task,
+      finalStatus: transition.task.status,
+      completedCount: transition.task.chapters.filter(
+        (chapter) => chapter.status === "completed"
+      ).length,
+      totalChapters: transition.task.chapters.length,
+    })
+  }
+
+  if (transitioned) {
+    await clearActiveTaskProgress()
+    scheduleQueueContinuation(stateManager, ensureOffscreenReady)
+  }
+}
+
 export async function processDownloadQueue(
   stateManager: CentralizedStateManager,
   ensureOffscreenReady: () => Promise<void>
 ): Promise<void> {
   try {
     const globalState = await stateManager.getGlobalState()
-    const queuedTasks = globalState.downloadQueue.filter(
-      (task) => task.status === "queued"
-    )
+    const queuedTasks = globalState.downloadQueue.filter(isRunnableQueuedTask)
     const activeTasks = globalState.downloadQueue.filter(
-      (task) => task.status === "downloading"
+      isExecutingDownloadTask
     )
     const concurrentLimit = MAX_CONCURRENT_QUEUED_TASKS
     const availableSlots = Math.max(0, concurrentLimit - activeTasks.length)
@@ -1074,12 +1154,12 @@ export async function processDownloadQueue(
       const latestTask = latestGlobalState.downloadQueue.find(
         (currentTask) => currentTask.id === task.id
       )
-      if (!latestTask || latestTask.status !== "queued") {
+      if (!latestTask || !isRunnableQueuedTask(latestTask)) {
         continue
       }
 
       const latestActiveTasks = latestGlobalState.downloadQueue.filter(
-        (currentTask) => currentTask.status === "downloading"
+        isExecutingDownloadTask
       )
       if (latestActiveTasks.length >= concurrentLimit) {
         break
@@ -1092,7 +1172,7 @@ export async function processDownloadQueue(
       ).downloadQueue.find(
         (currentQueuedTask) => currentQueuedTask.id === latestTask.id
       )
-      if (currentTask && currentTask.status === "queued") {
+      if (currentTask && isRunnableQueuedTask(currentTask)) {
         await startDownloadTask(
           stateManager,
           latestTask.id,
