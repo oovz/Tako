@@ -175,6 +175,53 @@ describe("task lifecycle helpers", () => {
     ])
   })
 
+  it("preserves completed status when liveness recovery observes all completed chapters", () => {
+    const task: DownloadTaskState = {
+      id: "task-completed",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-3",
+      seriesTitle: "Series 3",
+      chapters: [
+        {
+          id: "c1",
+          url: "c1",
+          title: "c1",
+          index: 1,
+          status: "completed",
+          lastUpdated: 10,
+        },
+        {
+          id: "c2",
+          url: "c2",
+          title: "c2",
+          index: 2,
+          status: "completed",
+          lastUpdated: 20,
+        },
+      ],
+      status: "downloading",
+      created: 1000,
+      completed: 2000,
+      errorMessage: "stale error",
+      errorCategory: "unknown",
+      settingsSnapshot: createTaskSettingsSnapshot(
+        DEFAULT_SETTINGS,
+        "mangadex"
+      ),
+    }
+
+    const normalized = normalizeInterruptedTask(
+      task,
+      "Download process unresponsive",
+      3000
+    )
+
+    expect(normalized.status).toBe("completed")
+    expect(normalized.completed).toBe(2000)
+    expect(normalized.errorMessage).toBeUndefined()
+    expect(normalized.errorCategory).toBeUndefined()
+  })
+
   it("normalizes fully interrupted tasks to failed and preserves an existing completed timestamp", () => {
     const task: DownloadTaskState = {
       id: "task-failed",
