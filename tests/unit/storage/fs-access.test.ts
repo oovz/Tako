@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   checkPermissionBeforeWrite,
@@ -113,10 +113,16 @@ describe("File System Access helpers", () => {
     })
 
     it("rejects with a directory error when the stored handle no longer resolves", async () => {
+      const callOrder: string[] = []
       const dir = createDirectoryHandle(undefined, {
+        queryPermission: async () => {
+          callOrder.push("permission")
+          return "granted"
+        },
         entries: (() =>
           ({
             async next() {
+              callOrder.push("entries")
               throw createNamedError("NotFoundError")
             },
             [Symbol.asyncIterator]() {
@@ -130,6 +136,40 @@ describe("File System Access helpers", () => {
       await expect(checkPermissionBeforeWrite(dir)).rejects.toBeInstanceOf(
         DirectoryNotFoundError
       )
+      expect(callOrder).toEqual(["permission", "entries"])
+    })
+
+    it("reports revoked access as expired permission without enumerating", async () => {
+      const entries = vi.fn()
+      const dir = createDirectoryHandle(undefined, {
+        queryPermission: async () => "denied",
+        entries,
+      })
+
+      await expect(checkPermissionBeforeWrite(dir)).rejects.toBeInstanceOf(
+        PermissionExpiredError
+      )
+      expect(entries).not.toHaveBeenCalled()
+    })
+
+    it("preserves an abort raised by the directory operation", async () => {
+      const abortError = createNamedError("AbortError")
+      const dir = createDirectoryHandle(undefined, {
+        queryPermission: async () => "granted",
+        entries: (() =>
+          ({
+            async next() {
+              throw abortError
+            },
+            [Symbol.asyncIterator]() {
+              return this
+            },
+          }) as unknown as ReturnType<
+            FileSystemDirectoryHandle["entries"]
+          >) as FileSystemDirectoryHandle["entries"],
+      })
+
+      await expect(checkPermissionBeforeWrite(dir)).rejects.toBe(abortError)
     })
   })
 

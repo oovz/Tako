@@ -18,6 +18,7 @@ import {
   assertIntegrationResponseUrl,
 } from "../request-policy"
 import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { readResponseText } from "@/src/shared/html-response-decoder"
 
 function buildLockedComicNettaiChapterUrl(
   thumbnailUrl: string,
@@ -258,7 +259,7 @@ export async function loadComicNettaiPaginationDocument(
         `Comic Nettai pagination request failed (HTTP ${response.status})`
       )
     }
-    const html = await response.text()
+    const html = await readResponseText(response)
     return new DOMParser().parseFromString(html, "text/html")
   } catch (error) {
     if (controller.signal.aborted) {

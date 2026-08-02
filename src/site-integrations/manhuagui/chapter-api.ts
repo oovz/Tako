@@ -9,13 +9,10 @@ import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { resolveImageUrlsFromChapterHtml } from "./chapter-viewer"
-import {
-  assertManhuaguiChapterUrl,
-  isAllowedManhuaguiImageUrl,
-  MANHUAGUI_BASE_URL,
-} from "./shared"
+import { assertManhuaguiChapterUrl, isAllowedManhuaguiImageUrl } from "./shared"
 import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
 import { createIntegrationUrlAssertion } from "../request-policy"
+import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
 
 const assertManhuaguiRequestUrl = createIntegrationUrlAssertion("manhuagui")
 
@@ -37,7 +34,7 @@ export async function resolveManhuaguiChapterImageUrls(
     "manhuagui",
     chapter.url,
     "chapter",
-    undefined,
+    { credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml },
     chapterPolicy
   )
   if (!response.ok) {
@@ -68,12 +65,10 @@ export function processManhuaguiImageUrls(urls: string[]): Promise<string[]> {
 }
 
 /**
- * Download a single Manhuagui chapter image. The hamreus.com CDN rejects
- * requests missing the Manhuagui origin as referrer; we set both the
- * `referer` header (best-effort, may be stripped by the browser as a
- * forbidden header) and the RequestInit `referrer` option (honored), with
- * `strict-origin-when-cross-origin` so only the origin is leaked across
- * domains.
+ * Download a single Manhuagui chapter image. Fetch cannot manufacture the
+ * provider's cross-origin Referer value; the provider-declared,
+ * extension-initiated DNR session rule supplies it. The request itself omits
+ * ambient credentials and remains constrained by the provider URL allowlist.
  */
 export async function downloadManhuaguiChapterImage(
   imageUrl: string,
@@ -99,11 +94,7 @@ export async function downloadManhuaguiChapterImage(
     onBytesReceived: opts?.onBytesReceived,
     assertUrlAllowed: assertManhuaguiRequestUrl,
     init: {
-      headers: {
-        referer: `${MANHUAGUI_BASE_URL}/`,
-      },
-      referrer: `${MANHUAGUI_BASE_URL}/`,
-      referrerPolicy: "strict-origin-when-cross-origin",
+      credentials: MANHUAGUI_CREDENTIAL_POLICY.image,
     },
   })
   const filename =

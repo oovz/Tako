@@ -42,12 +42,15 @@ export interface ResolveTabContextOptions {
 
 function withinTimeout<T>(
   operation: Promise<T>,
-  timeoutMs: number
+  timeoutMs: number,
+  controller?: AbortController
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => {
-        reject(new Error("Timed out while resolving page context"))
+        const error = new Error("Timed out while resolving page context")
+        controller?.abort(error)
+        reject(error)
       },
       Math.max(1, timeoutMs)
     )
@@ -242,9 +245,14 @@ export function createTabContextResolver(deps: {
 
     let acceptsPartialResults = true
     try {
+      const resolutionController = new AbortController()
       const deadlineAt = Date.now() + resolutionTimeoutMs
       const awaitWithinResolutionDeadline = <T>(operation: Promise<T>) =>
-        withinTimeout(operation, Math.max(1, deadlineAt - Date.now()))
+        withinTimeout(
+          operation,
+          Math.max(1, deadlineAt - Date.now()),
+          resolutionController
+        )
       const manifest = getSiteIntegrationManifestById(matched.integrationId)
       let probe: PageProbeResult | undefined
       const shouldReadMangadexPreferences =
@@ -355,6 +363,7 @@ export function createTabContextResolver(deps: {
           ...(probe?.integrationContext
             ? { integrationContext: probe.integrationContext }
             : {}),
+          signal: resolutionController.signal,
           onPartial,
         })
       )

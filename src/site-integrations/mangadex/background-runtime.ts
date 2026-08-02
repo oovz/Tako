@@ -30,13 +30,25 @@ async function resolveMangadexSeriesData(
     throw new Error("Could not determine MangaDex series ID from the title URL")
   }
 
-  const metadataPromise = fetchMangadexSeriesMetadata(seriesId, "interactive")
+  const metadataPromise = input.signal
+    ? fetchMangadexSeriesMetadata(seriesId, "interactive", input.signal)
+    : fetchMangadexSeriesMetadata(seriesId, "interactive")
   let chapterListSettled = false
-  const chapterListPromise = fetchMangadexChapterList(
-    seriesId,
-    input.language,
-    input.mangadexPreferences,
-    "interactive"
+  const chapterListPromise = (
+    input.signal
+      ? fetchMangadexChapterList(
+          seriesId,
+          input.language,
+          input.mangadexPreferences,
+          "interactive",
+          input.signal
+        )
+      : fetchMangadexChapterList(
+          seriesId,
+          input.language,
+          input.mangadexPreferences,
+          "interactive"
+        )
   ).finally(() => {
     chapterListSettled = true
   })
@@ -87,8 +99,16 @@ async function resolveMangadexSeriesData(
 const background: ServiceWorkerIntegration = {
   name: "MangaDex API Background",
   series: {
-    fetchSeriesMetadata: fetchMangadexSeriesMetadata,
-    fetchChapterList: fetchMangadexChapterList,
+    fetchSeriesMetadata: (seriesId, _language, signal) =>
+      fetchMangadexSeriesMetadata(seriesId, "resilient", signal),
+    fetchChapterList: (seriesId, language, signal) =>
+      fetchMangadexChapterList(
+        seriesId,
+        language,
+        undefined,
+        "resilient",
+        signal
+      ),
     resolveSeriesData: resolveMangadexSeriesData,
   },
   async prepareDispatchContext(

@@ -1,3 +1,5 @@
+import { MAX_METADATA_RESPONSE_BYTES } from "@/src/constants/timeouts"
+
 const DEFAULT_META_SCAN_BYTES = 1024
 
 type EncodingSource = "bom" | "header" | "meta"
@@ -5,6 +7,7 @@ type EncodingSource = "bom" | "header" | "meta"
 export interface DecodeHtmlOptions {
   contentType?: string | null
   scanByteLimit?: number
+  maxBytes?: number
 }
 
 export interface DecodedHtmlDocument {
@@ -149,13 +152,119 @@ export function decodeHtmlBytes(
   }
 }
 
+function responseBodyLimitError(maxBytes: number, actualBytes?: number): Error {
+  return new Error(
+    actualBytes === undefined
+      ? `Response body exceeds ${maxBytes} byte limit`
+      : `Response body exceeds ${maxBytes} byte limit (got ${actualBytes})`
+  )
+}
+
+export async function readResponseBytes(
+  response: Response,
+  maxBytes: number = MAX_METADATA_RESPONSE_BYTES
+): Promise<Uint8Array> {
+  const limit = Math.max(0, Math.trunc(maxBytes))
+  const contentLength = Number(
+    response.headers?.get?.("content-length") ?? Number.NaN
+  )
+  if (Number.isFinite(contentLength) && contentLength > limit) {
+    throw responseBodyLimitError(limit, contentLength)
+  }
+
+  if (!response.body) {
+    const contentType = response.headers?.get?.("content-type") ?? ""
+    if (
+      contentType.toLowerCase().includes("javascript") &&
+      typeof response.arrayBuffer === "function"
+    ) {
+      const buffer = await response.arrayBuffer()
+      if (buffer.byteLength > limit) {
+        throw responseBodyLimitError(limit, buffer.byteLength)
+      }
+      return new Uint8Array(buffer)
+    }
+    const responseLike = response as Response & {
+      text?: () => Promise<string>
+    }
+    if (typeof responseLike.text === "function") {
+      const bytes = new TextEncoder().encode(await responseLike.text())
+      if (bytes.byteLength > limit) {
+        throw responseBodyLimitError(limit, bytes.byteLength)
+      }
+      return bytes
+    }
+    const responseJson = response as Response & {
+      json?: () => Promise<unknown>
+    }
+    if (typeof responseJson.json === "function") {
+      const bytes = new TextEncoder().encode(
+        JSON.stringify(await responseJson.json())
+      )
+      if (bytes.byteLength > limit) {
+        throw responseBodyLimitError(limit, bytes.byteLength)
+      }
+      return bytes
+    }
+    const buffer = await response.arrayBuffer()
+    if (buffer.byteLength > limit) {
+      throw responseBodyLimitError(limit, buffer.byteLength)
+    }
+    return new Uint8Array(buffer)
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      if (!result.value || result.value.byteLength === 0) continue
+      totalBytes += result.value.byteLength
+      if (totalBytes > limit) {
+        void reader.cancel()
+        throw responseBodyLimitError(limit, totalBytes)
+      }
+      chunks.push(result.value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+export async function readResponseText(
+  response: Response,
+  maxBytes: number = MAX_METADATA_RESPONSE_BYTES
+): Promise<string> {
+  return new TextDecoder().decode(await readResponseBytes(response, maxBytes))
+}
+
+export async function readResponseJson(
+  response: Response,
+  maxBytes: number = MAX_METADATA_RESPONSE_BYTES
+): Promise<unknown> {
+  return JSON.parse(await readResponseText(response, maxBytes)) as unknown
+}
+
 export async function decodeHtmlResponse(
   response: Response,
   options: Omit<DecodeHtmlOptions, "contentType"> = {}
 ): Promise<DecodedHtmlDocument> {
-  const buffer = await response.arrayBuffer()
+  const buffer = await readResponseBytes(
+    response,
+    options.maxBytes ?? MAX_METADATA_RESPONSE_BYTES
+  )
   return decodeHtmlBytes(new Uint8Array(buffer), {
     ...options,
-    contentType: response.headers.get("content-type"),
+    contentType: response.headers?.get?.("content-type"),
   })
 }

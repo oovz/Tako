@@ -3,6 +3,7 @@ import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
 import {
   makeHtmlResponse,
+  makePngHeader,
   mockRateLimitedFetch,
 } from "./pixiv-comic-test-setup"
 
@@ -32,7 +33,7 @@ export function registerPixivComicBackgroundImageCases(): void {
     })
 
     it("downloads image through rate-limited fetch", async () => {
-      const payload = new Uint8Array([1, 2, 3]).buffer
+      const payload = makePngHeader()
       mockRateLimitedFetch.mockResolvedValue({
         ok: true,
         headers: {
@@ -51,7 +52,7 @@ export function registerPixivComicBackgroundImageCases(): void {
 
       expect(result.mimeType).toBe("image/webp")
       expect(result.filename).toBe("page01.webp")
-      expect(result.data.byteLength).toBe(3)
+      expect(result.data.byteLength).toBe(24)
     })
 
     it("rejects non-raster image responses before returning downloaded image data", async () => {
@@ -299,7 +300,7 @@ export function registerPixivComicBackgroundImageCases(): void {
           get: (name: string) =>
             name === "content-type" ? "image/webp" : null,
         },
-        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+        arrayBuffer: async () => makePngHeader(),
       })
 
       const { pixivComicIntegration } =
@@ -315,7 +316,7 @@ export function registerPixivComicBackgroundImageCases(): void {
         headers: {
           get: (name: string) => (name === "content-type" ? "image/gif" : null),
         },
-        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+        arrayBuffer: async () => makePngHeader(),
       })
       vi.stubGlobal(
         "createImageBitmap",
@@ -420,7 +421,7 @@ export function registerPixivComicBackgroundImageCases(): void {
           get: (name: string) =>
             name === "content-type" ? "image/webp" : null,
         },
-        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+        arrayBuffer: async () => makePngHeader(),
       })
 
       const { pixivComicIntegration } =
@@ -449,14 +450,14 @@ export function registerPixivComicBackgroundImageCases(): void {
       expect(result.mimeType).toBe("image/webp")
     })
 
-    it("sets fetch referrer metadata and sends gridshuffle key header when downloading chapter images from pixiv CDN", async () => {
+    it("relies on DNR for Pixiv referer and sends the gridshuffle key header", async () => {
       mockRateLimitedFetch.mockResolvedValue({
         ok: true,
         headers: {
           get: (name: string) =>
             name === "content-type" ? "image/jpeg" : null,
         },
-        arrayBuffer: async () => new Uint8Array([9, 8, 7]).buffer,
+        arrayBuffer: async () => makePngHeader(),
       })
 
       const { pixivComicIntegration } =
@@ -480,12 +481,11 @@ export function registerPixivComicBackgroundImageCases(): void {
       ]
       expect(scope).toBe("image")
       expect(requestInit.credentials).toBe("include")
-      expect(requestInit.referrer).toBe("https://comic.pixiv.net/")
-      expect(requestInit.referrerPolicy).toBe("strict-origin-when-cross-origin")
+      expect(requestInit).not.toHaveProperty("referrer")
+      expect(requestInit).not.toHaveProperty("referrerPolicy")
       expect(requestInit.signal).toBeInstanceOf(AbortSignal)
 
       expect(requestInit.headers).toEqual({
-        referer: "https://comic.pixiv.net/",
         "x-cobalt-thumber-parameter-gridshuffle-key": "k1",
       })
     })
@@ -497,7 +497,7 @@ export function registerPixivComicBackgroundImageCases(): void {
           get: (name: string) =>
             name === "content-type" ? "image/jpeg" : null,
         },
-        arrayBuffer: async () => new Uint8Array([1]).buffer,
+        arrayBuffer: async () => makePngHeader(),
       })
 
       const { pixivComicIntegration } =

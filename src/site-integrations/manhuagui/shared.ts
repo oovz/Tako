@@ -1,29 +1,23 @@
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
+import {
+  MANHUAGUI_BASE_URL,
+  MANHUAGUI_CONFIG_HOST,
+  MANHUAGUI_IMAGE_HOST_NAMES,
+  MANHUAGUI_PAGE_HOST_NAMES,
+} from "./policy"
 
 /**
  * Canonical Manhuagui origin used for building absolute URLs from relative
  * links and as the `Referer` header when downloading CDN images.
  */
-export const MANHUAGUI_BASE_URL = "https://www.manhuagui.com"
+export { MANHUAGUI_BASE_URL }
 
 /** Default protocol used when constructing absolute image URLs. */
 export const DEFAULT_IMAGE_PROTOCOL = "https:"
 
-export const MANHUAGUI_PAGE_HOSTS = new Set([
-  "www.manhuagui.com",
-  "manhuagui.com",
-])
-export const MANHUAGUI_CONFIG_HOST = "cf.mhgui.com"
-export const MANHUAGUI_IMAGE_HOSTS = new Set([
-  "i.hamreus.com",
-  "eu.hamreus.com",
-  "eu1.hamreus.com",
-  "eu2.hamreus.com",
-  "us.hamreus.com",
-  "us1.hamreus.com",
-  "us2.hamreus.com",
-  "us3.hamreus.com",
-])
+export const MANHUAGUI_PAGE_HOSTS = new Set<string>(MANHUAGUI_PAGE_HOST_NAMES)
+export { MANHUAGUI_CONFIG_HOST }
+export const MANHUAGUI_IMAGE_HOSTS = new Set<string>(MANHUAGUI_IMAGE_HOST_NAMES)
 
 /** Matches `/comic/{id}` or `/comic/{id}/` (trailing slash optional). */
 export const SERIES_PATH_REGEX = /^\/comic\/(\d+)\/?$/

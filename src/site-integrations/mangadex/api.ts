@@ -13,6 +13,7 @@ import {
   createSameOriginDynamicAssetAssertion,
 } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
+import { readResponseBytes } from "@/src/shared/html-response-decoder"
 
 export const MANGADEX_API_BASE = "https://api.mangadex.org"
 export const MANGADEX_UPLOADS_BASE = "https://uploads.mangadex.org"
@@ -287,7 +288,8 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   }
 
   try {
-    return await response.json()
+    const bytes = await readResponseBytes(response)
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
   } catch {
     throw createMangadexHttpError(
       response,
@@ -518,13 +520,15 @@ export function parseChapterIdFromUrl(chapterUrl: string): string {
 
 export async function fetchMangaMetadata(
   mangaId: string,
-  retryMode: MangadexRetryMode = "resilient"
+  retryMode: MangadexRetryMode = "resilient",
+  signal?: AbortSignal
 ): Promise<MangadexMangaResponse> {
   const url = `${MANGADEX_API_BASE}/manga/${mangaId}?includes[]=author&includes[]=artist&includes[]=cover_art`
   const response = await fetchMangadexApiWithRateLimit(
     url,
     {
       credentials: "omit",
+      signal,
     },
     retryMode
   )
@@ -550,13 +554,15 @@ export async function fetchMangaMetadata(
 
 export async function fetchMangaStatistics(
   mangaId: string,
-  retryMode: MangadexRetryMode = "resilient"
+  retryMode: MangadexRetryMode = "resilient",
+  signal?: AbortSignal
 ): Promise<MangadexStatisticsResponse> {
   const url = `${MANGADEX_API_BASE}/statistics/manga/${mangaId}`
   const response = await fetchMangadexApiWithRateLimit(
     url,
     {
       credentials: "omit",
+      signal,
     },
     retryMode
   )
@@ -594,7 +600,8 @@ export async function fetchChapterFeed(
   } = {},
   offset = 0,
   limit = 500,
-  retryMode: MangadexRetryMode = "resilient"
+  retryMode: MangadexRetryMode = "resilient",
+  signal?: AbortSignal
 ): Promise<MangadexChapterFeedResponse> {
   const params = new URLSearchParams({
     "order[chapter]": "asc",
@@ -616,6 +623,7 @@ export async function fetchChapterFeed(
     url,
     {
       credentials: "omit",
+      signal,
     },
     retryMode
   )

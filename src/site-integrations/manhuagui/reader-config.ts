@@ -6,6 +6,8 @@ import {
   toAbsoluteUrl,
 } from "./shared"
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
+import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
+import { readResponseBytes } from "@/src/shared/html-response-decoder"
 
 /**
  * Weighted image host (e.g. `eu`, `us1`) used to build `{host}.hamreus.com`
@@ -156,16 +158,16 @@ export async function fetchReaderConfig(
     "manhuagui",
     configScriptUrl,
     "chapter",
-    { credentials: "omit" },
+    { credentials: MANHUAGUI_CREDENTIAL_POLICY.configuration },
     chapterPolicy
   )
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
-  const buffer = await response.arrayBuffer()
+  const bytes = await readResponseBytes(response)
   const scriptText = decodeTextBytes(
-    new Uint8Array(buffer),
+    bytes,
     response.headers.get("content-type")
   )
   return parseReaderConfigScript(scriptText)

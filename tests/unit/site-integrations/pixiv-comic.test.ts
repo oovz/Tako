@@ -420,9 +420,12 @@ describe("Pixiv Comic site integration", () => {
       const [, init] = fetch.mock.calls.at(-1) ?? []
       expect(init).toMatchObject({
         credentials: "include",
-        referrer: "https://comic.pixiv.net/",
-        referrerPolicy: "strict-origin-when-cross-origin",
       })
+      expect(init).not.toHaveProperty("referrer")
+      expect(init).not.toHaveProperty("referrerPolicy")
+      expect(
+        new Headers((init as RequestInit | undefined)?.headers).has("referer")
+      ).toBe(false)
       expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(
         AbortSignal
       )

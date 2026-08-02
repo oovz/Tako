@@ -20,8 +20,16 @@ export type { MangadexUserPreferences } from "./preferences"
 export const mangadexBackgroundIntegration: BackgroundIntegration = {
   name: "MangaDex API Background",
   series: {
-    fetchSeriesMetadata: fetchMangadexSeriesMetadata,
-    fetchChapterList: fetchMangadexChapterList,
+    fetchSeriesMetadata: (seriesId, _language, signal) =>
+      fetchMangadexSeriesMetadata(seriesId, "resilient", signal),
+    fetchChapterList: (seriesId, language, signal) =>
+      fetchMangadexChapterList(
+        seriesId,
+        language,
+        undefined,
+        "resilient",
+        signal
+      ),
   },
   async prepareDispatchContext(
     input

@@ -153,6 +153,38 @@ describe("tab context resolver", () => {
     expect(cache.projectLoadingForTab).toHaveBeenCalledBefore(mocks.matchUrl)
   })
 
+  it("aborts provider resolution when the context deadline expires", async () => {
+    let providerSignal: AbortSignal | undefined
+    mocks.resolveSeriesData.mockImplementationOnce(
+      (input: { signal?: AbortSignal }) => {
+        providerSignal = input.signal
+        return new Promise((_, reject) => {
+          input.signal?.addEventListener(
+            "abort",
+            () => reject(input.signal?.reason ?? new Error("aborted")),
+            { once: true }
+          )
+        })
+      }
+    )
+    const resolver = createTabContextResolver({
+      getStateManager: () => ({}) as never,
+      tabContextCache: createCache() as never,
+      resolutionTimeoutMs: 5,
+    })
+
+    await resolver.resolveTabContext(9)
+
+    expect(providerSignal).toBeInstanceOf(AbortSignal)
+    expect(providerSignal?.aborted).toBe(true)
+    expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+      {},
+      { context: "error", error: expect.any(String) },
+      9,
+      { requestId: 4, windowId: 3, supersedeInFlight: true }
+    )
+  })
+
   it("resolves provider data and commits a request-scoped tab payload", async () => {
     const cache = createCache()
     const stateManager = {} as never
@@ -169,6 +201,7 @@ describe("tab context resolver", () => {
       siteIntegrationId: "pixiv-comic",
       seriesUrl: "https://comic.pixiv.net/works/123",
       mangadexPreferences: undefined,
+      signal: expect.any(AbortSignal),
       onPartial: expect.any(Function),
     })
     expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
@@ -603,6 +636,7 @@ describe("tab context resolver", () => {
         adultGatePresent: false,
         chapterHtml: '<div class="chapter"></div>',
       },
+      signal: expect.any(AbortSignal),
       onPartial: expect.any(Function),
     })
   })

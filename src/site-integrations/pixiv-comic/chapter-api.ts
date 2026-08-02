@@ -10,12 +10,12 @@ import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
 import { descramblePixivImage } from "./descrambler"
 import { createIntegrationUrlAssertion } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
+import { readResponseJson } from "@/src/shared/html-response-decoder"
 import { parseEpisodeIdFromUrl } from "./page-context"
 import {
   PIXIV_BASE_URL,
   PIXIV_EPISODES_API_URL,
   PIXIV_GRIDSHUFFLE_HEADER,
-  PIXIV_IMAGE_REFERRER,
   PIXIV_KEY_FRAGMENT_PARAM,
   cachePixivBuildId,
   getPixivBuildIdCache,
@@ -193,7 +193,7 @@ async function fetchPixivSalt(
     throw error
   }
 
-  const payload = (await response.json()) as {
+  const payload = (await readResponseJson(response)) as {
     pageProps?: {
       salt?: string
       story?: {
@@ -289,7 +289,7 @@ async function resolvePixivReadPages(
     throw new Error(`Pixiv Comic read_v4 failed: HTTP ${response.status}`)
   }
 
-  const payload = (await response.json()) as {
+  const payload = (await readResponseJson(response)) as {
     pages?: PixivReadV4Page[]
     reading_episode?: {
       pages?: PixivReadV4Page[]
@@ -402,9 +402,7 @@ export async function downloadPixivChapterImage(
       sourceImageUrl.includes("?") && !sourceImageUrl.includes("?="),
   })
 
-  const requestHeaders: Record<string, string> = {
-    referer: PIXIV_IMAGE_REFERRER,
-  }
+  const requestHeaders: Record<string, string> = {}
 
   if (pixivKey) {
     requestHeaders[PIXIV_GRIDSHUFFLE_HEADER] = pixivKey
@@ -422,8 +420,6 @@ export async function downloadPixivChapterImage(
       init: {
         credentials: "include",
         headers: requestHeaders,
-        referrer: PIXIV_IMAGE_REFERRER,
-        referrerPolicy: "strict-origin-when-cross-origin",
       },
     }
   )

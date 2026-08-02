@@ -20,6 +20,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
   seriesUrl: string
   seriesId?: string
   language?: string
+  signal?: AbortSignal
 }): Promise<SeriesDataResolutionResult> {
   const trusted = parseTrustedShonenJumpPlusEpisodeUrl(input.seriesUrl)
   if (!trusted) {
@@ -33,7 +34,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
     "shonenjumpplus",
     input.seriesUrl,
     "chapter",
-    { credentials: "omit" }
+    { credentials: "omit", signal: input.signal }
   )
   if (!response.ok) {
     throw new Error(
@@ -59,7 +60,11 @@ async function resolveShonenJumpPlusSeriesData(input: {
 
   let chapterList: Awaited<ReturnType<typeof fetchShonenJumpPlusChapterList>>
   try {
-    chapterList = await fetchShonenJumpPlusChapterList(aggregateId, episodeId)
+    chapterList = await fetchShonenJumpPlusChapterList(
+      aggregateId,
+      episodeId,
+      input.signal
+    )
   } catch (error) {
     return {
       seriesId: aggregateId,

@@ -149,7 +149,7 @@ describe("Rate Limiting", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         "https://cdn.comicnettai.com/assets/page-1.jpg",
         expect.objectContaining({
-          credentials: "include",
+          credentials: "omit",
           redirect: "error",
         })
       )
@@ -171,7 +171,7 @@ describe("Rate Limiting", () => {
       expect(global.fetch).not.toHaveBeenCalled()
     })
 
-    it("fetches with credentials included by default", async () => {
+    it("omits ambient credentials by default", async () => {
       const { rateLimitedFetchByUrlScope } =
         await import("@/src/runtime/rate-limit")
       const { findSiteIntegrationForUrl } =
@@ -187,7 +187,7 @@ describe("Rate Limiting", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         "https://example.com/image.jpg",
         expect.objectContaining({
-          credentials: "include",
+          credentials: "omit",
           redirect: "error",
         })
       )
@@ -218,7 +218,7 @@ describe("Rate Limiting", () => {
         expect.objectContaining({
           method: "POST",
           headers: { Custom: "Header" },
-          credentials: "include",
+          credentials: "omit",
           redirect: "error",
         })
       )
@@ -308,7 +308,7 @@ describe("Rate Limiting", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         "https://comic.pixiv.net/works/123",
         expect.objectContaining({
-          credentials: "include",
+          credentials: "omit",
           redirect: "error",
         })
       )

@@ -211,42 +211,49 @@ export async function checkPermissionBeforeWrite(
     await import("@/src/types/errors")
 
   try {
-    // First, check if the directory still exists
-    try {
-      // Try to enumerate (permission-independent existence check)
-      const entries = dir.entries()
-      await entries.next()
-    } catch (e) {
-      // Directory handle is stale (directory was deleted/moved)
-      throw new DirectoryNotFoundError(
-        dir.name,
-        { component: "fs-access", operation: "checkPermissionBeforeWrite" },
-        e instanceof Error ? e : undefined
-      )
-    }
-
+    // Directory enumeration itself is permission-gated. Query the stored
+    // handle first so revoked access is not misreported as a missing folder.
     const permission = await queryFsaPermission(dir, true)
-    if (permission === "granted") {
-      return
-    }
-
-    if (permission === "unsupported") {
+    if (permission !== "granted") {
       throw new PermissionExpiredError({
         component: "fs-access",
         operation: "checkPermissionBeforeWrite",
       })
     }
 
-    throw new PermissionExpiredError({
-      component: "fs-access",
-      operation: "checkPermissionBeforeWrite",
-    })
+    try {
+      const entries = dir.entries()
+      await entries.next()
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new DirectoryNotFoundError(
+          dir.name,
+          { component: "fs-access", operation: "checkPermissionBeforeWrite" },
+          error
+        )
+      }
+      if (isNamedError(error, "NotAllowedError")) {
+        // Permission can be revoked between queryPermission() and the first
+        // directory operation.
+        throw new PermissionExpiredError(
+          { component: "fs-access", operation: "checkPermissionBeforeWrite" },
+          error
+        )
+      }
+      if (isNamedError(error, "AbortError")) {
+        throw error
+      }
+      throw error
+    }
   } catch (e) {
     // Re-throw our custom errors
     if (
       e instanceof PermissionExpiredError ||
       e instanceof DirectoryNotFoundError
     ) {
+      throw e
+    }
+    if (isNamedError(e, "AbortError")) {
       throw e
     }
     // Wrap unknown errors
@@ -262,8 +269,12 @@ type WriteBlobToPathOptions = {
   onBytesWritten?: (bytesWritten: number) => void | Promise<void>
 }
 
-function isNotFoundError(error: unknown): boolean {
-  return error instanceof Error && error.name === "NotFoundError"
+function isNotFoundError(error: unknown): error is Error {
+  return isNamedError(error, "NotFoundError")
+}
+
+function isNamedError(error: unknown, name: string): error is Error {
+  return error instanceof Error && error.name === name
 }
 
 export type WriteBlobToPathResult = { status: "written" }

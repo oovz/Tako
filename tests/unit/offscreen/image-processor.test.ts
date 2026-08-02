@@ -69,6 +69,10 @@ describe("downloadCoverImage", () => {
       await expect(
         fetchChapterHtml("https://api.mangadex.org/chapter", 1000, "mangadex")
       ).resolves.toBe("あいう")
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.mangadex.org/chapter",
+        expect.objectContaining({ credentials: "omit" })
+      )
     })
 
     it("sniffs meta charset when the response header omits charset", async () => {
@@ -978,7 +982,7 @@ describe("downloadCoverImage", () => {
         mockUrl,
         "image",
         expect.objectContaining({
-          credentials: "include",
+          credentials: "omit",
           signal: expect.any(AbortSignal),
         }),
         undefined

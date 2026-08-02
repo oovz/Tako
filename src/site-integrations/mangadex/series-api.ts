@@ -136,11 +136,12 @@ function buildMangadexVolumeId(volumeLabel: string): string {
 
 export async function fetchMangadexSeriesMetadata(
   seriesId: string,
-  retryMode: MangadexRetryMode = "resilient"
+  retryMode: MangadexRetryMode = "resilient",
+  signal?: AbortSignal
 ): Promise<SeriesMetadata> {
   const [data, statisticsResult] = await Promise.all([
-    fetchMangaMetadata(seriesId, retryMode),
-    fetchMangaStatistics(seriesId, retryMode).catch((error) => {
+    fetchMangaMetadata(seriesId, retryMode, signal),
+    fetchMangaStatistics(seriesId, retryMode, signal).catch((error) => {
       logger.debug(
         "[mangadex] Failed to fetch manga statistics (non-blocking):",
         error
@@ -323,7 +324,8 @@ export async function fetchMangadexChapterList(
   seriesId: string,
   language?: string,
   requestPreferences?: MangadexUserPreferences,
-  retryMode: MangadexRetryMode = "resilient"
+  retryMode: MangadexRetryMode = "resilient",
+  signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
   const chapterById = new Map<string, Chapter>()
   const duplicateChapterIds = new Set<string>()
@@ -345,7 +347,8 @@ export async function fetchMangadexChapterList(
       feedOptions,
       offset,
       limit,
-      retryMode
+      retryMode,
+      signal
     )
     total = feed.total
 

@@ -8,6 +8,7 @@ import logger from "@/src/runtime/logger"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { resolveSeriesDataViaOffscreen } from "@/src/runtime/resolve-series-data-offscreen"
 import { MANHUAGUI_PAGE_HOSTS, parseSeriesIdFromPath } from "./shared"
+import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
 
 function readManhuaguiLiveChapterHtml(
   integrationContext: Record<string, unknown> | undefined
@@ -30,6 +31,7 @@ async function resolveManhuaguiSeriesData(input: {
   seriesId?: string
   language?: string
   integrationContext?: Record<string, unknown>
+  signal?: AbortSignal
 }): Promise<SeriesDataResolutionResult> {
   let parsedUrl: URL
   try {
@@ -63,7 +65,8 @@ async function resolveManhuaguiSeriesData(input: {
     input.seriesUrl,
     "chapter",
     {
-      credentials: "include",
+      credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml,
+      signal: input.signal,
     }
   )
   if (!response.ok) {

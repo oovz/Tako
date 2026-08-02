@@ -26,6 +26,10 @@ import {
   parsePublusImageTransportUrl,
 } from "./publus-image"
 import {
+  readResponseJson,
+  readResponseText,
+} from "@/src/shared/html-response-decoder"
+import {
   assertIntegrationRequestUrl,
   assertIntegrationResponseUrl,
   createIntegrationUrlAssertion,
@@ -97,7 +101,7 @@ async function fetchJson(
     )
   }
 
-  return response.json()
+  return readResponseJson(response)
 }
 
 export async function resolveComicNettaiChapterImageUrls(
@@ -137,7 +141,7 @@ export async function resolveComicNettaiChapterImageUrls(
     )
   }
 
-  const rawConfig = await configResponse.text()
+  const rawConfig = await readResponseText(configResponse)
   let config: PublusConfig
   try {
     config = decodePublusConfigurationPack(rawConfig)

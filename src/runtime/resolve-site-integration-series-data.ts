@@ -9,6 +9,7 @@ export interface ResolveSiteIntegrationSeriesDataInput {
   language?: string
   mangadexPreferences?: MangadexPreferencesPayload
   integrationContext?: Record<string, unknown>
+  signal?: AbortSignal
   /**
    * Optional callback for partial results. Called when metadata is available
    * but the chapter list is still being fetched.
@@ -48,6 +49,7 @@ export async function resolveSiteIntegrationSeriesData(
       ...(input.integrationContext
         ? { integrationContext: input.integrationContext }
         : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
       onPartial: input.onPartial,
     })
   }
@@ -63,16 +65,15 @@ export async function resolveSiteIntegrationSeriesData(
     )
   }
 
-  const metadataPromise = series.fetchSeriesMetadata(
-    input.seriesId,
-    input.language
-  )
+  const metadataPromise = input.signal
+    ? series.fetchSeriesMetadata(input.seriesId, input.language, input.signal)
+    : series.fetchSeriesMetadata(input.seriesId, input.language)
   let chapterListSettled = false
-  const chapterListPromise = series
-    .fetchChapterList(input.seriesId, input.language)
-    .finally(() => {
-      chapterListSettled = true
-    })
+  const chapterListPromise = input.signal
+    ? series.fetchChapterList(input.seriesId, input.language, input.signal)
+    : series.fetchChapterList(input.seriesId, input.language).finally(() => {
+        chapterListSettled = true
+      })
   const partialDeliveryPromise = metadataPromise.then(
     async (seriesMetadata) => {
       if (input.onPartial && !chapterListSettled) {

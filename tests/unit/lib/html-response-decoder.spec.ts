@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest"
 
-import { decodeHtmlBytes } from "@/src/shared/html-response-decoder"
+import {
+  decodeHtmlBytes,
+  decodeHtmlResponse,
+} from "@/src/shared/html-response-decoder"
 
 describe("html response decoder", () => {
+  describe("decodeHtmlResponse", () => {
+    it("rejects a response body that exceeds the configured byte limit", async () => {
+      const response = new Response("<html>too large</html>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      })
+
+      await expect(
+        decodeHtmlResponse(response, { maxBytes: 4 })
+      ).rejects.toThrow("Response body exceeds 4 byte limit")
+    })
+  })
+
   describe("decodeHtmlBytes", () => {
     it("throws when no charset declaration is present", () => {
       const bytes = new TextEncoder().encode("<html><body>hello</body></html>")

@@ -15,6 +15,7 @@ async function resolvePixivSeriesData(input: {
   seriesUrl: string
   seriesId?: string
   language?: string
+  signal?: AbortSignal
 }): Promise<SeriesDataResolutionResult> {
   const workId = input.seriesId ?? parseWorkIdFromUrl(input.seriesUrl)
   if (!workId) {
@@ -22,8 +23,8 @@ async function resolvePixivSeriesData(input: {
   }
 
   const [metadataResult, chapterListResult] = await Promise.allSettled([
-    fetchPixivSeriesMetadata(workId),
-    fetchPixivChapterList(workId),
+    fetchPixivSeriesMetadata(workId, undefined, input.signal),
+    fetchPixivChapterList(workId, undefined, input.signal),
   ])
 
   return {

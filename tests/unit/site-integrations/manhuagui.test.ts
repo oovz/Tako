@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { decompressFromBase64 } from "@/src/site-integrations/manhuagui/lz-string"
 import {
   MANHUAGUI_BASE_URL,
+  MANHUAGUI_IMAGE_HOSTS,
+  isAllowedManhuaguiImageUrl,
   parseChapterIdFromUrl,
   parseSeriesIdFromPath,
   toAbsoluteUrl,
@@ -51,6 +53,26 @@ describe("Manhuagui site integration", () => {
   describe("shared utilities", () => {
     it("exposes the correct base URL", () => {
       expect(MANHUAGUI_BASE_URL).toBe("https://www.manhuagui.com")
+    })
+
+    it("keeps the externally observed Hamreus host contract exact", () => {
+      const expectedHosts = [
+        "i.hamreus.com",
+        "eu.hamreus.com",
+        "eu1.hamreus.com",
+        "eu2.hamreus.com",
+        "us.hamreus.com",
+        "us1.hamreus.com",
+        "us2.hamreus.com",
+        "us3.hamreus.com",
+      ]
+
+      expect([...MANHUAGUI_IMAGE_HOSTS]).toEqual(expectedHosts)
+      for (const host of expectedHosts) {
+        expect(isAllowedManhuaguiImageUrl(`https://${host}/page.jpg`)).toBe(
+          true
+        )
+      }
     })
 
     it("parses series id from /comic/{id} path", () => {
@@ -403,13 +425,11 @@ describe("Manhuagui site integration", () => {
       expect(rateLimitedFetchForIntegration).not.toHaveBeenCalled()
       const [, init] = fetch.mock.calls.at(-1) ?? []
       expect(init).toMatchObject({
-        credentials: "include",
-        referrer: "https://www.manhuagui.com/",
-        referrerPolicy: "strict-origin-when-cross-origin",
-        headers: {
-          referer: "https://www.manhuagui.com/",
-        },
+        credentials: "omit",
       })
+      expect((init as RequestInit | undefined)?.referrer).toBeUndefined()
+      expect((init as RequestInit | undefined)?.referrerPolicy).toBeUndefined()
+      expect((init as RequestInit | undefined)?.headers).toBeUndefined()
       expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(
         AbortSignal
       )

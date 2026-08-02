@@ -8,6 +8,7 @@ import {
 } from "@/src/shared/site-integration-utils"
 import { parseTrustedShonenJumpPlusEpisodeUrl } from "./urls"
 import { ProviderContractError } from "../provider-contract-error"
+import { readResponseJson } from "@/src/shared/html-response-decoder"
 
 export type PaginationInfo = {
   per_page?: number
@@ -87,7 +88,8 @@ export function mapEpisode(product: PaginationProduct): Chapter | null {
 
 export async function fetchPaginationInfo(
   aggregateId: string,
-  episodeId: string
+  episodeId: string,
+  signal?: AbortSignal
 ): Promise<PaginationInfo> {
   const endpoint = new URL(
     `${API_BASE}/readable_product_pagination_information`
@@ -99,20 +101,21 @@ export async function fetchPaginationInfo(
     "shonenjumpplus",
     endpoint.href,
     "chapter",
-    PUBLIC_FETCH_INIT
+    { ...PUBLIC_FETCH_INIT, signal }
   )
   if (!response.ok) {
     throw new Error(
       `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
     )
   }
-  return (await response.json()) as PaginationInfo
+  return (await readResponseJson(response)) as PaginationInfo
 }
 
 export async function fetchProducts(
   aggregateId: string,
   offset: number,
-  limit: number
+  limit: number,
+  signal?: AbortSignal
 ): Promise<PaginationProduct[]> {
   const endpoint = new URL(`${API_BASE}/pagination_readable_products`)
   endpoint.searchParams.set("type", "episode")
@@ -125,14 +128,14 @@ export async function fetchProducts(
     "shonenjumpplus",
     endpoint.href,
     "chapter",
-    PUBLIC_FETCH_INIT
+    { ...PUBLIC_FETCH_INIT, signal }
   )
   if (!response.ok) {
     throw new Error(
       `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
     )
   }
-  const payload = (await response.json()) as unknown
+  const payload = await readResponseJson(response)
   if (!Array.isArray(payload)) {
     throw new ProviderContractError(
       "Shonen Jump+ chapter list returned an unexpected response structure."
@@ -143,9 +146,10 @@ export async function fetchProducts(
 
 export async function fetchShonenJumpPlusChapterList(
   aggregateId: string,
-  episodeId: string
+  episodeId: string,
+  signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
-  const info = await fetchPaginationInfo(aggregateId, episodeId)
+  const info = await fetchPaginationInfo(aggregateId, episodeId, signal)
   const limit =
     typeof info.per_page === "number" && info.per_page > 0 ? info.per_page : 50
   const total =
@@ -158,7 +162,7 @@ export async function fetchShonenJumpPlusChapterList(
   const duplicateIds = new Set<string>()
   let retrieved = 0
   for (let offset = 0; offset < total; offset += limit) {
-    const products = await fetchProducts(aggregateId, offset, limit)
+    const products = await fetchProducts(aggregateId, offset, limit, signal)
     retrieved += products.length
     for (const product of products) {
       const chapter = mapEpisode(product)

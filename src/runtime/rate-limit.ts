@@ -229,9 +229,10 @@ function createRateLimitedFetchInit(init?: RequestInit): RequestInit {
   // before the mock receives the request. The production bundle compiles this
   // flag to false; test builds still require the resulting URL to be loopback
   // before bypassing normal response-origin validation below.
-  // Ensure cookies are sent for authenticated flows; do not set custom headers by default
+  // Public provider traffic is the default. Authenticated integrations must
+  // explicitly opt in so shared helpers never send ambient cookies by accident.
   return {
-    credentials: "include",
+    credentials: "omit",
     ...init,
     // A post-fetch response URL check cannot prevent the redirected request.
     // Reject redirects before the browser follows them.

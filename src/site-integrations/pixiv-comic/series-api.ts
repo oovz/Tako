@@ -19,8 +19,12 @@ import {
   type PixivWorkV5Response,
 } from "./shared"
 import { ProviderContractError } from "../provider-contract-error"
+import { readResponseJson } from "@/src/shared/html-response-decoder"
 
-async function fetchPixivWorkV5(workId: string): Promise<PixivOfficialWork> {
+async function fetchPixivWorkV5(
+  workId: string,
+  signal?: AbortSignal
+): Promise<PixivOfficialWork> {
   const endpoint = `${PIXIV_BASE_URL}/api/app/works/v5/${workId}`
   const response = await rateLimitedFetchForIntegration(
     "pixiv-comic",
@@ -29,6 +33,7 @@ async function fetchPixivWorkV5(workId: string): Promise<PixivOfficialWork> {
     {
       credentials: "include",
       headers: createPixivAppHeaders(),
+      signal,
     }
   )
 
@@ -36,7 +41,7 @@ async function fetchPixivWorkV5(workId: string): Promise<PixivOfficialWork> {
     throw new Error(`Pixiv Comic works/v5 failed: HTTP ${response.status}`)
   }
 
-  const payload = (await response.json()) as PixivWorkV5Response
+  const payload = (await readResponseJson(response)) as PixivWorkV5Response
   const officialWork = payload.data?.official_work
   if (!officialWork?.name) {
     throw new ProviderContractError(
@@ -49,7 +54,8 @@ async function fetchPixivWorkV5(workId: string): Promise<PixivOfficialWork> {
 
 async function fetchPixivEpisodesV2(
   workId: string,
-  order: "asc" | "desc" = "asc"
+  order: "asc" | "desc" = "asc",
+  signal?: AbortSignal
 ): Promise<
   NonNullable<NonNullable<PixivEpisodesV2Response["data"]>["episodes"]>
 > {
@@ -61,6 +67,7 @@ async function fetchPixivEpisodesV2(
     {
       credentials: "include",
       headers: createPixivAppHeaders(),
+      signal,
     }
   )
 
@@ -68,7 +75,7 @@ async function fetchPixivEpisodesV2(
     throw new Error(`Pixiv Comic episodes/v2 failed: HTTP ${response.status}`)
   }
 
-  const payload = (await response.json()) as PixivEpisodesV2Response
+  const payload = (await readResponseJson(response)) as PixivEpisodesV2Response
   if (!Array.isArray(payload.data?.episodes)) {
     throw new ProviderContractError(
       "Pixiv Comic API may have changed (episodes missing)"
@@ -143,9 +150,11 @@ function resolvePixivCoverUrl(work: PixivOfficialWork): string | undefined {
 }
 
 export async function fetchPixivSeriesMetadata(
-  seriesId: string
+  seriesId: string,
+  _language?: string,
+  signal?: AbortSignal
 ): Promise<SeriesMetadata> {
-  const work = await fetchPixivWorkV5(seriesId)
+  const work = await fetchPixivWorkV5(seriesId, signal)
 
   return {
     title: sanitizeLabel(work.name || "") || `Pixiv Comic ${seriesId}`,
@@ -158,9 +167,11 @@ export async function fetchPixivSeriesMetadata(
 }
 
 export async function fetchPixivChapterList(
-  seriesId: string
+  seriesId: string,
+  _language?: string,
+  signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
-  const episodes = await fetchPixivEpisodesV2(seriesId, "asc")
+  const episodes = await fetchPixivEpisodesV2(seriesId, "asc", signal)
   const chapterById = new Map<string, Chapter>()
   const duplicateChapterIds = new Set<string>()
 

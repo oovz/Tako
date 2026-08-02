@@ -12,6 +12,7 @@ async function resolveComicNettaiSeriesData(input: {
   seriesUrl: string
   seriesId?: string
   language?: string
+  signal?: AbortSignal
 }): Promise<SeriesDataResolutionResult> {
   let parsedUrl: URL
   try {
@@ -38,7 +39,7 @@ async function resolveComicNettaiSeriesData(input: {
     "comicnettai",
     input.seriesUrl,
     "chapter",
-    { credentials: "include" }
+    { credentials: "include", signal: input.signal }
   )
   if (!response.ok) {
     throw new Error(

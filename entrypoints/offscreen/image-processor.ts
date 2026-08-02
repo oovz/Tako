@@ -103,7 +103,7 @@ async function fetchChapterHtml(
     const fetchFn = () =>
       fetch(chapterUrl, {
         signal: controller.signal,
-        credentials: "include",
+        credentials: "omit",
         redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
       })
     const response = await awaitWithAbortSignal(

@@ -793,7 +793,7 @@ export function registerManhuaguiCases(): void {
         "manhuagui",
         "https://www.manhuagui.com/comic/28004/760111.html",
         "chapter",
-        undefined,
+        { credentials: "include" },
         undefined
       )
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
@@ -806,7 +806,7 @@ export function registerManhuaguiCases(): void {
       )
     })
 
-    it("downloads hamreus images with the Manhuagui referrer contract", async () => {
+    it("relies on DNR rather than ineffective Fetch referrer options for Hamreus images", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,
         headers: {
@@ -841,11 +841,10 @@ export function registerManhuaguiCases(): void {
         "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
       )
       expect(scope).toBe("image")
-      expect(requestInit.referrer).toBe("https://www.manhuagui.com/")
-      expect(requestInit.referrerPolicy).toBe("strict-origin-when-cross-origin")
-      expect(requestInit.headers).toEqual({
-        referer: "https://www.manhuagui.com/",
-      })
+      expect(requestInit.credentials).toBe("omit")
+      expect(requestInit.referrer).toBeUndefined()
+      expect(requestInit.referrerPolicy).toBeUndefined()
+      expect(requestInit.headers).toBeUndefined()
     })
 
     it("rejects non-raster image responses before returning downloaded image data", async () => {
