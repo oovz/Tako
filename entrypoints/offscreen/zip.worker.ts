@@ -2,6 +2,7 @@
 // Runs CPU-heavy zipping off the main offscreen thread with streaming compression.
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from "fflate"
 import { normalizeImageFilename } from "@/src/shared/filename-sanitizer"
+import { MAX_ARCHIVE_BYTES } from "@/src/constants/timeouts"
 
 // Message-based streaming protocol used by the offscreen archive pipeline.
 type InitMsg = {
@@ -12,6 +13,7 @@ type InitMsg = {
   normalizeImageFilenames?: boolean
   imagePaddingDigits?: "auto" | 2 | 3 | 4 | 5
   totalImages?: number // Required if normalization enabled
+  maxArchiveBytes?: number
 }
 type AddComicInfoMsg = { type: "addComicInfo"; xml: string }
 type AddImageMsg = {
@@ -53,6 +55,8 @@ interface StreamingState {
   extension?: "cbz" | "zip"
   imageCount: number
   compressedBytes: number
+  maxArchiveBytes: number
+  resourceLimitFailed: boolean
   chunkCount: number
   // Normalization state
   normalizeImageFilenames: boolean
@@ -88,6 +92,8 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     isFinalized: false,
     imageCount: 0,
     compressedBytes: 0,
+    maxArchiveBytes: MAX_ARCHIVE_BYTES,
+    resourceLimitFailed: false,
     chunkCount: 0,
     normalizeImageFilenames: false,
     imagePaddingDigits: "auto",
@@ -102,6 +108,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     if (!streamState.zip) {
       streamState.zip = new Zip()
       streamState.zip.ondata = (err, chunk, final) => {
+        if (streamState.resourceLimitFailed) return
         if (err) {
           post({
             success: false,
@@ -109,7 +116,18 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           })
           return
         }
-        streamState.compressedBytes += chunk.byteLength
+        const nextCompressedBytes =
+          streamState.compressedBytes + chunk.byteLength
+        if (nextCompressedBytes > streamState.maxArchiveBytes) {
+          streamState.resourceLimitFailed = true
+          streamState.chunks = []
+          post({
+            success: false,
+            error: `Archive size exceeds ${streamState.maxArchiveBytes} byte limit (got at least ${nextCompressedBytes})`,
+          })
+          return
+        }
+        streamState.compressedBytes = nextCompressedBytes
         streamState.chunks.push(chunk)
         streamState.chunkCount += 1
         post({
@@ -156,6 +174,8 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     streamState.extension = undefined
     streamState.imageCount = 0
     streamState.compressedBytes = 0
+    streamState.maxArchiveBytes = MAX_ARCHIVE_BYTES
+    streamState.resourceLimitFailed = false
     streamState.chunkCount = 0
     streamState.normalizeImageFilenames = false
     streamState.imagePaddingDigits = "auto"
@@ -200,10 +220,13 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
             message.normalizeImageFilenames ?? false
           streamState.imagePaddingDigits = message.imagePaddingDigits ?? "auto"
           streamState.totalImages = message.totalImages ?? 0
+          streamState.maxArchiveBytes =
+            message.maxArchiveBytes ?? MAX_ARCHIVE_BYTES
           ensureZip()
           return
         }
         case "addComicInfo": {
+          if (streamState.resourceLimitFailed) return
           const zip = ensureZip()
           const stream = new ZipDeflate("ComicInfo.xml", { level: 6 })
           zip.add(stream)
@@ -211,6 +234,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           return
         }
         case "addImage": {
+          if (streamState.resourceLimitFailed) return
           const zip = ensureZip()
           const bytes = new Uint8Array(message.buffer)
           if (bytes.byteLength === 0) return
@@ -236,6 +260,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           return
         }
         case "finalize":
+          if (streamState.resourceLimitFailed) return
           ensureZip().end()
           return
       }

@@ -25,6 +25,16 @@ import {
 } from "@/src/site-integrations/comicnettai/series-dom"
 import * as rateLimit from "@/src/runtime/rate-limit"
 
+function makePngHeader(width: number, height: number): Uint8Array {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(16, width)
+  view.setUint32(20, height)
+  return bytes
+}
+
 const LIVE_PUBLUS_KEYS = {
   key1: "77fb2c670460a4daeb0463c40976806a63750720ceb768cf43031fca8f3eb5e2",
   key2: "49840499d31b5b7bffadf76a48b1308b25f6c2ed154d91f66abc7764ec9029d2",
@@ -356,7 +366,7 @@ describe("Comic Nettai site integration", () => {
       "fetch",
       vi.fn(
         async () =>
-          new Response(new Uint8Array([1, 2, 3, 4]), {
+          new Response(makePngHeader(32, 32).buffer as ArrayBuffer, {
             status: 200,
             headers: { "content-type": "image/gif" },
           })

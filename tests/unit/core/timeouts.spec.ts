@@ -6,6 +6,11 @@ import {
   IPC_THROTTLE_MS,
   TRANSITION_DURATION_MS,
   MAX_IMAGE_BYTES,
+  MAX_CHAPTER_IMAGES,
+  MAX_CHAPTER_IMAGE_BYTES,
+  MAX_ARCHIVE_BYTES,
+  MAX_IMAGE_DIMENSION_PX,
+  MAX_DECODED_IMAGE_PIXELS,
   ZIP_WORKER_FINALIZATION_TIMEOUT_MS,
 } from "@/src/constants/timeouts"
 
@@ -27,9 +32,22 @@ describe("MAX_IMAGE_BYTES decompression bomb guard", () => {
     expect(MAX_IMAGE_BYTES).toBe(100 * 1024 * 1024)
   })
 
-  it("is large enough to allow typical cover/page images but block decompression bombs", () => {
+  it("is large enough to allow typical cover/page payloads but bound encoded input", () => {
     expect(MAX_IMAGE_BYTES).toBeGreaterThan(10 * 1024 * 1024) // > 10MB
     expect(MAX_IMAGE_BYTES).toBeLessThan(1024 * 1024 * 1024) // < 1GB
+  })
+})
+
+describe("aggregate chapter resource guards", () => {
+  it("caps page count and aggregate source/archive bytes", () => {
+    expect(MAX_CHAPTER_IMAGES).toBe(2_000)
+    expect(MAX_CHAPTER_IMAGE_BYTES).toBe(512 * 1024 * 1024)
+    expect(MAX_ARCHIVE_BYTES).toBe(256 * 1024 * 1024)
+  })
+
+  it("caps decoded image dimensions and pixels separately from encoded bytes", () => {
+    expect(MAX_IMAGE_DIMENSION_PX).toBe(16_384)
+    expect(MAX_DECODED_IMAGE_PIXELS).toBe(32 * 1024 * 1024)
   })
 })
 

@@ -1,3 +1,8 @@
+import {
+  assertDecodedImageWithinLimits,
+  readEncodedImageDimensions,
+} from "@/src/runtime/decoded-image-limits"
+
 export type PublusImageMetadata = {
   mode: number
   seed1: number
@@ -677,10 +682,17 @@ export async function descramblePublusImage(
     )
   }
 
+  const dimensions = readEncodedImageDimensions(buffer, mimeType)
+  assertDecodedImageWithinLimits(
+    dimensions.width,
+    dimensions.height,
+    "Comic Nettai"
+  )
   const blob = new Blob([buffer], { type: mimeType })
   const bitmap = await createImageBitmap(blob)
 
   try {
+    assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Comic Nettai")
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
     const context = canvas.getContext("2d")
     if (!context) {

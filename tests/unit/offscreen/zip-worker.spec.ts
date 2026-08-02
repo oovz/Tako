@@ -97,8 +97,8 @@ describe("zip.worker streaming archive protocol", () => {
     return terminal!
   }
 
-  it("does not reject output solely because cumulative byte accounting exceeds 500 MiB", async () => {
-    const reportedByteLength = 500 * 1024 * 1024 + 1
+  it("rejects compressed output that exceeds the declared archive budget", async () => {
+    const reportedByteLength = 2
     const reportedChunk = {
       0: 0,
       length: 1,
@@ -124,20 +124,18 @@ describe("zip.worker streaming archive protocol", () => {
     })
 
     await installWorkerRuntime()
-    sendMessage({ type: "init", chapterTitle: "Large", extension: "cbz" })
+    sendMessage({
+      type: "init",
+      chapterTitle: "Large",
+      extension: "cbz",
+      maxArchiveBytes: 1,
+    })
     sendMessage({ type: "finalize" })
 
     const terminal = await waitForTerminalMessage()
     expect(terminal).toMatchObject({
-      success: true,
-      filename: "Large.cbz",
-      size: 1,
-    })
-    expect(postedMessages).toContainEqual({
-      type: "progress",
-      bytes: reportedByteLength,
-      chunks: 1,
-      final: true,
+      success: false,
+      error: expect.stringContaining("Archive size exceeds 1 byte limit"),
     })
   })
 

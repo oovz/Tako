@@ -50,7 +50,9 @@ export async function fetchImageWithStallDetection(
   try {
     options.assertUrlAllowed?.(imageUrl)
     const requestInit: RequestInit = {
-      credentials: "include",
+      // Public provider APIs/CDNs are the common case. Integrations that
+      // deliberately depend on a browser session must opt in at the call site.
+      credentials: "omit",
       ...options.init,
       // Validation after an automatically followed redirect is too late: the
       // browser has already contacted the target and may have sent credentials.
@@ -122,14 +124,20 @@ export async function fetchImageWithStallDetection(
         }
 
         if (readResult.value && readResult.value.byteLength > 0) {
-          chunks.push(readResult.value)
-          totalBytes += readResult.value.byteLength
-          if (totalBytes > MAX_IMAGE_BYTES) {
+          const nextTotalBytes = totalBytes + readResult.value.byteLength
+          if (nextTotalBytes > MAX_IMAGE_BYTES) {
             throw new Error(
-              `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${totalBytes})`
+              `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${nextTotalBytes})`
             )
           }
-          await options.onBytesReceived?.(totalBytes)
+          try {
+            await options.onBytesReceived?.(nextTotalBytes)
+          } catch (error) {
+            controller.abort(error)
+            throw error
+          }
+          chunks.push(readResult.value)
+          totalBytes = nextTotalBytes
         }
       } catch (error) {
         if (stallTimeoutId) {

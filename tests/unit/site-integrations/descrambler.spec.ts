@@ -2,6 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { descramblePixivImage } from "@/src/site-integrations/pixiv-comic/descrambler"
 
+function makePngHeader(width: number, height: number): ArrayBuffer {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(16, width)
+  view.setUint32(20, height)
+  return bytes.buffer
+}
+
 function createMockBitmap(width: number, height: number) {
   return {
     width,
@@ -114,7 +124,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(10)
+    const buffer = makePngHeader(64, 64)
     await expect(
       descramblePixivImage(
         buffer,
@@ -134,7 +144,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(10)
+    const buffer = makePngHeader(1, 1)
     await expect(
       descramblePixivImage(
         buffer,
@@ -156,7 +166,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(width * height * 4)
+    const buffer = makePngHeader(width, height)
     const result = await descramblePixivImage(
       buffer,
       "image/png",
@@ -186,7 +196,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(width * height * 4)
+    const buffer = makePngHeader(width, height)
     await descramblePixivImage(
       buffer,
       "image/jpeg",
@@ -211,7 +221,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(width * height * 4)
+    const buffer = makePngHeader(width, height)
     await descramblePixivImage(
       buffer,
       "application/octet-stream",
@@ -236,7 +246,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(width * height * 4)
+    const buffer = makePngHeader(width, height)
     await descramblePixivImage(
       buffer,
       "image/png",
@@ -263,7 +273,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(8)
+    const buffer = makePngHeader(1800, 1800)
     await expect(
       descramblePixivImage(
         buffer,
@@ -290,7 +300,7 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas =
       createOffscreenCanvasMock(canvas)
 
-    const buffer = new ArrayBuffer(width * height * 4)
+    const buffer = makePngHeader(width, height)
     await descramblePixivImage(
       buffer,
       "image/png",

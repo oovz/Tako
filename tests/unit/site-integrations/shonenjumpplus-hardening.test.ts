@@ -33,6 +33,16 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+function makePngHeader(width: number, height: number): ArrayBuffer {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(16, width)
+  view.setUint32(20, height)
+  return bytes.buffer
+}
+
 describe("Shonen Jump+ hardening contracts", () => {
   it("parses episode-json regardless of script attribute order", () => {
     const dataValue = encodeAttributeJson({
@@ -152,6 +162,21 @@ describe("Shonen Jump+ hardening contracts", () => {
     ).rejects.toThrow("image reconstruction is unavailable")
   })
 
+  it("rejects oversized encoded dimensions before bitmap allocation", async () => {
+    const createImageBitmap = vi.fn(async () => ({
+      width: 20_000,
+      height: 20_000,
+      close: vi.fn(),
+    }))
+    vi.stubGlobal("createImageBitmap", createImageBitmap)
+    vi.stubGlobal("OffscreenCanvas", class {})
+
+    await expect(
+      descrambleGigaviewerImage(makePngHeader(20_000, 20_000), "image/png")
+    ).rejects.toThrow("dimension")
+    expect(createImageBitmap).not.toHaveBeenCalled()
+  })
+
   it("reconstructs the fixed transpose and preserves edge strips through the download adapter", async () => {
     const width = 40
     const height = 40
@@ -226,7 +251,7 @@ describe("Shonen Jump+ hardening contracts", () => {
       }
     )
     fetchImageWithStallDetectionMock.mockResolvedValue({
-      data: new Uint8Array([1, 2, 3]).buffer,
+      data: makePngHeader(width, height),
       mimeType: "image/png",
     })
 

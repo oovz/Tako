@@ -1,3 +1,8 @@
+import {
+  assertDecodedImageWithinLimits,
+  readEncodedImageDimensions,
+} from "@/src/runtime/decoded-image-limits"
+
 const DIVIDE_NUM = 4
 const MULTIPLE = 8
 
@@ -47,8 +52,15 @@ export async function descrambleGigaviewerImage(
     )
   }
 
+  const dimensions = readEncodedImageDimensions(buffer, mimeType)
+  assertDecodedImageWithinLimits(
+    dimensions.width,
+    dimensions.height,
+    "Shonen Jump+"
+  )
   const bitmap = await createImageBitmap(new Blob([buffer], { type: mimeType }))
   try {
+    assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Shonen Jump+")
     const { tileWidth, tileHeight, moves } = buildGigaviewerTileMoves(
       bitmap.width,
       bitmap.height

@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { downloadChapterImages } from "@/entrypoints/offscreen/chapter-image-downloads"
+import {
+  ChapterResourceLimitError,
+  downloadChapterImages,
+} from "@/entrypoints/offscreen/chapter-image-downloads"
 import type { ChapterProcessingRuntime } from "@/entrypoints/offscreen/chapter-processing"
+import {
+  MAX_CHAPTER_IMAGE_BYTES,
+  MAX_CHAPTER_IMAGES,
+} from "@/src/constants/timeouts"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -28,6 +35,124 @@ const RATE_LIMIT_SETTINGS = {
 }
 
 describe("downloadChapterImages", () => {
+  it("rejects a chapter whose declared image count exceeds the job budget", async () => {
+    const downloadImage = vi.fn()
+    const runtime = {
+      withImageRetries: vi.fn(),
+    } as unknown as ChapterProcessingRuntime
+
+    await expect(
+      downloadChapterImages(runtime, {
+        urls: Array.from(
+          { length: MAX_CHAPTER_IMAGES + 1 },
+          (_, index) => `https://example.com/${index}.jpg`
+        ),
+        integrationId: "test-site",
+        chapterId: "chapter-1",
+        rateLimitSettings: RATE_LIMIT_SETTINGS,
+        onProgress: vi.fn(),
+        downloadImage,
+        onDownloaded: vi.fn(),
+        onDownloadFailed: vi.fn(),
+      })
+    ).rejects.toBeInstanceOf(ChapterResourceLimitError)
+    expect(downloadImage).not.toHaveBeenCalled()
+  })
+
+  it("rejects when aggregate chapter image bytes cross the job budget", async () => {
+    const runtime: ChapterProcessingRuntime = {
+      withImageRetries: async (fn) => fn(),
+      resolveWritableDownloadRoot: vi.fn(),
+      requestBrowserBlobDownload: vi.fn(),
+      getMemoryStats: vi.fn(() => null),
+    }
+
+    await expect(
+      downloadChapterImages(runtime, {
+        urls: ["https://example.com/1.jpg"],
+        integrationId: "test-site",
+        chapterId: "chapter-1",
+        rateLimitSettings: RATE_LIMIT_SETTINGS,
+        initialAggregateBytes: MAX_CHAPTER_IMAGE_BYTES,
+        onProgress: vi.fn(async () => undefined),
+        downloadImage: vi.fn(async () => ({
+          data: new ArrayBuffer(1),
+          filename: "1.jpg",
+          mimeType: "image/jpeg",
+        })),
+        onDownloaded: vi.fn(),
+        onDownloadFailed: vi.fn(),
+      })
+    ).rejects.toBeInstanceOf(ChapterResourceLimitError)
+  })
+
+  it("rejects in-flight image bytes before concurrent buffers cross the chapter budget", async () => {
+    const controller = new AbortController()
+    const onDownloadFailed = vi.fn()
+    const runtime: ChapterProcessingRuntime = {
+      withImageRetries: async (fn) => fn(),
+      resolveWritableDownloadRoot: vi.fn(),
+      requestBrowserBlobDownload: vi.fn(),
+      getMemoryStats: vi.fn(() => null),
+    }
+    const downloadImage = vi.fn(
+      async (
+        _url: string,
+        opts?: {
+          signal?: AbortSignal
+          onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+        }
+      ) => {
+        await opts?.onBytesReceived?.(32)
+        await new Promise<never>((_, reject) => {
+          const onAbort = () => reject(new Error("aborted"))
+          if (opts?.signal?.aborted) {
+            onAbort()
+            return
+          }
+          opts?.signal?.addEventListener("abort", onAbort, { once: true })
+        })
+        throw new Error("unreachable")
+      }
+    )
+
+    const resultPromise = downloadChapterImages(runtime, {
+      urls: ["https://example.com/1.jpg", "https://example.com/2.jpg"],
+      integrationId: "test-site",
+      chapterId: "chapter-1",
+      rateLimitSettings: RATE_LIMIT_SETTINGS,
+      initialAggregateBytes: MAX_CHAPTER_IMAGE_BYTES - 16,
+      abortSignal: controller.signal,
+      onProgress: vi.fn(async () => undefined),
+      downloadImage,
+      onDownloaded: vi.fn(),
+      onDownloadFailed,
+    })
+    const settledResultPromise = resultPromise.catch(() => undefined)
+
+    let rejectedByBudget = false
+    await vi
+      .waitFor(
+        () =>
+          expect(onDownloadFailed).toHaveBeenCalledWith(
+            expect.objectContaining({
+              error: expect.any(ChapterResourceLimitError),
+            })
+          ),
+        { timeout: 100 }
+      )
+      .then(
+        () => {
+          rejectedByBudget = true
+        },
+        () => undefined
+      )
+
+    controller.abort()
+    await settledResultPromise
+    expect(rejectedByBudget).toBe(true)
+  })
+
   it("uses the image concurrency from the task rate-limit snapshot", async () => {
     const urls = Array.from(
       { length: 5 },

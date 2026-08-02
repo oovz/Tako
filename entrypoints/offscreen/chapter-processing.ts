@@ -6,14 +6,21 @@ import {
   type WriteBlobToPathResult,
 } from "@/src/storage/fs-access"
 import createZipArchiveWorker from "./archive-worker-factory"
-import { downloadChapterImages } from "./chapter-image-downloads"
+import {
+  ChapterResourceLimitError,
+  downloadChapterImages,
+} from "./chapter-image-downloads"
 import {
   buildCoverOutputFilename,
   buildImageOutputFilename,
   buildOptionalComicInfoXml,
   normalizeDownloadPath,
 } from "./chapter-processing-helpers"
-import { ZIP_WORKER_FINALIZATION_TIMEOUT_MS } from "@/src/constants/timeouts"
+import {
+  MAX_ARCHIVE_BYTES,
+  MAX_CHAPTER_IMAGES,
+  ZIP_WORKER_FINALIZATION_TIMEOUT_MS,
+} from "@/src/constants/timeouts"
 import type {
   ArchiveNormalizationSettings,
   ChapterDownloadImageFn,
@@ -142,7 +149,16 @@ function initializeArchiveWorker(input: {
     normalizeImageFilenames: normalizeSettings.normalizeImageFilenames,
     imagePaddingDigits: normalizeSettings.imagePaddingDigits,
     totalImages,
+    maxArchiveBytes: MAX_ARCHIVE_BYTES,
   })
+}
+
+function assertChapterImageCount(imageCount: number): void {
+  if (imageCount > MAX_CHAPTER_IMAGES) {
+    throw new ChapterResourceLimitError(
+      `Chapter image count exceeds ${MAX_CHAPTER_IMAGES} image limit (got ${imageCount})`
+    )
+  }
 }
 
 function addComicInfoToArchiveWorker(input: {
@@ -342,6 +358,7 @@ export async function processNoneFormatChapter(
     coverImage,
     seriesMetadata,
   } = opts
+  assertChapterImageCount(urls.length + (coverImage ? 1 : 0))
   const chapterDir = chapter.resolvedPath || sanitizeFilename(chapter.title)
   const total = urls.length
   const outputCount = total + (coverImage ? 1 : 0) + (includeComicInfo ? 1 : 0)
@@ -440,6 +457,7 @@ export async function processNoneFormatChapter(
     onProgress,
     onImageDownloaded: opts.onImageDownloaded,
     downloadImage,
+    initialAggregateBytes: coverImage?.data.byteLength ?? 0,
     onDownloaded: async ({ index, result }) => {
       if (abortSignal?.aborted) throw new Error("job-cancelled")
       const filename = buildImageOutputFilename({
@@ -615,6 +633,7 @@ export async function processArchiveFormatChapter(
     coverImage,
     seriesMetadata,
   } = opts
+  assertChapterImageCount(urls.length + (coverImage ? 1 : 0))
 
   const finalPath =
     chapter.resolvedPath || `${sanitizeFilename(chapter.title)}.${format}`
@@ -685,6 +704,7 @@ export async function processArchiveFormatChapter(
         onProgress,
         onImageDownloaded: opts.onImageDownloaded,
         downloadImage,
+        initialAggregateBytes: coverImage?.data.byteLength ?? 0,
         mapImageIndex: (index) => index + (coverImage ? 1 : 0),
         collectFailureReasons: true,
         onDownloaded: ({ index, result }) => {

@@ -7,6 +7,17 @@ import type {
   ChapterDownloadImageResult,
   ChapterProcessingRuntime,
 } from "./chapter-processing-types"
+import {
+  MAX_CHAPTER_IMAGE_BYTES,
+  MAX_CHAPTER_IMAGES,
+} from "@/src/constants/timeouts"
+
+export class ChapterResourceLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "ChapterResourceLimitError"
+  }
+}
 
 type DownloadChapterImageSuccess = {
   url: string
@@ -41,6 +52,7 @@ type DownloadChapterImagesOptions = {
   mapImageIndex?: (index: number) => number
   collectFailureReasons?: boolean
   isFatalError?: (error: unknown) => boolean
+  initialAggregateBytes?: number
 }
 
 type DownloadChapterImagesResult = {
@@ -71,7 +83,18 @@ export async function downloadChapterImages(
     mapImageIndex,
     collectFailureReasons = false,
     isFatalError,
+    initialAggregateBytes = 0,
   } = input
+  if (urls.length > MAX_CHAPTER_IMAGES) {
+    throw new ChapterResourceLimitError(
+      `Chapter image count exceeds ${MAX_CHAPTER_IMAGES} image limit (got ${urls.length})`
+    )
+  }
+  if (initialAggregateBytes > MAX_CHAPTER_IMAGE_BYTES) {
+    throw new ChapterResourceLimitError(
+      `Chapter image bytes exceed ${MAX_CHAPTER_IMAGE_BYTES} byte limit (got ${initialAggregateBytes})`
+    )
+  }
   const imageConcurrency = rateLimitSettings.image.concurrency
   const downloadQueue = new PromiseQueue(imageConcurrency)
   let processed = 0
@@ -80,6 +103,9 @@ export async function downloadChapterImages(
   const total = urls.length
   const failedUrls: string[] = []
   const failedReasons: string[] = []
+  let committedBytes = initialAggregateBytes
+  let reservedBytes = 0
+  let resourceLimitMessage: string | null = null
   const imageDownloadContext = {
     ...(integrationContext ?? {}),
     rateLimitSettings,
@@ -97,6 +123,41 @@ export async function downloadChapterImages(
     }
   }
 
+  const createImageByteState = () => ({
+    receivedBytes: 0,
+    reservedBytes: 0,
+  })
+  const releaseImageBytes = (
+    state: ReturnType<typeof createImageByteState>
+  ) => {
+    reservedBytes -= state.reservedBytes
+    state.receivedBytes = 0
+    state.reservedBytes = 0
+  }
+  const reserveImageBytes = (
+    state: ReturnType<typeof createImageByteState>,
+    bytes: number
+  ): void => {
+    if (bytes <= 0) return
+    const nextTotal = committedBytes + reservedBytes + bytes
+    if (nextTotal > MAX_CHAPTER_IMAGE_BYTES) {
+      resourceLimitMessage =
+        resourceLimitMessage ??
+        `Chapter image bytes exceed ${MAX_CHAPTER_IMAGE_BYTES} byte limit (got ${nextTotal})`
+      throw new ChapterResourceLimitError(resourceLimitMessage)
+    }
+    reservedBytes += bytes
+    state.reservedBytes += bytes
+  }
+  const commitImageBytes = (
+    state: ReturnType<typeof createImageByteState>
+  ): void => {
+    committedBytes += state.reservedBytes
+    reservedBytes -= state.reservedBytes
+    state.reservedBytes = 0
+    state.receivedBytes = 0
+  }
+
   const tasks: Promise<void>[] = []
   abortSignal?.addEventListener("abort", cancelPendingDownloads, {
     once: true,
@@ -107,11 +168,15 @@ export async function downloadChapterImages(
       const imageIndex = mapImageIndex ? mapImageIndex(i) : i
       tasks.push(
         downloadQueue.add(async () => {
+          const imageByteState = createImageByteState()
+          const reportImageBytes = async (bytesReceived: number) => {
+            const normalizedBytes = Math.max(0, Math.trunc(bytesReceived))
+            const delta = normalizedBytes - imageByteState.receivedBytes
+            reserveImageBytes(imageByteState, delta)
+            imageByteState.receivedBytes = normalizedBytes
+            await emitInFlightProgress()
+          }
           try {
-            // Single atomic abort check at task start — the outer loop check
-            // was removed because it created a race window between the check
-            // and the queue dispatch. This in-task check plus the rate-limiter
-            // re-check below fully covers cancellation.
             if (abortSignal?.aborted) throw new Error("job-cancelled")
             const result =
               await runtime.withImageRetries<ChapterDownloadImageResult>(
@@ -120,27 +185,48 @@ export async function downloadChapterImages(
                     integrationId,
                     "image",
                     () => {
-                      // Re-check abort after rate-limit scheduling wait — the task may
-                      // have been queued behind other tasks in the rate limiter while
-                      // the abort signal fired in the interim.
                       if (abortSignal?.aborted) {
                         throw new Error("job-cancelled")
                       }
                       return downloadImage(url, {
                         signal: abortSignal,
                         context: imageDownloadContext,
-                        onBytesReceived: emitInFlightProgress,
+                        onBytesReceived: reportImageBytes,
                       })
                     },
                     rateLimitSettings.image
                   ),
-                { onAttemptStart: emitInFlightProgress }
+                {
+                  onAttemptStart: async (attempt) => {
+                    if (attempt > 1) releaseImageBytes(imageByteState)
+                    await emitInFlightProgress()
+                  },
+                }
               )
+            if (resourceLimitMessage) {
+              throw new ChapterResourceLimitError(resourceLimitMessage)
+            }
+            const resultBytes = result.data.byteLength
+            if (resultBytes > imageByteState.reservedBytes) {
+              reserveImageBytes(
+                imageByteState,
+                resultBytes - imageByteState.reservedBytes
+              )
+            } else if (resultBytes < imageByteState.reservedBytes) {
+              const released = imageByteState.reservedBytes - resultBytes
+              reservedBytes -= released
+              imageByteState.reservedBytes = resultBytes
+            }
             await onDownloaded({ url, index: imageIndex, result })
+            commitImageBytes(imageByteState)
             succeeded++
             onImageDownloaded?.()
           } catch (error) {
-            if (isFatalError?.(error)) {
+            releaseImageBytes(imageByteState)
+            if (
+              error instanceof ChapterResourceLimitError ||
+              isFatalError?.(error)
+            ) {
               downloadQueue.cancelPending(error)
             }
             failed++
@@ -168,6 +254,10 @@ export async function downloadChapterImages(
     await Promise.allSettled(tasks)
   } finally {
     abortSignal?.removeEventListener("abort", cancelPendingDownloads)
+  }
+
+  if (resourceLimitMessage) {
+    throw new ChapterResourceLimitError(resourceLimitMessage)
   }
 
   logger.debug("chapter image download batch complete", {

@@ -1,3 +1,8 @@
+import {
+  assertDecodedImageWithinLimits,
+  readEncodedImageDimensions,
+} from "@/src/runtime/decoded-image-limits"
+
 const PIXIV_DESCRAMBLE_MAGIC_KEY = "4wXCKprMMoxnyJ3PocJFs4CYbfnbazNe"
 
 const rotateLeft = (value: number, shift: number): number => {
@@ -139,10 +144,17 @@ export const descramblePixivImage = async (
     )
   }
 
+  const dimensions = readEncodedImageDimensions(buffer, mimeType)
+  assertDecodedImageWithinLimits(
+    dimensions.width,
+    dimensions.height,
+    "Pixiv Comic"
+  )
   const sourceBlob = new Blob([buffer], { type: mimeType })
   const bitmap = await createImageBitmap(sourceBlob)
 
   try {
+    assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Pixiv Comic")
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
     const context = canvas.getContext("2d")
     if (!context) {
