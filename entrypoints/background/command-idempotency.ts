@@ -2,6 +2,11 @@ import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
 const MAX_COMMAND_RESULTS = 128
 const COMMAND_RESULT_TTL_MS = 24 * 60 * 60 * 1000
+export const COMMAND_PENDING_RECONCILIATION_WINDOW_MS = 5 * 60 * 1000
+const UNKNOWN_COMMAND_OUTCOME = {
+  success: false,
+  error: "Command outcome could not be reconciled after worker interruption",
+} as const
 
 type CommandRecord = {
   commandId: string
@@ -73,14 +78,37 @@ function pruneRecords(
     .filter(
       ([, record]) =>
         record.state === "completed" &&
-        now - record.startedAt <= COMMAND_RESULT_TTL_MS
+        now - (record.completedAt ?? record.startedAt) <= COMMAND_RESULT_TTL_MS
     )
     .sort((left, right) => right[1].startedAt - left[1].startedAt)
     .slice(0, MAX_COMMAND_RESULTS)
-  // A pending record is the durable proof that its side effect may already
-  // have happened. Never evict that proof because of age or completed-result
-  // cache pressure; doing so would make a replay execute the mutation again.
+  // Pending records inside the reconciliation window remain durable proof that
+  // their side effect may already have happened. Expired records are converted
+  // to a durable unknown/failure result before this pruning step.
   return Object.fromEntries([...pending, ...completed])
+}
+
+function reconcileExpiredPendingRecords(
+  records: CommandRecordMap,
+  now: number
+): boolean {
+  let changed = false
+  for (const [commandId, record] of Object.entries(records)) {
+    if (
+      record.state !== "pending" ||
+      now - record.startedAt < COMMAND_PENDING_RECONCILIATION_WINDOW_MS
+    ) {
+      continue
+    }
+    records[commandId] = {
+      ...record,
+      state: "completed",
+      completedAt: now,
+      result: structuredClone(UNKNOWN_COMMAND_OUTCOME),
+    }
+    changed = true
+  }
+  return changed
 }
 
 async function withCommandStorage<T>(operation: () => Promise<T>): Promise<T> {
@@ -122,6 +150,11 @@ export async function executeIdempotentCommand<T>(input: {
   const operation = (async (): Promise<T> => {
     const replay = await withCommandStorage(async () => {
       const records = await readRecords()
+      const now = Date.now()
+      const reconciledExpiredPending = reconcileExpiredPendingRecords(
+        records,
+        now
+      )
       const existing = records[input.commandId]
       if (!existing) {
         records[input.commandId] = {
@@ -129,15 +162,17 @@ export async function executeIdempotentCommand<T>(input: {
           type: input.type,
           fingerprint: messageFingerprint,
           state: "pending",
-          startedAt: Date.now(),
+          startedAt: now,
         }
         await chrome.storage.local.set({
-          [LOCAL_STORAGE_KEYS.commandResults]: pruneRecords(
-            records,
-            Date.now()
-          ),
+          [LOCAL_STORAGE_KEYS.commandResults]: pruneRecords(records, now),
         })
         return { kind: "new" as const }
+      }
+      if (reconciledExpiredPending) {
+        await chrome.storage.local.set({
+          [LOCAL_STORAGE_KEYS.commandResults]: pruneRecords(records, now),
+        })
       }
       if (
         existing.type !== input.type ||

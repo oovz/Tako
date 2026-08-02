@@ -169,6 +169,36 @@ describe("pending native output store", () => {
     })
   })
 
+  it("describes durable Chrome download identities while a job is waiting", async () => {
+    const store = createPendingDownloadsStore()
+    await store.prepare(
+      preparedRecord({
+        outputId: "job-1:archive:1",
+        outputIndex: 1,
+        outputCount: 2,
+        createdAt: 1_500,
+      })
+    )
+    await store.attachDownload("job-1:archive:1", 102)
+    await store.prepare(
+      preparedRecord({
+        outputId: "job-1:archive:0",
+        outputIndex: 0,
+        outputCount: 2,
+        createdAt: 1_000,
+      })
+    )
+    await store.attachDownload("job-1:archive:0", 101)
+    await store.markTerminal(102, "complete")
+
+    expect(store.describeJobWait("job-1")).toEqual({
+      downloadIds: [101, 102],
+      since: 1_000,
+      lastObservedAt: expect.any(Number),
+    })
+    expect(store.describeJobWait("missing-job")).toBeNull()
+  })
+
   it("does not expose an intent whose durable write failed", async () => {
     const store = createPendingDownloadsStore()
     vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(
@@ -185,27 +215,36 @@ describe("pending native output store", () => {
     })
   })
 
-  it("keeps a prepared record retryable when download-id persistence fails", async () => {
+  it("keeps an accepted download observable when download-id persistence fails", async () => {
     const store = createPendingDownloadsStore()
     await store.prepare(preparedRecord())
     vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(
       new Error("attachment write failed")
     )
 
-    await expect(store.attachDownload("job-1:archive:0", 101)).rejects.toThrow(
-      "attachment write failed"
-    )
-    expect(store.get(101)).toBeUndefined()
-    expect(store.getByOutputId("job-1:archive:0")).toMatchObject({
-      state: "prepared",
-    })
-    expect(store.getByOutputId("job-1:archive:0")).not.toHaveProperty(
-      "downloadId"
-    )
-
     await expect(
       store.attachDownload("job-1:archive:0", 101)
     ).resolves.toMatchObject({ state: "in_progress", downloadId: 101 })
+    expect(store.get(101)).toMatchObject({
+      state: "in_progress",
+      downloadId: 101,
+    })
+    expect(store.getByOutputId("job-1:archive:0")).toMatchObject({
+      state: "in_progress",
+      downloadId: 101,
+    })
+    await expect(
+      store.attachDownload("job-1:archive:0", 102)
+    ).resolves.toMatchObject({ state: "in_progress", downloadId: 101 })
+
+    await store.markTerminal(101, "complete")
+    expect(store.get(101)).toMatchObject({ state: "complete", downloadId: 101 })
+    expect(localStore[LOCAL_STORAGE_KEYS.pendingOutputs]).toEqual({
+      "job-1:archive:0": expect.objectContaining({
+        state: "complete",
+        downloadId: 101,
+      }),
+    })
   })
 
   it("does not double-count a pre-handoff failure record", async () => {

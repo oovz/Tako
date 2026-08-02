@@ -1090,6 +1090,28 @@ describe("background message router branch behavior", () => {
     expect(mocks.enqueueStartDownloadTask).not.toHaveBeenCalled()
   })
 
+  it("rejects START_DOWNLOAD from non-extension sender contexts", async () => {
+    mocks.classifySenderOrigin.mockReturnValue("content-script")
+    const harness = createHarness()
+
+    await expect(
+      handleBackgroundMessage(
+        startDownloadMessage,
+        {
+          id: chrome.runtime.id,
+          url: "https://comic.pixiv.net/works/9012",
+          tab: { id: 12 } as chrome.tabs.Tab,
+        },
+        harness.deps
+      )
+    ).resolves.toEqual({
+      success: false,
+      error: "START_DOWNLOAD is only accepted from extension pages",
+    })
+    expect(harness.ensureStateManagerInitialized).not.toHaveBeenCalled()
+    expect(mocks.enqueueStartDownloadTask).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{ success: false, reason: "queue full" }, "queue full"],
     [{ success: false }, "Failed to enqueue download task"],

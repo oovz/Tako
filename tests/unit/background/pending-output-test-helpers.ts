@@ -133,6 +133,23 @@ export function createPendingDownloadsStoreStub(
         }
       }
     ),
+    describeJobWait: vi.fn((jobId: string) => {
+      const records = [...byOutputId.values()].filter(
+        (record) => record.jobId === jobId
+      )
+      const downloadIds = records
+        .map((record) => record.downloadId)
+        .filter((downloadId): downloadId is number => downloadId !== undefined)
+        .sort((left, right) => left - right)
+      if (downloadIds.length === 0) return null
+      return {
+        downloadIds: [...new Set(downloadIds)],
+        since: Math.min(...records.map((record) => record.createdAt)),
+        lastObservedAt: Math.max(
+          ...records.map((record) => record.terminalAt ?? record.createdAt)
+        ),
+      }
+    }),
     snapshot: vi.fn(() => new Map(byOutputId)),
     hasBlobDependencies: vi.fn(() =>
       [...byOutputId.values()].some(

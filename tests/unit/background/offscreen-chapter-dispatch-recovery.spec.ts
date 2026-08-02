@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { dispatchOffscreenChapterWithRecovery } from "@/entrypoints/background/download-queue-runner"
+import { dispatchOffscreenChapterWithRecovery } from "@/entrypoints/background/offscreen-chapter-dispatch"
 import type { OffscreenDownloadChapterMessage } from "@/src/types/offscreen-messages"
+
+const CLOSED_PORT_ERROR =
+  "The message port closed before a response was received."
 
 const mocks = vi.hoisted(() => ({
   queryOffscreenJob: vi.fn(),
@@ -72,7 +75,7 @@ describe("offscreen chapter dispatch recovery", () => {
     const ensureOffscreenReady = vi.fn(async () => undefined)
     const isDispatchStillCurrent = vi.fn(async () => true)
     sendMessage
-      .mockRejectedValueOnce(new Error("message channel closed"))
+      .mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
       .mockResolvedValueOnce({ success: true, status: "completed" })
 
     await expect(
@@ -91,7 +94,7 @@ describe("offscreen chapter dispatch recovery", () => {
 
   it("recovers a cached terminal outcome without dispatching again", async () => {
     const message = dispatchMessage()
-    sendMessage.mockRejectedValueOnce(new Error("message channel closed"))
+    sendMessage.mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
     mocks.queryOffscreenJob.mockResolvedValueOnce({
       jobId: "job-1",
       attempt: 1,
@@ -130,7 +133,7 @@ describe("offscreen chapter dispatch recovery", () => {
   it("does not revive a task whose lease is no longer current", async () => {
     const message = dispatchMessage()
     const ensureOffscreenReady = vi.fn(async () => undefined)
-    sendMessage.mockRejectedValueOnce(new Error("message channel closed"))
+    sendMessage.mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
 
     await expect(
       dispatchOffscreenChapterWithRecovery({
@@ -138,7 +141,7 @@ describe("offscreen chapter dispatch recovery", () => {
         ensureOffscreenReady,
         isDispatchStillCurrent: vi.fn(async () => false),
       })
-    ).rejects.toThrow("message channel closed")
+    ).rejects.toThrow(CLOSED_PORT_ERROR)
     expect(ensureOffscreenReady).not.toHaveBeenCalled()
     expect(sendMessage).toHaveBeenCalledTimes(1)
   })
@@ -150,7 +153,7 @@ describe("offscreen chapter dispatch recovery", () => {
       .fn<() => Promise<boolean>>()
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false)
-    sendMessage.mockRejectedValueOnce(new Error("message channel closed"))
+    sendMessage.mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
 
     await expect(
       dispatchOffscreenChapterWithRecovery({
@@ -158,7 +161,7 @@ describe("offscreen chapter dispatch recovery", () => {
         ensureOffscreenReady,
         isDispatchStillCurrent,
       })
-    ).rejects.toThrow("message channel closed")
+    ).rejects.toThrow(CLOSED_PORT_ERROR)
 
     expect(ensureOffscreenReady).toHaveBeenCalledTimes(1)
     expect(isDispatchStillCurrent).toHaveBeenCalledTimes(2)
@@ -168,8 +171,8 @@ describe("offscreen chapter dispatch recovery", () => {
   it("uses a terminal query result when the replacement channel also closes", async () => {
     const message = dispatchMessage()
     sendMessage
-      .mockRejectedValueOnce(new Error("first channel closed"))
-      .mockRejectedValueOnce(new Error("second channel closed"))
+      .mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
+      .mockRejectedValueOnce(new Error(CLOSED_PORT_ERROR))
     mocks.queryOffscreenJob.mockResolvedValueOnce(null).mockResolvedValueOnce({
       jobId: "job-1",
       attempt: 1,
@@ -198,5 +201,23 @@ describe("offscreen chapter dispatch recovery", () => {
       outputsCommitted: 1,
     })
     expect(sendMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not replay application errors from the offscreen listener", async () => {
+    const message = dispatchMessage()
+    const ensureOffscreenReady = vi.fn(async () => undefined)
+    sendMessage.mockRejectedValueOnce(new Error("provider parser exploded"))
+
+    await expect(
+      dispatchOffscreenChapterWithRecovery({
+        message,
+        ensureOffscreenReady,
+        isDispatchStillCurrent: vi.fn(async () => true),
+      })
+    ).rejects.toThrow("provider parser exploded")
+
+    expect(mocks.queryOffscreenJob).toHaveBeenCalledTimes(1)
+    expect(ensureOffscreenReady).not.toHaveBeenCalled()
+    expect(sendMessage).toHaveBeenCalledTimes(1)
   })
 })

@@ -2,7 +2,11 @@ import {
   LOCAL_STORAGE_KEYS,
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
-import type { PendingOutputRecord } from "@/src/types/queue-state"
+import logger from "@/src/runtime/logger"
+import type {
+  BrowserDownloadWaitState,
+  PendingOutputRecord,
+} from "@/src/types/queue-state"
 
 export interface PendingOutputSummary {
   requested: number
@@ -39,6 +43,7 @@ export interface PendingDownloadsStore {
     requested: number
     failedBeforeHandoff?: number
   }) => Promise<PendingOutputSummary>
+  describeJobWait: (jobId: string) => BrowserDownloadWaitState | null
   snapshot: () => Map<string, PendingOutputRecord>
   hasBlobDependencies: () => boolean
 }
@@ -254,7 +259,19 @@ export function createPendingDownloadsStore(): PendingDownloadsStore {
         }
         const nextRecords = new Map(recordsByOutputId)
         nextRecords.set(outputId, next)
-        await persistThenCommit(nextRecords)
+        try {
+          await persistRecords(nextRecords)
+        } catch (error) {
+          commitRecords(nextRecords)
+          logger.warn("Accepted download ID persistence will be retried", {
+            outputId,
+            downloadId,
+            error,
+          })
+          notifyJobWaiters(next.jobId)
+          return next
+        }
+        commitRecords(nextRecords)
         notifyJobWaiters(next.jobId)
         return next
       })
@@ -370,6 +387,24 @@ export function createPendingDownloadsStore(): PendingDownloadsStore {
           waiters.add(resolve)
           waitersByJobId.set(input.jobId, waiters)
         })
+      }
+    },
+    describeJobWait(jobId) {
+      const records = [...recordsByOutputId.values()].filter(
+        (record) => record.jobId === jobId
+      )
+      const downloadIds = records
+        .map((record) => record.downloadId)
+        .filter((downloadId): downloadId is number => downloadId !== undefined)
+        .sort((left, right) => left - right)
+      if (downloadIds.length === 0) return null
+
+      return {
+        downloadIds: [...new Set(downloadIds)],
+        since: Math.min(...records.map((record) => record.createdAt)),
+        lastObservedAt: Math.max(
+          ...records.map((record) => record.terminalAt ?? record.createdAt)
+        ),
       }
     },
     snapshot() {

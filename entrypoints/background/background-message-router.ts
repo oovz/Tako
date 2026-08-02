@@ -42,32 +42,9 @@ import { applyUiLanguagePreference, t } from "@/src/runtime/i18n"
 import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
 import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 import type { PendingOutputRecord } from "@/src/types/queue-state"
-import type { OffscreenOutputReadyResponse } from "@/src/types/offscreen-messages"
-import {
-  reconcilePendingOutput,
-  reconcilePreparedOutput,
-} from "./native-output-finalizer"
 import { runTaskSideEffectExclusive } from "./download-task-side-effect-gate"
 import { executeIdempotentCommand } from "./command-idempotency"
-
-type OutputReadyIdentity = {
-  jobId: string
-  attempt: number
-  taskId: string
-  chapterId: string
-  blobUrl: string
-  filename: string
-  outputIndex: number
-  outputCount: number
-  outputKind: "archive" | "image"
-}
-
-type OutputReadyOperation = {
-  identity: OutputReadyIdentity
-  promise: Promise<OffscreenOutputReadyResponse>
-}
-
-const outputReadyOperations = new Map<string, OutputReadyOperation>()
+import { handleOffscreenOutputReady } from "./offscreen-output-ready-handler"
 
 const IDEMPOTENT_COMMAND_TYPES = new Set<ExtensionMessage["type"]>([
   "STATE_ACTION",
@@ -87,36 +64,6 @@ function readCommandId(message: ExtensionMessage): string | undefined {
   return typeof commandId === "string" && commandId.length > 0
     ? commandId
     : undefined
-}
-
-async function runOutputReadySingleFlight(
-  outputId: string,
-  identity: OutputReadyIdentity,
-  onCollision: (
-    currentIdentity: OutputReadyIdentity
-  ) => Promise<OffscreenOutputReadyResponse>,
-  operation: () => Promise<OffscreenOutputReadyResponse>
-): Promise<OffscreenOutputReadyResponse> {
-  const current = outputReadyOperations.get(outputId)
-  if (current) {
-    const sameIdentity = Object.entries(identity).every(
-      ([key, value]) =>
-        current.identity[key as keyof OutputReadyIdentity] === value
-    )
-    if (!sameIdentity) return await onCollision(current.identity)
-    return await current.promise
-  }
-
-  const pending = operation()
-  const entry = { identity, promise: pending }
-  outputReadyOperations.set(outputId, entry)
-  try {
-    return await pending
-  } finally {
-    if (outputReadyOperations.get(outputId) === entry) {
-      outputReadyOperations.delete(outputId)
-    }
-  }
 }
 
 export const offscreenOnlyMessages = [
@@ -547,278 +494,7 @@ export async function handleBackgroundMessage(
           }
         }
 
-        try {
-          const {
-            jobId,
-            attempt,
-            outputId,
-            taskId,
-            chapterId,
-            fileUrl,
-            filename,
-            outputIndex,
-            outputCount,
-            outputKind,
-          } = parsedMessage.payload
-
-          logger.debug(
-            "[background-message-router] Processing OFFSCREEN_OUTPUT_READY",
-            {
-              jobId,
-              outputId,
-              taskId,
-              chapterId,
-              filename,
-            }
-          )
-
-          await deps.ensureStateManagerInitialized()
-
-          const stateManager = deps.getStateManager()
-          return await runOutputReadySingleFlight(
-            outputId,
-            {
-              jobId,
-              attempt,
-              taskId,
-              chapterId,
-              blobUrl: fileUrl,
-              filename,
-              outputIndex,
-              outputCount,
-              outputKind,
-            },
-            async (currentIdentity) => {
-              if (currentIdentity.blobUrl !== fileUrl) {
-                await deps.requestBlobRevocation({
-                  jobId,
-                  attempt,
-                  outputId,
-                  blobUrl: fileUrl,
-                })
-              }
-              return { success: false, error: "Output identity collision" }
-            },
-            () =>
-              runTaskSideEffectExclusive(taskId, async () => {
-                const finalizerDependencies = {
-                  stateManager,
-                  pendingOutputs: deps.pendingDownloadsStore,
-                  requestBlobRevocation: deps.requestBlobRevocation,
-                }
-                let existing =
-                  deps.pendingDownloadsStore.getByOutputId(outputId)
-                if (existing) {
-                  if (
-                    existing.jobId !== jobId ||
-                    existing.attempt !== attempt ||
-                    existing.taskId !== taskId ||
-                    existing.chapterId !== chapterId ||
-                    existing.blobUrl !== fileUrl ||
-                    existing.filename !== filename ||
-                    existing.outputIndex !== outputIndex ||
-                    existing.outputCount !== outputCount ||
-                    existing.outputKind !== outputKind
-                  ) {
-                    if (existing.blobUrl !== fileUrl) {
-                      await deps.requestBlobRevocation({
-                        jobId,
-                        attempt,
-                        outputId,
-                        blobUrl: fileUrl,
-                      })
-                    }
-                    return {
-                      success: false,
-                      error: "Output identity collision",
-                    }
-                  }
-
-                  if (existing.state === "prepared") {
-                    try {
-                      existing = await reconcilePreparedOutput(
-                        finalizerDependencies,
-                        existing
-                      )
-                    } catch (error) {
-                      logger.warn("Prepared output reconciliation will retry", {
-                        outputId,
-                        error,
-                      })
-                      return { success: true, accepted: "unknown" }
-                    }
-                  }
-                  if (existing.downloadId !== undefined) {
-                    try {
-                      await reconcilePendingOutput(
-                        finalizerDependencies,
-                        existing.downloadId
-                      )
-                    } catch (error) {
-                      logger.warn("Accepted output reconciliation will retry", {
-                        outputId,
-                        downloadId: existing.downloadId,
-                        error,
-                      })
-                      return {
-                        success: true,
-                        accepted: "unknown",
-                        id: existing.downloadId,
-                      }
-                    }
-                    return {
-                      success: true,
-                      accepted: true,
-                      id: existing.downloadId,
-                    }
-                  }
-                  if (existing.state === "interrupted") {
-                    return {
-                      success: false,
-                      error: existing.error ?? "Output handoff was interrupted",
-                    }
-                  }
-                  // A prepared record with no observable download remains an
-                  // ambiguous accepted handoff. It owns the Blob and is retried
-                  // by reconciliation; a canceled task must not revoke it.
-                  return { success: true, accepted: "unknown" }
-                }
-
-                const currentLease = await activeDispatchLeaseStore.get()
-                if (
-                  !currentLease ||
-                  currentLease.jobId !== jobId ||
-                  currentLease.attempt !== attempt ||
-                  currentLease.taskId !== taskId ||
-                  currentLease.chapterId !== chapterId
-                ) {
-                  await deps.requestBlobRevocation({
-                    jobId,
-                    attempt,
-                    outputId,
-                    blobUrl: fileUrl,
-                  })
-                  return {
-                    success: false,
-                    error: "Output belongs to a stale job",
-                  }
-                }
-
-                const task = (
-                  await stateManager.getGlobalState()
-                ).downloadQueue.find((queuedTask) => queuedTask.id === taskId)
-                if (task?.status !== "downloading") {
-                  await deps.requestBlobRevocation({
-                    jobId,
-                    attempt,
-                    outputId,
-                    blobUrl: fileUrl,
-                  })
-                  return {
-                    success: false,
-                    error: "Download task is no longer active",
-                  }
-                }
-
-                if (!existing) {
-                  await deps.pendingDownloadsStore.prepare({
-                    outputId,
-                    jobId,
-                    attempt,
-                    taskId,
-                    chapterId,
-                    blobUrl: fileUrl,
-                    filename,
-                    outputIndex,
-                    outputCount,
-                    outputKind,
-                    state: "prepared",
-                    createdAt: Date.now(),
-                  })
-                }
-
-                const settings = await settingsService.getSettings()
-                const conflictAction = task.settingsSnapshot.conflictPolicy
-                const saveAs = settings.downloads.suppressSaveAsDialog === false
-                let downloadId: number
-                try {
-                  const acceptedId = await chrome.downloads.download({
-                    url: fileUrl,
-                    filename,
-                    conflictAction,
-                    saveAs,
-                  })
-                  if (typeof acceptedId !== "number") {
-                    throw new Error(
-                      "downloads.download returned no download id"
-                    )
-                  }
-                  downloadId = acceptedId
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? error.message
-                      : "Chrome rejected the download"
-                  await deps.pendingDownloadsStore.markPreparedInterrupted(
-                    outputId,
-                    message
-                  )
-                  try {
-                    await deps.requestBlobRevocation({
-                      jobId,
-                      attempt,
-                      outputId,
-                      blobUrl: fileUrl,
-                    })
-                    await deps.pendingDownloadsStore.markBlobRevoked(outputId)
-                  } catch (revocationError) {
-                    logger.warn("Blob URL revocation will be retried", {
-                      outputId,
-                      revocationError,
-                    })
-                  }
-                  return { success: false, error: message }
-                }
-
-                try {
-                  const attached =
-                    await deps.pendingDownloadsStore.attachDownload(
-                      outputId,
-                      downloadId
-                    )
-                  if (!attached || attached.downloadId !== downloadId) {
-                    throw new Error(
-                      "Failed to persist native download acceptance"
-                    )
-                  }
-                  await reconcilePendingOutput(
-                    finalizerDependencies,
-                    downloadId
-                  )
-                } catch (error) {
-                  // downloads.download() already returned an ID. Any later failure
-                  // is an ambiguous/durable-recovery condition, never permission
-                  // to revoke the Blob that Chrome may still be streaming.
-                  logger.warn("Native output acceptance will be reconciled", {
-                    outputId,
-                    downloadId,
-                    error,
-                  })
-                  return {
-                    success: true,
-                    accepted: "unknown",
-                    id: downloadId,
-                  }
-                }
-                return { success: true, accepted: true, id: downloadId }
-              })
-          )
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : "downloads.download failed"
-          logger.error("OFFSCREEN_OUTPUT_READY failed:", error)
-          return { success: false, error: errorMessage }
-        }
+        return await handleOffscreenOutputReady(parsedMessage, deps)
       }
       case "RETRY_FAILED_CHAPTERS": {
         const parsedMessage = parseActionMessage(
@@ -1026,6 +702,15 @@ export async function handleBackgroundMessage(
         const parsedMessage = parseActionMessage(message, "START_DOWNLOAD")
         if (!parsedMessage) {
           return { success: false, error: "Invalid START_DOWNLOAD payload" }
+        }
+
+        if (
+          classifySenderOrigin(sender, chrome.runtime.id) !== "extension-page"
+        ) {
+          return {
+            success: false,
+            error: "START_DOWNLOAD is only accepted from extension pages",
+          }
         }
 
         await deps.ensureStateManagerInitialized()

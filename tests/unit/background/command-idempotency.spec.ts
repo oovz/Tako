@@ -180,7 +180,7 @@ describe("durable command idempotency", () => {
     expect(replayOperation).not.toHaveBeenCalled()
   })
 
-  it("never evicts a pending intent because of age or cache pressure", async () => {
+  it("converts expired pending intent uncertainty to a durable failure", async () => {
     const targetMessage = {
       type: "START_DOWNLOAD",
       commandId: "pending-target",
@@ -225,8 +225,20 @@ describe("durable command idempotency", () => {
       })
     ).resolves.toEqual({
       success: false,
-      error: "Command outcome is pending reconciliation",
+      error:
+        "Command outcome could not be reconciled after worker interruption",
     })
     expect(replayOperation).not.toHaveBeenCalled()
+    expect(
+      (
+        storage[LOCAL_STORAGE_KEYS.commandResults] as Record<
+          string,
+          { state: string; completedAt?: number }
+        >
+      )["pending-target"]
+    ).toMatchObject({
+      state: "completed",
+      completedAt: expect.any(Number),
+    })
   })
 })
