@@ -232,4 +232,23 @@ describe("toQueueTaskSummary", () => {
     expect(retrySummary.isRetryTask).toBe(true)
     expect(restartSummary.isRetryTask).toBe(true)
   })
+
+  it("projects durable block and native-download wait diagnostics", () => {
+    const browserDownloadWait = {
+      downloadIds: [101, 102],
+      since: 1_000,
+      lastObservedAt: 1_500,
+    }
+    const summary = toQueueTaskSummary(
+      makeTask({
+        status: "queued",
+        activeBlock: "provider_network_policy_pending",
+        browserDownloadWait,
+      })
+    )
+
+    expect(summary.activeBlock).toBe("provider_network_policy_pending")
+    expect(summary.browserDownloadWait).toEqual(browserDownloadWait)
+    expect(summary.browserDownloadWait).not.toBe(browserDownloadWait)
+  })
 })

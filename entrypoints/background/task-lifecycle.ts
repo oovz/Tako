@@ -46,12 +46,21 @@ export function normalizeInterruptedTask(
     (chapter) =>
       chapter.status === "completed" || chapter.status === "partial_success"
   ).length
+  const allChaptersCompleted =
+    normalizedChapters.length > 0 &&
+    normalizedChapters.every((chapter) => chapter.status === "completed")
 
   return {
     ...task,
-    status: successfulCount > 0 ? "partial_success" : "failed",
-    errorMessage,
-    errorCategory: "unknown",
+    status: allChaptersCompleted
+      ? "completed"
+      : successfulCount > 0
+        ? "partial_success"
+        : "failed",
+    activeBlock: undefined,
+    browserDownloadWait: undefined,
+    errorMessage: allChaptersCompleted ? undefined : errorMessage,
+    errorCategory: allChaptersCompleted ? undefined : "unknown",
     completed: task.completed ?? now,
     chapters: normalizedChapters,
   }

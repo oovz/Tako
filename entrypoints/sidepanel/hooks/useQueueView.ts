@@ -17,6 +17,20 @@ const QueueTaskSummaryStorageSchema = z.object({
   siteIntegration: z.string(),
   coverUrl: z.unknown().optional(),
   status: DownloadTaskStatusSchema,
+  activeBlock: z
+    .enum([
+      "destination_action_required",
+      "provider_network_policy_pending",
+      "provider_network_policy_action_required",
+    ])
+    .optional(),
+  browserDownloadWait: z
+    .object({
+      downloadIds: z.array(z.number().int().nonnegative()),
+      since: z.number(),
+      lastObservedAt: z.number().optional(),
+    })
+    .optional(),
   chapters: z.object({
     total: z.number(),
     completed: z.number(),
@@ -47,6 +61,8 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
     siteIntegration: data.siteIntegration,
     coverUrl: typeof data.coverUrl === "string" ? data.coverUrl : undefined,
     status: data.status,
+    activeBlock: data.activeBlock,
+    browserDownloadWait: data.browserDownloadWait,
     chapters: {
       total: data.chapters.total,
       completed: data.chapters.completed,

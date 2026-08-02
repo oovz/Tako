@@ -17,6 +17,7 @@ import {
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
 import { projectToQueueView, updateActionBadge } from "@/src/runtime/projection"
+import { normalizeDestinationIssues } from "@/src/runtime/destination-issue-state"
 
 import { normalizePersistedDownloadTask } from "./persisted-download-task"
 import {
@@ -24,15 +25,13 @@ import {
   isMangaPageState,
   resolveVolumeStates,
 } from "./state-shapes"
-import type { ChapterStatus } from "@/src/types/chapter"
-import type { DownloadTaskStatus } from "@/src/shared/download-contract"
 import type {
   ActiveDispatchLease,
+  DestinationIssue,
   DownloadTaskState,
   GlobalAppState,
   PendingUndoAction,
   PendingUndoReceipt,
-  TaskChapter,
 } from "@/src/types/queue-state"
 import type { ChapterState, MangaPageState } from "@/src/types/tab-state"
 import { runDispatchPersistenceExclusive } from "./dispatch-persistence-gate"
@@ -42,6 +41,19 @@ import {
   PENDING_UNDO_WINDOW_MS,
   toPendingUndoReceipt,
 } from "./pending-undo-actions"
+import {
+  beginChapterDispatchInQueue,
+  cancelDownloadingTask,
+  transitionDownloadTaskInQueue,
+  updateDownloadTaskInQueue,
+  updateTaskChapterInQueue,
+  type BeginChapterDispatchTransitionResult,
+  type DownloadingTaskChapterUpdateResult,
+  type DownloadTaskTransitionResult,
+  type TaskChapterUpdate,
+} from "./download-queue-transitions"
+import type { ChapterStatus } from "@/src/types/chapter"
+import type { DownloadTaskStatus } from "@/src/shared/download-contract"
 
 // Re-export helpers for convenience
 export {
@@ -50,16 +62,10 @@ export {
   undoPendingAction,
 } from "./state-actions"
 export { toQueueTaskSummary } from "./queue-task-summary"
-
-export type DownloadTaskTransitionResult =
-  | { success: true; task: DownloadTaskState }
-  | { success: false; reason: "not-found" }
-  | {
-      success: false
-      reason: "invalid-status"
-      currentStatus: DownloadTaskStatus
-    }
-  | { success: false; reason: "active-task-exists" }
+export type {
+  DownloadTaskTransitionResult,
+  DownloadingTaskChapterUpdateResult,
+} from "./download-queue-transitions"
 
 export type RemoveTerminalDownloadTaskResult =
   | { success: true; undo: PendingUndoReceipt }
@@ -70,21 +76,15 @@ export type RemoveTerminalDownloadTaskResult =
       currentStatus: DownloadTaskStatus
     }
 
-export type DownloadingTaskChapterUpdateResult =
-  | { success: true; updated: boolean }
-  | { success: false; reason: "task-not-found" }
-  | { success: false; reason: "chapter-not-found" }
-  | {
-      success: false
-      reason: "task-not-downloading"
-      currentStatus: DownloadTaskStatus
-    }
-
 export type BeginChapterDispatchResult =
   | { success: true; updated: true }
   | Exclude<DownloadingTaskChapterUpdateResult, { success: true }>
   | { success: false; reason: "chapter-not-dispatchable" }
   | { success: false; reason: "dispatch-lease-conflict" }
+
+export type DestinationIssuesMutation =
+  | { type: "upsert"; issue: DestinationIssue }
+  | { type: "clear-task"; taskId: string }
 
 export type CancelDownloadTaskTransitionResult =
   | {
@@ -189,6 +189,7 @@ export class CentralizedStateManager {
       ...structuredClone(action.taskSnapshot),
       status: "canceled",
       activeBlock: undefined,
+      browserDownloadWait: undefined,
       errorMessage: undefined,
       errorCategory: undefined,
       completed: canceledAt,
@@ -560,23 +561,6 @@ export class CentralizedStateManager {
   }
 
   /**
-   * Find chapter index by canonical chapter ID.
-   *
-   * Chapter URLs remain useful for navigation and integration-specific fetches,
-   * but state mutation paths must always resolve chapters by their stable ID.
-   *
-   * @param chapters - Array of chapters to search
-   * @param chapterId - Chapter ID to match
-   * @returns Index of matching chapter, or -1 if not found
-   */
-  private findChapterIndex<T extends { id: string }>(
-    chapters: T[],
-    chapterId: string
-  ): number {
-    return chapters.findIndex((ch) => ch.id === chapterId)
-  }
-
-  /**
    * Get global application state
    *
    * Returns a copy of the committed in-memory state when available. On a cache
@@ -622,6 +606,28 @@ export class CentralizedStateManager {
     await this.syncGlobalStateProjection(committedState)
     await this.syncQueueProjection(committedState.downloadQueue)
     logger.debug("🌍 Global state updated")
+  }
+
+  private async writeGlobalStateAndDestinationIssues(
+    state: GlobalAppState,
+    destinationIssues: DestinationIssue[]
+  ): Promise<void> {
+    const committedState = this.cloneGlobalState({
+      ...state,
+      lastActivity: Date.now(),
+    })
+
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(
+        committedState.downloadQueue
+      ),
+      [LOCAL_STORAGE_KEYS.destinationIssues]:
+        structuredClone(destinationIssues),
+    })
+    this.globalStateCache = this.cloneGlobalState(committedState)
+
+    await this.syncGlobalStateProjection(committedState)
+    await this.syncQueueProjection(committedState.downloadQueue)
   }
 
   private async writeGlobalStateAndPendingUndoActions(
@@ -677,31 +683,15 @@ export class CentralizedStateManager {
     return await this.withGlobalStateLock(() =>
       runDispatchPersistenceExclusive(async () => {
         const globalState = await this.getGlobalState()
-        const taskIndex = globalState.downloadQueue.findIndex(
-          (task) => task.id === input.taskId
-        )
-        if (taskIndex === -1) {
-          return { success: false, reason: "task-not-found" }
-        }
-        const task = globalState.downloadQueue[taskIndex]
-        if (task.status !== "downloading") {
-          return {
-            success: false,
-            reason: "task-not-downloading",
-            currentStatus: task.status,
-          }
-        }
-        const chapterIndex = this.findChapterIndex(
-          task.chapters,
-          input.chapterId
-        )
-        if (chapterIndex === -1) {
-          return { success: false, reason: "chapter-not-found" }
-        }
-        const chapter = task.chapters[chapterIndex]
-        if (chapter.status !== "queued" && chapter.status !== "downloading") {
-          return { success: false, reason: "chapter-not-dispatchable" }
-        }
+        const transition = beginChapterDispatchInQueue({
+          queue: globalState.downloadQueue,
+          taskId: input.taskId,
+          chapterId: input.chapterId,
+          lease: input.lease,
+          now: Date.now(),
+        })
+        const result: BeginChapterDispatchTransitionResult = transition.result
+        if (!result.success) return result
 
         const stored = await chrome.storage.local.get(
           LOCAL_STORAGE_KEYS.activeDispatchLease
@@ -724,16 +714,9 @@ export class CentralizedStateManager {
           return { success: false, reason: "dispatch-lease-conflict" }
         }
 
-        task.chapters[chapterIndex] = {
-          ...chapter,
-          status: "downloading",
-          dispatchAttempt: input.lease.attempt,
-          outputs: { requested: 0, committed: 0, failed: 0 },
-          errorMessage: undefined,
-          lastUpdated: Date.now(),
-        }
+        globalState.downloadQueue = transition.queue
         await this.writeGlobalStateAndDispatchLease(globalState, input.lease)
-        return { success: true, updated: true }
+        return result
       })
     )
   }
@@ -790,30 +773,7 @@ export class CentralizedStateManager {
         )
         const canceledLease =
           currentLease?.taskId === taskId ? currentLease : null
-        const updatedTask: DownloadTaskState = {
-          ...currentTask,
-          status: "canceled",
-          completed: now,
-          chapters: currentTask.chapters.map((chapter) => {
-            if (chapter.status === "downloading") {
-              return {
-                ...chapter,
-                status: "canceled",
-                errorMessage: "Canceled by user",
-                lastUpdated: now,
-              }
-            }
-            if (chapter.status === "queued") {
-              return {
-                ...chapter,
-                status: "skipped",
-                errorMessage: "Skipped after task cancellation",
-                lastUpdated: now,
-              }
-            }
-            return chapter
-          }),
-        }
+        const updatedTask = cancelDownloadingTask(currentTask, now)
         globalState.downloadQueue[taskIndex] = updatedTask
         await this.writeGlobalStateAndDispatchLease(
           globalState,
@@ -880,20 +840,15 @@ export class CentralizedStateManager {
     let foundTask = false
     await this.withGlobalStateLock(async () => {
       const globalState = await this.getGlobalState()
-      const taskIndex = globalState.downloadQueue.findIndex(
-        (task) => task.id === taskId
+      const transition = updateDownloadTaskInQueue(
+        globalState.downloadQueue,
+        taskId,
+        updates
       )
+      foundTask = transition.result.found
+      if (!foundTask) return
 
-      if (taskIndex === -1) {
-        return
-      }
-
-      foundTask = true
-      globalState.downloadQueue[taskIndex] = {
-        ...globalState.downloadQueue[taskIndex],
-        ...updates,
-      }
-
+      globalState.downloadQueue = transition.queue
       await this.writeGlobalState(globalState)
     })
 
@@ -926,41 +881,17 @@ export class CentralizedStateManager {
 
     await this.withGlobalStateLock(async () => {
       const globalState = await this.getGlobalState()
-      const taskIndex = globalState.downloadQueue.findIndex(
-        (task) => task.id === taskId
+      const transition = transitionDownloadTaskInQueue(
+        globalState.downloadQueue,
+        taskId,
+        allowedCurrentStatuses,
+        updates
       )
+      result = transition.result
+      if (!result.success) return
 
-      if (taskIndex === -1) {
-        return
-      }
-
-      const currentTask = globalState.downloadQueue[taskIndex]
-      if (!allowedCurrentStatuses.includes(currentTask.status)) {
-        result = {
-          success: false,
-          reason: "invalid-status",
-          currentStatus: currentTask.status,
-        }
-        return
-      }
-
-      if (
-        updates.status === "downloading" &&
-        globalState.downloadQueue.some(
-          (task) => task.id !== taskId && task.status === "downloading"
-        )
-      ) {
-        result = { success: false, reason: "active-task-exists" }
-        return
-      }
-
-      const updatedTask: DownloadTaskState = {
-        ...currentTask,
-        ...updates,
-      }
-      globalState.downloadQueue[taskIndex] = updatedTask
+      globalState.downloadQueue = transition.queue
       await this.writeGlobalState(globalState)
-      result = { success: true, task: updatedTask }
     })
 
     if (!result.success) {
@@ -974,6 +905,58 @@ export class CentralizedStateManager {
     return result
   }
 
+  async transitionDownloadTaskWithDestinationIssues(
+    taskId: string,
+    allowedCurrentStatuses: readonly DownloadTaskStatus[],
+    updates: Omit<Partial<DownloadTaskState>, "id" | "status"> & {
+      status: DownloadTaskStatus
+    },
+    mutation: DestinationIssuesMutation
+  ): Promise<DownloadTaskTransitionResult> {
+    let result: DownloadTaskTransitionResult = {
+      success: false,
+      reason: "not-found",
+    }
+
+    await this.withGlobalStateLock(async () => {
+      const globalState = await this.getGlobalState()
+      const transition = transitionDownloadTaskInQueue(
+        globalState.downloadQueue,
+        taskId,
+        allowedCurrentStatuses,
+        updates
+      )
+      result = transition.result
+      if (!result.success) return
+
+      const stored = await chrome.storage.local.get(
+        LOCAL_STORAGE_KEYS.destinationIssues
+      )
+      const currentIssues = normalizeDestinationIssues(
+        stored[LOCAL_STORAGE_KEYS.destinationIssues]
+      )
+      const nextIssues =
+        mutation.type === "upsert"
+          ? currentIssues.some((issue) => issue.id === mutation.issue.id)
+            ? currentIssues
+            : [...currentIssues, mutation.issue]
+          : currentIssues.filter((issue) => issue.taskId !== mutation.taskId)
+
+      await this.writeGlobalStateAndDestinationIssues(
+        { ...globalState, downloadQueue: transition.queue },
+        nextIssues
+      )
+    })
+
+    if (!result.success) {
+      logger.warn(
+        `Download task/destination transition rejected: ${taskId}`,
+        result
+      )
+    }
+    return result
+  }
+
   /**
    * Update a specific chapter's status within a download task
    * This ensures the UI can track real-time progress during downloads
@@ -982,62 +965,33 @@ export class CentralizedStateManager {
     taskId: string,
     chapterId: string,
     status: ChapterStatus,
-    updates?: {
-      errorMessage?: string
-      errorCategory?: TaskChapter["errorCategory"]
-      totalImages?: number
-      imagesFailed?: number
-      outputs?: TaskChapter["outputs"]
-      dispatchAttempt?: number
-    }
+    updates?: TaskChapterUpdate
   ): Promise<void> {
     let foundTask = false
     let foundChapter = false
 
     await this.withGlobalStateLock(async () => {
       const globalState = await this.getGlobalState()
-      const taskIndex = globalState.downloadQueue.findIndex(
-        (task) => task.id === taskId
-      )
-
-      if (taskIndex === -1) {
-        return
-      }
-
-      foundTask = true
-      const task = globalState.downloadQueue[taskIndex]
-      const chapterIndex = this.findChapterIndex(task.chapters, chapterId)
-
-      if (chapterIndex === -1) {
-        return
-      }
-
-      foundChapter = true
-      const currentChapter = task.chapters[chapterIndex]
-      const currentChapterIsTerminal =
-        currentChapter.status === "completed" ||
-        currentChapter.status === "failed" ||
-        currentChapter.status === "partial_success" ||
-        currentChapter.status === "canceled" ||
-        currentChapter.status === "skipped"
-      if (currentChapterIsTerminal && status !== currentChapter.status) {
-        return
-      }
-      task.chapters[chapterIndex] = {
-        ...currentChapter,
+      const transition = updateTaskChapterInQueue({
+        queue: globalState.downloadQueue,
+        taskId,
+        chapterId,
         status,
-        errorMessage: updates?.errorMessage,
-        errorCategory: updates?.errorCategory,
-        totalImages:
-          updates?.totalImages ?? task.chapters[chapterIndex].totalImages,
-        imagesFailed:
-          updates?.imagesFailed ?? task.chapters[chapterIndex].imagesFailed,
-        outputs: updates?.outputs ?? currentChapter.outputs,
-        dispatchAttempt:
-          updates?.dispatchAttempt ?? currentChapter.dispatchAttempt,
-        lastUpdated: Date.now(),
+        updates,
+        now: Date.now(),
+        requireDownloadingTask: false,
+      })
+      if (transition.result.success) {
+        foundTask = true
+        foundChapter = true
+      } else {
+        foundTask = transition.result.reason !== "task-not-found"
+        foundChapter =
+          foundTask && transition.result.reason !== "chapter-not-found"
       }
+      if (!transition.result.success || !transition.result.updated) return
 
+      globalState.downloadQueue = transition.queue
       await this.writeGlobalState(globalState)
     })
 
@@ -1064,63 +1018,26 @@ export class CentralizedStateManager {
     taskId: string,
     chapterId: string,
     status: ChapterStatus,
-    updates?: {
-      errorMessage?: string
-      errorCategory?: TaskChapter["errorCategory"]
-      totalImages?: number
-      imagesFailed?: number
-      outputs?: TaskChapter["outputs"]
-      dispatchAttempt?: number
-    }
+    updates?: TaskChapterUpdate
   ): Promise<DownloadingTaskChapterUpdateResult> {
     return await this.withGlobalStateLock(async () => {
       const globalState = await this.getGlobalState()
-      const taskIndex = globalState.downloadQueue.findIndex(
-        (task) => task.id === taskId
-      )
-      if (taskIndex === -1) {
-        return { success: false, reason: "task-not-found" }
-      }
-
-      const task = globalState.downloadQueue[taskIndex]
-      if (task.status !== "downloading") {
-        return {
-          success: false,
-          reason: "task-not-downloading",
-          currentStatus: task.status,
-        }
-      }
-
-      const chapterIndex = this.findChapterIndex(task.chapters, chapterId)
-      if (chapterIndex === -1) {
-        return { success: false, reason: "chapter-not-found" }
-      }
-
-      const currentChapter = task.chapters[chapterIndex]
-      const currentChapterIsTerminal =
-        currentChapter.status === "completed" ||
-        currentChapter.status === "failed" ||
-        currentChapter.status === "partial_success" ||
-        currentChapter.status === "canceled" ||
-        currentChapter.status === "skipped"
-      if (currentChapterIsTerminal && status !== currentChapter.status) {
-        return { success: true, updated: false }
-      }
-
-      task.chapters[chapterIndex] = {
-        ...currentChapter,
+      const transition = updateTaskChapterInQueue({
+        queue: globalState.downloadQueue,
+        taskId,
+        chapterId,
         status,
-        errorMessage: updates?.errorMessage,
-        errorCategory: updates?.errorCategory,
-        totalImages: updates?.totalImages ?? currentChapter.totalImages,
-        imagesFailed: updates?.imagesFailed ?? currentChapter.imagesFailed,
-        outputs: updates?.outputs ?? currentChapter.outputs,
-        dispatchAttempt:
-          updates?.dispatchAttempt ?? currentChapter.dispatchAttempt,
-        lastUpdated: Date.now(),
+        updates,
+        now: Date.now(),
+        requireDownloadingTask: true,
+      })
+      if (!transition.result.success || !transition.result.updated) {
+        return transition.result
       }
+
+      globalState.downloadQueue = transition.queue
       await this.writeGlobalState(globalState)
-      return { success: true, updated: true }
+      return transition.result
     })
   }
 

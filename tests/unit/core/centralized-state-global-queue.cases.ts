@@ -3,6 +3,7 @@ import {
   createActiveDispatchLeaseStore,
   createDispatchLease,
 } from "@/src/runtime/active-dispatch-lease"
+import { createPendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
 import {
   LOCAL_STORAGE_KEYS,
   SESSION_STORAGE_KEYS,
@@ -59,6 +60,169 @@ export function registerCentralizedStateGlobalQueueCases(): void {
 
       const globalState = await stateManager.getGlobalState()
       expect(globalState.lastActivity).toBeGreaterThan(beforeUpdate)
+    })
+
+    it("preserves legacy queue records and related durable state across two worker restarts", async () => {
+      const { CentralizedStateManager } =
+        await import("@/src/runtime/centralized-state")
+
+      const legacyBlockedTask = {
+        ...makeDownloadTask({
+          id: "legacy-blocked",
+          siteIntegrationId: "manhuagui",
+          status: "queued",
+          activeBlock: "provider_network_policy_pending",
+          chapters: [
+            {
+              id: "blocked-chapter",
+              url: "https://www.manhuagui.com/comic/19430/219425.html",
+              title: "Blocked chapter",
+              index: 1,
+              status: "queued",
+              lastUpdated: 10,
+            },
+          ],
+        }),
+        settingsSnapshot: {
+          archiveFormat: "none",
+          fsaCollisionPolicy: "skip",
+          overwriteExisting: false,
+          pathTemplate: "Library/<SERIES_TITLE>",
+          fileNameTemplate: "<SERIES_TITLE> - <CHAPTER_TITLE>",
+          includeComicInfo: false,
+          includeCoverImage: false,
+        },
+      }
+      const nativeWaitTask = makeDownloadTask({
+        id: "native-wait",
+        status: "downloading",
+        chapters: [
+          {
+            id: "native-chapter",
+            url: "https://example.com/chapter-1",
+            title: "Native chapter",
+            index: 1,
+            status: "downloading",
+            outputs: { requested: 1, committed: 0, failed: 0 },
+            dispatchAttempt: 1,
+            lastUpdated: 20,
+          },
+        ],
+        browserDownloadWait: {
+          downloadIds: [21, 7, 21],
+          since: 100,
+          lastObservedAt: 120,
+        },
+      })
+      const invalidTask = {
+        ...nativeWaitTask,
+        id: "invalid-task",
+        settingsSnapshot: { archiveFormat: "rar" },
+      }
+      const lease = createDispatchLease({
+        jobId: "job-native-wait",
+        taskId: nativeWaitTask.id,
+        chapterId: "native-chapter",
+        attempt: 1,
+        now: 100,
+      })
+      const pendingOutput = {
+        outputId: "output-native-wait",
+        jobId: lease.jobId,
+        attempt: lease.attempt,
+        taskId: nativeWaitTask.id,
+        chapterId: lease.chapterId,
+        downloadId: 7,
+        blobUrl: "blob:native-wait",
+        filename: "native-wait.cbz",
+        outputIndex: 0,
+        outputCount: 1,
+        outputKind: "archive" as const,
+        state: "complete" as const,
+        createdAt: 100,
+        terminalAt: 120,
+      }
+
+      mockLocalStorage[LOCAL_STORAGE_KEYS.downloadQueue] = [
+        legacyBlockedTask,
+        nativeWaitTask,
+        invalidTask,
+      ]
+      mockLocalStorage[LOCAL_STORAGE_KEYS.activeDispatchLease] = lease
+      mockLocalStorage[LOCAL_STORAGE_KEYS.pendingOutputs] = {
+        [pendingOutput.outputId]: pendingOutput,
+      }
+      mockLocalStorage[LOCAL_STORAGE_KEYS.pendingUndoActions] = [
+        {
+          token: "undo-legacy-blocked",
+          type: "cancel_queued",
+          taskSnapshot: legacyBlockedTask,
+          previousQueuePosition: 0,
+          createdAt: 10,
+          expiresAt: 10_000,
+        },
+        { token: "malformed-undo" },
+      ]
+
+      const firstManager = new CentralizedStateManager()
+      await firstManager.initialize()
+      await firstManager.updateDownloadTask(nativeWaitTask.id, {
+        errorMessage: "rewritten without losing native output state",
+      })
+
+      const queueAfterRewrite = await firstManager.getGlobalState()
+      expect(queueAfterRewrite.downloadQueue).toHaveLength(2)
+      expect(queueAfterRewrite.downloadQueue).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: legacyBlockedTask.id,
+            activeBlock: "provider_network_policy_pending",
+            settingsSnapshot: expect.objectContaining({
+              destination: "downloads-api",
+              conflictPolicy: "uniquify",
+              pathTemplate: "Library/<SERIES_TITLE>",
+            }),
+          }),
+          expect.objectContaining({
+            id: nativeWaitTask.id,
+            browserDownloadWait: {
+              downloadIds: [7, 21],
+              since: 100,
+              lastObservedAt: 120,
+            },
+            errorMessage: "rewritten without losing native output state",
+          }),
+        ])
+      )
+
+      const firstLease = createActiveDispatchLeaseStore()
+      const firstOutputs = createPendingDownloadsStore()
+      await firstOutputs.hydrate()
+      const firstUndo = await firstManager.getPendingUndoActions()
+      expect(await firstLease.get()).toEqual(lease)
+      expect(firstOutputs.snapshot().get(pendingOutput.outputId)).toEqual(
+        pendingOutput
+      )
+      expect(firstUndo).toHaveLength(1)
+
+      const secondManager = new CentralizedStateManager()
+      await secondManager.initialize()
+      const secondQueue = (await secondManager.getGlobalState()).downloadQueue
+      const secondLease = createActiveDispatchLeaseStore()
+      const secondOutputs = createPendingDownloadsStore()
+      await secondOutputs.hydrate()
+
+      expect(secondQueue).toEqual(queueAfterRewrite.downloadQueue)
+      expect(await secondLease.get()).toEqual(lease)
+      expect(secondOutputs.snapshot().get(pendingOutput.outputId)).toEqual(
+        pendingOutput
+      )
+      await expect(secondManager.getPendingUndoActions()).resolves.toEqual(
+        firstUndo
+      )
+      expect(mockLocalStorage[LOCAL_STORAGE_KEYS.downloadQueue]).toEqual(
+        secondQueue
+      )
     })
   })
 
@@ -179,6 +343,45 @@ export function registerCentralizedStateGlobalQueueCases(): void {
       const globalState = await stateManager.getGlobalState()
       expect(result).toMatchObject({ success: true })
       expect(globalState.downloadQueue[0].status).toBe("downloading")
+    })
+
+    it("commits a destination issue with its queue transition", async () => {
+      const { CentralizedStateManager } =
+        await import("@/src/runtime/centralized-state")
+
+      const stateManager = new CentralizedStateManager()
+      await stateManager.initialize()
+      await stateManager.addDownloadTask(
+        makeDownloadTask({ id: "destination-task", mangaId: "test" })
+      )
+      vi.mocked(chrome.storage.local.set).mockClear()
+
+      const issue = {
+        id: "destination-task::fsa_folder_missing",
+        taskId: "destination-task",
+        kind: "fsa_folder_missing" as const,
+        occurredAt: 10,
+      }
+      const result =
+        await stateManager.transitionDownloadTaskWithDestinationIssues(
+          "destination-task",
+          ["queued"],
+          {
+            status: "queued",
+            activeBlock: "destination_action_required",
+          },
+          { type: "upsert", issue }
+        )
+
+      expect(result).toMatchObject({ success: true })
+      const [lastWrite] =
+        vi.mocked(chrome.storage.local.set).mock.calls.at(-1) ?? []
+      expect(lastWrite).toEqual(
+        expect.objectContaining({
+          [LOCAL_STORAGE_KEYS.downloadQueue]: expect.any(Array),
+          [LOCAL_STORAGE_KEYS.destinationIssues]: [issue],
+        })
+      )
     })
 
     it("atomically allows only one queued task to become downloading", async () => {

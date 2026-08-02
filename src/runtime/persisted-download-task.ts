@@ -12,6 +12,7 @@ import {
 import { isRecord } from "@/src/shared/type-guards"
 import { z } from "zod"
 import type { DownloadTaskState, TaskChapter } from "@/src/types/queue-state"
+import { normalizeDownloadTaskExecutionState } from "@/src/runtime/download-task-execution-state"
 
 const PersistedTaskChapterStatusSchema = DownloadTaskChapterStatusSchema
 const PersistedTaskStatusSchema = DownloadTaskStatusSchema
@@ -100,7 +101,20 @@ const PersistedTaskSchema = z
     isRetried: z.boolean().optional(),
     isRetryTask: z.boolean().optional(),
     lastSuccessfulDownloadId: z.number().optional(),
-    activeBlock: z.literal("destination_action_required").optional(),
+    activeBlock: z
+      .enum([
+        "destination_action_required",
+        "provider_network_policy_pending",
+        "provider_network_policy_action_required",
+      ])
+      .optional(),
+    browserDownloadWait: z
+      .object({
+        downloadIds: z.array(z.number().int().nonnegative()),
+        since: z.number().finite(),
+        lastObservedAt: z.number().finite().optional(),
+      })
+      .optional(),
     destinationOverride: z.literal("downloads-api").optional(),
     nextChapterDispatchAt: z.number().optional(),
     settingsSnapshot: z.unknown().optional(),
@@ -242,7 +256,7 @@ export function normalizePersistedDownloadTask(
       ? task.lastSuccessfulDownloadId
       : undefined
 
-  return {
+  const normalizedTask = normalizeDownloadTaskExecutionState({
     id: task.id,
     siteIntegrationId,
     mangaId,
@@ -254,6 +268,15 @@ export function normalizePersistedDownloadTask(
     errorMessage: task.errorMessage,
     errorCategory,
     activeBlock: task.activeBlock,
+    browserDownloadWait: task.browserDownloadWait
+      ? {
+          downloadIds: [...new Set(task.browserDownloadWait.downloadIds)].sort(
+            (left, right) => left - right
+          ),
+          since: task.browserDownloadWait.since,
+          lastObservedAt: task.browserDownloadWait.lastObservedAt,
+        }
+      : undefined,
     destinationOverride: task.destinationOverride,
     created: task.created,
     started: task.started,
@@ -263,5 +286,37 @@ export function normalizePersistedDownloadTask(
     lastSuccessfulDownloadId,
     nextChapterDispatchAt: task.nextChapterDispatchAt,
     settingsSnapshot,
+  })
+
+  if (
+    normalizedTask.activeBlock === "provider_network_policy_action_required"
+  ) {
+    const now = Date.now()
+    return normalizeDownloadTaskExecutionState({
+      ...normalizedTask,
+      status: "failed",
+      activeBlock: undefined,
+      browserDownloadWait: undefined,
+      errorMessage:
+        normalizedTask.errorMessage ??
+        "Provider access is required before this download can continue",
+      errorCategory: normalizedTask.errorCategory ?? "unknown",
+      completed: normalizedTask.completed ?? now,
+      chapters: normalizedTask.chapters.map((chapter) =>
+        chapter.status === "queued" || chapter.status === "downloading"
+          ? {
+              ...chapter,
+              status: "failed",
+              errorMessage:
+                chapter.errorMessage ??
+                "Provider access is required before this download can continue",
+              errorCategory: chapter.errorCategory ?? "unknown",
+              lastUpdated: now,
+            }
+          : chapter
+      ),
+    })
   }
+
+  return normalizedTask
 }

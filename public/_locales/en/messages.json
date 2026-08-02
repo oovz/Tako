@@ -212,6 +212,18 @@
 
   "status_downloading": { "message": "Downloading" },
   "status_queued": { "message": "Queued" },
+  "status_waitingBrowserDownload": {
+    "message": "Waiting for Chrome Downloads"
+  },
+  "status_destinationActionRequired": {
+    "message": "Download folder action required"
+  },
+  "status_waitingProviderPolicy": {
+    "message": "Waiting for provider access"
+  },
+  "status_providerActionRequired": {
+    "message": "Provider access required"
+  },
   "status_completed": { "message": "Completed" },
   "status_partialSuccess": { "message": "Partial success" },
   "status_failed": { "message": "Failed" },

@@ -22,7 +22,16 @@ export interface DestinationIssue {
   acknowledgedAt?: number
 }
 
-export type ActiveTaskBlock = "destination_action_required"
+export type ActiveTaskBlock =
+  | "destination_action_required"
+  | "provider_network_policy_pending"
+  | "provider_network_policy_action_required"
+
+export interface BrowserDownloadWaitState {
+  downloadIds: number[]
+  since: number
+  lastObservedAt?: number
+}
 
 export type OffscreenJobStage =
   | "dispatching"
@@ -104,6 +113,7 @@ export interface DownloadTaskState {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
+  browserDownloadWait?: BrowserDownloadWaitState
   destinationOverride?: "downloads-api"
   created: number
   started?: number
@@ -138,6 +148,8 @@ export interface QueueTaskSummary {
   siteIntegration: string
   coverUrl?: string
   status: DownloadTaskStatus
+  activeBlock?: ActiveTaskBlock
+  browserDownloadWait?: BrowserDownloadWaitState
   chapters: {
     total: number
     completed: number

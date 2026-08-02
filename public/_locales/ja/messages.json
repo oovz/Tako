@@ -228,6 +228,18 @@
 
   "status_downloading": { "message": "ダウンロード中" },
   "status_queued": { "message": "待機中" },
+  "status_waitingBrowserDownload": {
+    "message": "Chrome のダウンロード完了待ち"
+  },
+  "status_destinationActionRequired": {
+    "message": "保存先フォルダーの操作が必要"
+  },
+  "status_waitingProviderPolicy": {
+    "message": "サイトアクセスの準備待ち"
+  },
+  "status_providerActionRequired": {
+    "message": "サイトアクセスの許可が必要"
+  },
   "status_completed": { "message": "完了" },
   "status_partialSuccess": { "message": "一部成功" },
   "status_failed": { "message": "失敗" },

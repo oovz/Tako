@@ -197,7 +197,11 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
               <span className="flex items-center gap-1">
                 {icon}
                 <span className="capitalize">
-                  {getTaskStatusLabel(task.status)}
+                  {getTaskStatusLabel(
+                    task.status,
+                    task.activeBlock,
+                    task.browserDownloadWait
+                  )}
                 </span>
               </span>
               <span>·</span>
@@ -211,6 +215,19 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
             {failureMessage && (
               <div className="text-[11px] text-destructive truncate">
                 {failureMessage}
+              </div>
+            )}
+
+            {task.browserDownloadWait && (
+              <div
+                className="text-[11px] text-muted-foreground truncate"
+                title={task.browserDownloadWait.downloadIds
+                  .map((downloadId) => `#${downloadId}`)
+                  .join(", ")}
+              >
+                {task.browserDownloadWait.downloadIds
+                  .map((downloadId) => `#${downloadId}`)
+                  .join(", ")}
               </div>
             )}
 

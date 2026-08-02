@@ -54,7 +54,24 @@ export function getRetryAvailability(
   return { canRetryFailed: true, retryBlockedMessage: null }
 }
 
-export function getTaskStatusLabel(status: QueueTaskSummary["status"]): string {
+export function getTaskStatusLabel(
+  status: QueueTaskSummary["status"],
+  activeBlock?: QueueTaskSummary["activeBlock"],
+  browserDownloadWait?: QueueTaskSummary["browserDownloadWait"]
+): string {
+  if (browserDownloadWait) {
+    return t("status_waitingBrowserDownload")
+  }
+  if (activeBlock === "destination_action_required") {
+    return t("status_destinationActionRequired")
+  }
+  if (activeBlock === "provider_network_policy_pending") {
+    return t("status_waitingProviderPolicy")
+  }
+  if (activeBlock === "provider_network_policy_action_required") {
+    return t("status_providerActionRequired")
+  }
+
   switch (status) {
     case "downloading":
       return t("status_downloading")

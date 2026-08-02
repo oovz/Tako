@@ -37,6 +37,13 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     siteIntegration: task.siteIntegrationId,
     coverUrl: task.seriesCoverUrl,
     status: task.status,
+    activeBlock: task.activeBlock,
+    browserDownloadWait: task.browserDownloadWait
+      ? {
+          ...task.browserDownloadWait,
+          downloadIds: [...task.browserDownloadWait.downloadIds],
+        }
+      : undefined,
     chapters: {
       total: totalChapters,
       completed: completedChapters,

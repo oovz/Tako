@@ -198,6 +198,18 @@
 
   "status_downloading": { "message": "下載中" },
   "status_queued": { "message": "排隊中" },
+  "status_waitingBrowserDownload": {
+    "message": "等待 Chrome 下載完成"
+  },
+  "status_destinationActionRequired": {
+    "message": "需要處理下載資料夾"
+  },
+  "status_waitingProviderPolicy": {
+    "message": "等待網站存取策略"
+  },
+  "status_providerActionRequired": {
+    "message": "需要網站存取權限"
+  },
   "status_completed": { "message": "已完成" },
   "status_partialSuccess": { "message": "部分成功" },
   "status_failed": { "message": "已失敗" },

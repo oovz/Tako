@@ -198,6 +198,18 @@
 
   "status_downloading": { "message": "下载中" },
   "status_queued": { "message": "排队中" },
+  "status_waitingBrowserDownload": {
+    "message": "等待 Chrome 下载完成"
+  },
+  "status_destinationActionRequired": {
+    "message": "需要处理下载文件夹"
+  },
+  "status_waitingProviderPolicy": {
+    "message": "等待站点访问策略"
+  },
+  "status_providerActionRequired": {
+    "message": "需要站点访问权限"
+  },
   "status_completed": { "message": "已完成" },
   "status_partialSuccess": { "message": "部分成功" },
   "status_failed": { "message": "已失败" },
