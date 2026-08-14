@@ -8,7 +8,7 @@ import {
   LIVE_PIXIV_COMIC_DUPLICATE_TITLE_URL,
   LIVE_PIXIV_COMIC_DUAL_TITLE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
-} from "../e2e/fixtures/test-domains"
+} from "../e2e/fixtures/test-domains-constants"
 import { resolveCandidateTabIds } from "./fixtures/download-workflow-helpers"
 import type { BrowserContext, Page } from "@playwright/test"
 

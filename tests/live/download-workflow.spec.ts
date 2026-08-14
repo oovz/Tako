@@ -2,19 +2,27 @@ import fs from "node:fs/promises"
 import type { BrowserContext, Page } from "@playwright/test"
 
 import { test, expect } from "../e2e/fixtures/extension"
-import { getSessionState, getTabId } from "../e2e/fixtures/state-helpers"
+import {
+  focusTab,
+  getSessionState,
+  getTabId,
+  waitForActiveSeriesContextRevision,
+} from "../e2e/fixtures/state-helpers"
 import {
   LIVE_COMICNETTAI_REFERENCE_URL,
   LIVE_MANGADEX_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
-} from "../e2e/fixtures/test-domains"
+} from "../e2e/fixtures/test-domains-constants"
 import { resolveCandidateTabIds } from "./fixtures/download-workflow-helpers"
-import type { DownloadTaskState, GlobalAppState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { MangaPageState } from "@/src/types/tab-state"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import {
+  LOCAL_STORAGE_KEYS,
+  SESSION_STORAGE_KEYS,
+} from "@/src/runtime/storage-keys"
 import { HARD_TIMEOUT_MS } from "@/src/constants/timeouts"
 
 type LiveChapter = {
@@ -291,32 +299,6 @@ async function persistDownloadSettings(
         siteIntegrationSettings: mergedSiteSettings,
       })
 
-      const issuedAt = Date.now()
-      const response = await chrome.runtime.sendMessage({
-        type: "SYNC_SETTINGS_TO_STATE",
-        commandId: crypto.randomUUID(),
-        issuedAt,
-        payload: {
-          settings: mergedSettings,
-        },
-      })
-      if (
-        !response ||
-        typeof response !== "object" ||
-        response.success !== true
-      ) {
-        throw new Error(
-          `SYNC_SETTINGS_TO_STATE was rejected: ${
-            response &&
-            typeof response === "object" &&
-            "error" in response &&
-            typeof response.error === "string"
-              ? response.error
-              : "unknown error"
-          }`
-        )
-      }
-
       return {
         globalSettings: mergedSettings,
         siteIntegrationSettings: mergedSiteSettings,
@@ -350,15 +332,21 @@ async function startSingleChapterDownload(
     )
   }
 
+  await focusTab(optionsPage.context(), tabId)
+  const seriesRevision = await waitForActiveSeriesContextRevision(
+    optionsPage.context(),
+    tabId
+  )
+
   const response = await optionsPage.evaluate(
     async ({
       sourceTabId,
-      mangaState,
       selectedChapter,
+      revision,
     }: {
       sourceTabId: number
-      mangaState: LiveDownloadState
       selectedChapter: LiveChapter
+      revision: number
     }) => {
       const issuedAt = Date.now()
       return (await chrome.runtime.sendMessage({
@@ -367,30 +355,15 @@ async function startSingleChapterDownload(
         issuedAt,
         payload: {
           sourceTabId,
-          siteIntegrationId: mangaState.siteIntegrationId,
-          mangaId: mangaState.mangaId,
-          seriesTitle: mangaState.seriesTitle,
-          metadata: mangaState.metadata,
-          chapters: [
-            {
-              id: selectedChapter.id,
-              title: selectedChapter.title,
-              url: selectedChapter.url,
-              index: selectedChapter.index,
-              chapterLabel: selectedChapter.chapterLabel,
-              chapterNumber: selectedChapter.chapterNumber,
-              volumeLabel: selectedChapter.volumeLabel,
-              volumeNumber: selectedChapter.volumeNumber,
-              language: selectedChapter.language,
-            },
-          ],
+          seriesRevision: revision,
+          selectedChapterIds: [selectedChapter.id],
         },
       })) as { success?: boolean; taskId?: string; error?: string }
     },
     {
       sourceTabId: tabId,
-      mangaState: state,
       selectedChapter: chapter,
+      revision: seriesRevision,
     }
   )
 
@@ -405,14 +378,18 @@ async function startSingleChapterDownload(
 
 async function readGlobalStateFromExtensionPage(
   optionsPage: Page
-): Promise<GlobalAppState | undefined> {
+): Promise<{ downloadQueue: DownloadTaskState[] }> {
   return await optionsPage.evaluate(async (storageKey: string) => {
-    const result = (await chrome.storage.session.get(storageKey)) as Record<
+    const result = (await chrome.storage.local.get(storageKey)) as Record<
       string,
       unknown
     >
-    return result[storageKey] as GlobalAppState | undefined
-  }, SESSION_STORAGE_KEYS.globalState)
+    return {
+      downloadQueue: Array.isArray(result[storageKey])
+        ? (result[storageKey] as DownloadTaskState[])
+        : [],
+    }
+  }, LOCAL_STORAGE_KEYS.downloadQueue)
 }
 
 async function readActiveTaskProgressFromExtensionPage(
@@ -432,7 +409,7 @@ async function waitForTerminalTask(
   taskId: string
 ): Promise<DownloadTaskState> {
   const startedAt = Date.now()
-  let globalState: GlobalAppState | undefined
+  let globalState: { downloadQueue: DownloadTaskState[] } | undefined
   let terminalTask: DownloadTaskState | undefined
 
   while (Date.now() - startedAt < LIVE_TASK_TERMINAL_TIMEOUT_MS) {
