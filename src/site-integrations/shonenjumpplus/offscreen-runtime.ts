@@ -1,63 +1,123 @@
 import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
-  ParseImageUrlsFromHtmlInput,
 } from "@/src/types/site-integrations"
+import { ChapterImagePlanSchema } from "../chapter-plan"
 import logger from "@/src/runtime/logger"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
-import {
-  getRateLimitPolicyFromContext,
-  getRateLimitPolicyFromSnapshot,
-  rateLimitedFetchForIntegration,
-} from "@/src/runtime/rate-limit"
+import { getRateLimitPolicyFromSnapshot } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { extractImageUrlsFromEpisodeJsonScript } from "./episode-json"
 import { descrambleGigaviewerImage } from "./gigaviewer-image"
-import { createIntegrationUrlAssertion } from "../request-policy"
+import { createIntegrationEndpointUrlAssertion } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
 import {
   isScrambledShonenJumpPlusPageUrl,
   isTrustedShonenJumpPlusAssetUrl,
   parseTrustedShonenJumpPlusEpisodeUrl,
 } from "./urls"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 
 const PUBLIC_FETCH_INIT: RequestInit = { credentials: "omit" }
-const assertShonenJumpPlusRequestUrl =
-  createIntegrationUrlAssertion("shonenjumpplus")
+const assertShonenJumpPlusImageUrl = createIntegrationEndpointUrlAssertion(
+  "shonenjumpplus",
+  "shonenjumpplus-image-cdn"
+)
+
+async function downloadShonenJumpPlusCoverImage(
+  imageUrl: string,
+  opts: {
+    signal?: AbortSignal
+    runtime: import("@/src/types/site-integrations").ChapterRuntimeData
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
+  }
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (!isTrustedShonenJumpPlusAssetUrl(imageUrl)) {
+    throw new ProviderContractError(
+      "Invalid or untrusted Shonen Jump+ cover URL."
+    )
+  }
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(imageUrl, {
+      integrationId: "shonenjumpplus",
+      endpointId: "shonenjumpplus-image-cdn",
+      signal: opts.signal,
+      init: PUBLIC_FETCH_INIT,
+      skipRateLimit: opts.skipRateLimit,
+      rateLimitService: opts.runtime.rateLimitService,
+      onBytesReceived: opts.onBytesReceived,
+      assertUrlAllowed: assertShonenJumpPlusImageUrl,
+      liveResourceLedger: opts.liveResourceLedger,
+    })
+  return {
+    data,
+    mimeType,
+    liveResourceLease,
+    filename:
+      new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
+      "cover.jpg",
+  }
+}
 
 function requireTrustedEpisodeUrl(input: string): URL {
   const trusted = parseTrustedShonenJumpPlusEpisodeUrl(input)
   if (!trusted) {
-    throw new Error("Invalid or untrusted Shonen Jump+ episode URL.")
+    throw new ProviderContractError(
+      "Invalid or untrusted Shonen Jump+ episode URL."
+    )
   }
   return trusted.url
 }
 
 function trustedPageUrls(html: string): string[] {
-  return extractImageUrlsFromEpisodeJsonScript(html).filter(
-    isTrustedShonenJumpPlusAssetUrl
-  )
+  const imageUrls = extractImageUrlsFromEpisodeJsonScript(html)
+  for (const imageUrl of imageUrls) {
+    if (!isTrustedShonenJumpPlusAssetUrl(imageUrl)) {
+      throw new ProviderContractError(
+        "Shonen Jump+ episode data contains an untrusted page image URL."
+      )
+    }
+  }
+  return imageUrls
 }
 
 const offscreen: OffscreenIntegration = {
   name: "Shonen Jump+ Offscreen",
+  cover: {
+    downloadImage: downloadShonenJumpPlusCoverImage,
+  },
   chapter: {
-    async resolveImageUrls(
-      chapter,
-      _context,
-      settingsSnapshot
-    ): Promise<string[]> {
+    async resolveChapterPlan(chapter, input) {
       const chapterUrl = requireTrustedEpisodeUrl(chapter.url)
-      const response = await rateLimitedFetchForIntegration(
-        "shonenjumpplus",
-        chapterUrl.href,
-        "chapter",
-        PUBLIC_FETCH_INIT,
-        getRateLimitPolicyFromSnapshot(settingsSnapshot, "chapter")
-      )
+      const response = await integrationHttpClient.request({
+        integrationId: "shonenjumpplus",
+        endpointId: "shonenjumpplus-episode-html",
+        url: chapterUrl.href,
+        scope: "chapter",
+        init: { ...PUBLIC_FETCH_INIT, signal: input.signal },
+        rateLimitService: input.runtime.rateLimitService,
+        policyOverride: getRateLimitPolicyFromSnapshot(
+          input.settings,
+          "chapter"
+        ),
+      })
       if (!response.ok) {
-        throw new Error(
-          `Shonen Jump+ chapter page could not be loaded (HTTP ${response.status}).`
+        throw Object.assign(
+          new Error(
+            `Shonen Jump+ chapter page could not be loaded (HTTP ${response.status}).`
+          ),
+          { status: response.status }
         )
       }
       const { html } = await decodeHtmlResponse(response)
@@ -71,46 +131,38 @@ const offscreen: OffscreenIntegration = {
         chapterId: chapter.id,
         urlCount: urls.length,
       })
-      return urls
-    },
-
-    parseImageUrlsFromHtml({
-      chapterHtml,
-      chapterUrl,
-    }: ParseImageUrlsFromHtmlInput): Promise<string[]> {
-      requireTrustedEpisodeUrl(chapterUrl)
-      const urls = trustedPageUrls(chapterHtml)
-      if (urls.length === 0) {
-        return Promise.reject(
-          new ProviderContractError(
-            "Shonen Jump+ episode data contained no trusted readable page images."
-          )
-        )
-      }
-      return Promise.resolve(urls)
-    },
-
-    processImageUrls(urls: string[]): Promise<string[]> {
-      return Promise.resolve(urls.filter(isTrustedShonenJumpPlusAssetUrl))
+      return ChapterImagePlanSchema.parse({ imageUrls: urls })
     },
 
     async downloadImage(imageUrl, opts) {
       if (!isTrustedShonenJumpPlusAssetUrl(imageUrl)) {
-        throw new Error("Invalid or untrusted Shonen Jump+ asset URL.")
+        throw new ProviderContractError(
+          "Invalid or untrusted Shonen Jump+ asset URL."
+        )
       }
-      if (opts?.signal?.aborted) throw new Error("aborted")
-      const { data, mimeType } = await fetchImageWithStallDetection(imageUrl, {
-        integrationId: "shonenjumpplus",
-        signal: opts?.signal,
-        init: PUBLIC_FETCH_INIT,
-        rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, "image"),
-        skipRateLimit: true,
-        onBytesReceived: opts?.onBytesReceived,
-        assertUrlAllowed: assertShonenJumpPlusRequestUrl,
-      })
+      if (opts.signal?.aborted) throw new Error("aborted")
+      const { data, mimeType, liveResourceLease } =
+        await fetchImageWithStallDetection(imageUrl, {
+          integrationId: "shonenjumpplus",
+          endpointId: "shonenjumpplus-image-cdn",
+          signal: opts.signal,
+          init: PUBLIC_FETCH_INIT,
+          rateLimitPolicy: opts.runtime.rateLimitSettings.image,
+          rateLimitService: opts.runtime.rateLimitService,
+          skipRateLimit: true,
+          onBytesReceived: opts.onBytesReceived,
+          assertUrlAllowed: assertShonenJumpPlusImageUrl,
+          liveResourceLedger: opts.liveResourceLedger,
+        })
       const downloaded = isScrambledShonenJumpPlusPageUrl(imageUrl)
-        ? await descrambleGigaviewerImage(data, mimeType)
-        : { data, mimeType }
+        ? await descrambleGigaviewerImage(
+            data,
+            mimeType,
+            opts.signal,
+            opts.liveResourceLedger,
+            liveResourceLease
+          )
+        : { data, mimeType, liveResourceLease }
       const filename =
         new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
         "image.jpg"

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "providerId": "shonenjumpplus",
+  "data": {
+    "episodeJson": {
+      "readableProduct": {
+        "isPublic": true,
+        "hasPurchased": false,
+        "series": {
+          "id": "1001",
+          "title": "Fixture Series",
+          "thumbnailUri": "https://cdn-ak-img.shonenjumpplus.com/fixture/cover.jpg"
+        },
+        "pageStructure": {
+          "pages": [
+            {
+              "type": "main",
+              "src": "https://cdn-ak-img.shonenjumpplus.com/fixture/page-1.jpg"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

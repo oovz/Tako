@@ -13,11 +13,31 @@ import {
   parseTrustedShonenJumpPlusEpisodeUrl,
 } from "@/src/site-integrations/shonenjumpplus/urls"
 import { offscreenSiteAdapter } from "@/src/site-integrations/shonenjumpplus/offscreen-runtime"
+import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 const fetchImageWithStallDetectionMock = vi.hoisted(() => vi.fn())
+const integrationHttpRequestMock = vi.hoisted(() => vi.fn())
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+const rateLimitSettings = {
+  image: { concurrency: 1, delayMs: 0 },
+  chapter: { concurrency: 1, delayMs: 0 },
+}
 
 vi.mock("@/src/runtime/fetch-image", () => ({
   fetchImageWithStallDetection: fetchImageWithStallDetectionMock,
+}))
+
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: { request: integrationHttpRequestMock },
 }))
 
 function encodeAttributeJson(value: unknown): string {
@@ -30,6 +50,7 @@ function encodeAttributeJson(value: unknown): string {
 
 afterEach(() => {
   fetchImageWithStallDetectionMock.mockReset()
+  integrationHttpRequestMock.mockReset()
   vi.unstubAllGlobals()
 })
 
@@ -63,6 +84,79 @@ describe("Shonen Jump+ hardening contracts", () => {
         `<script data-value="${dataValue}" type="application/json" id="episode-json"></script>`
       )
     ).toEqual(["https://cdn-ak-img.shonenjumpplus.com/public/page/1.jpg"])
+  })
+
+  it("rejects oversized episode page arrays before mapping them", () => {
+    const dataValue = encodeAttributeJson({
+      readableProduct: {
+        pageStructure: {
+          pages: Array.from({ length: 2_001 }, (_, index) => ({
+            type: "main",
+            src: `https://cdn-ak-img.shonenjumpplus.com/public/page/${index}.jpg`,
+          })),
+        },
+      },
+    })
+
+    expect(() =>
+      extractImageUrlsFromEpisodeJsonScript(
+        `<script id="episode-json" data-value="${dataValue}"></script>`
+      )
+    ).toThrow("exceeds the 2000 image limit")
+  })
+
+  it("rejects a main page without an image URL instead of omitting it", () => {
+    const dataValue = encodeAttributeJson({
+      readableProduct: {
+        pageStructure: {
+          pages: [
+            {
+              type: "main",
+              src: "https://cdn-ak-img.shonenjumpplus.com/public/page/1.jpg",
+            },
+            { type: "main" },
+          ],
+        },
+      },
+    })
+
+    expect(() =>
+      extractImageUrlsFromEpisodeJsonScript(
+        `<script id="episode-json" data-value="${dataValue}"></script>`
+      )
+    ).toThrow("main page is missing its image URL")
+  })
+
+  it("rejects mixed trusted and untrusted page URLs at the provider boundary", async () => {
+    const dataValue = encodeAttributeJson({
+      readableProduct: {
+        pageStructure: {
+          pages: [
+            {
+              type: "main",
+              src: "https://cdn-ak-img.shonenjumpplus.com/public/page/1.jpg",
+            },
+            { type: "main", src: "https://attacker.example/page/2.jpg" },
+          ],
+        },
+      },
+    })
+    integrationHttpRequestMock.mockResolvedValueOnce(
+      new Response(
+        `<script id="episode-json" data-value="${dataValue}"></script>`,
+        { headers: { "content-type": "text/html; charset=utf-8" } }
+      )
+    )
+
+    await expect(
+      offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
+        {
+          id: "123",
+          url: "https://shonenjumpplus.com/episode/123",
+        },
+        { runtime: { rateLimitService, rateLimitSettings } }
+      )
+    ).rejects.toThrow("contains an untrusted page image URL")
   })
 
   it("reads the stable series id from episode-json metadata", () => {
@@ -177,6 +271,58 @@ describe("Shonen Jump+ hardening contracts", () => {
     expect(createImageBitmap).not.toHaveBeenCalled()
   })
 
+  it("reserves the dimension-derived output peak and rejects an oversized Blob before reading it", async () => {
+    const width = 8_192
+    const height = 4_096
+    const pixelCount = width * height
+    const buffer = makePngHeader(width, height)
+    const expectedOutputReservation = pixelCount * 4
+    const expectedConvertUsage =
+      buffer.byteLength + pixelCount * 8 + expectedOutputReservation
+    const ledger = new OffscreenLiveResourceLedger(expectedConvertUsage)
+    const sourceLease = ledger.reserve(buffer.byteLength, "Gigaviewer source")
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(1))
+    let usageDuringConvert = 0
+    const convertToBlob = vi.fn(async () => {
+      usageDuringConvert = ledger.getUsedBytes()
+      return {
+        size: MAX_IMAGE_BYTES + 1,
+        type: "image/png",
+        arrayBuffer,
+      } as unknown as Blob
+    })
+    const close = vi.fn()
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width, height, close }))
+    )
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { imageSmoothingEnabled: true, drawImage: vi.fn() }
+        }
+        convertToBlob = convertToBlob
+      }
+    )
+
+    await expect(
+      descrambleGigaviewerImage(
+        buffer,
+        "image/png",
+        undefined,
+        ledger,
+        sourceLease
+      )
+    ).rejects.toThrow(`${MAX_IMAGE_BYTES} byte limit`)
+
+    expect(expectedOutputReservation).toBeGreaterThan(MAX_IMAGE_BYTES)
+    expect(usageDuringConvert).toBe(expectedConvertUsage)
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalledOnce()
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
   it("reconstructs the fixed transpose and preserves edge strips through the download adapter", async () => {
     const width = 40
     const height = 40
@@ -256,7 +402,8 @@ describe("Shonen Jump+ hardening contracts", () => {
     })
 
     const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
-      "https://cdn-ak-img.shonenjumpplus.com/public/page/known-vector.png"
+      "https://cdn-ak-img.shonenjumpplus.com/public/page/known-vector.png",
+      { runtime: { rateLimitService, rateLimitSettings } }
     )
     const output = new Uint8Array(result.data)
     const markerAt = (x: number, y: number) => output[(y * width + x) * 4]

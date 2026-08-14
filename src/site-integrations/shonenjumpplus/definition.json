@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "shonenjumpplus",
+  "name": "Shonen Jump+",
+  "author": "TMD Team",
+  "version": "1.1.0",
+  "maturity": "stable",
+  "shipped": true,
+  "enabledByDefault": true,
+  "implementationType": "hybrid",
+  "volatility": "medium",
+  "authentication": "anonymous",
+  "regions": ["global"],
+  "accountConstraints": ["guest-access"],
+  "patterns": {
+    "domains": ["shonenjumpplus.com"],
+    "seriesMatches": ["/episode/*"]
+  },
+  "requiredOrigins": [
+    "https://shonenjumpplus.com/*",
+    "https://cdn-ak-img.shonenjumpplus.com/*",
+    "https://cdn-ak.shonenjumpplus.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 1000 },
+    "chapter": { "concurrency": 1, "delayMs": 2000 }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "none" }
+  },
+  "resolution": {
+    "seriesStrategies": ["public-html", "viewer-api"],
+    "chapterStrategies": ["viewer-api"],
+    "imageStrategies": ["gigaviewer"],
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 3000
+    }
+  },
+  "endpointPolicies": [
+    {
+      "id": "shonenjumpplus-episode-html",
+      "purpose": "Shonen Jump+ episode HTML",
+      "origins": ["https://shonenjumpplus.com/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "shonenjumpplus-viewer-api",
+      "purpose": "Shonen Jump+ viewer API",
+      "origins": ["https://shonenjumpplus.com/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "shonenjumpplus-image-cdn",
+      "purpose": "Shonen Jump+ image CDN",
+      "origins": [
+        "https://cdn-ak-img.shonenjumpplus.com/*",
+        "https://cdn-ak.shonenjumpplus.com/*"
+      ],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "dynamicOrigins": [],
+  "sessionRefererRules": [],
+  "customSettings": [],
+  "fixtures": {
+    "paths": ["src/site-integrations/shonenjumpplus/fixtures/contract.json"],
+    "liveFreshnessDays": 30
+  }
+}

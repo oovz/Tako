@@ -4,13 +4,14 @@ import type {
   ServiceWorkerIntegration,
 } from "@/src/types/site-integrations"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { parseTrustedShonenJumpPlusEpisodeUrl } from "./urls"
 import { parseAggregateIdFromHtml } from "./page-context"
 import { readEpisodeJsonSeriesMetadataFromHtml } from "./episode-json"
 import { fetchShonenJumpPlusChapterList } from "./series-api"
 import { ProviderContractError } from "../provider-contract-error"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function resolveShonenJumpPlusError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
@@ -21,6 +22,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
   seriesId?: string
   language?: string
   signal?: AbortSignal
+  rateLimitService: RateLimitService
 }): Promise<SeriesDataResolutionResult> {
   const trusted = parseTrustedShonenJumpPlusEpisodeUrl(input.seriesUrl)
   if (!trusted) {
@@ -30,15 +32,20 @@ async function resolveShonenJumpPlusSeriesData(input: {
   }
   const episodeId = trusted.episodeId
 
-  const response = await rateLimitedFetchForIntegration(
-    "shonenjumpplus",
-    input.seriesUrl,
-    "chapter",
-    { credentials: "omit", signal: input.signal }
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "shonenjumpplus",
+    endpointId: "shonenjumpplus-episode-html",
+    url: input.seriesUrl,
+    scope: "chapter",
+    rateLimitService: input.rateLimitService,
+    init: { credentials: "omit", signal: input.signal },
+  })
   if (!response.ok) {
-    throw new Error(
-      `Shonen Jump+ episode page could not be loaded (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(
+        `Shonen Jump+ episode page could not be loaded (HTTP ${response.status}).`
+      ),
+      { status: response.status }
     )
   }
 
@@ -63,6 +70,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
     chapterList = await fetchShonenJumpPlusChapterList(
       aggregateId,
       episodeId,
+      input.rateLimitService,
       input.signal
     )
   } catch (error) {

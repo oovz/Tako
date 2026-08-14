@@ -1,28 +1,11 @@
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
-
-interface EpisodeJsonPage {
-  type?: string
-  src?: string
-}
-
-interface EpisodeJsonPayload {
-  readableProduct?: {
-    isPublic?: boolean
-    hasPurchased?: boolean
-    series?: {
-      title?: string
-      thumbnailUri?: string
-      id?: string
-    }
-    pageStructure?: { pages?: EpisodeJsonPage[] }
-  }
-}
-
-export interface EpisodeJsonSeriesMetadata {
-  seriesId?: string
-  seriesTitle?: string
-  seriesThumbnailUri?: string
-}
+import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
+import { ProviderContractError } from "../provider-contract-error"
+import {
+  parseEpisodeJsonPayload,
+  type EpisodeJsonPayload,
+  type EpisodeJsonSeriesMetadata,
+} from "./contracts/episode-json"
 
 function decodeHtmlAttributeEntities(value: string): string {
   return value
@@ -47,7 +30,7 @@ function parsePayload(
   }
   for (const candidate of [value, decodeHtmlAttributeEntities(value)]) {
     try {
-      return JSON.parse(candidate) as EpisodeJsonPayload
+      return parseEpisodeJsonPayload(JSON.parse(candidate))
     } catch {
       // Try the decoded attribute representation next.
     }
@@ -108,12 +91,20 @@ export function extractImageUrlsFromEpisodeJsonScript(html: string): string[] {
   if (!Array.isArray(pages)) {
     return []
   }
-  return pages
-    .filter(
-      (page) =>
-        page.type === "main" &&
-        typeof page.src === "string" &&
-        page.src.length > 0
+  if (pages.length > MAX_CHAPTER_IMAGES) {
+    throw new ProviderContractError(
+      `Shonen Jump+ chapter exceeds the ${MAX_CHAPTER_IMAGES} image limit.`
     )
-    .map((page) => page.src as string)
+  }
+  const imageUrls: string[] = []
+  for (const page of pages) {
+    if (page.type !== "main") continue
+    if (typeof page.src !== "string" || page.src.length === 0) {
+      throw new ProviderContractError(
+        "Shonen Jump+ main page is missing its image URL."
+      )
+    }
+    imageUrls.push(page.src)
+  }
+  return imageUrls
 }

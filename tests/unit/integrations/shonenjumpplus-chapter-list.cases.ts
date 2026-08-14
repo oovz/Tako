@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   captureBrowserGlobals,
   mockRateLimitedFetch,
+  rateLimitService,
   resetShonenJumpPlusTestEnvironment,
   restoreBrowserGlobals,
   setTestDocument,
@@ -84,15 +85,16 @@ export function registerShonenJumpPlusChapterListCases(): void {
       })
       setTestFetch(fetchMock)
       // Route rate-limited pagination API calls through the same fetch mock
-      mockRateLimitedFetch.mockImplementation(async (url: string) =>
-        fetchMock(url)
+      mockRateLimitedFetch.mockImplementation(async (input: { url: string }) =>
+        fetchMock(input.url)
       )
 
       const { fetchShonenJumpPlusChapterList } =
         await import("@/src/site-integrations/shonenjumpplus/series-api")
       const chapterResult = await fetchShonenJumpPlusChapterList(
         "10834108156648240732",
-        "10834108156648240735"
+        "10834108156648240735",
+        rateLimitService
       )
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
@@ -178,15 +180,16 @@ export function registerShonenJumpPlusChapterListCases(): void {
         ),
       })
       setTestFetch(fetchMock)
-      mockRateLimitedFetch.mockImplementation(async (url: string) =>
-        fetchMock(url)
+      mockRateLimitedFetch.mockImplementation(async (input: { url: string }) =>
+        fetchMock(input.url)
       )
 
       const { fetchShonenJumpPlusChapterList } =
         await import("@/src/site-integrations/shonenjumpplus/series-api")
       const chapterResult = await fetchShonenJumpPlusChapterList(
         "10834108156648240732",
-        "10834108156648240735"
+        "10834108156648240735",
+        rateLimitService
       )
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
@@ -211,10 +214,53 @@ export function registerShonenJumpPlusChapterListCases(): void {
       const { fetchProducts } =
         await import("@/src/site-integrations/shonenjumpplus/series-api")
 
-      await expect(fetchProducts("aggregate-1", 0, 50)).rejects.toMatchObject({
+      await expect(
+        fetchProducts("aggregate-1", 0, 50, rateLimitService)
+      ).rejects.toMatchObject({
         category: "provider_changed",
         message: expect.stringContaining("unexpected response structure"),
       })
+    })
+
+    it("bounds pagination when the provider reports an adversarial total", async () => {
+      let productRequest = 0
+      mockRateLimitedFetch.mockImplementation(
+        async (input: { url: string }) => {
+          const { url } = input
+          if (url.includes("pagination_information")) {
+            return {
+              ok: true,
+              json: async () => ({
+                per_page: 1,
+                readable_products_count: Number.MAX_SAFE_INTEGER,
+              }),
+            } as Response
+          }
+          productRequest += 1
+          return {
+            ok: true,
+            json: async () => [
+              {
+                readable_product_id: String(productRequest),
+                viewer_uri: `/episode/${productRequest}`,
+                title: `${productRequest}話`,
+                status: { label: "is_free" },
+              },
+            ],
+          } as Response
+        }
+      )
+
+      const { fetchShonenJumpPlusChapterList } =
+        await import("@/src/site-integrations/shonenjumpplus/series-api")
+      const result = await fetchShonenJumpPlusChapterList(
+        "aggregate-1",
+        "episode-1",
+        rateLimitService
+      )
+
+      expect(result).toMatchObject({ truncated: true })
+      expect(productRequest).toBe(100)
     })
 
     it("logs invariant error when duplicate chapter ids are returned with different URLs", async () => {
@@ -276,15 +322,16 @@ export function registerShonenJumpPlusChapterListCases(): void {
         ),
       })
       setTestFetch(fetchMock)
-      mockRateLimitedFetch.mockImplementation(async (url: string) =>
-        fetchMock(url)
+      mockRateLimitedFetch.mockImplementation(async (input: { url: string }) =>
+        fetchMock(input.url)
       )
 
       const { fetchShonenJumpPlusChapterList } =
         await import("@/src/site-integrations/shonenjumpplus/series-api")
       const chapterResult = await fetchShonenJumpPlusChapterList(
         "10834108156648240732",
-        "10834108156648240735"
+        "10834108156648240735",
+        rateLimitService
       )
       const chapters = Array.isArray(chapterResult)
         ? chapterResult

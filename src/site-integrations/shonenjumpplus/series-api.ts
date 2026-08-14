@@ -1,7 +1,7 @@
 import type { Chapter } from "@/src/types/chapter"
 import type { SeriesChapterListResult } from "@/src/types/site-integrations"
 import logger from "@/src/runtime/logger"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import {
   parseChapterNumber,
   sanitizeLabel,
@@ -9,6 +9,7 @@ import {
 import { parseTrustedShonenJumpPlusEpisodeUrl } from "./urls"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 export type PaginationInfo = {
   per_page?: number
@@ -34,6 +35,9 @@ export type PaginationProduct = {
 
 const API_BASE = "https://shonenjumpplus.com/api/viewer"
 const PUBLIC_FETCH_INIT: RequestInit = { credentials: "omit" }
+const MAX_SERIES_CHAPTERS = 5_000
+const MAX_PAGINATION_REQUESTS = 100
+const MAX_PAGE_SIZE = 100
 
 function isExplicitlyFree(status: ProductStatus | undefined): boolean {
   const explicit =
@@ -89,6 +93,7 @@ export function mapEpisode(product: PaginationProduct): Chapter | null {
 export async function fetchPaginationInfo(
   aggregateId: string,
   episodeId: string,
+  rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<PaginationInfo> {
   const endpoint = new URL(
@@ -97,15 +102,20 @@ export async function fetchPaginationInfo(
   endpoint.searchParams.set("type", "episode")
   endpoint.searchParams.set("aggregate_id", aggregateId)
   endpoint.searchParams.set("readable_product_id", episodeId)
-  const response = await rateLimitedFetchForIntegration(
-    "shonenjumpplus",
-    endpoint.href,
-    "chapter",
-    { ...PUBLIC_FETCH_INIT, signal }
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "shonenjumpplus",
+    endpointId: "shonenjumpplus-viewer-api",
+    url: endpoint.href,
+    scope: "chapter",
+    init: { ...PUBLIC_FETCH_INIT, signal },
+    rateLimitService,
+  })
   if (!response.ok) {
-    throw new Error(
-      `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(
+        `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
+      ),
+      { status: response.status }
     )
   }
   return (await readResponseJson(response)) as PaginationInfo
@@ -115,6 +125,7 @@ export async function fetchProducts(
   aggregateId: string,
   offset: number,
   limit: number,
+  rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<PaginationProduct[]> {
   const endpoint = new URL(`${API_BASE}/pagination_readable_products`)
@@ -124,15 +135,20 @@ export async function fetchProducts(
   endpoint.searchParams.set("limit", String(limit))
   endpoint.searchParams.set("sort_order", "desc")
   endpoint.searchParams.set("is_guest", "1")
-  const response = await rateLimitedFetchForIntegration(
-    "shonenjumpplus",
-    endpoint.href,
-    "chapter",
-    { ...PUBLIC_FETCH_INIT, signal }
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "shonenjumpplus",
+    endpointId: "shonenjumpplus-viewer-api",
+    url: endpoint.href,
+    scope: "chapter",
+    init: { ...PUBLIC_FETCH_INIT, signal },
+    rateLimitService,
+  })
   if (!response.ok) {
-    throw new Error(
-      `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(
+        `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
+      ),
+      { status: response.status }
     )
   }
   const payload = await readResponseJson(response)
@@ -147,22 +163,47 @@ export async function fetchProducts(
 export async function fetchShonenJumpPlusChapterList(
   aggregateId: string,
   episodeId: string,
+  rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
-  const info = await fetchPaginationInfo(aggregateId, episodeId, signal)
-  const limit =
-    typeof info.per_page === "number" && info.per_page > 0 ? info.per_page : 50
-  const total =
+  const info = await fetchPaginationInfo(
+    aggregateId,
+    episodeId,
+    rateLimitService,
+    signal
+  )
+  const reportedPageSize =
+    typeof info.per_page === "number" &&
+    Number.isFinite(info.per_page) &&
+    info.per_page > 0
+      ? Math.floor(info.per_page)
+      : 50
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, reportedPageSize))
+  const reportedTotal =
     typeof info.readable_products_count === "number" &&
+    Number.isFinite(info.readable_products_count) &&
     info.readable_products_count > 0
-      ? info.readable_products_count
+      ? Math.floor(info.readable_products_count)
       : limit
+  const targetTotal = Math.min(reportedTotal, MAX_SERIES_CHAPTERS)
 
   const chapters = new Map<string, Chapter>()
   const duplicateIds = new Set<string>()
   let retrieved = 0
-  for (let offset = 0; offset < total; offset += limit) {
-    const products = await fetchProducts(aggregateId, offset, limit, signal)
+  let requestCount = 0
+  for (
+    let offset = 0;
+    offset < targetTotal && requestCount < MAX_PAGINATION_REQUESTS;
+    offset += limit
+  ) {
+    requestCount += 1
+    const products = await fetchProducts(
+      aggregateId,
+      offset,
+      limit,
+      rateLimitService,
+      signal
+    )
     retrieved += products.length
     for (const product of products) {
       const chapter = mapEpisode(product)
@@ -176,10 +217,10 @@ export async function fetchShonenJumpPlusChapterList(
     if (products.length < limit) break
   }
 
-  if (retrieved < total) {
+  if (retrieved < reportedTotal) {
     logger.debug("[shonenjumpplus] Chapter list appears incomplete", {
       aggregateId,
-      expected: total,
+      expected: reportedTotal,
       retrieved,
     })
   }
@@ -196,6 +237,6 @@ export async function fetchShonenJumpPlusChapterList(
   return {
     chapters: [...chapters.values()],
     volumes: [],
-    truncated: retrieved < total,
+    truncated: retrieved < reportedTotal,
   }
 }
