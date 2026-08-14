@@ -1,49 +1,59 @@
 import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
-  ParseImageUrlsFromHtmlInput,
 } from "@/src/types/site-integrations"
+import { ChapterImagePlanSchema } from "../chapter-plan"
+import {
+  MangadexDispatchContextSchema,
+  type MangadexDispatchContext,
+} from "./contracts/dispatch-context"
+import type { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import {
   downloadMangadexChapterImage,
-  parseMangadexImageUrlsFromHtml,
-  processMangadexImageUrls,
+  downloadMangadexCoverImage,
   resolveMangadexChapterImageUrls,
 } from "./chapter-api"
 
-const offscreen: OffscreenIntegration = {
+const offscreen: OffscreenIntegration<MangadexDispatchContext> = {
   name: "MangaDex API Offscreen",
+  dispatchContext: {
+    parse: (value) => MangadexDispatchContextSchema.parse(value),
+  },
+  cover: {
+    downloadImage: downloadMangadexCoverImage,
+  },
   chapter: {
-    async resolveImageUrls(
-      chapter: { id: string; url: string },
-      context?: Record<string, unknown>
-    ): Promise<string[]> {
-      return resolveMangadexChapterImageUrls(chapter, context)
-    },
-
-    async parseImageUrlsFromHtml(
-      input: ParseImageUrlsFromHtmlInput
-    ): Promise<string[]> {
-      return parseMangadexImageUrlsFromHtml(input)
-    },
-
-    processImageUrls(urls: string[]): Promise<string[]> {
-      return processMangadexImageUrls(urls)
+    async resolveChapterPlan(chapter: { id: string; url: string }, input) {
+      const context = input?.dispatchContext
+      const urls = await resolveMangadexChapterImageUrls(
+        chapter,
+        input.runtime.rateLimitService,
+        context,
+        input.signal
+      )
+      return ChapterImagePlanSchema.parse({ imageUrls: urls })
     },
 
     async downloadImage(
       imageUrl: string,
-      opts?: {
+      opts: {
         signal?: AbortSignal
-        context?: Record<string, unknown>
+        dispatchContext?: MangadexDispatchContext
+        runtime: import("@/src/types/site-integrations").ChapterRuntimeData
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+        liveResourceLedger?: OffscreenLiveResourceLedger
       }
     ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-      return downloadMangadexChapterImage(imageUrl, opts)
+      return downloadMangadexChapterImage(imageUrl, {
+        ...opts,
+        dispatchContext: opts.dispatchContext,
+      })
     },
   },
 }
 
-export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "mangadex",
-  offscreen,
-}
+export const offscreenSiteAdapter: OffscreenSiteAdapter<MangadexDispatchContext> =
+  {
+    id: "mangadex",
+    offscreen,
+  }

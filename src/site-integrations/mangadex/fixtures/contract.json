@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangadex",
+  "data": {
+    "pageProbe": {
+      "dataSaver": true,
+      "filteredLanguages": ["en", "ja"],
+      "showSafe": true,
+      "showSuggestive": true
+    },
+    "dispatchContext": {
+      "mangadexConfiguredImageQuality": "data-saver",
+      "mangadexUserPreferences": {
+        "dataSaver": true,
+        "filteredLanguages": ["en", "ja"],
+        "showSafe": true
+      }
+    }
+  }
+}

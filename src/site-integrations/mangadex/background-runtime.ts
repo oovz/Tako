@@ -4,12 +4,24 @@ import type {
   SeriesDataResolutionResult,
   ServiceWorkerIntegration,
 } from "@/src/types/site-integrations"
-import { prepareMangadexDispatchContext } from "../mangadex-dispatch-context"
+import { prepareMangadexDispatchContext } from "./dispatch-context"
 import {
   fetchMangadexChapterList,
   fetchMangadexSeriesMetadata,
 } from "./series-api"
 import { parseUuidFromPath } from "./api"
+import { parseMangadexPagePreferences } from "./preferences"
+import {
+  MANGADEX_PREFERENCES_BY_SERIES_SESSION_KEY,
+  parseMangadexPreferencesBySeries,
+} from "./preferences-schema"
+import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
+import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
+import logger from "@/src/runtime/logger"
+import type { MangadexDispatchContext } from "./contracts/dispatch-context"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+
+const pageProbePreferenceWrites = new StorageMutationQueue()
 
 function resolutionError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
@@ -31,23 +43,39 @@ async function resolveMangadexSeriesData(
   }
 
   const metadataPromise = input.signal
-    ? fetchMangadexSeriesMetadata(seriesId, "interactive", input.signal)
-    : fetchMangadexSeriesMetadata(seriesId, "interactive")
+    ? fetchMangadexSeriesMetadata(
+        seriesId,
+        input.rateLimitService,
+        "interactive",
+        input.signal
+      )
+    : fetchMangadexSeriesMetadata(
+        seriesId,
+        input.rateLimitService,
+        "interactive",
+        undefined
+      )
+  const pageProbePreferences = parseMangadexPagePreferences(input.pageProbeData)
   let chapterListSettled = false
   const chapterListPromise = (
     input.signal
       ? fetchMangadexChapterList(
           seriesId,
+          input.rateLimitService,
           input.language,
-          input.mangadexPreferences,
+          pageProbePreferences,
           "interactive",
-          input.signal
+          input.signal,
+          input.siteIntegrationSettingsReader
         )
       : fetchMangadexChapterList(
           seriesId,
+          input.rateLimitService,
           input.language,
-          input.mangadexPreferences,
-          "interactive"
+          pageProbePreferences,
+          "interactive",
+          undefined,
+          input.siteIntegrationSettingsReader
         )
   ).finally(() => {
     chapterListSettled = true
@@ -96,29 +124,52 @@ async function resolveMangadexSeriesData(
   }
 }
 
-const background: ServiceWorkerIntegration = {
+const background: ServiceWorkerIntegration<MangadexDispatchContext> = {
   name: "MangaDex API Background",
+  async shouldExecutePageProbe(input: {
+    siteIntegrationSettingsReader: SiteIntegrationSettingsReader
+  }): Promise<boolean> {
+    try {
+      const settings =
+        await input.siteIntegrationSettingsReader.getForSite("mangadex")
+      return settings.autoReadMangaDexSettings !== false
+    } catch (error) {
+      logger.debug("Skipping optional MangaDex page probe", error)
+      return false
+    }
+  },
+  async persistPageProbeData(input): Promise<void> {
+    const preferences = parseMangadexPagePreferences(input.pageProbeData)
+    if (!preferences) return
+    await pageProbePreferenceWrites.run(async () => {
+      const session = await chrome.storage.session.get(
+        MANGADEX_PREFERENCES_BY_SERIES_SESSION_KEY
+      )
+      const preferencesBySeries = parseMangadexPreferencesBySeries(
+        session[MANGADEX_PREFERENCES_BY_SERIES_SESSION_KEY]
+      )
+      preferencesBySeries[composeSeriesKey("mangadex", input.seriesId)] =
+        preferences
+      await chrome.storage.session.set({
+        [MANGADEX_PREFERENCES_BY_SERIES_SESSION_KEY]: preferencesBySeries,
+      })
+    })
+  },
   series: {
-    fetchSeriesMetadata: (seriesId, _language, signal) =>
-      fetchMangadexSeriesMetadata(seriesId, "resilient", signal),
-    fetchChapterList: (seriesId, language, signal) =>
-      fetchMangadexChapterList(
-        seriesId,
-        language,
-        undefined,
-        "resilient",
-        signal
-      ),
     resolveSeriesData: resolveMangadexSeriesData,
   },
   async prepareDispatchContext(
     input
-  ): Promise<Record<string, unknown> | undefined> {
-    return prepareMangadexDispatchContext({ seriesKey: input.seriesKey })
+  ): Promise<MangadexDispatchContext | undefined> {
+    return prepareMangadexDispatchContext({
+      seriesKey: input.seriesKey,
+      siteIntegrationSettingsReader: input.siteIntegrationSettingsReader,
+    })
   },
 }
 
-export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "mangadex",
-  background,
-}
+export const backgroundSiteAdapter: BackgroundSiteAdapter<MangadexDispatchContext> =
+  {
+    id: "mangadex",
+    background,
+  }

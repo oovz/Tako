@@ -1,19 +1,12 @@
 import { z } from "zod"
 import type { AtHomeResponse } from "./image-delivery"
 import logger from "@/src/runtime/logger"
-import {
-  allowsDeterministicE2eRedirect,
-  shouldAcceptDeterministicE2eMockResponse,
-} from "@/src/runtime/deterministic-e2e-redirect"
-import { scheduleForIntegrationScope } from "@/src/runtime/rate-limit"
 import { parseRateLimitRetryAfterHeader } from "@/src/shared/site-integration-utils"
-import {
-  assertIntegrationRequestUrl,
-  assertIntegrationResponseUrl,
-  createSameOriginDynamicAssetAssertion,
-} from "../request-policy"
+import { integrationHttpClient } from "../http-client"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseBytes } from "@/src/shared/html-response-decoder"
+import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 export const MANGADEX_API_BASE = "https://api.mangadex.org"
 export const MANGADEX_UPLOADS_BASE = "https://uploads.mangadex.org"
@@ -215,8 +208,8 @@ const AtHomeResponseSchema = z
     chapter: z
       .object({
         hash: z.string(),
-        data: z.array(z.string()),
-        dataSaver: z.array(z.string()),
+        data: z.array(z.string()).max(MAX_CHAPTER_IMAGES),
+        dataSaver: z.array(z.string()).max(MAX_CHAPTER_IMAGES),
       })
       .passthrough(),
   })
@@ -287,10 +280,24 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
     )
   }
 
+  let bytes: Uint8Array
   try {
-    const bytes = await readResponseBytes(response)
+    bytes = await readResponseBytes(response)
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+    throw createMangadexHttpError(
+      response,
+      "Failed to parse MangaDex API response as JSON. The service may be unavailable or blocking requests."
+    )
+  }
+  try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
     throw createMangadexHttpError(
       response,
       "Failed to parse MangaDex API response as JSON. The service may be unavailable or blocking requests."
@@ -342,54 +349,26 @@ const shouldRetryTransientResponse = (
   }
 }
 
-type MangadexRequestPolicy = {
-  assertRequestUrl: (url: string) => void
-  assertResponseUrl: (responseUrl: string) => void
-}
-
-function createDynamicMangadexAssetPolicy(
-  initialUrl: string
-): MangadexRequestPolicy {
-  const assertUrlAllowed = createSameOriginDynamicAssetAssertion(
-    initialUrl,
-    "MangaDex@Home asset request"
-  )
-  return {
-    assertRequestUrl: assertUrlAllowed,
-    assertResponseUrl: assertUrlAllowed,
-  }
-}
-
-function createMangadexApiRequestPolicy(
-  requestUrl: string
-): MangadexRequestPolicy {
-  return {
-    assertRequestUrl: (url) => {
-      assertIntegrationRequestUrl("mangadex", url)
-    },
-    assertResponseUrl: (responseUrl) => {
-      assertIntegrationResponseUrl("mangadex", requestUrl, responseUrl)
-    },
-  }
-}
-
 async function fetchWithMangadexRetryUsingPolicy(
   url: string,
+  rateLimitService: RateLimitService,
   options?: RequestInit,
   retryCount = 0,
-  requestPolicy: MangadexRequestPolicy = createDynamicMangadexAssetPolicy(url),
-  retryConfig: MangadexRetryConfig = MANGADEX_RETRY_CONFIG
+  retryConfig: MangadexRetryConfig = MANGADEX_RETRY_CONFIG,
+  endpointId:
+    "mangadex-api" | "mangadex-at-home-image" = "mangadex-at-home-image"
 ): Promise<Response> {
   let response: Response
   try {
-    requestPolicy.assertRequestUrl(url)
-    response = await fetch(url, {
-      ...options,
-      redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
+    response = await integrationHttpClient.request({
+      integrationId: "mangadex",
+      endpointId,
+      url,
+      scope: endpointId === "mangadex-api" ? "chapter" : "image",
+      init: options,
+      skipRateLimit: endpointId === "mangadex-at-home-image",
+      rateLimitService,
     })
-    if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
-      requestPolicy.assertResponseUrl(response.url || url)
-    }
   } catch (error) {
     const isAbort =
       options?.signal?.aborted === true ||
@@ -413,10 +392,11 @@ async function fetchWithMangadexRetryUsingPolicy(
     await waitForRetryDelay(retryDelay, options?.signal)
     return fetchWithMangadexRetryUsingPolicy(
       url,
+      rateLimitService,
       options,
       retryCount + 1,
-      requestPolicy,
-      retryConfig
+      retryConfig,
+      endpointId
     )
   }
   const shouldRetryRateLimit = response.status === 429
@@ -434,10 +414,11 @@ async function fetchWithMangadexRetryUsingPolicy(
     await waitForRetryDelay(retryDelay, options?.signal)
     return fetchWithMangadexRetryUsingPolicy(
       url,
+      rateLimitService,
       options,
       retryCount + 1,
-      requestPolicy,
-      retryConfig
+      retryConfig,
+      endpointId
     )
   }
 
@@ -451,20 +432,23 @@ async function fetchWithMangadexRetryUsingPolicy(
  */
 export async function fetchWithMangadexRetry(
   url: string,
+  rateLimitService: RateLimitService,
   options?: RequestInit,
   retryCount = 0
 ): Promise<Response> {
   return fetchWithMangadexRetryUsingPolicy(
     url,
+    rateLimitService,
     options,
     retryCount,
-    createDynamicMangadexAssetPolicy(url)
+    MANGADEX_RETRY_CONFIG,
+    "mangadex-at-home-image"
   )
 }
 
 /**
- * Schedule a MangaDex API call through the chapter-scope rate limiter, then
- * run it through `fetchWithMangadexRetry` for 429/transient retry handling.
+ * Run a MangaDex API call through the chapter-scope endpoint policy and rate
+ * limiter, then apply MangaDex's provider-owned retry handling.
  *
  * Image downloads must NOT use this — they are already rate-limited at the
  * 'image' scope by `chapter-image-downloads.ts` via `scheduleForIntegrationScope`.
@@ -472,19 +456,17 @@ export async function fetchWithMangadexRetry(
  */
 async function fetchMangadexApiWithRateLimit(
   url: string,
+  rateLimitService: RateLimitService,
   options?: RequestInit,
   retryMode: MangadexRetryMode = "resilient"
 ): Promise<Response> {
-  const requestPolicy = createMangadexApiRequestPolicy(url)
-  requestPolicy.assertRequestUrl(url)
-  return scheduleForIntegrationScope("mangadex", "chapter", () =>
-    fetchWithMangadexRetryUsingPolicy(
-      url,
-      options,
-      0,
-      requestPolicy,
-      retryConfigForMode(retryMode)
-    )
+  return fetchWithMangadexRetryUsingPolicy(
+    url,
+    rateLimitService,
+    options,
+    0,
+    retryConfigForMode(retryMode),
+    "mangadex-api"
   )
 }
 
@@ -520,12 +502,14 @@ export function parseChapterIdFromUrl(chapterUrl: string): string {
 
 export async function fetchMangaMetadata(
   mangaId: string,
+  rateLimitService: RateLimitService,
   retryMode: MangadexRetryMode = "resilient",
   signal?: AbortSignal
 ): Promise<MangadexMangaResponse> {
   const url = `${MANGADEX_API_BASE}/manga/${mangaId}?includes[]=author&includes[]=artist&includes[]=cover_art`
   const response = await fetchMangadexApiWithRateLimit(
     url,
+    rateLimitService,
     {
       credentials: "omit",
       signal,
@@ -554,12 +538,14 @@ export async function fetchMangaMetadata(
 
 export async function fetchMangaStatistics(
   mangaId: string,
+  rateLimitService: RateLimitService,
   retryMode: MangadexRetryMode = "resilient",
   signal?: AbortSignal
 ): Promise<MangadexStatisticsResponse> {
   const url = `${MANGADEX_API_BASE}/statistics/manga/${mangaId}`
   const response = await fetchMangadexApiWithRateLimit(
     url,
+    rateLimitService,
     {
       credentials: "omit",
       signal,
@@ -594,6 +580,7 @@ export function mapCommunityRatingToFiveScale(
 
 export async function fetchChapterFeed(
   mangaId: string,
+  rateLimitService: RateLimitService,
   options: {
     languages?: string[]
     contentRatings?: string[]
@@ -621,6 +608,7 @@ export async function fetchChapterFeed(
   const url = `${MANGADEX_API_BASE}/manga/${mangaId}/feed?${params}`
   const response = await fetchMangadexApiWithRateLimit(
     url,
+    rateLimitService,
     {
       credentials: "omit",
       signal,
@@ -648,12 +636,20 @@ export async function fetchChapterFeed(
 }
 
 export async function fetchAtHomeServer(
-  chapterId: string
+  chapterId: string,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
 ): Promise<AtHomeResponse> {
   const url = `${MANGADEX_API_BASE}/at-home/server/${chapterId}`
-  const response = await fetchMangadexApiWithRateLimit(url, {
-    credentials: "omit",
-  })
+  const response = await fetchMangadexApiWithRateLimit(
+    url,
+    rateLimitService,
+    {
+      credentials: "omit",
+      signal,
+    },
+    "resilient"
+  )
 
   if (!response.ok) {
     if (response.status === 429) {

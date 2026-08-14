@@ -1,10 +1,7 @@
-import { siteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
-import {
-  normalizeMangadexUserPreferences,
-  parseMangadexUserPreferences,
-  selectMangadexUserPreferencesSource,
-} from "./preferences-schema"
-import { parseConfiguredMangadexImageQuality } from "../mangadex-dispatch-context"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+import { normalizeMangadexUserPreferences } from "./preferences-schema"
+import type { MangadexDispatchContext } from "./contracts/dispatch-context"
+import { MangadexPageProbeDataSchema } from "./contracts/page-probe"
 
 export interface MangadexUserPreferences {
   dataSaver: boolean
@@ -20,67 +17,33 @@ const DEFAULT_MANGADEX_PREFERENCES: MangadexUserPreferences = {
   filteredLanguages: [],
 }
 
-export function parseMangadexStoragePreferences(
-  raw: string | null | undefined
-): MangadexUserPreferences {
-  if (!raw) return DEFAULT_MANGADEX_PREFERENCES
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return normalizeMangadexUserPreferences(
-      selectMangadexUserPreferencesSource(parsed),
-      DEFAULT_MANGADEX_PREFERENCES
-    )
-  } catch {
-    return DEFAULT_MANGADEX_PREFERENCES
-  }
-}
-
 export function parseMangadexPagePreferences(
   value: unknown
 ): MangadexUserPreferences | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined
-  }
-
-  return normalizeMangadexUserPreferences(value, DEFAULT_MANGADEX_PREFERENCES)
-}
-
-export const getContextMangadexPreferences = (
-  context?: Record<string, unknown>
-): MangadexUserPreferences | undefined => {
-  return parseMangadexUserPreferences(context?.mangadexUserPreferences)
-}
-
-const getContextConfiguredMangadexImageQuality = (
-  context?: Record<string, unknown>
-): "data" | "data-saver" | undefined => {
-  return parseConfiguredMangadexImageQuality(
-    context?.mangadexConfiguredImageQuality
+  if (value === undefined) return undefined
+  return normalizeMangadexUserPreferences(
+    MangadexPageProbeDataSchema.parse(value),
+    DEFAULT_MANGADEX_PREFERENCES
   )
 }
 
-const resolveConfiguredMangadexImageQuality = async (): Promise<
-  "data" | "data-saver" | undefined
-> => {
-  try {
-    const allSettings = await siteIntegrationSettingsService.getAll()
-    const siteSettings = allSettings.mangadex
-    if (!siteSettings) {
-      return undefined
-    }
-
-    return parseConfiguredMangadexImageQuality(siteSettings.imageQuality)
-  } catch {
-    return undefined
-  }
+export const getContextMangadexPreferences = (
+  context?: MangadexDispatchContext
+): MangadexUserPreferences | undefined => {
+  return context?.mangadexUserPreferences
 }
 
-export async function resolveMangadexImageQuality(
-  context?: Record<string, unknown>
-): Promise<"data" | "data-saver"> {
+const getContextConfiguredMangadexImageQuality = (
+  context?: MangadexDispatchContext
+): "data" | "data-saver" | undefined => {
+  return context?.mangadexConfiguredImageQuality
+}
+
+export function resolveMangadexImageQuality(
+  context?: MangadexDispatchContext
+): "data" | "data-saver" {
   const configuredImageQuality =
-    getContextConfiguredMangadexImageQuality(context) ??
-    (await resolveConfiguredMangadexImageQuality())
+    getContextConfiguredMangadexImageQuality(context)
   const contextPrefs = getContextMangadexPreferences(context)
 
   if (configuredImageQuality) {
@@ -140,7 +103,8 @@ const resolveMangadexContentRatings = (
 
 export async function resolveMangadexChapterFeedOptions(
   language?: string,
-  requestPreferences?: MangadexUserPreferences
+  requestPreferences?: MangadexUserPreferences,
+  settingsReader?: SiteIntegrationSettingsReader
 ): Promise<{
   languages?: string[]
   contentRatings?: string[]
@@ -148,7 +112,10 @@ export async function resolveMangadexChapterFeedOptions(
   let storedSettings: Record<string, unknown> = {}
 
   try {
-    const allSettings = await siteIntegrationSettingsService.getAll()
+    if (!settingsReader) {
+      throw new Error("MangaDex chapter options require settings reader")
+    }
+    const allSettings = await settingsReader.getAll()
     const rawSettings = allSettings.mangadex
     if (rawSettings) {
       storedSettings = rawSettings

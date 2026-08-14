@@ -14,7 +14,13 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { backgroundSiteAdapter } from "@/src/site-integrations/mangadex/background-runtime"
+import { offscreenSiteAdapter as offscreenSiteAdapterImpl } from "@/src/site-integrations/mangadex/offscreen-runtime"
+import { fetchMangadexSeriesMetadata } from "@/src/site-integrations/mangadex/series-api"
+import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
+import { parseMangadexPagePreferences } from "@/src/site-integrations/mangadex/preferences"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 // Mock logger before importing the site integration
 vi.mock("@/src/runtime/logger", () => ({
@@ -26,53 +32,27 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-// Mock rate limiter — delegate to global.fetch so individual tests can mock fetch directly
+// Mock the endpoint client — delegate to global.fetch so individual tests can mock fetch directly.
 vi.mock("@/src/runtime/rate-limit", () => ({
   scheduleForIntegrationScope: vi.fn(
     async (_id: string, _scope: unknown, task: () => Promise<unknown>) => task()
   ),
-  rateLimitedFetchByUrlScope: vi.fn(
-    async (url: string, _scope: unknown, init?: RequestInit) => {
-      return fetch(url, { credentials: "include", ...init })
-    }
-  ),
-  getRateLimitPolicyFromContext: vi.fn(() => undefined),
   getRateLimitPolicyFromSnapshot: vi.fn(() => undefined),
 }))
 
-// Mock integration context validator
-vi.mock("@/src/types/site-integrations", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/src/types/site-integrations")>()
-  return {
-    ...original,
-    IntegrationContextValidator: {
-      validateContentScriptContext: vi.fn(),
-      validateBackgroundOrOffscreenContext: vi.fn(),
-    },
-  }
-})
-
-// Mock site integration manifest
-vi.mock("@/src/site-integrations/manifest", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/src/site-integrations/manifest")>()
-  return {
-    ...original,
-    getPatternBySiteIntegrationId: vi.fn(() => ({
-      domains: ["mangadex.org"],
-      seriesMatches: ["*://mangadex.org/title/*"],
-      excludeMatches: [],
-    })),
-  }
-})
-
-vi.mock("@/src/storage/site-integration-settings-service", () => ({
-  siteIntegrationSettingsService: {
-    getAll: vi.fn(async () => ({})),
-    getForSite: vi.fn(async () => ({})),
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: {
+    request: vi.fn(async (input: { url: string; init?: RequestInit }) =>
+      fetch(input.url, { credentials: "include", ...input.init })
+    ),
   },
+  fetchSharedResource: vi.fn(),
 }))
+
+const siteIntegrationSettingsReader = {
+  getAll: vi.fn(async () => ({})),
+  getForSite: vi.fn(async () => ({})),
+}
 
 async function fetchMangadexChapters(
   seriesId: string,
@@ -83,23 +63,91 @@ async function fetchMangadexChapters(
     await import("@/src/site-integrations/mangadex/series-api")
   const result = await fetchMangadexChapterList(
     seriesId,
+    rateLimitService,
     language,
-    requestPreferences
+    requestPreferences,
+    "resilient",
+    undefined,
+    siteIntegrationSettingsReader
   )
   return Array.isArray(result) ? result : result.chapters
 }
 
 async function fetchMangadexMetadata(seriesId: string) {
-  const { mangadexIntegration } =
-    await import("@/src/site-integrations/mangadex")
-  return mangadexIntegration.background.series!.fetchSeriesMetadata!(seriesId)
+  return fetchMangadexSeriesMetadata(seriesId, rateLimitService, "resilient")
 }
+
+const MANGADEX_RATE_LIMIT_SETTINGS = createTaskSettingsSnapshot(
+  DEFAULT_SETTINGS,
+  "mangadex"
+).rateLimitSettings
+
+const rateLimitService = {
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_id: string, _scope: string, task: () => Promise<T>) => task()
+  ),
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+
+const originalResolveChapterPlan =
+  offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan
+const originalDownloadImage =
+  offscreenSiteAdapterImpl.offscreen.chapter.downloadImage
 
 describe("MangaDex site integration", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    siteIntegrationSettingsReader.getAll.mockReset().mockResolvedValue({})
+    siteIntegrationSettingsReader.getForSite.mockReset().mockResolvedValue({})
     global.fetch = vi.fn()
+    offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan = (
+      chapter,
+      input
+    ) =>
+      originalResolveChapterPlan(chapter, {
+        ...input,
+        runtime: {
+          rateLimitSettings:
+            input?.runtime?.rateLimitSettings ?? MANGADEX_RATE_LIMIT_SETTINGS,
+          rateLimitService,
+          chapterId: input?.runtime?.chapterId,
+        },
+      })
+    offscreenSiteAdapterImpl.offscreen.chapter.downloadImage = (
+      imageUrl,
+      opts
+    ) =>
+      originalDownloadImage(imageUrl, {
+        ...opts,
+        runtime: {
+          rateLimitSettings:
+            opts?.runtime?.rateLimitSettings ?? MANGADEX_RATE_LIMIT_SETTINGS,
+          rateLimitService,
+          chapterId: opts?.runtime?.chapterId,
+        },
+      })
   })
+
+  const offscreenSiteAdapter = {
+    offscreen: {
+      chapter: {
+        resolveChapterPlan: (
+          chapter: Parameters<typeof originalResolveChapterPlan>[0],
+          input?: unknown
+        ) =>
+          offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan(
+            chapter,
+            input as Parameters<typeof originalResolveChapterPlan>[1]
+          ),
+        downloadImage: (imageUrl: string, input?: unknown) =>
+          offscreenSiteAdapterImpl.offscreen.chapter.downloadImage(
+            imageUrl,
+            input as Parameters<typeof originalDownloadImage>[1]
+          ),
+      },
+    },
+  }
 
   describe("fetchChapterList via api.fetchChapterList", () => {
     it("filters external and unavailable chapters from the downloadable list", async () => {
@@ -273,9 +321,7 @@ describe("MangaDex site integration", () => {
     })
 
     it("uses explicit chapterLanguageFilter site settings when no language override is provided", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
+      siteIntegrationSettingsReader.getAll.mockResolvedValue({
         mangadex: {
           chapterLanguageFilter: ["ja", "en"],
         },
@@ -305,9 +351,7 @@ describe("MangaDex site integration", () => {
     })
 
     it("uses request-local MangaDex language preferences when auto-read is enabled", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
+      siteIntegrationSettingsReader.getAll.mockResolvedValue({
         mangadex: {
           autoReadMangaDexSettings: true,
         },
@@ -339,9 +383,7 @@ describe("MangaDex site integration", () => {
     })
 
     it("maps request-local MangaDex content ratings to feed params", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
+      siteIntegrationSettingsReader.getAll.mockResolvedValue({
         mangadex: {
           autoReadMangaDexSettings: true,
         },
@@ -397,9 +439,7 @@ describe("MangaDex site integration", () => {
     })
 
     it("omits translatedLanguage filters when no explicit override or cached preference exists", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({})
+      siteIntegrationSettingsReader.getAll.mockResolvedValue({})
       global.chrome = {
         storage: {
           session: {
@@ -591,7 +631,12 @@ describe("MangaDex site integration", () => {
         await import("@/src/site-integrations/mangadex/api")
 
       await expect(
-        fetchMangaStatistics("interactive-series", "interactive")
+        fetchMangaStatistics(
+          "interactive-series",
+          rateLimitService,
+          "interactive",
+          undefined
+        )
       ).rejects.toThrow("HTTP 503")
       expect(global.fetch).toHaveBeenCalledTimes(1)
     })
@@ -748,10 +793,17 @@ describe("MangaDex site integration", () => {
   })
 
   describe("User preferences", () => {
+    it("keeps an absent page probe absent and rejects malformed present data", () => {
+      expect(parseMangadexPagePreferences(undefined)).toBeUndefined()
+      expect(() =>
+        parseMangadexPagePreferences({
+          dataSaver: "yes",
+        })
+      ).toThrow()
+    })
+
     it("prepareDispatchContext forwards cached per-series preferences when auto-read is enabled", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getForSite).mockResolvedValue({
+      siteIntegrationSettingsReader.getForSite.mockResolvedValue({
         autoReadMangaDexSettings: true,
       })
 
@@ -770,10 +822,8 @@ describe("MangaDex site integration", () => {
         },
       } as unknown as typeof chrome
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
       const context =
-        await mangadexIntegration.background.prepareDispatchContext?.({
+        await backgroundSiteAdapter.background.prepareDispatchContext?.({
           taskId: "task-1",
           seriesKey: "mangadex#series-1",
           chapter: {
@@ -785,6 +835,7 @@ describe("MangaDex site integration", () => {
           settingsSnapshot: {
             ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
           },
+          siteIntegrationSettingsReader,
         })
 
       expect(context).toEqual({
@@ -799,9 +850,7 @@ describe("MangaDex site integration", () => {
     })
 
     it("prepareDispatchContext does not read session preferences when auto-read is disabled", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getForSite).mockResolvedValue({
+      siteIntegrationSettingsReader.getForSite.mockResolvedValue({
         autoReadMangaDexSettings: false,
       })
 
@@ -821,10 +870,8 @@ describe("MangaDex site integration", () => {
       } as unknown as typeof chrome
 
       vi.resetModules()
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
       const context =
-        await mangadexIntegration.background.prepareDispatchContext?.({
+        await backgroundSiteAdapter.background.prepareDispatchContext?.({
           taskId: "task-1",
           seriesKey: "mangadex#series-1",
           chapter: {
@@ -836,21 +883,59 @@ describe("MangaDex site integration", () => {
           settingsSnapshot: {
             ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
           },
+          siteIntegrationSettingsReader,
         })
 
       expect(context).toBeUndefined()
       expect(chrome.storage.session.get).not.toHaveBeenCalled()
     })
 
+    it("rejects malformed stored per-series preferences instead of dropping them", async () => {
+      siteIntegrationSettingsReader.getForSite.mockResolvedValue({
+        autoReadMangaDexSettings: true,
+      })
+
+      global.chrome = {
+        storage: {
+          session: {
+            get: vi.fn(async () => ({
+              mangadexUserPreferencesBySeries: {
+                "mangadex#series-1": {
+                  dataSaver: false,
+                  filteredLanguages: ["en"],
+                  obsolete: true,
+                },
+              },
+            })),
+          },
+        },
+      } as unknown as typeof chrome
+
+      await expect(
+        backgroundSiteAdapter.background.prepareDispatchContext?.({
+          taskId: "task-1",
+          seriesKey: "mangadex#series-1",
+          chapter: {
+            id: "ch-1",
+            url: "https://mangadex.org/chapter/ch-1",
+            title: "Chapter 1",
+            comicInfo: {},
+          },
+          settingsSnapshot: {
+            ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
+          },
+          siteIntegrationSettingsReader,
+        })
+      ).rejects.toThrow()
+    })
+
     it("prepareDispatchContext forwards configured MangaDex imageQuality when offscreen cannot read storage directly", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
+      siteIntegrationSettingsReader.getAll.mockResolvedValue({
         mangadex: {
           imageQuality: "data",
         },
       })
-      vi.mocked(siteIntegrationSettingsService.getForSite).mockResolvedValue({
+      siteIntegrationSettingsReader.getForSite.mockResolvedValue({
         autoReadMangaDexSettings: false,
         imageQuality: "data",
       })
@@ -865,10 +950,8 @@ describe("MangaDex site integration", () => {
         },
       } as unknown as typeof chrome
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
       const context =
-        await mangadexIntegration.background.prepareDispatchContext?.({
+        await backgroundSiteAdapter.background.prepareDispatchContext?.({
           taskId: "task-1",
           seriesKey: "mangadex#series-1",
           chapter: {
@@ -880,6 +963,7 @@ describe("MangaDex site integration", () => {
           settingsSnapshot: {
             ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
           },
+          siteIntegrationSettingsReader,
         })
 
       expect(context).toEqual({
@@ -887,7 +971,7 @@ describe("MangaDex site integration", () => {
       })
     })
 
-    it("resolveImageUrls honors integrationContext MangaDex preferences for quality selection", async () => {
+    it("resolveChapterPlan honors typed MangaDex dispatch preferences for quality selection", async () => {
       ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -900,96 +984,24 @@ describe("MangaDex site integration", () => {
         }),
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const urls =
-        await mangadexIntegration.background.chapter.resolveImageUrls?.(
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
             url: "https://mangadex.org/chapter/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
           },
           {
-            mangadexUserPreferences: {
-              dataSaver: false,
-              filteredLanguages: ["en"],
+            dispatchContext: {
+              mangadexUserPreferences: {
+                dataSaver: false,
+                filteredLanguages: ["en"],
+              },
             },
           }
         )
 
       expect(urls).toEqual([
         "https://uploads.mangadex.org/data/hash123/001.jpg",
-      ])
-    })
-
-    it("resolveImageUrls honors explicit stored MangaDex imageQuality settings before cached preference fallback", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
-        mangadex: {
-          imageQuality: "data",
-        },
-      })
-
-      ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          baseUrl: "https://uploads.mangadex.org",
-          chapter: {
-            hash: "hash123",
-            data: ["full-quality.png"],
-            dataSaver: ["compressed.jpg"],
-          },
-        }),
-      })
-
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
-      const urls =
-        await mangadexIntegration.background.chapter.resolveImageUrls?.({
-          id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-          url: "https://mangadex.org/chapter/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        })
-
-      expect(urls).toEqual([
-        "https://uploads.mangadex.org/data/hash123/full-quality.png",
-      ])
-    })
-
-    it("parseImageUrlsFromHtml honors explicit stored MangaDex imageQuality settings before cached preference fallback", async () => {
-      const { siteIntegrationSettingsService } =
-        await import("@/src/storage/site-integration-settings-service")
-      vi.mocked(siteIntegrationSettingsService.getAll).mockResolvedValue({
-        mangadex: {
-          imageQuality: "data",
-        },
-      })
-
-      ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          baseUrl: "https://uploads.mangadex.org",
-          chapter: {
-            hash: "hash123",
-            data: ["full-quality.png"],
-            dataSaver: ["compressed.jpg"],
-          },
-        }),
-      })
-
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
-      const urls =
-        await mangadexIntegration.background.chapter.parseImageUrlsFromHtml?.({
-          chapterId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-          chapterUrl:
-            "https://mangadex.org/chapter/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-          chapterHtml: "",
-        })
-
-      expect(urls).toEqual([
-        "https://uploads.mangadex.org/data/hash123/full-quality.png",
       ])
     })
   })
@@ -1436,7 +1448,10 @@ describe("MangaDex site integration", () => {
       vi.useFakeTimers()
       try {
         const responsePromise = fetchWithMangadexRetry(
-          "https://api.mangadex.org/manga/test-id"
+          "https://api.mangadex.org/manga/test-id",
+          rateLimitService,
+          undefined,
+          0
         )
         await vi.advanceTimersByTimeAsync(6000)
         await expect(responsePromise).resolves.toMatchObject({ ok: true })
@@ -1456,7 +1471,10 @@ describe("MangaDex site integration", () => {
       vi.useFakeTimers()
       try {
         const responsePromise = fetchWithMangadexRetry(
-          "https://api.mangadex.org/manga/test-id"
+          "https://api.mangadex.org/manga/test-id",
+          rateLimitService,
+          undefined,
+          0
         )
         const expectation =
           expect(responsePromise).rejects.toThrow("Failed to fetch")
@@ -1478,9 +1496,12 @@ describe("MangaDex site integration", () => {
       ;(global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(abortError)
 
       await expect(
-        fetchWithMangadexRetry("https://api.mangadex.org/manga/test-id", {
-          signal: controller.signal,
-        })
+        fetchWithMangadexRetry(
+          "https://api.mangadex.org/manga/test-id",
+          rateLimitService,
+          { signal: controller.signal },
+          0
+        )
       ).rejects.toThrow("aborted")
       expect(global.fetch).toHaveBeenCalledOnce()
     })
@@ -1602,11 +1623,8 @@ describe("MangaDex site integration", () => {
         json: async () => mockAtHomeResponse,
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
       await expect(
-        mangadexIntegration.background.chapter.resolveImageUrls?.({
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan({
           id: "12345678-abcd-1234-abcd-123456789012",
           url: "https://mangadex.org/chapter/12345678-abcd-1234-abcd-123456789012",
         })
@@ -1633,10 +1651,8 @@ describe("MangaDex site integration", () => {
         json: async () => mockAtHomeResponse,
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const urls =
-        await mangadexIntegration.background.chapter.resolveImageUrls?.({
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan({
           id: "12345678-abcd-1234-abcd-123456789012",
           url: "https://mangadex.org/chapter/12345678-abcd-1234-abcd-123456789012",
         })
@@ -1663,19 +1679,18 @@ describe("MangaDex site integration", () => {
         json: async () => mockAtHomeResponse,
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
-      const urls =
-        await mangadexIntegration.background.chapter.resolveImageUrls?.(
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
             url: "https://mangadex.org/chapter/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
           },
           {
-            mangadexUserPreferences: {
-              dataSaver: false,
-              filteredLanguages: ["en"],
+            dispatchContext: {
+              mangadexUserPreferences: {
+                dataSaver: false,
+                filteredLanguages: ["en"],
+              },
             },
           }
         )
@@ -1704,44 +1719,24 @@ describe("MangaDex site integration", () => {
         json: async () => mockAtHomeResponse,
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const urls =
-        await mangadexIntegration.background.chapter.resolveImageUrls?.({
+      await expect(
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan({
           id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
           url: "https://mangadex.org/chapter/cccccccc-cccc-cccc-cccc-cccccccccccc",
         })
-
-      expect(urls).toHaveLength(0)
+      ).rejects.toThrow()
       expect(logger.default.error).toHaveBeenCalled()
     })
 
-    it("processImageUrls filters out invalid URLs", async () => {
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
-      const urls = [
-        "https://valid-url.mangadex.org/page1.jpg",
-        "not-a-valid-url",
-        "",
-        "https://another-valid.com/page2.jpg",
-      ]
-
-      const mockChapter = {
-        id: "test-chapter",
-        url: "https://mangadex.org/chapter/test",
-        title: "Test Chapter",
-        chapterNumber: 1,
-      }
-      const processed =
-        await mangadexIntegration.background.chapter.processImageUrls(
-          urls,
-          mockChapter as import("@/src/types/chapter").Chapter
-        )
-
-      expect(processed).toHaveLength(2)
-      expect(processed).toContain("https://valid-url.mangadex.org/page1.jpg")
-      expect(processed).toContain("https://another-valid.com/page2.jpg")
+    it("rejects malformed chapter plans instead of filtering provider output", () => {
+      expect(() =>
+        ChapterImagePlanSchema.parse({
+          imageUrls: [
+            "https://valid-url.mangadex.org/page1.jpg",
+            "not-a-valid-url",
+          ],
+        })
+      ).toThrow()
     })
   })
 
@@ -1904,9 +1899,7 @@ describe("MangaDex site integration", () => {
         },
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const result = await mangadexIntegration.background.chapter.downloadImage(
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://uploads.mangadex.org/data/abc123/page1.jpg"
       )
 
@@ -1958,10 +1951,8 @@ describe("MangaDex site integration", () => {
           }
         })
 
-        const { mangadexIntegration } =
-          await import("@/src/site-integrations/mangadex")
         const resultPromise =
-          mangadexIntegration.background.chapter.downloadImage(
+          offscreenSiteAdapter.offscreen.chapter.downloadImage(
             "https://uploads.mangadex.org/data/abc123/page1.jpg"
           )
 
@@ -1991,13 +1982,16 @@ describe("MangaDex site integration", () => {
         },
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
       await expect(
-        mangadexIntegration.background.chapter.downloadImage(
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
           "https://uploads.mangadex.org/data/abc123/page1.jpg",
-          { context: { chapterId: "ch-1" } }
+          {
+            runtime: {
+              chapterId: "ch-1",
+              rateLimitService,
+              rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
+            },
+          }
         )
       ).rejects.toThrow("Unsupported MIME type: text/html")
       expect(global.fetch).not.toHaveBeenCalledWith(
@@ -2010,11 +2004,8 @@ describe("MangaDex site integration", () => {
       const abortController = new AbortController()
       abortController.abort()
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
       await expect(
-        mangadexIntegration.background.chapter.downloadImage(
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
           "https://uploads.mangadex.org/data/abc123/page1.jpg",
           { signal: abortController.signal }
         )
@@ -2028,11 +2019,8 @@ describe("MangaDex site integration", () => {
         statusText: "Not Found",
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-
       await expect(
-        mangadexIntegration.background.chapter.downloadImage(
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
           "https://uploads.mangadex.org/data/abc123/missing.jpg"
         )
       ).rejects.toThrow("404")
@@ -2090,13 +2078,13 @@ describe("MangaDex site integration", () => {
         throw new Error(`Unexpected fetch URL: ${url}`)
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const result = await mangadexIntegration.background.chapter.downloadImage(
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://uploads.mangadex.org/data/hash123/1-old.png",
         {
-          context: {
+          runtime: {
             chapterId: "ch-1",
+            rateLimitService,
+            rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
           },
         }
       )
@@ -2112,6 +2100,78 @@ describe("MangaDex site integration", () => {
         "https://new-node.mangadex.network/data/hash456/1-new.png",
         expect.objectContaining({ credentials: "omit" })
       )
+    })
+
+    it("aborts a stalled at-home recovery request with the owning image signal", async () => {
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+      const controller = new AbortController()
+      let recoveryStarted = false
+
+      fetchMock.mockImplementation(
+        async (url: string, options?: RequestInit) => {
+          if (
+            url === "https://same-node.mangadex.network/data/hash123/1-old.png"
+          ) {
+            return {
+              ok: false,
+              status: 404,
+              statusText: "Not Found",
+              headers: { get: () => null },
+            }
+          }
+
+          if (url === "https://api.mangadex.org/at-home/server/ch-1") {
+            recoveryStarted = true
+            return await new Promise<never>((_resolve, reject) => {
+              const signal = options?.signal
+              if (signal?.aborted) {
+                reject(
+                  new DOMException("The operation was aborted.", "AbortError")
+                )
+                return
+              }
+              signal?.addEventListener(
+                "abort",
+                () =>
+                  reject(
+                    new DOMException("The operation was aborted.", "AbortError")
+                  ),
+                { once: true }
+              )
+            })
+          }
+
+          if (url.includes("mangadex.network/report")) {
+            return { ok: true, headers: { get: () => null } }
+          }
+
+          throw new Error(`Unexpected fetch URL: ${url}`)
+        }
+      )
+
+      const resultPromise =
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
+          "https://same-node.mangadex.network/data/hash123/1-old.png",
+          {
+            signal: controller.signal,
+            runtime: {
+              chapterId: "ch-1",
+              rateLimitService,
+              rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
+            },
+          }
+        )
+
+      await vi.waitFor(() => expect(recoveryStarted).toBe(true))
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.mangadex.org/at-home/server/ch-1",
+        expect.objectContaining({ signal: controller.signal })
+      )
+      controller.abort()
+
+      await expect(resultPromise).rejects.toMatchObject({
+        name: "AbortError",
+      })
     })
 
     it("falls back to uploads.mangadex.org after report-and-refresh returns the same base URL", async () => {
@@ -2166,13 +2226,13 @@ describe("MangaDex site integration", () => {
         throw new Error(`Unexpected fetch URL: ${url}`)
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const result = await mangadexIntegration.background.chapter.downloadImage(
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://same-node.mangadex.network/data/hash123/1-old.png",
         {
-          context: {
+          runtime: {
             chapterId: "ch-1",
+            rateLimitService,
+            rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
           },
         }
       )
@@ -2255,13 +2315,13 @@ describe("MangaDex site integration", () => {
         throw new Error(`Unexpected fetch URL: ${url}`)
       })
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      const result = await mangadexIntegration.background.chapter.downloadImage(
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://same-node.mangadex.network/data/hash123/1-old.png",
         {
-          context: {
+          runtime: {
             chapterId: "ch-1",
+            rateLimitService,
+            rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
           },
         }
       )
@@ -2341,14 +2401,14 @@ describe("MangaDex site integration", () => {
       vi.useFakeTimers()
 
       try {
-        const { mangadexIntegration } =
-          await import("@/src/site-integrations/mangadex")
         const resultPromise =
-          mangadexIntegration.background.chapter.downloadImage(
+          offscreenSiteAdapter.offscreen.chapter.downloadImage(
             "https://same-node.mangadex.network/data/hash123/1-old.png",
             {
-              context: {
+              runtime: {
                 chapterId: "ch-1",
+                rateLimitService,
+                rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
               },
             }
           )
@@ -2391,9 +2451,7 @@ describe("MangaDex site integration", () => {
         }
       )
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
-      await mangadexIntegration.background.chapter.downloadImage(
+      await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://cdn.mangadex.network/data/abc123/page1.webp"
       )
 
@@ -2439,10 +2497,8 @@ describe("MangaDex site integration", () => {
         }
       )
 
-      const { mangadexIntegration } =
-        await import("@/src/site-integrations/mangadex")
       let settled = false
-      const resultPromise = mangadexIntegration.background.chapter
+      const resultPromise = offscreenSiteAdapter.offscreen.chapter
         .downloadImage("https://cdn.mangadex.network/data/abc/page.png")
         .then((result) => {
           settled = true

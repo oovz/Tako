@@ -15,6 +15,8 @@ import {
 } from "./api"
 import { resolveMangadexChapterFeedOptions } from "./preferences"
 import type { MangadexUserPreferences } from "./preferences-schema"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function extractPreferredTitle(
   titles: Record<string, string>,
@@ -136,18 +138,21 @@ function buildMangadexVolumeId(volumeLabel: string): string {
 
 export async function fetchMangadexSeriesMetadata(
   seriesId: string,
+  rateLimitService: RateLimitService,
   retryMode: MangadexRetryMode = "resilient",
   signal?: AbortSignal
 ): Promise<SeriesMetadata> {
   const [data, statisticsResult] = await Promise.all([
-    fetchMangaMetadata(seriesId, retryMode, signal),
-    fetchMangaStatistics(seriesId, retryMode, signal).catch((error) => {
-      logger.debug(
-        "[mangadex] Failed to fetch manga statistics (non-blocking):",
-        error
-      )
-      return undefined
-    }),
+    fetchMangaMetadata(seriesId, rateLimitService, retryMode, signal),
+    fetchMangaStatistics(seriesId, rateLimitService, retryMode, signal).catch(
+      (error) => {
+        logger.debug(
+          "[mangadex] Failed to fetch manga statistics (non-blocking):",
+          error
+        )
+        return undefined
+      }
+    ),
   ])
   const attrs = data.data.attributes
 
@@ -322,19 +327,25 @@ function buildMangadexVolumes(chapters: Chapter[]): VolumeState[] {
 
 export async function fetchMangadexChapterList(
   seriesId: string,
+  rateLimitService: RateLimitService,
   language?: string,
   requestPreferences?: MangadexUserPreferences,
   retryMode: MangadexRetryMode = "resilient",
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  settingsReader?: SiteIntegrationSettingsReader
 ): Promise<SeriesChapterListResult> {
   const chapterById = new Map<string, Chapter>()
   const duplicateChapterIds = new Set<string>()
   let offset = 0
   const limit = 500
   let total = Infinity
+  if (!settingsReader) {
+    throw new Error("MangaDex chapter resolution requires settings reader")
+  }
   const feedOptions = await resolveMangadexChapterFeedOptions(
     language,
-    requestPreferences
+    requestPreferences,
+    settingsReader
   )
 
   if (feedOptions.contentRatings?.length === 0) {
@@ -344,6 +355,7 @@ export async function fetchMangadexChapterList(
   while (offset < total && offset < 10000) {
     const feed = await fetchChapterFeed(
       seriesId,
+      rateLimitService,
       feedOptions,
       offset,
       limit,

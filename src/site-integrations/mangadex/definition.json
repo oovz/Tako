@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "mangadex",
+  "name": "MangaDex API",
+  "author": "TMD Team",
+  "version": "1.1.0",
+  "maturity": "stable",
+  "shipped": true,
+  "enabledByDefault": false,
+  "implementationType": "official-api",
+  "volatility": "low",
+  "authentication": "anonymous",
+  "regions": ["global"],
+  "accountConstraints": ["free-api-access"],
+  "patterns": {
+    "domains": ["mangadex.org"],
+    "seriesMatches": ["/title/*"],
+    "excludeMatches": ["/chapter/*"]
+  },
+  "requiredOrigins": [
+    "https://mangadex.org/*",
+    "https://*.mangadex.org/*",
+    "https://api.mangadex.org/*",
+    "https://uploads.mangadex.org/*",
+    "https://api.mangadex.network/*"
+  ],
+  "optionalOrigins": ["https://*/*"],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 500 },
+    "chapter": { "concurrency": 1, "delayMs": 500 }
+  },
+  "retryOwner": "provider",
+  "pageProbe": "optional",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "optional", "schemaVersion": 1 }
+  },
+  "resolution": {
+    "seriesStrategies": ["official-api"],
+    "chapterStrategies": ["official-api"],
+    "imageStrategies": ["at-home-api"],
+    "imageTransform": { "kind": "none", "estimatedCostMs": 0 }
+  },
+  "endpointPolicies": [
+    {
+      "id": "mangadex-api",
+      "purpose": "MangaDex API requests",
+      "origins": ["https://api.mangadex.org/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "mangadex-network-report",
+      "purpose": "MangaDex network report requests",
+      "origins": ["https://api.mangadex.network/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 1000000
+    },
+    {
+      "id": "mangadex-at-home-image",
+      "purpose": "MangaDex provider-issued image nodes",
+      "origins": ["https://*/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "dynamicOrigins": [
+    {
+      "endpointId": "mangadex-at-home-image",
+      "sourceEndpointId": "mangadex-api",
+      "allowedOriginPattern": "https://*/*",
+      "validator": "public-https"
+    }
+  ],
+  "sessionRefererRules": [],
+  "customSettings": [
+    {
+      "id": "imageQuality",
+      "labelKey": "mangadexSetting_imageQualityLabel",
+      "descriptionKey": "mangadexSetting_imageQualityDescription",
+      "type": "select",
+      "defaultValue": "data-saver",
+      "options": [
+        {
+          "labelKey": "mangadexSetting_imageQualityOption_dataSaver",
+          "value": "data-saver"
+        },
+        {
+          "labelKey": "mangadexSetting_imageQualityOption_data",
+          "value": "data"
+        }
+      ]
+    },
+    {
+      "id": "chapterLanguageFilter",
+      "labelKey": "mangadexSetting_chapterLanguageFilterLabel",
+      "descriptionKey": "mangadexSetting_chapterLanguageFilterDescription",
+      "type": "multiselect",
+      "defaultValue": [],
+      "options": [
+        {
+          "labelKey": "mangadexSetting_chapterLanguageFilterOption_en",
+          "value": "en"
+        },
+        {
+          "labelKey": "mangadexSetting_chapterLanguageFilterOption_ja",
+          "value": "ja"
+        },
+        {
+          "labelKey": "mangadexSetting_chapterLanguageFilterOption_ko",
+          "value": "ko"
+        },
+        {
+          "labelKey": "mangadexSetting_chapterLanguageFilterOption_zh",
+          "value": "zh"
+        }
+      ]
+    },
+    {
+      "id": "autoReadMangaDexSettings",
+      "labelKey": "mangadexSetting_autoReadMangaDexSettingsLabel",
+      "descriptionKey": "mangadexSetting_autoReadMangaDexSettingsDescription",
+      "type": "boolean",
+      "defaultValue": true
+    }
+  ],
+  "fixtures": {
+    "paths": ["src/site-integrations/mangadex/fixtures/contract.json"],
+    "liveFreshnessDays": 30
+  }
+}

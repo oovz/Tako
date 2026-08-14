@@ -1,9 +1,4 @@
-import type { ParseImageUrlsFromHtmlInput } from "../../types/site-integrations"
 import logger from "@/src/runtime/logger"
-import {
-  allowsDeterministicE2eRedirect,
-  shouldAcceptDeterministicE2eMockResponse,
-} from "@/src/runtime/deterministic-e2e-redirect"
 import {
   buildMangadexUploadsRecoveryImageUrl,
   buildPageUrls,
@@ -29,13 +24,15 @@ import {
   getContextMangadexPreferences,
   resolveMangadexImageQuality,
 } from "./preferences"
-import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image-core"
-import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
-import {
-  assertIntegrationRequestUrl,
-  assertIntegrationResponseUrl,
-  createSameOriginDynamicAssetAssertion,
-} from "../request-policy"
+import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
+import { integrationHttpClient } from "../http-client"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { ChapterRuntimeData } from "@/src/types/site-integrations"
+import type { MangadexDispatchContext } from "./contracts/dispatch-context"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 type MangadexAtHomeReport = {
   url: string
@@ -90,16 +87,12 @@ const waitForMangadexImageRecoveryWindow = async (
   })
 }
 
-const getContextChapterId = (
-  context?: Record<string, unknown>
-): string | undefined => {
-  return typeof context?.chapterId === "string" && context.chapterId.length > 0
-    ? context.chapterId
-    : undefined
-}
+const getContextChapterId = (runtime: ChapterRuntimeData): string | undefined =>
+  runtime.chapterId
 
 async function reportToMangadexNetwork(
-  report: MangadexAtHomeReport
+  report: MangadexAtHomeReport,
+  rateLimitService: RateLimitService
 ): Promise<void> {
   let reportHost: string
   try {
@@ -120,22 +113,19 @@ async function reportToMangadexNetwork(
   )
 
   try {
-    assertIntegrationRequestUrl("mangadex", MANGADEX_NETWORK_REPORT)
-    const response = await fetch(MANGADEX_NETWORK_REPORT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report),
-      credentials: "omit",
-      redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
-      signal: controller.signal,
+    const response = await integrationHttpClient.request({
+      integrationId: "mangadex",
+      endpointId: "mangadex-network-report",
+      url: MANGADEX_NETWORK_REPORT,
+      scope: "chapter",
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+        signal: controller.signal,
+      },
+      rateLimitService,
     })
-    if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
-      assertIntegrationResponseUrl(
-        "mangadex",
-        MANGADEX_NETWORK_REPORT,
-        response.url
-      )
-    }
     if (!response.ok) {
       logger.debug(
         `[mangadex] Network report rejected with HTTP ${response.status}`
@@ -150,32 +140,39 @@ async function reportToMangadexNetwork(
 
 async function fetchMangadexImageAsset(
   imageUrl: string,
+  rateLimitService: RateLimitService,
   signal?: AbortSignal,
-  onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+  onBytesReceived?: (bytesReceived: number) => void | Promise<void>,
+  liveResourceLedger?: OffscreenLiveResourceLedger
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
   const startTime = Date.now()
   let success = false
   let bytes = 0
   let cached = false
-  const assertImageUrlAllowed = createSameOriginDynamicAssetAssertion(
-    imageUrl,
-    "MangaDex@Home image request"
-  )
-
   try {
-    const { data, mimeType } = await fetchImageWithStallDetection(imageUrl, {
-      signal,
-      init: {
-        credentials: "omit",
-      },
-      fetcher: (url, init) => fetchWithMangadexRetry(url, init),
-      createHttpError: createMangadexHttpError,
-      assertUrlAllowed: assertImageUrlAllowed,
-      onResponse: (response) => {
-        cached = response.headers.get("X-Cache")?.startsWith("HIT") ?? false
-      },
-      onBytesReceived,
-    })
+    const { data, mimeType, liveResourceLease } =
+      await fetchImageWithStallDetection(imageUrl, {
+        integrationId: "mangadex",
+        endpointId: "mangadex-at-home-image",
+        rateLimitService,
+        signal,
+        init: {
+          credentials: "omit",
+        },
+        fetcher: (url, init) =>
+          fetchWithMangadexRetry(url, rateLimitService, init, 0),
+        createHttpError: createMangadexHttpError,
+        onResponse: (response) => {
+          cached = response.headers.get("X-Cache")?.startsWith("HIT") ?? false
+        },
+        onBytesReceived,
+        liveResourceLedger,
+      })
 
     bytes = data.byteLength
     success = true
@@ -191,26 +188,31 @@ async function fetchMangadexImageAsset(
       cached,
     })
 
-    return { data, filename, mimeType }
+    return { data, filename, mimeType, liveResourceLease }
   } finally {
     const duration = Date.now() - startTime
-    void reportToMangadexNetwork({
-      url: imageUrl,
-      success,
-      bytes,
-      duration,
-      cached,
-    })
+    void reportToMangadexNetwork(
+      {
+        url: imageUrl,
+        success,
+        bytes,
+        duration,
+        cached,
+      },
+      rateLimitService
+    )
   }
 }
 
 export async function resolveMangadexChapterImageUrls(
   chapter: { id: string; url: string },
-  context?: Record<string, unknown>
+  rateLimitService: RateLimitService,
+  context?: MangadexDispatchContext,
+  signal?: AbortSignal
 ): Promise<string[]> {
   const chapterId = parseChapterIdFromUrl(chapter.url)
-  const atHome = await fetchAtHomeServer(chapterId)
-  const quality = await resolveMangadexImageQuality(context)
+  const atHome = await fetchAtHomeServer(chapterId, rateLimitService, signal)
+  const quality = resolveMangadexImageQuality(context)
   const urls = buildPageUrls(atHome, quality)
 
   logger.debug("[mangadex] Resolved chapter image URLs from at-home server", {
@@ -233,45 +235,22 @@ export async function resolveMangadexChapterImageUrls(
   return urls
 }
 
-export async function parseMangadexImageUrlsFromHtml({
-  chapterUrl,
-}: ParseImageUrlsFromHtmlInput): Promise<string[]> {
-  const chapterId = parseChapterIdFromUrl(chapterUrl)
-  const atHome = await fetchAtHomeServer(chapterId)
-
-  const quality = await resolveMangadexImageQuality()
-  const urls = buildPageUrls(atHome, quality)
-
-  logger.debug("[mangadex] Resolved chapter image URLs from at-home server", {
-    chapterId,
-    chapterUrl: summarizeUrlForDiagnostics(chapterUrl),
-    quality,
-    urlCount: urls.length,
-  })
-
-  if (urls.length === 0) {
-    logger.error("[mangadex] No images returned by at-home endpoint", {
-      chapterId,
-      chapterUrl: summarizeUrlForDiagnostics(chapterUrl),
-    })
-  }
-
-  return urls
-}
-
-export function processMangadexImageUrls(urls: string[]): Promise<string[]> {
-  return Promise.resolve(filterValidImageUrls(urls))
-}
-
 export async function downloadMangadexChapterImage(
   imageUrl: string,
-  opts?: {
+  opts: {
     signal?: AbortSignal
-    context?: Record<string, unknown>
+    dispatchContext?: MangadexDispatchContext
+    runtime: ChapterRuntimeData
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
   }
-): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-  if (opts?.signal?.aborted) {
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (opts.signal?.aborted) {
     throw new Error("aborted")
   }
 
@@ -281,16 +260,18 @@ export async function downloadMangadexChapterImage(
   try {
     return await fetchMangadexImageAsset(
       imageUrl,
-      opts?.signal,
-      opts?.onBytesReceived
+      opts.runtime.rateLimitService,
+      opts.signal,
+      opts.onBytesReceived,
+      opts.liveResourceLedger
     )
   } catch (error) {
-    const chapterId = getContextChapterId(opts?.context)
+    const chapterId = getContextChapterId(opts.runtime)
     const deliveryTarget = parseMangadexImageDeliveryTarget(imageUrl)
     if (
       !chapterId ||
       !deliveryTarget ||
-      opts?.signal?.aborted ||
+      opts.signal?.aborted ||
       !isMangadexImageRecoveryRetryableError(error)
     ) {
       throw error
@@ -301,11 +282,15 @@ export async function downloadMangadexChapterImage(
     let failedOfficialBaseUrl = deliveryTarget.baseUrl
 
     for (let cycle = 1; cycle <= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES; cycle++) {
-      if (opts?.signal?.aborted) {
+      if (opts.signal?.aborted) {
         throw new Error("aborted", { cause: error })
       }
 
-      const refreshedAtHome = await fetchAtHomeServer(chapterId)
+      const refreshedAtHome = await fetchAtHomeServer(
+        chapterId,
+        opts.runtime.rateLimitService,
+        opts.signal
+      )
       const refreshedBaseUrl = normalizeMangadexBaseUrl(refreshedAtHome.baseUrl)
       const useUploadsFallback = isSameMangadexBaseUrl(
         refreshedBaseUrl,
@@ -338,8 +323,10 @@ export async function downloadMangadexChapterImage(
       try {
         return await fetchMangadexImageAsset(
           recoveryUrl,
-          opts?.signal,
-          opts?.onBytesReceived
+          opts.runtime.rateLimitService,
+          opts.signal,
+          opts.onBytesReceived,
+          opts.liveResourceLedger
         )
       } catch (recoveryError) {
         lastRecoveryError = recoveryError
@@ -356,7 +343,7 @@ export async function downloadMangadexChapterImage(
         break
       }
 
-      await waitForMangadexImageRecoveryWindow(opts?.signal)
+      await waitForMangadexImageRecoveryWindow(opts.signal)
     }
 
     const lastRecoveryMessage =
@@ -371,5 +358,41 @@ export async function downloadMangadexChapterImage(
     }
 
     throw error
+  }
+}
+
+export async function downloadMangadexCoverImage(
+  imageUrl: string,
+  opts: {
+    signal?: AbortSignal
+    dispatchContext?: MangadexDispatchContext
+    runtime: ChapterRuntimeData
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
+  }
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(imageUrl, {
+      signal: opts.signal,
+      init: { credentials: "omit" },
+      integrationId: "mangadex",
+      endpointId: "mangadex-at-home-image",
+      rateLimitService: opts.runtime.rateLimitService,
+      onBytesReceived: opts.onBytesReceived,
+      liveResourceLedger: opts.liveResourceLedger,
+    })
+  return {
+    data,
+    mimeType,
+    liveResourceLease,
+    filename:
+      new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
+      "cover.jpg",
   }
 }
