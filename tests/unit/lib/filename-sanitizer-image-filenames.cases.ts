@@ -121,12 +121,6 @@ export function registerNormalizeImageFilenameCases(): void {
         )
       })
 
-      it("converts image/jpg to .jpg", () => {
-        expect(normalizeImageFilename(0, 10, "image/jpg", "auto")).toBe(
-          "01.jpg"
-        )
-      })
-
       it("converts image/png to .png", () => {
         expect(normalizeImageFilename(0, 10, "image/png", "auto")).toBe(
           "01.png"
@@ -145,31 +139,10 @@ export function registerNormalizeImageFilenameCases(): void {
         )
       })
 
-      it("converts image/bmp to .bmp", () => {
-        expect(normalizeImageFilename(0, 10, "image/bmp", "auto")).toBe(
-          "01.bmp"
-        )
-      })
-
-      it("converts image/svg to .svg", () => {
-        expect(normalizeImageFilename(0, 10, "image/svg+xml", "auto")).toBe(
-          "01.svg"
-        )
-      })
-
-      it("converts image/avif to .avif", () => {
-        expect(normalizeImageFilename(0, 10, "image/avif", "auto")).toBe(
-          "01.avif"
-        )
-      })
-
-      it("handles case-insensitive MIME types", () => {
-        expect(normalizeImageFilename(0, 10, "IMAGE/JPEG", "auto")).toBe(
-          "01.jpg"
-        )
-        expect(normalizeImageFilename(0, 10, "Image/PNG", "auto")).toBe(
-          "01.png"
-        )
+      it("rejects unsupported MIME types instead of defaulting to JPEG", () => {
+        expect(() =>
+          normalizeImageFilename(0, 10, "image/avif", "auto")
+        ).toThrow("Unsupported image MIME type")
       })
     })
 

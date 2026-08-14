@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   decodeHtmlBytes,
   decodeHtmlResponse,
+  readResponseBytes,
+  ResponseBodyLimitError,
 } from "@/src/shared/html-response-decoder"
 
 describe("html response decoder", () => {
@@ -14,7 +16,45 @@ describe("html response decoder", () => {
 
       await expect(
         decodeHtmlResponse(response, { maxBytes: 4 })
-      ).rejects.toThrow("Response body exceeds 4 byte limit")
+      ).rejects.toBeInstanceOf(ResponseBodyLimitError)
+    })
+
+    it("cancels a body rejected by Content-Length before throwing the limit", async () => {
+      const cancel = vi.fn(async () => undefined)
+      const response = {
+        headers: { get: () => "9" },
+        body: { cancel },
+      } as unknown as Response
+
+      await expect(readResponseBytes(response, 4)).rejects.toBeInstanceOf(
+        ResponseBodyLimitError
+      )
+      expect(cancel).toHaveBeenCalledWith(expect.any(ResponseBodyLimitError))
+    })
+
+    it("preserves a streaming limit when reader cancellation rejects", async () => {
+      const reader = {
+        read: vi.fn(async () => ({
+          done: false,
+          value: new Uint8Array([1, 2, 3, 4, 5]),
+        })),
+        cancel: vi.fn(async () => {
+          throw new Error("cancel failed")
+        }),
+        releaseLock: vi.fn(),
+      }
+      const response = {
+        headers: { get: () => null },
+        body: { getReader: () => reader },
+      } as unknown as Response
+
+      await expect(readResponseBytes(response, 4)).rejects.toBeInstanceOf(
+        ResponseBodyLimitError
+      )
+      expect(reader.cancel).toHaveBeenCalledWith(
+        expect.any(ResponseBodyLimitError)
+      )
+      expect(reader.releaseLock).toHaveBeenCalled()
     })
   })
 
@@ -131,5 +171,31 @@ describe("html response decoder", () => {
         decodeHtmlBytes(bytes, { contentType: "text/html; charset=utf-8" })
       ).toThrow("Failed to decode HTML response")
     })
+  })
+
+  it("returns the body-limit error without waiting for a hanging cancellation", async () => {
+    const reader = {
+      read: vi.fn(async () => ({
+        done: false,
+        value: new Uint8Array([1, 2, 3, 4, 5]),
+      })),
+      cancel: vi.fn(() => new Promise<void>(() => undefined)),
+      releaseLock: vi.fn(),
+    }
+    const response = {
+      headers: { get: () => null },
+      body: { getReader: () => reader },
+    } as unknown as Response
+
+    const result = readResponseBytes(response, 4)
+    await expect(
+      Promise.race([
+        result,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("readResponseBytes hung")), 50)
+        ),
+      ])
+    ).rejects.toBeInstanceOf(ResponseBodyLimitError)
+    expect(reader.releaseLock).toHaveBeenCalled()
   })
 })
