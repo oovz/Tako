@@ -4,7 +4,7 @@
  */
 
 import React from "react"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
 import { t } from "@/src/runtime/i18n"
 import { GlobalNotificationsSection } from "@/entrypoints/options/components/GlobalNotificationsSection"

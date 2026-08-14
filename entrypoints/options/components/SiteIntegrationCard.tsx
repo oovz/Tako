@@ -36,10 +36,12 @@ import {
   normalizeImagePolicyOverride,
   normalizeRetryOverride,
 } from "@/entrypoints/options/hooks/rate-policy-override"
-import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
+import type {
+  SiteIntegrationSettingValue,
+  SiteOverrideRecord,
+} from "@/src/domain/site-integrations/storage-schemas"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
-import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
-import type { SettingsFieldSchema } from "@/src/site-integrations/manifest"
+import type { SiteIntegrationSettingsField as SettingsFieldSchema } from "@/src/site-integrations/definition-types"
 
 type CustomSettingValue = SiteIntegrationSettingValue
 

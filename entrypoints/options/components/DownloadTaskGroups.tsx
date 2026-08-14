@@ -8,9 +8,9 @@ import {
 
 import { Card, CardContent } from "@/components/ui/card"
 import { DownloadTaskSection } from "@/entrypoints/options/components/DownloadTaskSection"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
-import type { DownloadTaskActionResult } from "@/entrypoints/options/download-task-actions"
+import type { DownloadTaskActionResult } from "@/entrypoints/options/types/download-task-actions"
 
 interface DownloadTaskGroupsProps {
   tasks: DownloadTaskState[]

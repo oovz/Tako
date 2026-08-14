@@ -7,12 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { SiteIntegrationCard } from "../components/SiteIntegrationCard"
-import { SITE_INTEGRATION_MANIFESTS } from "@/src/site-integrations/manifest"
-import { isEnabled } from "@/src/site-integrations/registry"
-import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
-import type { SiteIntegrationEnablementMap } from "@/src/storage/site-integration-enablement-service"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
+import {
+  isEnabled,
+  requiresBroadHttpsPermission,
+  siteIntegrationCatalog,
+} from "@/src/site-integrations/catalog"
+import type {
+  SiteIntegrationEnablementMap,
+  SiteIntegrationSettingValue,
+  SiteOverrideRecord,
+} from "@/src/domain/site-integrations/storage-schemas"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 
 type CustomSettingValue = SiteIntegrationSettingValue
@@ -54,17 +59,16 @@ export function SiteIntegrationManagementTab({
 
   // Build from the manifest SSOT so the tab is not coupled to async registry initialization.
   const integrations = useMemo(() => {
-    return SITE_INTEGRATION_MANIFESTS.filter(
-      (manifest) => manifest.shipped
-    ).map((manifest) => ({
-      id: manifest.id,
-      name: manifest.name,
-      domains: manifest.patterns.domains,
-      customSettings: manifest.customSettings,
-      policyDefaults: manifest.policyDefaults,
-      requiresBroadHttpsPermission:
-        manifest.requiresBroadHttpsPermission === true,
-    }))
+    return siteIntegrationCatalog
+      .filter((manifest) => manifest.shipped)
+      .map((manifest) => ({
+        id: manifest.id,
+        name: manifest.name,
+        domains: manifest.patterns.domains,
+        customSettings: manifest.customSettings,
+        policyDefaults: manifest.policyDefaults,
+        requiresBroadHttpsPermission: requiresBroadHttpsPermission(manifest.id),
+      }))
   }, [])
 
   // Filter integrations by deferred search query (name or domain)

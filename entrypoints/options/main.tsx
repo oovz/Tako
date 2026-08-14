@@ -336,6 +336,7 @@ function OptionsPage() {
                   onRepairFolder={repairDownloadFolder}
                   onGrantFolderAccess={grantDownloadFolderAccess}
                   isPickingFolder={isPickingFolder}
+                  isSaving={isSaving}
                 />
               </Suspense>
             </section>

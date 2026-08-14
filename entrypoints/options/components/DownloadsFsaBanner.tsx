@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { getDestinationIssueMessageKey } from "@/src/runtime/destination-issue-state"
 import { t } from "@/src/runtime/i18n"
-import type { DestinationIssue } from "@/src/types/queue-state"
+import type { DestinationIssue } from "@/src/domain/queue/state"
 
 interface DownloadsFsaBannerProps {
   issue: DestinationIssue

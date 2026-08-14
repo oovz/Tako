@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { reconcileOptionsSave } from "@/entrypoints/options/hooks/options-save-reconciliation"
+import { reconcileOptionsSave } from "@/entrypoints/options/state/options-configuration-reducer"
 
 describe("options save reconciliation", () => {
   it("commits submitted baselines without clearing edits made during the save", () => {

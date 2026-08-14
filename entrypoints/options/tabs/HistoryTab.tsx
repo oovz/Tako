@@ -34,7 +34,7 @@ import { t } from "@/src/runtime/i18n"
 import { formatBytes } from "@/entrypoints/options/components/downloads-tab-helpers"
 import { runConfirmedHistoryAction } from "@/entrypoints/options/hooks/history-dialog-action"
 import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
-import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
+import { getDisplayName } from "@/src/site-integrations/catalog"
 
 interface HistoryStats {
   totalChapters: number
@@ -299,9 +299,7 @@ export function HistoryTab({
                                     {s.seriesTitle}
                                   </span>
                                   <span className="text-xs text-muted-foreground">
-                                    {getSiteIntegrationDisplayName(
-                                      s.siteIntegrationId
-                                    )}
+                                    {getDisplayName(s.siteIntegrationId)}
                                   </span>
                                 </span>
                                 <Badge

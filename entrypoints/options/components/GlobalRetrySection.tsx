@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 
 interface GlobalRetrySectionProps {

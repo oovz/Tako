@@ -3,8 +3,8 @@ import type { ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { DownloadTaskCard } from "@/entrypoints/options/components/DownloadTaskCard"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import type { DownloadTaskActionResult } from "@/entrypoints/options/download-task-actions"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { DownloadTaskActionResult } from "@/entrypoints/options/types/download-task-actions"
 
 interface DownloadTaskSectionProps {
   icon: ReactNode

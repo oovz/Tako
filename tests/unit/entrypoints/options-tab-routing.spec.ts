@@ -8,7 +8,7 @@ describe("options tab routing", () => {
   })
 
   it("returns global for unknown tabs and invalid query strings", () => {
-    expect(getInitialOptionsSection("?tab=legacy-integrations")).toBe("global")
+    expect(getInitialOptionsSection("?tab=removed-section")).toBe("global")
     expect(getInitialOptionsSection("?tab=unknown")).toBe("global")
     expect(getInitialOptionsSection("::not-a-query")).toBe("global")
   })

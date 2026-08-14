@@ -33,11 +33,16 @@ describe("options control labels", () => {
         integrationId: "mangadex",
         schema: {
           id: "languages",
-          label: "Languages",
-          description: "Choose one or more languages.",
+          labelKey: "mangadexSetting_chapterLanguageFilterLabel",
+          descriptionKey: "mangadexSetting_chapterLanguageFilterDescription",
           type: "multiselect",
           defaultValue: [],
-          options: [{ value: "en", label: "English" }],
+          options: [
+            {
+              value: "en",
+              labelKey: "mangadexSetting_chapterLanguageFilterOption_en",
+            },
+          ],
         },
         enabled: true,
         effectiveValue: [],

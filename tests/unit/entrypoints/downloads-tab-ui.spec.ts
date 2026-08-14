@@ -11,7 +11,7 @@ import {
   chapterStatusBadgeClass,
   getTaskStatusSummaryLabel,
 } from "@/entrypoints/options/tabs/DownloadsTab"
-import type { DownloadTaskState, TaskChapter } from "@/src/types/queue-state"
+import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {

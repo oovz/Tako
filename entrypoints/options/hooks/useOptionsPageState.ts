@@ -1,57 +1,31 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import logger from "@/src/runtime/logger"
-import { createCommandEnvelope } from "@/src/runtime/command-envelope"
-import { isRecord } from "@/src/shared/type-guards"
-import { chapterPersistenceService } from "@/src/storage/chapter-persistence-service"
 import {
-  saveDownloadRootHandle,
-  loadDownloadRootHandle,
-  clearDownloadRootHandle,
-  verifyPermission,
   DOWNLOAD_ROOT_HANDLE_ID,
   type DirHandle,
 } from "@/src/storage/fs-access"
+import { validateSettingsDestination } from "@/src/storage/settings-destination-validation"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import type {
+  SiteIntegrationEnablementMap,
+  SiteIntegrationSettingsMap,
+  SiteOverrideRecord,
+} from "@/src/domain/site-integrations/storage-schemas"
 import {
-  SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
-  siteIntegrationEnablementService,
-  type SiteIntegrationEnablementMap,
-} from "@/src/storage/site-integration-enablement-service"
-import {
-  SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
-  siteIntegrationSettingsService,
-  type SiteIntegrationSettingsMap,
-} from "@/src/storage/site-integration-settings-service"
-import {
-  settingsService,
-  SETTINGS_STORAGE_KEY,
-} from "@/src/storage/settings-service"
-import { settingsSyncService } from "@/src/storage/settings-sync-service"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import {
-  SITE_OVERRIDES_STORAGE_KEY,
-  siteOverridesService,
-  type SiteOverrideRecord,
-} from "@/src/storage/site-overrides-service"
-import { reconcileOptionsSave } from "./options-save-reconciliation"
-import {
-  mergeOptionsDraftOntoLatest,
-  type OptionsConfigurationSnapshot,
-} from "./options-external-change"
+  initialOptionsConfigurationState,
+  optionsConfigurationReducer,
+  optionsConfigurationSnapshotsEqual,
+} from "../state/options-configuration-reducer"
 import { t } from "@/src/runtime/i18n"
 import { validateTemplate } from "@/src/shared/template-expander"
-import {
-  integrationRequiresBroadHttpsPermission,
-  reconcileBroadHttpsPermissionEnablement,
-  removeBroadHttpsPermissionIfUnused,
-  requestIntegrationHostPermission,
-} from "@/src/site-integrations/host-permission-service"
-import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
-import type {
-  ClearPersistedDownloadHistoryMessage,
-  ClearPersistedDownloadHistoryResponse,
-} from "@/src/types/runtime-command-messages"
+import { getDisplayName } from "@/src/site-integrations/catalog"
+import { OptionsConfigurationClient } from "../controllers/options-configuration-client"
+import { OptionsExternalChangeController } from "../controllers/options-external-change-controller"
+import { OptionsFsaController } from "../controllers/options-fsa-controller"
+import { OptionsHistoryController } from "../controllers/options-history-controller"
+import { OptionsHostPermissionController } from "../controllers/options-host-permission-controller"
 
 export interface SeriesHistory {
   siteIntegrationId: string
@@ -67,120 +41,31 @@ export interface HistoryStats {
 
 type CustomSettingValue = SiteIntegrationSettingsMap[string][string]
 
-const OPTIONS_CONFIGURATION_STORAGE_KEYS = [
-  SETTINGS_STORAGE_KEY,
-  SITE_OVERRIDES_STORAGE_KEY,
-  SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
-  SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
-] as const
-
-type OptionsConfigurationStorageKey =
-  (typeof OPTIONS_CONFIGURATION_STORAGE_KEYS)[number]
-
-function stableSerialize(value: unknown): string {
-  return JSON.stringify(value, (_key, candidate: unknown) => {
-    if (!isRecord(candidate)) return candidate
-    return Object.fromEntries(
-      Object.entries(candidate).sort(([left], [right]) =>
-        left.localeCompare(right)
-      )
-    )
-  })
-}
-
-async function loadSeriesHistory(): Promise<SeriesHistory[]> {
-  try {
-    return (await chapterPersistenceService.getAllSeriesHistory())
-      .map((entry) => ({
-        siteIntegrationId: entry.siteIntegrationId,
-        seriesId: entry.seriesId,
-        seriesTitle: entry.seriesTitle,
-        chapterCount: entry.downloadedChapters.length,
-      }))
-      .sort((a, b) => a.seriesTitle.localeCompare(b.seriesTitle))
-  } catch (error) {
-    logger.error("[OPTIONS] Failed to load series history:", error)
-    return []
-  }
-}
-
-async function loadPersistedOptionsConfiguration(
-  reloadSettings = false
-): Promise<OptionsConfigurationSnapshot> {
-  const [
-    loadedSettings,
-    loadedOverrides,
-    loadedIntegrationEnablement,
-    loadedIntegrationSettings,
-  ] = await Promise.all([
-    reloadSettings ? settingsService.reload() : settingsService.getSettings(),
-    siteOverridesService.getAll(),
-    siteIntegrationEnablementService.getAll(),
-    siteIntegrationSettingsService.getAll(),
-  ])
-
-  return {
-    settings: loadedSettings,
-    overrides: loadedOverrides,
-    enablement: loadedIntegrationEnablement,
-    integrationSettings: loadedIntegrationSettings,
-  }
-}
-
-async function loadInitialOptionsState() {
-  try {
-    await reconcileBroadHttpsPermissionEnablement()
-  } catch (error) {
-    logger.warn(
-      "[OPTIONS] Could not reconcile optional host permissions during startup:",
-      error
-    )
-  }
-
-  const configuration = await loadPersistedOptionsConfiguration()
-  const [stats, series] = await Promise.all([
-    chapterPersistenceService.getStorageStats().catch((error) => {
-      logger.warn("[OPTIONS] Could not load storage statistics:", error)
-      return { totalChapters: 0, totalSeries: 0 }
-    }),
-    loadSeriesHistory(),
-  ])
-
-  return {
-    loadedSettings: configuration.settings,
-    loadedOverrides: configuration.overrides,
-    loadedIntegrationEnablement: configuration.enablement,
-    loadedIntegrationSettings: configuration.integrationSettings,
-    historyStats: {
-      totalChapters: stats.totalChapters,
-      totalSeries: stats.totalSeries,
-    },
-    series,
-  }
-}
-
 export function useOptionsPageState() {
-  const [settings, setSettings] = useState<ExtensionSettings | null>(null)
-  const [settingsBuffer, setSettingsBuffer] =
-    useState<ExtensionSettings | null>(null)
-  const [savedOverrides, setSavedOverrides] = useState<
-    Record<string, SiteOverrideRecord>
-  >({})
-  const [overrides, setOverrides] = useState<
-    Record<string, SiteOverrideRecord>
-  >({})
-  const [savedSiteIntegrationEnablement, setSavedSiteIntegrationEnablement] =
-    useState<SiteIntegrationEnablementMap>({})
-  const [siteIntegrationEnablement, setSiteIntegrationEnablement] =
-    useState<SiteIntegrationEnablementMap>({})
-  const [
-    savedSiteIntegrationSettingsByIntegration,
-    setSavedSiteIntegrationSettingsByIntegration,
-  ] = useState<Record<string, Record<string, CustomSettingValue>>>({})
-  const [
-    siteIntegrationSettingsByIntegration,
-    setSiteIntegrationSettingsByIntegration,
-  ] = useState<Record<string, Record<string, CustomSettingValue>>>({})
+  const [configuration, dispatchConfiguration] = useReducer(
+    optionsConfigurationReducer,
+    initialOptionsConfigurationState
+  )
+  const configurationClient = useMemo(
+    () => new OptionsConfigurationClient(),
+    []
+  )
+  const historyController = useMemo(
+    () => new OptionsHistoryController(configurationClient),
+    [configurationClient]
+  )
+  const hostPermissionController = useMemo(
+    () => new OptionsHostPermissionController(),
+    []
+  )
+  const fsaController = useMemo(() => new OptionsFsaController(), [])
+  const settings = configuration.saved?.settings ?? null
+  const settingsBuffer = configuration.draft?.settings ?? null
+  const overrides = configuration.draft?.overrides ?? {}
+  const savedSiteIntegrationEnablement = configuration.saved?.enablement ?? {}
+  const siteIntegrationEnablement = configuration.draft?.enablement ?? {}
+  const siteIntegrationSettingsByIntegration =
+    configuration.draft?.integrationSettings ?? {}
   const [historyStats, setHistoryStats] = useState<HistoryStats | null>(null)
   const [historySeries, setHistorySeries] = useState<SeriesHistory[]>([])
   const [savedFolderHandle, setSavedFolderHandle] = useState<DirHandle | null>(
@@ -188,93 +73,105 @@ export function useOptionsPageState() {
   )
   const [pendingFolderHandle, setPendingFolderHandle] =
     useState<DirHandle | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [loadFailed, setLoadFailed] = useState(false)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isPickingFolder, setIsPickingFolder] = useState(false)
-  const [externalChangeKeys, setExternalChangeKeys] = useState<
-    OptionsConfigurationStorageKey[]
-  >([])
   const [isResolvingExternalChanges, setIsResolvingExternalChanges] =
     useState(false)
+  const externalChangeKeys = configuration.externalChangeKeys
+  const isLoading = configuration.hydration.status === "loading"
+  const loadFailed = configuration.hydration.status === "error"
   const draftRevisionRef = useRef(0)
   const folderDraftRevisionRef = useRef(0)
   const draftDirtyRef = useRef(false)
   const isSavingRef = useRef(false)
-  const externalReloadRequestRef = useRef(0)
-  const externalChangeRevisionRef = useRef(0)
+  const isPickingFolderRef = useRef(false)
   const savedEnablementRef = useRef<SiteIntegrationEnablementMap>({})
   const hasLoadedEnablementRef = useRef(false)
+  const externalChangeController = useMemo(
+    () => new OptionsExternalChangeController(configurationClient),
+    [configurationClient]
+  )
+  useEffect(() => {
+    draftRevisionRef.current = configuration.draftRevision
+    draftDirtyRef.current = configuration.draftDirty
+    savedEnablementRef.current = configuration.saved?.enablement ?? {}
+    if (configuration.saved) hasLoadedEnablementRef.current = true
+  }, [
+    configuration.draftDirty,
+    configuration.draftRevision,
+    configuration.saved,
+  ])
   const selectedFolderName =
     pendingFolderHandle?.name ?? savedFolderHandle?.name ?? null
-  const hasUnsavedChanges = useMemo(() => {
-    if (!settings || !settingsBuffer) return false
-    return (
-      pendingFolderHandle !== null ||
-      stableSerialize(settings) !== stableSerialize(settingsBuffer) ||
-      stableSerialize(savedOverrides) !== stableSerialize(overrides) ||
-      stableSerialize(savedSiteIntegrationEnablement) !==
-        stableSerialize(siteIntegrationEnablement) ||
-      stableSerialize(savedSiteIntegrationSettingsByIntegration) !==
-        stableSerialize(siteIntegrationSettingsByIntegration)
-    )
-  }, [
-    overrides,
-    pendingFolderHandle,
-    savedOverrides,
-    savedSiteIntegrationEnablement,
-    savedSiteIntegrationSettingsByIntegration,
-    settings,
-    settingsBuffer,
-    siteIntegrationEnablement,
-    siteIntegrationSettingsByIntegration,
-  ])
+  const hasUnsavedChanges =
+    configuration.saved !== null &&
+    configuration.draft !== null &&
+    (pendingFolderHandle !== null ||
+      !optionsConfigurationSnapshotsEqual(
+        configuration.saved,
+        configuration.draft
+      ))
+
+  function beginFolderAction(): boolean {
+    if (isSavingRef.current || isPickingFolderRef.current) return false
+    isPickingFolderRef.current = true
+    setIsPickingFolder(true)
+    return true
+  }
+
+  function endFolderAction(): void {
+    isPickingFolderRef.current = false
+    setIsPickingFolder(false)
+  }
 
   useEffect(() => {
     let canceled = false
     const folderRevisionAtStart = folderDraftRevisionRef.current
+    const draftRevisionAtStart = draftRevisionRef.current
+    const fsaRevisionAtStart = fsaController.revision
 
-    void loadInitialOptionsState()
+    dispatchConfiguration({ type: "load-start" })
+
+    void hostPermissionController
+      .reconcileOnLoad()
+      .catch((error) => {
+        logger.warn(
+          "[OPTIONS] Could not reconcile optional host permissions during startup:",
+          error
+        )
+      })
+      .then(() => {
+        if (canceled) return null
+        return externalChangeController.loadInitial(
+          () =>
+            draftRevisionRef.current === draftRevisionAtStart &&
+            !draftDirtyRef.current
+        )
+      })
       .then((loaded) => {
-        if (canceled) return
+        if (canceled || !loaded) return
 
-        setSettings(loaded.loadedSettings)
-        setSettingsBuffer(loaded.loadedSettings)
-        setSavedOverrides(loaded.loadedOverrides)
-        setOverrides(loaded.loadedOverrides)
-        setSavedSiteIntegrationEnablement(loaded.loadedIntegrationEnablement)
-        savedEnablementRef.current = loaded.loadedIntegrationEnablement
-        hasLoadedEnablementRef.current = true
-        setSiteIntegrationEnablement(loaded.loadedIntegrationEnablement)
-        setSavedSiteIntegrationSettingsByIntegration(
-          loaded.loadedIntegrationSettings
-        )
-        setSiteIntegrationSettingsByIntegration(
-          loaded.loadedIntegrationSettings
-        )
+        dispatchConfiguration({
+          type: "hydrate",
+          configuration: loaded.configuration,
+        })
         setHistoryStats(loaded.historyStats)
-        setHistorySeries(loaded.series)
-        draftDirtyRef.current = false
-        setExternalChangeKeys([])
-        setLoadFailed(false)
+        setHistorySeries(loaded.historySeries)
       })
       .catch((error) => {
         if (canceled) return
         logger.error("[OPTIONS] Failed to load configuration:", error)
-        setLoadFailed(true)
+        dispatchConfiguration({ type: "hydrate-error", error })
         toast.error(t("options_toastLoadFailed"))
       })
-      .finally(() => {
-        if (!canceled) {
-          setIsLoading(false)
-        }
-      })
 
-    void loadDownloadRootHandle()
+    void fsaController
+      .loadSaved()
       .then((handle) => {
         if (canceled) return
+        if (fsaController.revision !== fsaRevisionAtStart) return
         setSavedFolderHandle(handle ?? null)
         if (folderDraftRevisionRef.current === folderRevisionAtStart) {
           setPendingFolderHandle(null)
@@ -292,7 +189,13 @@ export function useOptionsPageState() {
     return () => {
       canceled = true
     }
-  }, [loadAttempt])
+  }, [
+    configurationClient,
+    externalChangeController,
+    fsaController,
+    hostPermissionController,
+    loadAttempt,
+  ])
 
   useEffect(() => {
     return () => {
@@ -300,82 +203,53 @@ export function useOptionsPageState() {
       // Permission requests must happen in a user gesture, but a user can
       // close Options before saving the matching enablement change. Cleanup is
       // best-effort here and is repeated during background/Options startup.
-      void removeBroadHttpsPermissionIfUnused(savedEnablementRef.current).catch(
-        (error) => {
+      void hostPermissionController
+        .removeUnused(savedEnablementRef.current)
+        .catch((error) => {
           logger.warn(
             "Failed to remove unused HTTPS host permission when Options closed:",
             error
           )
-        }
-      )
+        })
     }
-  }, [])
+  }, [hostPermissionController])
 
   useEffect(() => {
-    let canceled = false
-    const handleStorageChange = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: chrome.storage.AreaName
-    ) => {
-      if (areaName !== "local") return
-      const changedKeys = OPTIONS_CONFIGURATION_STORAGE_KEYS.filter(
-        (key) => changes[key] !== undefined
-      )
-      if (changedKeys.length === 0 || isSavingRef.current) return
-      externalChangeRevisionRef.current++
-
-      const recordConflict = () => {
-        setExternalChangeKeys((current) => [
-          ...new Set([...current, ...changedKeys]),
-        ])
-      }
-
-      if (draftDirtyRef.current || hasUnsavedChanges) {
-        recordConflict()
-        return
-      }
-
-      const draftRevisionAtStart = draftRevisionRef.current
-      const requestId = ++externalReloadRequestRef.current
-      void loadPersistedOptionsConfiguration(true)
-        .then((latest) => {
-          if (canceled || requestId !== externalReloadRequestRef.current) return
-          if (
-            draftDirtyRef.current ||
-            draftRevisionRef.current !== draftRevisionAtStart
-          ) {
-            recordConflict()
-            return
-          }
-
-          setSettings(latest.settings)
-          setSettingsBuffer(latest.settings)
-          setSavedOverrides(latest.overrides)
-          setOverrides(latest.overrides)
-          setSavedSiteIntegrationEnablement(latest.enablement)
-          setSiteIntegrationEnablement(latest.enablement)
-          setSavedSiteIntegrationSettingsByIntegration(
-            latest.integrationSettings
-          )
-          setSiteIntegrationSettingsByIntegration(latest.integrationSettings)
-          draftDirtyRef.current = false
-          setExternalChangeKeys([])
+    return externalChangeController.subscribe({
+      isSaving: () => isSavingRef.current,
+      isDirty: () => draftDirtyRef.current,
+      hasUnsavedChanges: () => hasUnsavedChanges,
+      draftRevision: () => draftRevisionRef.current,
+      onConflict: (keys) => {
+        dispatchConfiguration({
+          type: "record-external-conflict",
+          keys,
         })
-        .catch((error) => {
-          if (canceled) return
-          logger.error("[OPTIONS] Failed to apply external settings:", error)
-          recordConflict()
+      },
+      onSync: (latest) => {
+        dispatchConfiguration({
+          type: "sync-external",
+          latest: latest.configuration,
         })
-    }
-    chrome.storage.onChanged.addListener(handleStorageChange)
-    return () => {
-      canceled = true
-      chrome.storage.onChanged.removeListener(handleStorageChange)
-    }
-  }, [hasUnsavedChanges])
+        setHistoryStats(latest.historyStats)
+        setHistorySeries(latest.historySeries)
+      },
+      onError: (error, keys) => {
+        logger.error("[OPTIONS] Failed to apply external settings:", error)
+        dispatchConfiguration({ type: "record-external-conflict", keys })
+      },
+    })
+  }, [externalChangeController, hasUnsavedChanges])
 
   async function saveConfiguration() {
-    if (!settingsBuffer || !settings || isSaving) return
+    if (
+      !settingsBuffer ||
+      !settings ||
+      isSaving ||
+      isSavingRef.current ||
+      isPickingFolderRef.current
+    )
+      return
     if (externalChangeKeys.length > 0 || isResolvingExternalChanges) {
       toast.error(t("options_externalChangesSaveBlocked"))
       return
@@ -385,21 +259,39 @@ export function useOptionsPageState() {
       settingsBuffer.downloads.pathTemplate
     )
     const filenameValidation = validateTemplate(
-      settingsBuffer.downloads.fileNameTemplate || "<CHAPTER_TITLE>"
+      settingsBuffer.downloads.fileNameTemplate
     )
     if (!pathValidation.valid || !filenameValidation.valid) {
       toast.error(t("options_invalidTemplate"))
       return
     }
 
+    let fsaMutationRevision: number | null = null
+    let saveSucceeded = false
+    const submittedConfiguration = {
+      settings: settingsBuffer,
+      overrides,
+      enablement: siteIntegrationEnablement,
+      integrationSettings: siteIntegrationSettingsByIntegration,
+    }
+    const saveToken = externalChangeController.beginSave(
+      submittedConfiguration,
+      {
+        expectStorageChange:
+          configuration.saved === null ||
+          !optionsConfigurationSnapshotsEqual(
+            configuration.saved,
+            submittedConfiguration
+          ),
+      }
+    )
+
     try {
       isSavingRef.current = true
       setIsSaving(true)
-      const submittedRevision = draftRevisionRef.current
+      const submittedRevision = configuration.draftRevision
       const submittedSettings = settingsBuffer
-      const submittedOverrides = overrides
       const submittedEnablement = siteIntegrationEnablement
-      const submittedIntegrationSettings = siteIntegrationSettingsByIntegration
       const wantsCustomFolder =
         submittedSettings.downloads.destination === "file-system-access"
       const handleToPersist = wantsCustomFolder
@@ -407,142 +299,89 @@ export function useOptionsPageState() {
         : null
 
       if (wantsCustomFolder && handleToPersist) {
-        await saveDownloadRootHandle(handleToPersist)
+        try {
+          fsaMutationRevision = await fsaController.save(handleToPersist)
+        } catch (error) {
+          fsaMutationRevision = fsaController.revision
+          throw error
+        }
       }
 
       if (!wantsCustomFolder && (savedFolderHandle || pendingFolderHandle)) {
-        await clearDownloadRootHandle()
+        try {
+          fsaMutationRevision = await fsaController.clear()
+        } catch (error) {
+          fsaMutationRevision = fsaController.revision
+          throw error
+        }
       }
 
-      const result =
-        await settingsSyncService.updateSettingsWithSync(submittedSettings)
-
-      if (!result.success) {
-        throw new Error(result.error || t("options_toastSaveFailed"))
+      const destinationValidation = await validateSettingsDestination(
+        submittedSettings.downloads.destination
+      )
+      if (!destinationValidation.isValid) {
+        throw new Error(
+          destinationValidation.error ?? t("options_toastSaveFailed")
+        )
       }
-      const persistedSettings = result.settings ?? submittedSettings
 
-      await siteOverridesService.setAll(submittedOverrides)
-      await siteIntegrationEnablementService.setAll(submittedEnablement)
-      savedEnablementRef.current = submittedEnablement
-      await siteIntegrationSettingsService.setAll(submittedIntegrationSettings)
+      const response = await configurationClient.save({
+        ...submittedConfiguration,
+      })
       try {
-        await removeBroadHttpsPermissionIfUnused(submittedEnablement)
+        await hostPermissionController.removeUnused(submittedEnablement)
       } catch (error) {
         // A disabled integration remains safely disabled if Chrome declines to
         // remove now-unused permission; retain permission cleanup as best effort.
         logger.warn("Failed to remove unused HTTPS host permission:", error)
       }
 
-      const reconciliation = reconcileOptionsSave({
-        submitted: {
-          settings: submittedSettings,
-          overrides: submittedOverrides,
-          enablement: submittedEnablement,
-          integrationSettings: submittedIntegrationSettings,
-          folderHandle: handleToPersist,
-        },
-        persisted: {
-          settings: persistedSettings,
-          overrides: submittedOverrides,
-          enablement: submittedEnablement,
-          integrationSettings: submittedIntegrationSettings,
-          folderHandle: handleToPersist,
-        },
+      const clearTransientDraft = draftRevisionRef.current === submittedRevision
+      dispatchConfiguration({
+        type: "save-commit",
+        submitted: submittedConfiguration,
         submittedRevision,
-        currentRevision: draftRevisionRef.current,
+        persisted: response,
       })
-      setSettings(reconciliation.saved.settings)
-      setSavedOverrides(reconciliation.saved.overrides)
-      setSavedSiteIntegrationEnablement(reconciliation.saved.enablement)
-      setSavedSiteIntegrationSettingsByIntegration(
-        reconciliation.saved.integrationSettings
-      )
-      setSavedFolderHandle(reconciliation.saved.folderHandle)
-      draftDirtyRef.current = !reconciliation.clearTransientDraft
-      if (reconciliation.clearTransientDraft) {
-        setSettingsBuffer(reconciliation.saved.settings)
-        setOverrides(reconciliation.saved.overrides)
-        setSiteIntegrationEnablement(reconciliation.saved.enablement)
-        setSiteIntegrationSettingsByIntegration(
-          reconciliation.saved.integrationSettings
-        )
+      setSavedFolderHandle(handleToPersist)
+      if (clearTransientDraft) {
         setPendingFolderHandle(null)
       }
+      saveSucceeded = true
       toast.success(t("options_toastSavedSuccessfully"))
     } catch (error) {
-      const rollbackFailures: unknown[] = []
-      try {
-        if (savedFolderHandle) {
-          await saveDownloadRootHandle(savedFolderHandle)
-        } else {
-          await clearDownloadRootHandle()
+      if (fsaMutationRevision !== null) {
+        try {
+          await fsaController.restore(savedFolderHandle, fsaMutationRevision)
+        } catch (rollbackError) {
+          logger.error(
+            "[OPTIONS] Failed to restore saved folder handle after save error:",
+            rollbackError
+          )
         }
-      } catch (rollbackError) {
-        rollbackFailures.push(rollbackError)
-        logger.error(
-          "[OPTIONS] Failed to restore saved folder handle after save error:",
-          rollbackError
-        )
-      }
-      const rollbackResults = await Promise.allSettled([
-        settingsSyncService.updateSettingsWithSync(settings),
-        siteOverridesService.setAll(savedOverrides),
-        siteIntegrationEnablementService.setAll(savedSiteIntegrationEnablement),
-        siteIntegrationSettingsService.setAll(
-          savedSiteIntegrationSettingsByIntegration
-        ),
-      ])
-      savedEnablementRef.current = savedSiteIntegrationEnablement
-      for (const rollbackResult of rollbackResults) {
-        if (rollbackResult.status === "rejected") {
-          rollbackFailures.push(rollbackResult.reason)
-        } else if (
-          typeof rollbackResult.value === "object" &&
-          rollbackResult.value !== null &&
-          "success" in rollbackResult.value &&
-          rollbackResult.value.success === false
-        ) {
-          rollbackFailures.push(rollbackResult.value.error)
-        }
-      }
-      if (rollbackFailures.length > 0) {
-        logger.error(
-          "[OPTIONS] Configuration rollback was incomplete:",
-          rollbackFailures
-        )
       }
       logger.error("[OPTIONS] Failed to save settings:", error)
       toast.error(t("options_toastSaveFailed"), {
         description: t("options_toastUnknownError"),
       })
     } finally {
+      externalChangeController.completeSave(saveToken, saveSucceeded)
       isSavingRef.current = false
       setIsSaving(false)
     }
   }
 
   async function handleRefreshHistory() {
-    const series = await loadSeriesHistory()
-    setHistorySeries(series)
-    try {
-      const stats = await chapterPersistenceService.getStorageStats()
-      setHistoryStats({
-        totalChapters: stats.totalChapters,
-        totalSeries: stats.totalSeries,
-      })
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to refresh storage stats:", error)
-    }
-    return series
+    const loaded = await historyController.refresh()
+    setHistoryStats(loaded.historyStats)
+    setHistorySeries(loaded.historySeries)
+    return loaded.historySeries
   }
 
   function handleSettingsChange(updates: Partial<ExtensionSettings>) {
     if (!settingsBuffer) return
 
-    draftRevisionRef.current++
-    draftDirtyRef.current = true
-    setSettingsBuffer({ ...settingsBuffer, ...updates })
+    dispatchConfiguration({ type: "edit-settings", updates })
   }
 
   function handleSiteIntegrationSettingsChange(
@@ -551,29 +390,12 @@ export function useOptionsPageState() {
     enabled: boolean,
     value: CustomSettingValue
   ) {
-    draftRevisionRef.current++
-    draftDirtyRef.current = true
-    setSiteIntegrationSettingsByIntegration((previous) => {
-      const siteIntegrationSettings = {
-        ...(previous[siteIntegrationId] ?? {}),
-      }
-
-      if (enabled) {
-        siteIntegrationSettings[settingId] = value
-      } else {
-        delete siteIntegrationSettings[settingId]
-      }
-
-      if (Object.keys(siteIntegrationSettings).length === 0) {
-        const next = { ...previous }
-        delete next[siteIntegrationId]
-        return next
-      }
-
-      return {
-        ...previous,
-        [siteIntegrationId]: siteIntegrationSettings,
-      }
+    dispatchConfiguration({
+      type: "set-integration-setting",
+      siteIntegrationId,
+      settingId,
+      enabled,
+      value,
     })
   }
 
@@ -581,31 +403,27 @@ export function useOptionsPageState() {
     siteIntegrationId: string,
     override: SiteOverrideRecord | null
   ) {
-    draftRevisionRef.current++
-    draftDirtyRef.current = true
-    const nextOverrides = { ...overrides }
-    if (override === null || Object.keys(override).length === 0) {
-      delete nextOverrides[siteIntegrationId]
-    } else {
-      nextOverrides[siteIntegrationId] = override
-    }
-    setOverrides(nextOverrides)
+    dispatchConfiguration({
+      type: "set-override",
+      siteIntegrationId,
+      override,
+    })
   }
 
   async function handleSiteIntegrationEnablementChange(
     siteIntegrationId: string,
     enabled: boolean
   ): Promise<void> {
-    if (enabled && integrationRequiresBroadHttpsPermission(siteIntegrationId)) {
+    if (enabled) {
       try {
         // This is intentionally the first awaited operation: Chrome requires
         // optional permission requests to originate from the user's gesture.
         const granted =
-          await requestIntegrationHostPermission(siteIntegrationId)
+          await hostPermissionController.requestForEnablement(siteIntegrationId)
         if (!granted) {
           toast.error(
             t("options_toastIntegrationHostPermissionDenied", [
-              getSiteIntegrationDisplayName(siteIntegrationId),
+              getDisplayName(siteIntegrationId),
             ])
           )
           return
@@ -617,59 +435,35 @@ export function useOptionsPageState() {
         )
         toast.error(
           t("options_toastIntegrationHostPermissionFailed", [
-            getSiteIntegrationDisplayName(siteIntegrationId),
+            getDisplayName(siteIntegrationId),
           ])
         )
         return
       }
     }
 
-    draftRevisionRef.current++
-    draftDirtyRef.current = true
-    setSiteIntegrationEnablement((previous) => ({
-      ...previous,
-      [siteIntegrationId]: enabled,
-    }))
-  }
-
-  async function requestDownloadFolderFromUser(): Promise<
-    DirHandle | undefined
-  > {
-    const picker = (
-      window as Window & {
-        showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
-      }
-    ).showDirectoryPicker
-    if (!picker) {
-      toast.error(t("options_toastFsaNotSupported"))
-      return undefined
-    }
-
-    const handle = await picker().catch((error: unknown) => {
-      const normalized = error as { name?: string; code?: number }
-      if (
-        normalized &&
-        (normalized.name === "AbortError" || normalized.code === 20)
-      ) {
-        return undefined
-      }
-      throw error
+    dispatchConfiguration({
+      type: "set-enablement",
+      siteIntegrationId,
+      enabled,
     })
-    if (!handle) return undefined
-
-    const ok = await verifyPermission(handle, true)
-    if (!ok) {
-      toast.error(t("options_toastPermissionDenied"))
-      return undefined
-    }
-    return handle
   }
 
   async function pickDownloadFolder() {
+    if (!beginFolderAction()) return
     try {
-      setIsPickingFolder(true)
-      const handle = await requestDownloadFolderFromUser()
-      if (!handle) return
+      const result = await fsaController.requestFromUser()
+      if (result.status === "unsupported") {
+        toast.error(t("options_toastFsaNotSupported"))
+        return
+      }
+      if (result.status === "denied") {
+        toast.error(t("options_toastPermissionDenied"))
+        return
+      }
+      if (result.status === "aborted") return
+      if (result.status !== "granted") return
+      const handle = result.handle
 
       folderDraftRevisionRef.current++
       setPendingFolderHandle(handle)
@@ -682,9 +476,6 @@ export function useOptionsPageState() {
             customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
           },
         })
-      } else {
-        draftRevisionRef.current++
-        draftDirtyRef.current = true
       }
 
       toast.success(t("options_toastCustomFolderSet", [handle.name]))
@@ -693,17 +484,27 @@ export function useOptionsPageState() {
         toast.error(t("options_toastSetFolderFailed"))
       }
     } finally {
-      setIsPickingFolder(false)
+      endFolderAction()
     }
   }
 
   async function repairDownloadFolder(): Promise<boolean> {
+    if (!beginFolderAction()) return false
     try {
-      setIsPickingFolder(true)
-      const handle = await requestDownloadFolderFromUser()
-      if (!handle) return false
+      const result = await fsaController.requestFromUser()
+      if (result.status === "unsupported") {
+        toast.error(t("options_toastFsaNotSupported"))
+        return false
+      }
+      if (result.status === "denied") {
+        toast.error(t("options_toastPermissionDenied"))
+        return false
+      }
+      if (result.status === "aborted") return false
+      if (result.status !== "granted") return false
+      const handle = result.handle
 
-      await saveDownloadRootHandle(handle)
+      await fsaController.save(handle)
       folderDraftRevisionRef.current++
       setSavedFolderHandle(handle)
       setPendingFolderHandle(null)
@@ -714,23 +515,23 @@ export function useOptionsPageState() {
       toast.error(t("options_toastSetFolderFailed"))
       return false
     } finally {
-      setIsPickingFolder(false)
+      endFolderAction()
     }
   }
 
   async function grantDownloadFolderAccess(): Promise<boolean> {
+    if (!beginFolderAction()) return false
     try {
-      setIsPickingFolder(true)
-      const handle = await loadDownloadRootHandle()
-      if (!handle) {
+      const result = await fsaController.grantSavedAccess()
+      if (result.status === "missing") {
         toast.error(t("settings_customFolderRequired"))
         return false
       }
-      const granted = await verifyPermission(handle, true)
-      if (!granted) {
+      if (result.status === "denied") {
         toast.error(t("options_toastPermissionDenied"))
         return false
       }
+      const handle = result.handle
       setSavedFolderHandle(handle)
       toast.success(t("destinationIssue_accessGranted"))
       return true
@@ -739,31 +540,16 @@ export function useOptionsPageState() {
       toast.error(t("options_toastPermissionDenied"))
       return false
     } finally {
-      setIsPickingFolder(false)
+      endFolderAction()
     }
   }
 
   async function clearAllHistory(): Promise<boolean> {
     try {
       setIsClearing(true)
-      const response = await chrome.runtime.sendMessage<
-        ClearPersistedDownloadHistoryMessage,
-        ClearPersistedDownloadHistoryResponse
-      >({
-        type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
-        ...createCommandEnvelope(),
-        payload: { scope: "all" },
-      })
-      if (!response?.success) {
-        throw new Error(response?.error ?? "Unable to clear download history")
-      }
-      const stats = await chapterPersistenceService.getStorageStats()
-      setHistoryStats({
-        totalChapters: stats.totalChapters,
-        totalSeries: stats.totalSeries,
-      })
-      const series = await loadSeriesHistory()
-      setHistorySeries(series)
+      const loaded = await historyController.clear({ scope: "all" })
+      setHistoryStats(loaded.historyStats)
+      setHistorySeries(loaded.historySeries)
       toast.success(t("options_toastAllHistoryCleared"))
       return true
     } catch (error) {
@@ -781,26 +567,13 @@ export function useOptionsPageState() {
   ): Promise<boolean> {
     try {
       setIsClearing(true)
-      const response = await chrome.runtime.sendMessage<
-        ClearPersistedDownloadHistoryMessage,
-        ClearPersistedDownloadHistoryResponse
-      >({
-        type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY",
-        ...createCommandEnvelope(),
-        payload: { scope: "series", siteIntegrationId, seriesId },
+      const loaded = await historyController.clear({
+        scope: "series",
+        siteIntegrationId,
+        seriesId,
       })
-      if (!response?.success) {
-        throw new Error(
-          response?.error ?? "Unable to clear series download history"
-        )
-      }
-      const stats = await chapterPersistenceService.getStorageStats()
-      setHistoryStats({
-        totalChapters: stats.totalChapters,
-        totalSeries: stats.totalSeries,
-      })
-      const series = await loadSeriesHistory()
-      setHistorySeries(series)
+      setHistoryStats(loaded.historyStats)
+      setHistorySeries(loaded.historySeries)
       toast.success(t("options_toastSeriesHistoryCleared"))
       return true
     } catch (error) {
@@ -819,69 +592,47 @@ export function useOptionsPageState() {
       !settings ||
       !settingsBuffer ||
       isResolvingExternalChanges ||
-      isSaving
+      isSaving ||
+      isSavingRef.current ||
+      isPickingFolderRef.current
     ) {
       return false
     }
 
     const draftRevisionAtStart = draftRevisionRef.current
-    const externalRevisionAtStart = externalChangeRevisionRef.current
-    const baseline: OptionsConfigurationSnapshot = {
-      settings,
-      overrides: savedOverrides,
-      enablement: savedSiteIntegrationEnablement,
-      integrationSettings: savedSiteIntegrationSettingsByIntegration,
-    }
-    const draft: OptionsConfigurationSnapshot = {
-      settings: settingsBuffer,
-      overrides,
-      enablement: siteIntegrationEnablement,
-      integrationSettings: siteIntegrationSettingsByIntegration,
-    }
+    const externalRevisionAtStart = externalChangeController.revision
 
     try {
       setIsResolvingExternalChanges(true)
-      const latest = await loadPersistedOptionsConfiguration(true)
+      const latest = await configurationClient.load()
       if (
         draftRevisionRef.current !== draftRevisionAtStart ||
-        externalChangeRevisionRef.current !== externalRevisionAtStart
+        externalChangeController.revision !== externalRevisionAtStart
       ) {
         toast.info(t("options_externalChangesChangedAgain"))
         return false
       }
 
-      const nextDraft =
+      externalChangeController.invalidatePendingReads()
+      dispatchConfiguration(
         strategy === "keep-mine"
-          ? mergeOptionsDraftOntoLatest(baseline, draft, latest)
-          : latest
-      const draftRemainsDirty =
-        stableSerialize(nextDraft) !== stableSerialize(latest)
-
-      externalReloadRequestRef.current++
-      draftRevisionRef.current++
-      draftDirtyRef.current = draftRemainsDirty
-      setSettings(latest.settings)
-      setSettingsBuffer(nextDraft.settings)
-      setSavedOverrides(latest.overrides)
-      setOverrides(nextDraft.overrides)
-      setSavedSiteIntegrationEnablement(latest.enablement)
-      savedEnablementRef.current = latest.enablement
-      setSiteIntegrationEnablement(nextDraft.enablement)
-      setSavedSiteIntegrationSettingsByIntegration(latest.integrationSettings)
-      setSiteIntegrationSettingsByIntegration(nextDraft.integrationSettings)
-      setExternalChangeKeys([])
+          ? { type: "merge-latest-keeping-local", latest: latest.configuration }
+          : { type: "replace-from-external", latest: latest.configuration }
+      )
+      setHistoryStats(latest.historyStats)
+      setHistorySeries(latest.historySeries)
 
       if (strategy === "reload") {
         folderDraftRevisionRef.current++
         setPendingFolderHandle(null)
-        void removeBroadHttpsPermissionIfUnused(latest.enablement).catch(
-          (error) => {
+        void hostPermissionController
+          .removeUnused(latest.configuration.enablement)
+          .catch((error) => {
             logger.warn(
               "Failed to remove unused HTTPS host permission after reloading settings:",
               error
             )
-          }
-        )
+          })
       }
 
       toast.info(
@@ -902,39 +653,31 @@ export function useOptionsPageState() {
   }
 
   async function discardChanges(): Promise<boolean> {
+    if (isSavingRef.current || isPickingFolderRef.current) return false
     if (externalChangeKeys.length > 0) {
       const reloaded = await resolveExternalChanges("reload")
       if (reloaded) toast.info(t("options_toastChangesDiscarded"))
       return reloaded
     }
 
-    void removeBroadHttpsPermissionIfUnused(
-      savedSiteIntegrationEnablement
-    ).catch((error) => {
-      logger.warn(
-        "Failed to remove unused HTTPS host permission after discarding changes:",
-        error
-      )
-    })
+    void hostPermissionController
+      .removeUnused(savedSiteIntegrationEnablement)
+      .catch((error) => {
+        logger.warn(
+          "Failed to remove unused HTTPS host permission after discarding changes:",
+          error
+        )
+      })
 
-    draftRevisionRef.current++
     folderDraftRevisionRef.current++
-    draftDirtyRef.current = false
-    setSettingsBuffer(settings)
-    setOverrides(savedOverrides)
-    setSiteIntegrationEnablement(savedSiteIntegrationEnablement)
-    setSiteIntegrationSettingsByIntegration(
-      savedSiteIntegrationSettingsByIntegration
-    )
+    dispatchConfiguration({ type: "discard-to-saved" })
     setPendingFolderHandle(null)
-    setExternalChangeKeys([])
     toast.info(t("options_toastChangesDiscarded"))
     return true
   }
 
   function retryLoad() {
-    setIsLoading(true)
-    setLoadFailed(false)
+    dispatchConfiguration({ type: "load-start" })
     setLoadAttempt((attempt) => attempt + 1)
   }
 

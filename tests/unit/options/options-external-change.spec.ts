@@ -6,8 +6,8 @@ import { ExternalSettingsConflictBanner } from "@/entrypoints/options/components
 import {
   mergeOptionsDraftOntoLatest,
   type OptionsConfigurationSnapshot,
-} from "@/entrypoints/options/hooks/options-external-change"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+} from "@/entrypoints/options/state/options-configuration-reducer"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
 function createSnapshot(): OptionsConfigurationSnapshot {
   return {

@@ -11,10 +11,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InlineConfirmation } from "@/src/ui/shared/components/InlineConfirmation"
-import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { getDisplayName } from "@/src/site-integrations/catalog"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
-import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
+import {
+  getDownloadCancelPresentation,
+  getDownloadErrorMessage,
+} from "@/src/runtime/download-error-presentation"
 import {
   chapterStatusBadgeClass,
   formatChapterStatusLabel,
@@ -25,7 +28,7 @@ import {
   getTerminalTimestampLabel,
   shouldShowChapterError,
 } from "@/entrypoints/options/components/downloads-tab-helpers"
-import type { DownloadTaskActionResult } from "@/entrypoints/options/download-task-actions"
+import type { DownloadTaskActionResult } from "@/entrypoints/options/types/download-task-actions"
 
 export interface DownloadTaskCardProps {
   task: DownloadTaskState
@@ -67,11 +70,15 @@ export function DownloadTaskCard({
     (chapter) => chapter.status === "completed"
   ).length
   const totalChapters = task.chapters.length
-  const siteIntegrationName = getSiteIntegrationDisplayName(
-    task.siteIntegrationId
-  )
+  const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
   const isRetried = task.isRetried ?? false
+  const cancelPresentation = getDownloadCancelPresentation(
+    task.errorCategory,
+    task.chapters.some(
+      (chapter) => chapter.errorCategory === "browser_download_unobservable"
+    )
+  )
 
   const runTaskAction = async (
     action: "retry" | "restart" | "remove",
@@ -93,10 +100,10 @@ export function DownloadTaskCard({
     >
       {confirmingCancel && task.status === "downloading" && (
         <InlineConfirmation
-          title={t("sidepanel_cancelThisDownload")}
-          description={t("sidepanel_cancelProgressWarning")}
+          title={cancelPresentation.title}
+          description={cancelPresentation.description}
           pendingLabel={t("sidepanel_cancelingDownload")}
-          confirmLabel={t("common_yes")}
+          confirmLabel={cancelPresentation.confirmLabel}
           cancelLabel={t("common_no")}
           isPending={isCanceling}
           errorMessage={cancelError}

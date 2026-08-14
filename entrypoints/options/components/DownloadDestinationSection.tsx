@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 import { detectFsaCapabilities } from "@/src/storage/fs-access"
 
@@ -19,6 +19,7 @@ interface DownloadDestinationSectionProps {
   downloads: ExtensionSettings["downloads"]
   selectedFolderName: string | null
   isPickingFolder: boolean
+  isSaving: boolean
   onDownloadsChange: (updates: Partial<ExtensionSettings["downloads"]>) => void
   onPickFolder: () => Promise<void>
 }
@@ -27,6 +28,7 @@ export function DownloadDestinationSection({
   downloads,
   selectedFolderName,
   isPickingFolder,
+  isSaving,
   onDownloadsChange,
   onPickFolder,
 }: DownloadDestinationSectionProps) {
@@ -61,7 +63,8 @@ export function DownloadDestinationSection({
             id="custom-folder-switch"
             checked={downloads.destination === "file-system-access"}
             disabled={
-              !fsaSupported && downloads.destination !== "file-system-access"
+              isSaving ||
+              (!fsaSupported && downloads.destination !== "file-system-access")
             }
             onCheckedChange={(checked) => {
               onDownloadsChange({
@@ -82,7 +85,7 @@ export function DownloadDestinationSection({
             variant="outline"
             size="sm"
             onClick={onPickFolder}
-            disabled={isPickingFolder || !fsaSupported}
+            disabled={isSaving || isPickingFolder || !fsaSupported}
           >
             <Folder data-icon="inline-start" className="size-3.5" />
             {selectedFolderName
@@ -99,6 +102,7 @@ export function DownloadDestinationSection({
                   customDirectoryHandleId: null,
                 })
               }}
+              disabled={isSaving}
             >
               {t("options_useBrowserDownloads")}
             </Button>

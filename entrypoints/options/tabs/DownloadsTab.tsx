@@ -6,7 +6,7 @@
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { DownloadDestinationSection } from "@/entrypoints/options/components/DownloadDestinationSection"
 import { DownloadsFsaBanner } from "@/entrypoints/options/components/DownloadsFsaBanner"
 import { DownloadsHistoryActions } from "@/entrypoints/options/components/DownloadsHistoryActions"
@@ -30,6 +30,7 @@ interface DownloadsTabProps {
   onRepairFolder: () => Promise<boolean>
   onGrantFolderAccess: () => Promise<boolean>
   isPickingFolder: boolean
+  isSaving: boolean
 }
 
 export {
@@ -47,6 +48,7 @@ export function DownloadsTab({
   onRepairFolder,
   onGrantFolderAccess,
   isPickingFolder,
+  isSaving,
 }: DownloadsTabProps) {
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false)
   const [isDestinationActionPending, setIsDestinationActionPending] =
@@ -126,7 +128,7 @@ export function DownloadsTab({
         <DownloadsFsaBanner
           issue={destinationIssue}
           taskTitle={destinationTask?.seriesTitle}
-          isWorking={isPickingFolder || isDestinationActionPending}
+          isWorking={isSaving || isPickingFolder || isDestinationActionPending}
           onGrantAccess={() => repairAndRetry(onGrantFolderAccess)}
           onPickFolder={() => repairAndRetry(onRepairFolder)}
           onContinueInDownloads={async () => {
@@ -152,6 +154,7 @@ export function DownloadsTab({
         downloads={settings.downloads}
         selectedFolderName={selectedFolderName}
         isPickingFolder={isPickingFolder}
+        isSaving={isSaving}
         onDownloadsChange={updateDownloads}
         onPickFolder={onPickFolder}
       />

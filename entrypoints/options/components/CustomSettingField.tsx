@@ -20,8 +20,8 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/src/shared/utils"
 import { t } from "@/src/runtime/i18n"
-import type { SettingsFieldSchema } from "@/src/site-integrations/manifest"
-import type { SiteIntegrationSettingValue } from "@/src/storage/site-integration-settings-service"
+import type { SiteIntegrationSettingsField as SettingsFieldSchema } from "@/src/site-integrations/definition-types"
+import type { SiteIntegrationSettingValue } from "@/src/domain/site-integrations/storage-schemas"
 
 type CustomSettingValue = SiteIntegrationSettingValue
 
@@ -79,16 +79,16 @@ export function CustomSettingField({
         <div className="flex flex-col gap-1">
           {schema.type === "multiselect" ? (
             <p id={labelId} className="font-medium">
-              {schema.label}
+              {t(schema.labelKey)}
             </p>
           ) : (
             <Label htmlFor={controlId} className="font-medium">
-              {schema.label}
+              {t(schema.labelKey)}
             </Label>
           )}
-          {schema.description && (
+          {schema.descriptionKey && (
             <p id={descriptionId} className="text-[11px] text-muted-foreground">
-              {schema.description}
+              {t(schema.descriptionKey)}
             </p>
           )}
         </div>
@@ -157,7 +157,7 @@ export function CustomSettingField({
                   key={`${schema.id}-${option.value}`}
                   value={option.value}
                 >
-                  {option.label}
+                  {t(option.labelKey)}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -169,10 +169,10 @@ export function CustomSettingField({
         <fieldset
           id={controlId}
           aria-labelledby={labelId}
-          aria-describedby={schema.description ? descriptionId : undefined}
+          aria-describedby={schema.descriptionKey ? descriptionId : undefined}
           className="grid gap-2 sm:grid-cols-2"
         >
-          <legend className="sr-only">{schema.label}</legend>
+          <legend className="sr-only">{t(schema.labelKey)}</legend>
           {schema.options.map((option) => {
             const isChecked = multiselectValues.includes(option.value)
             return (
@@ -195,7 +195,7 @@ export function CustomSettingField({
                     onChange(schema, enabled, nextValues)
                   }}
                 />
-                <span className="truncate">{option.label}</span>
+                <span className="truncate">{t(option.labelKey)}</span>
               </label>
             )
           })}

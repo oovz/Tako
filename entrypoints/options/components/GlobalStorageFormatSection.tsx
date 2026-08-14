@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { ArchiveFormatPicker } from "@/entrypoints/options/components/ArchiveFormatPicker"
 import { PathVisualization } from "@/entrypoints/options/components/PathVisualization"
 import { t } from "@/src/runtime/i18n"
@@ -35,9 +35,7 @@ export function GlobalStorageFormatSection({
   onDownloadsChange,
 }: GlobalStorageFormatSectionProps) {
   const pathIsValid = validateTemplate(downloads.pathTemplate).valid
-  const filenameIsValid = validateTemplate(
-    downloads.fileNameTemplate || "<CHAPTER_TITLE>"
-  ).valid
+  const filenameIsValid = validateTemplate(downloads.fileNameTemplate).valid
 
   return (
     <Card>
@@ -171,7 +169,7 @@ export function GlobalStorageFormatSection({
               <Input
                 id="filename-template"
                 data-testid="filename-template-input"
-                value={downloads.fileNameTemplate || ""}
+                value={downloads.fileNameTemplate}
                 aria-invalid={!filenameIsValid}
                 aria-describedby="filename-template-help template-validation-status"
                 onChange={(e) =>
@@ -192,7 +190,7 @@ export function GlobalStorageFormatSection({
 
             <PathVisualization
               template={downloads.pathTemplate}
-              filenameTemplate={downloads.fileNameTemplate || "<CHAPTER_TITLE>"}
+              filenameTemplate={downloads.fileNameTemplate}
               format={downloads.defaultFormat}
             />
           </div>

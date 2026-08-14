@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Bug } from "lucide-react"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 
 interface DebugSettingsSectionProps {
