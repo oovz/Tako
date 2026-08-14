@@ -5,47 +5,114 @@
   "extDescription": {
     "message": "從 MangaDex、Pixiv Comic、少年 Jump+ 等網站批次下載漫畫章節。在 Chrome 側邊欄中排隊、重試並匯出 CBZ/ZIP 檔案。"
   },
-
-  "common_active": { "message": "進行中" },
-  "common_queued": { "message": "排隊中" },
-  "common_cancel": { "message": "取消" },
-  "common_dismiss": { "message": "關閉" },
-  "common_remove": { "message": "移除" },
-  "common_undo": { "message": "復原" },
-  "common_restart": { "message": "重新開始" },
-  "common_error": { "message": "錯誤" },
-  "common_warning": { "message": "警告" },
-  "common_loading": { "message": "載入中..." },
-  "common_chapters": { "message": "章節" },
-  "common_chapter": { "message": "章節" },
-  "common_chaptersShort": { "message": "話" },
-  "common_images": { "message": "圖片" },
-  "common_locked": { "message": "已鎖定" },
-  "common_progress": { "message": "進度" },
-  "common_retried": { "message": "已重試" },
-  "common_enabled": { "message": "已啟用" },
-  "common_overrides": { "message": "覆蓋" },
-  "common_override": { "message": "覆蓋" },
-  "common_disabled": { "message": "已停用" },
-  "common_configure": { "message": "設定" },
-  "common_hide": { "message": "隱藏" },
-  "common_yes": { "message": "是" },
-  "common_no": { "message": "否" },
-
-  "sidepanel_settingsTooltip": { "message": "設定" },
-  "sidepanel_settingsNeedAttention": { "message": "設定需要關注" },
-  "sidepanel_openOptionsAdvanced": { "message": "開啟選項（進階設定）" },
-  "sidepanel_openOptionsActionItem": { "message": "開啟選項（有待處理事項）" },
-
-  "sidepanel_noSeriesDetected": { "message": "未偵測到漫畫" },
+  "common_active": {
+    "message": "進行中"
+  },
+  "common_queued": {
+    "message": "排隊中"
+  },
+  "common_cancel": {
+    "message": "取消"
+  },
+  "common_dismiss": {
+    "message": "關閉"
+  },
+  "common_remove": {
+    "message": "移除"
+  },
+  "common_undo": {
+    "message": "復原"
+  },
+  "common_restart": {
+    "message": "重新開始"
+  },
+  "common_error": {
+    "message": "錯誤"
+  },
+  "common_warning": {
+    "message": "警告"
+  },
+  "common_loading": {
+    "message": "載入中..."
+  },
+  "common_chapters": {
+    "message": "章節"
+  },
+  "common_chapter": {
+    "message": "章節"
+  },
+  "common_chaptersShort": {
+    "message": "話"
+  },
+  "common_images": {
+    "message": "圖片"
+  },
+  "common_locked": {
+    "message": "已鎖定"
+  },
+  "common_progress": {
+    "message": "進度"
+  },
+  "common_retried": {
+    "message": "已重試"
+  },
+  "common_enabled": {
+    "message": "已啟用"
+  },
+  "common_overrides": {
+    "message": "覆蓋"
+  },
+  "common_override": {
+    "message": "覆蓋"
+  },
+  "common_disabled": {
+    "message": "已停用"
+  },
+  "common_configure": {
+    "message": "設定"
+  },
+  "common_hide": {
+    "message": "隱藏"
+  },
+  "common_yes": {
+    "message": "是"
+  },
+  "common_no": {
+    "message": "否"
+  },
+  "sidepanel_settingsTooltip": {
+    "message": "設定"
+  },
+  "sidepanel_settingsNeedAttention": {
+    "message": "設定需要關注"
+  },
+  "sidepanel_openOptionsAdvanced": {
+    "message": "開啟選項（進階設定）"
+  },
+  "sidepanel_openOptionsActionItem": {
+    "message": "開啟選項（有待處理事項）"
+  },
+  "sidepanel_noSeriesDetected": {
+    "message": "未偵測到漫畫"
+  },
   "sidepanel_openSupportedPage": {
     "message": "開啟一個受支援的漫畫系列頁面以開始使用。"
   },
-  "sidepanel_pageNotRecognized": { "message": "此頁面未被識別為漫畫系列" },
-  "sidepanel_selectChapters": { "message": "選擇章節" },
-  "sidepanel_closeSelection": { "message": "關閉選擇" },
-  "sidepanel_noChapters": { "message": "無章節" },
-  "sidepanel_noChaptersFound": { "message": "未找到章節" },
+  "sidepanel_pageNotRecognized": {
+    "message": "此頁面未被識別為漫畫系列"
+  },
+  "sidepanel_selectChapters": {
+    "message": "選擇章節"
+  },
+  "sidepanel_closeSelection": {
+    "message": "關閉選擇"
+  },
+  "sidepanel_noChapters": {
+    "message": "無章節"
+  },
+  "sidepanel_noChaptersFound": {
+    "message": "未找到章節"
+  },
   "sidepanel_adultConsentRequired": {
     "message": "請先接受 Manhuagui 的成人內容提示，然後重新載入此頁面。"
   },
@@ -57,111 +124,218 @@
   },
   "sidepanel_chaptersCount": {
     "message": "$COUNT$ 章",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "sidepanel_volumesCount": {
     "message": "$COUNT$ 卷",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "sidepanel_volumeToggleAria": {
     "message": "切換卷 $TITLE$",
-    "placeholders": { "title": { "content": "$1" } }
+    "placeholders": {
+      "title": {
+        "content": "$1"
+      }
+    }
   },
   "sidepanel_volumeSelectAllAria": {
     "message": "選取卷 $TITLE$ 的全部 $COUNT$ 章",
     "placeholders": {
-      "title": { "content": "$1" },
-      "count": { "content": "$2" }
+      "title": {
+        "content": "$1"
+      },
+      "count": {
+        "content": "$2"
+      }
     }
   },
-
-  "sidepanel_selectChaptersLabel": { "message": "選擇章節" },
-  "sidepanel_skipToContent": { "message": "跳到主要內容" },
+  "sidepanel_selectChaptersLabel": {
+    "message": "選擇章節"
+  },
+  "sidepanel_skipToContent": {
+    "message": "跳到主要內容"
+  },
   "sidepanel_selectedCount": {
     "message": "已選 $COUNT$",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "sidepanel_availableCount": {
     "message": "可選 $COUNT$",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
-  "sidepanel_volumes": { "message": "按卷" },
-  "sidepanel_allChapters": { "message": "全部章節" },
-  "sidepanel_addedToQueue": { "message": "已加入佇列！" },
+  "sidepanel_volumes": {
+    "message": "按卷"
+  },
+  "sidepanel_allChapters": {
+    "message": "全部章節"
+  },
+  "sidepanel_addedToQueue": {
+    "message": "已加入佇列！"
+  },
   "sidepanel_downloadCount": {
     "message": "下載 ($COUNT$)",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "sidepanel_selectChaptersHint": {
     "message": "在上方選擇章節並點擊下載以加入佇列"
   },
-  "sidepanel_noDownloadsYet": { "message": "暫無下載" },
+  "sidepanel_noDownloadsYet": {
+    "message": "暫無下載"
+  },
   "sidepanel_useSelectChapters": {
     "message": "使用上方的\"選擇章節\"開始下載"
   },
-  "sidepanel_recentHistory": { "message": "最近歷史" },
-  "sidepanel_viewFullHistory": { "message": "檢視完整歷史" },
-  "sidepanel_viewAll": { "message": "檢視全部" },
+  "sidepanel_recentHistory": {
+    "message": "最近歷史"
+  },
+  "sidepanel_viewFullHistory": {
+    "message": "檢視完整歷史"
+  },
+  "sidepanel_viewAll": {
+    "message": "檢視全部"
+  },
   "sidepanel_emptyQueue": {
     "message": "暫無下載。從任意受支援的漫畫分頁開始下載即可在此檢視。"
   },
-
-  "sidepanel_cancelDownload": { "message": "取消下載" },
-  "sidepanel_cancelingDownload": { "message": "正在取消下載" },
-  "sidepanel_retryFailed": { "message": "重試失敗" },
-  "sidepanel_retryFailedChapters": { "message": "重試失敗章節" },
-  "sidepanel_restartTask": { "message": "重新開始任務" },
-  "sidepanel_restartAllChapters": { "message": "重新開始所有章節" },
-  "sidepanel_moveToTop": { "message": "移至頂部" },
-  "sidepanel_moveTaskToTop": { "message": "將任務移至頂部" },
-  "sidepanel_moreActions": { "message": "更多操作" },
+  "sidepanel_cancelDownload": {
+    "message": "取消下載"
+  },
+  "sidepanel_cancelingDownload": {
+    "message": "正在取消下載"
+  },
+  "sidepanel_retryFailed": {
+    "message": "重試失敗"
+  },
+  "sidepanel_retryFailedChapters": {
+    "message": "重試失敗章節"
+  },
+  "sidepanel_restartTask": {
+    "message": "重新開始任務"
+  },
+  "sidepanel_restartAllChapters": {
+    "message": "重新開始所有章節"
+  },
+  "sidepanel_moveToTop": {
+    "message": "移至頂部"
+  },
+  "sidepanel_moveTaskToTop": {
+    "message": "將任務移至頂部"
+  },
+  "sidepanel_moreActions": {
+    "message": "更多操作"
+  },
   "sidepanel_taskRemovedFromQueue": {
     "message": "已從佇列中移除工作"
   },
-  "sidepanel_historyRemoved": { "message": "已從歷史記錄中移除" },
-  "sidepanel_undoFailed": { "message": "無法復原此操作" },
-  "sidepanel_cancelThisDownload": { "message": "取消此下載？" },
+  "sidepanel_historyRemoved": {
+    "message": "已從歷史記錄中移除"
+  },
+  "sidepanel_undoFailed": {
+    "message": "無法復原此操作"
+  },
+  "sidepanel_cancelThisDownload": {
+    "message": "取消此下載？"
+  },
   "sidepanel_cancelProgressWarning": {
     "message": "正在下載的章節進度可能會遺失。"
   },
-
+  "sidepanel_forgetUnobservableDownload": {
+    "message": "要忘記此工作中的所有待處理下載嗎？"
+  },
+  "sidepanel_forgetUnobservableWarning": {
+    "message": "無法再檢查瀏覽器下載。忘記它會釋放此工作中 Tako 的所有待處理輸出；檔案可能不完整。"
+  },
+  "sidepanel_forgetDownload": {
+    "message": "忘記所有下載"
+  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下載",
     "placeholders": {
-      "count": { "content": "$1" },
-      "unit": { "content": "$2" }
+      "count": {
+        "content": "$1"
+      },
+      "unit": {
+        "content": "$2"
+      }
     }
   },
   "sidepanel_chapterPosition": {
     "message": "第 $POS$/$TOTAL$ 章",
-    "placeholders": { "pos": { "content": "$1" }, "total": { "content": "$2" } }
+    "placeholders": {
+      "pos": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
   },
-  "progressStage_preparing": { "message": "正在準備章節" },
-  "progressStage_resolving": { "message": "正在取得章節資訊" },
+  "progressStage_preparing": {
+    "message": "正在準備章節"
+  },
+  "progressStage_resolving": {
+    "message": "正在取得章節資訊"
+  },
   "progressStage_downloading": {
     "message": "正在下載第 $CURRENT$/$TOTAL$ 張圖片",
     "placeholders": {
-      "current": { "content": "$1" },
-      "total": { "content": "$2" }
+      "current": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "progressStage_transforming": {
     "message": "正在處理第 $CURRENT$/$TOTAL$ 張圖片",
     "placeholders": {
-      "current": { "content": "$1" },
-      "total": { "content": "$2" }
+      "current": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
-  "progressStage_archiving": { "message": "正在建立壓縮檔" },
-  "progressStage_saving": { "message": "正在儲存檔案" },
-
+  "progressStage_archiving": {
+    "message": "正在建立壓縮檔"
+  },
+  "progressStage_saving": {
+    "message": "正在儲存檔案"
+  },
   "sidepanel_tabNotSupported": {
     "message": "此分頁不受支援（例如瀏覽器/擴充功能內部頁面或被策略封鎖）。"
   },
-  "sidepanel_noMangaFound": { "message": "此頁面未找到漫畫。" },
-  "sidepanel_siteNotSupported": { "message": "此網站暫不受支援。" },
-
-  "destinationIssue_title": { "message": "下載資料夾需要處理" },
+  "sidepanel_noMangaFound": {
+    "message": "此頁面未找到漫畫。"
+  },
+  "sidepanel_siteNotSupported": {
+    "message": "此網站暫不受支援。"
+  },
+  "destinationIssue_title": {
+    "message": "下載資料夾需要處理"
+  },
   "destinationIssue_permissionRequired": {
     "message": "請再次允許存取所選資料夾，以繼續此工作。"
   },
@@ -174,30 +348,66 @@
   "destinationIssue_unsupported": {
     "message": "此瀏覽器無法使用所選的自訂資料夾。"
   },
-  "destinationIssue_diskFull": { "message": "所選下載資料夾的可用空間不足。" },
-  "destinationIssue_fixFolder": { "message": "修復資料夾" },
-  "destinationIssue_grantAccess": { "message": "再次授權" },
-  "destinationIssue_chooseFolder": { "message": "選擇其他資料夾" },
-  "destinationIssue_continueDownloads": { "message": "改用瀏覽器下載" },
-  "destinationIssue_cancelTask": { "message": "取消工作" },
-  "destinationIssue_actionFailed": { "message": "無法更新受阻工作" },
-  "destinationIssue_accessGranted": { "message": "已恢復資料夾存取權限" },
-
-  "sidepanel_initFailed": { "message": "擴充功能初始化失敗" },
-
-  "sidepanel_toastRetryFailed": { "message": "重試失敗章節失敗" },
-  "sidepanel_toastRestartFailed": { "message": "重新開始任務失敗" },
-  "sidepanel_toastMoveTopFailed": { "message": "移至頂部失敗" },
-  "sidepanel_toastCancelFailed": { "message": "取消任務失敗" },
-  "sidepanel_toastRemoveFailed": { "message": "移除任務失敗" },
-
-  "options_toastCancelFailed": { "message": "取消任務失敗" },
-  "options_toastRetryFailed": { "message": "重試失敗章節失敗" },
-  "options_toastRestartFailed": { "message": "重新開始任務失敗" },
-  "options_toastRemoveFailed": { "message": "移除任務失敗" },
-
-  "status_downloading": { "message": "下載中" },
-  "status_queued": { "message": "排隊中" },
+  "destinationIssue_diskFull": {
+    "message": "所選下載資料夾的可用空間不足。"
+  },
+  "destinationIssue_fixFolder": {
+    "message": "修復資料夾"
+  },
+  "destinationIssue_grantAccess": {
+    "message": "再次授權"
+  },
+  "destinationIssue_chooseFolder": {
+    "message": "選擇其他資料夾"
+  },
+  "destinationIssue_continueDownloads": {
+    "message": "改用瀏覽器下載"
+  },
+  "destinationIssue_cancelTask": {
+    "message": "取消工作"
+  },
+  "destinationIssue_actionFailed": {
+    "message": "無法更新受阻工作"
+  },
+  "destinationIssue_accessGranted": {
+    "message": "已恢復資料夾存取權限"
+  },
+  "sidepanel_initFailed": {
+    "message": "擴充功能初始化失敗"
+  },
+  "sidepanel_toastRetryFailed": {
+    "message": "重試失敗章節失敗"
+  },
+  "sidepanel_toastRestartFailed": {
+    "message": "重新開始任務失敗"
+  },
+  "sidepanel_toastMoveTopFailed": {
+    "message": "移至頂部失敗"
+  },
+  "sidepanel_toastCancelFailed": {
+    "message": "取消任務失敗"
+  },
+  "sidepanel_toastRemoveFailed": {
+    "message": "移除任務失敗"
+  },
+  "options_toastCancelFailed": {
+    "message": "取消任務失敗"
+  },
+  "options_toastRetryFailed": {
+    "message": "重試失敗章節失敗"
+  },
+  "options_toastRestartFailed": {
+    "message": "重新開始任務失敗"
+  },
+  "options_toastRemoveFailed": {
+    "message": "移除任務失敗"
+  },
+  "status_downloading": {
+    "message": "下載中"
+  },
+  "status_queued": {
+    "message": "排隊中"
+  },
   "status_waitingBrowserDownload": {
     "message": "等待 Chrome 下載完成"
   },
@@ -210,19 +420,36 @@
   "status_providerActionRequired": {
     "message": "需要網站存取權限"
   },
-  "status_completed": { "message": "已完成" },
-  "status_partialSuccess": { "message": "部分成功" },
-  "status_failed": { "message": "已失敗" },
-  "status_canceled": { "message": "已取消" },
-
-  "failureCategory_network": { "message": "網路：" },
-  "failureCategory_download": { "message": "下載：" },
-  "downloadError_networkUnavailable": { "message": "網路連線不可用。" },
+  "status_completed": {
+    "message": "已完成"
+  },
+  "status_partialSuccess": {
+    "message": "部分成功"
+  },
+  "status_failed": {
+    "message": "已失敗"
+  },
+  "status_canceled": {
+    "message": "已取消"
+  },
+  "failureCategory_network": {
+    "message": "網路："
+  },
+  "failureCategory_download": {
+    "message": "下載："
+  },
+  "downloadError_networkUnavailable": {
+    "message": "網路連線不可用。"
+  },
   "downloadError_providerRateLimited": {
     "message": "該網站正在限制請求，請稍後重試。"
   },
-  "downloadError_providerChanged": { "message": "該網站可能已發生變更。" },
-  "downloadError_chapterUnavailable": { "message": "該章節已無法使用。" },
+  "downloadError_providerChanged": {
+    "message": "該網站可能已發生變更。"
+  },
+  "downloadError_chapterUnavailable": {
+    "message": "該章節已無法使用。"
+  },
   "downloadError_folderPermissionRequired": {
     "message": "需要授予所選資料夾的存取權限。"
   },
@@ -232,9 +459,14 @@
   "downloadError_folderWriteFailed": {
     "message": "Tako 無法寫入所選資料夾。"
   },
-  "downloadError_diskFull": { "message": "磁碟空間不足。" },
+  "downloadError_diskFull": {
+    "message": "磁碟空間不足。"
+  },
   "downloadError_browserDownloadInterrupted": {
     "message": "瀏覽器未能完成輸出檔案的儲存。"
+  },
+  "downloadError_browserDownloadUnobservable": {
+    "message": "下載歷程已刪除，無法確認瀏覽器下載結果。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 無法建立壓縮檔。"
@@ -242,139 +474,270 @@
   "downloadError_unknown": {
     "message": "下載失敗。技術詳細資料可在擴充功能主控台中查看。"
   },
-  "progressStage_preparingNextChapter": { "message": "正在準備下一章" },
+  "progressStage_preparingNextChapter": {
+    "message": "正在準備下一章"
+  },
   "sidepanel_persistentError": {
     "message": "擴充功能需要處理問題。技術詳細資料可在擴充功能主控台中查看。"
   },
-  "errorBoundary_title": { "message": "發生問題" },
+  "errorBoundary_title": {
+    "message": "發生問題"
+  },
   "errorBoundary_description": {
     "message": "發生未預期的錯誤。技術詳細資料可在擴充功能主控台中查看。"
   },
-  "errorBoundary_tryAgain": { "message": "重試" },
-
-  "options_takoSettings": { "message": "Tako 設定" },
+  "errorBoundary_tryAgain": {
+    "message": "重試"
+  },
+  "options_takoSettings": {
+    "message": "Tako 設定"
+  },
   "options_takoVersion": {
     "message": "Tako v$VERSION$",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "options_general": { "message": "一般" },
-  "options_siteIntegrations": { "message": "網站整合" },
-  "options_downloads": { "message": "下載" },
-  "options_aboutDebug": { "message": "關於 / 除錯" },
-
-  "options_loadingSettings": { "message": "正在載入設定..." },
-  "options_loadingDownloads": { "message": "正在載入下載..." },
-
-  "options_generalSettings": { "message": "一般設定" },
+  "options_general": {
+    "message": "一般"
+  },
+  "options_siteIntegrations": {
+    "message": "網站整合"
+  },
+  "options_downloads": {
+    "message": "下載"
+  },
+  "options_aboutDebug": {
+    "message": "關於 & 除錯"
+  },
+  "options_loadingSettings": {
+    "message": "正在載入設定..."
+  },
+  "options_loadingDownloads": {
+    "message": "正在載入下載..."
+  },
+  "options_generalSettings": {
+    "message": "一般設定"
+  },
   "options_generalSettingsDesc": {
     "message": "設定下載格式、效能、重試和通知。"
   },
-
-  "options_storageFormats": { "message": "儲存與格式" },
-  "options_storageFormatsDesc": { "message": "選擇封存格式和檔案組織選項。" },
-  "options_includeComicInfo": { "message": "包含 ComicInfo.xml" },
-  "options_includeComicInfoDesc": { "message": "為漫畫閱讀器嵌入詮釋資料" },
-  "options_includeCoverImage": { "message": "包含系列封面" },
-  "options_includeCoverImageDesc": { "message": "將封面圖片儲存到封存檔案中" },
-  "options_normalizeFilenames": { "message": "規範化檔案名" },
+  "options_storageFormats": {
+    "message": "儲存與格式"
+  },
+  "options_storageFormatsDesc": {
+    "message": "選擇封存格式和檔案組織選項。"
+  },
+  "options_includeComicInfo": {
+    "message": "包含 ComicInfo.xml"
+  },
+  "options_includeComicInfoDesc": {
+    "message": "為漫畫閱讀器嵌入詮釋資料"
+  },
+  "options_includeCoverImage": {
+    "message": "包含系列封面"
+  },
+  "options_includeCoverImageDesc": {
+    "message": "將封面圖片儲存到封存檔案中"
+  },
+  "options_normalizeFilenames": {
+    "message": "規範化檔案名"
+  },
   "options_normalizeFilenamesDesc": {
     "message": "將圖片重新命名為 001.jpg, 002.jpg..."
   },
-  "options_overwriteExisting": { "message": "覆蓋已有檔案" },
-  "options_overwriteExistingDesc": { "message": "如果檔案已存在則替換" },
-  "options_suppressSaveAs": { "message": "禁止另存新檔對話框" },
+  "options_overwriteExisting": {
+    "message": "覆蓋已有檔案"
+  },
+  "options_overwriteExistingDesc": {
+    "message": "如果檔案已存在則替換"
+  },
+  "options_suppressSaveAs": {
+    "message": "禁止另存新檔對話框"
+  },
   "options_suppressSaveAsDesc": {
     "message": "儲存到已設定的瀏覽器下載路徑，不開啟 Chrome 的檔案選擇器"
   },
-  "options_directoryPathTemplate": { "message": "目錄路徑範本" },
+  "options_directoryPathTemplate": {
+    "message": "目錄路徑範本"
+  },
   "options_directoryPathTemplateDesc": {
     "message": "使用巨集：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
   },
-  "options_filenameTemplate": { "message": "檔案名範本" },
+  "options_filenameTemplate": {
+    "message": "檔案名範本"
+  },
   "options_filenameTemplateDesc": {
     "message": "封存/資料夾名稱的範本。支援相同巨集以及 <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3>。"
   },
-  "options_imageFilenamePadding": { "message": "圖片檔案名補零" },
-  "options_imagePaddingAuto": { "message": "自動（基於圖片總數）" },
-  "options_imagePadding2": { "message": "2 位數 (01-99)" },
-  "options_imagePadding3": { "message": "3 位數 (001-999)" },
-  "options_imagePadding4": { "message": "4 位數 (0001-9999)" },
-  "options_imagePadding5": { "message": "5 位數 (00001-99999)" },
+  "options_imageFilenamePadding": {
+    "message": "圖片檔案名補零"
+  },
+  "options_imagePaddingAuto": {
+    "message": "自動（基於圖片總數）"
+  },
+  "options_imagePadding2": {
+    "message": "2 位數 (01-99)"
+  },
+  "options_imagePadding3": {
+    "message": "3 位數 (001-999)"
+  },
+  "options_imagePadding4": {
+    "message": "4 位數 (0001-9999)"
+  },
+  "options_imagePadding5": {
+    "message": "5 位數 (00001-99999)"
+  },
   "options_imagePaddingDesc": {
     "message": "規範化圖片檔案名的補零位數（例如 001.jpg, 002.jpg）。"
   },
-
-  "options_archiveFormat": { "message": "封存格式" },
-  "options_cbzArchive": { "message": "CBZ 封存" },
-  "options_cbzArchiveDesc": { "message": "最適合漫畫閱讀器" },
-  "options_zipArchive": { "message": "ZIP 封存" },
-  "options_zipArchiveDesc": { "message": "標準壓縮資料夾" },
-  "options_noArchive": { "message": "不封存" },
-  "options_noArchiveDesc": { "message": "單獨的圖片檔案" },
+  "options_archiveFormat": {
+    "message": "封存格式"
+  },
+  "options_cbzArchive": {
+    "message": "CBZ 封存"
+  },
+  "options_cbzArchiveDesc": {
+    "message": "最適合漫畫閱讀器"
+  },
+  "options_zipArchive": {
+    "message": "ZIP 封存"
+  },
+  "options_zipArchiveDesc": {
+    "message": "標準壓縮資料夾"
+  },
+  "options_noArchive": {
+    "message": "不封存"
+  },
+  "options_noArchiveDesc": {
+    "message": "單獨的圖片檔案"
+  },
   "options_noArchiveWarningTitle": {
     "message": "不封存 + 預設下載會使下載列雜亂"
   },
   "options_noArchiveWarningDesc": {
     "message": "使用\"不封存\"格式配合預設下載位置會為每張圖片建立單獨的 Chrome 下載項目。建議啟用自訂下載資料夾以避免下載列雜亂。"
   },
-
-  "options_performance": { "message": "效能" },
-  "options_performanceDesc": { "message": "控制下載速度和並行限制。" },
-  "options_imageConcurrency": { "message": "圖片並行數" },
-  "options_streams": { "message": "串流" },
-  "options_imageConcurrencyDesc": { "message": "每章節並行圖片請求數。" },
-  "options_imageRequestDelay": { "message": "圖片請求延遲 (ms)" },
-  "options_imageRequestDelayDesc": { "message": "圖片請求之間的等待時間。" },
-  "options_chapterDelay": { "message": "章節延遲 (ms)" },
-  "options_chapterDelayDesc": { "message": "章節排程之間的等待時間。" },
-
-  "options_retrySettings": { "message": "重試設定" },
-  "options_retrySettingsDesc": { "message": "設定失敗下載的自動重試行為。" },
-  "options_imageRetries": { "message": "圖片重試次數" },
-  "options_imageRetriesDesc": { "message": "圖片下載失敗後的重試次數。" },
-  "options_chapterRetries": { "message": "章節重試次數" },
-  "options_chapterRetriesDesc": { "message": "章節下載失敗後的重試次數。" },
-
-  "options_notifications": { "message": "通知" },
-  "options_notificationsDesc": { "message": "控制瀏覽器通知行為。" },
-  "options_enableNotifications": { "message": "啟用通知" },
+  "options_performance": {
+    "message": "效能"
+  },
+  "options_performanceDesc": {
+    "message": "控制下載速度和並行限制。"
+  },
+  "options_imageConcurrency": {
+    "message": "圖片並行數"
+  },
+  "options_streams": {
+    "message": "串流"
+  },
+  "options_imageConcurrencyDesc": {
+    "message": "每章節並行圖片請求數。"
+  },
+  "options_imageRequestDelay": {
+    "message": "圖片請求延遲 (ms)"
+  },
+  "options_imageRequestDelayDesc": {
+    "message": "圖片請求之間的等待時間。"
+  },
+  "options_chapterDelay": {
+    "message": "章節延遲 (ms)"
+  },
+  "options_chapterDelayDesc": {
+    "message": "章節排程之間的等待時間。"
+  },
+  "options_retrySettings": {
+    "message": "重試設定"
+  },
+  "options_retrySettingsDesc": {
+    "message": "設定失敗下載的自動重試行為。"
+  },
+  "options_imageRetries": {
+    "message": "圖片重試次數"
+  },
+  "options_imageRetriesDesc": {
+    "message": "圖片下載失敗後的重試次數。"
+  },
+  "options_chapterRetries": {
+    "message": "章節重試次數"
+  },
+  "options_chapterRetriesDesc": {
+    "message": "章節下載失敗後的重試次數。"
+  },
+  "options_notifications": {
+    "message": "通知"
+  },
+  "options_notificationsDesc": {
+    "message": "控制瀏覽器通知行為。"
+  },
+  "options_enableNotifications": {
+    "message": "啟用通知"
+  },
   "options_enableNotificationsDesc": {
     "message": "在下載完成和出錯時顯示瀏覽器通知。"
   },
-
-  "options_interfacePreferences": { "message": "介面" },
+  "options_interfacePreferences": {
+    "message": "介面"
+  },
   "options_interfacePreferencesDesc": {
     "message": "選擇 Tako 擴充功能頁面使用的語言和動態效果。"
   },
-  "options_uiLanguage": { "message": "語言" },
+  "options_uiLanguage": {
+    "message": "語言"
+  },
   "options_uiLanguageDesc": {
     "message": "套用於 Tako 的側邊欄和設定。擴充功能名稱仍由 Chrome 本地化。"
   },
-  "options_languageAutomatic": { "message": "自動（瀏覽器語言）" },
-  "options_motionPreference": { "message": "動態效果" },
+  "options_languageAutomatic": {
+    "message": "自動（瀏覽器語言）"
+  },
+  "options_motionPreference": {
+    "message": "動態效果"
+  },
   "options_motionPreferenceDesc": {
     "message": "選擇跟隨系統設定或減少動態效果。"
   },
-  "options_motionSystem": { "message": "跟隨系統設定" },
-  "options_motionReduce": { "message": "減少動態效果" },
-
-  "options_downloadsTitle": { "message": "下載" },
-  "options_downloadsDesc": { "message": "管理下載目標和監控活躍任務。" },
-
-  "options_downloadDestination": { "message": "下載目標" },
-  "options_useCustomFolder": { "message": "使用自訂資料夾（檔案系統存取）" },
+  "options_motionSystem": {
+    "message": "跟隨系統設定"
+  },
+  "options_motionReduce": {
+    "message": "減少動態效果"
+  },
+  "options_downloadsTitle": {
+    "message": "下載"
+  },
+  "options_downloadsDesc": {
+    "message": "管理下載目標和監控活躍任務。"
+  },
+  "options_downloadDestination": {
+    "message": "下載目標"
+  },
+  "options_useCustomFolder": {
+    "message": "使用自訂資料夾（檔案系統存取）"
+  },
   "options_fsaUnsupported": {
     "message": "此瀏覽器不支援自訂資料夾。仍可使用瀏覽器下載。"
   },
-  "options_conflictPolicy": { "message": "現有檔案" },
-  "options_conflictOverwrite": { "message": "覆寫現有檔案" },
-  "options_conflictUniquify": { "message": "使用唯一名稱保留兩個檔案" },
+  "options_conflictPolicy": {
+    "message": "現有檔案"
+  },
+  "options_conflictOverwrite": {
+    "message": "覆寫現有檔案"
+  },
+  "options_conflictUniquify": {
+    "message": "使用唯一名稱保留兩個檔案"
+  },
   "options_conflictPolicyHelp": {
     "message": "此原則同時適用於瀏覽器下載和自訂資料夾。"
   },
   "options_currentFolder": {
     "message": "目前資料夾：$NAME$",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
   "options_noCustomFolder": {
     "message": "未選擇自訂資料夾。使用預設瀏覽器下載。"
@@ -382,294 +745,575 @@
   "options_customFolderOverwrite": {
     "message": "自訂資料夾模式始終覆蓋同名檔案。"
   },
-  "options_changeFolder": { "message": "變更資料夾" },
-  "options_selectFolder": { "message": "選擇資料夾" },
-  "options_useBrowserDownloads": { "message": "使用瀏覽器下載" },
+  "options_changeFolder": {
+    "message": "變更資料夾"
+  },
+  "options_selectFolder": {
+    "message": "選擇資料夾"
+  },
+  "options_useBrowserDownloads": {
+    "message": "使用瀏覽器下載"
+  },
   "options_customFolderIgnoresOverwrite": {
     "message": "自訂資料夾模式忽略覆蓋設定，始終替換所選資料夾中的同名檔案。"
   },
-
   "options_historyStorageUsage": {
     "message": "歷史記錄儲存用量約：$SIZE$",
-    "placeholders": { "size": { "content": "$1" } }
+    "placeholders": {
+      "size": {
+        "content": "$1"
+      }
+    }
   },
-  "options_clearAllHistory": { "message": "清除全部歷史" },
-
-  "options_activeDownloads": { "message": "活躍下載" },
-  "options_queued": { "message": "排隊中" },
-  "options_completed": { "message": "已完成" },
-  "options_failedPartial": { "message": "失敗 / 部分" },
-  "options_canceled": { "message": "已取消" },
-  "options_noDownloadsYet": { "message": "暫無下載" },
-  "options_openMangaPage": { "message": "開啟漫畫系列頁面開始下載。" },
-
-  "options_cancelThisDownload": { "message": "取消此下載？" },
+  "options_clearAllHistory": {
+    "message": "清除全部歷史"
+  },
+  "options_activeDownloads": {
+    "message": "活躍下載"
+  },
+  "options_queued": {
+    "message": "排隊中"
+  },
+  "options_completed": {
+    "message": "已完成"
+  },
+  "options_failedPartial": {
+    "message": "失敗 / 部分"
+  },
+  "options_canceled": {
+    "message": "已取消"
+  },
+  "options_noDownloadsYet": {
+    "message": "暫無下載"
+  },
+  "options_openMangaPage": {
+    "message": "開啟漫畫系列頁面開始下載。"
+  },
+  "options_cancelThisDownload": {
+    "message": "取消此下載？"
+  },
   "options_cancelProgressWarning": {
     "message": "正在下載的章節進度可能會遺失。"
   },
   "options_chaptersCount": {
     "message": "$COMPLETED$/$TOTAL$ 章",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_createdAt": {
     "message": "建立於 $TIMESTAMP$",
-    "placeholders": { "timestamp": { "content": "$1" } }
+    "placeholders": {
+      "timestamp": {
+        "content": "$1"
+      }
+    }
   },
-  "options_retryFailedChapters": { "message": "重試失敗章節" },
-
-  "options_chapterColumn": { "message": "章節" },
-  "options_statusColumn": { "message": "狀態" },
-  "options_imagesColumn": { "message": "圖片" },
-  "options_errorColumn": { "message": "錯誤" },
+  "options_retryFailedChapters": {
+    "message": "重試失敗章節"
+  },
+  "options_chapterColumn": {
+    "message": "章節"
+  },
+  "options_statusColumn": {
+    "message": "狀態"
+  },
+  "options_imagesColumn": {
+    "message": "圖片"
+  },
+  "options_errorColumn": {
+    "message": "錯誤"
+  },
   "options_errorPrefix": {
     "message": "錯誤：$MESSAGE$",
-    "placeholders": { "message": { "content": "$1" } }
+    "placeholders": {
+      "message": {
+        "content": "$1"
+      }
+    }
   },
-
-  "options_completedAt": { "message": "完成於" },
-  "options_failedAt": { "message": "失敗於" },
-  "options_canceledAt": { "message": "取消於" },
-
+  "options_completedAt": {
+    "message": "完成於"
+  },
+  "options_failedAt": {
+    "message": "失敗於"
+  },
+  "options_canceledAt": {
+    "message": "取消於"
+  },
   "options_taskSummaryCompleted": {
     "message": "✅ 已完成（$TOTAL$ 章）",
     "placeholders": {
-      "total": { "content": "$1" },
-      "plural": { "content": "$2" }
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
     }
   },
   "options_taskSummaryFailed": {
     "message": "❌ 已失敗（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskSummaryCanceled": {
     "message": "⚠ 已取消（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskSummaryQueued": {
     "message": "$TOTAL$ 章已排隊",
-    "placeholders": { "total": { "content": "$1" } }
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   },
   "options_taskSummaryDownloading": {
     "message": "正在下載 $COMPLETED$/$TOTAL$ 章",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskSummaryPartial": {
     "message": "⚠ 部分完成（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskSummaryDefault": {
     "message": "$TOTAL$ 章",
-    "placeholders": { "total": { "content": "$1" } }
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   },
-
   "options_chapterImagesSummary": {
     "message": "$SUCCEEDED$/$TOTAL$ 張圖片",
     "placeholders": {
-      "succeeded": { "content": "$1" },
-      "total": { "content": "$2" }
+      "succeeded": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_chapterImagesPartial": {
     "message": "$SUCCEEDED$/$TOTAL$ 張圖片（$FAILED$ 張失敗）",
     "placeholders": {
-      "succeeded": { "content": "$1" },
-      "total": { "content": "$2" },
-      "failed": { "content": "$3" }
+      "succeeded": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      },
+      "failed": {
+        "content": "$3"
+      }
     }
   },
-
-  "options_clearHistoryTitle": { "message": "清除所有下載歷史？" },
+  "options_clearHistoryTitle": {
+    "message": "清除所有下載歷史？"
+  },
   "options_clearHistoryDesc": {
     "message": "這將永久刪除所有下載歷史。已下載的檔案不受影響。"
   },
-  "options_noKeepHistory": { "message": "否，保留歷史" },
-  "options_yesClearAll": { "message": "是，全部清除" },
-
-  "options_totalSeries": { "message": "系列總數" },
-  "options_trackedInHistory": { "message": "歷史記錄中追蹤" },
-  "options_totalChapters": { "message": "章節總數" },
-  "options_downloadsRecorded": { "message": "已記錄下載" },
-  "options_storageUsed": { "message": "已用儲存" },
-  "options_localStorageUsage": { "message": "本機儲存用量" },
-  "options_manageHistoryData": { "message": "管理歷史資料" },
+  "options_noKeepHistory": {
+    "message": "否，保留歷史"
+  },
+  "options_yesClearAll": {
+    "message": "是，全部清除"
+  },
+  "options_totalSeries": {
+    "message": "系列總數"
+  },
+  "options_trackedInHistory": {
+    "message": "歷史記錄中追蹤"
+  },
+  "options_totalChapters": {
+    "message": "章節總數"
+  },
+  "options_downloadsRecorded": {
+    "message": "已記錄下載"
+  },
+  "options_storageUsed": {
+    "message": "已用儲存"
+  },
+  "options_localStorageUsage": {
+    "message": "本機儲存用量"
+  },
+  "options_manageHistoryData": {
+    "message": "管理歷史資料"
+  },
   "options_manageHistoryDesc": {
     "message": "刪除已儲存的章節歷史記錄，不影響已儲存到磁碟的檔案。"
   },
-  "options_clearAllHistoryLabel": { "message": "清除全部歷史" },
-  "options_clearAllHistorySubtext": { "message": "刪除所有系列的所有下載歷史" },
-  "options_clearEverything": { "message": "全部清除" },
-  "options_clearAllDownloadHistory": { "message": "清除所有下載歷史？" },
+  "options_clearAllHistoryLabel": {
+    "message": "清除全部歷史"
+  },
+  "options_clearAllHistorySubtext": {
+    "message": "刪除所有系列的所有下載歷史"
+  },
+  "options_clearEverything": {
+    "message": "全部清除"
+  },
+  "options_clearAllDownloadHistory": {
+    "message": "清除所有下載歷史？"
+  },
   "options_clearAllConfirm": {
     "message": "這將永久刪除 $CHAPTERS$ 章、$SERIES$ 個系列的記錄。",
     "placeholders": {
-      "chapters": { "content": "$1" },
-      "series": { "content": "$2" }
+      "chapters": {
+        "content": "$1"
+      },
+      "series": {
+        "content": "$2"
+      }
     }
   },
-  "options_actionCannotBeUndone": { "message": "此操作無法復原。" },
-  "options_clearSpecificSeries": { "message": "清除特定系列" },
-  "options_clearSeriesSubtext": { "message": "刪除單個系列的下載歷史" },
-  "options_selectSeriesDots": { "message": "選擇系列..." },
-  "options_clearSeriesHistory": { "message": "清除系列歷史" },
-  "options_selectSeries": { "message": "選擇系列" },
-  "options_chooseSeries": { "message": "選擇一個系列..." },
-  "options_noDownloadHistory": { "message": "未找到下載歷史" },
-  "options_clearSelected": { "message": "清除已選" },
-
-  "options_siteIntegrationsTitle": { "message": "網站整合" },
+  "options_actionCannotBeUndone": {
+    "message": "此操作無法復原。"
+  },
+  "options_clearSpecificSeries": {
+    "message": "清除特定系列"
+  },
+  "options_clearSeriesSubtext": {
+    "message": "刪除單個系列的下載歷史"
+  },
+  "options_selectSeriesDots": {
+    "message": "選擇系列..."
+  },
+  "options_clearSeriesHistory": {
+    "message": "清除系列歷史"
+  },
+  "options_selectSeries": {
+    "message": "選擇系列"
+  },
+  "options_chooseSeries": {
+    "message": "選擇一個系列..."
+  },
+  "options_noDownloadHistory": {
+    "message": "未找到下載歷史"
+  },
+  "options_clearSelected": {
+    "message": "清除已選"
+  },
+  "options_siteIntegrationsTitle": {
+    "message": "網站整合"
+  },
   "options_integrationsCount": {
     "message": "$COUNT$ 個整合",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "options_siteIntegrationsDesc": {
     "message": "在不影響全域下載設定的情況下調整網站特定預設值、自訂設定和啟用狀態。"
   },
-  "options_searchIntegrations": { "message": "按名稱或網域搜尋網站整合..." },
+  "options_searchIntegrations": {
+    "message": "按名稱或網域搜尋網站整合..."
+  },
   "options_activeOverrides": {
     "message": "您有 $COUNT$ 個$WORD$的活躍覆蓋。",
     "placeholders": {
-      "count": { "content": "$1" },
-      "word": { "content": "$2" }
+      "count": {
+        "content": "$1"
+      },
+      "word": {
+        "content": "$2"
+      }
     }
   },
-  "options_noIntegrationsFound": { "message": "未找到整合" },
-  "options_trySearchingElse": { "message": "嘗試搜尋其他內容" },
-  "options_noIntegrationsAvailable": { "message": "無可用整合" },
-
-  "options_downloadSettings": { "message": "下載設定" },
-  "options_archiveFormatLabel": { "message": "封存格式" },
-  "options_cbzComicBookArchive": { "message": "CBZ（漫畫封存）" },
-  "options_zipFormat": { "message": "ZIP" },
-  "options_noArchiveIndividualFiles": { "message": "不封存（單獨檔案）" },
-  "options_downloadPathTemplate": { "message": "下載路徑範本" },
-  "options_leaveEmptyGlobal": { "message": "留空以使用全域路徑" },
+  "options_noIntegrationsFound": {
+    "message": "未找到整合"
+  },
+  "options_trySearchingElse": {
+    "message": "嘗試搜尋其他內容"
+  },
+  "options_noIntegrationsAvailable": {
+    "message": "無可用整合"
+  },
+  "options_downloadSettings": {
+    "message": "下載設定"
+  },
+  "options_archiveFormatLabel": {
+    "message": "封存格式"
+  },
+  "options_cbzComicBookArchive": {
+    "message": "CBZ（漫畫封存）"
+  },
+  "options_zipFormat": {
+    "message": "ZIP"
+  },
+  "options_noArchiveIndividualFiles": {
+    "message": "不封存（單獨檔案）"
+  },
+  "options_downloadPathTemplate": {
+    "message": "下載路徑範本"
+  },
+  "options_leaveEmptyGlobal": {
+    "message": "留空以使用全域路徑"
+  },
   "options_useMacrosLike": {
     "message": "使用巨集如 <SERIES_TITLE>、<CHAPTER_NUMBER>"
   },
-  "options_rateLimitingImages": { "message": "速率限制 - 圖片" },
-  "options_rateLimitingChapters": { "message": "速率限制 - 章節" },
-  "options_retrySettingsLabel": { "message": "重試設定" },
-  "options_imageRetriesLabel": { "message": "圖片重試次數" },
-  "options_chapterRetriesLabel": { "message": "章節重試次數" },
+  "options_rateLimitingImages": {
+    "message": "速率限制 - 圖片"
+  },
+  "options_rateLimitingChapters": {
+    "message": "速率限制 - 章節"
+  },
+  "options_retrySettingsLabel": {
+    "message": "重試設定"
+  },
+  "options_imageRetriesLabel": {
+    "message": "圖片重試次數"
+  },
+  "options_chapterRetriesLabel": {
+    "message": "章節重試次數"
+  },
   "options_defaultPlaceholder": {
     "message": "預設：$VALUE$",
-    "placeholders": { "value": { "content": "$1" } }
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
   },
-  "options_customSettings": { "message": "自訂設定" },
-  "options_enableOverride": { "message": "啟用覆蓋" },
-  "options_resetToGlobalDefaults": { "message": "重置為全域預設值" },
-
+  "options_customSettings": {
+    "message": "自訂設定"
+  },
+  "options_enableOverride": {
+    "message": "啟用覆蓋"
+  },
+  "options_resetToGlobalDefaults": {
+    "message": "重置為全域預設值"
+  },
   "options_concurrencyLabel": {
     "message": "$SCOPE$ 並行數",
-    "placeholders": { "scope": { "content": "$1" } }
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
   },
   "options_delayLabel": {
     "message": "$SCOPE$ 延遲 (ms)",
-    "placeholders": { "scope": { "content": "$1" } }
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
   },
   "options_maxConcurrentDesc": {
     "message": "最大並行 $SCOPE$ 下載 (1-10)",
-    "placeholders": { "scope": { "content": "$1" } }
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
   },
   "options_usingValue": {
     "message": " • 使用中：$VALUE$",
-    "placeholders": { "value": { "content": "$1" } }
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
   },
   "options_minDelayDesc": {
     "message": "$SCOPE$ 請求之間的最小延遲 (0-10000 ms)",
-    "placeholders": { "scope": { "content": "$1" } }
+    "placeholders": {
+      "scope": {
+        "content": "$1"
+      }
+    }
   },
   "options_usingMs": {
     "message": " • 使用中：$VALUE$ms",
-    "placeholders": { "value": { "content": "$1" } }
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
   },
-  "options_policyHierarchy": { "message": "策略層級：" },
-  "options_overrideActive": { "message": "✓ 覆蓋：活躍（此表單）" },
-  "options_siteIntegrationDefault": { "message": "網站整合預設值" },
-  "options_globalDefault": { "message": "全域預設值" },
-  "options_siteIntegrationBadge": { "message": "網站整合" },
-  "options_globalBadge": { "message": "全域" },
+  "options_policyHierarchy": {
+    "message": "策略層級："
+  },
+  "options_overrideActive": {
+    "message": "✓ 覆蓋：活躍（此表單）"
+  },
+  "options_siteIntegrationDefault": {
+    "message": "網站整合預設值"
+  },
+  "options_globalDefault": {
+    "message": "全域預設值"
+  },
+  "options_siteIntegrationBadge": {
+    "message": "網站整合"
+  },
+  "options_globalBadge": {
+    "message": "全域"
+  },
   "options_concurrentDelay": {
     "message": "$CONCURRENCY$ 並行，$DELAY$ms 延遲",
     "placeholders": {
-      "concurrency": { "content": "$1" },
-      "delay": { "content": "$2" }
+      "concurrency": {
+        "content": "$1"
+      },
+      "delay": {
+        "content": "$2"
+      }
     }
   },
-
-  "options_aboutDebug": { "message": "關於 & 除錯" },
-  "options_aboutDebugDesc": { "message": "擴充功能更新、日誌和歷史管理。" },
-  "options_debugSettings": { "message": "除錯設定" },
-  "options_debugSettingsDesc": { "message": "除錯選項。" },
-  "options_logLevel": { "message": "日誌層級" },
+  "options_aboutDebugDesc": {
+    "message": "擴充功能更新、日誌和歷史管理。"
+  },
+  "options_debugSettings": {
+    "message": "除錯設定"
+  },
+  "options_debugSettingsDesc": {
+    "message": "除錯選項。"
+  },
+  "options_logLevel": {
+    "message": "日誌層級"
+  },
   "options_logLevelDesc": {
     "message": "主控台詳細程度。使用 \"debug\" 進行故障排除。"
   },
-  "options_logLevelError": { "message": "錯誤" },
-  "options_logLevelWarn": { "message": "警告" },
-  "options_logLevelInfo": { "message": "資訊" },
-  "options_logLevelDebug": { "message": "除錯" },
-
-  "options_chromeWebStoreUpdates": { "message": "Chrome 線上應用程式商店更新" },
+  "options_logLevelError": {
+    "message": "錯誤"
+  },
+  "options_logLevelWarn": {
+    "message": "警告"
+  },
+  "options_logLevelInfo": {
+    "message": "資訊"
+  },
+  "options_logLevelDebug": {
+    "message": "除錯"
+  },
+  "options_chromeWebStoreUpdates": {
+    "message": "Chrome 線上應用程式商店更新"
+  },
   "options_webStoreUpdateDesc": {
     "message": "透過 Chrome 的擴充功能更新服務手動檢查更新。"
   },
   "options_installedVersion": {
     "message": "已安裝版本 $VERSION$",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "options_checking": { "message": "檢查中..." },
-  "options_checkForUpdates": { "message": "檢查更新" },
-  "options_applyUpdate": { "message": "套用更新" },
-  "options_openStoreListing": { "message": "開啟商店頁面" },
+  "options_checking": {
+    "message": "檢查中..."
+  },
+  "options_checkForUpdates": {
+    "message": "檢查更新"
+  },
+  "options_applyUpdate": {
+    "message": "套用更新"
+  },
+  "options_openStoreListing": {
+    "message": "開啟商店頁面"
+  },
   "options_autoUpdateNote": {
     "message": "Chrome 也會每隔幾小時自動檢查已安裝擴充功能的更新。"
   },
-
-  "updateCheck_unavailable": { "message": "更新檢查不可用" },
-  "updateCheck_failed": { "message": "更新檢查失敗" },
-  "updateCheck_ready": { "message": "更新就緒" },
+  "updateCheck_unavailable": {
+    "message": "更新檢查不可用"
+  },
+  "updateCheck_failed": {
+    "message": "更新檢查失敗"
+  },
+  "updateCheck_ready": {
+    "message": "更新就緒"
+  },
   "updateCheck_readyDesc": {
     "message": "$VERSION$ 已下載。在目前擴充功能工作可以中斷時套用更新。",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
   "updateCheck_versionLabel": {
     "message": "版本 $VERSION$",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "updateCheck_anUpdate": { "message": "一個更新" },
-  "updateCheck_throttled": { "message": "檢查被限流" },
+  "updateCheck_anUpdate": {
+    "message": "一個更新"
+  },
+  "updateCheck_throttled": {
+    "message": "檢查被限流"
+  },
   "updateCheck_throttledDesc": {
     "message": "Chrome 限制了重複的更新檢查。請稍後再試。"
   },
-  "updateCheck_noUpdate": { "message": "無可用更新" },
+  "updateCheck_noUpdate": {
+    "message": "無可用更新"
+  },
   "updateCheck_noUpdateDesc": {
     "message": "Chrome 未傳回版本 $VERSION$ 的可安裝更新。這不會將未打包或本機修改的建置與公開的 Web 商店頁面進行比較。",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-
-  "options_unsavedChanges": { "message": "您有未儲存的變更" },
-  "options_externalChangesTitle": { "message": "設定已在其他位置變更" },
+  "options_unsavedChanges": {
+    "message": "您有未儲存的變更"
+  },
+  "options_externalChangesTitle": {
+    "message": "設定已在其他位置變更"
+  },
   "options_externalChangesDescription": {
     "message": "此草稿開啟期間，另一個擴充功能頁面更新了設定。您可以重新載入已儲存的值，或保留編輯並將其合併到最新設定中。"
   },
-  "options_externalChangesReload": { "message": "重新載入設定" },
-  "options_externalChangesKeepMine": { "message": "保留我的變更" },
+  "options_externalChangesReload": {
+    "message": "重新載入設定"
+  },
+  "options_externalChangesKeepMine": {
+    "message": "保留我的變更"
+  },
   "options_externalChangesSaveBlocked": {
     "message": "請先處理外部設定變更，然後再儲存。"
   },
@@ -685,195 +1329,398 @@
   "options_externalChangesResolveFailed": {
     "message": "無法處理外部設定變更。"
   },
-  "options_discard": { "message": "放棄" },
-  "options_saveChanges": { "message": "儲存變更" },
-  "options_discardUnsavedChanges": { "message": "放棄未儲存的變更？" },
+  "options_discard": {
+    "message": "放棄"
+  },
+  "options_saveChanges": {
+    "message": "儲存變更"
+  },
+  "options_discardUnsavedChanges": {
+    "message": "放棄未儲存的變更？"
+  },
   "options_discardWarning": {
     "message": "所有未儲存的變更將遺失。此操作無法復原。"
   },
-  "options_discardChanges": { "message": "放棄變更" },
-
-  "options_invalidTemplate": { "message": "無效範本" },
-  "options_previewOutput": { "message": "預覽輸出" },
-
-  "options_toastLoadFailed": { "message": "載入設定失敗" },
-  "options_toastSavedSuccessfully": { "message": "設定儲存成功" },
-  "options_toastSaveFailed": { "message": "儲存設定失敗" },
-  "options_toastUnknownError": { "message": "未知錯誤" },
-  "options_toastFsaNotSupported": { "message": "不支援檔案系統存取 API" },
-  "options_toastPermissionDenied": { "message": "權限被拒絕" },
+  "options_discardChanges": {
+    "message": "放棄變更"
+  },
+  "options_invalidTemplate": {
+    "message": "無效範本"
+  },
+  "options_previewOutput": {
+    "message": "預覽輸出"
+  },
+  "options_toastLoadFailed": {
+    "message": "載入設定失敗"
+  },
+  "options_toastSavedSuccessfully": {
+    "message": "設定儲存成功"
+  },
+  "options_toastSaveFailed": {
+    "message": "儲存設定失敗"
+  },
+  "options_toastUnknownError": {
+    "message": "未知錯誤"
+  },
+  "options_toastFsaNotSupported": {
+    "message": "不支援檔案系統存取 API"
+  },
+  "options_toastPermissionDenied": {
+    "message": "權限被拒絕"
+  },
   "options_toastCustomFolderSet": {
     "message": "自訂下載資料夾已設定：$NAME$",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
-  "options_toastSetFolderFailed": { "message": "設定下載資料夾失敗" },
-  "options_toastAllHistoryCleared": { "message": "所有下載歷史已清除" },
-  "options_toastClearHistoryFailed": { "message": "清除歷史失敗" },
-  "options_toastSeriesHistoryCleared": { "message": "系列歷史已清除" },
-  "options_toastClearSeriesFailed": { "message": "清除系列歷史失敗" },
-  "options_toastChangesDiscarded": { "message": "變更已放棄" },
-
-  "options_includeCover": { "message": "包含系列封面" },
-  "options_includeCoverDesc": { "message": "將封面圖像儲存到壓縮包內" },
+  "options_toastSetFolderFailed": {
+    "message": "設定下載資料夾失敗"
+  },
+  "options_toastAllHistoryCleared": {
+    "message": "所有下載歷史已清除"
+  },
+  "options_toastClearHistoryFailed": {
+    "message": "清除歷史失敗"
+  },
+  "options_toastSeriesHistoryCleared": {
+    "message": "系列歷史已清除"
+  },
+  "options_toastClearSeriesFailed": {
+    "message": "清除系列歷史失敗"
+  },
+  "options_toastChangesDiscarded": {
+    "message": "變更已放棄"
+  },
+  "options_includeCover": {
+    "message": "包含系列封面"
+  },
+  "options_includeCoverDesc": {
+    "message": "將封面圖像儲存到壓縮包內"
+  },
   "options_pathTemplateMacros": {
     "message": "使用巨集：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
   },
-  "options_imagePadding": { "message": "圖片檔名填充" },
-  "options_paddingAuto": { "message": "自動（根據圖片總數）" },
-  "options_padding2": { "message": "2位數（01-99）" },
-  "options_padding3": { "message": "3位數（001-999）" },
-  "options_padding4": { "message": "4位數（0001-9999）" },
-  "options_padding5": { "message": "5位數（00001-99999）" },
-  "options_openMangaToDownload": { "message": "開啟漫畫系列頁面開始下載。" },
-  "options_keepHistory": { "message": "否，保留歷史" },
-  "options_clearAll": { "message": "是，全部清除" },
+  "options_imagePadding": {
+    "message": "圖片檔名填充"
+  },
+  "options_paddingAuto": {
+    "message": "自動（根據圖片總數）"
+  },
+  "options_padding2": {
+    "message": "2位數（01-99）"
+  },
+  "options_padding3": {
+    "message": "3位數（001-999）"
+  },
+  "options_padding4": {
+    "message": "4位數（0001-9999）"
+  },
+  "options_padding5": {
+    "message": "5位數（00001-99999）"
+  },
+  "options_openMangaToDownload": {
+    "message": "開啟漫畫系列頁面開始下載。"
+  },
+  "options_keepHistory": {
+    "message": "否，保留歷史"
+  },
+  "options_clearAll": {
+    "message": "是，全部清除"
+  },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "透過 Chrome 的擴充功能更新服務手動檢查更新。"
   },
-  "options_updateCheckUnavailable": { "message": "更新檢查不可用" },
-  "options_updateCheckFailed": { "message": "更新檢查失敗" },
+  "options_updateCheckUnavailable": {
+    "message": "更新檢查不可用"
+  },
+  "options_updateCheckFailed": {
+    "message": "更新檢查失敗"
+  },
   "options_version": {
     "message": "版本 $VERSION$",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "options_anUpdate": { "message": "一個更新" },
-  "options_updateReady": { "message": "更新就緒" },
+  "options_anUpdate": {
+    "message": "一個更新"
+  },
+  "options_updateReady": {
+    "message": "更新就緒"
+  },
   "options_updateReadyDesc": {
     "message": "$VERSION$ 已下載。在當前擴充功能工作可以中斷時套用更新。",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "options_checkThrottled": { "message": "檢查被限流" },
+  "options_checkThrottled": {
+    "message": "檢查被限流"
+  },
   "options_checkThrottledDesc": {
     "message": "Chrome 限制了頻繁的更新檢查。請稍後再試。"
   },
-  "options_noUpdateAvailable": { "message": "無可用更新" },
+  "options_noUpdateAvailable": {
+    "message": "無可用更新"
+  },
   "options_noUpdateAvailableDesc": {
     "message": "Chrome 未回傳版本 $VERSION$ 的可安裝更新。此檢查不會將解壓縮或本地修改的建置與公共 Web Store 列表進行比較。",
-    "placeholders": { "version": { "content": "$1" } }
+    "placeholders": {
+      "version": {
+        "content": "$1"
+      }
+    }
   },
-  "options_retried": { "message": "已重試" },
-  "options_chapter": { "message": "章節" },
-  "options_status": { "message": "狀態" },
-  "options_images": { "message": "圖片" },
-  "options_error": { "message": "錯誤" },
-  "options_partial": { "message": "部分" },
+  "options_retried": {
+    "message": "已重試"
+  },
+  "options_chapter": {
+    "message": "章節"
+  },
+  "options_status": {
+    "message": "狀態"
+  },
+  "options_images": {
+    "message": "圖片"
+  },
+  "options_error": {
+    "message": "錯誤"
+  },
+  "options_partial": {
+    "message": "部分"
+  },
   "options_taskCompleted": {
     "message": "✅ 已完成（$TOTAL$ 章）",
-    "placeholders": { "total": { "content": "$1" } }
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   },
   "options_taskFailed": {
     "message": "❌ 失敗（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskCanceled": {
     "message": "⚠ 已取消（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskQueued": {
     "message": "$TOTAL$ 章已排隊",
-    "placeholders": { "total": { "content": "$1" } }
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   },
   "options_taskDownloading": {
     "message": "正在下載 $COMPLETED$/$TOTAL$ 章",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskPartial": {
     "message": "⚠ 部分完成（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
-      "completed": { "content": "$1" },
-      "total": { "content": "$2" }
+      "completed": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_taskDefaultChapters": {
     "message": "$TOTAL$ 章",
-    "placeholders": { "total": { "content": "$1" } }
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   },
   "options_imagesFailed": {
     "message": "$SUCCEEDED$/$TOTAL$ 張圖片（$FAILED$ 張失敗）",
     "placeholders": {
-      "succeeded": { "content": "$1" },
-      "total": { "content": "$2" },
-      "failed": { "content": "$3" }
+      "succeeded": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      },
+      "failed": {
+        "content": "$3"
+      }
     }
   },
   "options_imagesSummary": {
     "message": "$SUCCEEDED$/$TOTAL$ 張圖片",
     "placeholders": {
-      "succeeded": { "content": "$1" },
-      "total": { "content": "$2" }
+      "succeeded": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
     }
   },
   "options_manageHistoryDataDesc": {
     "message": "刪除儲存的章節歷史記錄，不影響已儲存到磁碟的檔案。"
   },
-  "options_clearAllHistoryDesc": { "message": "刪除所有系列的下載歷史" },
+  "options_clearAllHistoryDesc": {
+    "message": "刪除所有系列的下載歷史"
+  },
   "options_clearAllWarning": {
     "message": "這將永久刪除 $CHAPTERS$ 章跨 $SERIES$ 個系列的記錄。",
     "placeholders": {
-      "chapters": { "content": "$1" },
-      "series": { "content": "$2" }
+      "chapters": {
+        "content": "$1"
+      },
+      "series": {
+        "content": "$2"
+      }
     }
   },
-  "options_cannotBeUndone": { "message": "此操作無法復原。" },
-  "options_clearSpecificSeriesDesc": { "message": "刪除單個系列的下載歷史" },
-  "options_noHistoryFound": { "message": "未找到下載歷史" },
+  "options_cannotBeUndone": {
+    "message": "此操作無法復原。"
+  },
+  "options_clearSpecificSeriesDesc": {
+    "message": "刪除單個系列的下載歷史"
+  },
+  "options_noHistoryFound": {
+    "message": "未找到下載歷史"
+  },
   "options_chCount": {
     "message": "$COUNT$ 章",
-    "placeholders": { "count": { "content": "$1" } }
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
   },
   "options_searchSiteIntegrations": {
     "message": "按名稱或域名搜尋站點整合..."
   },
-  "options_overrides": { "message": "覆蓋" },
-  "options_integrationsPlural": { "message": "個整合" },
-  "options_integrationSingular": { "message": "個整合" },
-  "options_cbzFull": { "message": "CBZ（漫畫存檔）" },
-  "options_zip": { "message": "ZIP" },
-  "options_noArchiveFull": { "message": "不壓縮（單獨檔案）" },
+  "options_overrides": {
+    "message": "覆蓋"
+  },
+  "options_integrationsPlural": {
+    "message": "個整合"
+  },
+  "options_integrationSingular": {
+    "message": "個整合"
+  },
+  "options_cbzFull": {
+    "message": "CBZ（漫畫存檔）"
+  },
+  "options_zip": {
+    "message": "ZIP"
+  },
+  "options_noArchiveFull": {
+    "message": "不壓縮（單獨檔案）"
+  },
   "options_useMacros": {
     "message": "使用巨集如 <SERIES_TITLE>、<CHAPTER_NUMBER>"
   },
-  "options_disabled": { "message": "已停用" },
-  "options_override": { "message": "覆蓋" },
-  "options_enabled": { "message": "已啟用" },
+  "options_disabled": {
+    "message": "已停用"
+  },
+  "options_override": {
+    "message": "覆蓋"
+  },
+  "options_enabled": {
+    "message": "已啟用"
+  },
   "options_enableIntegration": {
     "message": "啟用 $NAME$",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
   "options_broadHostPermissionDescription": {
     "message": "$NAME$ 使用動態選取的圖片伺服器。啟用時會要求存取 HTTPS 網站的權限。",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
   "options_toastIntegrationHostPermissionDenied": {
     "message": "未授予 HTTPS 網站存取權限，$NAME$ 將維持停用。",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
   "options_toastIntegrationHostPermissionFailed": {
     "message": "無法為 $NAME$ 要求 HTTPS 網站存取權限，請再試一次。",
-    "placeholders": { "name": { "content": "$1" } }
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   },
-  "options_hide": { "message": "隱藏" },
-  "options_configure": { "message": "設定" },
-  "options_default3": { "message": "預設：3" },
-  "options_commaSeparatedValues": { "message": "逗號分隔的值" },
-  "options_activeThisForm": { "message": "活躍（此表單）" },
-  "options_global": { "message": "全域" },
+  "options_hide": {
+    "message": "隱藏"
+  },
+  "options_configure": {
+    "message": "設定"
+  },
+  "options_default3": {
+    "message": "預設：3"
+  },
+  "options_commaSeparatedValues": {
+    "message": "逗號分隔的值"
+  },
+  "options_activeThisForm": {
+    "message": "活躍（此表單）"
+  },
+  "options_global": {
+    "message": "全域"
+  },
   "options_msDelay": {
     "message": "$DELAY$ 毫秒延遲",
-    "placeholders": { "delay": { "content": "$1" } }
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      }
+    }
   },
   "options_defaultValue": {
     "message": "預設：$VALUE$",
-    "placeholders": { "value": { "content": "$1" } }
+    "placeholders": {
+      "value": {
+        "content": "$1"
+      }
+    }
   },
   "settings_customFolderRequired": {
     "message": "自訂下載模式需要先選擇資料夾。"
@@ -883,15 +1730,88 @@
   },
   "settings_validateCustomFolderFailed": {
     "message": "無法驗證自訂資料夾：$DETAIL$",
-    "placeholders": { "detail": { "content": "$1" } }
+    "placeholders": {
+      "detail": {
+        "content": "$1"
+      }
+    }
   },
-  "settings_invalidDownloadMode": { "message": "下載模式無效" },
+  "settings_invalidDownloadMode": {
+    "message": "下載模式無效"
+  },
   "settings_customFolderClearedFallback": {
     "message": "自訂資料夾已清除，已切換為瀏覽器下載。"
   },
   "settings_customFolderPermissionLostFallback": {
     "message": "已失去自訂資料夾的存取權限，已切換為瀏覽器下載。"
   },
-  "settings_unknownError": { "message": "未知錯誤" },
-  "background_settingsSyncFailed": { "message": "無法將設定同步到狀態" }
+  "settings_unknownError": {
+    "message": "未知錯誤"
+  },
+  "background_settingsSyncFailed": {
+    "message": "無法將設定同步到狀態"
+  },
+  "status_nativeOutputActionRequired": {
+    "message": "需要確認下載結果"
+  },
+  "sidepanel_forgettingDownload": {
+    "message": "正在忘記待處理下載…"
+  },
+  "sidepanel_forgetSucceeded": {
+    "message": "已忘記 $1 個待處理下載。佇列將繼續。"
+  },
+  "sidepanel_toastForgetFailed": {
+    "message": "無法忘記待處理下載。"
+  },
+  "startDownloadError_staleSeriesContext": {
+    "message": "系列上下文已過期。請重新整理頁面後重試。"
+  },
+  "startDownloadError_invalidChapterSelection": {
+    "message": "所選章節已失效。請重新選擇後重試。"
+  },
+  "startDownloadError_integrationDisabled": {
+    "message": "此網站整合已停用。請在選項中啟用後重試。"
+  },
+  "startDownloadError_hostPermissionRequired": {
+    "message": "缺少此網站的存取權限。請授予權限後重試。"
+  },
+  "startDownloadError_durableStateFailure": {
+    "message": "無法將下載儲存至佇列。請重試。"
+  },
+  "mangadexSetting_imageQualityLabel": {
+    "message": "圖片品質"
+  },
+  "mangadexSetting_imageQualityDescription": {
+    "message": "選擇 MangaDex 圖片品質偏好。"
+  },
+  "mangadexSetting_imageQualityOption_dataSaver": {
+    "message": "省流量"
+  },
+  "mangadexSetting_imageQualityOption_data": {
+    "message": "原圖品質"
+  },
+  "mangadexSetting_chapterLanguageFilterLabel": {
+    "message": "章節語言篩選"
+  },
+  "mangadexSetting_chapterLanguageFilterDescription": {
+    "message": "首選章節語言（BCP-47 代碼）。"
+  },
+  "mangadexSetting_chapterLanguageFilterOption_en": {
+    "message": "英語 (en)"
+  },
+  "mangadexSetting_chapterLanguageFilterOption_ja": {
+    "message": "日語 (ja)"
+  },
+  "mangadexSetting_chapterLanguageFilterOption_ko": {
+    "message": "韓語 (ko)"
+  },
+  "mangadexSetting_chapterLanguageFilterOption_zh": {
+    "message": "中文 (zh)"
+  },
+  "mangadexSetting_autoReadMangaDexSettingsLabel": {
+    "message": "自動讀取 MangaDex 網站設定"
+  },
+  "mangadexSetting_autoReadMangaDexSettingsDescription": {
+    "message": "可用時使用 MangaDex 網站本機設定。"
+  }
 }
