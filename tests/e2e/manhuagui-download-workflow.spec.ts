@@ -19,7 +19,6 @@
  */
 
 import { test, expect } from "./fixtures/extension"
-import type { BrowserContext } from "@playwright/test"
 import {
   getTabId,
   waitForTabSeriesTitle,
@@ -36,27 +35,12 @@ import {
   waitForCbzArtifact,
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
-
-async function readExtensionSessionRules(
-  context: BrowserContext,
-  extensionId: string
-) {
-  const worker =
-    context
-      .serviceWorkers()
-      .find((candidate) =>
-        candidate.url().startsWith(`chrome-extension://${extensionId}/`)
-      ) ??
-    (await context.waitForEvent("serviceworker", {
-      timeout: 10_000,
-      predicate: (candidate) =>
-        candidate.url().startsWith(`chrome-extension://${extensionId}/`),
-    }))
-
-  return await worker.evaluate(async () =>
-    chrome.declarativeNetRequest.getSessionRules()
-  )
-}
+import {
+  readExtensionSessionRules,
+  retainExtensionSessionRules,
+  setIntegrationEnabledFromWorker,
+  testExtensionSessionRuleMatch,
+} from "./fixtures/session-rule-helpers"
 
 test.describe("Manhuagui download workflow (mocked)", () => {
   test.describe.configure({ timeout: 120_000 })
@@ -80,6 +64,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
           ],
         }),
         condition: expect.objectContaining({
+          initiatorDomains: [extensionId],
           requestDomains: expect.arrayContaining([
             "i.hamreus.com",
             "eu.hamreus.com",
@@ -94,6 +79,40 @@ test.describe("Manhuagui download workflow (mocked)", () => {
         }),
       })
     )
+
+    // Deterministic external-network redirect/block rules have higher action
+    // priority than modifyHeaders rules. Retain only production provider rules
+    // so testMatchOutcome reports the referer rule itself.
+    await retainExtensionSessionRules(context, extensionId, [41001, 41002])
+
+    const extensionRequest = {
+      initiator: `chrome-extension://${extensionId}/`,
+      type: "xmlhttprequest",
+      url: "https://eu.hamreus.com/mock/chapter/page.jpg",
+    } as const
+    await expect(
+      testExtensionSessionRuleMatch(context, extensionId, extensionRequest)
+    ).resolves.toContain(41002)
+    await expect(
+      testExtensionSessionRuleMatch(context, extensionId, {
+        ...extensionRequest,
+        initiator: "https://www.manhuagui.com/",
+      })
+    ).resolves.not.toContain(41002)
+
+    await setIntegrationEnabledFromWorker(
+      context,
+      extensionId,
+      "manhuagui",
+      false
+    )
+    await expect
+      .poll(
+        () =>
+          testExtensionSessionRuleMatch(context, extensionId, extensionRequest),
+        { timeout: 10_000 }
+      )
+      .not.toContain(41002)
   })
 
   test("completes a single-chapter download through the packed-payload pipeline", async ({

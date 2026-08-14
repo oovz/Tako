@@ -33,9 +33,58 @@ import {
   waitForCbzArtifact,
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
+import {
+  retainExtensionSessionRules,
+  setIntegrationEnabledFromWorker,
+  testExtensionSessionRuleMatch,
+} from "./fixtures/session-rule-helpers"
 
 test.describe("Pixiv Comic download workflow (mocked)", () => {
   test.describe.configure({ timeout: 120_000 })
+
+  test("matches the pximg referer rule only for enabled extension-originated requests", async ({
+    context,
+    extensionId,
+  }) => {
+    // Deterministic external-network redirect/block rules have higher action
+    // priority than modifyHeaders rules. Retain only production provider rules
+    // so testMatchOutcome reports the referer rule itself.
+    await retainExtensionSessionRules(context, extensionId, [41001, 41002])
+
+    const extensionRequest = {
+      initiator: `chrome-extension://${extensionId}/`,
+      type: "xmlhttprequest",
+      url: "https://img-comic.pximg.net/mock/story/page.png",
+    } as const
+
+    await expect
+      .poll(
+        () =>
+          testExtensionSessionRuleMatch(context, extensionId, extensionRequest),
+        { timeout: 10_000 }
+      )
+      .toContain(41001)
+    await expect(
+      testExtensionSessionRuleMatch(context, extensionId, {
+        ...extensionRequest,
+        initiator: "https://comic.pixiv.net/",
+      })
+    ).resolves.not.toContain(41001)
+
+    await setIntegrationEnabledFromWorker(
+      context,
+      extensionId,
+      "pixiv-comic",
+      false
+    )
+    await expect
+      .poll(
+        () =>
+          testExtensionSessionRuleMatch(context, extensionId, extensionRequest),
+        { timeout: 10_000 }
+      )
+      .not.toContain(41001)
+  })
 
   test("completes a single-chapter download through the read_v4 + pximg pipeline", async ({
     context,

@@ -2,7 +2,13 @@ import { defineConfig } from "wxt"
 import tailwindcss from "@tailwindcss/vite"
 import path from "path"
 import istanbul from "vite-plugin-istanbul"
-import { generateRequiredHostPermissions } from "./src/site-integrations/manifest"
+import {
+  generateRequiredHostPermissions,
+  SITE_INTEGRATION_MANIFESTS,
+} from "./src/site-integrations/manifest"
+import { assertValidSiteIntegrationNetworkCapabilities } from "./src/site-integrations/manifest-validation"
+
+assertValidSiteIntegrationNetworkCapabilities(SITE_INTEGRATION_MANIFESTS)
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
@@ -80,7 +86,10 @@ export default defineConfig({
         "webNavigation",
         "notifications",
         "alarms",
-        "declarativeNetRequest", // Required for session DNR referer rewrites on image CDN fetches
+        // Use the host-access-bound DNR permission and avoid the broad
+        // "Block content on any page" warning. Tako additionally scopes every
+        // provider rule by target domain and extension initiator.
+        "declarativeNetRequestWithHostAccess",
       ],
       background: {
         type: "module",

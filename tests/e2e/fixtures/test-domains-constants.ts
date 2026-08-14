@@ -9,6 +9,13 @@
  * predate the split.
  */
 
+import {
+  MANHUAGUI_BASE_URL as MANHUAGUI_POLICY_BASE_URL,
+  MANHUAGUI_CONFIG_HOST,
+  MANHUAGUI_IMAGE_HOST_NAMES,
+  MANHUAGUI_PAGE_HOST_NAMES,
+} from "../../../src/site-integrations/manhuagui/policy"
+
 export const EXAMPLE_TEST_DOMAIN = "example.com"
 export const EXAMPLE_BASE_URL = `https://${EXAMPLE_TEST_DOMAIN}`
 
@@ -51,23 +58,14 @@ export const SHONENJUMPPLUS_BASE_URL = `https://${SHONENJUMPPLUS_TEST_DOMAIN}`
 export const LIVE_SHONENJUMPPLUS_REFERENCE_URL =
   "https://shonenjumpplus.com/episode/10834108156648240735"
 
-export const MANHUAGUI_TEST_DOMAIN = "www.manhuagui.com"
-export const MANHUAGUI_BASE_URL = `https://${MANHUAGUI_TEST_DOMAIN}`
+export const MANHUAGUI_TEST_DOMAIN = MANHUAGUI_PAGE_HOST_NAMES[0]
+export const MANHUAGUI_BASE_URL = MANHUAGUI_POLICY_BASE_URL
 export const LIVE_MANHUAGUI_REFERENCE_URL =
   "https://www.manhuagui.com/comic/19430/"
 export const LIVE_MANHUAGUI_ADULT_REFERENCE_URL =
   "https://www.manhuagui.com/comic/21243/"
-export const MANHUAGUI_CONFIG_SCRIPT_DOMAIN = "cf.mhgui.com"
-export const MANHUAGUI_IMAGE_HOSTS = [
-  "i.hamreus.com",
-  "eu.hamreus.com",
-  "eu1.hamreus.com",
-  "eu2.hamreus.com",
-  "us.hamreus.com",
-  "us1.hamreus.com",
-  "us2.hamreus.com",
-  "us3.hamreus.com",
-] as const
+export const MANHUAGUI_CONFIG_SCRIPT_DOMAIN = MANHUAGUI_CONFIG_HOST
+export const MANHUAGUI_IMAGE_HOSTS = MANHUAGUI_IMAGE_HOST_NAMES
 
 export const COMICNETTAI_TEST_DOMAIN = "www.comicnettai.com"
 export const COMICNETTAI_BASE_URL = `https://${COMICNETTAI_TEST_DOMAIN}`

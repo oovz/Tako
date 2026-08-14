@@ -7,13 +7,14 @@
  *
  * Features:
  * - Pure function with no side effects or dependencies
- * - O(1) domain filtering for performance
+ * - Precompiled domain and path filtering
  * - Supports multiple site integrations per domain
  * - Works in service worker context (no DOM access)
  */
 
 import {
   getAllSiteIntegrationPatterns,
+  getSiteIntegrationManifestById,
   type SiteIntegrationId,
 } from "../site-integrations/manifest"
 import { isEnabled } from "../site-integrations/registry"
@@ -39,7 +40,7 @@ export interface MatchUrlOptions {
 
 interface CompiledPattern {
   integrationId: SitePatternId
-  domains: string[]
+  domains: Array<{ hostname: string; includeSubdomains: boolean }>
   seriesRegex: RegExp[]
   excludeRegex: RegExp[] // Pre-compiled exclude patterns for performance
 }
@@ -68,9 +69,15 @@ function compilePatterns(): CompiledPattern[] {
   const compiled: CompiledPattern[] = []
 
   for (const [integrationId, patterns] of Object.entries(SITE_PATTERNS)) {
+    const manifest = getSiteIntegrationManifestById(integrationId)
     compiled.push({
       integrationId,
-      domains: patterns.domains,
+      domains: patterns.domains.map((hostname) => ({
+        hostname,
+        includeSubdomains:
+          manifest?.requiredOrigins.includes(`https://*.${hostname}/*`) ===
+          true,
+      })),
       seriesRegex: patterns.seriesMatches.map(pathPatternToRegex),
       excludeRegex: (patterns.excludeMatches ?? []).map(pathPatternToRegex),
     })
@@ -92,9 +99,15 @@ function ensurePatternsCompiled(): CompiledPattern[] {
 /**
  * Check if hostname matches any of the target domains
  */
-function isDomainMatch(hostname: string, domains: string[]): boolean {
+function isDomainMatch(
+  hostname: string,
+  domains: CompiledPattern["domains"]
+): boolean {
   for (const domain of domains) {
-    if (hostname === domain || hostname.endsWith("." + domain)) {
+    if (
+      hostname === domain.hostname ||
+      (domain.includeSubdomains && hostname.endsWith(`.${domain.hostname}`))
+    ) {
       return true
     }
   }
@@ -126,6 +139,7 @@ export function matchUrl(
   } catch {
     return null
   }
+  if (parsedUrl.protocol !== "https:") return null
 
   const hostname = parsedUrl.hostname
   let pathname = parsedUrl.pathname
@@ -136,7 +150,7 @@ export function matchUrl(
   // Get compiled patterns
   const patterns = ensurePatternsCompiled()
 
-  // Filter candidates by domain (O(1) domain filtering)
+  // Filter candidates by their compiled exact/wildcard domain policy.
   const candidates = patterns.filter((pattern) =>
     isDomainMatch(hostname, pattern.domains)
   )
@@ -175,7 +189,9 @@ export function matchUrl(
  */
 export function isSupportedDomain(url: string): boolean {
   try {
-    const hostname = new URL(url).hostname
+    const parsedUrl = new URL(url)
+    if (parsedUrl.protocol !== "https:") return false
+    const hostname = parsedUrl.hostname
     const patterns = ensurePatternsCompiled()
 
     return patterns.some((pattern) => isDomainMatch(hostname, pattern.domains))
@@ -191,7 +207,7 @@ export function getAllPatternMetadata() {
   return Object.entries(SITE_PATTERNS).map(([integrationId, patterns]) => ({
     integrationId,
     domains: patterns.domains,
-    seriesMatches: patterns.seriesMatches.map((path) => `*://*${path}`),
+    seriesMatches: patterns.seriesMatches.map((path) => `https://*${path}`),
   }))
 }
 

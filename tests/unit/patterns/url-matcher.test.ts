@@ -10,6 +10,7 @@
 
 import { beforeEach, describe, it, expect, afterEach } from "vitest"
 import {
+  getAllPatternMetadata,
   matchUrl,
   isSupportedDomain,
 } from "@/src/site-integrations/url-matcher"
@@ -32,6 +33,17 @@ describe("URL Pattern Matching", () => {
   })
 
   describe("Basic Pattern Matching", () => {
+    it("advertises only HTTPS pattern metadata", () => {
+      const metadata = getAllPatternMetadata()
+
+      expect(metadata.length).toBeGreaterThan(0)
+      expect(
+        metadata.every((entry) =>
+          entry.seriesMatches.every((pattern) => pattern.startsWith("https://"))
+        )
+      ).toBe(true)
+    })
+
     it("matches exact domain", () => {
       expectMatchedUrl("https://comic.pixiv.net/works/9012", {
         integrationId: "pixiv-comic",
@@ -55,6 +67,12 @@ describe("URL Pattern Matching", () => {
     it("returns null for unsupported domain", () => {
       const result = matchUrl("https://unsupported-site.com/manga/123")
       expect(result).toBeNull()
+    })
+
+    it("rejects non-HTTPS pages and undeclared subdomains", () => {
+      expect(matchUrl("http://comic.pixiv.net/works/9012")).toBeNull()
+      expect(matchUrl("https://preview.comic.pixiv.net/works/9012")).toBeNull()
+      expect(isSupportedDomain("http://comic.pixiv.net/works/9012")).toBe(false)
     })
 
     it("matches shonenjumpplus episode paths", () => {

@@ -35,6 +35,7 @@ export interface SeriesDataResolutionInput {
    * integration is responsible for decoding this opaque record.
    */
   integrationContext?: Record<string, unknown>
+  signal?: AbortSignal
   /**
    * Optional callback for partial results. Called when metadata is available
    * but the chapter list is still being fetched.
@@ -67,11 +68,13 @@ export interface ServiceWorkerIntegration {
      */
     fetchSeriesMetadata?(
       seriesId: string,
-      language?: string
+      language?: string,
+      signal?: AbortSignal
     ): Promise<SeriesMetadata>
     fetchChapterList?(
       seriesId: string,
-      language?: string
+      language?: string,
+      signal?: AbortSignal
     ): Promise<SeriesChapterListResult>
     /**
      * Unified URL-based resolver. Preferred when an integration can resolve

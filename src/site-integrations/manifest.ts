@@ -1,15 +1,16 @@
 /**
- * Unified Site Integration Manifest - Single Source of Truth (SSOT)
+ * Unified Site Integration Manifest - Declarative Integration Registry
  *
- * This file is the authoritative source for all site integration metadata including:
+ * This file is the authoritative source for declared site integration
+ * metadata including:
  * - Site integration identification (id, name, author)
  * - URL patterns (domains, seriesMatches, excludeMatches)
  * - Rate limit policies
  * - Behavioral flags (handlesOwnRetries)
  *
- * All other systems (site-integration initialization, URL matching, permissions,
- * and static background/offscreen registries)
- * derive their configuration from this manifest.
+ * Initialization, URL matching, permissions, and static runtime registries
+ * derive their configuration from this manifest. Provider request call sites
+ * remain responsible for enforcing their declared network behavior.
  *
  * To add a new site integration:
  * 1. Add entry to SITE_INTEGRATION_MANIFESTS below
@@ -18,6 +19,12 @@
  */
 
 import type { RateScopePolicy } from "../types/rate-policy"
+import {
+  MANHUAGUI_CREDENTIAL_POLICY,
+  MANHUAGUI_IMAGE_HOST_NAMES,
+  MANHUAGUI_IMAGE_REFERER,
+  MANHUAGUI_PAGE_HOST_NAMES,
+} from "./manhuagui/policy"
 
 export interface SiteIntegrationUrlPatterns {
   domains: string[]
@@ -25,11 +32,44 @@ export interface SiteIntegrationUrlPatterns {
   excludeMatches?: string[]
 }
 
+export type SessionRuleResourceType = "xmlhttprequest" | "other"
+
+export interface SessionRefererRuleDeclaration {
+  /** Stable extension-owned DNR rule ID. Must be unique across integrations. */
+  id: number
+  priority?: number
+  /**
+   * Chrome's requestDomains condition includes subdomains. Runtime request URL
+   * allowlists remain the exact authority for provider fetch destinations.
+   */
+  requestDomains: string[]
+  resourceTypes: SessionRuleResourceType[]
+  referer: string
+}
+
+export interface SiteIntegrationNetworkCapabilities {
+  /**
+   * Session-scoped request-header policies required by the provider. The
+   * runtime manager limits them to extension-initiated requests and installs
+   * them only while the integration is enabled.
+   */
+  sessionRefererRules?: SessionRefererRuleDeclaration[]
+  /**
+   * Descriptive credential modes for externally visible provider request
+   * roles. Runtime request call sites are independently tested until request
+   * roles are enforced by a shared provider request factory.
+   */
+  credentialPolicies?: Array<{
+    purpose: string
+    mode: "include" | "omit"
+  }>
+}
+
 const MANGADEX_DOMAINS: string[] = Array.from(new Set<string>(["mangadex.org"]))
 
 const PIXIV_COMIC_DOMAINS: string[] = ["comic.pixiv.net"]
 const SHONEN_JUMP_PLUS_DOMAINS: string[] = ["shonenjumpplus.com"]
-const MANHUAGUI_DOMAINS: string[] = ["www.manhuagui.com", "manhuagui.com"]
+const MANHUAGUI_DOMAINS: string[] = [...MANHUAGUI_PAGE_HOST_NAMES]
 const COMICNETTAI_DOMAINS: string[] = ["www.comicnettai.com"]
 
 export type SettingsFieldType =
@@ -116,6 +156,9 @@ export interface SiteIntegrationManifest {
   /** Whether this integration needs the optional HTTPS-wide asset permission. */
   requiresBroadHttpsPermission?: boolean
 
+  /** Provider-specific browser networking capabilities. */
+  network?: SiteIntegrationNetworkCapabilities
+
   /**
    * Optional integration-specific custom settings shown in Options.
    * Values are persisted in chrome.storage.local under siteIntegrationSettings[siteId][fieldId].
@@ -131,14 +174,15 @@ export interface SiteIntegrationManifest {
   runtimes: {
     background: boolean
     offscreen: boolean
+    dispatchContext: "none" | "optional" | "required"
   }
 }
 
 /**
- * All site integration manifests - THE SINGLE SOURCE OF TRUTH
+ * All declarative site integration manifests.
  *
- * This is the only place where site integration configuration is defined.
- * All other files must derive their data from this array.
+ * Runtime request implementations remain provider-owned and must agree with
+ * the capabilities declared here.
  */
 export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
   {
@@ -203,6 +247,7 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
     runtimes: {
       background: true,
       offscreen: true,
+      dispatchContext: "optional",
     },
   },
   {
@@ -228,9 +273,21 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 2000 },
     },
+    network: {
+      sessionRefererRules: [
+        {
+          id: 41001,
+          priority: 1,
+          requestDomains: ["img-comic.pximg.net"],
+          resourceTypes: ["xmlhttprequest", "other"],
+          referer: "https://comic.pixiv.net/",
+        },
+      ],
+    },
     runtimes: {
       background: true,
       offscreen: true,
+      dispatchContext: "optional",
     },
   },
   {
@@ -262,6 +319,7 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
     runtimes: {
       background: true,
       offscreen: true,
+      dispatchContext: "none",
     },
   },
   {
@@ -290,9 +348,35 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
       image: { concurrency: 2, delayMs: 1000 },
       chapter: { concurrency: 1, delayMs: 1000 },
     },
+    network: {
+      credentialPolicies: [
+        {
+          purpose: "provider page HTML",
+          mode: MANHUAGUI_CREDENTIAL_POLICY.pageHtml,
+        },
+        {
+          purpose: "reader configuration",
+          mode: MANHUAGUI_CREDENTIAL_POLICY.configuration,
+        },
+        {
+          purpose: "image CDN bytes",
+          mode: MANHUAGUI_CREDENTIAL_POLICY.image,
+        },
+      ],
+      sessionRefererRules: [
+        {
+          id: 41002,
+          priority: 1,
+          requestDomains: [...MANHUAGUI_IMAGE_HOST_NAMES],
+          resourceTypes: ["xmlhttprequest", "other"],
+          referer: MANHUAGUI_IMAGE_REFERER,
+        },
+      ],
+    },
     runtimes: {
       background: true,
       offscreen: true,
+      dispatchContext: "none",
     },
   },
   {
@@ -321,6 +405,7 @@ export const SITE_INTEGRATION_MANIFESTS: readonly SiteIntegrationManifest[] = [
     runtimes: {
       background: true,
       offscreen: true,
+      dispatchContext: "none",
     },
   },
 

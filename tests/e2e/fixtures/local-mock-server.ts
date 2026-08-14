@@ -126,11 +126,11 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
    * 1. **Plain CORS**: Extension offscreen / SW fetches go cross-origin
    *    from the chrome-extension:// origin, and page-context fetches
    *    from mangadex.org etc. are also cross-origin to 127.0.0.1.
-   *    Since the production fetch path uses `credentials: 'include'`
-   *    (see `src/runtime/rate-limit.ts`) we can't respond with
-   *    `Access-Control-Allow-Origin: *`; instead we echo the exact
-   *    Origin header — including the literal string `null` that DNR
-   *    redirects across scheme boundaries tend to produce.
+   *    Some provider-owned authenticated paths use
+   *    `credentials: 'include'`, so we can't respond with
+   *    `Access-Control-Allow-Origin: *`; instead we echo the exact Origin
+   *    header — including the literal string `null` that DNR redirects
+   *    across scheme boundaries tend to produce.
    *
    * 2. **Private Network Access (PNA)**: Chrome blocks public-origin
    *    pages (mangadex.org, comic.pixiv.net, etc.) from fetching

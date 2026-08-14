@@ -62,15 +62,21 @@ contents.
 
 ## `alarms`
 
-Provides a coarse wake-up for job-lease watchdog checks. The alarm is explicitly
-configured to persist across sessions and is verified/recreated whenever the
-Service Worker initializes.
+Provides a coarse wake-up for offscreen job-lease watchdog checks. The alarm is
+explicitly configured to persist across sessions and is verified/recreated
+whenever the Service Worker initializes. Native Chrome download completion is
+handled by `downloads.onChanged` and startup reconciliation rather than this
+watchdog alarm.
 
-## `declarativeNetRequest`
+## `declarativeNetRequestWithHostAccess`
 
 Applies narrowly scoped request-header rules for provider/CDN requests that need
-them. Rules are generated for approved origins and do not grant additional host
-access by themselves.
+them. The API can act only where Tako already has host access. Rules are
+generated from enabled provider manifests and are additionally restricted to
+extension-initiated requests. Because session rules are cleared on browser
+shutdown and extension update, DNR-dependent providers wait for reconciliation
+before task dispatch. Indeterminate permission/API failures preserve the current
+rule set and schedule one capped-backoff retry through `chrome.alarms`.
 
 ## File System Access
 

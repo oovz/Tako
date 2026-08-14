@@ -117,8 +117,10 @@ URL ownership. It communicates through `chrome.runtime`; storage/downloads/
 permissions/alarms remain Service Worker responsibilities.
 
 The component making requests owns the rate limiter, Retry-After handling,
-backoff, and `nextChapterDispatchAt` deadline. Service Worker suspension must
-not erase a provider delay.
+backoff, and `nextChapterDispatchAt` deadline. Series resolvers also receive an
+AbortSignal that must be passed to provider fetches so a resolution deadline
+cancels the underlying request. Service Worker suspension must not erase a
+provider delay.
 
 ### Dispatch context
 
@@ -150,8 +152,10 @@ layer, which enforces:
 - private, link-local, and loopback rejection unless explicitly required;
 - declared credential mode;
 - response-size limits and AbortSignal cancellation;
+- metadata/HTML response bodies capped at 10 MiB before parsing;
 - raster MIME plus magic-byte validation;
-- pixel-dimension limits before canvas allocation;
+- encoded pixel-dimension limits before canvas allocation, with a post-decode
+  consistency check;
 - sanitized filenames;
 - structured retry/error categories;
 - redacted logging of query values, credentials, headers, and bodies.
