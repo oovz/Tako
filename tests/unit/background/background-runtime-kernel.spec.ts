@@ -121,12 +121,15 @@ function createKernel(input?: {
   queueRepository?: QueueRepository
   nativeOutputCoordinator?: NativeOutputCoordinator
   ensureLivenessAlarm?: () => Promise<void>
+  awaitSchemaMigration?: () => Promise<void>
 }) {
   const queueRepository = input?.queueRepository ?? createQueueRepository()
   const nativeOutputCoordinator =
     input?.nativeOutputCoordinator ?? createNativeOutputCoordinator()
   const ensureLivenessAlarm =
     input?.ensureLivenessAlarm ?? vi.fn(async () => undefined)
+  const awaitSchemaMigration =
+    input?.awaitSchemaMigration ?? vi.fn(async () => undefined)
   const queueScheduler = {
     activateStartup: vi.fn(async (activation: StartupQueueActivation) => {
       if (activation.kind === "resume-task") {
@@ -156,12 +159,14 @@ function createKernel(input?: {
     queueScheduler,
     terminalCoordinator: {} as OffscreenJobTerminalCoordinator,
     destinationService: {} as never,
+    awaitSchemaMigration,
   })
   return {
     kernel,
     queueRepository,
     nativeOutputCoordinator,
     ensureLivenessAlarm,
+    awaitSchemaMigration,
   }
 }
 
@@ -180,6 +185,52 @@ describe("BackgroundRuntimeKernel", () => {
     vi.stubGlobal("chrome", {
       storage: { session: { set: sessionSet } },
     } as unknown as typeof chrome)
+  })
+
+  it("holds every readiness phase behind the schema reset gate", async () => {
+    const resetGate = deferred<void>()
+    const { kernel, queueRepository, nativeOutputCoordinator } = createKernel({
+      awaitSchemaMigration: () => resetGate.promise,
+    })
+
+    const queue = kernel.ensure("queue-hydrated")
+    const runtime = kernel.ensure("runtime-ready")
+    await Promise.resolve()
+    expect(mocks.stateInitialize).not.toHaveBeenCalled()
+    expect(queueRepository.initialize).not.toHaveBeenCalled()
+    expect(nativeOutputCoordinator.initialize).not.toHaveBeenCalled()
+
+    resetGate.resolve()
+    await Promise.all([queue, runtime])
+    expect(mocks.stateInitialize).toHaveBeenCalledOnce()
+    expect(queueRepository.initialize).toHaveBeenCalledOnce()
+    expect(nativeOutputCoordinator.initialize).toHaveBeenCalledOnce()
+  })
+
+  it("treats a rejected schema migration as sticky and fatal without hydrating", async () => {
+    const resetError = new Error("storage unavailable")
+    const { kernel, queueRepository } = createKernel({
+      awaitSchemaMigration: () => Promise.reject(resetError),
+    })
+
+    await expect(kernel.ensure("queue-hydrated")).rejects.toThrow(
+      "Retained state could not be migrated"
+    )
+    expect(mocks.stateInitialize).not.toHaveBeenCalled()
+    expect(queueRepository.initialize).not.toHaveBeenCalled()
+    expect(sessionSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initFailed: true,
+        error: expect.stringContaining("Retained state could not be migrated"),
+      })
+    )
+
+    // The failure is sticky: later phases reject without retrying the reset.
+    await expect(kernel.ensure("runtime-ready")).rejects.toThrow(
+      "Retained state could not be migrated"
+    )
+    expect(mocks.stateInitialize).not.toHaveBeenCalled()
+    expect(queueRepository.initialize).not.toHaveBeenCalled()
   })
 
   it("routes each readiness label to its exact minimum DAG phase", async () => {

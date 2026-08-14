@@ -27,6 +27,8 @@ import { getDefinition } from "@/src/site-integrations/catalog"
 import { includesBroadHttpsPermission } from "@/src/site-integrations/host-permission-service"
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
+import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { NativeOutputRecord } from "@/src/domain/native-output/state"
 import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 
@@ -59,7 +61,6 @@ import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscr
 import { ProviderPolicyQueueCoordinator } from "@/entrypoints/background/provider-policy-queue-coordinator"
 import { ChapterDispatchCoordinator } from "@/entrypoints/background/chapter-dispatch-coordinator"
 import { reconcileCompletedChapterHistory } from "@/entrypoints/background/download-queue-finalization"
-import { resetDurableStateForBreakingSchema } from "@/src/runtime/state-schema-epoch"
 import { OptionsConfigurationService } from "@/entrypoints/background/options-configuration-service"
 import {
   DestinationIssueRepository,
@@ -95,6 +96,7 @@ const destinationService = new DestinationService({
 const siteIntegrationSessionRuleManager = new SiteIntegrationSessionRuleManager(
   {
     service: siteIntegrationEnablementService,
+    awaitSchemaMigration,
     onReconciliationSucceeded: async (enablement) => {
       try {
         await runtimeKernel.ensure("runtime-ready")
@@ -233,7 +235,7 @@ const queueScheduler = new QueueScheduler(
   async () => {
     await scheduleOffscreenCloseIfIdle(queueRepository, nativeOutputCoordinator)
     await setLivenessAlarmArmed(
-      await nativeOutputCoordinator.hasLiveDependencies()
+      await nativeOutputCoordinator.hasReconcilableLiveDependencies()
     )
   }
 )
@@ -244,6 +246,18 @@ const terminalCoordinator = new OffscreenJobTerminalCoordinator(
   destinationService,
   finalizationDependencies
 )
+
+/**
+ * One-time durable-state migration gate. The promise is
+ * created inside `main()` (the only context guaranteed to have `chrome`);
+ * every readiness phase and the DNR manager await the SAME gate through
+ * `awaitSchemaMigration()`. A rejected migration is sticky and fatal.
+ */
+const schemaMigrationGate: { promise: Promise<void> | null } = { promise: null }
+
+function awaitSchemaMigration(): Promise<void> {
+  return schemaMigrationGate.promise ?? Promise.resolve()
+}
 
 const runtimeKernel = new BackgroundRuntimeKernel({
   settingsRepository,
@@ -257,6 +271,7 @@ const runtimeKernel = new BackgroundRuntimeKernel({
   setLivenessAlarmArmed,
   queueScheduler,
   destinationService,
+  awaitSchemaMigration,
 })
 
 const tabContextResolver = createTabContextResolver({
@@ -434,23 +449,43 @@ export default defineBackground({
     })
 
     siteIntegrationSessionRuleManager.registerListeners()
-    const initialSessionRuleReconciliation =
-      siteIntegrationSessionRuleManager.start()
-    void initialSessionRuleReconciliation.catch((error) => {
-      logger.warn("Initial provider session DNR reconciliation failed", error)
-    })
+
+    // The migration promise is created HERE, in the service-worker runtime, so
+    // build-time module evaluation (which has no `chrome`) never executes it.
+    schemaMigrationGate.promise = migrateDurableStateForCurrentSchema()
+    void schemaMigrationGate.promise.catch(() => undefined)
 
     void (async () => {
       try {
-        // Destructive reset for the breaking refactor: retained state from
-        // older schema epochs is cleared (never parsed) before hydration.
-        await resetDurableStateForBreakingSchema()
+        // Migrate retained state before strict repositories hydrate it.
+        await schemaMigrationGate.promise
       } catch (error) {
         logger.error(
-          "Failed to reset retained state before initialization",
+          "Refusing to initialize: retained durable state could not be migrated",
           error
         )
+        try {
+          await chrome.storage.session.set({
+            [SESSION_STORAGE_KEYS.initFailed]: true,
+            [SESSION_STORAGE_KEYS.initError]:
+              "Retained state could not be migrated; restart the extension to retry.",
+          })
+        } catch (diagnosticError) {
+          logger.warn(
+            "Unable to publish the schema-migration failure diagnostic",
+            diagnosticError
+          )
+        }
+        return
       }
+
+      // Initial DNR reconciliation and its enablement/continuation reads must
+      // not run against pre-migration storage.
+      const initialSessionRuleReconciliation =
+        siteIntegrationSessionRuleManager.start()
+      void initialSessionRuleReconciliation.catch((error) => {
+        logger.warn("Initial provider session DNR reconciliation failed", error)
+      })
 
       runtimeKernel.markControlReady()
       runtimeKernel.start()

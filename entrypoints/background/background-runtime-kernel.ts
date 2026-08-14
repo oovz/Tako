@@ -3,6 +3,7 @@ import { applyUiLanguagePreference } from "@/src/runtime/i18n"
 import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import type { RuntimeMessageReadiness } from "@/src/runtime/runtime-message-contracts"
 import {
+  InvalidDurableStateError,
   RuntimePhaseError,
   isFatalRuntimeInitializationError,
   type BackgroundRuntimePhase,
@@ -53,6 +54,12 @@ export interface BackgroundRuntimeKernelInput {
   setLivenessAlarmArmed: (shouldArm: boolean) => Promise<void>
   queueScheduler: QueueScheduler
   destinationService: DestinationService
+  /**
+   * Durable-state schema migration gate. Every readiness phase above listener
+   * registration awaits this before any storage-backed service hydrates or
+   * mutates state. On rejection the failure is sticky and fatal.
+   */
+  awaitSchemaMigration: () => Promise<void>
 }
 
 function createPhaseState(): PhaseState {
@@ -145,6 +152,17 @@ export class BackgroundRuntimeKernel {
       "internal-state-ready",
       this.statePhase,
       async () => {
+        // The one-time schema migration must complete before ANY storage-backed
+        // service hydrates. A migration failure is a durable-state failure and is
+        // therefore sticky and fatal, not a retryable transient error.
+        try {
+          await this.input.awaitSchemaMigration()
+        } catch (cause) {
+          throw new InvalidDurableStateError(
+            "Retained state could not be migrated; refusing to initialize",
+            { cause }
+          )
+        }
         await this.input.tabContextStateService.initialize()
         this.tabContextStateService = this.input.tabContextStateService
       }

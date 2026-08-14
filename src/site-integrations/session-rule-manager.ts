@@ -156,14 +156,17 @@ export class SiteIntegrationSessionRuleManager {
   private retryAlarmScheduled = false
   private readonly service: Pick<SiteIntegrationEnablementService, "getAll">
   private readonly continuation: ProviderNetworkPolicyContinuationCoordinator
+  private readonly awaitSchemaMigration: () => Promise<void>
 
   constructor(input: {
     service: Pick<SiteIntegrationEnablementService, "getAll">
     onReconciliationSucceeded: (
       enablement: SiteIntegrationEnablementMap
     ) => void | Promise<void>
+    awaitSchemaMigration: () => Promise<void>
   }) {
     this.service = input.service
+    this.awaitSchemaMigration = input.awaitSchemaMigration
     this.continuation = new ProviderNetworkPolicyContinuationCoordinator({
       state: () => this.getContinuationStateSnapshot(),
       reconcile: () => this.reconcile(undefined),
@@ -310,9 +313,12 @@ export class SiteIntegrationSessionRuleManager {
 
   /**
    * Serialize and coalesce DNR updates so storage, permission, alarm, and
-   * dispatch-time readiness requests cannot race.
+   * dispatch-time readiness requests cannot race. Waits for the destructive
+   * schema reset so enablement reads and continuation state never touch
+   * pre-reset storage.
    */
-  reconcile(enablement?: SiteIntegrationEnablementMap): Promise<void> {
+  async reconcile(enablement?: SiteIntegrationEnablementMap): Promise<void> {
+    await this.awaitSchemaMigration()
     this.requestedRevision += 1
     this.requestedEnablement = enablement
     this.reconciliationDirty = true

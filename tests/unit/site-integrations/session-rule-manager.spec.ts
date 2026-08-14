@@ -129,6 +129,7 @@ async function loadManager() {
   ): Manager => {
     instance = new module.SiteIntegrationSessionRuleManager({
       service: testEnablementService,
+      awaitSchemaMigration: async () => undefined,
       onReconciliationSucceeded,
     })
     return instance
