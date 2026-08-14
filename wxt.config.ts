@@ -2,13 +2,7 @@ import { defineConfig } from "wxt"
 import tailwindcss from "@tailwindcss/vite"
 import path from "path"
 import istanbul from "vite-plugin-istanbul"
-import {
-  generateRequiredHostPermissions,
-  SITE_INTEGRATION_MANIFESTS,
-} from "./src/site-integrations/manifest"
-import { assertValidSiteIntegrationNetworkCapabilities } from "./src/site-integrations/manifest-validation"
-
-assertValidSiteIntegrationNetworkCapabilities(SITE_INTEGRATION_MANIFESTS)
+import { siteIntegrationWxtPermissions } from "./src/runtime/generated/site-integration-wxt-permissions"
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
@@ -17,6 +11,11 @@ export default defineConfig({
   vite: (configEnv) => ({
     define: {
       __TAKO_E2E_STATE_SEED__: JSON.stringify(
+        configEnv.mode === "live-test" ||
+          (configEnv.mode === "e2e-test" &&
+            process.env.TAKO_E2E_STATE_SEED === "true")
+      ),
+      __TAKO_E2E_REDIRECTS__: JSON.stringify(
         configEnv.mode === "e2e-test" &&
           process.env.TAKO_E2E_STATE_SEED === "true"
       ),
@@ -26,7 +25,7 @@ export default defineConfig({
       // Instrument extension source for Istanbul-based E2E coverage.
       // Only active when building for coverage (E2E_COVERAGE=true) to keep
       // production and normal dev builds clean and fast.
-      ...(process.env.E2E_COVERAGE === "true"
+      ...(configEnv.mode === "e2e-test" && process.env.E2E_COVERAGE === "true"
         ? [
             istanbul({
               include: ["src/**/*", "entrypoints/**/*", "components/**/*"],
@@ -63,15 +62,14 @@ export default defineConfig({
   manifest: ({ mode }) => {
     const isLiveTest = mode === "live-test"
     // A test environment variable alone must never make a normal production
-    // artifact more permissive. The deterministic state seeder and its broad
-    // mock-host permission exist only in WXT's isolated e2e-test output.
+    // artifact more permissive. Test state seeding and broad mock-host access
+    // are compile-time capabilities of the isolated E2E artifacts.
     const isDeterministicE2e =
       mode === "e2e-test" && process.env.TAKO_E2E_STATE_SEED === "true"
     const grantsBroadHttpsForIsolatedTest = isLiveTest || isDeterministicE2e
 
     return {
       name: "__MSG_extName__",
-      version: "1.6.2",
       description: "__MSG_extDescription__",
       default_locale: "en",
       minimum_chrome_version: "150",
@@ -98,15 +96,14 @@ export default defineConfig({
         default_path: "sidepanel.html",
       },
       host_permissions: grantsBroadHttpsForIsolatedTest
-        ? [...generateRequiredHostPermissions(), "https://*/*"]
-        : generateRequiredHostPermissions(),
+        ? [
+            ...siteIntegrationWxtPermissions.requiredOrigins,
+            ...siteIntegrationWxtPermissions.optionalOrigins,
+          ]
+        : [...siteIntegrationWxtPermissions.requiredOrigins],
       optional_host_permissions: grantsBroadHttpsForIsolatedTest
         ? []
-        : [
-            // MangaDex@Home returns dynamic HTTPS image-node origins. MangaDex is
-            // disabled by default and requests this access only when the user enables it.
-            "https://*/*",
-          ],
+        : [...siteIntegrationWxtPermissions.optionalOrigins],
       action: {
         default_title: "__MSG_extName__",
         default_icon: {

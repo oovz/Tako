@@ -18,7 +18,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.release_tag || github.ref_name }}
@@ -80,6 +80,8 @@ jobs:
       - resolve
       - verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
       RELEASE_SHA: ${{ needs.resolve.outputs.checkout_sha }}
@@ -111,6 +113,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build release bundle
         run: pnpm zip
+        env:
+          E2E_COVERAGE: "false"
+          TMD_TEST_E2E_USE_MOCKS: "false"
       - name: Validate packaged manifest version
         shell: pwsh
         run: |
