@@ -85,56 +85,95 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(DOWNLOAD_ROOT_STORE_NAME)
       }
     }
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      const db = req.result
+      db.onversionchange = () => db.close()
+      resolve(db)
+    }
     req.onerror = () =>
       reject(req.error ?? new Error("Failed to open IndexedDB"))
   })
 }
 
-async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
+async function runTransaction<T>(
+  mode: IDBTransactionMode,
+  requestFactory: (store: IDBObjectStore) => IDBRequest,
+  getResult: (request: IDBRequest) => T
+): Promise<T> {
   const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, "readonly")
-    const store = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME)
-    const req = store.get(key)
-    req.onsuccess = () => resolve(req.result as T | undefined)
-    req.onerror = () =>
-      reject(req.error ?? new Error("Failed to read IndexedDB"))
-    tx.onerror = () =>
-      reject(tx.error ?? new Error("IndexedDB read transaction failed"))
-    tx.onabort = () =>
-      reject(tx.error ?? new Error("IndexedDB read transaction aborted"))
-  })
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      let result!: T
+      let requestError: DOMException | null = null
+      let settled = false
+
+      const rejectOnce = (error: unknown): void => {
+        if (settled) return
+        settled = true
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
+
+      try {
+        const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, mode)
+        const request = requestFactory(tx.objectStore(DOWNLOAD_ROOT_STORE_NAME))
+        request.onsuccess = () => {
+          result = getResult(request)
+        }
+        request.onerror = () => {
+          requestError = request.error
+        }
+        tx.oncomplete = () => {
+          if (requestError) {
+            rejectOnce(requestError)
+            return
+          }
+          if (settled) return
+          settled = true
+          resolve(result)
+        }
+        tx.onerror = () =>
+          rejectOnce(
+            requestError ??
+              tx.error ??
+              new Error("IndexedDB transaction failed")
+          )
+        tx.onabort = () =>
+          rejectOnce(
+            requestError ??
+              tx.error ??
+              new Error("IndexedDB transaction aborted")
+          )
+      } catch (error) {
+        rejectOnce(error)
+      }
+    })
+  } finally {
+    db.close()
+  }
+}
+
+async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
+  return runTransaction(
+    "readonly",
+    (store) => store.get(key),
+    (request) => request.result as T | undefined
+  )
 }
 
 async function idbSet(key: string, value: unknown): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, "readwrite")
-    const req = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME).put(value, key)
-    req.onerror = () =>
-      reject(req.error ?? new Error("Failed to write IndexedDB"))
-    tx.oncomplete = () => resolve()
-    tx.onerror = () =>
-      reject(tx.error ?? new Error("IndexedDB write transaction failed"))
-    tx.onabort = () =>
-      reject(tx.error ?? new Error("IndexedDB write transaction aborted"))
-  })
+  await runTransaction(
+    "readwrite",
+    (store) => store.put(value, key),
+    () => undefined
+  )
 }
 
 async function idbDelete(key: string): Promise<void> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, "readwrite")
-    const req = tx.objectStore(DOWNLOAD_ROOT_STORE_NAME).delete(key)
-    req.onerror = () =>
-      reject(req.error ?? new Error("Failed to delete IndexedDB entry"))
-    tx.oncomplete = () => resolve()
-    tx.onerror = () =>
-      reject(tx.error ?? new Error("IndexedDB delete transaction failed"))
-    tx.onabort = () =>
-      reject(tx.error ?? new Error("IndexedDB delete transaction aborted"))
-  })
+  await runTransaction(
+    "readwrite",
+    (store) => store.delete(key),
+    () => undefined
+  )
 }
 
 export async function saveDownloadRootHandle(handle: DirHandle): Promise<void> {
