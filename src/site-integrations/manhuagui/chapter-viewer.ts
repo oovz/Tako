@@ -4,7 +4,10 @@ import {
   selectReaderHost,
   type ReaderConfig,
 } from "./reader-config"
-import type { EffectivePolicy } from "@/src/runtime/rate-limit"
+import type {
+  EffectivePolicy,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
 import { ProviderContractError } from "../provider-contract-error"
 import { DEFAULT_IMAGE_PROTOCOL, isAllowedManhuaguiImageUrl } from "./shared"
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
@@ -85,24 +88,26 @@ function extractPackedPayloadTemplate(
   chapterHtml: string
 ): PackedPayloadTemplate {
   if (chapterHtml.length > MAX_CHAPTER_HTML_LENGTH) {
-    throw new Error("Manhuagui chapter HTML exceeds the supported size")
+    throw new ProviderContractError(
+      "Manhuagui chapter HTML exceeds the supported size"
+    )
   }
   const packedMatch = chapterHtml.match(PACKED_PAYLOAD_REGEX)
   if (!packedMatch) {
     if (isAgeGatedChapterHtml(chapterHtml)) {
-      throw new Error(
+      throw new ProviderContractError(
         "Manhuagui age-gate not completed: open the chapter on Manhuagui, complete the site consent prompt, and reload before downloading."
       )
     }
-    throw new Error(
-      "Manhuagui viewer format changed (packed image data missing)"
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
     )
   }
 
   const [, templateLiteral, radixText, countText, rawKeys] = packedMatch
   if (!templateLiteral || !radixText || !countText || rawKeys == null) {
-    throw new Error(
-      "Manhuagui viewer format changed (packed image data incomplete)"
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
     )
   }
 
@@ -110,16 +115,20 @@ function extractPackedPayloadTemplate(
   const radix = Number.parseInt(radixText, 10)
   const count = Number.parseInt(countText, 10)
   if (radix < 2 || radix > 62) {
-    throw new Error("Manhuagui packed radix is out of bounds")
+    throw new ProviderContractError("Manhuagui packed radix is out of bounds")
   }
   if (count < 0 || count > MAX_PACKED_DICTIONARY_SIZE) {
-    throw new Error("Manhuagui packed dictionary size is out of bounds")
+    throw new ProviderContractError(
+      "Manhuagui packed dictionary size is out of bounds"
+    )
   }
   if (
     template.length > MAX_PACKED_TEMPLATE_LENGTH ||
     rawKeys.length > MAX_PACKED_KEYS_LENGTH
   ) {
-    throw new Error("Manhuagui packed payload exceeds the supported size")
+    throw new ProviderContractError(
+      "Manhuagui packed payload exceeds the supported size"
+    )
   }
 
   return {
@@ -139,12 +148,16 @@ function extractPackedPayloadTemplate(
 function extractBalancedJsonObject(source: string, marker: string): string {
   const markerIndex = source.indexOf(marker)
   if (markerIndex < 0) {
-    throw new Error("Manhuagui viewer format changed (imgData call missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   const startIndex = source.indexOf("{", markerIndex + marker.length)
   if (startIndex < 0) {
-    throw new Error("Manhuagui viewer format changed (imgData payload missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   let depth = 0
@@ -195,8 +208,8 @@ function extractBalancedJsonObject(source: string, marker: string): string {
     }
   }
 
-  throw new Error(
-    "Manhuagui viewer format changed (imgData payload unbalanced)"
+  throw new ProviderContractError(
+    "Manhuagui viewer data no longer matches the supported format."
   )
 }
 
@@ -213,7 +226,9 @@ function parsePackedPayloadTemplate(
 ): PackedImageData {
   const keyText = decompressFromBase64(rawKeys)
   if (keyText == null) {
-    throw new Error("Unable to decompress packed image payload")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   const keys = keyText.split("|")
@@ -242,7 +257,9 @@ function parsePackedPayloadTemplate(
     extractBalancedJsonObject(jsonText, "imgData(")
   )
   if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("Invalid Manhuagui packed image data: expected JSON object")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
   return parsed
 }
@@ -260,7 +277,9 @@ function parsePackedImageData(chapterHtml: string): PackedImageData {
 function normalizeImagePath(path: string): string {
   const cleaned = sanitizeLabel(path).replace(/^\/+/, "")
   if (!cleaned) {
-    throw new Error("Manhuagui viewer format changed (image path missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   return cleaned
@@ -277,7 +296,9 @@ function buildReaderFilePath(
 ): string {
   const normalizedPath = sanitizeLabel(basePath)
   if (!normalizedPath) {
-    throw new Error("Manhuagui viewer format changed (image path missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   if (/^https?:\/\//i.test(normalizedPath)) {
@@ -285,7 +306,9 @@ function buildReaderFilePath(
       ? normalizedPath
       : `${normalizedPath}/`
     if (!isAllowedManhuaguiImageUrl(absoluteUrl)) {
-      throw new Error("Manhuagui image URL origin is not allowed")
+      throw new ProviderContractError(
+        "Manhuagui image URL origin is not allowed"
+      )
     }
     return absoluteUrl
   }
@@ -293,12 +316,25 @@ function buildReaderFilePath(
   if (normalizedPath.startsWith("//")) {
     const absoluteUrl = `${DEFAULT_IMAGE_PROTOCOL}${normalizedPath}`
     if (!isAllowedManhuaguiImageUrl(absoluteUrl)) {
-      throw new Error("Manhuagui image URL origin is not allowed")
+      throw new ProviderContractError(
+        "Manhuagui image URL origin is not allowed"
+      )
     }
     return absoluteUrl.endsWith("/") ? absoluteUrl : `${absoluteUrl}/`
   }
 
-  const hostName = selectReaderHost(readerConfig)
+  let hostName: string
+  try {
+    hostName = selectReaderHost(readerConfig)
+  } catch (error) {
+    if (error instanceof ProviderContractError) {
+      throw new ProviderContractError(
+        "Manhuagui viewer data no longer matches the supported format.",
+        error
+      )
+    }
+    throw error
+  }
   return `${DEFAULT_IMAGE_PROTOCOL}//${hostName}.hamreus.com/${normalizeImagePath(normalizedPath).replace(/\/?$/, "/")}`
 }
 
@@ -310,7 +346,9 @@ function buildImageUrl(
 ): string {
   const normalizedFilename = sanitizeLabel(filename)
   if (!normalizedFilename) {
-    throw new Error("Manhuagui viewer format changed (image filename missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   const normalizedBasePath = basePath.endsWith("/") ? basePath : `${basePath}/`
@@ -321,15 +359,24 @@ function extractImageUrlsFromPackedData(
   data: PackedImageData,
   readerConfig: ReaderConfig
 ): string[] {
-  const files = Array.isArray(data.files)
-    ? data.files.filter(
-        (value): value is string =>
-          typeof value === "string" && sanitizeLabel(value).length > 0
-      )
-    : []
-  if (files.length > MAX_IMAGE_FILES) {
-    throw new Error("Manhuagui image file count exceeds the supported limit")
+  if (!Array.isArray(data.files) || data.files.length === 0) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
+  if (data.files.length > MAX_IMAGE_FILES) {
+    throw new ProviderContractError(
+      "Manhuagui image file count exceeds the supported limit"
+    )
+  }
+  const files = data.files.map((value) => {
+    if (typeof value !== "string" || sanitizeLabel(value).length === 0) {
+      throw new ProviderContractError(
+        "Manhuagui viewer data contains an invalid image filename."
+      )
+    }
+    return value
+  })
   const basePath =
     typeof data.path === "string"
       ? buildReaderFilePath(data.path, readerConfig)
@@ -343,16 +390,18 @@ function extractImageUrlsFromPackedData(
       ? String(data.sl.m)
       : ""
 
-  if (!basePath || !expiresAt || !signature || files.length === 0) {
-    throw new Error(
-      "Manhuagui viewer format changed (image metadata incomplete)"
+  if (!basePath || !expiresAt || !signature) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
     )
   }
 
   return files.map((filename) => {
     const imageUrl = buildImageUrl(basePath, filename, expiresAt, signature)
     if (!isAllowedManhuaguiImageUrl(imageUrl)) {
-      throw new Error("Manhuagui image URL origin is not allowed")
+      throw new ProviderContractError(
+        "Manhuagui image URL origin is not allowed"
+      )
     }
     return imageUrl
   })
@@ -366,26 +415,24 @@ function extractImageUrlsFromPackedData(
  * image host. Config failures are surfaced rather than replaced with a stale
  * host map.
  */
-export async function resolveImageUrlsFromChapterHtml(
+export async function buildManhuaguiChapterImageUrlsFromHtml(
   chapterHtml: string,
-  chapterPolicy?: EffectivePolicy
+  rateLimitService: RateLimitService,
+  chapterPolicy?: EffectivePolicy,
+  signal?: AbortSignal
 ): Promise<string[]> {
   try {
     const [packedImageData, readerConfig] = await Promise.all([
       Promise.resolve(parsePackedImageData(chapterHtml)),
-      fetchReaderConfig(chapterHtml, chapterPolicy),
+      fetchReaderConfig(chapterHtml, rateLimitService, chapterPolicy, signal),
     ])
 
     return extractImageUrlsFromPackedData(packedImageData, readerConfig)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (
-      error instanceof SyntaxError ||
-      message.includes("format changed") ||
-      message.includes("config script missing") ||
-      message.includes("packed image") ||
-      message.includes("decompress packed")
-    ) {
+    if (error instanceof ProviderContractError) {
+      throw error
+    }
+    if (error instanceof SyntaxError) {
       throw new ProviderContractError(
         "Manhuagui viewer data no longer matches the supported format.",
         error

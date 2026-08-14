@@ -1,13 +1,14 @@
 import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
-  ParseImageUrlsFromHtmlInput,
   SeriesDataResolutionResult,
 } from "@/src/types/site-integrations"
+import type { JsonObject } from "@/src/types/site-integrations"
+import { ChapterImagePlanSchema } from "../chapter-plan"
+import type { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import {
   downloadManhuaguiChapterImage,
-  parseManhuaguiImageUrlsFromHtml,
-  processManhuaguiImageUrls,
+  downloadManhuaguiCoverImage,
   resolveManhuaguiChapterImageUrls,
 } from "./chapter-api"
 import {
@@ -17,6 +18,9 @@ import {
 
 const offscreen: OffscreenIntegration = {
   name: "Manhuagui Offscreen",
+  cover: {
+    downloadImage: downloadManhuaguiCoverImage,
+  },
   series: {
     resolveSeriesData({
       document,
@@ -45,26 +49,24 @@ const offscreen: OffscreenIntegration = {
     },
   },
   chapter: {
-    resolveImageUrls(chapter, _context, settingsSnapshot): Promise<string[]> {
-      return resolveManhuaguiChapterImageUrls(chapter, settingsSnapshot)
-    },
-
-    parseImageUrlsFromHtml(
-      input: ParseImageUrlsFromHtmlInput
-    ): Promise<string[]> {
-      return parseManhuaguiImageUrlsFromHtml(input)
-    },
-
-    processImageUrls(urls: string[]): Promise<string[]> {
-      return processManhuaguiImageUrls(urls)
+    async resolveChapterPlan(chapter, input) {
+      const urls = await resolveManhuaguiChapterImageUrls(
+        chapter,
+        input.runtime.rateLimitService,
+        input.settings,
+        input.signal
+      )
+      return ChapterImagePlanSchema.parse({ imageUrls: urls })
     },
 
     downloadImage(
       imageUrl: string,
-      opts?: {
+      opts: {
         signal?: AbortSignal
-        context?: Record<string, unknown>
+        dispatchContext?: JsonObject
+        runtime: import("@/src/types/site-integrations").ChapterRuntimeData
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+        liveResourceLedger?: OffscreenLiveResourceLedger
       }
     ) {
       return downloadManhuaguiChapterImage(imageUrl, {

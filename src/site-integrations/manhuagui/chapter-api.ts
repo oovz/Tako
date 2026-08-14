@@ -1,66 +1,68 @@
-import type { ParseImageUrlsFromHtmlInput } from "@/src/types/site-integrations"
 import {
-  getRateLimitPolicyFromContext,
   getRateLimitPolicyFromSnapshot,
-  rateLimitedFetchForIntegration,
-  type EffectivePolicy,
+  type RateLimitService,
 } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
-import { resolveImageUrlsFromChapterHtml } from "./chapter-viewer"
-import { assertManhuaguiChapterUrl, isAllowedManhuaguiImageUrl } from "./shared"
-import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
-import { createIntegrationUrlAssertion } from "../request-policy"
+import { buildManhuaguiChapterImageUrlsFromHtml } from "./chapter-viewer"
+import {
+  assertManhuaguiChapterUrl,
+  isAllowedManhuaguiCoverUrl,
+  isAllowedManhuaguiImageUrl,
+} from "./shared"
+import { createIntegrationEndpointUrlAssertion } from "../request-policy"
+import { ProviderContractError } from "../provider-contract-error"
 import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { ChapterRuntimeData } from "@/src/types/site-integrations"
 
-const assertManhuaguiRequestUrl = createIntegrationUrlAssertion("manhuagui")
+const assertManhuaguiImageUrl = createIntegrationEndpointUrlAssertion(
+  "manhuagui",
+  "manhuagui-image-cdn"
+)
 
 /**
  * Fetch the chapter viewer HTML and reconstruct the signed image URL list.
- * Mirrors the background integration's `resolveImageUrls` contract: caller
- * receives absolute CDN URLs ready to be downloaded in order.
+ * Returns absolute CDN URLs ready to be downloaded in order.
  */
 export async function resolveManhuaguiChapterImageUrls(
   chapter: { id: string; url: string },
-  settingsSnapshot?: Partial<TaskSettingsSnapshot>
+  rateLimitService: RateLimitService,
+  settingsSnapshot?: Partial<TaskSettingsSnapshot>,
+  signal?: AbortSignal
 ): Promise<string[]> {
   assertManhuaguiChapterUrl(chapter.url)
   const chapterPolicy = getRateLimitPolicyFromSnapshot(
     settingsSnapshot,
     "chapter"
   )
-  const response = await rateLimitedFetchForIntegration(
-    "manhuagui",
-    chapter.url,
-    "chapter",
-    { credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml },
-    chapterPolicy
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "manhuagui",
+    endpointId: "manhuagui-series-html",
+    url: chapter.url,
+    scope: "chapter",
+    init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml, signal },
+    rateLimitService,
+    policyOverride: chapterPolicy,
+  })
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw Object.assign(
+      new Error(`HTTP ${response.status}: ${response.statusText}`),
+      { status: response.status }
+    )
   }
 
   const { html } = await decodeHtmlResponse(response)
-  return resolveImageUrlsFromChapterHtml(html, chapterPolicy)
-}
-
-/**
- * HTML-only fallback used when offscreen has already fetched the chapter
- * body. Delegates to the same viewer decoder as
- * {@link resolveManhuaguiChapterImageUrls}.
- */
-export function parseManhuaguiImageUrlsFromHtml(
-  { chapterHtml }: ParseImageUrlsFromHtmlInput,
-  chapterPolicy?: EffectivePolicy
-): Promise<string[]> {
-  return resolveImageUrlsFromChapterHtml(chapterHtml, chapterPolicy)
-}
-
-/** Filter out malformed entries before download (shared URL validity check). */
-export function processManhuaguiImageUrls(urls: string[]): Promise<string[]> {
-  return Promise.resolve(
-    filterValidImageUrls(urls).filter(isAllowedManhuaguiImageUrl)
+  return buildManhuaguiChapterImageUrlsFromHtml(
+    html,
+    rateLimitService,
+    chapterPolicy,
+    signal
   )
 }
 
@@ -72,33 +74,83 @@ export function processManhuaguiImageUrls(urls: string[]): Promise<string[]> {
  */
 export async function downloadManhuaguiChapterImage(
   imageUrl: string,
-  opts?: {
+  opts: {
     signal?: AbortSignal
-    context?: Record<string, unknown>
+    runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
   }
-): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
   if (!isAllowedManhuaguiImageUrl(imageUrl)) {
-    throw new Error("Manhuagui image URL origin is not allowed")
+    throw new ProviderContractError("Manhuagui image URL origin is not allowed")
   }
-  if (opts?.signal?.aborted) {
+  if (opts.signal?.aborted) {
     throw new Error("aborted")
   }
 
-  const { data, mimeType } = await fetchImageWithStallDetection(imageUrl, {
-    integrationId: "manhuagui",
-    signal: opts?.signal,
-    rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, "image"),
-    skipRateLimit: opts?.skipRateLimit,
-    onBytesReceived: opts?.onBytesReceived,
-    assertUrlAllowed: assertManhuaguiRequestUrl,
-    init: {
-      credentials: MANHUAGUI_CREDENTIAL_POLICY.image,
-    },
-  })
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(imageUrl, {
+      integrationId: "manhuagui",
+      endpointId: "manhuagui-image-cdn",
+      signal: opts.signal,
+      rateLimitPolicy: opts.runtime.rateLimitSettings.image,
+      rateLimitService: opts.runtime.rateLimitService,
+      skipRateLimit: opts.skipRateLimit,
+      onBytesReceived: opts.onBytesReceived,
+      assertUrlAllowed: assertManhuaguiImageUrl,
+      liveResourceLedger: opts.liveResourceLedger,
+      init: {
+        credentials: MANHUAGUI_CREDENTIAL_POLICY.image,
+      },
+    })
   const filename =
     new URL(imageUrl).pathname.split("/").filter(Boolean).pop() || "image.jpg"
 
-  return { data, filename, mimeType }
+  return { data, filename, mimeType, liveResourceLease }
+}
+
+export async function downloadManhuaguiCoverImage(
+  imageUrl: string,
+  opts: {
+    signal?: AbortSignal
+    runtime: ChapterRuntimeData
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
+  }
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (!isAllowedManhuaguiCoverUrl(imageUrl)) {
+    throw new ProviderContractError("Manhuagui cover URL origin is not allowed")
+  }
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(imageUrl, {
+      integrationId: "manhuagui",
+      endpointId: "manhuagui-image-cdn",
+      signal: opts.signal,
+      rateLimitService: opts.runtime.rateLimitService,
+      skipRateLimit: opts.skipRateLimit,
+      onBytesReceived: opts.onBytesReceived,
+      assertUrlAllowed: assertManhuaguiImageUrl,
+      liveResourceLedger: opts.liveResourceLedger,
+      init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.image },
+    })
+  return {
+    data,
+    mimeType,
+    liveResourceLease,
+    filename:
+      new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
+      "cover.jpg",
+  }
 }

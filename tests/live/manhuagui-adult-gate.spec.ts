@@ -6,7 +6,7 @@ import {
   LIVE_MANHUAGUI_ADULT_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   MANHUAGUI_BASE_URL,
-} from "../e2e/fixtures/test-domains"
+} from "../e2e/fixtures/test-domains-constants"
 import { resolveCandidateTabIds } from "./fixtures/download-workflow-helpers"
 
 type ManhuaguiLiveState = {

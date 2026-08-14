@@ -4,6 +4,8 @@ import {
   compressToBase64,
   makeHtmlResponse,
   mockRateLimitedFetch,
+  rateLimitService,
+  rateLimitSettings,
   restoreBrowserGlobals,
   setTestDocument,
   setTestWindow,
@@ -13,6 +15,7 @@ import {
   extractSeriesMetadataFromDocument,
 } from "@/src/site-integrations/manhuagui/series-dom"
 import { parseSeriesIdFromPath } from "@/src/site-integrations/manhuagui/shared"
+import { offscreenSiteAdapter } from "@/src/site-integrations/manhuagui/offscreen-runtime"
 
 type MockChapterGroup = {
   groupTitle: string
@@ -726,39 +729,7 @@ export function registerManhuaguiCases(): void {
       restoreBrowserGlobals(snapshot)
     })
 
-    it("parses packed viewer HTML into hamreus image URLs using the site config script", async () => {
-      const compressedKeys = compressToBase64("")
-      const chapterHtml = buildPackedChapterHtml(compressedKeys)
-      mockRateLimitedFetch.mockResolvedValueOnce(
-        makeHtmlResponse(
-          readerConfigScript,
-          "application/javascript; charset=utf-8"
-        )
-      )
-
-      const { manhuaguiIntegration } =
-        await import("@/src/site-integrations/manhuagui")
-      const urls =
-        await manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml?.({
-          chapterId: "760110",
-          chapterUrl: "https://www.manhuagui.com/comic/28004/760110.html",
-          chapterHtml,
-        })
-
-      expect(urls).toEqual([
-        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/001.jpg.webp?e=1712345678&m=abc123",
-        "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第01回/002.jpg.webp?e=1712345678&m=abc123",
-      ])
-      expect(mockRateLimitedFetch).toHaveBeenCalledWith(
-        "manhuagui",
-        "https://cf.mhgui.com/scripts/config_TEST.js",
-        "chapter",
-        { credentials: "omit" },
-        undefined
-      )
-    })
-
-    it("resolveImageUrls fetches chapter HTML and the config script to reconstruct filePath", async () => {
+    it("resolveChapterPlan fetches chapter HTML and the config script to reconstruct filePath", async () => {
       const compressedKeys = compressToBase64("")
       mockRateLimitedFetch
         .mockResolvedValueOnce(
@@ -776,13 +747,14 @@ export function registerManhuaguiCases(): void {
           )
         )
 
-      const { manhuaguiIntegration } =
-        await import("@/src/site-integrations/manhuagui")
-      const urls =
-        await manhuaguiIntegration.background.chapter.resolveImageUrls?.({
-          id: "760111",
-          url: "https://www.manhuagui.com/comic/28004/760111.html",
-        })
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
+          {
+            id: "760111",
+            url: "https://www.manhuagui.com/comic/28004/760111.html",
+          },
+          { runtime: { rateLimitService, rateLimitSettings } }
+        )
 
       expect(urls).toEqual([
         "https://eu2.hamreus.com/ps4/z/zhoushuhz_jjx/第02回/001.jpg.webp?e=1712345678&m=abc123",
@@ -790,19 +762,23 @@ export function registerManhuaguiCases(): void {
       ])
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         1,
-        "manhuagui",
-        "https://www.manhuagui.com/comic/28004/760111.html",
-        "chapter",
-        { credentials: "include" },
-        undefined
+        expect.objectContaining({
+          integrationId: "manhuagui",
+          endpointId: "manhuagui-series-html",
+          url: "https://www.manhuagui.com/comic/28004/760111.html",
+          scope: "chapter",
+          init: { credentials: "include" },
+        })
       )
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         2,
-        "manhuagui",
-        "https://cf.mhgui.com/scripts/config_TEST.js",
-        "chapter",
-        { credentials: "omit" },
-        undefined
+        expect.objectContaining({
+          integrationId: "manhuagui",
+          endpointId: "manhuagui-reader-config",
+          url: "https://cf.mhgui.com/scripts/config_TEST.js",
+          scope: "chapter",
+          init: { credentials: "omit" },
+        })
       )
     })
 
@@ -816,12 +792,10 @@ export function registerManhuaguiCases(): void {
         arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
       })
 
-      const { manhuaguiIntegration } =
-        await import("@/src/site-integrations/manhuagui")
-      const result =
-        await manhuaguiIntegration.background.chapter.downloadImage(
-          "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
-        )
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456",
+        { runtime: { rateLimitService, rateLimitSettings } }
+      )
 
       expect(result).toMatchObject({
         filename: "003.jpg",
@@ -829,22 +803,25 @@ export function registerManhuaguiCases(): void {
       })
       expect(result.data.byteLength).toBe(4)
 
-      const [integrationId, requestUrl, scope, requestInit] =
-        mockRateLimitedFetch.mock.calls[0] as [
-          string,
-          string,
-          string,
-          RequestInit,
-        ]
-      expect(integrationId).toBe("manhuagui")
-      expect(requestUrl).toBe(
+      const [request] = mockRateLimitedFetch.mock.calls[0] as [
+        {
+          integrationId: string
+          endpointId: string
+          url: string
+          scope: string
+          init?: RequestInit
+        },
+      ]
+      expect(request.integrationId).toBe("manhuagui")
+      expect(request.endpointId).toBe("manhuagui-image-cdn")
+      expect(request.url).toBe(
         "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
       )
-      expect(scope).toBe("image")
-      expect(requestInit.credentials).toBe("omit")
-      expect(requestInit.referrer).toBeUndefined()
-      expect(requestInit.referrerPolicy).toBeUndefined()
-      expect(requestInit.headers).toBeUndefined()
+      expect(request.scope).toBe("image")
+      expect(request.init?.credentials).toBe("omit")
+      expect(request.init?.referrer).toBeUndefined()
+      expect(request.init?.referrerPolicy).toBeUndefined()
+      expect(request.init?.headers).toBeUndefined()
     })
 
     it("rejects non-raster image responses before returning downloaded image data", async () => {
@@ -858,46 +835,12 @@ export function registerManhuaguiCases(): void {
           new TextEncoder().encode("<html>captcha</html>").buffer,
       })
 
-      const { manhuaguiIntegration } =
-        await import("@/src/site-integrations/manhuagui")
-
       await expect(
-        manhuaguiIntegration.background.chapter.downloadImage(
-          "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
+          "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456",
+          { runtime: { rateLimitService, rateLimitSettings } }
         )
       ).rejects.toThrow("Unsupported MIME type: text/html")
-    })
-
-    describe("adult-gate handling", () => {
-      it("parseImageUrlsFromHtml raises an actionable age-gate error when the cookie was not honored", async () => {
-        const ageGateHtml = `
-          <html>
-            <body>
-              <div id="checkAdult" class="w980 mt10">
-                <p>本漫画为成年读者向，请确认您年满18周岁后再继续访问。</p>
-                <a href="javascript:showAdultInfo();" onclick="showAdultInfo();">成年读者，请点击此处进入</a>
-              </div>
-            </body>
-          </html>
-        `
-
-        const { manhuaguiIntegration } =
-          await import("@/src/site-integrations/manhuagui")
-        const parseImageUrlsFromHtml =
-          manhuaguiIntegration.background.chapter.parseImageUrlsFromHtml
-        expect(parseImageUrlsFromHtml).toBeDefined()
-        if (!parseImageUrlsFromHtml) {
-          throw new Error("Expected parseImageUrlsFromHtml to be defined")
-        }
-
-        await expect(
-          parseImageUrlsFromHtml({
-            chapterId: "760110",
-            chapterUrl: "https://www.manhuagui.com/comic/28004/760110.html",
-            chapterHtml: ageGateHtml,
-          })
-        ).rejects.toThrow(/complete the site consent prompt/)
-      })
     })
   })
 }

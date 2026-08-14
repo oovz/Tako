@@ -3,19 +3,22 @@ import type {
   SeriesDataResolutionResult,
   ServiceWorkerIntegration,
 } from "@/src/types/site-integrations"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import logger from "@/src/runtime/logger"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { resolveSeriesDataViaOffscreen } from "@/src/runtime/resolve-series-data-offscreen"
 import { MANHUAGUI_PAGE_HOSTS, parseSeriesIdFromPath } from "./shared"
 import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
+import { ManhuaguiPageProbeDataSchema } from "./contracts/page-probe"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function readManhuaguiLiveChapterHtml(
-  integrationContext: Record<string, unknown> | undefined
+  pageProbeData: unknown
 ): string | undefined {
-  if (!integrationContext) return undefined
-  if (integrationContext.adultGatePresent === true) return undefined
-  const chapterHtml = integrationContext.chapterHtml
+  if (pageProbeData === undefined) return undefined
+  const data = ManhuaguiPageProbeDataSchema.parse(pageProbeData)
+  if (data.adultGatePresent === true) return undefined
+  const chapterHtml = data.chapterHtml
   if (
     typeof chapterHtml !== "string" ||
     chapterHtml.length === 0 ||
@@ -30,8 +33,9 @@ async function resolveManhuaguiSeriesData(input: {
   seriesUrl: string
   seriesId?: string
   language?: string
-  integrationContext?: Record<string, unknown>
+  pageProbeData?: unknown
   signal?: AbortSignal
+  rateLimitService: RateLimitService
 }): Promise<SeriesDataResolutionResult> {
   let parsedUrl: URL
   try {
@@ -54,24 +58,29 @@ async function resolveManhuaguiSeriesData(input: {
     )
   }
 
-  const liveChapterHtml = readManhuaguiLiveChapterHtml(input.integrationContext)
+  const liveChapterHtml = readManhuaguiLiveChapterHtml(input.pageProbeData)
   logger.debug("[manhuagui] Resolving series data", {
     seriesId,
     hasLiveChapterHtml: !!liveChapterHtml,
   })
 
-  const response = await rateLimitedFetchForIntegration(
-    "manhuagui",
-    input.seriesUrl,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "manhuagui",
+    endpointId: "manhuagui-series-html",
+    url: input.seriesUrl,
+    scope: "chapter",
+    init: {
       credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml,
       signal: input.signal,
-    }
-  )
+    },
+    rateLimitService: input.rateLimitService,
+  })
   if (!response.ok) {
-    throw new Error(
-      `Manhuagui series page could not be loaded (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(
+        `Manhuagui series page could not be loaded (HTTP ${response.status}).`
+      ),
+      { status: response.status }
     )
   }
 
@@ -82,6 +91,8 @@ async function resolveManhuaguiSeriesData(input: {
     seriesUrl: input.seriesUrl,
     html,
     language: input.language,
+    signal: input.signal,
+    rateLimitService: input.rateLimitService,
   })
 
   if (!liveChapterHtml) {
@@ -89,7 +100,9 @@ async function resolveManhuaguiSeriesData(input: {
     return {
       ...resolved,
       seriesId,
-      ...(input.integrationContext?.adultGatePresent === true
+      ...(input.pageProbeData !== undefined &&
+      ManhuaguiPageProbeDataSchema.parse(input.pageProbeData)
+        .adultGatePresent === true
         ? { chapterListNotice: "adult-consent-required" as const }
         : {}),
     }
@@ -103,6 +116,8 @@ async function resolveManhuaguiSeriesData(input: {
     seriesUrl: input.seriesUrl,
     html: liveChapterHtml,
     language: input.language,
+    signal: input.signal,
+    rateLimitService: input.rateLimitService,
   })
   const liveChapterList = liveResolved.chapterList as
     { chapters?: unknown[] } | undefined

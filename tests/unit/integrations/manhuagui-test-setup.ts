@@ -1,6 +1,19 @@
 import { vi } from "vitest"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 export const mockRateLimitedFetch = vi.fn()
+export const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+export const rateLimitSettings = {
+  image: { concurrency: 1, delayMs: 0 },
+  chapter: { concurrency: 1, delayMs: 0 },
+}
 
 export const makeHtmlResponse = (
   html: string,
@@ -23,11 +36,6 @@ vi.mock("@/src/runtime/logger", () => ({
 }))
 
 vi.mock("@/src/runtime/rate-limit", () => ({
-  rateLimitedFetchForIntegration: (...args: unknown[]) =>
-    mockRateLimitedFetch(...args),
-  rateLimitedFetchByUrlScope: (...args: unknown[]) =>
-    mockRateLimitedFetch(...args),
-  getRateLimitPolicyFromContext: vi.fn(() => undefined),
   getRateLimitPolicyFromSnapshot: vi.fn(() => undefined),
   scheduleForIntegrationScope: vi.fn(
     async (_integrationId: string, _scope: string, task: () => unknown) =>
@@ -35,17 +43,12 @@ vi.mock("@/src/runtime/rate-limit", () => ({
   ),
 }))
 
-vi.mock("@/src/types/site-integrations", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/src/types/site-integrations")>()
-  return {
-    ...original,
-    IntegrationContextValidator: {
-      validateContentScriptContext: vi.fn(),
-      validateBackgroundOrOffscreenContext: vi.fn(),
-    },
-  }
-})
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: {
+    request: (...args: unknown[]) => mockRateLimitedFetch(...args),
+  },
+  fetchSharedResource: (...args: Parameters<typeof fetch>) => fetch(...args),
+}))
 
 export type BrowserGlobalsSnapshot = {
   windowValue: typeof global.window

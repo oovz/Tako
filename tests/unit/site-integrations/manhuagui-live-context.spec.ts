@@ -6,8 +6,10 @@ const mocks = vi.hoisted(() => ({
   resolveSeriesDataViaOffscreen: vi.fn(),
 }))
 
-vi.mock("@/src/runtime/rate-limit", () => ({
-  rateLimitedFetchForIntegration: mocks.fetch,
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: {
+    request: mocks.fetch,
+  },
 }))
 vi.mock("@/src/shared/html-response-decoder", () => ({
   decodeHtmlResponse: mocks.decodeHtmlResponse,
@@ -17,6 +19,21 @@ vi.mock("@/src/runtime/resolve-series-data-offscreen", () => ({
 }))
 
 import { backgroundSiteAdapter } from "@/src/site-integrations/manhuagui/background-runtime"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
+  getAll: vi.fn(async () => ({})),
+  getForSite: vi.fn(async () => ({})),
+}
 
 describe("Manhuagui live page context", () => {
   const seriesUrl = "https://www.manhuagui.com/comic/21243/"
@@ -55,11 +72,13 @@ describe("Manhuagui live page context", () => {
     await expect(
       resolveSeriesData({
         seriesUrl,
-        integrationContext: {
+        pageProbeData: {
           adultGatePresent: false,
           chapterHtml:
             '<div class="chapter"><div class="chapter-list"><a href="/comic/21243/900001.html">Chapter 1</a></div></div>',
         },
+        rateLimitService,
+        siteIntegrationSettingsReader,
       })
     ).resolves.toMatchObject({
       seriesId: "21243",
@@ -72,12 +91,16 @@ describe("Manhuagui live page context", () => {
       seriesUrl,
       html: "<html>server page</html>",
       language: undefined,
+      rateLimitService,
+      signal: undefined,
     })
     expect(mocks.resolveSeriesDataViaOffscreen).toHaveBeenNthCalledWith(2, {
       siteIntegrationId: "manhuagui",
       seriesUrl,
       html: '<div class="chapter"><div class="chapter-list"><a href="/comic/21243/900001.html">Chapter 1</a></div></div>',
       language: undefined,
+      rateLimitService,
+      signal: undefined,
     })
   })
 
@@ -94,11 +117,13 @@ describe("Manhuagui live page context", () => {
     await expect(
       resolveSeriesData({
         seriesUrl,
-        integrationContext: {
+        pageProbeData: {
           adultGatePresent: true,
           chapterHtml:
             '<div id="checkAdult"></div><div class="chapter-list"><a href="/comic/21243/900001.html">Hidden chapter</a></div>',
         },
+        rateLimitService,
+        siteIntegrationSettingsReader,
       })
     ).resolves.toMatchObject({
       chapterList: { chapters: [] },

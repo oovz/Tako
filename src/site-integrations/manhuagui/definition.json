@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "manhuagui",
+  "name": "Manhuagui",
+  "author": "TMD Team",
+  "version": "1.1.0",
+  "maturity": "stable",
+  "shipped": true,
+  "enabledByDefault": true,
+  "implementationType": "dom-scraping",
+  "volatility": "medium",
+  "authentication": "browser-session",
+  "regions": ["global"],
+  "accountConstraints": ["browser-session-cookie"],
+  "patterns": {
+    "domains": ["www.manhuagui.com", "manhuagui.com"],
+    "seriesMatches": ["/comic/*"],
+    "excludeMatches": ["/comic/*/*.html"]
+  },
+  "requiredOrigins": [
+    "https://www.manhuagui.com/*",
+    "https://manhuagui.com/*",
+    "https://cf.mhgui.com/*",
+    "https://hamreus.com/*",
+    "https://*.hamreus.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 1000 },
+    "chapter": { "concurrency": 1, "delayMs": 1000 }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "optional",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "none" }
+  },
+  "resolution": {
+    "seriesStrategies": ["fetched-html"],
+    "chapterStrategies": ["packed-reader"],
+    "imageStrategies": ["packed-reader"],
+    "imageTransform": { "kind": "none", "estimatedCostMs": 0 }
+  },
+  "endpointPolicies": [
+    {
+      "id": "manhuagui-series-html",
+      "purpose": "Manhuagui series page HTML",
+      "origins": ["https://www.manhuagui.com/*", "https://manhuagui.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 15000000
+    },
+    {
+      "id": "manhuagui-reader-config",
+      "purpose": "Manhuagui reader configuration",
+      "origins": ["https://cf.mhgui.com/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "text",
+      "maxResponseBytes": 5000000
+    },
+    {
+      "id": "manhuagui-image-cdn",
+      "purpose": "Manhuagui image CDN",
+      "origins": ["https://hamreus.com/*", "https://*.hamreus.com/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "dynamicOrigins": [],
+  "sessionRefererRules": [
+    {
+      "id": 41002,
+      "priority": 1,
+      "requestDomains": [
+        "i.hamreus.com",
+        "eu.hamreus.com",
+        "eu1.hamreus.com",
+        "eu2.hamreus.com",
+        "us.hamreus.com",
+        "us1.hamreus.com",
+        "us2.hamreus.com",
+        "us3.hamreus.com"
+      ],
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "referer": "https://www.manhuagui.com/"
+    }
+  ],
+  "customSettings": [],
+  "fixtures": {
+    "paths": ["src/site-integrations/manhuagui/fixtures/contract.json"],
+    "liveFreshnessDays": 30
+  }
+}

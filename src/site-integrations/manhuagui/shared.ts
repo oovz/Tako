@@ -5,6 +5,7 @@ import {
   MANHUAGUI_IMAGE_HOST_NAMES,
   MANHUAGUI_PAGE_HOST_NAMES,
 } from "./policy"
+import { ProviderContractError } from "../provider-contract-error"
 
 /**
  * Canonical Manhuagui origin used for building absolute URLs from relative
@@ -51,7 +52,9 @@ export function assertManhuaguiChapterUrl(url: string): URL {
     !MANHUAGUI_PAGE_HOSTS.has(parsed.hostname) ||
     !CHAPTER_PATH_REGEX.test(parsed.pathname)
   ) {
-    throw new Error("Manhuagui chapter URL origin or path is not allowed")
+    throw new ProviderContractError(
+      "Manhuagui chapter URL origin or path is not allowed"
+    )
   }
   return parsed
 }
@@ -61,6 +64,22 @@ export function isAllowedManhuaguiImageUrl(url: string): boolean {
     const parsed = new URL(url)
     return (
       parsed.protocol === "https:" && MANHUAGUI_IMAGE_HOSTS.has(parsed.hostname)
+    )
+  } catch {
+    return false
+  }
+}
+
+export function isAllowedManhuaguiCoverUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname
+    return (
+      parsed.protocol === "https:" &&
+      (MANHUAGUI_PAGE_HOSTS.has(host) ||
+        host === MANHUAGUI_CONFIG_HOST ||
+        host === "hamreus.com" ||
+        host.endsWith(".hamreus.com"))
     )
   } catch {
     return false

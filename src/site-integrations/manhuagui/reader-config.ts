@@ -1,5 +1,8 @@
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
-import type { EffectivePolicy } from "@/src/runtime/rate-limit"
+import type {
+  EffectivePolicy,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import {
   MANHUAGUI_CONFIG_HOST,
   MANHUAGUI_IMAGE_HOSTS,
@@ -8,6 +11,7 @@ import {
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
 import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
 import { readResponseBytes } from "@/src/shared/html-response-decoder"
+import { ProviderContractError } from "../provider-contract-error"
 
 /**
  * Weighted image host (e.g. `eu`, `us1`) used to build `{host}.hamreus.com`
@@ -73,7 +77,9 @@ function extractConfigScriptUrl(chapterHtml: string): string | undefined {
     parsed.protocol !== "https:" ||
     parsed.hostname !== MANHUAGUI_CONFIG_HOST
   ) {
-    throw new Error("Manhuagui reader config origin is not allowed")
+    throw new ProviderContractError(
+      "Manhuagui reader config origin is not allowed"
+    )
   }
   return parsed.toString()
 }
@@ -95,7 +101,9 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
     ),
   ]
   if (serviceMatches.length === 0) {
-    throw new Error("Manhuagui config format changed (picserv hosts missing)")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
   const services = serviceMatches.map((serviceMatch) => {
@@ -113,8 +121,8 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
       )
 
     if (!serviceName || hosts.length === 0) {
-      throw new Error(
-        "Manhuagui config format changed (picserv host entry missing)"
+      throw new ProviderContractError(
+        "Manhuagui viewer data no longer matches the supported format."
       )
     }
 
@@ -147,22 +155,31 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
  */
 export async function fetchReaderConfig(
   chapterHtml: string,
-  chapterPolicy?: EffectivePolicy
+  rateLimitService: RateLimitService,
+  chapterPolicy?: EffectivePolicy,
+  signal?: AbortSignal
 ): Promise<ReaderConfig> {
   const configScriptUrl = extractConfigScriptUrl(chapterHtml)
   if (!configScriptUrl) {
-    throw new Error("Manhuagui reader config script missing")
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
   }
 
-  const response = await rateLimitedFetchForIntegration(
-    "manhuagui",
-    configScriptUrl,
-    "chapter",
-    { credentials: MANHUAGUI_CREDENTIAL_POLICY.configuration },
-    chapterPolicy
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "manhuagui",
+    endpointId: "manhuagui-reader-config",
+    url: configScriptUrl,
+    scope: "chapter",
+    init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.configuration, signal },
+    rateLimitService,
+    policyOverride: chapterPolicy,
+  })
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    throw Object.assign(
+      new Error(`HTTP ${response.status}: ${response.statusText}`),
+      { status: response.status }
+    )
   }
 
   const bytes = await readResponseBytes(response)
@@ -181,7 +198,7 @@ export async function fetchReaderConfig(
 export function selectReaderHost(config: ReaderConfig): string {
   const service = config.services[config.curServ]
   if (!service) {
-    throw new Error(
+    throw new ProviderContractError(
       "Manhuagui config format changed (selected service is unavailable)"
     )
   }
@@ -193,7 +210,9 @@ export function selectReaderHost(config: ReaderConfig): string {
 
   const firstAvailableHost = service.hosts.find((host) => host.weight > 0)
   if (!firstAvailableHost) {
-    throw new Error("Manhuagui config format changed (no enabled image hosts)")
+    throw new ProviderContractError(
+      "Manhuagui config format changed (no enabled image hosts)"
+    )
   }
 
   return firstAvailableHost.name
