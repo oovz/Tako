@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest"
 import { withRetries } from "@/entrypoints/offscreen/image-processor"
+import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
 
 // Retry policy behavior
 // Validates:
@@ -13,7 +14,7 @@ describe("Retry policy", () => {
   })
 
   it("uses exponential backoff 1000, 3000, 9000 for 5xx errors", async () => {
-    const error = new Error("HTTP 500: Server error")
+    const error = Object.assign(new Error("provider wording"), { status: 500 })
     const fn = vi.fn(async () => {
       throw error
     })
@@ -34,7 +35,19 @@ describe("Retry policy", () => {
   })
 
   it("does not retry on non-429 4xx errors", async () => {
-    const error = new Error("HTTP 404: Not Found")
+    const error = Object.assign(new Error("provider wording"), { status: 404 })
+    const fn = vi.fn(async () => {
+      throw error
+    })
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout")
+
+    await expect(withRetries(fn, 3)).rejects.toBe(error)
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(setTimeoutSpy).not.toHaveBeenCalled()
+  })
+
+  it("does not retry typed provider-contract failures regardless of wording", async () => {
+    const error = new ProviderContractError("provider wording changed")
     const fn = vi.fn(async () => {
       throw error
     })
@@ -46,7 +59,7 @@ describe("Retry policy", () => {
   })
 
   it("retries on 429 errors with exponential backoff", async () => {
-    const error = new Error("HTTP 429: Too Many Requests")
+    const error = Object.assign(new Error("provider wording"), { status: 429 })
     const successValue = "ok"
     let attempts = 0
     const fn = vi.fn(async () => {
