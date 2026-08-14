@@ -1,18 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
-import {
-  clearAllHistory,
-  restartTask,
-  retryFailedChapters,
-} from "@/entrypoints/background/download-queue"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type {
-  DownloadTaskState,
-  GlobalAppState,
-  TaskChapter,
-} from "@/src/types/queue-state"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
+import { createQueueRepositoryTestHarness } from "./queue-repository-test-harness"
 
 const CANONICAL_TASK_STATUSES: Array<DownloadTaskState["status"]> = [
   "queued",
@@ -61,32 +52,6 @@ function makeTask(
   }
 }
 
-function createMockStateManager(
-  downloadQueue: DownloadTaskState[]
-): CentralizedStateManager {
-  const globalState: GlobalAppState = {
-    downloadQueue,
-    settings: DEFAULT_SETTINGS,
-    lastActivity: Date.now(),
-  }
-
-  return {
-    getGlobalState: vi.fn().mockResolvedValue(globalState),
-    updateDownloadQueueAtomically: vi.fn(
-      async (
-        update: (queue: readonly DownloadTaskState[]) => {
-          queue: DownloadTaskState[]
-          result: unknown
-        }
-      ) => {
-        const outcome = update(globalState.downloadQueue)
-        globalState.downloadQueue = outcome.queue
-        return outcome.result
-      }
-    ),
-  } as unknown as CentralizedStateManager
-}
-
 describe("status vocabulary invariants", () => {
   it("retry/restart create new tasks using canonical queued status only", async () => {
     const retrySource = makeTask({
@@ -107,17 +72,28 @@ describe("status vocabulary invariants", () => {
       ],
     })
 
-    const stateManager = createMockStateManager([retrySource, restartSource])
+    const queueRepository = createQueueRepositoryTestHarness([
+      retrySource,
+      restartSource,
+    ])
 
-    const retryResult = await retryFailedChapters(stateManager, retrySource.id)
-    const restartResult = await restartTask(stateManager, restartSource.id)
+    const retryResult = await queueRepository.retryFailedChapters({
+      taskId: retrySource.id,
+      retryTaskId: "retry-task",
+      now: Date.now(),
+    })
+    const restartResult = await queueRepository.restartDownloadTask({
+      taskId: restartSource.id,
+      restartTaskId: "restart-task",
+      now: Date.now(),
+    })
 
-    expect(retryResult.success).toBe(true)
-    expect(restartResult.success).toBe(true)
+    expect(retryResult.outcome).toBe("applied")
+    expect(restartResult.outcome).toBe("applied")
 
-    const createdTasks = (
-      await stateManager.getGlobalState()
-    ).downloadQueue.filter((task) => task.isRetryTask)
+    const createdTasks = (await queueRepository.getQueue()).filter(
+      (task) => task.isRetryTask
+    )
     expect(createdTasks).toHaveLength(2)
 
     for (const task of createdTasks) {
@@ -145,7 +121,7 @@ describe("status vocabulary invariants", () => {
     }
   })
 
-  it("clearAllHistory keeps only queued/downloading and removes terminal/non-canonical entries", async () => {
+  it("clearAllHistory keeps only canonical queued/downloading tasks", async () => {
     const queue = [
       makeTask({ id: "queued-task", status: "queued" }),
       makeTask({ id: "downloading-task", status: "downloading" }),
@@ -156,21 +132,24 @@ describe("status vocabulary invariants", () => {
       }),
       makeTask({ id: "failed-task", status: "failed", completed: Date.now() }),
       makeTask({
-        id: "pending-legacy",
-        status: "queued" as DownloadTaskState["status"],
+        id: "partial-task",
+        status: "partial_success",
+        completed: Date.now(),
+      }),
+      makeTask({
+        id: "canceled-task",
+        status: "canceled",
+        completed: Date.now(),
       }),
     ]
 
-    // Simulate corrupted legacy entry with non-canonical status in persisted state.
-    ;(queue[4] as unknown as { status: string }).status = "waiting"
+    const queueRepository = createQueueRepositoryTestHarness(queue)
 
-    const stateManager = createMockStateManager(queue)
+    const result = await queueRepository.clearTerminalHistory()
+    expect(result.outcome).toBe("applied")
+    expect(result.removedTaskIds).toHaveLength(4)
 
-    const result = await clearAllHistory(stateManager)
-    expect(result.success).toBe(true)
-    expect(result.removedCount).toBe(3)
-
-    const updatedQueue = (await stateManager.getGlobalState()).downloadQueue
+    const updatedQueue = await queueRepository.getQueue()
     expect(updatedQueue.map((task) => task.id)).toEqual([
       "queued-task",
       "downloading-task",

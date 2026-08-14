@@ -1,228 +1,159 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { enqueueStartDownloadTask } from "@/entrypoints/background/download-queue"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import {
+  buildStartDownloadTask,
+  loadStartDownloadSettingsInputs,
+} from "@/entrypoints/background/download-queue-enqueue"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { MangaPageState } from "@/src/types/tab-state"
 
-vi.mock("@/src/storage/site-overrides-service", () => ({
-  siteOverridesService: {
-    getAll: vi.fn(async () => ({})),
-  },
+const serviceMocks = vi.hoisted(() => ({
+  getSettings: vi.fn(),
+  getSiteOverrides: vi.fn(),
+  getSiteSettings: vi.fn(),
 }))
 
-vi.mock("@/src/storage/site-integration-settings-service", () => ({
+const settingsDependencies = {
+  settingsRepository: { getSettings: serviceMocks.getSettings },
+  siteOverridesService: { getAll: serviceMocks.getSiteOverrides },
   siteIntegrationSettingsService: {
-    getAll: vi.fn(async () => ({})),
-    getForSite: vi.fn(async () => ({})),
+    getForSite: serviceMocks.getSiteSettings,
   },
-}))
+}
 
-describe("enqueueStartDownloadTask", () => {
-  it("creates queued task from START_DOWNLOAD payload with preserved raw and integration-provided chapter metadata", async () => {
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = {
-      getGlobalState: vi.fn(async () => ({
-        downloadQueue: [],
-        settings: DEFAULT_SETTINGS,
-        lastActivity: Date.now(),
-      })),
-      addDownloadTask,
-    } as unknown as CentralizedStateManager
+const context: MangaPageState = {
+  sourceUrl: "https://mangadex.org/title/series-1",
+  siteIntegrationId: "mangadex",
+  mangaId: "series-1",
+  seriesTitle: " Series Title ",
+  chapters: [
+    {
+      id: "chapter-1",
+      title: " Chapter 12 ",
+      url: "https://mangadex.org/chapter/1",
+      index: 1,
+      chapterLabel: "Ch. 12.5",
+      chapterNumber: 12.5,
+      volumeLabel: "Vol. 02",
+      volumeNumber: 2,
+      language: "en",
+      status: "queued",
+      lastUpdated: 1,
+    },
+  ],
+  volumes: [],
+  metadata: {
+    author: "Author Name",
+    coverUrl: "https://example.com/cover.jpg",
+    publisher: "Test Publisher",
+    readingDirection: "rtl",
+  },
+  lastUpdated: 1,
+}
 
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      {
+describe("START_DOWNLOAD task inputs and builder", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    serviceMocks.getSettings.mockResolvedValue(DEFAULT_SETTINGS)
+    serviceMocks.getSiteOverrides.mockResolvedValue({
+      mangadex: { enabled: true },
+    })
+    serviceMocks.getSiteSettings.mockResolvedValue({ imageQuality: "data" })
+  })
+
+  it("loads the current settings and provider inputs once", async () => {
+    await expect(
+      loadStartDownloadSettingsInputs("mangadex", settingsDependencies)
+    ).resolves.toEqual({
+      settings: DEFAULT_SETTINGS,
+      siteOverride: { enabled: true },
+      siteSettings: { imageQuality: "data" },
+      sitePolicyDefaults: {
+        image: { concurrency: 2, delayMs: 500 },
+        chapter: { concurrency: 1, delayMs: 500 },
+      },
+    })
+    expect(serviceMocks.getSettings).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.getSiteOverrides).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.getSiteSettings).toHaveBeenCalledWith("mangadex")
+  })
+
+  it("builds a queued task synchronously from canonical context data", async () => {
+    const settingsInputs = await loadStartDownloadSettingsInputs(
+      "mangadex",
+      settingsDependencies
+    )
+
+    const task = buildStartDownloadTask({
+      context,
+      selectedChapters: context.chapters,
+      settingsInputs,
+      taskId: "task-1",
+      now: 100,
+    })
+
+    expect(task).toMatchObject({
+      id: "task-1",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-1",
+      seriesTitle: "Series Title",
+      seriesCoverUrl: "https://example.com/cover.jpg",
+      status: "queued",
+      created: 100,
+      chapters: [
+        {
+          id: "chapter-1",
+          title: "Chapter 12",
+          url: "https://mangadex.org/chapter/1",
+          chapterLabel: "Ch. 12.5",
+          chapterNumber: 12.5,
+          volumeLabel: "Vol. 02",
+          volumeNumber: 2,
+          language: "en",
+          status: "queued",
+          lastUpdated: 100,
+          outputs: { requested: 0, committed: 0, failed: 0 },
+        },
+      ],
+      settingsSnapshot: {
+        archiveFormat: "cbz",
         siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: " Series Title ",
-        chapters: [
-          {
-            id: "chapter-1",
-            title: " Chapter 12 ",
-            url: "https://mangadex.org/chapter/1",
-            index: 1,
-            chapterLabel: "Ch. 12.5",
-            chapterNumber: 12.5,
-            volumeLabel: "Vol. 02",
-            volumeNumber: 2,
-            language: "en",
-          },
-        ],
-        metadata: {
+        comicInfo: {
           author: "Author Name",
           coverUrl: "https://example.com/cover.jpg",
           publisher: "Test Publisher",
           readingDirection: "rtl",
         },
       },
-      99
-    )
-
-    expect(result.success).toBe(true)
-    expect(typeof result.taskId).toBe("string")
-    expect(result.taskId?.length ?? 0).toBeGreaterThan(0)
-
-    const firstCall = addDownloadTask.mock.calls[0]
-    expect(firstCall).toBeDefined()
-
-    const task = firstCall?.[0] as unknown as {
-      siteIntegrationId: string
-      mangaId: string
-      seriesTitle: string
-      seriesCoverUrl?: string
-      chapters: Array<{
-        chapterLabel?: string
-        chapterNumber?: number
-        volumeNumber?: number
-        volumeLabel?: string
-        status: string
-      }>
-      settingsSnapshot: {
-        archiveFormat: string
-        siteIntegrationId: string
-        comicInfo?: {
-          publisher?: string
-          readingDirection?: string
-          coverUrl?: string
-        }
-      }
-    }
-
-    expect(task.siteIntegrationId).toBe("mangadex")
-    expect(task.mangaId).toBe("series-1")
-    expect(task.seriesTitle).toBe("Series Title")
-    expect(task.seriesCoverUrl).toBe("https://example.com/cover.jpg")
-    expect(task.settingsSnapshot.comicInfo?.publisher).toBe("Test Publisher")
-    expect(task.settingsSnapshot.comicInfo?.readingDirection).toBe("rtl")
-    expect(task.chapters[0]).toEqual(
-      expect.objectContaining({
-        status: "queued",
-        chapterLabel: "Ch. 12.5",
-        chapterNumber: 12.5,
-        volumeNumber: 2,
-        volumeLabel: "Vol. 02",
-        language: "en",
-      })
-    )
-    expect(task.settingsSnapshot).toEqual(
-      expect.objectContaining({
-        archiveFormat: "cbz",
-        siteIntegrationId: "mangadex",
-      })
-    )
+    })
   })
 
-  it("does not parse chapter or volume numbers in SW when integrations omit them", async () => {
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = {
-      getGlobalState: vi.fn(async () => ({
-        downloadQueue: [],
-        settings: DEFAULT_SETTINGS,
-        lastActivity: Date.now(),
-      })),
-      addDownloadTask,
-    } as unknown as CentralizedStateManager
-
-    await enqueueStartDownloadTask(
-      stateManager,
-      {
-        siteIntegrationId: "pixiv-comic",
-        mangaId: "series-2",
-        seriesTitle: "Series Title",
-        chapters: [
-          {
-            id: "chapter-2",
-            title: "Volume 01 Episode 07",
-            url: "https://comic.pixiv.net/viewer/stories/2",
-            index: 2,
-            chapterLabel: "Ch. 7",
-            volumeLabel: "Vol. 01",
-            language: "ja",
-          },
-        ],
-      },
-      100
+  it("does not infer chapter or volume numbers when canonical data omits them", async () => {
+    const settingsInputs = await loadStartDownloadSettingsInputs(
+      "mangadex",
+      settingsDependencies
     )
-
-    const task = addDownloadTask.mock.calls[0]?.[0] as {
-      chapters: Array<{
-        chapterLabel?: string
-        chapterNumber?: number
-        volumeNumber?: number
-        volumeLabel?: string
-      }>
+    const selectedChapter = {
+      ...context.chapters[0],
+      title: "Volume 01 Episode 07",
+      chapterNumber: undefined,
+      volumeNumber: undefined,
     }
+
+    const task = buildStartDownloadTask({
+      context: { ...context, chapters: [selectedChapter] },
+      selectedChapters: [selectedChapter],
+      settingsInputs,
+      taskId: "task-2",
+      now: 200,
+    })
 
     expect(task.chapters[0]).toEqual(
       expect.objectContaining({
-        chapterLabel: "Ch. 7",
+        title: "Volume 01 Episode 07",
         chapterNumber: undefined,
-        volumeLabel: "Vol. 01",
         volumeNumber: undefined,
       })
     )
-  })
-
-  it("rejects empty chapter list", async () => {
-    const stateManager = {
-      getGlobalState: vi.fn(async () => ({
-        downloadQueue: [],
-        settings: DEFAULT_SETTINGS,
-        lastActivity: Date.now(),
-      })),
-      addDownloadTask: vi.fn(async () => {}),
-    } as unknown as CentralizedStateManager
-
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series",
-        chapters: [],
-      },
-      1
-    )
-
-    expect(result).toEqual({
-      success: false,
-      reason: "No chapters selected for download",
-    })
-  })
-
-  it("rejects chapters without stable ids", async () => {
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = {
-      getGlobalState: vi.fn(async () => ({
-        downloadQueue: [],
-        settings: DEFAULT_SETTINGS,
-        lastActivity: Date.now(),
-      })),
-      addDownloadTask,
-    } as unknown as CentralizedStateManager
-
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series",
-        chapters: [
-          {
-            id: "",
-            title: "Chapter 1",
-            url: "https://mangadex.org/chapter/1",
-            index: 1,
-          },
-        ],
-      },
-      1
-    )
-
-    expect(result).toEqual({
-      success: false,
-      reason: "Invalid START_DOWNLOAD payload",
-    })
-    expect(addDownloadTask).not.toHaveBeenCalled()
   })
 })

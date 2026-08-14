@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 const getAllSiteOverrides = vi.fn(async () => ({}))
 

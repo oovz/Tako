@@ -1,14 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { enqueueStartDownloadTask } from "@/entrypoints/background/download-queue"
-import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
 import {
-  registerSiteIntegration,
-  siteIntegrationRegistry,
-} from "@/src/runtime/site-integration-registry"
+  buildStartDownloadTask,
+  loadStartDownloadSettingsInputs,
+} from "@/entrypoints/background/download-queue-enqueue"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { MangaPageState } from "@/src/types/tab-state"
+
+const settingsMocks = vi.hoisted(() => ({
+  getSettings: vi.fn(),
+}))
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -19,18 +23,13 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/storage/site-overrides-service", () => ({
-  siteOverridesService: {
-    getAll: vi.fn(async () => ({})),
-  },
-}))
-
-vi.mock("@/src/storage/site-integration-settings-service", () => ({
+const settingsDependencies = {
+  settingsRepository: { getSettings: settingsMocks.getSettings },
+  siteOverridesService: { getAll: vi.fn(async () => ({})) },
   siteIntegrationSettingsService: {
-    getAll: vi.fn(async () => ({})),
     getForSite: vi.fn(async () => ({})),
   },
-}))
+}
 
 type ExtensionSettingsOverrides = Partial<
   Omit<ExtensionSettings, "downloads" | "globalPolicy">
@@ -65,21 +64,21 @@ function makeSettings(
   }
 }
 
-function createStateManager(
+function createQueueRepository(
   settingsRef: { current: ExtensionSettings },
-  addDownloadTask = vi.fn(async (_task: unknown) => {})
-): CentralizedStateManager {
+  enqueueDownloadTask = vi.fn(async (task: unknown) => ({
+    outcome: "applied",
+    task,
+  }))
+): QueueRepository {
+  settingsMocks.getSettings.mockImplementation(async () => settingsRef.current)
   return {
-    getGlobalState: vi.fn(async () => ({
-      downloadQueue: [],
-      settings: settingsRef.current,
-      lastActivity: Date.now(),
-    })),
-    addDownloadTask,
-  } as unknown as CentralizedStateManager
+    enqueueDownloadTask,
+  } as unknown as QueueRepository
 }
 
-const START_PAYLOAD = {
+const START_CONTEXT: MangaPageState = {
+  sourceUrl: "https://mangadex.org/title/mangadex-series-1",
   siteIntegrationId: "mangadex",
   mangaId: "mangadex:series-1",
   seriesTitle: "Hunter x Hunter",
@@ -92,14 +91,37 @@ const START_PAYLOAD = {
       chapterLabel: "1",
       volumeLabel: "Vol. 1",
       language: "en",
+      status: "queued" as const,
+      lastUpdated: 1,
     },
   ],
+  volumes: [],
+  lastUpdated: 1,
+}
+
+async function buildAndEnqueue(
+  queueRepository: QueueRepository,
+  context: MangaPageState,
+  taskSequence: number
+) {
+  const settingsInputs = await loadStartDownloadSettingsInputs(
+    context.siteIntegrationId,
+    settingsDependencies
+  )
+  const task = buildStartDownloadTask({
+    context,
+    selectedChapters: context.chapters,
+    settingsInputs,
+    taskId: `task-${taskSequence}`,
+    now: taskSequence,
+  })
+  return await queueRepository.enqueueDownloadTask(task)
 }
 
 describe("settings snapshot isolation (behavior-based)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    siteIntegrationRegistry.clear()
+    settingsMocks.getSettings.mockReset()
   })
 
   it("captures enqueue-time task settings snapshot for created task", async () => {
@@ -118,19 +140,21 @@ describe("settings snapshot isolation (behavior-based)", () => {
         },
       }),
     }
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = createStateManager(settingsRef, addDownloadTask)
-
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      START_PAYLOAD,
-      42
+    const enqueueDownloadTask = vi.fn(async (task: unknown) => ({
+      outcome: "applied",
+      task,
+    }))
+    const queueRepository = createQueueRepository(
+      settingsRef,
+      enqueueDownloadTask
     )
 
-    expect(result.success).toBe(true)
-    expect(addDownloadTask).toHaveBeenCalledTimes(1)
+    const result = await buildAndEnqueue(queueRepository, START_CONTEXT, 42)
+
+    expect(result.outcome).toBe("applied")
+    expect(enqueueDownloadTask).toHaveBeenCalledTimes(1)
     const addCalls = (
-      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+      enqueueDownloadTask as unknown as { mock: { calls: unknown[][] } }
     ).mock.calls
     const createdTaskRaw = addCalls[0]?.[0]
     expect(createdTaskRaw).toBeDefined()
@@ -159,12 +183,12 @@ describe("settings snapshot isolation (behavior-based)", () => {
       "<CHAPTER_NUMBER>-<CHAPTER_TITLE>"
     )
     expect(createdTask.settingsSnapshot.rateLimitSettings.image).toEqual({
-      concurrency: 4,
-      delayMs: 150,
+      concurrency: 2,
+      delayMs: 500,
     })
     expect(createdTask.settingsSnapshot.rateLimitSettings.chapter).toEqual({
       concurrency: 1,
-      delayMs: 750,
+      delayMs: 500,
     })
   })
 
@@ -182,10 +206,16 @@ describe("settings snapshot isolation (behavior-based)", () => {
         },
       }),
     }
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = createStateManager(settingsRef, addDownloadTask)
+    const enqueueDownloadTask = vi.fn(async (task: unknown) => ({
+      outcome: "applied",
+      task,
+    }))
+    const queueRepository = createQueueRepository(
+      settingsRef,
+      enqueueDownloadTask
+    )
 
-    await enqueueStartDownloadTask(stateManager, START_PAYLOAD, 1)
+    await buildAndEnqueue(queueRepository, START_CONTEXT, 1)
 
     settingsRef.current.downloads.defaultFormat = "zip"
     settingsRef.current.downloads.destination = "file-system-access"
@@ -193,11 +223,11 @@ describe("settings snapshot isolation (behavior-based)", () => {
     settingsRef.current.globalPolicy.image.concurrency = 9
     settingsRef.current.globalPolicy.chapter.delayMs = 250
 
-    await enqueueStartDownloadTask(stateManager, START_PAYLOAD, 2)
-    expect(addDownloadTask).toHaveBeenCalledTimes(2)
+    await buildAndEnqueue(queueRepository, START_CONTEXT, 2)
+    expect(enqueueDownloadTask).toHaveBeenCalledTimes(2)
 
     const addCalls = (
-      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+      enqueueDownloadTask as unknown as { mock: { calls: unknown[][] } }
     ).mock.calls
     const firstTaskRaw = addCalls[0]?.[0]
     const secondTaskRaw = addCalls[1]?.[0]
@@ -236,8 +266,8 @@ describe("settings snapshot isolation (behavior-based)", () => {
     expect(firstTaskSnapshot.destination).toBe("downloads-api")
     expect(firstTaskSnapshot.conflictPolicy).toBe("uniquify")
     expect(firstTaskSnapshot.rateLimitSettings.image).toEqual({
-      concurrency: 4,
-      delayMs: 100,
+      concurrency: 2,
+      delayMs: 500,
     })
     expect(firstTaskSnapshot.rateLimitSettings.chapter).toEqual({
       concurrency: 1,
@@ -248,49 +278,45 @@ describe("settings snapshot isolation (behavior-based)", () => {
     expect(secondTaskSnapshot.destination).toBe("file-system-access")
     expect(secondTaskSnapshot.conflictPolicy).toBe("overwrite")
     expect(secondTaskSnapshot.rateLimitSettings.image).toEqual({
-      concurrency: 9,
-      delayMs: 100,
+      concurrency: 2,
+      delayMs: 500,
     })
     expect(secondTaskSnapshot.rateLimitSettings.chapter).toEqual({
       concurrency: 1,
-      delayMs: 250,
+      delayMs: 500,
     })
   })
 
   it("uses registered site policy defaults when enqueueing a task", async () => {
-    registerSiteIntegration({
-      id: "custom-site",
-      name: "Custom Site",
-      author: "test",
-      policyDefaults: {
-        image: { concurrency: 5, delayMs: 350 },
-        chapter: { concurrency: 4, delayMs: 450 },
-      },
-    })
-
     const settingsRef = {
       current: makeSettings({
         globalPolicy: {
           image: { concurrency: 2, delayMs: 100 },
-          chapter: { concurrency: 3, delayMs: 200 },
+          chapter: { concurrency: 1, delayMs: 200 },
         },
       }),
     }
-    const addDownloadTask = vi.fn(async (_task: unknown) => {})
-    const stateManager = createStateManager(settingsRef, addDownloadTask)
+    const enqueueDownloadTask = vi.fn(async (task: unknown) => ({
+      outcome: "applied",
+      task,
+    }))
+    const queueRepository = createQueueRepository(
+      settingsRef,
+      enqueueDownloadTask
+    )
 
-    const result = await enqueueStartDownloadTask(
-      stateManager,
+    const result = await buildAndEnqueue(
+      queueRepository,
       {
-        ...START_PAYLOAD,
-        siteIntegrationId: "custom-site",
+        ...START_CONTEXT,
+        siteIntegrationId: "mangadex",
       },
       42
     )
 
-    expect(result.success).toBe(true)
+    expect(result.outcome).toBe("applied")
     const addCalls = (
-      addDownloadTask as unknown as { mock: { calls: unknown[][] } }
+      enqueueDownloadTask as unknown as { mock: { calls: unknown[][] } }
     ).mock.calls
     const createdTaskRaw = addCalls[0]?.[0]
     expect(createdTaskRaw).toBeDefined()
@@ -307,12 +333,12 @@ describe("settings snapshot isolation (behavior-based)", () => {
     ).settingsSnapshot
 
     expect(snapshot.rateLimitSettings.image).toEqual({
-      concurrency: 5,
-      delayMs: 350,
+      concurrency: 2,
+      delayMs: 500,
     })
     expect(snapshot.rateLimitSettings.chapter).toEqual({
       concurrency: 1,
-      delayMs: 450,
+      delayMs: 500,
     })
   })
 
@@ -343,7 +369,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: 4, delayMs: 100 },
-        chapter: { concurrency: 7, delayMs: 500 },
+        chapter: { concurrency: 1, delayMs: 500 },
       },
     })
 
@@ -365,7 +391,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: 2, delayMs: 100 },
-        chapter: { concurrency: 3, delayMs: 200 },
+        chapter: { concurrency: 1, delayMs: 200 },
       },
     })
 
@@ -390,7 +416,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     })
   })
 
-  it("canonicalizes the effective settings document and merged policy overrides once", () => {
+  it("rejects an invalid current settings document", () => {
     const settings = makeSettings({
       globalPolicy: {
         image: { concurrency: -4, delayMs: -50 },
@@ -399,25 +425,8 @@ describe("settings snapshot isolation (behavior-based)", () => {
       globalRetries: { image: 99, chapter: -2 },
     })
 
-    const snapshot = createTaskSettingsSnapshot(settings, "custom-site", {
-      sitePolicyDefaults: {
-        image: { concurrency: 50, delayMs: -100 },
-      },
-      siteOverride: {
-        imagePolicy: { concurrency: 25, delayMs: -200 },
-        retries: { image: 50, chapter: -3 },
-      },
-    })
-
-    expect(snapshot.rateLimitSettings.image).toEqual({
-      concurrency: 10,
-      delayMs: 0,
-    })
-    expect(snapshot.rateLimitSettings.chapter).toEqual({
-      concurrency: 1,
-      delayMs: 0,
-    })
-    expect(snapshot.retrySettings).toEqual({ image: 10, chapter: 0 })
-    expect(snapshot.conflictPolicy).toBe("uniquify")
+    expect(() => createTaskSettingsSnapshot(settings, "custom-site")).toThrow(
+      "Stored settings document is invalid"
+    )
   })
 })

@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  DestinationIssueRepository,
   DestinationService,
-  clearDestinationIssuesForTask,
-  getDestinationIssues,
-  recordDestinationIssue,
-  recordDestinationRuntimeIssue,
 } from "@/entrypoints/background/destination"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
@@ -22,10 +19,6 @@ vi.mock("@/src/storage/fs-access", () => ({
   detectFsaCapabilities: mocks.detectFsaCapabilities,
   loadDownloadRootHandle: mocks.loadDownloadRootHandle,
   queryFsaPermission: mocks.queryFsaPermission,
-}))
-
-vi.mock("@/src/storage/settings-service", () => ({
-  settingsService: { getSettings: mocks.getSettings },
 }))
 
 vi.mock("@/entrypoints/background/notification-service", () => ({
@@ -45,6 +38,7 @@ vi.mock("@/src/runtime/logger", () => ({
 
 describe("destination service", () => {
   let storage: Record<string, unknown>
+  let service: DestinationService
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -60,6 +54,13 @@ describe("destination service", () => {
       },
     })
     mocks.getSettings.mockResolvedValue({ notifications: true })
+    service = new DestinationService({
+      issueRepository: new DestinationIssueRepository(),
+      settingsReader: { getSettings: mocks.getSettings },
+      notifier: {
+        notifyDestinationActionRequired: mocks.notifyDestinationActionRequired,
+      },
+    })
     mocks.detectFsaCapabilities.mockReturnValue({
       directoryPicker: true,
       handlePermissionQuery: true,
@@ -78,17 +79,17 @@ describe("destination service", () => {
       destination: "file-system-access" as const,
     }
 
-    const first = await recordDestinationIssue(context, {
+    const first = await service.recordDestinationIssue(context, {
       ready: false,
       reason: "permission_prompt",
     })
-    const second = await recordDestinationIssue(context, {
+    const second = await service.recordDestinationIssue(context, {
       ready: false,
       reason: "permission_denied",
     })
 
     expect(second).toEqual(first)
-    expect(await getDestinationIssues()).toEqual([first])
+    expect(await service.getIssues()).toEqual([first])
     expect(chrome.storage.local.set).toHaveBeenCalledTimes(1)
     expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledTimes(1)
   })
@@ -100,17 +101,17 @@ describe("destination service", () => {
       destination: "file-system-access" as const,
     }
 
-    await recordDestinationRuntimeIssue(context, "fsa_write_failed")
-    await recordDestinationRuntimeIssue(context, "disk_full")
+    await service.recordDestinationRuntimeIssue(context, "fsa_write_failed")
+    await service.recordDestinationRuntimeIssue(context, "disk_full")
 
-    expect((await getDestinationIssues()).map((issue) => issue.kind)).toEqual([
+    expect((await service.getIssues()).map((issue) => issue.kind)).toEqual([
       "fsa_write_failed",
       "disk_full",
     ])
     expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledTimes(2)
   })
 
-  it("filters malformed persisted entries and clears every issue for a task", async () => {
+  it("rejects malformed persisted entries instead of filtering them", async () => {
     storage[LOCAL_STORAGE_KEYS.destinationIssues] = [
       { invalid: true },
       {
@@ -127,15 +128,36 @@ describe("destination service", () => {
       },
     ]
 
-    await clearDestinationIssuesForTask("task-1")
+    await expect(
+      service.clearDestinationIssuesForTask("task-1")
+    ).rejects.toThrow()
+  })
 
-    expect(await getDestinationIssues()).toEqual([
+  it("clears every valid issue for a task", async () => {
+    storage[LOCAL_STORAGE_KEYS.destinationIssues] = [
+      {
+        id: "task-1::fsa_folder_missing",
+        taskId: "task-1",
+        kind: "fsa_folder_missing",
+        occurredAt: 1,
+      },
+      {
+        id: "task-2::disk_full",
+        taskId: "task-2",
+        kind: "disk_full",
+        occurredAt: 2,
+      },
+    ]
+
+    await service.clearDestinationIssuesForTask("task-1")
+
+    expect(await service.getIssues()).toEqual([
       expect.objectContaining({ taskId: "task-2", kind: "disk_full" }),
     ])
   })
 
   it("bypasses File System Access checks for an explicit Downloads override", async () => {
-    const result = await new DestinationService().preflight({
+    const result = await service.preflight({
       taskId: "task-1",
       destination: "file-system-access",
       destinationOverride: "downloads-api",
@@ -150,7 +172,7 @@ describe("destination service", () => {
     mocks.queryFsaPermission.mockResolvedValue("unsupported")
 
     await expect(
-      new DestinationService().preflight({
+      service.preflight({
         taskId: "task-1",
         destination: "file-system-access",
       })
@@ -162,7 +184,7 @@ describe("destination service", () => {
     mocks.loadDownloadRootHandle.mockResolvedValue(undefined)
 
     await expect(
-      new DestinationService().preflight({
+      service.preflight({
         taskId: "task-1",
         destination: "file-system-access",
       })
@@ -179,7 +201,7 @@ describe("destination service", () => {
       mocks.queryFsaPermission.mockResolvedValue(permission)
 
       await expect(
-        new DestinationService().preflight({
+        service.preflight({
           taskId: "task-1",
           destination: "file-system-access",
         })

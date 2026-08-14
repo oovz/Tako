@@ -3,31 +3,134 @@
  *
  * Covers:
  *  - Guard 1: MAX_CONCURRENT_QUEUED_TASKS (queue overload protection)
- *    Source: entrypoints/background/download-queue-runner.ts:24 (value: 1)
- *    Enforcement: entrypoints/background/download-queue-runner.ts:388
+ *    Source: src/domain/queue/scheduler-policy.ts
+ *    Enforcement: entrypoints/background/queue-scheduler.ts
  *  - Guard 4: Chapter delay enforcement
- *    Source: entrypoints/background/download-queue-runner.ts:117
- *    Enforcement: entrypoints/background/download-queue-runner.ts:311
+ *    Source: persisted task settings
+ *    Enforcement: entrypoints/background/download-task-executor.ts
  */
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { destinationService } from "@/entrypoints/background/destination"
+import { createDispatchLease } from "@/src/runtime/dispatch-lease"
+import { QueueRepository } from "@/src/storage/queue-repository"
+import type {
+  RuntimeMessageRequest,
+  RuntimeMessageResponse,
+} from "@/src/runtime/runtime-message-contracts"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
+  continueDownloadTaskAfterChapterSettlement,
   createChapter,
+  failDisabledProviderTasks,
+  handleOffscreenJobTerminal,
   makeTask,
   mockEnsureOffscreenReady,
   mockGlobalState,
+  mockNativeOutputCoordinator,
+  mockRunOffscreenDocumentAdmissionExclusive,
   mockRuntimeSendMessage,
-  mockStateManager,
+  mockQueueRepository,
+  mockDestinationService,
+  mockSiteIntegrationEnablementService,
   processDownloadQueue,
   resetDownloadQueueTestEnvironment,
   startDownloadTask,
   testSettings,
 } from "./download-queue-test-setup"
 
-const enablementMocks = vi.hoisted(() => ({
-  getAll: vi.fn(async () => ({}) as Record<string, boolean>),
-}))
+type StartDownloadTaskResult = Awaited<
+  ReturnType<QueueRepository["startDownloadTask"]>
+>
+type DispatchMessage = RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">
+type TerminalOutcome =
+  RuntimeMessageRequest<"OFFSCREEN_JOB_TERMINAL">["payload"]["outcome"]
+
+const DOCUMENT_INSTANCE_ID = "queue-guards-document-1"
+
+function dispatchAcknowledgement(
+  message: DispatchMessage
+): RuntimeMessageResponse<"OFFSCREEN_DOWNLOAD_CHAPTER"> {
+  return {
+    success: true,
+    accepted: true,
+    jobId: message.payload.jobId,
+    attempt: message.payload.attempt,
+    taskId: message.payload.taskId,
+    chapterId: message.payload.chapter.id,
+    fingerprint: message.payload.fingerprint,
+    documentInstanceId: DOCUMENT_INSTANCE_ID,
+  }
+}
+
+function installDispatchAcknowledgementResponder(): void {
+  mockRuntimeSendMessage.mockImplementation(async (message) => {
+    if (message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER") {
+      return dispatchAcknowledgement(message as DispatchMessage)
+    }
+    return { success: true }
+  })
+}
+
+function dispatchedChapters(taskId: string): DispatchMessage[] {
+  return mockRuntimeSendMessage.mock.calls
+    .map(([message]) => message as DispatchMessage)
+    .filter(
+      (message): message is DispatchMessage =>
+        message.type === "OFFSCREEN_DOWNLOAD_CHAPTER" &&
+        message.payload.taskId === taskId
+    )
+}
+
+async function settleAcceptedDispatch(
+  message: DispatchMessage,
+  outcome: TerminalOutcome = {
+    status: "completed",
+    outputsRequested: 1,
+    outputsFailedBeforeHandoff: 0,
+    outputsCommitted: 1,
+  }
+): Promise<void> {
+  await handleOffscreenJobTerminal({
+    stateManager: mockQueueRepository,
+    nativeOutputCoordinator: mockNativeOutputCoordinator,
+    ensureOffscreenReady: mockEnsureOffscreenReady,
+    payload: {
+      jobId: message.payload.jobId,
+      attempt: message.payload.attempt,
+      taskId: message.payload.taskId,
+      chapterId: message.payload.chapter.id,
+      fingerprint: message.payload.fingerprint,
+      documentInstanceId: DOCUMENT_INSTANCE_ID,
+      sequence: 1,
+      stage: "saving",
+      terminalAt: Date.now(),
+      outcome,
+    },
+  })
+
+  const task = await mockQueueRepository.getTask(message.payload.taskId)
+  if (
+    message.payload.saveMode === "downloads-api" &&
+    task?.status === "downloading"
+  ) {
+    await continueDownloadTaskAfterChapterSettlement({
+      stateManager: mockQueueRepository,
+      taskId: message.payload.taskId,
+      ensureOffscreenReady: mockEnsureOffscreenReady,
+    })
+  }
+}
+
+async function settleAllAcceptedDispatches(taskId: string): Promise<void> {
+  const expectedCount =
+    (await mockQueueRepository.getTask(taskId))?.chapters.length ?? 0
+  for (let index = 0; index < expectedCount; index += 1) {
+    const message = dispatchedChapters(taskId)[index]
+    if (!message) {
+      throw new Error(`Missing acknowledged chapter dispatch ${index + 1}`)
+    }
+    await settleAcceptedDispatch(message)
+  }
+}
 
 // In Vitest 4, vi.mock must be in the test file itself to intercept imports
 // pulled in via the setup module's re-exports.
@@ -60,54 +163,21 @@ vi.mock("@/src/runtime/logger", () => ({
     warn: vi.fn(),
   },
 }))
-vi.mock("@/src/runtime/rate-limit", () => ({
-  resolveEffectivePolicy: vi.fn(),
-  scheduleForIntegrationScope: vi.fn(),
-}))
-vi.mock("@/src/runtime/site-integration-registry", () => ({
-  findSiteIntegrationForUrl: vi.fn(() => ({
-    id: "test-integration",
-    name: "Test Integration",
-    author: "tester",
-  })),
-  siteIntegrationRegistry: {
-    findById: vi.fn(() => null),
-  },
-}))
 vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
   getBackgroundSiteAdapterById: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock("@/entrypoints/background/destination", () => ({
-  destinationService: {
-    getEffectiveDestination: vi.fn(async () => ({ kind: "downloads" })),
-    preflight: vi.fn(async () => ({ ready: true })),
-  },
-  createDestinationIssue: vi.fn((context, kind) => ({
-    id: `${context.taskId}:${context.chapterId ?? ""}:${kind}`,
-    ...context,
-    kind,
-    occurredAt: 1,
-  })),
-  issueKindForPreflight: vi.fn((result) =>
-    result.reason === "permission_prompt"
-      ? "fsa_permission_required"
-      : "fsa_folder_missing"
-  ),
-  notifyDestinationIssue: vi.fn(),
-  clearDestinationIssuesForTask: vi.fn(),
-  recordDestinationIssue: vi.fn(),
-  recordDestinationRuntimeIssue: vi.fn(),
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDefinition: () => ({
+    runtimes: { dispatchContext: { mode: "none" } },
+  }),
+  isEnabled: (id: string, enablement: Record<string, boolean> = {}): boolean =>
+    enablement[id] ?? id !== "mangadex",
 }))
-vi.mock("@/src/storage/site-integration-enablement-service", () => ({
-  siteIntegrationEnablementService: {
-    getAll: enablementMocks.getAll,
-  },
-}))
-
 describe("Download Queue Guards", () => {
   beforeEach(async () => {
     await resetDownloadQueueTestEnvironment()
-    enablementMocks.getAll.mockResolvedValue({})
+    mockSiteIntegrationEnablementService.getAll.mockResolvedValue({})
+    installDispatchAcknowledgementResponder()
   })
 
   describe("MAX_CONCURRENT_QUEUED_TASKS (queue overload protection)", () => {
@@ -117,20 +187,58 @@ describe("Download Queue Guards", () => {
         status: "queued",
       })
       mockGlobalState.downloadQueue = [queuedTask]
-      vi.mocked(mockStateManager.transitionDownloadTask).mockResolvedValueOnce({
-        success: false,
-        reason: "invalid-status",
+      vi.mocked(mockQueueRepository.startDownloadTask).mockResolvedValueOnce({
+        outcome: "rejected",
+        reason: "task-not-runnable",
         currentStatus: "canceled",
       })
 
       await startDownloadTask(
-        mockStateManager,
+        mockQueueRepository,
         queuedTask.id,
         mockEnsureOffscreenReady
       )
 
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
       expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+    })
+
+    it("awaits the durable start commit before admission or offscreen effects", async () => {
+      const queuedTask = makeTask({ id: "durable-start" })
+      mockGlobalState.downloadQueue = [queuedTask]
+      let resolveStart!: (result: StartDownloadTaskResult) => void
+      const startCommit = new Promise<StartDownloadTaskResult>((resolve) => {
+        resolveStart = resolve
+      })
+      vi.mocked(mockQueueRepository.startDownloadTask).mockReturnValueOnce(
+        startCommit
+      )
+
+      const run = startDownloadTask(
+        mockQueueRepository,
+        queuedTask.id,
+        mockEnsureOffscreenReady
+      )
+      await vi.waitFor(() =>
+        expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledOnce()
+      )
+
+      expect(mockSiteIntegrationEnablementService.getAll).not.toHaveBeenCalled()
+      expect(mockDestinationService.preflight).not.toHaveBeenCalled()
+      expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+      expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
+
+      const startedTask = {
+        ...queuedTask,
+        status: "downloading" as const,
+        started: Date.now(),
+      }
+      mockGlobalState.downloadQueue = [startedTask]
+      resolveStart({ outcome: "applied", task: startedTask })
+      await run
+
+      expect(mockSiteIntegrationEnablementService.getAll).toHaveBeenCalled()
+      expect(mockEnsureOffscreenReady).toHaveBeenCalled()
     })
 
     it("fails a disabled queued task before offscreen execution", async () => {
@@ -140,10 +248,12 @@ describe("Download Queue Guards", () => {
         status: "queued",
       })
       mockGlobalState.downloadQueue = [queuedTask]
-      enablementMocks.getAll.mockResolvedValue({ mangadex: false })
+      mockSiteIntegrationEnablementService.getAll.mockResolvedValue({
+        mangadex: false,
+      })
 
       await startDownloadTask(
-        mockStateManager,
+        mockQueueRepository,
         queuedTask.id,
         mockEnsureOffscreenReady
       )
@@ -159,6 +269,31 @@ describe("Download Queue Guards", () => {
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
     })
 
+    it("applies the manifest default when an enablement override is absent", async () => {
+      const queuedTask = makeTask({
+        id: "default-disabled-before-start",
+        siteIntegrationId: "mangadex",
+        status: "queued",
+      })
+      mockGlobalState.downloadQueue = [queuedTask]
+      mockSiteIntegrationEnablementService.getAll.mockResolvedValue({})
+
+      await startDownloadTask(
+        mockQueueRepository,
+        queuedTask.id,
+        mockEnsureOffscreenReady
+      )
+
+      expect(mockGlobalState.downloadQueue[0]).toEqual(
+        expect.objectContaining({
+          status: "failed",
+          errorMessage: "Integration disabled",
+        })
+      )
+      expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
+      expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
+    })
+
     it("fails a disabled task resumed from a prior downloading state and releases the queue slot", async () => {
       const resumedTask = makeTask({
         id: "disabled-while-restarting",
@@ -167,20 +302,20 @@ describe("Download Queue Guards", () => {
         started: Date.now() - 5_000,
       })
       mockGlobalState.downloadQueue = [resumedTask]
-      enablementMocks.getAll.mockResolvedValue({ mangadex: false })
+      mockSiteIntegrationEnablementService.getAll.mockResolvedValue({
+        mangadex: false,
+      })
 
       await startDownloadTask(
-        mockStateManager,
+        mockQueueRepository,
         resumedTask.id,
         mockEnsureOffscreenReady,
         true
       )
 
-      expect(mockStateManager.transitionDownloadTask).toHaveBeenCalledWith(
-        resumedTask.id,
-        ["queued", "downloading"],
+      expect(mockQueueRepository.interruptDownloadTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: "failed",
+          taskId: resumedTask.id,
           errorMessage: "Integration disabled",
         })
       )
@@ -189,6 +324,184 @@ describe("Download Queue Guards", () => {
       )
       expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
+    })
+
+    it("orders an internal interruption before exact producer and native cleanup", async () => {
+      const task = makeTask({
+        id: "internal-interruption-with-lease",
+        status: "downloading",
+        started: Date.now() - 5_000,
+      })
+      mockGlobalState.downloadQueue = [task]
+      const lease = createDispatchLease({
+        jobId: "internal-job",
+        attempt: 1,
+        taskId: task.id,
+        chapterId: task.chapters[0]!.id,
+        fingerprint: "c".repeat(64),
+        saveMode: "downloads-api",
+        now: Date.now(),
+      })
+      await mockQueueRepository.beginChapterDispatch({
+        taskId: task.id,
+        chapterId: task.chapters[0]!.id,
+        expectedPreviousLease: null,
+        lease,
+        now: Date.now(),
+      })
+      await mockQueueRepository.bindDispatchLeaseIncarnation({
+        jobId: lease.jobId,
+        attempt: lease.attempt,
+        taskId: lease.taskId,
+        chapterId: lease.chapterId,
+        fingerprint: lease.fingerprint,
+        documentInstanceId: DOCUMENT_INSTANCE_ID,
+      })
+      mockSiteIntegrationEnablementService.getAll.mockRejectedValueOnce(
+        new Error("enablement storage unavailable")
+      )
+      mockRuntimeSendMessage.mockImplementation(async (message) => {
+        if (message?.type === "OFFSCREEN_CANCEL_JOB") {
+          return {
+            success: true,
+            canceled: true,
+            ...message.payload,
+            status: "canceled",
+            lastSequence: 1,
+          }
+        }
+        return { success: true }
+      })
+
+      await startDownloadTask(
+        mockQueueRepository,
+        task.id,
+        mockEnsureOffscreenReady,
+        true
+      )
+
+      expect(mockQueueRepository.interruptDownloadTask).toHaveBeenCalledWith({
+        taskId: task.id,
+        errorMessage: "enablement storage unavailable",
+        now: expect.any(Number),
+      })
+      const cancellationCall = mockRuntimeSendMessage.mock.calls.find(
+        ([message]) => message?.type === "OFFSCREEN_CANCEL_JOB"
+      )
+      expect(cancellationCall?.[0]).toEqual({
+        target: "offscreen",
+        type: "OFFSCREEN_CANCEL_JOB",
+        payload: {
+          jobId: lease.jobId,
+          attempt: lease.attempt,
+          taskId: lease.taskId,
+          chapterId: lease.chapterId,
+          fingerprint: lease.fingerprint,
+          documentInstanceId: DOCUMENT_INSTANCE_ID,
+        },
+      })
+      expect(mockQueueRepository.clearDispatchLease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...lease,
+          documentInstanceId: DOCUMENT_INSTANCE_ID,
+        })
+      )
+      expect(mockNativeOutputCoordinator.cancelTask).toHaveBeenCalledWith(
+        task.id,
+        {
+          jobId: lease.jobId,
+          attempt: lease.attempt,
+          taskId: lease.taskId,
+          chapterId: lease.chapterId,
+          fingerprint: lease.fingerprint,
+          documentInstanceId: DOCUMENT_INSTANCE_ID,
+        }
+      )
+      expect(
+        vi
+          .mocked(mockQueueRepository.interruptDownloadTask)
+          .mock.invocationCallOrder.at(-1)
+      ).toBeLessThan(
+        mockRuntimeSendMessage.mock.invocationCallOrder.find(
+          (_, index) =>
+            mockRuntimeSendMessage.mock.calls[index]?.[0]?.type ===
+            "OFFSCREEN_CANCEL_JOB"
+        )!
+      )
+    })
+
+    it("serializes a terminal interruption read before chapter admission authority", async () => {
+      const { resolveDownloadPlan } =
+        await import("@/entrypoints/background/queue-helpers")
+      const task = makeTask({ id: "interruption-admission-race" })
+      mockGlobalState.downloadQueue = [task]
+
+      let signalPlanRead!: () => void
+      let releasePlan!: () => void
+      const planRead = new Promise<void>((resolve) => {
+        signalPlanRead = resolve
+      })
+      const planRelease = new Promise<void>((resolve) => {
+        releasePlan = resolve
+      })
+      const resolvedPlan = await vi.mocked(resolveDownloadPlan)(task)
+      vi.mocked(resolveDownloadPlan).mockImplementationOnce(async () => {
+        signalPlanRead()
+        await planRelease
+        return resolvedPlan
+      })
+
+      let signalInterruptionRead!: () => void
+      let releaseTerminalCommit!: () => void
+      const interruptionRead = new Promise<void>((resolve) => {
+        signalInterruptionRead = resolve
+      })
+      const terminalCommitRelease = new Promise<void>((resolve) => {
+        releaseTerminalCommit = resolve
+      })
+      vi.mocked(
+        mockQueueRepository.interruptDownloadTask
+      ).mockImplementationOnce(async (input) => {
+        signalInterruptionRead()
+        await terminalCommitRelease
+        return await QueueRepository.prototype.interruptDownloadTask.call(
+          mockQueueRepository,
+          input
+        )
+      })
+
+      const start = startDownloadTask(
+        mockQueueRepository,
+        task.id,
+        mockEnsureOffscreenReady
+      )
+      await planRead
+      const interruption = failDisabledProviderTasks(
+        mockQueueRepository,
+        mockNativeOutputCoordinator,
+        { "test-site": false },
+        mockEnsureOffscreenReady
+      )
+      await interruptionRead
+
+      releasePlan()
+      for (let turn = 0; turn < 20; turn += 1) {
+        await Promise.resolve()
+      }
+      releaseTerminalCommit()
+      await interruption
+      await start
+
+      expect(mockQueueRepository.beginChapterDispatch).not.toHaveBeenCalled()
+      expect(mockRunOffscreenDocumentAdmissionExclusive).not.toHaveBeenCalled()
+      expect(dispatchedChapters(task.id)).toEqual([])
+      expect(mockNativeOutputCoordinator.cancelTask).not.toHaveBeenCalled()
+      expect(mockNativeOutputCoordinator.armLiveness).not.toHaveBeenCalled()
+      expect(await mockQueueRepository.getActiveDispatchLease()).toBeNull()
+      expect(await mockQueueRepository.getTask(task.id)).toMatchObject({
+        status: "failed",
+        errorMessage: "Integration disabled",
+      })
     })
 
     it("fails a disabled FSA task before a destination block can retain its queue slot", async () => {
@@ -203,20 +516,22 @@ describe("Download Queue Guards", () => {
         },
       })
       mockGlobalState.downloadQueue = [resumedTask]
-      enablementMocks.getAll.mockResolvedValue({ mangadex: false })
-      vi.mocked(destinationService.preflight).mockResolvedValue({
+      mockSiteIntegrationEnablementService.getAll.mockResolvedValue({
+        mangadex: false,
+      })
+      vi.mocked(mockDestinationService.preflight).mockResolvedValue({
         ready: false,
         reason: "permission_prompt",
       })
 
       await startDownloadTask(
-        mockStateManager,
+        mockQueueRepository,
         resumedTask.id,
         mockEnsureOffscreenReady,
         true
       )
 
-      expect(destinationService.preflight).not.toHaveBeenCalled()
+      expect(mockDestinationService.preflight).not.toHaveBeenCalled()
       expect(mockGlobalState.downloadQueue[0]).toEqual(
         expect.objectContaining({
           status: "failed",
@@ -245,15 +560,46 @@ describe("Download Queue Guards", () => {
 
       mockGlobalState.downloadQueue = [activeTask, queuedTask]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
       // The already-downloading task must not be re-started, and the queued
       // task must not be started while a download is in flight.
-      expect(mockStateManager.updateDownloadTask).not.toHaveBeenCalledWith(
-        "queued-task",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "queued-task" })
       )
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
+    })
+
+    it("waits while a task is still owned by native output", async () => {
+      mockGlobalState.downloadQueue = [
+        makeTask({
+          id: "native-output-task",
+          status: "downloading",
+          started: Date.now() - 1000,
+        }),
+        makeTask({ id: "queued-task-1", mangaId: "series-2" }),
+        makeTask({ id: "queued-task-2", mangaId: "series-3" }),
+      ]
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
+
+      expect(mockQueueRepository.startDownloadTask).not.toHaveBeenCalled()
+      expect(mockGlobalState.downloadQueue).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "native-output-task",
+            status: "downloading",
+          }),
+          expect.objectContaining({
+            id: "queued-task-1",
+            status: "queued",
+          }),
+          expect.objectContaining({
+            id: "queued-task-2",
+            status: "queued",
+          }),
+        ])
+      )
+      expect(dispatchedChapters("queued-task-1")).toEqual([])
     })
 
     it("starts the second queued task only after the first completes", async () => {
@@ -275,11 +621,10 @@ describe("Download Queue Guards", () => {
 
       mockGlobalState.downloadQueue = [completedTask, queuedTask]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "second-task",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "second-task" })
       )
     })
 
@@ -303,17 +648,13 @@ describe("Download Queue Guards", () => {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
-
-      const downloadingCalls = vi
-        .mocked(mockStateManager.updateDownloadTask)
-        .mock.calls.filter(
-          (call) => (call[1] as { status?: string }).status === "downloading"
-        )
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
       // Only one task may transition to downloading in a single processing pass.
-      expect(downloadingCalls).toHaveLength(1)
-      expect(downloadingCalls[0]?.[0]).toBe("task-0")
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledTimes(1)
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-0" })
+      )
     })
 
     it("does not start any task when the active slot is occupied by a downloading task", async () => {
@@ -323,9 +664,9 @@ describe("Download Queue Guards", () => {
         makeTask({ id: "waiting-2" }),
       ]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).not.toHaveBeenCalled()
+      expect(mockQueueRepository.startDownloadTask).not.toHaveBeenCalled()
     })
 
     it("treats the concurrent limit as a hard ceiling: 0 active starts exactly 1, 1 active starts 0", async () => {
@@ -344,15 +685,12 @@ describe("Download Queue Guards", () => {
         }),
       ]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      const downloadingAfterFirst = vi
-        .mocked(mockStateManager.updateDownloadTask)
-        .mock.calls.filter(
-          (call) => (call[1] as { status?: string }).status === "downloading"
-        )
-      expect(downloadingAfterFirst).toHaveLength(1)
-      expect(downloadingAfterFirst[0]?.[0]).toBe("task-a")
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledTimes(1)
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-a" })
+      )
     })
   })
 
@@ -406,8 +744,9 @@ describe("Download Queue Guards", () => {
           }) => {
             if (message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER") {
               dispatchDeadlines.push(message.payload?.notBefore)
+              return dispatchAcknowledgement(message as DispatchMessage)
             }
-            return { success: true, status: "completed" }
+            return { success: true }
           }
         )
 
@@ -445,12 +784,13 @@ describe("Download Queue Guards", () => {
         mockGlobalState.downloadQueue = [task]
 
         const taskPromise = startDownloadTask(
-          mockStateManager,
+          mockQueueRepository,
           "task-delay",
           mockEnsureOffscreenReady
         )
         await vi.runAllTicks()
         await taskPromise
+        await settleAllAcceptedDispatches(task.id)
 
         expect(dispatchDeadlines).toHaveLength(3)
         expect(dispatchDeadlines[0]).toBeUndefined()
@@ -501,8 +841,9 @@ describe("Download Queue Guards", () => {
           async (message: { type?: string }) => {
             if (message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER") {
               dispatchTimes.push(Date.now())
+              return dispatchAcknowledgement(message as DispatchMessage)
             }
-            return { success: true, status: "completed" }
+            return { success: true }
           }
         )
 
@@ -534,12 +875,13 @@ describe("Download Queue Guards", () => {
         mockGlobalState.downloadQueue = [task]
 
         const taskPromise = startDownloadTask(
-          mockStateManager,
+          mockQueueRepository,
           "task-no-delay",
           mockEnsureOffscreenReady
         )
         await vi.advanceTimersByTimeAsync(100)
         await taskPromise
+        await settleAllAcceptedDispatches(task.id)
 
         expect(dispatchTimes).toHaveLength(2)
         // No delay: both dispatches happen at the same logical instant.
@@ -549,93 +891,7 @@ describe("Download Queue Guards", () => {
       }
     })
 
-    it("clamps negative chapterDelayMs to 0 (no negative delay / immediate dispatch)", async () => {
-      vi.useFakeTimers()
-      try {
-        const { resolveDownloadPlan } =
-          await import("@/entrypoints/background/queue-helpers")
-        vi.mocked(resolveDownloadPlan).mockResolvedValue({
-          format: "cbz",
-          book: {
-            siteId: "test-site",
-            seriesId: "series-1",
-            seriesTitle: "Negative Delay Series",
-            comicInfoBase: { Series: "Negative Delay Series" },
-          },
-          chapters: [
-            {
-              id: "ch1",
-              url: "https://example.com/ch1",
-              title: "Chapter 1",
-              chapterNumber: 1,
-              resolvedPath: "Chapter 1.cbz",
-              comicInfo: {},
-            },
-            {
-              id: "ch2",
-              url: "https://example.com/ch2",
-              title: "Chapter 2",
-              chapterNumber: 2,
-              resolvedPath: "Chapter 2.cbz",
-              comicInfo: {},
-            },
-          ],
-        })
-
-        const dispatchTimes: number[] = []
-        mockRuntimeSendMessage.mockImplementation(
-          async (message: { type?: string }) => {
-            if (message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER") {
-              dispatchTimes.push(Date.now())
-            }
-            return { success: true, status: "completed" }
-          }
-        )
-
-        const task = makeTask({
-          id: "task-negative-delay",
-          chapters: [
-            createChapter({
-              id: "ch1",
-              url: "https://example.com/ch1",
-              title: "Chapter 1",
-              chapterNumber: 1,
-            }),
-            createChapter({
-              id: "ch2",
-              url: "https://example.com/ch2",
-              title: "Chapter 2",
-              chapterNumber: 2,
-            }),
-          ],
-          settingsSnapshot: {
-            ...createTaskSettingsSnapshot(testSettings, "test-site"),
-            rateLimitSettings: {
-              image: { concurrency: 2, delayMs: 0 },
-              chapter: { concurrency: 1, delayMs: -500 },
-            },
-          },
-        })
-
-        mockGlobalState.downloadQueue = [task]
-
-        const taskPromise = startDownloadTask(
-          mockStateManager,
-          "task-negative-delay",
-          mockEnsureOffscreenReady
-        )
-        await vi.advanceTimersByTimeAsync(100)
-        await taskPromise
-
-        expect(dispatchTimes).toHaveLength(2)
-        // Math.max(0, -500) === 0 -> no delay between dispatches.
-        expect(dispatchTimes[1]! - dispatchTimes[0]!).toBe(0)
-      } finally {
-        vi.useRealTimers()
-      }
-    })
-
-    it("forwards a very large chapterDelayMs without blocking the service worker", async () => {
+    it("forwards the maximum supported chapterDelayMs without blocking the service worker", async () => {
       vi.useFakeTimers()
       try {
         const { resolveDownloadPlan } =
@@ -676,8 +932,9 @@ describe("Download Queue Guards", () => {
           }) => {
             if (message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER") {
               dispatchDeadlines.push(message.payload?.notBefore)
+              return dispatchAcknowledgement(message as DispatchMessage)
             }
-            return { success: true, status: "completed" }
+            return { success: true }
           }
         )
 
@@ -701,7 +958,7 @@ describe("Download Queue Guards", () => {
             ...createTaskSettingsSnapshot(testSettings, "test-site"),
             rateLimitSettings: {
               image: { concurrency: 2, delayMs: 0 },
-              chapter: { concurrency: 1, delayMs: 60_000 },
+              chapter: { concurrency: 1, delayMs: 5_000 },
             },
           },
         })
@@ -709,16 +966,17 @@ describe("Download Queue Guards", () => {
         mockGlobalState.downloadQueue = [task]
 
         const taskPromise = startDownloadTask(
-          mockStateManager,
+          mockQueueRepository,
           "task-huge-delay",
           mockEnsureOffscreenReady
         )
         await vi.runAllTicks()
         await taskPromise
+        await settleAllAcceptedDispatches(task.id)
 
         expect(dispatchDeadlines).toHaveLength(2)
         expect(dispatchDeadlines[0]).toBeUndefined()
-        expect(dispatchDeadlines[1]).toBeGreaterThanOrEqual(Date.now() + 60_000)
+        expect(dispatchDeadlines[1]).toBeGreaterThanOrEqual(Date.now() + 5_000)
       } finally {
         vi.useRealTimers()
       }

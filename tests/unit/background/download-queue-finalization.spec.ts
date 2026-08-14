@@ -6,10 +6,10 @@ import {
   reconcileCompletedChapterHistory,
 } from "@/entrypoints/background/download-queue-finalization"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import type { DownloadedChapterRecord } from "@/src/storage/chapter-persistence-service"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 
 const notificationMocks = vi.hoisted(() => ({
   showDownloadCompleteNotification: vi.fn(),
@@ -24,31 +24,20 @@ const persistenceMocks = vi.hoisted(() => ({
   restoreChapterFromCompletedTask: vi.fn(async () => true),
 }))
 
-vi.mock("@/src/storage/chapter-persistence-service", () => ({
-  chapterPersistenceService: persistenceMocks,
-  composeDownloadedChapterKey: (
-    siteIntegrationId: string,
-    seriesId: string,
-    chapterId: string
-  ) => `${siteIntegrationId}\u0000${seriesId}\u0000${chapterId}`,
-}))
-
-vi.mock("@/src/storage/settings-service", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/src/storage/settings-service")>()
-  return {
-    ...actual,
-    settingsService: {
-      getSettings: vi.fn(async () => ({ notifications: true })),
-    },
-  }
-})
-
 vi.mock("@/entrypoints/background/notification-service", () => ({
   getNotificationService: () => notificationMocks,
 }))
 
 describe("download task finalization", () => {
+  const finalizationDependencies = {
+    historyRepository: persistenceMocks,
+    settingsRepository: {
+      getSettings: vi.fn(async () => ({
+        ...DEFAULT_SETTINGS,
+        notifications: true,
+      })),
+    },
+  }
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -113,7 +102,7 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task])
+    await reconcileCompletedChapterHistory([task], finalizationDependencies)
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask
@@ -157,7 +146,7 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task])
+    await reconcileCompletedChapterHistory([task], finalizationDependencies)
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask
@@ -196,7 +185,7 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task])
+    await reconcileCompletedChapterHistory([task], finalizationDependencies)
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask
@@ -211,16 +200,14 @@ describe("download task finalization", () => {
   })
 
   it("does not overwrite a task that was canceled before finalization commits", async () => {
-    const transitionDownloadTask = vi.fn(async () => ({
-      success: false as const,
-      reason: "invalid-status" as const,
+    const finalizeDownloadTask = vi.fn(async () => ({
+      outcome: "rejected" as const,
+      reason: "task-not-active" as const,
       currentStatus: "canceled" as const,
     }))
-    const updateDownloadTask = vi.fn(async () => undefined)
-    const stateManager = {
-      transitionDownloadTask,
-      updateDownloadTask,
-    } as unknown as CentralizedStateManager
+    const queueRepository = {
+      finalizeDownloadTask,
+    } as unknown as QueueRepository
     const task: DownloadTaskState = {
       id: "task-canceled-at-finish",
       siteIntegrationId: "mangadex",
@@ -236,19 +223,19 @@ describe("download task finalization", () => {
     }
 
     const result = await finalizeDownloadTaskAfterDispatch({
-      stateManager,
+      stateManager: queueRepository,
       taskId: task.id,
-      task,
       chapterOutcomesByIndex: [],
       settingsSnapshot: task.settingsSnapshot,
+      finalizationDependencies,
     })
 
-    expect(transitionDownloadTask).toHaveBeenCalledWith(
-      task.id,
-      ["downloading"],
-      expect.objectContaining({ status: "completed" })
-    )
-    expect(updateDownloadTask).not.toHaveBeenCalled()
+    expect(finalizeDownloadTask).toHaveBeenCalledWith({
+      taskId: task.id,
+      chapterOutcomesByIndex: [],
+      completedAt: expect.any(Number),
+      clearLease: undefined,
+    })
     expect(result.finalized).toBe(false)
   })
 
@@ -275,16 +262,17 @@ describe("download task finalization", () => {
         "mangadex"
       ),
     } as DownloadTaskState
-    const stateManager = {
-      getGlobalState: vi.fn(async () => ({ downloadQueue: [task] })),
-    } as unknown as CentralizedStateManager
+    const queueRepository = {
+      getTask: vi.fn(async () => task),
+    } as unknown as QueueRepository
 
     await notifyDownloadTaskCompletion({
-      stateManager,
+      stateManager: queueRepository,
       taskId: task.id,
       finalStatus: "partial_success",
       completedCount: 0,
       totalChapters: 1,
+      settingsRepository: finalizationDependencies.settingsRepository,
     })
 
     expect(notificationMocks.notifyTaskFailed).toHaveBeenCalledWith({
@@ -292,5 +280,50 @@ describe("download task finalization", () => {
       notificationsEnabled: true,
       errorMessage: undefined,
     })
+  })
+
+  it("observes and contains a rejected notification API promise", async () => {
+    const task = {
+      id: "task-notification-rejection",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-1",
+      seriesTitle: "Series 1",
+      chapters: [
+        {
+          id: "chapter-1",
+          title: "Chapter 1",
+          url: "https://example.com/chapter-1",
+          index: 0,
+          status: "completed",
+          lastUpdated: 1,
+        },
+      ],
+      status: "completed",
+      created: 1,
+      settingsSnapshot: createTaskSettingsSnapshot(
+        DEFAULT_SETTINGS,
+        "mangadex"
+      ),
+    } as DownloadTaskState
+    const queueRepository = {
+      getTask: vi.fn(async () => task),
+    } as unknown as QueueRepository
+    notificationMocks.showDownloadCompleteNotification.mockRejectedValueOnce(
+      new Error("notification API rejected")
+    )
+
+    await expect(
+      notifyDownloadTaskCompletion({
+        stateManager: queueRepository,
+        taskId: task.id,
+        finalStatus: "completed",
+        completedCount: 1,
+        totalChapters: 1,
+        settingsRepository: finalizationDependencies.settingsRepository,
+      })
+    ).resolves.toBeUndefined()
+    expect(
+      notificationMocks.showDownloadCompleteNotification
+    ).toHaveBeenCalledOnce()
   })
 })

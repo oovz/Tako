@@ -42,22 +42,15 @@ vi.mock("@/src/runtime/logger", () => ({
     warn: vi.fn(),
   },
 }))
-vi.mock("@/src/runtime/rate-limit", () => ({
-  resolveEffectivePolicy: vi.fn(),
-  scheduleForIntegrationScope: vi.fn(),
-}))
-vi.mock("@/src/runtime/site-integration-registry", () => ({
-  findSiteIntegrationForUrl: vi.fn(() => ({
-    id: "test-integration",
-    name: "Test Integration",
-    author: "tester",
-  })),
-  siteIntegrationRegistry: {
-    findById: vi.fn(() => null),
-  },
-}))
 vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
   getBackgroundSiteAdapterById: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDefinition: () => ({
+    runtimes: { dispatchContext: { mode: "none" } },
+  }),
+  isEnabled: (id: string, enablement: Record<string, boolean> = {}): boolean =>
+    enablement[id] !== false,
 }))
 vi.mock("@/src/site-integrations/session-rule-manager", () => {
   class ProviderNetworkPolicyPendingError extends Error {
@@ -84,35 +77,15 @@ vi.mock("@/src/site-integrations/session-rule-manager", () => {
   }
 
   return {
-    ensureSiteIntegrationNetworkReady: vi.fn(),
     ProviderNetworkPolicyPendingError,
     ProviderNetworkPolicyActionRequiredError,
   }
 })
-vi.mock("@/entrypoints/background/destination", () => ({
-  destinationService: {
-    getEffectiveDestination: vi.fn(async () => ({ kind: "downloads" })),
-    preflight: vi.fn(async () => ({ ready: true })),
-  },
-  createDestinationIssue: vi.fn((context, kind) => ({
-    id: `${context.taskId}:${context.chapterId ?? ""}:${kind}`,
-    ...context,
-    kind,
-    occurredAt: 1,
-  })),
-  issueKindForPreflight: vi.fn((result) =>
-    result.reason === "permission_prompt"
-      ? "fsa_permission_required"
-      : "fsa_folder_missing"
-  ),
-  notifyDestinationIssue: vi.fn(),
-  clearDestinationIssuesForTask: vi.fn(),
-  recordDestinationIssue: vi.fn(),
-  recordDestinationRuntimeIssue: vi.fn(),
-}))
-vi.mock("@/src/storage/chapter-persistence-service", () => ({
-  chapterPersistenceService: {
-    markChapterAsDownloaded: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/src/storage/history-repository", () => ({
+  HistoryRepository: class {
+    markChapterAsDownloaded = vi.fn().mockResolvedValue(undefined)
+    getDownloadedChapters = vi.fn().mockResolvedValue([])
+    restoreChapterFromCompletedTask = vi.fn().mockResolvedValue(true)
   },
 }))
 

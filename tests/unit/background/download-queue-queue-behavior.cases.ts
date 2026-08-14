@@ -1,41 +1,55 @@
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import { describe, expect, it, vi } from "vitest"
-import { configureDownloadQueueLifecycle } from "@/entrypoints/background/download-queue-runner"
+import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import {
+  configureDownloadQueueTestLifecycle,
   createChapter,
   makeTask,
   mockEnsureOffscreenReady,
   mockGlobalState,
   mockRuntimeSendMessage,
-  mockStateManager,
-  moveTaskToTop,
+  mockQueueRepository,
   processDownloadQueue,
 } from "./download-queue-test-setup"
-import { createPendingDownloadsStoreStub } from "./pending-output-test-helpers"
 
 export function registerDownloadQueueBehaviorCases(): void {
   describe("queue drain lifecycle", () => {
-    it("runs the drain handler only when no queued or active task remains", async () => {
+    it("runs the drain handler when no queued or active task remains", async () => {
       const onQueueDrained = vi.fn(async () => undefined)
-      configureDownloadQueueLifecycle({
+      configureDownloadQueueTestLifecycle({
         onQueueDrained,
-        pendingOutputsStore: createPendingDownloadsStoreStub(),
       })
       try {
         mockGlobalState.downloadQueue = []
-        await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+        await processDownloadQueue(
+          mockQueueRepository,
+          mockEnsureOffscreenReady
+        )
         expect(onQueueDrained).toHaveBeenCalledTimes(1)
+      } finally {
+        configureDownloadQueueTestLifecycle({
+          onQueueDrained: null,
+        })
+      }
+    })
 
-        onQueueDrained.mockClear()
+    it("does not run the drain handler while an active task remains", async () => {
+      const onQueueDrained = vi.fn(async () => undefined)
+      configureDownloadQueueTestLifecycle({
+        onQueueDrained,
+      })
+      try {
         mockGlobalState.downloadQueue = [
           makeTask({ id: "active-task", status: "downloading" }),
         ]
-        await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+        await processDownloadQueue(
+          mockQueueRepository,
+          mockEnsureOffscreenReady
+        )
         expect(onQueueDrained).not.toHaveBeenCalled()
       } finally {
-        configureDownloadQueueLifecycle({
+        configureDownloadQueueTestLifecycle({
           onQueueDrained: null,
-          pendingOutputsStore: createPendingDownloadsStoreStub(),
         })
       }
     })
@@ -62,11 +76,10 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-0",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-0" })
       )
     })
 
@@ -90,18 +103,15 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-0",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-0" })
       )
 
       const failedCalls = vi
-        .mocked(mockStateManager.updateDownloadTask)
-        .mock.calls.filter(
-          (call) => (call[1] as Partial<DownloadTaskState>).status === "failed"
-        )
+        .mocked(mockQueueRepository.interruptDownloadTask)
+        .mock.calls.filter((call) => call[0].errorMessage.length > 0)
       expect(failedCalls).toHaveLength(0)
     })
   })
@@ -132,16 +142,13 @@ export function registerDownloadQueueBehaviorCases(): void {
       ]
 
       mockGlobalState.downloadQueue = tasks
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
-
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-old",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-old" })
       )
-      expect(mockStateManager.updateDownloadTask).not.toHaveBeenCalledWith(
-        "task-new",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).not.toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-new" })
       )
     })
 
@@ -186,11 +193,10 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-2",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-2" })
       )
     })
   })
@@ -221,10 +227,25 @@ export function registerDownloadQueueBehaviorCases(): void {
       ]
 
       mockGlobalState.downloadQueue = tasks
+      await mockQueueRepository.beginChapterDispatch({
+        taskId: "active-task",
+        chapterId: tasks[0]!.chapters[0]!.id,
+        expectedPreviousLease: null,
+        lease: createDispatchLease({
+          jobId: "active-job",
+          attempt: 1,
+          taskId: "active-task",
+          chapterId: tasks[0]!.chapters[0]!.id,
+          fingerprint: "a".repeat(64),
+          saveMode: "downloads-api",
+          now: Date.now(),
+        }),
+        now: Date.now(),
+      })
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).not.toHaveBeenCalled()
+      expect(mockQueueRepository.startDownloadTask).not.toHaveBeenCalled()
       expect(mockRuntimeSendMessage).not.toHaveBeenCalled()
     })
 
@@ -254,11 +275,10 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = [completedTask, nextTask]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "next-task",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "next-task" })
       )
     })
 
@@ -287,11 +307,10 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-1",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-1" })
       )
     })
 
@@ -319,111 +338,12 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = tasks
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalled()
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "task-1",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "task-1" })
       )
       expect(mockGlobalState.downloadQueue).toHaveLength(3)
-    })
-  })
-
-  describe("moveTaskToTop", () => {
-    it("moves a queued task to the front of the queued segment after all active tasks", async () => {
-      mockGlobalState.downloadQueue = [
-        makeTask({
-          id: "active-1",
-          mangaId: "series-1",
-          seriesTitle: "Active 1",
-          chapters: [
-            createChapter({
-              url: "https://example.com/a1",
-              title: "A1",
-              chapterNumber: 1,
-            }),
-          ],
-          status: "downloading",
-          created: 1,
-        }),
-        makeTask({
-          id: "active-2",
-          mangaId: "series-2",
-          seriesTitle: "Active 2",
-          chapters: [
-            createChapter({
-              url: "https://example.com/a2",
-              title: "A2",
-              chapterNumber: 2,
-            }),
-          ],
-          status: "downloading",
-          created: 2,
-        }),
-        makeTask({
-          id: "queued-1",
-          mangaId: "series-3",
-          seriesTitle: "Queued 1",
-          chapters: [
-            createChapter({
-              url: "https://example.com/q1",
-              title: "Q1",
-              chapterNumber: 3,
-            }),
-          ],
-          created: 3,
-        }),
-        makeTask({
-          id: "queued-2",
-          mangaId: "series-4",
-          seriesTitle: "Queued 2",
-          chapters: [
-            createChapter({
-              url: "https://example.com/q2",
-              title: "Q2",
-              chapterNumber: 4,
-            }),
-          ],
-          created: 4,
-        }),
-      ]
-
-      const result = await moveTaskToTop(mockStateManager, "queued-2")
-
-      expect(result).toEqual({ success: true })
-      expect(mockGlobalState.downloadQueue.map((task) => task.id)).toEqual([
-        "active-1",
-        "active-2",
-        "queued-2",
-        "queued-1",
-      ])
-    })
-
-    it("rejects moving non-queued tasks", async () => {
-      mockGlobalState.downloadQueue = [
-        makeTask({
-          id: "active-1",
-          mangaId: "series-1",
-          seriesTitle: "Active 1",
-          chapters: [
-            createChapter({
-              url: "https://example.com/a1",
-              title: "A1",
-              chapterNumber: 1,
-            }),
-          ],
-          status: "downloading",
-          created: 1,
-        }),
-      ]
-
-      const result = await moveTaskToTop(mockStateManager, "active-1")
-
-      expect(result).toEqual({
-        success: false,
-        reason: "Only queued tasks can be moved to top",
-      })
     })
   })
 
@@ -441,30 +361,17 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = [task]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "rate-limited-task",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "rate-limited-task" })
       )
 
-      const calls = (
-        mockStateManager.updateDownloadTask as unknown as {
-          mock: { calls: unknown[][] }
-        }
-      ).mock.calls
-      const hasWaitingUpdate = calls.some(
-        (c) => (c[1] as { status?: string } | undefined)?.status === "waiting"
+      const committedTask = mockGlobalState.downloadQueue.find(
+        (candidate) => candidate.id === task.id
       )
-      const hasCooldownField = calls.some((c) => {
-        const update = c[1] as Record<string, unknown> | undefined
-        return (
-          !!update &&
-          Object.prototype.hasOwnProperty.call(update, "cooldownUntil")
-        )
-      })
-      expect(hasWaitingUpdate).toBe(false)
-      expect(hasCooldownField).toBe(false)
+      expect(committedTask?.status).not.toBe("waiting")
+      expect(committedTask).not.toHaveProperty("cooldownUntil")
 
       vi.useRealTimers()
     })
@@ -478,11 +385,10 @@ export function registerDownloadQueueBehaviorCases(): void {
 
       mockGlobalState.downloadQueue = [queuedTask]
 
-      await processDownloadQueue(mockStateManager, mockEnsureOffscreenReady)
+      await processDownloadQueue(mockQueueRepository, mockEnsureOffscreenReady)
 
-      expect(mockStateManager.updateDownloadTask).toHaveBeenCalledWith(
-        "queued-task",
-        expect.objectContaining({ status: "downloading" })
+      expect(mockQueueRepository.startDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: "queued-task" })
       )
     })
   })

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 function createTask(overrides?: Partial<DownloadTaskState>): DownloadTaskState {
   return {
@@ -53,5 +53,31 @@ describe("resolveDownloadPlan", () => {
     expect(plan.chapters).toHaveLength(1)
     expect(plan.chapters[0].language).toBe("en")
     expect(plan.chapters[0].comicInfo.LanguageISO).toBe("en")
+  })
+
+  it("fails explicitly when the frozen filename template is empty", () => {
+    const task = createTask({
+      settingsSnapshot: {
+        ...createTask().settingsSnapshot,
+        fileNameTemplate: "",
+      },
+    })
+
+    expect(() => resolveDownloadPlan(task)).toThrow(
+      "Filename template resolution failed: Filename template is empty"
+    )
+  })
+
+  it("fails explicitly when the frozen filename template has an invalid macro", () => {
+    const task = createTask({
+      settingsSnapshot: {
+        ...createTask().settingsSnapshot,
+        fileNameTemplate: "<CHAPTER_INDEX>",
+      },
+    })
+
+    expect(() => resolveDownloadPlan(task)).toThrow(
+      "Filename template resolution failed: Unknown or unimplemented macros"
+    )
   })
 })

@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { NotificationService } from "@/entrypoints/background/notification-service"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -14,8 +14,8 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/site-integrations/manifest", () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDisplayName: vi.fn(() => "MangaDex"),
 }))
 
 function makeTask(
