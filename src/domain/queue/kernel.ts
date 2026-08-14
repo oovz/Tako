@@ -1265,6 +1265,7 @@ export function blockTaskForDestination(
     ...task,
     status: "queued",
     activeBlock: "destination_action_required",
+    destinationBlockRevision: (task.destinationBlockRevision ?? 0) + 1,
     errorMessage: input.errorMessage ?? task.errorMessage,
     errorCategory: input.errorCategory ?? task.errorCategory,
     chapters,
@@ -1333,12 +1334,17 @@ export function resumeDestinationTask(
   state: QueueAggregateState,
   input: {
     taskId: string
+    commandId: string
     destinationOverride?: "downloads-api"
     now: number
   }
 ): QueueKernelDecision<
   | Applied<{ task: DownloadTaskState }>
-  | Unchanged<{ reason: "not-blocked" }>
+  | Unchanged<
+      | { reason: "not-blocked" }
+      | { reason: "already-resumed"; task: DownloadTaskState }
+      | { reason: "superseded"; task: DownloadTaskState }
+    >
   | TaskMutationRejection
 > {
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
@@ -1350,6 +1356,21 @@ export function resumeDestinationTask(
     }
   }
   const task = state.queue[taskIndex]
+  const blockRevision = task.destinationBlockRevision ?? 0
+  if (task.destinationResume?.commandId === input.commandId) {
+    if (task.destinationResume.blockRevision < blockRevision) {
+      return {
+        next: state,
+        changedKeys: [],
+        result: { outcome: "unchanged", reason: "superseded", task },
+      }
+    }
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "unchanged", reason: "already-resumed", task },
+    }
+  }
   if (task.status !== "queued" && task.status !== "downloading") {
     return {
       next: state,
@@ -1372,6 +1393,10 @@ export function resumeDestinationTask(
     ...task,
     status: "queued",
     activeBlock: undefined,
+    destinationResume: {
+      commandId: input.commandId,
+      blockRevision,
+    },
     destinationOverride: input.destinationOverride,
     errorMessage: undefined,
     errorCategory: undefined,
@@ -1816,19 +1841,19 @@ export function retryFailedChapters(
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
+  if (state.queue.some((task) => task.id === input.retryTaskId)) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "retry-task-id-conflict" },
+    }
+  }
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
   if (taskIndex === -1) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  if (state.queue.some((task) => task.id === input.retryTaskId)) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "retry-task-id-conflict" },
     }
   }
   const original = state.queue[taskIndex]
@@ -1883,6 +1908,10 @@ export function retryFailedChapters(
     created: input.now,
     isRetried: false,
     isRetryTask: true,
+    destinationBlockRevision: undefined,
+    destinationResume: undefined,
+    activeCancel: undefined,
+    restoredUndo: undefined,
     settingsSnapshot: original.settingsSnapshot,
   }
   return {
@@ -1914,19 +1943,19 @@ export function restartDownloadTask(
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
+  if (state.queue.some((task) => task.id === input.restartTaskId)) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "restart-task-id-conflict" },
+    }
+  }
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
   if (taskIndex === -1) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  if (state.queue.some((task) => task.id === input.restartTaskId)) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "restart-task-id-conflict" },
     }
   }
   const original = state.queue[taskIndex]
@@ -1978,6 +2007,10 @@ export function restartDownloadTask(
     isRetryTask: true,
     lastSuccessfulDownloadId: undefined,
     nextChapterDispatchAt: undefined,
+    destinationBlockRevision: undefined,
+    destinationResume: undefined,
+    activeCancel: undefined,
+    restoredUndo: undefined,
   }
   return {
     next: {
@@ -2071,18 +2104,62 @@ export function clearTerminalHistory(
 
 export function cancelDownloadTask(
   state: QueueAggregateState,
-  input: { taskId: string; undoToken: string; now: number }
+  input: {
+    taskId: string
+    commandId: string
+    now: number
+  }
 ): QueueKernelDecision<
   | Applied<{
       task: DownloadTaskState
       canceledLease: ActiveDispatchLease | null
       undo: PendingUndoReceipt | null
     }>
+  | Unchanged<{
+      reason: "already-canceled"
+      task: DownloadTaskState
+      canceledLease: ActiveDispatchLease | null
+      undo: null
+    }>
+  | Unchanged<{
+      reason: "already-canceled"
+      task: DownloadTaskState
+      canceledLease: null
+      undo: PendingUndoReceipt
+    }>
   | Rejected<
       "task-not-found" | "task-not-active" | "undo-token-conflict",
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
+  const undoToken = `cancel:${input.commandId}`
+  const existingUndo = state.pendingUndoActions.find(
+    (action) => action.token === undoToken
+  )
+  if (existingUndo) {
+    if (
+      existingUndo.type !== "cancel_queued" ||
+      existingUndo.taskSnapshot.id !== input.taskId
+    ) {
+      return {
+        next: state,
+        changedKeys: [],
+        result: { outcome: "rejected", reason: "undo-token-conflict" },
+      }
+    }
+    return {
+      next: state,
+      changedKeys: [],
+      result: {
+        outcome: "unchanged",
+        reason: "already-canceled",
+        task: existingUndo.taskSnapshot,
+        canceledLease: null,
+        undo: toPendingUndoReceipt(existingUndo),
+      },
+    }
+  }
+
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
   if (taskIndex === -1) {
     return {
@@ -2092,6 +2169,20 @@ export function cancelDownloadTask(
     }
   }
   const task = state.queue[taskIndex]
+  if (task.activeCancel?.commandId === input.commandId) {
+    const canceledLease = state.lease?.taskId === task.id ? state.lease : null
+    return {
+      next: state,
+      changedKeys: [],
+      result: {
+        outcome: "unchanged",
+        reason: "already-canceled",
+        task,
+        canceledLease,
+        undo: null,
+      },
+    }
+  }
   if (task.status !== "queued" && task.status !== "downloading") {
     return {
       next: state,
@@ -2109,7 +2200,11 @@ export function cancelDownloadTask(
       // A native-output action-required task cancels through the coordinator's
       // surrender path, NOT ordinary queued Undo: Undo would resurrect a task
       // whose erased native outputs were surrendered and released.
-      const canceledTask = cancelDownloadingTask(task, input.now)
+      const canceledTask = {
+        ...cancelDownloadingTask(task, input.now),
+        activeCancel: { commandId: input.commandId },
+      }
+      const canceledLease = state.lease?.taskId === task.id ? state.lease : null
       return {
         next: {
           ...state,
@@ -2119,24 +2214,13 @@ export function cancelDownloadTask(
         result: {
           outcome: "applied",
           task: canceledTask,
-          canceledLease: null,
+          canceledLease,
           undo: null,
         },
       }
     }
-    if (
-      state.pendingUndoActions.some(
-        (action) => action.token === input.undoToken
-      )
-    ) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "rejected", reason: "undo-token-conflict" },
-      }
-    }
     const action = createPendingUndoAction({
-      token: input.undoToken,
+      token: undoToken,
       type: "cancel_queued",
       taskSnapshot: task,
       previousQueuePosition: taskIndex,
@@ -2159,7 +2243,10 @@ export function cancelDownloadTask(
   }
 
   const canceledLease = state.lease?.taskId === task.id ? state.lease : null
-  const canceledTask = cancelDownloadingTask(task, input.now)
+  const canceledTask = {
+    ...cancelDownloadingTask(task, input.now),
+    activeCancel: { commandId: input.commandId },
+  }
   return {
     next: {
       ...state,
@@ -2181,11 +2268,42 @@ export function removeTerminalDownloadTask(
   input: { taskId: string; undoToken: string; now: number }
 ): QueueKernelDecision<
   | Applied<{ task: DownloadTaskState; undo: PendingUndoReceipt }>
+  | Unchanged<{
+      reason: "already-removed"
+      task: DownloadTaskState
+      undo: PendingUndoReceipt
+    }>
   | Rejected<
       "task-not-found" | "task-not-terminal" | "undo-token-conflict",
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
+  const existingUndo = state.pendingUndoActions.find(
+    (action) => action.token === input.undoToken
+  )
+  if (existingUndo) {
+    if (
+      existingUndo.type !== "remove_history" ||
+      existingUndo.taskSnapshot.id !== input.taskId
+    ) {
+      return {
+        next: state,
+        changedKeys: [],
+        result: { outcome: "rejected", reason: "undo-token-conflict" },
+      }
+    }
+    return {
+      next: state,
+      changedKeys: [],
+      result: {
+        outcome: "unchanged",
+        reason: "already-removed",
+        task: existingUndo.taskSnapshot,
+        undo: toPendingUndoReceipt(existingUndo),
+      },
+    }
+  }
+
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
   if (taskIndex === -1) {
     return {
@@ -2204,15 +2322,6 @@ export function removeTerminalDownloadTask(
         reason: "task-not-terminal",
         currentStatus: task.status,
       },
-    }
-  }
-  if (
-    state.pendingUndoActions.some((action) => action.token === input.undoToken)
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "undo-token-conflict" },
     }
   }
   const action = createPendingUndoAction({
@@ -2246,12 +2355,32 @@ export function restorePendingUndoAction(
       restored: boolean
       reason?: "expired"
     }>
+  | Unchanged<{
+      type: PendingUndoAction["type"]
+      restored: true
+      reason: "already-restored"
+    }>
   | Rejected<"undo-not-found">
 > {
   const actionIndex = state.pendingUndoActions.findIndex(
     (action) => action.token === input.token
   )
   if (actionIndex === -1) {
+    const restoredTask = state.queue.find(
+      (task) => task.restoredUndo?.token === input.token
+    )
+    if (restoredTask?.restoredUndo) {
+      return {
+        next: state,
+        changedKeys: [],
+        result: {
+          outcome: "unchanged",
+          type: restoredTask.restoredUndo.type,
+          restored: true,
+          reason: "already-restored",
+        },
+      }
+    }
     return {
       next: state,
       changedKeys: [],
@@ -2266,11 +2395,38 @@ export function restorePendingUndoAction(
   const taskAlreadyPresent = state.queue.some(
     (task) => task.id === action.taskSnapshot.id
   )
-  const queue = expired
-    ? applyExpiredPendingUndoAction(state.queue, action)
-    : reinsertPendingUndoTask(state.queue, action, action.taskSnapshot)
-  const queueChanged =
-    !taskAlreadyPresent && (!expired || action.type === "cancel_queued")
+  let queue: DownloadTaskState[]
+  let queueChanged = false
+  if (expired) {
+    queue = applyExpiredPendingUndoAction(state.queue, action)
+    queueChanged = !taskAlreadyPresent && action.type === "cancel_queued"
+  } else {
+    const restoredTask: DownloadTaskState = {
+      ...action.taskSnapshot,
+      restoredUndo: { token: action.token, type: action.type },
+    }
+    if (taskAlreadyPresent) {
+      const existingTaskIndex = state.queue.findIndex(
+        (task) => task.id === action.taskSnapshot.id
+      )
+      queue = [...state.queue]
+      const existingTask = queue[existingTaskIndex]
+      if (
+        existingTask &&
+        (existingTask.restoredUndo?.token !== action.token ||
+          existingTask.restoredUndo?.type !== action.type)
+      ) {
+        queue[existingTaskIndex] = {
+          ...existingTask,
+          restoredUndo: restoredTask.restoredUndo,
+        }
+        queueChanged = true
+      }
+    } else {
+      queue = reinsertPendingUndoTask(state.queue, action, restoredTask)
+      queueChanged = true
+    }
+  }
   return {
     next: {
       ...state,

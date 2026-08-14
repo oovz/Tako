@@ -30,7 +30,7 @@ describe("pending Undo task persistence", () => {
     }
     const cancellation = await repository.cancelDownloadTask({
       taskId: "task-b",
-      undoToken: "undo-task-b",
+      commandId: "task-b-cancel",
       now: 1_000,
     })
 
@@ -60,10 +60,18 @@ describe("pending Undo task persistence", () => {
       "task-b",
       "task-c",
     ])
-    expect(restoredQueue[1]).toEqual(tasks[1])
+    expect(restoredQueue[1]).toEqual({
+      ...tasks[1],
+      restoredUndo: { token, type: "cancel_queued" },
+    })
     await expect(
       repository.restorePendingUndoAction({ token, now: 5_999 })
-    ).resolves.toMatchObject({ outcome: "rejected", reason: "undo-not-found" })
+    ).resolves.toMatchObject({
+      outcome: "unchanged",
+      reason: "already-restored",
+      restored: true,
+      type: "cancel_queued",
+    })
   })
 
   it("restores an immediately hidden terminal history record", async () => {
@@ -97,7 +105,26 @@ describe("pending Undo task persistence", () => {
         now: removal.undo.expiresAt - 1,
       })
     ).resolves.toMatchObject({ outcome: "applied", restored: true })
-    expect(await repository.getQueue()).toEqual([completedTask])
+    expect(await repository.getQueue()).toEqual([
+      {
+        ...completedTask,
+        restoredUndo: {
+          token: removal.undo.token,
+          type: "remove_history",
+        },
+      },
+    ])
+    await expect(
+      repository.restorePendingUndoAction({
+        token: removal.undo.token,
+        now: removal.undo.expiresAt - 1,
+      })
+    ).resolves.toMatchObject({
+      outcome: "unchanged",
+      reason: "already-restored",
+      restored: true,
+      type: "remove_history",
+    })
   })
 
   it("rejects late Undo and normalizes a queued cancellation into history", async () => {
@@ -120,7 +147,7 @@ describe("pending Undo task persistence", () => {
     )
     const cancellation = await repository.cancelDownloadTask({
       taskId: "expiring-task",
-      undoToken: "undo-expiring-task",
+      commandId: "expiring-task-cancel",
       now: 2_000,
     })
     if (cancellation.outcome !== "applied" || !cancellation.undo) {
@@ -166,12 +193,12 @@ describe("pending Undo task persistence", () => {
     )
     await repository.cancelDownloadTask({
       taskId: "old-task",
-      undoToken: "undo-old-task",
+      commandId: "old-task-cancel",
       now: 1_000,
     })
     await repository.cancelDownloadTask({
       taskId: "new-task",
-      undoToken: "undo-new-task",
+      commandId: "new-task-cancel",
       now: 5_000,
     })
 
@@ -203,7 +230,7 @@ describe("pending Undo task persistence", () => {
     await expect(
       repository.cancelDownloadTask({
         taskId: "atomic-task",
-        undoToken: "undo-atomic-task",
+        commandId: "atomic-task-cancel",
         now: 1_000,
       })
     ).rejects.toThrow("Undo staging write failed")

@@ -134,6 +134,18 @@ export interface DownloadTaskState {
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number
   nextChapterDispatchAt?: number
+  destinationBlockRevision?: number
+  destinationResume?: {
+    commandId: string
+    blockRevision: number
+  }
+  activeCancel?: {
+    commandId: string
+  }
+  restoredUndo?: {
+    token: string
+    type: PendingUndoActionType
+  }
   settingsSnapshot: TaskSettingsSnapshot
 }
 

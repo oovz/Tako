@@ -182,6 +182,7 @@ function canceledJobIdentity(lease: ActiveDispatchLease) {
 
 describe("QueueApplicationCommands", () => {
   const queueRepository = {
+    getTask: vi.fn(),
     enqueueDownloadTask: vi.fn(),
     retryFailedChapters: vi.fn(),
     restartDownloadTask: vi.fn(),
@@ -212,6 +213,7 @@ describe("QueueApplicationCommands", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(queueRepository.getTask).mockResolvedValue(undefined)
     mocks.loadStartDownloadSettingsInputs.mockResolvedValue({})
     mocks.buildStartDownloadTask.mockImplementation(
       ({ taskId }: { taskId: string }) => task(taskId)
@@ -312,14 +314,105 @@ describe("QueueApplicationCommands", () => {
     expect(mocks.processDownloadQueue).toHaveBeenCalledWith()
   })
 
+  it("replays an existing command without rechecking start or source preconditions", async () => {
+    vi.mocked(queueRepository.getTask).mockImplementation(async (taskId) => {
+      if (taskId === "command-start") return task("command-start")
+      if (taskId === "retry:command-retry") return task(taskId)
+      if (taskId === "restart:command-restart") return task(taskId)
+      return undefined
+    })
+    getCurrentSeriesContext.mockRejectedValue(new Error("context unavailable"))
+    startDownloadSettings.settingsRepository.getSettings.mockRejectedValue(
+      new Error("settings unavailable")
+    )
+    const providerLookup = vi.fn(async () => {
+      throw new Error("provider unavailable")
+    })
+    const replayCommands = new QueueApplicationCommands({
+      startDownloadSettings,
+      queueRepository,
+      nativeOutputCoordinator,
+      cancellationCoordinator: new DownloadTaskCancellationCoordinator(
+        queueRepository,
+        nativeOutputCoordinator,
+        destinationService,
+        finalizationDependencies
+      ),
+      queueScheduler: {
+        activate: mocks.processDownloadQueue,
+      } as unknown as QueueScheduler,
+      destinationService,
+      siteIntegrationEnablementService: { getAll: providerLookup },
+      getCurrentSeriesContext,
+    })
+
+    await expect(
+      replayCommands.startDownload(startPayload, "command-start")
+    ).resolves.toEqual({ taskId: "command-start" })
+    await expect(
+      commands.retryFailedChapters("missing-source", "command-retry")
+    ).resolves.toEqual({ newTaskId: "retry:command-retry" })
+    await expect(
+      commands.restartTask("missing-source", "command-restart")
+    ).resolves.toEqual({ newTaskId: "restart:command-restart" })
+    expect(getCurrentSeriesContext).not.toHaveBeenCalled()
+    expect(
+      startDownloadSettings.settingsRepository.getSettings
+    ).not.toHaveBeenCalled()
+    expect(providerLookup).not.toHaveBeenCalled()
+    expect(queueRepository.retryFailedChapters).not.toHaveBeenCalled()
+    expect(queueRepository.restartDownloadTask).not.toHaveBeenCalled()
+  })
+
+  it("does not report another command's retry or restart as this command's success", async () => {
+    vi.mocked(queueRepository.retryFailedChapters).mockResolvedValueOnce({
+      outcome: "rejected",
+      reason: "already-retried",
+    } as never)
+    vi.mocked(queueRepository.restartDownloadTask).mockResolvedValueOnce({
+      outcome: "rejected",
+      reason: "already-retried",
+    } as never)
+
+    await expect(
+      commands.retryFailedChapters("source", "different-retry")
+    ).rejects.toThrow("another command")
+    await expect(
+      commands.restartTask("source", "different-restart")
+    ).rejects.toThrow("another command")
+  })
+
   it("converges a remove replay after the task is already gone", async () => {
     vi.mocked(queueRepository.removeTerminalDownloadTask).mockResolvedValue({
       outcome: "rejected",
       reason: "task-not-found",
     } as never)
 
-    await expect(commands.removeTask("task-1")).resolves.toBeUndefined()
+    await expect(
+      commands.removeTask("task-1", "command-remove")
+    ).resolves.toBeUndefined()
     expect(mocks.schedulePendingUndoAction).not.toHaveBeenCalled()
+  })
+
+  it("returns the same remove Undo receipt after a durable replay", async () => {
+    vi.mocked(queueRepository.removeTerminalDownloadTask)
+      .mockResolvedValueOnce({
+        outcome: "applied",
+        task: task("task-1"),
+        undo: historyUndo,
+      })
+      .mockResolvedValueOnce({
+        outcome: "unchanged",
+        reason: "already-removed",
+        task: task("task-1"),
+        undo: historyUndo,
+      })
+
+    const first = await commands.removeTask("task-1", "command-remove")
+    const second = await commands.removeTask("task-1", "command-remove")
+    expect(first).toEqual(historyUndo)
+    expect(second).toEqual(first)
+    expect(mocks.schedulePendingUndoAction).toHaveBeenCalledTimes(2)
   })
 
   it("commits remove and queued cancel before scheduling Undo without activation", async () => {
@@ -349,8 +442,12 @@ describe("QueueApplicationCommands", () => {
       events.push("schedule-undo")
     })
 
-    await expect(commands.removeTask("task-1")).resolves.toEqual(historyUndo)
-    await expect(commands.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      commands.removeTask("task-1", "command-remove")
+    ).resolves.toEqual(historyUndo)
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).resolves.toEqual({
       kind: "queued",
       undo: queuedUndo,
     })
@@ -361,7 +458,77 @@ describe("QueueApplicationCommands", () => {
       "cancel-commit",
       "schedule-undo",
     ])
+    expect(queueRepository.removeTerminalDownloadTask).toHaveBeenCalledWith(
+      expect.objectContaining({ undoToken: "remove:command-remove" })
+    )
+    expect(queueRepository.cancelDownloadTask).toHaveBeenCalledWith(
+      expect.objectContaining({ commandId: "command-cancel" })
+    )
     expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
+  })
+
+  it("re-drives destination cleanup and activation for an exact replay", async () => {
+    vi.mocked(queueRepository.resumeDestinationTask)
+      .mockResolvedValueOnce({ outcome: "applied", task: task("task-1") })
+      .mockResolvedValueOnce({
+        outcome: "unchanged",
+        reason: "already-resumed",
+        task: task("task-1"),
+      })
+
+    await expect(
+      commands.retryDestination("task-1", "command-destination")
+    ).resolves.toBeUndefined()
+    await expect(
+      commands.retryDestination("task-1", "command-destination")
+    ).resolves.toBeUndefined()
+    expect(mocks.clearDestinationIssuesForTask).toHaveBeenCalledTimes(2)
+    expect(mocks.processDownloadQueue).toHaveBeenCalledTimes(2)
+    expect(queueRepository.resumeDestinationTask).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ commandId: "command-destination" })
+    )
+    expect(queueRepository.resumeDestinationTask).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ commandId: "command-destination" })
+    )
+  })
+
+  it("does not clear a newer destination issue for a delayed old replay", async () => {
+    vi.mocked(queueRepository.resumeDestinationTask).mockResolvedValue({
+      outcome: "unchanged",
+      reason: "superseded",
+      task: task("task-1"),
+    })
+
+    await expect(
+      commands.retryDestination("task-1", "old-destination-command")
+    ).resolves.toBeUndefined()
+    expect(mocks.clearDestinationIssuesForTask).not.toHaveBeenCalled()
+    expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
+  })
+
+  it("returns the same queued cancel receipt after a durable replay", async () => {
+    vi.mocked(queueRepository.cancelDownloadTask)
+      .mockResolvedValueOnce({
+        outcome: "applied",
+        task: task("task-1"),
+        canceledLease: null,
+        undo: queuedUndo,
+      })
+      .mockResolvedValueOnce({
+        outcome: "unchanged",
+        reason: "already-canceled",
+        task: task("task-1"),
+        canceledLease: null,
+        undo: queuedUndo,
+      })
+
+    const first = await commands.cancelTask("task-1", "command-cancel")
+    const second = await commands.cancelTask("task-1", "command-cancel")
+    expect(first).toEqual({ kind: "queued", undo: queuedUndo })
+    expect(second).toEqual(first)
+    expect(mocks.schedulePendingUndoAction).toHaveBeenCalledTimes(2)
   })
 
   it("orders active cancellation effects after commit and tolerates only diagnostic cleanup failure", async () => {
@@ -407,7 +574,9 @@ describe("QueueApplicationCommands", () => {
       events.push("activate")
     })
 
-    await expect(commands.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).resolves.toEqual({
       kind: "active",
     })
 
@@ -448,7 +617,9 @@ describe("QueueApplicationCommands", () => {
     })
     sendMessage.mockRejectedValueOnce(new Error("offscreen unavailable"))
 
-    await expect(commands.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).resolves.toEqual({
       kind: "active",
     })
     expect(queueRepository.clearDispatchLease).not.toHaveBeenCalled()
@@ -542,7 +713,9 @@ describe("QueueApplicationCommands", () => {
     })
     sendMessage.mockResolvedValueOnce(response)
 
-    await expect(commands.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).resolves.toEqual({
       kind: "active",
     })
     expect(queueRepository.clearDispatchLease).not.toHaveBeenCalled()
@@ -561,7 +734,9 @@ describe("QueueApplicationCommands", () => {
       new Error("native storage unavailable")
     )
 
-    await expect(commands.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).resolves.toEqual({
       kind: "active",
     })
 
@@ -582,9 +757,9 @@ describe("QueueApplicationCommands", () => {
       new Error("queue activation failed")
     )
 
-    await expect(commands.cancelTask("task-1")).rejects.toThrow(
-      "queue activation failed"
-    )
+    await expect(
+      commands.cancelTask("task-1", "command-cancel")
+    ).rejects.toThrow("queue activation failed")
   })
 
   it("requires destination cleanup before activation", async () => {
@@ -592,9 +767,9 @@ describe("QueueApplicationCommands", () => {
       new Error("destination cleanup failed")
     )
 
-    await expect(commands.retryDestination("task-1")).rejects.toThrow(
-      "destination cleanup failed"
-    )
+    await expect(
+      commands.retryDestination("task-1", "command-destination")
+    ).rejects.toThrow("destination cleanup failed")
     expect(queueRepository.resumeDestinationTask).toHaveBeenCalled()
     expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
   })
@@ -619,5 +794,28 @@ describe("QueueApplicationCommands", () => {
       restoredQueuedTask: true,
     })
     expect(mocks.processDownloadQueue).toHaveBeenCalledTimes(1)
+  })
+
+  it("treats an exact queued Undo replay as success and reactivates again", async () => {
+    mocks.restorePendingUndoAndCleanup
+      .mockResolvedValueOnce({
+        outcome: "applied",
+        action: pendingAction("cancel_queued"),
+        restored: true,
+      })
+      .mockResolvedValueOnce({
+        outcome: "unchanged",
+        type: "cancel_queued",
+        restored: true,
+        reason: "already-restored",
+      })
+
+    await expect(commands.undoQueueAction("queued")).resolves.toEqual({
+      restoredQueuedTask: true,
+    })
+    await expect(commands.undoQueueAction("queued")).resolves.toEqual({
+      restoredQueuedTask: true,
+    })
+    expect(mocks.processDownloadQueue).toHaveBeenCalledTimes(2)
   })
 })

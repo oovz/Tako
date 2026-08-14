@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildStartDownloadMessage,
+  createStartDownloadRetentionKey,
   resolveDownloadSeriesIdentity,
   resolveSelectedChapterStates,
 } from "@/entrypoints/sidepanel/hooks/useDownload"
@@ -161,5 +162,35 @@ describe("buildStartDownloadMessage", () => {
       "chapter-2",
       "chapter-1",
     ])
+  })
+})
+
+describe("createStartDownloadRetentionKey", () => {
+  it("reuses a key only for the same series revision and selection", async () => {
+    const message = buildStartDownloadMessage({
+      windowId: 11,
+      tabId: 321,
+      sourceUrl: "https://mangadex.org/title/series-1",
+      siteIntegrationId: "mangadex",
+      seriesId: "series-1",
+      seriesRevision: 7,
+      selectedChapterIds: ["chapter-1"],
+    })
+
+    const same = await createStartDownloadRetentionKey(message.payload)
+    const changedSelection = await createStartDownloadRetentionKey({
+      ...message.payload,
+      selectedChapterIds: ["chapter-2"],
+    })
+    const changedRevision = await createStartDownloadRetentionKey({
+      ...message.payload,
+      seriesRevision: 8,
+    })
+
+    expect(same).not.toBe(changedSelection)
+    expect(same).not.toBe(changedRevision)
+    await expect(
+      createStartDownloadRetentionKey(structuredClone(message.payload))
+    ).resolves.toBe(same)
   })
 })

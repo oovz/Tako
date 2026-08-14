@@ -61,7 +61,8 @@ export function createBackgroundQueueMessageHandlers(
     },
     REMOVE_TASK: async (message) => {
       const undo = await deps.queueApplicationCommands.removeTask(
-        message.payload.taskId
+        message.payload.taskId,
+        message.commandId
       )
       return undo === undefined
         ? { success: true }
@@ -69,7 +70,8 @@ export function createBackgroundQueueMessageHandlers(
     },
     CANCEL_TASK: async (message) => {
       const result = await deps.queueApplicationCommands.cancelTask(
-        message.payload.taskId
+        message.payload.taskId,
+        message.commandId
       )
       return result.kind === "queued"
         ? { success: true, data: { undo: result.undo } }
@@ -84,13 +86,15 @@ export function createBackgroundQueueMessageHandlers(
     },
     RETRY_DESTINATION: async (message) => {
       await deps.queueApplicationCommands.retryDestination(
-        message.payload.taskId
+        message.payload.taskId,
+        message.commandId
       )
       return { success: true }
     },
     CONTINUE_DOWNLOAD: async (message) => {
       await deps.queueApplicationCommands.continueDownload(
-        message.payload.taskId
+        message.payload.taskId,
+        message.commandId
       )
       return { success: true }
     },

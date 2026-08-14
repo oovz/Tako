@@ -589,7 +589,7 @@ describe("QueueRepository", () => {
     await expect(
       repository.cancelDownloadTask({
         taskId: "task-1",
-        undoToken: "undo-task-1",
+        commandId: "task-1-cancel",
         now: 500,
       })
     ).resolves.toMatchObject({
@@ -624,7 +624,7 @@ describe("QueueRepository", () => {
     await expect(
       repository.cancelDownloadTask({
         taskId: "task-1",
-        undoToken: "undo-task-1",
+        commandId: "task-1-cancel",
         now: 500,
       })
     ).rejects.toThrow("Undo persistence failed")
@@ -708,5 +708,30 @@ describe("QueueRepository", () => {
     })
     expect(localSet).not.toHaveBeenCalled()
     expect(sessionSet).not.toHaveBeenCalled()
+  })
+
+  it("round-trips operation-specific convergence markers through current storage", async () => {
+    const markedTask = createTask({
+      destinationBlockRevision: 3,
+      destinationResume: {
+        commandId: "destination-command",
+        blockRevision: 3,
+      },
+      activeCancel: { commandId: "cancel-command" },
+      restoredUndo: { token: "undo-token", type: "cancel_queued" },
+    })
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = [markedTask]
+
+    const repository = new QueueRepository()
+    await expect(repository.getTask("task-1")).resolves.toMatchObject({
+      destinationBlockRevision: 3,
+      destinationResume: {
+        commandId: "destination-command",
+        blockRevision: 3,
+      },
+      activeCancel: { commandId: "cancel-command" },
+      restoredUndo: { token: "undo-token", type: "cancel_queued" },
+    })
+    expect(localSet).not.toHaveBeenCalled()
   })
 })

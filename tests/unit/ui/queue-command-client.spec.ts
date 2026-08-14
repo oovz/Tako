@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   sendRuntimeMessage: vi.fn(),
+  sendRuntimeMessageWithRetry: vi.fn(),
   createCommandEnvelope: vi.fn(() => ({
     commandId: "00000000-0000-4000-8000-000000000001",
     issuedAt: 123,
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/runtime/send-runtime-message", () => ({
   sendRuntimeMessage: mocks.sendRuntimeMessage,
-  sendRuntimeMessageWithRetry: mocks.sendRuntimeMessage,
+  sendRuntimeMessageWithRetry: mocks.sendRuntimeMessageWithRetry,
 }))
 
 vi.mock("@/src/runtime/command-envelope", () => ({
@@ -28,10 +29,12 @@ const undo = {
 describe("queueCommandClient", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.sendRuntimeMessage.mockResolvedValue({ success: true })
+    mocks.sendRuntimeMessageWithRetry.mockResolvedValue({ success: true })
   })
 
   it("maps queued and active cancellation responses to semantic results", async () => {
-    mocks.sendRuntimeMessage
+    mocks.sendRuntimeMessageWithRetry
       .mockResolvedValueOnce({ success: true, data: { undo } })
       .mockResolvedValueOnce({ success: true })
 
@@ -42,17 +45,21 @@ describe("queueCommandClient", () => {
     await expect(queueCommandClient.cancelTask("task-2")).resolves.toEqual({
       kind: "active",
     })
-    expect(mocks.sendRuntimeMessage).toHaveBeenNthCalledWith(1, {
-      target: "background",
-      type: "CANCEL_TASK",
-      commandId: "00000000-0000-4000-8000-000000000001",
-      issuedAt: 123,
-      payload: { taskId: "task-1" },
-    })
+    expect(mocks.sendRuntimeMessageWithRetry).toHaveBeenNthCalledWith(
+      1,
+      {
+        target: "background",
+        type: "CANCEL_TASK",
+        commandId: "00000000-0000-4000-8000-000000000001",
+        issuedAt: 123,
+        payload: { taskId: "task-1" },
+      },
+      { retentionKey: "CANCEL_TASK:task-1" }
+    )
   })
 
   it("returns the required Undo receipt from terminal removal", async () => {
-    mocks.sendRuntimeMessage.mockResolvedValue({
+    mocks.sendRuntimeMessageWithRetry.mockResolvedValue({
       success: true,
       data: { undo },
     })
@@ -61,7 +68,7 @@ describe("queueCommandClient", () => {
   })
 
   it("rejects failed command responses without retry or fallback", async () => {
-    mocks.sendRuntimeMessage.mockResolvedValue({
+    mocks.sendRuntimeMessageWithRetry.mockResolvedValue({
       success: false,
       error: "rejected",
     })
@@ -69,12 +76,10 @@ describe("queueCommandClient", () => {
     await expect(
       queueCommandClient.retryFailedChapters("task-1")
     ).rejects.toThrow("rejected")
-    expect(mocks.sendRuntimeMessage).toHaveBeenCalledOnce()
+    expect(mocks.sendRuntimeMessageWithRetry).toHaveBeenCalledOnce()
   })
 
   it("owns the fixed destination, Undo, reorder, restart, and clear messages", async () => {
-    mocks.sendRuntimeMessage.mockResolvedValue({ success: true })
-
     await queueCommandClient.retryDestination("task-1")
     await queueCommandClient.continueDownload("task-1")
     await queueCommandClient.undoQueueAction("undo-1")
@@ -83,14 +88,33 @@ describe("queueCommandClient", () => {
     await queueCommandClient.clearTerminalHistory()
 
     expect(
-      mocks.sendRuntimeMessage.mock.calls.map(([message]) => message.type)
+      mocks.sendRuntimeMessageWithRetry.mock.calls.map(
+        ([message]) => message.type
+      )
     ).toEqual([
       "RETRY_DESTINATION",
       "CONTINUE_DOWNLOAD",
       "UNDO_QUEUE_ACTION",
-      "MOVE_TASK_TO_TOP",
       "RESTART_TASK",
-      "CLEAR_ALL_HISTORY",
     ])
+    expect(
+      mocks.sendRuntimeMessage.mock.calls.map(([message]) => message.type)
+    ).toEqual(["MOVE_TASK_TO_TOP", "CLEAR_ALL_HISTORY"])
+  })
+
+  it("sends reorder, clear, and forget once because they can broaden on replay", async () => {
+    mocks.sendRuntimeMessage
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true, surrendered: 1 })
+
+    await queueCommandClient.moveTaskToTop("task-1")
+    await queueCommandClient.clearTerminalHistory()
+    await expect(
+      queueCommandClient.forgetUnobservableOutputs("task-1")
+    ).resolves.toEqual({ surrendered: 1 })
+
+    expect(mocks.sendRuntimeMessage).toHaveBeenCalledTimes(3)
+    expect(mocks.sendRuntimeMessageWithRetry).not.toHaveBeenCalled()
   })
 })

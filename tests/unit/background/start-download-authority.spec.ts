@@ -96,7 +96,10 @@ describe("START_DOWNLOAD background authority", () => {
           getForSite: mocks.getSiteSettings,
         },
       },
-      queueRepository: { enqueueDownloadTask } as unknown as QueueRepository,
+      queueRepository: {
+        enqueueDownloadTask,
+        getTask: vi.fn(async () => undefined),
+      } as unknown as QueueRepository,
       nativeOutputCoordinator: {} as NativeOutputCoordinator,
       cancellationCoordinator: {} as DownloadTaskCancellationCoordinator,
       queueScheduler: {

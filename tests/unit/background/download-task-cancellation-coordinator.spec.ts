@@ -51,7 +51,9 @@ describe("DownloadTaskCancellationCoordinator", () => {
       finalizationDependencies
     )
 
-    await expect(coordinator.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      coordinator.cancelTask("task-1", "command-1")
+    ).resolves.toEqual({
       result: { kind: "active" },
       queueCanContinue: true,
     })
@@ -99,7 +101,9 @@ describe("DownloadTaskCancellationCoordinator", () => {
       finalizationDependencies
     )
 
-    await expect(coordinator.cancelTask("task-1")).resolves.toEqual({
+    await expect(
+      coordinator.cancelTask("task-1", "command-2")
+    ).resolves.toEqual({
       result: { kind: "active" },
       queueCanContinue: true,
     })
@@ -146,5 +150,62 @@ describe("DownloadTaskCancellationCoordinator", () => {
     ).resolves.toBeUndefined()
     expect(clearDispatchLease).not.toHaveBeenCalled()
     expect(nativeOutputCoordinator.cancelTask).not.toHaveBeenCalled()
+  })
+
+  it("clears an exact lease when the producer already reached terminal state", async () => {
+    const clearDispatchLease = vi.fn(async () => ({
+      outcome: "applied" as const,
+    }))
+    const queueRepository = {
+      clearDispatchLease,
+    } as unknown as QueueRepository
+    const nativeOutputCoordinator = {
+      cancelTask: vi.fn(),
+    } as unknown as NativeOutputCoordinator
+    const destinationService = {
+      clearDestinationIssuesForTask: vi.fn(async () => undefined),
+    } as unknown as DestinationService
+    const coordinator = new DownloadTaskCancellationCoordinator(
+      queueRepository,
+      nativeOutputCoordinator,
+      destinationService,
+      {
+        settingsRepository: {
+          getSettings: vi.fn(async () => DEFAULT_SETTINGS),
+        },
+        historyRepository: {
+          markChapterAsDownloaded: vi.fn(async () => undefined),
+          getDownloadedChapters: vi.fn(async () => []),
+          restoreChapterFromCompletedTask: vi.fn(async () => true),
+        },
+      }
+    )
+    const lease = {
+      jobId: "job-1",
+      attempt: 1,
+      taskId: "task-1",
+      chapterId: "chapter-1",
+      fingerprint: "a".repeat(64),
+      documentInstanceId: "document-1",
+    } satisfies DispatchLeaseAuthority
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          success: true,
+          canceled: false,
+          ...lease,
+          status: "terminal",
+          lastSequence: 3,
+        })),
+      },
+    } as unknown as typeof chrome)
+
+    await expect(
+      coordinator.cancelProducerAndClearLease(lease)
+    ).resolves.toMatchObject({
+      jobId: "job-1",
+      documentInstanceId: "document-1",
+    })
+    expect(clearDispatchLease).toHaveBeenCalledWith(lease)
   })
 })

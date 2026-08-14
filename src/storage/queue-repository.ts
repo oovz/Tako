@@ -304,6 +304,7 @@ export class QueueRepository {
 
   async resumeDestinationTask(input: {
     taskId: string
+    commandId: string
     destinationOverride: "downloads-api" | undefined
     now: number
   }): Promise<ReturnType<typeof decideDestinationResume>["result"]> {

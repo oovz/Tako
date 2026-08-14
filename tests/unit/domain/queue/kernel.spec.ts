@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   beginChapterDispatch,
   blockTaskForDestination,
+  blockTaskForNativeOutputAction,
   blockTaskForProviderPolicy,
   cancelDownloadTask,
   clearDispatchLease,
@@ -1102,6 +1103,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
 
     const resumed = resumeDestinationTask(state, {
       taskId: "task-1",
+      commandId: "command-destination",
       destinationOverride: "downloads-api",
       now: 500,
     })
@@ -1123,6 +1125,81 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       expect.objectContaining({ id: "chapter-2", status: "completed" }),
     ])
 
+    const destinationReplay = resumeDestinationTask(resumed.next, {
+      taskId: "task-1",
+      commandId: "command-destination",
+      destinationOverride: "downloads-api",
+      now: 900,
+    })
+    expectNoChange(destinationReplay, resumed.next, "unchanged")
+    expect(destinationReplay.result).toMatchObject({
+      reason: "already-resumed",
+      task: resumed.next.queue[0],
+    })
+
+    const reblocked = blockTaskForDestination(resumed.next, {
+      taskId: "task-1",
+      errorMessage: "new permission issue",
+      now: 950,
+    })
+    expect(reblocked.next.queue[0]).toMatchObject({
+      activeBlock: "destination_action_required",
+      destinationBlockRevision: 1,
+    })
+    const delayedReplay = resumeDestinationTask(reblocked.next, {
+      taskId: "task-1",
+      commandId: "command-destination",
+      destinationOverride: "downloads-api",
+      now: 1_000,
+    })
+    expectNoChange(delayedReplay, reblocked.next, "unchanged")
+    expect(delayedReplay.result).toMatchObject({
+      reason: "superseded",
+      task: reblocked.next.queue[0],
+    })
+    expect(delayedReplay.next.queue[0]?.activeBlock).toBe(
+      "destination_action_required"
+    )
+
+    const terminalReplay = resumeDestinationTask(
+      {
+        ...resumed.next,
+        queue: [
+          {
+            ...resumed.next.queue[0]!,
+            status: "completed",
+          },
+        ],
+      },
+      {
+        taskId: "task-1",
+        commandId: "command-destination",
+        destinationOverride: "downloads-api",
+        now: 1_000,
+      }
+    )
+    expectNoChange(terminalReplay, terminalReplay.next, "unchanged")
+
+    const differentCommand = resumeDestinationTask(
+      {
+        ...resumed.next,
+        queue: [
+          {
+            ...resumed.next.queue[0]!,
+            status: "queued",
+          },
+        ],
+      },
+      {
+        taskId: "task-1",
+        commandId: "other-command",
+        destinationOverride: "downloads-api",
+        now: 1_000,
+      }
+    )
+    expectNoChange(differentCommand, differentCommand.next, "unchanged")
+    expect(differentCommand.result).toMatchObject({ reason: "not-blocked" })
+
     const unblocked = createState([createTask()])
     expectNoChange(
       releaseDestinationBlock(unblocked, { taskId: "task-1" }),
@@ -1132,6 +1209,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expectNoChange(
       resumeDestinationTask(unblocked, {
         taskId: "task-1",
+        commandId: "command-destination",
         destinationOverride: undefined,
         now: 500,
       }),
@@ -1142,6 +1220,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expectNoChange(
       resumeDestinationTask(missing, {
         taskId: "missing",
+        commandId: "command-destination",
         destinationOverride: undefined,
         now: 500,
       }),
@@ -1616,7 +1695,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     const before = structuredClone(state)
     const canceled = cancelDownloadTask(state, {
       taskId: "task-1",
-      undoToken: "undo-cancel",
+      commandId: "queued-cancel",
       now: 500,
     })
 
@@ -1627,7 +1706,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     ])
     expect(canceled.next.pendingUndoActions).toEqual([
       expect.objectContaining({
-        token: "undo-cancel",
+        token: "cancel:queued-cancel",
         type: "cancel_queued",
         previousQueuePosition: 1,
         createdAt: 500,
@@ -1639,7 +1718,22 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       outcome: "applied",
       canceledLease: null,
       undo: {
-        token: "undo-cancel",
+        token: "cancel:queued-cancel",
+        type: "cancel_queued",
+        expiresAt: 5_500,
+      },
+    })
+
+    const replay = cancelDownloadTask(canceled.next, {
+      taskId: "task-1",
+      commandId: "queued-cancel",
+      now: 900,
+    })
+    expectNoChange(replay, canceled.next, "unchanged")
+    expect(replay.result).toMatchObject({
+      reason: "already-canceled",
+      undo: {
+        token: "cancel:queued-cancel",
         type: "cancel_queued",
         expiresAt: 5_500,
       },
@@ -1659,7 +1753,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     const before = structuredClone(state)
     const canceled = cancelDownloadTask(state, {
       taskId: "task-1",
-      undoToken: "unused",
+      commandId: "cancel-command",
       now: 500,
     })
 
@@ -1680,6 +1774,28 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       canceledLease: lease,
       undo: null,
     })
+
+    const replay = cancelDownloadTask(canceled.next, {
+      taskId: "task-1",
+      commandId: "cancel-command",
+      now: 900,
+    })
+    expectNoChange(replay, canceled.next, "unchanged")
+    expect(replay.result).toMatchObject({
+      reason: "already-canceled",
+      canceledLease: lease,
+      undo: null,
+    })
+
+    expectRejectedReason(
+      cancelDownloadTask(canceled.next, {
+        taskId: "task-1",
+        commandId: "different-command",
+        now: 901,
+      }),
+      canceled.next,
+      "task-not-active"
+    )
   })
 
   it("cancels a native-output action-required queued task without Undo so surrender runs", () => {
@@ -1691,7 +1807,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     const before = structuredClone(state)
     const canceled = cancelDownloadTask(state, {
       taskId: "task-1",
-      undoToken: "unused",
+      commandId: "cancel-native",
       now: 500,
     })
 
@@ -1706,24 +1822,47 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       canceledLease: null,
       undo: null,
     })
+
+    const blockedWithLease = blockTaskForNativeOutputAction(
+      createState([createTask("task-1", "downloading")]),
+      { taskId: "task-1", errorMessage: "erased" }
+    )
+    const lease = createLease()
+    const canceledWithLease = cancelDownloadTask(
+      { ...blockedWithLease.next, lease },
+      {
+        taskId: "task-1",
+        commandId: "cancel-native",
+        now: 600,
+      }
+    )
+    expect(canceledWithLease.result).toMatchObject({
+      outcome: "applied",
+      canceledLease: lease,
+      undo: null,
+      task: { activeCancel: { commandId: "cancel-native" } },
+    })
   })
 
-  it("rejects cancellation for missing/terminal tasks and duplicate queued Undo tokens", () => {
-    const action = createUndoAction({ token: "duplicate" })
+  it("converges cancellation replays while rejecting mismatched and inactive tasks", () => {
+    const action = createUndoAction({ token: "cancel:duplicate" })
     const state = createState([createTask()], null, [action])
     const duplicate = cancelDownloadTask(state, {
       taskId: "task-1",
-      undoToken: "duplicate",
+      commandId: "duplicate",
       now: 500,
     })
-    expectNoChange(duplicate, state, "rejected")
-    expect(duplicate.result).toMatchObject({ reason: "undo-token-conflict" })
+    expectNoChange(duplicate, state, "unchanged")
+    expect(duplicate.result).toMatchObject({
+      reason: "already-canceled",
+      undo: { token: "cancel:duplicate", type: "cancel_queued" },
+    })
 
     const terminal = createState([createTask("task-1", "completed")])
     expectNoChange(
       cancelDownloadTask(terminal, {
         taskId: "task-1",
-        undoToken: "undo",
+        commandId: "terminal-cancel",
         now: 500,
       }),
       terminal,
@@ -1733,7 +1872,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     expectNoChange(
       cancelDownloadTask(missing, {
         taskId: "missing",
-        undoToken: "undo",
+        commandId: "missing-cancel",
         now: 500,
       }),
       missing,
@@ -1755,6 +1894,21 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     expect(removed.next.pendingUndoActions[0]).toMatchObject({
       type: "remove_history",
       taskSnapshot: task,
+    })
+
+    const replay = removeTerminalDownloadTask(removed.next, {
+      taskId: "task-1",
+      undoToken: "undo-remove",
+      now: 900,
+    })
+    expectNoChange(replay, removed.next, "unchanged")
+    expect(replay.result).toMatchObject({
+      reason: "already-removed",
+      undo: {
+        token: "undo-remove",
+        type: "remove_history",
+        expiresAt: 5_500,
+      },
     })
 
     const queued = createState([createTask()])
@@ -1812,9 +1966,28 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       token: action.token,
       now: 1_000,
     })
-    expect(duplicateRestore.changedKeys).toEqual(["pendingUndoActions"])
-    expect(duplicateRestore.next.queue).toBe(duplicateTask.queue)
+    expect(duplicateRestore.changedKeys).toEqual([
+      "queue",
+      "pendingUndoActions",
+    ])
+    expect(duplicateRestore.next.queue).not.toBe(duplicateTask.queue)
+    expect(duplicateRestore.next.queue[0]?.restoredUndo).toEqual({
+      token: action.token,
+      type: action.type,
+    })
     expect(duplicateRestore.result).toMatchObject({ restored: true })
+
+    const secondRestore = restorePendingUndoAction(duplicateRestore.next, {
+      token: action.token,
+      now: 1_500,
+    })
+    expectNoChange(secondRestore, duplicateRestore.next, "unchanged")
+    expect(secondRestore.result).toEqual({
+      outcome: "unchanged",
+      type: action.type,
+      restored: true,
+      reason: "already-restored",
+    })
   })
 
   it("materializes expired queued cancellation while reporting restoration failure", () => {

@@ -32,20 +32,39 @@ export class DownloadTaskCancellationCoordinator {
     private readonly finalizationDependencies: DownloadQueueFinalizationDependencies
   ) {}
 
-  async cancelTask(taskId: string): Promise<{
+  async cancelTask(
+    taskId: string,
+    commandId: string
+  ): Promise<{
     result: CancelTaskResult
     queueCanContinue: boolean
   }> {
     return await runTaskSideEffectExclusive(taskId, async () => {
       const transition = await this.queueRepository.cancelDownloadTask({
         taskId,
-        undoToken: crypto.randomUUID(),
+        commandId,
         now: Date.now(),
       })
-      if (transition.outcome !== "applied") {
+      if (transition.outcome === "unchanged" && transition.undo) {
+        await schedulePendingUndoAction(
+          this.queueRepository,
+          transition.undo,
+          this.destinationService
+        )
+        return {
+          result: { kind: "queued", undo: transition.undo },
+          queueCanContinue: false,
+        }
+      }
+      if (transition.outcome === "rejected") {
         // Replay of an already-applied cancel: the task is gone or already
         // terminal, which IS the durable result of this command.
         const task = await this.queueRepository.getTask(taskId)
+        if (task?.activeCancel && task.activeCancel.commandId !== commandId) {
+          throw new Error(
+            "Download task was already canceled by another command."
+          )
+        }
         if (!task || isTerminalDownloadTask(task)) {
           return { result: { kind: "active" }, queueCanContinue: true }
         }
@@ -190,17 +209,20 @@ export class DownloadTaskCancellationCoordinator {
         type: "OFFSCREEN_CANCEL_JOB",
         payload: identity,
       })
-      if (
-        !response.success ||
-        !response.canceled ||
-        response.jobId !== identity.jobId ||
-        response.attempt !== identity.attempt ||
-        response.taskId !== identity.taskId ||
-        response.chapterId !== identity.chapterId ||
-        response.fingerprint !== identity.fingerprint ||
-        response.documentInstanceId !== identity.documentInstanceId ||
-        response.status !== "canceled"
-      ) {
+      const exactIdentity =
+        response.success &&
+        response.jobId === identity.jobId &&
+        response.attempt === identity.attempt &&
+        response.taskId === identity.taskId &&
+        response.chapterId === identity.chapterId &&
+        response.fingerprint === identity.fingerprint &&
+        response.documentInstanceId === identity.documentInstanceId
+      const converged =
+        exactIdentity &&
+        ((response.canceled && response.status === "canceled") ||
+          (!response.canceled &&
+            (response.status === "absent" || response.status === "terminal")))
+      if (!converged) {
         logger.warn("Offscreen cancellation acknowledgement did not match", {
           taskId: lease.taskId,
           response,

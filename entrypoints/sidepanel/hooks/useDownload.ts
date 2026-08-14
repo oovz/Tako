@@ -64,6 +64,17 @@ export function buildStartDownloadMessage(input: {
   }
 }
 
+export async function createStartDownloadRetentionKey(
+  payload: RuntimeMessageRequest<"START_DOWNLOAD">["payload"]
+): Promise<string> {
+  const encoded = new TextEncoder().encode(JSON.stringify(payload))
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", encoded)
+  const fingerprint = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+  return `START_DOWNLOAD:${payload.sourceWindowId}:${payload.sourceTabId}:${fingerprint}`
+}
+
 export function resolveSelectedChapterStates(
   chapters: ChapterState[],
   selectedChapterIds: string[]
@@ -189,8 +200,14 @@ export function useDownload({
           ),
         })
 
-        const enqueueResponse =
-          await sendRuntimeMessageWithRetry(startDownloadMessage)
+        const enqueueResponse = await sendRuntimeMessageWithRetry(
+          startDownloadMessage,
+          {
+            retentionKey: await createStartDownloadRetentionKey(
+              startDownloadMessage.payload
+            ),
+          }
+        )
         if (enqueueResponse?.success !== true) {
           const code =
             enqueueResponse && "code" in enqueueResponse

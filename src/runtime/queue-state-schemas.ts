@@ -153,6 +153,24 @@ export const DownloadTaskStateSchema = z
     isRetryTask: z.boolean().optional(),
     lastSuccessfulDownloadId: nonnegativeInteger.optional(),
     nextChapterDispatchAt: finiteNumber.optional(),
+    destinationBlockRevision: nonnegativeInteger.optional(),
+    destinationResume: z
+      .strictObject({
+        commandId: nonemptyString,
+        blockRevision: nonnegativeInteger,
+      })
+      .optional(),
+    activeCancel: z
+      .strictObject({
+        commandId: nonemptyString,
+      })
+      .optional(),
+    restoredUndo: z
+      .strictObject({
+        token: nonemptyString,
+        type: z.enum(["cancel_queued", "remove_history"]),
+      })
+      .optional(),
     settingsSnapshot: taskSettingsSnapshotSchema,
   })
   .strict()

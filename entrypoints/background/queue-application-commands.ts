@@ -112,6 +112,9 @@ export class QueueApplicationCommands {
     payload: StartDownloadPayload,
     commandId: string
   ): Promise<{ taskId: string }> {
+    const existingTask = await this.deps.queueRepository.getTask(commandId)
+    if (existingTask) return { taskId: commandId }
+
     const firstContext = await this.deps.getCurrentSeriesContext(
       payload.sourceTabId,
       payload.sourceWindowId
@@ -165,6 +168,9 @@ export class QueueApplicationCommands {
     // Deterministic child identity: a re-delivered RETRY command produces the
     // same retry task, and the kernel's already-retried signal closes it.
     const retryTaskId = `retry:${commandId}`
+    const existingRetryTask =
+      await this.deps.queueRepository.getTask(retryTaskId)
+    if (existingRetryTask) return { newTaskId: retryTaskId }
     const result = await this.deps.queueRepository.retryFailedChapters({
       taskId,
       retryTaskId,
@@ -175,7 +181,14 @@ export class QueueApplicationCommands {
         result.reason === "already-retried" ||
         result.reason === "retry-task-id-conflict"
       ) {
-        return { newTaskId: retryTaskId }
+        const convergedRetryTask =
+          await this.deps.queueRepository.getTask(retryTaskId)
+        if (convergedRetryTask) return { newTaskId: retryTaskId }
+        throw new Error(
+          result.reason === "already-retried"
+            ? "Failed chapters were already retried by another command"
+            : "Retry task identity already exists"
+        )
       }
       throw new Error(
         result.reason === "task-not-found"
@@ -203,6 +216,9 @@ export class QueueApplicationCommands {
     commandId: string
   ): Promise<{ newTaskId: string }> {
     const restartTaskId = `restart:${commandId}`
+    const existingRestartTask =
+      await this.deps.queueRepository.getTask(restartTaskId)
+    if (existingRestartTask) return { newTaskId: restartTaskId }
     const result = await this.deps.queueRepository.restartDownloadTask({
       taskId,
       restartTaskId,
@@ -213,7 +229,14 @@ export class QueueApplicationCommands {
         result.reason === "already-retried" ||
         result.reason === "restart-task-id-conflict"
       ) {
-        return { newTaskId: restartTaskId }
+        const convergedRestartTask =
+          await this.deps.queueRepository.getTask(restartTaskId)
+        if (convergedRestartTask) return { newTaskId: restartTaskId }
+        throw new Error(
+          result.reason === "already-retried"
+            ? "Task was already restarted by another command"
+            : "Restart task identity already exists"
+        )
       }
       throw new Error(
         result.reason === "task-not-found"
@@ -249,13 +272,16 @@ export class QueueApplicationCommands {
     return { removedCount: result.removedTaskIds.length }
   }
 
-  async removeTask(taskId: string): Promise<PendingUndoReceipt | undefined> {
+  async removeTask(
+    taskId: string,
+    commandId: string
+  ): Promise<PendingUndoReceipt | undefined> {
     const result = await this.deps.queueRepository.removeTerminalDownloadTask({
       taskId,
-      undoToken: crypto.randomUUID(),
+      undoToken: `remove:${commandId}`,
       now: Date.now(),
     })
-    if (result.outcome !== "applied") {
+    if (result.outcome !== "applied" && result.outcome !== "unchanged") {
       if (result.reason === "task-not-found") {
         // Replay of an already-applied remove: the task is already gone,
         // which IS the durable result of this command. No new Undo exists.
@@ -273,9 +299,14 @@ export class QueueApplicationCommands {
     return result.undo
   }
 
-  async cancelTask(taskId: string): Promise<CancelTaskResult> {
-    const cancellation =
-      await this.deps.cancellationCoordinator.cancelTask(taskId)
+  async cancelTask(
+    taskId: string,
+    commandId: string
+  ): Promise<CancelTaskResult> {
+    const cancellation = await this.deps.cancellationCoordinator.cancelTask(
+      taskId,
+      commandId
+    )
     if (cancellation.queueCanContinue) await this.activateQueue()
     return cancellation.result
   }
@@ -290,12 +321,12 @@ export class QueueApplicationCommands {
     return result
   }
 
-  async retryDestination(taskId: string): Promise<void> {
-    await this.resumeDestination(taskId, undefined)
+  async retryDestination(taskId: string, commandId: string): Promise<void> {
+    await this.resumeDestination(taskId, commandId, undefined)
   }
 
-  async continueDownload(taskId: string): Promise<void> {
-    await this.resumeDestination(taskId, "downloads-api")
+  async continueDownload(taskId: string, commandId: string): Promise<void> {
+    await this.resumeDestination(taskId, commandId, "downloads-api")
   }
 
   async undoQueueAction(
@@ -306,7 +337,10 @@ export class QueueApplicationCommands {
       token,
       this.deps.destinationService
     )
-    if (result.outcome !== "applied" || !result.restored) {
+    if (
+      (result.outcome !== "applied" && result.outcome !== "unchanged") ||
+      !result.restored
+    ) {
       throw new Error(
         result.outcome === "applied" && result.reason === "expired"
           ? "The Undo period has ended."
@@ -314,24 +348,31 @@ export class QueueApplicationCommands {
       )
     }
 
-    const restoredQueuedTask = result.action.type === "cancel_queued"
+    const restoredQueuedTask =
+      (result.outcome === "applied" ? result.action.type : result.type) ===
+      "cancel_queued"
     if (restoredQueuedTask) await this.activateQueue()
     return { restoredQueuedTask }
   }
 
   private async resumeDestination(
     taskId: string,
+    commandId: string,
     destinationOverride: "downloads-api" | undefined
   ): Promise<void> {
     const result = await this.deps.queueRepository.resumeDestinationTask({
       taskId,
+      commandId,
       destinationOverride,
       now: Date.now(),
     })
     if (result.outcome === "rejected") {
       throw new Error("Download task not found.")
     }
-    if (result.outcome === "unchanged") {
+    if (result.outcome === "unchanged" && result.reason === "superseded") {
+      return
+    }
+    if (result.outcome === "unchanged" && result.reason !== "already-resumed") {
       throw new Error("This task is not waiting for download-folder action.")
     }
 
