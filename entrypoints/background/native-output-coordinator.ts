@@ -544,6 +544,12 @@ export class NativeOutputCoordinator {
           identity: canceledJob,
           error: "Download task canceled before every output was handed off",
         })
+        // A task can be blocked for an erased browser download while it still
+        // owns the producer lease. Sealing stops further handoff, but the
+        // already-erased output remains unobservable until it is explicitly
+        // surrendered. Cancellation is that terminal user decision.
+        await this.surrenderTaskUnobservableLocked(taskId)
+        await this.armLivenessLocked()
       } catch (error) {
         await this.armLivenessLocked()
         throw error
@@ -563,12 +569,9 @@ export class NativeOutputCoordinator {
   ): Promise<{ surrendered: number }> {
     return await this.serialized(async () => {
       const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
-      if (surrendered === 0) {
-        return { surrendered }
-      }
       const released =
         await this.deps.queueRepository.releaseNativeOutputActionBlock(taskId)
-      if (released.outcome === "applied") {
+      if (released.outcome === "applied" || released.outcome === "unchanged") {
         await this.deps.activateQueue()
       }
       return { surrendered }
@@ -615,10 +618,17 @@ export class NativeOutputCoordinator {
       (manifest) => manifest.taskId === taskId
     )
     let surrendered = 0
+    const jobsToReconcile = new Set<string>()
     for (const manifest of manifests) {
+      jobsToReconcile.add(manifest.jobId)
       for (const outputId of manifestTrackedOutputIds(manifest)) {
         const record = snapshot.outputsByOutputId[outputId]
-        if (!record || !isNativeOutputUnobservable(record)) continue
+        if (!record) continue
+        if (record.phase === "surrendered") {
+          jobsToReconcile.add(manifest.jobId)
+          continue
+        }
+        if (!isNativeOutputUnobservable(record)) continue
         const result = await this.deps.repository.markSurrendered({
           outputId,
           now: Date.now(),
@@ -626,9 +636,12 @@ export class NativeOutputCoordinator {
         if (result.outcome === "rejected") {
           throw new Error(`Native output surrender rejected: ${result.reason}`)
         }
-        surrendered += 1
+        if (result.outcome === "applied") surrendered += 1
+        jobsToReconcile.add(manifest.jobId)
       }
-      if (surrendered > 0) await this.reconcileJobLocked(manifest.jobId)
+    }
+    for (const jobId of jobsToReconcile) {
+      await this.reconcileJobLocked(jobId)
     }
     return surrendered
   }

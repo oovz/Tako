@@ -179,16 +179,19 @@ async function cancelOffscreenJob(
       type: "OFFSCREEN_CANCEL_JOB",
       payload: input,
     })
-    return (
+    const exactIdentity =
       response.success &&
-      response.canceled &&
-      response.status === "canceled" &&
       response.jobId === input.jobId &&
       response.attempt === input.attempt &&
       response.taskId === input.taskId &&
       response.chapterId === input.chapterId &&
       response.fingerprint === input.fingerprint &&
       response.documentInstanceId === input.documentInstanceId
+    return (
+      exactIdentity &&
+      ((response.canceled && response.status === "canceled") ||
+        (!response.canceled &&
+          (response.status === "terminal" || response.status === "absent")))
     )
   } catch (error) {
     logger.debug("Cooperative offscreen cancellation failed", error)
@@ -397,6 +400,8 @@ export async function recoverFromLivenessTimeout(
         exactQueriedJob.taskId,
         settlement
       )
+    } else if (settlement === "terminal-owner-released") {
+      await queueScheduler.activate()
     } else if (
       settlement === "chapter-settled" &&
       !queueScheduler.isTaskActive(exactQueriedJob.taskId)

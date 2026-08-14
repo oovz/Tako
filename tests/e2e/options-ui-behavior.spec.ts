@@ -145,12 +145,16 @@ test.describe("Options UI behavior", () => {
       }),
     ])
 
-    // Queued blocked tasks cancel immediately through the surrender path; the
-    // cancellation is NOT an ordinary reversible Undo action.
+    // Canceling this blocked task also surrenders erased output observation,
+    // so it requires the same explicit warning as the task-wide Forget action.
     const taskCard = page
       .getByRole("heading", { name: "Unobservable Options" })
       .locator("xpath=ancestor::*[@aria-busy][1]")
     await taskCard.getByRole("button", { name: "Cancel" }).click()
+    await expect(
+      taskCard.getByText("Forget all pending downloads for this task?")
+    ).toBeVisible()
+    await taskCard.getByRole("button", { name: "Forget all downloads" }).click()
 
     await expect(taskCard.getByText("Canceled at")).toBeVisible()
     await expect

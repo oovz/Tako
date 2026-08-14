@@ -62,6 +62,7 @@ describe("NativeOutputCoordinator", () => {
   let revoke: ReturnType<typeof vi.fn>
   let applySettlement: ReturnType<typeof vi.fn>
   let ensureLiveness: ReturnType<typeof vi.fn>
+  let activateQueue: ReturnType<typeof vi.fn>
   let queryJob: NativeOutputCoordinatorDependencies["queryOffscreenJob"]
   let settingsRepository: SettingsRepository
 
@@ -77,6 +78,7 @@ describe("NativeOutputCoordinator", () => {
       settlement: {},
     }))
     ensureLiveness = vi.fn(async () => undefined)
+    activateQueue = vi.fn(async () => undefined)
     queryJob = vi.fn(async (identity) => ({
       ...identity,
       status: "active" as const,
@@ -134,9 +136,10 @@ describe("NativeOutputCoordinator", () => {
       ensureLivenessAlarm:
         ensureLiveness as NativeOutputCoordinatorDependencies["ensureLivenessAlarm"],
       onQueueSettlement: vi.fn(async () => undefined),
-      activateQueue: vi.fn(async () => undefined),
+      activateQueue:
+        activateQueue as NativeOutputCoordinatorDependencies["activateQueue"],
     })
-    return { coordinator, repository, queueRepository }
+    return { coordinator, repository, queueRepository, activateQueue }
   }
 
   it("does not call Chrome when the durable acceptance marker fails", async () => {
@@ -536,7 +539,7 @@ describe("NativeOutputCoordinator", () => {
   })
 
   it("converges a forget replay with zero surrendered when nothing is unobservable", async () => {
-    const { coordinator } = createCoordinator()
+    const { coordinator, queueRepository, activateQueue } = createCoordinator()
     // The browser still knows the download, so the output stays observable.
     search.mockResolvedValue([downloadItem({ state: "in_progress" })])
     await coordinator.handleOutputReady(payload)
@@ -544,6 +547,48 @@ describe("NativeOutputCoordinator", () => {
     await expect(
       coordinator.forgetTaskUnobservableOutputs("task-1")
     ).resolves.toEqual({ surrendered: 0 })
+    expect(queueRepository.releaseNativeOutputActionBlock).toHaveBeenCalledWith(
+      "task-1"
+    )
+    expect(activateQueue).toHaveBeenCalledOnce()
+  })
+
+  it("replays forget after durable surrender and release response loss", async () => {
+    const { coordinator, repository, queueRepository, activateQueue } =
+      createCoordinator()
+    await coordinator.handleOutputReady(payload)
+    await coordinator.handleDownloadErased(42)
+
+    activateQueue.mockRejectedValueOnce(new Error("response lost"))
+    await expect(
+      coordinator.forgetTaskUnobservableOutputs("task-1")
+    ).rejects.toThrow("response lost")
+    expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
+      "surrendered"
+    )
+
+    await expect(
+      coordinator.forgetTaskUnobservableOutputs("task-1")
+    ).resolves.toEqual({ surrendered: 0 })
+    expect(
+      queueRepository.releaseNativeOutputActionBlock
+    ).toHaveBeenCalledTimes(2)
+    expect(activateQueue).toHaveBeenCalledTimes(2)
+  })
+
+  it("treats a terminal or missing task block as a converged forget replay", async () => {
+    const { coordinator, queueRepository, activateQueue } = createCoordinator()
+    vi.mocked(
+      queueRepository.releaseNativeOutputActionBlock
+    ).mockResolvedValueOnce({
+      outcome: "rejected",
+      reason: "task-not-found",
+    } as never)
+
+    await expect(
+      coordinator.forgetTaskUnobservableOutputs("task-1")
+    ).resolves.toEqual({ surrendered: 0 })
+    expect(activateQueue).not.toHaveBeenCalled()
   })
 
   it("surrenders erased outputs when a task is canceled without a job identity", async () => {
@@ -562,6 +607,26 @@ describe("NativeOutputCoordinator", () => {
     // Surrender does not claim complete or interrupted; the Blob is revoked,
     // the queue is settled with the surrendered count, and the released
     // record and manifest are pruned from durable storage.
+    expect(revoke).toHaveBeenCalledWith(
+      expect.objectContaining({ outputId: payload.outputId })
+    )
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({ surrendered: 1 })
+    )
+    await expect(repository.hasLiveDependencies()).resolves.toBe(false)
+    await expect(
+      repository.getByOutputId(payload.outputId)
+    ).resolves.toBeUndefined()
+    await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
+  })
+
+  it("surrenders erased outputs after canceling their exact producer", async () => {
+    const { coordinator, repository } = createCoordinator()
+    await coordinator.handleOutputReady(payload)
+    await coordinator.handleDownloadErased(42)
+
+    await coordinator.cancelTask("task-1", jobIdentity)
+
     expect(revoke).toHaveBeenCalledWith(
       expect.objectContaining({ outputId: payload.outputId })
     )

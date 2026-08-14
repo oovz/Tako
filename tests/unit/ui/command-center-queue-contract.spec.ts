@@ -68,8 +68,20 @@ describe("CommandCenterQueue action hierarchy", () => {
   }
 
   it("confirms active cancellation but makes queued cancellation undoable", () => {
-    expect(shouldConfirmTaskCancellation("downloading")).toBe(true)
-    expect(shouldConfirmTaskCancellation("queued")).toBe(false)
+    expect(
+      shouldConfirmTaskCancellation(makeTask({ status: "downloading" }))
+    ).toBe(true)
+    expect(shouldConfirmTaskCancellation(makeTask({ status: "queued" }))).toBe(
+      false
+    )
+    expect(
+      shouldConfirmTaskCancellation(
+        makeTask({
+          status: "queued",
+          activeBlock: "native_output_action_required",
+        })
+      )
+    ).toBe(true)
   })
 
   it("keeps active cancel visible as the only action", () => {

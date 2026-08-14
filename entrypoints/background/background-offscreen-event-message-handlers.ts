@@ -65,14 +65,10 @@ export function createBackgroundOffscreenEventMessageHandlers(
       const terminal = await runTaskSideEffectExclusive(
         message.payload.taskId,
         async () => {
-          if (!(await isActiveJobOwner(deps, message.payload))) {
-            return {
-              response: {
-                success: true as const,
-                disposition: "lease_not_current" as const,
-              },
-            }
-          }
+          // Terminal events may race with durable cancellation. The lease
+          // renewal below validates the full job incarnation; requiring the
+          // task to still be active would prevent exact terminal evidence
+          // from releasing a canceled task's retained lease.
           const renewal = await deps.queueRepository.renewDispatchLease({
             ...message.payload,
             activityAt: message.payload.terminalAt,

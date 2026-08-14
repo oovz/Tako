@@ -185,7 +185,7 @@ describe("native output cold-start recovery", () => {
     await expect(
       first.queueRepository.cancelDownloadTask({
         taskId: output.taskId,
-        undoToken: "unused-active-cancel-token",
+        commandId: "active-cancel",
         now: 250,
       })
     ).resolves.toMatchObject({ outcome: "applied", undo: null })

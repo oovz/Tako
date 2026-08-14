@@ -107,7 +107,7 @@ export function CommandCenterQueue({
                   delete nextErrors[taskId]
                   return nextErrors
                 })
-                if (!shouldConfirmTaskCancellation(task.status)) {
+                if (!shouldConfirmTaskCancellation(task)) {
                   void Promise.resolve(onCancelTask?.(taskId)).then(
                     (result) => {
                       if (result?.kind === "failed") {

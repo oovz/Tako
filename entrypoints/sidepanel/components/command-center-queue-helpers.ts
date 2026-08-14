@@ -36,9 +36,12 @@ export interface CommandCenterTaskProgressPresentation {
 }
 
 export function shouldConfirmTaskCancellation(
-  status: QueueTaskSummary["status"]
+  task: Pick<QueueTaskSummary, "status" | "activeBlock">
 ): boolean {
-  return status === "downloading"
+  return (
+    task.status === "downloading" ||
+    task.activeBlock === "native_output_action_required"
+  )
 }
 
 export function getRetryAvailability(

@@ -594,6 +594,114 @@ describe("recoverFromLivenessTimeout", () => {
     expect(cancelOrder).toBeLessThan(transitionOrder)
   })
 
+  it.each(["terminal", "absent"] as const)(
+    "accepts an exact %s cancel acknowledgement as stopped producer evidence",
+    async (status) => {
+      const lease = createLease()
+      const { manager, interruptDownloadTask } = createStateManager()
+      mocks.getLease.mockResolvedValue(lease)
+      mocks.renewLease.mockResolvedValue({
+        outcome: "rejected",
+        reason: "stale-sequence",
+      })
+      sendMessage
+        .mockImplementationOnce(async (message) => ({
+          success: true,
+          requestId: message.payload?.requestId,
+          job: {
+            jobId: lease.jobId,
+            attempt: lease.attempt,
+            taskId: lease.taskId,
+            chapterId: lease.chapterId,
+            fingerprint: lease.fingerprint,
+            documentInstanceId: lease.documentInstanceId,
+            status: "active",
+            stage: lease.stage,
+            lastSequence: lease.sequence,
+          },
+        }))
+        .mockImplementationOnce(async () => ({
+          success: true,
+          canceled: false,
+          jobId: lease.jobId,
+          attempt: lease.attempt,
+          taskId: lease.taskId,
+          chapterId: lease.chapterId,
+          fingerprint: lease.fingerprint,
+          documentInstanceId: lease.documentInstanceId,
+          status,
+          lastSequence: lease.sequence,
+        }))
+
+      await recoverFromLivenessTimeout(
+        manager,
+        createNativeOutputCoordinator(),
+        vi.fn(async () => undefined)
+      )
+
+      expect(interruptDownloadTask).toHaveBeenCalledWith(
+        expect.objectContaining({ clearLease: lease })
+      )
+    }
+  )
+
+  it("releases an exact terminal FSA lease after cancellation won the task race", async () => {
+    const lease = createLease()
+    const { manager, interruptDownloadTask } = createStateManager()
+    const canceledTask = {
+      ...(await manager.getTask(lease.taskId))!,
+      status: "canceled" as const,
+      chapters: [
+        {
+          ...(await manager.getTask(lease.taskId))!.chapters[0]!,
+          status: "failed" as const,
+        },
+      ],
+    }
+    vi.mocked(manager.getQueue).mockResolvedValue([canceledTask])
+    vi.mocked(manager.getTask).mockResolvedValue(canceledTask)
+    mocks.getLease.mockResolvedValue(lease)
+    sendMessage.mockImplementationOnce(async (message) => ({
+      success: true,
+      requestId: message.payload?.requestId,
+      job: {
+        jobId: lease.jobId,
+        attempt: lease.attempt,
+        taskId: lease.taskId,
+        chapterId: lease.chapterId,
+        fingerprint: lease.fingerprint,
+        documentInstanceId: lease.documentInstanceId,
+        status: "terminal",
+        stage: "saving",
+        lastSequence: lease.sequence + 1,
+        outcome: {
+          status: "completed",
+          outputsRequested: 1,
+          outputsCommitted: 1,
+          outputsFailedBeforeHandoff: 0,
+        },
+      },
+    }))
+    const onRecover = vi.fn(async () => undefined)
+
+    await recoverFromLivenessTimeout(
+      manager,
+      createNativeOutputCoordinator(),
+      onRecover
+    )
+
+    expect(interruptDownloadTask).not.toHaveBeenCalled()
+    expect(manager.settleTaskChapter).not.toHaveBeenCalled()
+    expect(mocks.clearLease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: lease.jobId,
+        taskId: lease.taskId,
+        fingerprint: lease.fingerprint,
+      })
+    )
+    expect(onRecover).toHaveBeenCalledWith()
+  })
+
   it("re-enters the runner for a matching terminal job without closing offscreen", async () => {
     const lease = createLease()
     const { manager } = createStateManager()

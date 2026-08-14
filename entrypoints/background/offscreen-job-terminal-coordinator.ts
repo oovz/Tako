@@ -23,7 +23,10 @@ import {
 type OffscreenTerminalPayload =
   RuntimeMessageRequest<"OFFSCREEN_JOB_TERMINAL">["payload"]
 export type OffscreenTerminalSettlement =
-  "native-output-pending" | "chapter-settled" | "destination-blocked"
+  | "native-output-pending"
+  | "chapter-settled"
+  | "destination-blocked"
+  | "terminal-owner-released"
 
 export class OffscreenJobTerminalCoordinator {
   constructor(
@@ -49,6 +52,10 @@ export class OffscreenJobTerminalCoordinator {
     }
     if (settlement === "chapter-settled") {
       await this.continueTask(taskId)
+      return
+    }
+    if (settlement === "terminal-owner-released") {
+      this.queueScheduler.requestContinuation()
     }
   }
 
@@ -87,6 +94,21 @@ export class OffscreenJobTerminalCoordinator {
       return "native-output-pending"
     }
 
+    const currentTask = await this.queueRepository.getTask(payload.taskId)
+    if (!currentTask || isTerminalDownloadTask(currentTask)) {
+      // Cancellation is best effort across the MV3 message boundary. An FSA
+      // producer can finish after the task was durably canceled or otherwise
+      // terminalized. Exact terminal producer evidence releases its lease,
+      // but must not rewrite the task that already won the race.
+      const clearing = await this.queueRepository.clearDispatchLease(payload)
+      if (clearing.outcome !== "applied") {
+        throw new Error("Terminal owner dispatch lease clear was rejected")
+      }
+      await clearActiveTaskProgress()
+      await progressTimingEstimator.finish(payload.jobId)
+      return "terminal-owner-released"
+    }
+
     const requested = payload.outcome.outputsRequested
     const committed = payload.outcome.outputsCommitted
     const failed = Math.max(
@@ -104,7 +126,6 @@ export class OffscreenJobTerminalCoordinator {
               ? "fsa_write_failed"
               : null
     if (destinationIssueKind) {
-      const task = await this.queueRepository.getTask(payload.taskId)
       const transition = await this.queueRepository.blockTaskForDestination({
         taskId: payload.taskId,
         now: Date.now(),
@@ -117,13 +138,13 @@ export class OffscreenJobTerminalCoordinator {
           outputs: { requested, committed, failed },
         },
       })
-      if (transition.outcome === "applied" && task) {
+      if (transition.outcome === "applied") {
         await this.destinationService.recordDestinationRuntimeIssue(
           {
             taskId: payload.taskId,
             chapterId: payload.chapterId,
-            destination: task.settingsSnapshot.destination,
-            destinationOverride: task.destinationOverride,
+            destination: currentTask.settingsSnapshot.destination,
+            destinationOverride: currentTask.destinationOverride,
           },
           destinationIssueKind
         )

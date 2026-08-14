@@ -79,6 +79,9 @@ export function DownloadTaskCard({
       (chapter) => chapter.errorCategory === "browser_download_unobservable"
     )
   )
+  const requiresCancelConfirmation =
+    task.status === "downloading" ||
+    task.activeBlock === "native_output_action_required"
 
   const runTaskAction = async (
     action: "retry" | "restart" | "remove",
@@ -98,7 +101,7 @@ export function DownloadTaskCard({
       className="relative"
       aria-busy={pendingAction !== null || isCanceling}
     >
-      {confirmingCancel && task.status === "downloading" && (
+      {confirmingCancel && requiresCancelConfirmation && (
         <InlineConfirmation
           title={cancelPresentation.title}
           description={cancelPresentation.description}
@@ -297,6 +300,10 @@ export function DownloadTaskCard({
               onClick={() => {
                 if (isCanceling) return
                 setCancelError(null)
+                if (requiresCancelConfirmation) {
+                  setConfirmingCancel(true)
+                  return
+                }
                 setIsCanceling(true)
                 void onCancel(task.id)
                   .then((result) => {
