@@ -1,42 +1,72 @@
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 
 import { AlertTriangle, Folder } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { createCommandEnvelope } from "@/src/runtime/command-envelope"
-import {
-  getDestinationIssueMessageKey,
-  normalizeDestinationIssues,
-} from "@/src/runtime/destination-issue-state"
+import { getDestinationIssueMessageKey } from "@/src/runtime/destination-issue-state"
 import { t } from "@/src/runtime/i18n"
 import logger from "@/src/runtime/logger"
 import { openOptionsPage } from "@/src/runtime/open-options"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { DestinationIssue } from "@/src/types/queue-state"
-import { StateAction } from "@/src/types/state-actions"
-import type {
-  StateActionMessage,
-  StateActionResponse,
-} from "@/src/types/state-action-message"
-import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import type { DestinationIssue } from "@/src/domain/queue/state"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 
 interface FsaBannerProps {
   className?: string
 }
 
 export function FsaBanner({ className }: FsaBannerProps) {
-  const [pendingAction, setPendingAction] = useState<StateAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<
+    "CONTINUE_DOWNLOAD" | "CANCEL_TASK" | null
+  >(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const { value: destinationIssues } = useChromeStorageValue<
-    DestinationIssue[]
-  >({
-    areaName: "local",
-    key: LOCAL_STORAGE_KEYS.destinationIssues,
-    initialValue: [],
-    parse: normalizeDestinationIssues,
-  })
-  const issue = destinationIssues[0]
+  const [issue, setIssue] = useState<DestinationIssue | null>(null)
+  const latestRequestId = useRef(0)
+
+  const refreshDestinationIssue = useCallback(async (): Promise<void> => {
+    const requestId = ++latestRequestId.current
+    try {
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "GET_SIDEPANEL_DOWNLOAD_STATE",
+      })
+      if (!response.success) throw new Error(response.error)
+      if (requestId === latestRequestId.current) {
+        setIssue(response.data.destinationIssue)
+      }
+    } catch (error) {
+      if (requestId === latestRequestId.current) {
+        logger.warn("[FsaBanner] Failed to refresh destination issue", error)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refreshDestinationIssue()
+    })
+
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: chrome.storage.AreaName
+    ): void => {
+      if (
+        areaName !== "local" ||
+        !(LOCAL_STORAGE_KEYS.destinationIssues in changes)
+      ) {
+        return
+      }
+      void refreshDestinationIssue()
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => {
+      latestRequestId.current += 1
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [refreshDestinationIssue])
 
   const openOptions = useCallback(async () => {
     try {
@@ -47,23 +77,17 @@ export function FsaBanner({ className }: FsaBannerProps) {
   }, [])
 
   const sendTaskAction = useCallback(
-    async (action: StateAction) => {
+    async (type: "CONTINUE_DOWNLOAD" | "CANCEL_TASK") => {
       if (!issue || pendingAction !== null) return
-      setPendingAction(action)
+      setPendingAction(type)
       setActionError(null)
       try {
-        const response = await chrome.runtime.sendMessage<
-          StateActionMessage,
-          StateActionResponse
-        >({
-          type: "STATE_ACTION",
-          action,
-          ...createCommandEnvelope(),
-          payload: { taskId: issue.taskId },
-        })
-        if (!response?.success) {
-          throw new Error(response?.error || "Task action failed")
+        if (type === "CONTINUE_DOWNLOAD") {
+          await queueCommandClient.continueDownload(issue.taskId)
+        } else {
+          await queueCommandClient.cancelTask(issue.taskId)
         }
+        void refreshDestinationIssue()
       } catch (error) {
         logger.warn("[FsaBanner] Destination task action failed", error)
         setActionError(t("destinationIssue_actionFailed"))
@@ -71,7 +95,7 @@ export function FsaBanner({ className }: FsaBannerProps) {
         setPendingAction(null)
       }
     },
-    [issue, pendingAction]
+    [issue, pendingAction, refreshDestinationIssue]
   )
 
   if (!issue) return null
@@ -93,9 +117,7 @@ export function FsaBanner({ className }: FsaBannerProps) {
             variant="outline"
             size="sm"
             disabled={pendingAction !== null}
-            onClick={() =>
-              void sendTaskAction(StateAction.CONTINUE_TASK_IN_DOWNLOADS)
-            }
+            onClick={() => void sendTaskAction("CONTINUE_DOWNLOAD")}
           >
             {t("destinationIssue_continueDownloads")}
           </Button>
@@ -103,9 +125,7 @@ export function FsaBanner({ className }: FsaBannerProps) {
             variant="ghost"
             size="sm"
             disabled={pendingAction !== null}
-            onClick={() =>
-              void sendTaskAction(StateAction.CANCEL_DOWNLOAD_TASK)
-            }
+            onClick={() => void sendTaskAction("CANCEL_TASK")}
           >
             {t("destinationIssue_cancelTask")}
           </Button>

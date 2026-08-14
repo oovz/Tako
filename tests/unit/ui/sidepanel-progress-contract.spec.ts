@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import React from "react"
 
 import { ActiveTaskProgress } from "@/entrypoints/sidepanel/components/ActiveTaskProgress"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<QueueTaskSummary> = {}): QueueTaskSummary {
   return {

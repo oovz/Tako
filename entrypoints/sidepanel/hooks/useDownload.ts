@@ -1,45 +1,65 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 // no local item mutations; rely on centralized state
 import type { MangaPageState, ChapterState } from "@/src/types/tab-state"
-import type {
-  StartDownloadMessage,
-  StartDownloadResponse,
-} from "@/src/types/runtime-command-messages"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import logger from "@/src/runtime/logger"
 import { createPendingActionGuard } from "@/entrypoints/sidepanel/hooks/pending-action-guard"
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
 import { t } from "@/src/runtime/i18n"
+import type { StartDownloadFailureCode } from "@/src/runtime/start-download-errors"
 
 const SUCCESS_HIDE_DELAY_MS = 2000
 
+const START_DOWNLOAD_ERROR_KEYS: Record<
+  StartDownloadFailureCode | "unknown",
+  string
+> = {
+  stale_series_context: "startDownloadError_staleSeriesContext",
+  invalid_chapter_selection: "startDownloadError_invalidChapterSelection",
+  integration_disabled: "startDownloadError_integrationDisabled",
+  host_permission_required: "startDownloadError_hostPermissionRequired",
+  durable_state_failure: "startDownloadError_durableStateFailure",
+  unknown: "sidepanel_enqueueFailed",
+}
+
+function getStartDownloadErrorMessage(
+  code: StartDownloadFailureCode | undefined
+): string {
+  return t(START_DOWNLOAD_ERROR_KEYS[code ?? "unknown"])
+}
+
 export function buildStartDownloadMessage(input: {
+  windowId: number
   tabId: number
-  mangaState: MangaPageState
-  selectedChapterStates: ChapterState[]
-}): StartDownloadMessage {
-  const { tabId, mangaState, selectedChapterStates } = input
+  sourceUrl: string
+  siteIntegrationId: string
+  seriesId: string
+  seriesRevision: number
+  selectedChapterIds: string[]
+}): RuntimeMessageRequest<"START_DOWNLOAD"> {
+  const {
+    windowId,
+    tabId,
+    sourceUrl,
+    siteIntegrationId,
+    seriesId,
+    seriesRevision,
+    selectedChapterIds,
+  } = input
 
   return {
+    target: "background",
     type: "START_DOWNLOAD",
     ...createCommandEnvelope(),
     payload: {
+      sourceWindowId: windowId,
       sourceTabId: tabId,
-      siteIntegrationId: mangaState.siteIntegrationId,
-      mangaId: mangaState.mangaId,
-      seriesTitle: mangaState.seriesTitle,
-      chapters: selectedChapterStates.map((chapter) => ({
-        id: chapter.id,
-        title: chapter.title,
-        url: chapter.url,
-        index: chapter.index,
-        chapterLabel: chapter.chapterLabel,
-        chapterNumber: chapter.chapterNumber,
-        volumeId: chapter.volumeId,
-        volumeLabel: chapter.volumeLabel,
-        volumeNumber: chapter.volumeNumber,
-        language: chapter.language,
-      })),
-      metadata: mangaState.metadata ? { ...mangaState.metadata } : undefined,
+      sourceUrl,
+      siteIntegrationId,
+      seriesId,
+      seriesRevision,
+      selectedChapterIds: [...selectedChapterIds],
     },
   }
 }
@@ -79,8 +99,10 @@ export function resolveDownloadSeriesIdentity(
 }
 
 interface UseDownloadOptions {
+  windowId: number | undefined
   tabId: number | undefined
   mangaState?: MangaPageState
+  seriesRevision: number | undefined
 }
 
 interface UseDownloadReturn {
@@ -92,8 +114,10 @@ interface UseDownloadReturn {
 }
 
 export function useDownload({
+  windowId,
   tabId,
   mangaState,
+  seriesRevision,
 }: UseDownloadOptions): UseDownloadReturn {
   const [showSuccess, setShowSuccess] = useState(false)
   const [isEnqueuing, setIsEnqueuing] = useState(false)
@@ -116,7 +140,15 @@ export function useDownload({
 
   const startDownload = useCallback(
     async (selectedChapterIds: string[]) => {
-      if (typeof tabId !== "number" || !mangaState) return false
+      if (
+        typeof tabId !== "number" ||
+        typeof windowId !== "number" ||
+        !mangaState ||
+        typeof mangaState.sourceUrl !== "string" ||
+        typeof seriesRevision !== "number"
+      ) {
+        return false
+      }
 
       const pendingKey = "enqueue"
       if (!pendingGuardRef.current.tryBegin(pendingKey)) return false
@@ -146,17 +178,25 @@ export function useDownload({
           throw new Error("Selected chapters must include stable ids")
         }
         const startDownloadMessage = buildStartDownloadMessage({
+          windowId,
           tabId,
-          mangaState,
-          selectedChapterStates,
+          sourceUrl: mangaState.sourceUrl,
+          siteIntegrationId: mangaState.siteIntegrationId,
+          seriesId: mangaState.mangaId,
+          seriesRevision,
+          selectedChapterIds: selectedChapterStates.map(
+            (chapter) => chapter.id
+          ),
         })
 
-        const enqueueResponse = await chrome.runtime.sendMessage<
-          StartDownloadMessage,
-          StartDownloadResponse
-        >(startDownloadMessage)
+        const enqueueResponse = await sendRuntimeMessage(startDownloadMessage)
         if (enqueueResponse?.success !== true) {
-          throw new Error("Failed to enqueue download task")
+          const code =
+            enqueueResponse && "code" in enqueueResponse
+              ? enqueueResponse.code
+              : undefined
+          setErrorMessage(getStartDownloadErrorMessage(code))
+          return false
         }
 
         // Guard against setting state after unmount
@@ -185,7 +225,7 @@ export function useDownload({
         }
       }
     },
-    [tabId, mangaState]
+    [mangaState, seriesRevision, tabId, windowId]
   )
 
   return {

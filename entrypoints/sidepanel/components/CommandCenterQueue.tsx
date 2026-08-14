@@ -3,7 +3,7 @@ import { toast } from "sonner"
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import { CommandCenterTaskRow } from "@/entrypoints/sidepanel/components/CommandCenterTaskRow"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import { shouldConfirmTaskCancellation } from "@/entrypoints/sidepanel/components/command-center-queue-helpers"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
@@ -14,6 +14,8 @@ export interface CommandCenterQueueProps {
     taskId: string
   ) => CancelTaskResult | Promise<CancelTaskResult>
   cancelingTaskIds?: Set<string>
+  onForgetUnobservable?: (taskId: string) => void | Promise<void>
+  forgettingTaskIds?: Set<string>
   retryingTaskIds?: Set<string>
   restartingTaskIds?: Set<string>
   removingTaskIds?: Set<string>
@@ -34,6 +36,8 @@ export function CommandCenterQueue({
   tasks,
   onCancelTask,
   cancelingTaskIds,
+  onForgetUnobservable,
+  forgettingTaskIds,
   retryingTaskIds,
   restartingTaskIds,
   removingTaskIds,
@@ -50,10 +54,16 @@ export function CommandCenterQueue({
   const [confirmingCancelTaskId, setConfirmingCancelTaskId] = useState<
     string | null
   >(null)
+  const [confirmingForgetTaskId, setConfirmingForgetTaskId] = useState<
+    string | null
+  >(null)
   const [coverLoadFailures, setCoverLoadFailures] = useState<
     Record<string, true>
   >({})
   const [cancelErrorsByTaskId, setCancelErrorsByTaskId] = useState<
+    Record<string, string>
+  >({})
+  const [forgetErrorsByTaskId, setForgetErrorsByTaskId] = useState<
     Record<string, string>
   >({})
 
@@ -75,12 +85,17 @@ export function CommandCenterQueue({
             <CommandCenterTaskRow
               task={task}
               isCanceling={isCanceling}
+              isForgettingUnobservable={
+                forgettingTaskIds?.has(task.id) ?? false
+              }
               isRetrying={retryingTaskIds?.has(task.id) ?? false}
               isRestarting={restartingTaskIds?.has(task.id) ?? false}
               isRemoving={removingTaskIds?.has(task.id) ?? false}
               isMoving={movingTaskIds?.has(task.id) ?? false}
               isConfirmingCancel={confirmingCancelTaskId === task.id}
+              isConfirmingForget={confirmingForgetTaskId === task.id}
               cancelError={cancelErrorsByTaskId[task.id] ?? null}
+              forgetError={forgetErrorsByTaskId[task.id] ?? null}
               coverFailed={coverLoadFailures[task.id] === true}
               activeTaskProgress={activeTaskProgress}
               showActiveProgress={showActiveProgress}
@@ -134,6 +149,46 @@ export function CommandCenterQueue({
                 }
                 setConfirmingCancelTaskId(null)
               }}
+              onBeginForgetUnobservable={(taskId) => {
+                setForgetErrorsByTaskId((previousErrors) => {
+                  if (!(taskId in previousErrors)) return previousErrors
+                  const nextErrors = { ...previousErrors }
+                  delete nextErrors[taskId]
+                  return nextErrors
+                })
+                setConfirmingForgetTaskId(taskId)
+              }}
+              onConfirmForgetUnobservable={(taskId) => {
+                void (async () => {
+                  try {
+                    await onForgetUnobservable?.(taskId)
+                  } catch (error) {
+                    setForgetErrorsByTaskId((previousErrors) => ({
+                      ...previousErrors,
+                      [taskId]:
+                        error instanceof Error
+                          ? error.message
+                          : t("sidepanel_toastForgetFailed"),
+                    }))
+                    return
+                  }
+                  setConfirmingForgetTaskId((currentTaskId) =>
+                    currentTaskId === taskId ? null : currentTaskId
+                  )
+                })()
+              }}
+              onDismissForgetUnobservable={() => {
+                if (confirmingForgetTaskId) {
+                  const taskId = confirmingForgetTaskId
+                  setForgetErrorsByTaskId((previousErrors) => {
+                    if (!(taskId in previousErrors)) return previousErrors
+                    const nextErrors = { ...previousErrors }
+                    delete nextErrors[taskId]
+                    return nextErrors
+                  })
+                }
+                setConfirmingForgetTaskId(null)
+              }}
               onCoverError={(taskId) => {
                 setCoverLoadFailures((previousFailures) => ({
                   ...previousFailures,
@@ -141,6 +196,7 @@ export function CommandCenterQueue({
                 }))
               }}
               onCancelTask={onCancelTask}
+              onForgetUnobservable={onForgetUnobservable}
               onRetryFailed={onRetryFailed}
               onRestartTask={onRestartTask}
               onMoveTaskToTop={onMoveTaskToTop}

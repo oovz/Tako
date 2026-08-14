@@ -4,15 +4,14 @@ import React from "react"
 import { SidePanelApp } from "@/entrypoints/sidepanel/SidePanelApp"
 import { ErrorBoundary } from "@/src/ui/shared/components/ErrorBoundary"
 import logger from "@/src/runtime/logger"
-import { settingsService } from "@/src/storage/settings-service"
 import { applyUiPreferences } from "@/src/ui/shared/ui-preferences"
+import { loadUiPreferences } from "@/src/ui/shared/ui-preferences-client"
 
 const rootEl = document.getElementById("root")
 if (rootEl) {
   const initializeSidePanel = async () => {
     try {
-      const settings = await settingsService.getSettings()
-      await applyUiPreferences(settings)
+      await applyUiPreferences(await loadUiPreferences())
     } catch (error) {
       // A preferences read or application failure must not prevent the panel
       // from rendering its ErrorBoundary and recoverable default UI.

@@ -114,11 +114,13 @@ export function SidePanelApp() {
   )
   const {
     cancelingTaskIds,
+    forgettingTaskIds,
     retryingTaskIds,
     restartingTaskIds,
     removingTaskIds,
     movingTaskIds,
     handleCancelTask,
+    handleForgetTask,
     handleRetryFailed,
     handleRestartTask,
     handleRemoveTask,
@@ -225,6 +227,7 @@ export function SidePanelApp() {
                 isLoading={isLoading}
                 isInlineSelectionOpen={isInlineSelectionOpen}
                 cancelingTaskIds={cancelingTaskIds}
+                forgettingTaskIds={forgettingTaskIds}
                 retryingTaskIds={retryingTaskIds}
                 restartingTaskIds={restartingTaskIds}
                 removingTaskIds={removingTaskIds}
@@ -232,6 +235,7 @@ export function SidePanelApp() {
                 activeTaskProgress={activeTaskProgress}
                 showActiveProgress={showActiveProgress}
                 onCancelTask={handleCancelTask}
+                onForgetUnobservable={handleForgetTask}
                 onRetryFailed={handleRetryFailed}
                 onRestartTask={handleRestartTask}
                 onMoveTaskToTop={handleMoveTaskToTop}

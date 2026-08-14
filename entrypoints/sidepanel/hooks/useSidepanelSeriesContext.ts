@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { VolumeOrChapter } from "../types"
 import { useSidepanelTrackedTabId } from "@/entrypoints/sidepanel/hooks/useSidepanelTrackedTabId"
@@ -14,15 +14,15 @@ import {
 } from "@/src/runtime/storage-keys"
 import type { MangaPageState } from "@/src/types/tab-state"
 import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
-import {
-  parseDownloadedChapters,
-  type DownloadedChapterRecord,
-} from "@/src/storage/chapter-persistence-service"
-import type { RequestTabContextRefreshResponse } from "@/src/types/runtime-command-messages"
+import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import logger from "@/src/runtime/logger"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
 
 export interface SidepanelSeriesContextData {
+  windowId: number | undefined
   tabId: number | undefined
+  seriesRevision: number | undefined
   mangaState?: MangaPageState
   items: VolumeOrChapter[]
   mangaTitle: string
@@ -107,7 +107,7 @@ export function createSeriesContextRecoveryCoordinator(input: {
   requestRefresh: (target: {
     tabId: number
     windowId: number
-  }) => Promise<RequestTabContextRefreshResponse>
+  }) => Promise<RuntimeMessageResponse<"REQUEST_TAB_CONTEXT_REFRESH">>
 }) {
   let activeAttempt:
     | {
@@ -129,6 +129,7 @@ export function createSeriesContextRecoveryCoordinator(input: {
 
       if (
         observation.activeTabContext.kind === "ready" &&
+        typeof observation.activeTabContext.revision === "number" &&
         observation.activeTabContext.mangaState.chaptersLoading !== true
       ) {
         activeAttempt = undefined
@@ -162,13 +163,14 @@ export function createSeriesContextRecoveryCoordinator(input: {
 }
 
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
-  const tabId = useSidepanelTrackedTabId()
+  const { tabId, activeUrl } = useSidepanelTrackedTabId()
   const windowId = useCurrentWindowId()
   const recoveryCoordinator = useMemo(
     () =>
       createSeriesContextRecoveryCoordinator({
         requestRefresh: ({ tabId: targetTabId, windowId: targetWindowId }) =>
-          chrome.runtime.sendMessage({
+          sendRuntimeMessage({
+            target: "background",
             type: "REQUEST_TAB_CONTEXT_REFRESH",
             payload: {
               tabId: targetTabId,
@@ -180,23 +182,13 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     []
   )
   const storageKeys = useMemo(
-    () =>
-      typeof tabId === "number"
-        ? [
-            `tab_${tabId}`,
-            `seriesContextError_${tabId}`,
-            SESSION_STORAGE_KEYS.activeTabContext,
-            SESSION_STORAGE_KEYS.activeTabContextByWindow,
-          ]
-        : [
-            SESSION_STORAGE_KEYS.activeTabContext,
-            SESSION_STORAGE_KEYS.activeTabContextByWindow,
-          ],
-    [tabId]
+    () => SESSION_STORAGE_KEYS.activeTabContextByWindow,
+    []
   )
   const parseStoredContext = useCallback(
-    (value: unknown) => normalizeStoredSeriesContext(value, tabId, windowId),
-    [tabId, windowId]
+    (value: unknown) =>
+      normalizeStoredSeriesContext(value, tabId, windowId, activeUrl),
+    [activeUrl, tabId, windowId]
   )
   const { value: activeTabContext, hydrated } =
     useChromeStorageValue<ActiveTabContextValue>({
@@ -205,14 +197,55 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       initialValue: { kind: "unsupported" },
       parse: parseStoredContext,
     })
-  const { value: downloadedChapters } = useChromeStorageValue<
+  const [downloadedChapters, setDownloadedChapters] = useState<
     DownloadedChapterRecord[]
-  >({
-    areaName: "local",
-    key: LOCAL_STORAGE_KEYS.downloadedChapters,
-    initialValue: [],
-    parse: parseDownloadedChapters,
-  })
+  >([])
+  const latestDownloadStateRequestId = useRef(0)
+
+  const refreshDownloadedChapters = useCallback(async (): Promise<void> => {
+    const requestId = ++latestDownloadStateRequestId.current
+    try {
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "GET_SIDEPANEL_DOWNLOAD_STATE",
+      })
+      if (!response.success) throw new Error(response.error)
+      if (requestId === latestDownloadStateRequestId.current) {
+        setDownloadedChapters(response.data.downloadedChapters)
+      }
+    } catch (error) {
+      if (requestId === latestDownloadStateRequestId.current) {
+        logger.debug("[sidepanel] Downloaded chapter query failed", error)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void refreshDownloadedChapters()
+    })
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: chrome.storage.AreaName
+    ): void => {
+      if (
+        areaName !== "local" ||
+        !(
+          LOCAL_STORAGE_KEYS.downloadedChapters in changes ||
+          LOCAL_STORAGE_KEYS.seriesDownloadHistory in changes ||
+          LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs in changes
+        )
+      ) {
+        return
+      }
+      void refreshDownloadedChapters()
+    }
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => {
+      latestDownloadStateRequestId.current += 1
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
+  }, [refreshDownloadedChapters])
 
   useEffect(() => {
     if (
@@ -259,11 +292,18 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   }, [activeTabContext, downloadedChapters])
 
   return {
+    windowId,
     tabId,
+    seriesRevision:
+      activeTabContext.kind === "ready" ? activeTabContext.revision : undefined,
     ...data,
     // Until the session snapshot has hydrated, an initial "unsupported"
     // placeholder is not a resolved result. Keep the loading projection so a
     // panel opening on a supported page does not flash the wrong state.
-    isLoading: !hydrated || data.isLoading,
+    isLoading:
+      !hydrated ||
+      typeof windowId !== "number" ||
+      typeof tabId !== "number" ||
+      data.isLoading,
   }
 }

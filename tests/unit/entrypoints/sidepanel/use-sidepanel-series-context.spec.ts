@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import {
   isInternalUrl,
   isExtensionUrl,
@@ -21,7 +21,7 @@ const chromeMock = {
   },
 }
 vi.stubGlobal("chrome", chromeMock)
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import {
   NO_MANGA_FOUND_MSG,
   TAB_NOT_SUPPORTED_MSG,
@@ -144,6 +144,7 @@ describe("activeTabContext mapping", () => {
     const result = deriveSeriesContextFromActiveTabContext({
       kind: "ready",
       mangaState: {
+        sourceUrl: "https://mangadex.org/title/series-ctx",
         siteIntegrationId: "mangadex",
         mangaId: "series-ctx",
         seriesTitle: "Series Context",
@@ -224,6 +225,7 @@ describe("activeTabContext mapping", () => {
     })
     expect(
       normalizeActiveTabContext({
+        sourceUrl: "https://mangadex.org/title/series-ctx",
         siteIntegrationId: "mangadex",
         mangaId: "series-ctx",
         seriesTitle: "Series Context",
@@ -234,6 +236,7 @@ describe("activeTabContext mapping", () => {
     ).toEqual({
       kind: "ready",
       mangaState: {
+        sourceUrl: "https://mangadex.org/title/series-ctx",
         siteIntegrationId: "mangadex",
         mangaId: "series-ctx",
         seriesTitle: "Series Context",
@@ -244,28 +247,94 @@ describe("activeTabContext mapping", () => {
     })
   })
 
-  it("prefers tracked tab session state over the projected activeTabContext", () => {
+  it("waits for window ownership before reading the per-window projection", () => {
     expect(
       normalizeStoredSeriesContext(
         {
-          tab_17: {
-            siteIntegrationId: "mangadex",
-            mangaId: "tracked-series",
-            seriesTitle: "Tracked Series",
-            chapters: [],
-            volumes: [],
-            lastUpdated: 1,
+          2: {
+            windowId: 2,
+            activeTabId: 17,
+            revision: 4,
+            timestamp: 1,
+            context: { error: "current projection" },
           },
-          activeTabContext: { error: "stale projection" },
         },
         17
       )
+    ).toEqual({ kind: "loading" })
+  })
+
+  it("reads only the exact active tab projection for the current window", () => {
+    expect(
+      normalizeStoredSeriesContext(
+        {
+          2: {
+            windowId: 2,
+            activeTabId: 18,
+            revision: 4,
+            timestamp: 1,
+            context: { error: "Different tab" },
+          },
+        },
+        17,
+        2,
+        "https://mangadex.org/title/current/series"
+      )
+    ).toEqual({ kind: "loading" })
+  })
+
+  it("returns loading for a malformed per-window projection", () => {
+    expect(
+      normalizeStoredSeriesContext(
+        {
+          2: {
+            windowId: 2,
+            activeTabId: 17,
+            revision: 4,
+            timestamp: 1,
+            context: { loading: true },
+            unexpected: true,
+          },
+        },
+        17,
+        2,
+        "https://mangadex.org/title/current/series"
+      )
+    ).toEqual({ kind: "loading" })
+  })
+
+  it("returns the strict ready projection for the exact tab, window, and URL", () => {
+    expect(
+      normalizeStoredSeriesContext(
+        {
+          2: {
+            windowId: 2,
+            activeTabId: 17,
+            revision: 4,
+            timestamp: 1,
+            context: {
+              sourceUrl: "https://mangadex.org/title/current/series",
+              siteIntegrationId: "mangadex",
+              mangaId: "current-series",
+              seriesTitle: "Current Series",
+              chapters: [],
+              volumes: [],
+              lastUpdated: 1,
+            },
+          },
+        },
+        17,
+        2,
+        "https://mangadex.org/title/current/series"
+      )
     ).toEqual({
       kind: "ready",
+      revision: 4,
       mangaState: {
+        sourceUrl: "https://mangadex.org/title/current/series",
         siteIntegrationId: "mangadex",
-        mangaId: "tracked-series",
-        seriesTitle: "Tracked Series",
+        mangaId: "current-series",
+        seriesTitle: "Current Series",
         chapters: [],
         volumes: [],
         lastUpdated: 1,
@@ -273,47 +342,30 @@ describe("activeTabContext mapping", () => {
     })
   })
 
-  it("reads tracked tab errors before falling back to the projected activeTabContext", () => {
+  it("does not render a ready projection from a previous URL on the same tab", () => {
     expect(
       normalizeStoredSeriesContext(
         {
-          seriesContextError_17: "Tab-specific parse failure",
-          activeTabContext: { loading: true },
-        },
-        17
-      )
-    ).toEqual({
-      kind: "error",
-      error: "Tab-specific parse failure",
-    })
-  })
-
-  it("falls back to activeTabContext when no tracked tab state exists", () => {
-    expect(
-      normalizeStoredSeriesContext(
-        {
-          activeTabContext: { loading: true },
-        },
-        17
-      )
-    ).toEqual({ kind: "loading" })
-  })
-
-  it("does not reuse a ready projection from another tab when tracked state is absent", () => {
-    expect(
-      normalizeStoredSeriesContext(
-        {
-          activeTabContext: {
-            siteIntegrationId: "mangadex",
-            mangaId: "stale-series",
-            seriesTitle: "Stale Series",
-            chapters: [],
-            volumes: [],
-            lastUpdated: 1,
+          2: {
+            windowId: 2,
+            activeTabId: 17,
+            revision: 4,
+            timestamp: 1,
+            context: {
+              sourceUrl: "https://mangadex.org/title/old/series",
+              siteIntegrationId: "mangadex",
+              mangaId: "old-series",
+              seriesTitle: "Old Series",
+              chapters: [],
+              volumes: [],
+              lastUpdated: 1,
+            },
           },
         },
-        17
+        17,
+        2,
+        "https://mangadex.org/title/new/series"
       )
-    ).toEqual({ kind: "unsupported" })
+    ).toEqual({ kind: "loading" })
   })
 })

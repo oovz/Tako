@@ -18,8 +18,11 @@ describe("SeriesInlineSelection enqueue errors", () => {
     const html = renderToStaticMarkup(
       React.createElement(SeriesInlineSelection, {
         data: {
+          windowId: 3,
           tabId: 7,
+          seriesRevision: 1,
           mangaState: {
+            sourceUrl: "https://mangadex.org/title/series-1",
             siteIntegrationId: "mangadex",
             mangaId: "series-1",
             seriesTitle: "Series 1",

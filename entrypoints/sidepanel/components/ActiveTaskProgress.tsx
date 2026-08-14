@@ -3,7 +3,7 @@ import { useMemo } from "react"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/src/shared/utils"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 
 interface ActiveTaskProgressProps {

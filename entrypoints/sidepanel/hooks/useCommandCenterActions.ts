@@ -8,28 +8,13 @@ import {
 
 import { toast } from "sonner"
 
-import {
-  cancelDownloadTask,
-  sendStateAction,
-  undoPendingAction,
-} from "@/src/runtime/centralized-state"
 import logger from "@/src/runtime/logger"
 import { openOptionsPage } from "@/src/runtime/open-options"
-import { StateAction } from "@/src/types/state-actions"
-import type {
-  MoveTaskToTopMessage,
-  MoveTaskToTopResponse,
-  RestartTaskMessage,
-  RestartTaskResponse,
-  RetryFailedChaptersMessage,
-  RetryFailedChaptersResponse,
-} from "@/src/types/runtime-command-messages"
 import { t } from "@/src/runtime/i18n"
 import { createPendingActionGuard } from "@/entrypoints/sidepanel/hooks/pending-action-guard"
-import { createCommandEnvelope } from "@/src/runtime/command-envelope"
-import { getPendingUndoReceipt } from "@/src/runtime/state-actions"
-import type { PendingUndoReceipt } from "@/src/types/queue-state"
+import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
+import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 
 function showUndoToast(receipt: PendingUndoReceipt): void {
   toast(
@@ -41,7 +26,9 @@ function showUndoToast(receipt: PendingUndoReceipt): void {
       action: {
         label: t("common_undo"),
         onClick: () => {
-          void undoPendingAction(receipt.token).catch((error) => {
+          void (async () => {
+            await queueCommandClient.undoQueueAction(receipt.token)
+          })().catch((error) => {
             logger.error("[CommandCenter] Failed to undo task action:", error)
             toast.error(t("sidepanel_undoFailed"))
           })
@@ -79,6 +66,9 @@ export function useCommandCenterActions() {
   const [cancelingTaskIds, setCancelingTaskIds] = useState<Set<string>>(
     new Set()
   )
+  const [forgettingTaskIds, setForgettingTaskIds] = useState<Set<string>>(
+    new Set()
+  )
   const [retryingTaskIds, setRetryingTaskIds] = useState<Set<string>>(new Set())
   const [restartingTaskIds, setRestartingTaskIds] = useState<Set<string>>(
     new Set()
@@ -97,8 +87,10 @@ export function useCommandCenterActions() {
       addPendingTaskId(setCancelingTaskIds, taskId)
 
       try {
-        const undo = await cancelDownloadTask(taskId)
-        if (undo) showUndoToast(undo)
+        const result = await queueCommandClient.cancelTask(taskId)
+        if (result.kind === "queued") {
+          showUndoToast(result.undo)
+        }
         return { kind: "completed" }
       } catch (error) {
         logger.error("[CommandCenter] Failed to cancel task:", error)
@@ -111,24 +103,33 @@ export function useCommandCenterActions() {
     []
   )
 
+  const handleForgetTask = useCallback(async (taskId: string) => {
+    const pendingKey = `forget:${taskId}`
+    if (!pendingGuardRef.current.tryBegin(pendingKey)) return
+    addPendingTaskId(setForgettingTaskIds, taskId)
+
+    try {
+      const result = await queueCommandClient.forgetUnobservableOutputs(taskId)
+      toast.success(t("sidepanel_forgetSucceeded", String(result.surrendered)))
+    } catch (error) {
+      logger.error(
+        "[CommandCenter] Failed to forget unobservable outputs:",
+        error
+      )
+      toast.error(t("sidepanel_toastForgetFailed"))
+    } finally {
+      pendingGuardRef.current.finish(pendingKey)
+      removePendingTaskId(setForgettingTaskIds, taskId)
+    }
+  }, [])
+
   const handleRetryFailed = useCallback(async (taskId: string) => {
     const pendingKey = `retry:${taskId}`
     if (!pendingGuardRef.current.tryBegin(pendingKey)) return
     addPendingTaskId(setRetryingTaskIds, taskId)
 
     try {
-      const response = await chrome.runtime.sendMessage<
-        RetryFailedChaptersMessage,
-        RetryFailedChaptersResponse
-      >({
-        type: "RETRY_FAILED_CHAPTERS",
-        ...createCommandEnvelope(),
-        payload: { taskId },
-      })
-
-      if (!response || response.success === false) {
-        toast.error(t("sidepanel_toastRetryFailed"))
-      }
+      await queueCommandClient.retryFailedChapters(taskId)
     } catch (error) {
       logger.error("[CommandCenter] Failed to retry failed chapters:", error)
       toast.error(t("sidepanel_toastRetryFailed"))
@@ -144,11 +145,7 @@ export function useCommandCenterActions() {
     addPendingTaskId(setRemovingTaskIds, taskId)
 
     try {
-      const response = await sendStateAction(StateAction.REMOVE_DOWNLOAD_TASK, {
-        taskId,
-      })
-      const undo = getPendingUndoReceipt(response)
-      if (undo) showUndoToast(undo)
+      showUndoToast(await queueCommandClient.removeTask(taskId))
     } catch (error) {
       logger.error("[CommandCenter] Failed to remove task:", error)
       toast.error(t("sidepanel_toastRemoveFailed"))
@@ -164,18 +161,7 @@ export function useCommandCenterActions() {
     addPendingTaskId(setRestartingTaskIds, taskId)
 
     try {
-      const response = await chrome.runtime.sendMessage<
-        RestartTaskMessage,
-        RestartTaskResponse
-      >({
-        type: "RESTART_TASK",
-        ...createCommandEnvelope(),
-        payload: { taskId },
-      })
-
-      if (!response || response.success === false) {
-        toast.error(t("sidepanel_toastRestartFailed"))
-      }
+      await queueCommandClient.restartTask(taskId)
     } catch (error) {
       logger.error("[CommandCenter] Failed to restart task:", error)
       toast.error(t("sidepanel_toastRestartFailed"))
@@ -191,18 +177,7 @@ export function useCommandCenterActions() {
     addPendingTaskId(setMovingTaskIds, taskId)
 
     try {
-      const response = await chrome.runtime.sendMessage<
-        MoveTaskToTopMessage,
-        MoveTaskToTopResponse
-      >({
-        type: "MOVE_TASK_TO_TOP",
-        ...createCommandEnvelope(),
-        payload: { taskId },
-      })
-
-      if (!response || response.success === false) {
-        toast.error(t("sidepanel_toastMoveTopFailed"))
-      }
+      await queueCommandClient.moveTaskToTop(taskId)
     } catch (error) {
       logger.error("[CommandCenter] Failed to move task to top:", error)
       toast.error(t("sidepanel_toastMoveTopFailed"))
@@ -230,11 +205,13 @@ export function useCommandCenterActions() {
 
   return {
     cancelingTaskIds,
+    forgettingTaskIds,
     retryingTaskIds,
     restartingTaskIds,
     removingTaskIds,
     movingTaskIds,
     handleCancelTask,
+    handleForgetTask,
     handleRetryFailed,
     handleRemoveTask,
     handleRestartTask,

@@ -9,7 +9,7 @@ import logger from "@/src/runtime/logger"
 export function createTrackedTabRefreshCoordinator(input: {
   queryActiveTab: () => Promise<chrome.tabs.Tab[]>
   getCurrentTabId: () => number | undefined
-  commit: (tabId: number | undefined) => void
+  commit: (tabId: number | undefined, activeUrl: string | undefined) => void
 }) {
   let latestRequestId = 0
   let disposed = false
@@ -31,11 +31,14 @@ export function createTrackedTabRefreshCoordinator(input: {
           activeUrl,
           nextTrackedTabId,
         })
-        input.commit(nextTrackedTabId)
+        input.commit(
+          nextTrackedTabId,
+          nextTrackedTabId === activeTab?.id ? activeUrl : undefined
+        )
       } catch (error) {
         if (disposed || requestId !== latestRequestId) return
         logger.debug("[sidepanel] Failed to refresh tracked active tab", error)
-        input.commit(undefined)
+        input.commit(undefined, undefined)
       }
     },
     dispose(): void {
@@ -45,18 +48,35 @@ export function createTrackedTabRefreshCoordinator(input: {
   }
 }
 
-export function useSidepanelTrackedTabId(): number | undefined {
-  const [tabId, setTabId] = useState<number | undefined>(undefined)
+export function useSidepanelTrackedTabId(): {
+  tabId: number | undefined
+  activeUrl: string | undefined
+} {
+  const [trackedTab, setTrackedTab] = useState<{
+    tabId: number | undefined
+    activeUrl: string | undefined
+  }>({ tabId: undefined, activeUrl: undefined })
   const tabIdRef = useRef<number | undefined>(undefined)
+  const activeUrlRef = useRef<string | undefined>(undefined)
 
-  const setTrackedTabId = useCallback((nextTabId: number | undefined) => {
-    logger.debug("[sidepanel] Updating tracked tab id", {
-      previousTabId: tabIdRef.current,
-      nextTabId,
-    })
-    tabIdRef.current = nextTabId
-    setTabId(nextTabId)
-  }, [])
+  const commitTrackedTab = useCallback(
+    (nextTabId: number | undefined, nextActiveUrl: string | undefined) => {
+      const activeUrl =
+        nextTabId === tabIdRef.current && nextActiveUrl === undefined
+          ? activeUrlRef.current
+          : nextActiveUrl
+      logger.debug("[sidepanel] Updating tracked tab", {
+        previousTabId: tabIdRef.current,
+        previousActiveUrl: activeUrlRef.current,
+        nextTabId,
+        nextActiveUrl: activeUrl,
+      })
+      tabIdRef.current = nextTabId
+      activeUrlRef.current = activeUrl
+      setTrackedTab({ tabId: nextTabId, activeUrl })
+    },
+    []
+  )
 
   useEffect(() => {
     logger.debug("[sidepanel] Initializing tracked-tab hook")
@@ -64,7 +84,7 @@ export function useSidepanelTrackedTabId(): number | undefined {
       queryActiveTab: () =>
         chrome.tabs.query({ currentWindow: true, active: true }),
       getCurrentTabId: () => tabIdRef.current,
-      commit: setTrackedTabId,
+      commit: commitTrackedTab,
     })
     const handleActivated = (activeInfo: {
       tabId: number
@@ -101,7 +121,7 @@ export function useSidepanelTrackedTabId(): number | undefined {
       chrome.tabs.onActivated.removeListener(handleActivated)
       chrome.tabs.onUpdated.removeListener(handleUpdated)
     }
-  }, [setTrackedTabId])
+  }, [commitTrackedTab])
 
-  return tabId
+  return trackedTab
 }

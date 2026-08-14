@@ -15,13 +15,4 @@ describe("command center task status labels", () => {
       getTaskStatusLabel("queued", "provider_network_policy_pending")
     ).toBe("Waiting for provider access")
   })
-
-  it("surfaces durable Chrome download waiting state", () => {
-    expect(
-      getTaskStatusLabel("downloading", undefined, {
-        downloadIds: [42],
-        since: 1_000,
-      })
-    ).toBe("Waiting for Chrome Downloads")
-  })
 })

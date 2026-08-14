@@ -3,12 +3,13 @@ import { createElement, type ReactNode } from "react"
 import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react"
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
 
 export interface CommandCenterTaskActionAvailability {
   canCancel: boolean
+  canForgetUnobservable: boolean
   isTaskHistory: boolean
   isRetried: boolean
   canRestart: boolean
@@ -17,7 +18,12 @@ export interface CommandCenterTaskActionAvailability {
 }
 
 export type CommandCenterTaskActionId =
-  "cancel" | "retry-failed" | "restart" | "move-to-top" | "remove"
+  | "cancel"
+  | "forget-unobservable"
+  | "retry-failed"
+  | "restart"
+  | "move-to-top"
+  | "remove"
 
 export interface CommandCenterTaskActionPlan {
   primary: CommandCenterTaskActionId | null
@@ -56,12 +62,8 @@ export function getRetryAvailability(
 
 export function getTaskStatusLabel(
   status: QueueTaskSummary["status"],
-  activeBlock?: QueueTaskSummary["activeBlock"],
-  browserDownloadWait?: QueueTaskSummary["browserDownloadWait"]
+  activeBlock?: QueueTaskSummary["activeBlock"]
 ): string {
-  if (browserDownloadWait) {
-    return t("status_waitingBrowserDownload")
-  }
   if (activeBlock === "destination_action_required") {
     return t("status_destinationActionRequired")
   }
@@ -70,6 +72,9 @@ export function getTaskStatusLabel(
   }
   if (activeBlock === "provider_network_policy_action_required") {
     return t("status_providerActionRequired")
+  }
+  if (activeBlock === "native_output_action_required") {
+    return t("status_nativeOutputActionRequired")
   }
 
   switch (status) {
@@ -123,6 +128,7 @@ export function getTaskActionAvailability(
   task: QueueTaskSummary,
   options: {
     hasCancelHandler: boolean
+    hasForgetUnobservableHandler?: boolean
     isCanceling: boolean
     hasRestartHandler: boolean
     hasMoveToTopHandler: boolean
@@ -136,11 +142,18 @@ export function getTaskActionAvailability(
     task.status === "failed" ||
     task.status === "canceled"
   const isRetried = task.isRetried === true
+  const isUnobservableActionRequired =
+    task.status === "queued" &&
+    task.activeBlock === "native_output_action_required" &&
+    task.hasUnobservableOutput === true
 
   return {
     canCancel:
       (task.status === "downloading" || task.status === "queued") &&
       options.hasCancelHandler,
+    canForgetUnobservable:
+      isUnobservableActionRequired &&
+      (options.hasForgetUnobservableHandler ?? false),
     isTaskHistory,
     isRetried,
     canRestart:
@@ -161,7 +174,11 @@ export function getTaskActionPlan(
   status: QueueTaskSummary["status"],
   availability: Pick<
     CommandCenterTaskActionAvailability,
-    "canCancel" | "canRestart" | "canMoveToTop" | "canRemove"
+    | "canCancel"
+    | "canForgetUnobservable"
+    | "canRestart"
+    | "canMoveToTop"
+    | "canRemove"
   > & { canRetryFailed: boolean }
 ): CommandCenterTaskActionPlan {
   if (status === "downloading") {
@@ -172,6 +189,12 @@ export function getTaskActionPlan(
   }
 
   if (status === "queued") {
+    if (availability.canForgetUnobservable) {
+      return {
+        primary: "forget-unobservable",
+        overflow: availability.canCancel ? ["cancel"] : [],
+      }
+    }
     return {
       primary: availability.canMoveToTop ? "move-to-top" : null,
       overflow: availability.canCancel ? ["cancel"] : [],

@@ -53,7 +53,7 @@ describe("tracked-tab refresh coordinator", () => {
     await firstRefresh
 
     expect(commit).toHaveBeenCalledTimes(1)
-    expect(commit).toHaveBeenCalledWith(2)
+    expect(commit).toHaveBeenCalledWith(2, "https://example.com/2")
   })
 
   it("does not let an older rejected query clear a newer tracked tab", async () => {
@@ -77,7 +77,7 @@ describe("tracked-tab refresh coordinator", () => {
     await firstRefresh
 
     expect(commit).toHaveBeenCalledTimes(1)
-    expect(commit).toHaveBeenCalledWith(2)
+    expect(commit).toHaveBeenCalledWith(2, "https://example.com/2")
   })
 
   it("invalidates an in-flight query when disposed", async () => {

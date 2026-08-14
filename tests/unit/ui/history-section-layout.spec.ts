@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeHistoryTask(id: string): QueueTaskSummary {
   return {

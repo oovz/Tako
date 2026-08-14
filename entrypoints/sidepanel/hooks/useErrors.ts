@@ -1,59 +1,40 @@
 import { useCallback, useEffect, useState } from "react"
-import { isRecord, type StorageValue } from "@/src/shared/type-guards"
 import logger from "@/src/runtime/logger"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import type {
+  PersistentError,
+  PersistentErrorSeverity,
+} from "@/src/runtime/persistent-error-schema"
 
-export type UIPersistentErrorSeverity = "warning" | "error"
-
-export interface UIPersistentError {
-  code: string
-  message: string
-  severity: UIPersistentErrorSeverity
-  ts: number
-}
+export type UIPersistentErrorSeverity = PersistentErrorSeverity
+export type UIPersistentError = PersistentError
 
 const STORAGE_KEY = LOCAL_STORAGE_KEYS.persistentErrors
-
-function parseErrors(raw: unknown): UIPersistentError[] {
-  if (!Array.isArray(raw)) return []
-  const now = Date.now()
-  const errors: UIPersistentError[] = []
-  for (const item of raw) {
-    if (
-      isRecord(item) &&
-      typeof item.code === "string" &&
-      typeof item.message === "string"
-    ) {
-      errors.push({
-        code: item.code,
-        message: item.message,
-        severity: item.severity === "error" ? "error" : "warning",
-        ts: typeof item.ts === "number" ? item.ts : now,
-      })
-    }
-  }
-  return errors
-}
 
 export function useErrors() {
   const [errors, setErrors] = useState<UIPersistentError[]>([])
 
   useEffect(() => {
     let isMounted = true
+    let generation = 0
 
     const load = async () => {
+      const requestGeneration = ++generation
       try {
-        const result = await chrome.storage.local.get(STORAGE_KEY)
-        if (!isMounted) return
-        setErrors(parseErrors(result[STORAGE_KEY]))
+        const response = await sendRuntimeMessage({
+          target: "background",
+          type: "GET_PERSISTENT_ERRORS",
+        })
+        if (!isMounted || requestGeneration !== generation) return
+        if (!response.success) throw new Error(response.error)
+        setErrors(response.data)
       } catch (error) {
-        logger.error("Failed to load persistent errors from storage:", error)
+        if (!isMounted || requestGeneration !== generation) return
+        logger.error("Failed to load persistent errors:", error)
       }
     }
-
-    // Fire-and-forget: React useEffect is sync; async error load runs in background
-    void load()
 
     const listener = (
       changes: { [key: string]: chrome.storage.StorageChange },
@@ -62,11 +43,12 @@ export function useErrors() {
       if (areaName !== "local") return
       const change = changes[STORAGE_KEY]
       if (!change) return
-      const next = change.newValue as StorageValue | undefined
-      setErrors(parseErrors(next))
+      void load()
     }
 
     chrome.storage.onChanged.addListener(listener)
+    // Fire-and-forget: React useEffect is sync; async error load runs in background
+    void load()
 
     return () => {
       isMounted = false
@@ -77,17 +59,17 @@ export function useErrors() {
   const acknowledgeError = useCallback(async (code: string) => {
     if (!code) return
     try {
-      await chrome.runtime.sendMessage({
+      const response = await sendRuntimeMessage({
+        target: "background",
         type: "ACKNOWLEDGE_ERROR",
         ...createCommandEnvelope(),
         payload: { code },
       })
+      if (!response.success) {
+        logger.debug("Failed to acknowledge persistent error:", response.error)
+      }
     } catch (error) {
-      logger.debug(
-        "Failed to send ACKNOWLEDGE_ERROR message, updating local state optimistically:",
-        error
-      )
-      setErrors((prev) => prev.filter((e) => e.code !== code))
+      logger.debug("Failed to send ACKNOWLEDGE_ERROR message:", error)
     }
   }, [])
 

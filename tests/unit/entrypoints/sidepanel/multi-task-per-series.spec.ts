@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { enqueueStartDownloadTask } from "@/entrypoints/background/download-queue"
+import {
+  buildStartDownloadTask,
+  loadStartDownloadSettingsInputs,
+} from "@/entrypoints/background/download-queue-enqueue"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { QueueRepository } from "@/src/storage/queue-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import type {
   DownloadTaskState,
   QueueTaskSummary,
-} from "@/src/types/queue-state"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+} from "@/src/domain/queue/state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { getRetryAvailability } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
+import { SettingsRepository } from "@/src/storage/settings-repository"
+import type { MangaPageState } from "@/src/types/tab-state"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -19,18 +26,14 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/storage/site-overrides-service", () => ({
-  siteOverridesService: {
-    getAll: vi.fn(async () => ({})),
-  },
-}))
-
-vi.mock("@/src/storage/site-integration-settings-service", () => ({
+const settingsRepository = new SettingsRepository("warn")
+const settingsDependencies = {
+  settingsRepository,
+  siteOverridesService: { getAll: vi.fn(async () => ({})) },
   siteIntegrationSettingsService: {
-    getAll: vi.fn(async () => ({})),
     getForSite: vi.fn(async () => ({})),
   },
-}))
+}
 
 function makeTask(
   id: string,
@@ -49,53 +52,55 @@ function makeTask(
   }
 }
 
-function createStateManager(
+function createQueueRepository(
   overrides: {
     queue?: DownloadTaskState[]
-    addDownloadTask?: ReturnType<typeof vi.fn>
+    enqueueDownloadTask?: ReturnType<typeof vi.fn>
   } = {}
 ): {
-  stateManager: CentralizedStateManager
-  addDownloadTask: ReturnType<typeof vi.fn>
+  queueRepository: QueueRepository
+  enqueueDownloadTask: ReturnType<typeof vi.fn>
 } {
-  const addDownloadTask =
-    overrides.addDownloadTask ?? vi.fn(async (_task: unknown) => undefined)
   const queue = overrides.queue ?? []
+  const local: Record<string, unknown> = {
+    [LOCAL_STORAGE_KEYS.downloadQueue]: structuredClone(queue),
+  }
+  vi.stubGlobal("chrome", {
+    storage: {
+      local: {
+        get: vi.fn(async (keys: string[]) =>
+          Object.fromEntries(keys.map((key) => [key, local[key]]))
+        ),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(local, structuredClone(values))
+        }),
+        remove: vi.fn(async (key: string) => {
+          delete local[key]
+        }),
+      },
+      session: { set: vi.fn(async () => undefined) },
+    },
+    action: {
+      setBadgeText: vi.fn(async () => undefined),
+      setBadgeBackgroundColor: vi.fn(async () => undefined),
+    },
+  } as unknown as typeof chrome)
+  const queueRepository = new QueueRepository(new QueueProjectionService())
+  const enqueueDownloadTask =
+    overrides.enqueueDownloadTask ??
+    vi.spyOn(queueRepository, "enqueueDownloadTask")
 
   return {
-    stateManager: {
-      getGlobalState: vi.fn(async () => ({
-        downloadQueue: queue,
-        settings: {
-          ...DEFAULT_SETTINGS,
-          downloads: {
-            ...DEFAULT_SETTINGS.downloads,
-            defaultFormat: "cbz",
-            overwriteExisting: false,
-            pathTemplate: "{seriesTitle}/{chapterTitle}",
-            fileNameTemplate: "<CHAPTER_TITLE>",
-            includeComicInfo: true,
-            includeCoverImage: true,
-          },
-          globalPolicy: {
-            ...DEFAULT_SETTINGS.globalPolicy,
-            image: { concurrency: 2, delayMs: 500 },
-            chapter: { concurrency: 2, delayMs: 500 },
-          },
-          advanced: { ...DEFAULT_SETTINGS.advanced, logLevel: "debug" },
-        },
-        lastActivity: Date.now(),
-      })),
-      addDownloadTask,
-    } as unknown as CentralizedStateManager,
-    addDownloadTask,
+    queueRepository,
+    enqueueDownloadTask,
   }
 }
 
-function makeStartPayload(
-  overrides: Partial<Parameters<typeof enqueueStartDownloadTask>[1]> = {}
-): Parameters<typeof enqueueStartDownloadTask>[1] {
+function makeStartContext(
+  overrides: Partial<MangaPageState> = {}
+): MangaPageState {
   return {
+    sourceUrl: "https://example.com/series/manga-123",
     siteIntegrationId: "mangadex",
     mangaId: "manga-123",
     seriesTitle: "Test Manga",
@@ -105,11 +110,15 @@ function makeStartPayload(
         url: "https://example.com/ch-1",
         title: "Chapter 1",
         index: 1,
+        status: "queued",
+        lastUpdated: 1,
       },
     ],
+    volumes: [],
     metadata: {
       author: "Author Name",
     },
+    lastUpdated: 1,
     ...overrides,
   }
 }
@@ -134,6 +143,9 @@ function makeQueueTask(overrides: Partial<QueueTaskSummary>): QueueTaskSummary {
 describe("multi-task same-series runtime behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(settingsRepository, "getSettings").mockResolvedValue(
+      DEFAULT_SETTINGS
+    )
   })
 
   it("allows adding a new task even when same series already has queued/downloading tasks", async () => {
@@ -141,50 +153,34 @@ describe("multi-task same-series runtime behavior", () => {
       makeTask("existing-queued", "queued", Date.now() - 2000),
       makeTask("existing-downloading", "downloading", Date.now() - 1000),
     ]
-    const { stateManager, addDownloadTask } = createStateManager({ queue })
+    const { queueRepository, enqueueDownloadTask } = createQueueRepository({
+      queue,
+    })
 
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      makeStartPayload(),
-      42
+    const context = makeStartContext()
+    const settingsInputs = await loadStartDownloadSettingsInputs(
+      "mangadex",
+      settingsDependencies
     )
+    const task = buildStartDownloadTask({
+      context,
+      selectedChapters: context.chapters,
+      settingsInputs,
+      taskId: "new-task",
+      now: Date.now(),
+    })
+    const result = await queueRepository.enqueueDownloadTask(task)
 
-    expect(result.success).toBe(true)
-    expect(typeof result.taskId).toBe("string")
-    expect(result.taskId?.length ?? 0).toBeGreaterThan(0)
-    expect(addDownloadTask).toHaveBeenCalledTimes(1)
+    expect(result.outcome).toBe("applied")
+    expect(enqueueDownloadTask).toHaveBeenCalledTimes(1)
 
-    const createdTask = addDownloadTask.mock.calls[0]?.[0] as DownloadTaskState
+    const createdTask = enqueueDownloadTask.mock
+      .calls[0]?.[0] as DownloadTaskState
     expect(createdTask.mangaId).toBe("manga-123")
     expect(createdTask.status).toBe("queued")
     expect(createdTask.chapters.map((chapter) => chapter.url)).toEqual([
       "https://example.com/ch-1",
     ])
-  })
-
-  it("rejects enqueue payloads that are missing stable ids", async () => {
-    const { stateManager, addDownloadTask } = createStateManager()
-
-    const result = await enqueueStartDownloadTask(
-      stateManager,
-      makeStartPayload({
-        chapters: [
-          {
-            id: "",
-            url: "https://example.com/ch-1",
-            title: "Chapter 1",
-            index: 1,
-          },
-        ],
-      }),
-      42
-    )
-
-    expect(result).toEqual({
-      success: false,
-      reason: "Invalid START_DOWNLOAD payload",
-    })
-    expect(addDownloadTask).not.toHaveBeenCalled()
   })
 
   it("keeps retry available for partial-success tasks even when same-series task exists", () => {

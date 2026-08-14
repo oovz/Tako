@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CollapsibleTrigger } from "@/components/ui/collapsible"
 import type { SidepanelSeriesContextData } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
-import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
+import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { Volume } from "@/entrypoints/sidepanel/types"
 import {
   NO_MANGA_FOUND_MSG,
@@ -140,8 +140,7 @@ export function SeriesContextCard({
   const coverSrc = data.coverUrl || chrome.runtime.getURL("icon/128.png")
   const subtitleParts: string[] = []
   if (data.author) subtitleParts.push(data.author)
-  if (data.siteId)
-    subtitleParts.push(getSiteIntegrationDisplayName(data.siteId))
+  if (data.siteId) subtitleParts.push(getDisplayName(data.siteId))
   const subtitle = subtitleParts.join(" · ")
 
   const volumeItems = data.items.filter(

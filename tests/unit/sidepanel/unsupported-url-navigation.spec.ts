@@ -6,7 +6,7 @@
  * to an unsupported page (e.g., mangadex.org homepage) still showed the previous
  * manga series information instead of the "unsupported" message.
  *
- * Root cause: Race condition where INITIALIZE_TAB from the old page arrived after
+ * Root cause: Race condition where a stale resolver result from the old page arrived after
  * CLEAR_TAB_STATE, and the onTabStateChange listener unconditionally cleared the
  * blocking message.
  *
@@ -137,7 +137,7 @@ describe("Unsupported URL Navigation Bug Fix", () => {
        * 1. User is on a supported manga page (tab state exists)
        * 2. User navigates to unsupported page (homepage)
        * 3. Side panel detects navigation, sets blockingMessage = TAB_NOT_SUPPORTED_MSG
-       * 4. A stale INITIALIZE_TAB arrives (from old page's async operation)
+       * 4. A stale resolver result arrives from the old page's async operation
        * 5. Side panel should IGNORE this update and keep the blocking message
        */
 

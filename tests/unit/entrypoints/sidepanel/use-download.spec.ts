@@ -81,6 +81,7 @@ describe("resolveDownloadSeriesIdentity", () => {
   it("returns site and series ids from a MangaPageState context", () => {
     expect(
       resolveDownloadSeriesIdentity({
+        sourceUrl: "https://mangadex.org/title/series-1",
         siteIntegrationId: "mangadex",
         mangaId: "series-1",
         seriesTitle: "Series 1",
@@ -103,131 +104,62 @@ describe("resolveDownloadSeriesIdentity", () => {
 })
 
 describe("buildStartDownloadMessage", () => {
-  it("preserves sourceTabId, metadata, raw chapter labels, and per-chapter language in START_DOWNLOAD payloads", () => {
+  it("sends only the source tab, current revision, and selected IDs", () => {
     const message = buildStartDownloadMessage({
+      windowId: 11,
       tabId: 321,
-      mangaState: {
-        siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series 1",
-        chapters: [],
-        volumes: [],
-        metadata: {
-          author: "Author Name",
-          coverUrl: "https://example.com/cover.png",
-          publisher: "Test Publisher",
-          readingDirection: "rtl",
-        },
-        lastUpdated: 1,
-      },
-      selectedChapterStates: [
-        makeChapter({
-          id: "chapter-1",
-          url: "https://mangadex.org/chapter/1",
-          title: "Chapter 12.5",
-          index: 1,
-          chapterLabel: "Ch. 12.5",
-          chapterNumber: 12.5,
-          volumeLabel: "Vol. 02",
-          volumeNumber: 2,
-          language: "ja",
-        }),
-      ],
+      sourceUrl: "https://mangadex.org/title/series-1",
+      siteIntegrationId: "mangadex",
+      seriesId: "series-1",
+      seriesRevision: 7,
+      selectedChapterIds: ["chapter-1"],
     })
 
     expect(message).toEqual({
+      target: "background",
       type: "START_DOWNLOAD",
       commandId: expect.any(String),
       issuedAt: expect.any(Number),
       payload: {
+        sourceWindowId: 11,
         sourceTabId: 321,
+        sourceUrl: "https://mangadex.org/title/series-1",
         siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series 1",
-        chapters: [
-          {
-            id: "chapter-1",
-            title: "Chapter 12.5",
-            url: "https://mangadex.org/chapter/1",
-            index: 1,
-            chapterLabel: "Ch. 12.5",
-            chapterNumber: 12.5,
-            volumeId: undefined,
-            volumeLabel: "Vol. 02",
-            volumeNumber: 2,
-            language: "ja",
-          },
-        ],
-        metadata: {
-          author: "Author Name",
-          coverUrl: "https://example.com/cover.png",
-          publisher: "Test Publisher",
-          readingDirection: "rtl",
-        },
+        seriesId: "series-1",
+        seriesRevision: 7,
+        selectedChapterIds: ["chapter-1"],
       },
     })
   })
 
   it("preserves zero as a valid sourceTabId", () => {
     const message = buildStartDownloadMessage({
+      windowId: 0,
       tabId: 0,
-      mangaState: {
-        siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series 1",
-        chapters: [],
-        volumes: [],
-        lastUpdated: 1,
-      },
-      selectedChapterStates: [
-        makeChapter({
-          id: "chapter-1",
-          url: "https://mangadex.org/chapter/1",
-          title: "Chapter 1",
-          index: 1,
-        }),
-      ],
+      sourceUrl: "https://mangadex.org/title/series-1",
+      siteIntegrationId: "mangadex",
+      seriesId: "series-1",
+      seriesRevision: 0,
+      selectedChapterIds: ["chapter-1"],
     })
 
     expect(message.payload.sourceTabId).toBe(0)
   })
 
-  it("forwards integration-provided numeric chapter fields in START_DOWNLOAD payloads", () => {
+  it("preserves selected ID order", () => {
     const message = buildStartDownloadMessage({
+      windowId: 11,
       tabId: 321,
-      mangaState: {
-        siteIntegrationId: "mangadex",
-        mangaId: "series-1",
-        seriesTitle: "Series 1",
-        chapters: [],
-        volumes: [],
-        lastUpdated: 1,
-      },
-      selectedChapterStates: [
-        makeChapter({
-          id: "chapter-1",
-          url: "https://mangadex.org/chapter/1",
-          title: "Chapter 12.5",
-          index: 1,
-          chapterLabel: "Ch. 12.5",
-          chapterNumber: 12.5,
-          volumeLabel: "Vol. 02",
-          volumeNumber: 2,
-          language: "ja",
-        }),
-      ],
+      sourceUrl: "https://mangadex.org/title/series-1",
+      siteIntegrationId: "mangadex",
+      seriesId: "series-1",
+      seriesRevision: 2,
+      selectedChapterIds: ["chapter-2", "chapter-1"],
     })
 
-    expect(message.payload.chapters[0]).toEqual({
-      id: "chapter-1",
-      title: "Chapter 12.5",
-      url: "https://mangadex.org/chapter/1",
-      index: 1,
-      chapterLabel: "Ch. 12.5",
-      chapterNumber: 12.5,
-      volumeLabel: "Vol. 02",
-      volumeNumber: 2,
-      language: "ja",
-    })
+    expect(message.payload.selectedChapterIds).toEqual([
+      "chapter-2",
+      "chapter-1",
+    ])
   })
 })

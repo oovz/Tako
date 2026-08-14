@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SidePanelQueueRegion } from "@/entrypoints/sidepanel/components/SidePanelQueueRegion"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 vi.stubGlobal("chrome", {
   runtime: {
@@ -39,6 +39,8 @@ const commonProps = {
   activeTaskProgress: null,
   showActiveProgress: false,
   onCancelTask: vi.fn(),
+  onForgetUnobservable: vi.fn(),
+  forgettingTaskIds: new Set<string>(),
   onRetryFailed: vi.fn(),
   onRestartTask: vi.fn(),
   onMoveTaskToTop: vi.fn(),

@@ -5,7 +5,7 @@ import {
   normalizeDownloadErrorCategory,
 } from "@/src/shared/download-contract"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 import { isRecord } from "@/src/shared/type-guards"
 import { z } from "zod"
@@ -22,14 +22,8 @@ const QueueTaskSummaryStorageSchema = z.object({
       "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
+      "native_output_action_required",
     ])
-    .optional(),
-  browserDownloadWait: z
-    .object({
-      downloadIds: z.array(z.number().int().nonnegative()),
-      since: z.number(),
-      lastObservedAt: z.number().optional(),
-    })
     .optional(),
   chapters: z.object({
     total: z.number(),
@@ -41,6 +35,7 @@ const QueueTaskSummaryStorageSchema = z.object({
     completed: z.number().optional(),
   }),
   failureCategory: z.unknown().optional(),
+  hasUnobservableOutput: z.unknown().optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
   lastSuccessfulDownloadId: z.unknown().optional(),
@@ -62,7 +57,6 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
     coverUrl: typeof data.coverUrl === "string" ? data.coverUrl : undefined,
     status: data.status,
     activeBlock: data.activeBlock,
-    browserDownloadWait: data.browserDownloadWait,
     chapters: {
       total: data.chapters.total,
       completed: data.chapters.completed,
@@ -73,6 +67,10 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
       completed: data.timestamps.completed,
     },
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
+    hasUnobservableOutput:
+      typeof data.hasUnobservableOutput === "boolean"
+        ? data.hasUnobservableOutput
+        : undefined,
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:
       typeof data.isRetryTask === "boolean" ? data.isRetryTask : undefined,

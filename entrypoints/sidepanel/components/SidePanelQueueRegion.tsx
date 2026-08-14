@@ -7,7 +7,7 @@ import { cn } from "@/src/shared/utils"
 import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
 import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
 
@@ -17,6 +17,7 @@ interface SidePanelQueueRegionProps {
   isLoading: boolean
   isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
+  forgettingTaskIds: Set<string>
   retryingTaskIds: Set<string>
   restartingTaskIds: Set<string>
   removingTaskIds: Set<string>
@@ -24,6 +25,7 @@ interface SidePanelQueueRegionProps {
   activeTaskProgress: ActiveTaskProgressState | null
   showActiveProgress: boolean
   onCancelTask: (taskId: string) => CancelTaskResult | Promise<CancelTaskResult>
+  onForgetUnobservable: (taskId: string) => void | Promise<void>
   onRetryFailed: (taskId: string) => void | Promise<void>
   onRestartTask: (taskId: string) => void | Promise<void>
   onMoveTaskToTop: (taskId: string) => void | Promise<void>
@@ -37,6 +39,7 @@ export function SidePanelQueueRegion({
   isLoading,
   isInlineSelectionOpen,
   cancelingTaskIds,
+  forgettingTaskIds,
   retryingTaskIds,
   restartingTaskIds,
   removingTaskIds,
@@ -44,6 +47,7 @@ export function SidePanelQueueRegion({
   activeTaskProgress,
   showActiveProgress,
   onCancelTask,
+  onForgetUnobservable,
   onRetryFailed,
   onRestartTask,
   onMoveTaskToTop,
@@ -93,7 +97,9 @@ export function SidePanelQueueRegion({
       showActiveProgress={task.status === "downloading" && showActiveProgress}
       firstQueuedTaskId={firstQueuedTaskId}
       onCancelTask={onCancelTask}
+      onForgetUnobservable={onForgetUnobservable}
       cancelingTaskIds={cancelingTaskIds}
+      forgettingTaskIds={forgettingTaskIds}
       retryingTaskIds={retryingTaskIds}
       restartingTaskIds={restartingTaskIds}
       removingTaskIds={removingTaskIds}

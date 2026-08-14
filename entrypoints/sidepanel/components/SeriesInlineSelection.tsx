@@ -108,8 +108,10 @@ export function SeriesInlineSelection({
   )
 
   const downloadHook = useDownload({
+    windowId: data.windowId,
     tabId: data.tabId,
     mangaState: data.mangaState,
+    seriesRevision: data.seriesRevision,
   })
   const download = downloadHook
 

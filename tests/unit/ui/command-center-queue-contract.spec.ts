@@ -6,7 +6,7 @@ import {
   getTaskActionPlan,
   shouldConfirmTaskCancellation,
 } from "@/entrypoints/sidepanel/components/command-center-queue-helpers"
-import type { QueueTaskSummary } from "@/src/types/queue-state"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<QueueTaskSummary>): QueueTaskSummary {
   return {

@@ -6,6 +6,34 @@ import {
 } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 
 describe("useActiveTaskProgress normalizeActiveTaskProgress", () => {
+  const currentProgress = {
+    generation: "generation-1",
+    revision: 3,
+    updatedAt: 100,
+    taskId: "task-1",
+    chapterId: "ch-1",
+    chapterTitle: "Chapter 1",
+    imagesProcessed: 4,
+    totalImages: 20,
+    activeChapterCount: 1,
+    activeChapters: [
+      {
+        chapterId: "ch-1",
+        chapterTitle: "Chapter 1",
+        imagesProcessed: 4,
+        totalImages: 20,
+        stage: "downloading",
+        phaseFraction: 0.2,
+        updatedAt: 100,
+      },
+    ],
+    stage: "downloading",
+    phaseFraction: 0.2,
+    overallFraction: 0.1,
+    outputCommitted: false,
+    status: "downloading",
+  } as const
+
   it("returns null for invalid payload", () => {
     expect(normalizeActiveTaskProgress(undefined)).toBeNull()
     expect(normalizeActiveTaskProgress({ taskId: "x" })).toBeNull()
@@ -14,112 +42,47 @@ describe("useActiveTaskProgress normalizeActiveTaskProgress", () => {
   it("returns null for unsupported status values", () => {
     expect(
       normalizeActiveTaskProgress({
-        taskId: "task-1",
-        imagesProcessed: 1,
-        totalImages: 5,
+        ...currentProgress,
         status: "queued",
       })
     ).toBeNull()
   })
 
-  it("returns normalized payload when required fields are present", () => {
-    expect(
-      normalizeActiveTaskProgress({
-        taskId: "task-1",
-        imagesProcessed: 4,
-        totalImages: 20,
-        activeChapterCount: 2,
-        activeChapters: [
-          {
-            chapterId: "ch-1",
-            chapterTitle: " Chapter 1 ",
-            imagesProcessed: 1,
-            totalImages: 8,
-          },
-          {
-            chapterId: "ch-2",
-            chapterTitle: "Chapter 2",
-            imagesProcessed: 3,
-            totalImages: 12,
-          },
-        ],
-        status: "downloading",
-      })
-    ).toEqual({
-      generation: "legacy",
-      revision: 0,
-      updatedAt: 0,
-      taskId: "task-1",
-      chapterId: undefined,
-      chapterTitle: undefined,
-      imagesProcessed: 4,
-      totalImages: 20,
-      activeChapterCount: 2,
-      activeChapters: [
-        {
-          chapterId: "ch-1",
-          chapterTitle: "Chapter 1",
-          imagesProcessed: 1,
-          totalImages: 8,
-          stage: "downloading",
-          phaseFraction: 0.125,
-          updatedAt: 0,
-        },
-        {
-          chapterId: "ch-2",
-          chapterTitle: "Chapter 2",
-          imagesProcessed: 3,
-          totalImages: 12,
-          stage: "downloading",
-          phaseFraction: 0.25,
-          updatedAt: 0,
-        },
-      ],
-      stage: "downloading",
-      phaseFraction: 0.125,
-      overallFraction: undefined,
-      outputCommitted: false,
-      status: "downloading",
-    })
+  it("accepts the exact current stored projection without synthesis", () => {
+    expect(normalizeActiveTaskProgress(currentProgress)).toEqual(
+      currentProgress
+    )
   })
 
-  it("normalizes blank chapterTitle to undefined so UI can make deterministic availability checks", () => {
-    expect(
-      normalizeActiveTaskProgress({
-        taskId: "task-1",
-        chapterId: "ch-1",
-        chapterTitle: "   ",
-        imagesProcessed: 1,
-        totalImages: 5,
-        status: "downloading",
-      })
-    ).toEqual({
-      generation: "legacy",
-      revision: 0,
-      updatedAt: 0,
+  it.each([
+    {
       taskId: "task-1",
-      chapterId: "ch-1",
-      chapterTitle: undefined,
       imagesProcessed: 1,
       totalImages: 5,
-      activeChapterCount: 1,
-      activeChapters: [
-        {
-          chapterId: "ch-1",
-          chapterTitle: undefined,
-          imagesProcessed: 1,
-          totalImages: 5,
-          stage: "downloading",
-          phaseFraction: 0.2,
-          updatedAt: 0,
-        },
-      ],
-      stage: "downloading",
-      phaseFraction: 0.2,
-      overallFraction: undefined,
-      outputCommitted: false,
       status: "downloading",
-    })
+    },
+    { ...currentProgress, generation: undefined },
+    { ...currentProgress, activeChapters: undefined },
+    { ...currentProgress, outputCommitted: undefined },
+  ])("rejects an old optional-field projection %#", (value) => {
+    expect(normalizeActiveTaskProgress(value)).toBeNull()
+  })
+
+  it("rejects unknown projection and nested chapter fields", () => {
+    expect(
+      normalizeActiveTaskProgress({
+        ...currentProgress,
+        unsupported: true,
+      })
+    ).toBeNull()
+    expect(
+      normalizeActiveTaskProgress({
+        ...currentProgress,
+        activeChapters: [
+          { ...currentProgress.activeChapters[0], unsupported: true },
+        ],
+      })
+    ).toBeNull()
   })
 
   it("accepts a lower revision from a new worker generation", () => {
@@ -139,73 +102,5 @@ describe("useActiveTaskProgress normalizeActiveTaskProgress", () => {
         nextRevision: 1,
       })
     ).toBe(false)
-  })
-
-  it("prefers normalized activeChapters length over stale activeChapterCount payload", () => {
-    expect(
-      normalizeActiveTaskProgress({
-        taskId: "task-1",
-        imagesProcessed: 6,
-        totalImages: 30,
-        activeChapterCount: 1,
-        activeChapters: [
-          {
-            chapterId: "ch-1",
-            chapterTitle: "A",
-            imagesProcessed: 2,
-            totalImages: 10,
-          },
-          {
-            chapterId: "ch-2",
-            chapterTitle: "B",
-            imagesProcessed: 2,
-            totalImages: 10,
-          },
-          {
-            chapterId: "ch-3",
-            chapterTitle: "C",
-            imagesProcessed: 2,
-            totalImages: 10,
-          },
-        ],
-        status: "downloading",
-      })
-    ).toEqual(
-      expect.objectContaining({
-        activeChapterCount: 3,
-      })
-    )
-  })
-
-  it("aggregates image counts from activeChapters when concurrent chapter snapshots are present", () => {
-    expect(
-      normalizeActiveTaskProgress({
-        taskId: "task-1",
-        imagesProcessed: 1,
-        totalImages: 4,
-        activeChapterCount: 1,
-        activeChapters: [
-          {
-            chapterId: "ch-1",
-            chapterTitle: "A",
-            imagesProcessed: 2,
-            totalImages: 8,
-          },
-          {
-            chapterId: "ch-2",
-            chapterTitle: "B",
-            imagesProcessed: 3,
-            totalImages: 12,
-          },
-        ],
-        status: "downloading",
-      })
-    ).toEqual(
-      expect.objectContaining({
-        imagesProcessed: 5,
-        totalImages: 20,
-        activeChapterCount: 2,
-      })
-    )
   })
 })

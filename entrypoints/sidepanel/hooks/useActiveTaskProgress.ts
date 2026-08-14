@@ -11,14 +11,14 @@ import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageVal
 
 export type ActiveTaskProgress = ActiveTaskProgressSnapshot
 
-function normalizeProgressRevision(value: unknown): number {
+function parseProgressRevision(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) && value >= 0
     ? value
-    : 0
+    : null
 }
 
-function normalizeProgressGeneration(value: unknown): string {
-  return typeof value === "string" && value.length > 0 ? value : "legacy"
+function parseProgressGeneration(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null
 }
 
 export function shouldAcceptProgressRevision(input: {
@@ -50,18 +50,18 @@ export function useActiveTaskProgress(): UseActiveTaskProgressResult {
       parse: normalizeActiveTaskProgress,
     })
   const { value: storedRevision, hydrated: revisionHydrated } =
-    useChromeStorageValue<number>({
+    useChromeStorageValue<number | null>({
       areaName: "session",
       key: SESSION_STORAGE_KEYS.activeTaskProgressRevision,
-      initialValue: 0,
-      parse: normalizeProgressRevision,
+      initialValue: null,
+      parse: parseProgressRevision,
     })
   const { value: storedGeneration, hydrated: generationHydrated } =
-    useChromeStorageValue<string>({
+    useChromeStorageValue<string | null>({
       areaName: "session",
       key: SESSION_STORAGE_KEYS.activeTaskProgressGeneration,
-      initialValue: "legacy",
-      parse: normalizeProgressGeneration,
+      initialValue: null,
+      parse: parseProgressGeneration,
     })
   const hydrated = progressHydrated && revisionHydrated && generationHydrated
   const [progress, setProgress] = useState<ActiveTaskProgress | null>(null)
@@ -72,24 +72,27 @@ export function useActiveTaskProgress(): UseActiveTaskProgressResult {
   useEffect(() => {
     if (!hydrated) return
     if (livePortConnectedRef.current) return
-    const generation =
-      storedGeneration !== "legacy"
-        ? storedGeneration
-        : (storedProgress?.generation ?? "legacy")
-    const revision = Math.max(storedRevision, storedProgress?.revision ?? 0)
+    if (storedGeneration === null || storedRevision === null) return
+    if (
+      storedProgress !== null &&
+      (storedProgress.generation !== storedGeneration ||
+        storedProgress.revision !== storedRevision)
+    ) {
+      return
+    }
     if (
       !shouldAcceptProgressRevision({
         currentGeneration: latestGenerationRef.current,
         currentRevision: latestRevisionRef.current,
-        nextGeneration: generation,
-        nextRevision: revision,
+        nextGeneration: storedGeneration,
+        nextRevision: storedRevision,
         allowEqual: true,
       })
     ) {
       return
     }
-    latestGenerationRef.current = generation
-    latestRevisionRef.current = revision
+    latestGenerationRef.current = storedGeneration
+    latestRevisionRef.current = storedRevision
     setProgress(storedProgress)
   }, [hydrated, storedGeneration, storedProgress, storedRevision])
 
@@ -116,6 +119,13 @@ export function useActiveTaskProgress(): UseActiveTaskProgressResult {
       }
       const normalized = normalizeActiveTaskProgress(value)
       if (value !== null && !normalized) return
+      if (
+        normalized !== null &&
+        (normalized.generation !== generation ||
+          normalized.revision !== revision)
+      ) {
+        return
+      }
       latestGenerationRef.current = generation
       latestRevisionRef.current = revision
       setProgress(normalized)
@@ -127,20 +137,17 @@ export function useActiveTaskProgress(): UseActiveTaskProgressResult {
         SESSION_STORAGE_KEYS.activeTaskProgressRevision,
         SESSION_STORAGE_KEYS.activeTaskProgressGeneration,
       ])
-      const storedProgressValue = normalizeActiveTaskProgress(
-        stored[SESSION_STORAGE_KEYS.activeTaskProgress]
-      )
-      const storedGenerationValue = normalizeProgressGeneration(
+      const rawProgress = stored[SESSION_STORAGE_KEYS.activeTaskProgress]
+      const storedProgressValue = normalizeActiveTaskProgress(rawProgress)
+      if (rawProgress !== null && storedProgressValue === null) return
+      const storedGenerationValue = parseProgressGeneration(
         stored[SESSION_STORAGE_KEYS.activeTaskProgressGeneration]
       )
-      const generation =
-        storedGenerationValue !== "legacy"
-          ? storedGenerationValue
-          : (storedProgressValue?.generation ?? "legacy")
-      const revision = normalizeProgressRevision(
+      const revision = parseProgressRevision(
         stored[SESSION_STORAGE_KEYS.activeTaskProgressRevision]
       )
-      applySnapshot(generation, revision, storedProgressValue)
+      if (storedGenerationValue === null || revision === null) return
+      applySnapshot(storedGenerationValue, revision, storedProgressValue)
     }
 
     const scheduleReconnect = (): void => {

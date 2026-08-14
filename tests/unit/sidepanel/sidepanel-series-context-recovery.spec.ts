@@ -8,11 +8,14 @@ import type { ActiveTabContextValue } from "@/entrypoints/sidepanel/hooks/sidepa
 
 function readyContext(
   chaptersLoading: boolean,
-  lastUpdated = 1
+  lastUpdated = 1,
+  revision: number | null = 1
 ): ActiveTabContextValue {
   return {
     kind: "ready",
+    ...(revision === null ? {} : { revision }),
     mangaState: {
+      sourceUrl: "https://mangadex.org/title/series-1",
       siteIntegrationId: "mangadex",
       mangaId: "series-1",
       seriesTitle: "Series 1",
@@ -52,6 +55,23 @@ describe("sidepanel window resolution", () => {
 })
 
 describe("sidepanel series-context recovery coordinator", () => {
+  it("recovers cached ready state that has no authoritative revision", async () => {
+    const requestRefresh = vi.fn(async () => ({ success: true as const }))
+    const coordinator = createSeriesContextRecoveryCoordinator({
+      requestRefresh,
+    })
+
+    await coordinator.recoverIfNeeded({
+      ...observation,
+      activeTabContext: readyContext(false, 1, null),
+    })
+
+    expect(requestRefresh).toHaveBeenCalledWith({
+      tabId: 7,
+      windowId: 2,
+    })
+  })
+
   it("starts a recovery when a complete context becomes partial on the same tab", async () => {
     const requestRefresh = vi.fn(async () => ({ success: true as const }))
     const coordinator = createSeriesContextRecoveryCoordinator({

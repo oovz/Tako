@@ -1,11 +1,11 @@
 import type { SidePanelChapter, VolumeOrChapter } from "../types"
 import { NO_MANGA_FOUND_MSG, TAB_NOT_SUPPORTED_MSG } from "../messages"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import { isMangaPageState } from "@/src/runtime/state-shapes"
-import { isRecord } from "@/src/shared/type-guards"
-import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import {
+  isMangaPageState,
+  parseActiveTabContextByWindow,
+} from "@/src/runtime/tab-state-schemas"
 import type {
-  ActiveTabContextByWindow,
   ChapterState,
   MangaPageState,
   VolumeState,
@@ -27,18 +27,10 @@ export interface DerivedSidepanelSeriesContextData {
 }
 
 export type ActiveTabContextValue =
-  | { kind: "ready"; mangaState: MangaPageState }
+  | { kind: "ready"; mangaState: MangaPageState; revision?: number }
   | { kind: "error"; error: string }
   | { kind: "loading" }
   | { kind: "unsupported" }
-
-function getTabStorageKey(tabId: number): string {
-  return `tab_${tabId}`
-}
-
-function getTabErrorStorageKey(tabId: number): string {
-  return `seriesContextError_${tabId}`
-}
 
 export function selectPreferredSeriesContextTask(
   tasks: DownloadTaskState[]
@@ -141,10 +133,15 @@ export function deriveSeriesContextFromActiveTabContext(
 }
 
 export function normalizeActiveTabContext(
-  value: unknown
+  value: unknown,
+  revision?: number
 ): ActiveTabContextValue {
   if (isMangaPageState(value)) {
-    return { kind: "ready", mangaState: value }
+    return {
+      kind: "ready",
+      mangaState: value,
+      ...(typeof revision === "number" ? { revision } : {}),
+    }
   }
 
   if (isLoadingContext(value)) {
@@ -158,77 +155,50 @@ export function normalizeActiveTabContext(
   return { kind: "unsupported" }
 }
 
-function isActiveTabContextByWindow(
-  value: unknown
-): value is ActiveTabContextByWindow {
-  return isRecord(value)
-}
-
 function resolveWindowContext(
-  value: Record<string, unknown>,
+  value: unknown,
   windowId: number
 ): WindowTabContext | undefined {
-  const raw = value[SESSION_STORAGE_KEYS.activeTabContextByWindow]
-  if (!isActiveTabContextByWindow(raw)) {
-    return undefined
-  }
-  const windowContext = raw[windowId]
-  if (
-    windowContext &&
-    typeof windowContext === "object" &&
-    "context" in windowContext
-  ) {
-    return windowContext
-  }
-  return undefined
+  return parseActiveTabContextByWindow(value)?.[windowId]
 }
 
 export function normalizeStoredSeriesContext(
   value: unknown,
   tabId: number | undefined,
-  windowId?: number
+  windowId?: number,
+  activeUrl?: string
 ): ActiveTabContextValue {
-  if (!isRecord(value)) {
-    return { kind: "unsupported" }
+  if (typeof windowId !== "number") {
+    return { kind: "loading" }
   }
 
   if (typeof tabId === "number") {
-    const tabState = value[getTabStorageKey(tabId)]
-    if (isMangaPageState(tabState)) {
-      return { kind: "ready", mangaState: tabState }
-    }
-
-    const tabError = value[getTabErrorStorageKey(tabId)]
-    if (typeof tabError === "string" && tabError.length > 0) {
-      return { kind: "error", error: tabError }
-    }
-
-    // Prefer the per-window projection when the windowId is known and the
-    // projection belongs to the tracked tab. Otherwise preserve only the
-    // harmless loading signal from the legacy global projection until this
-    // tracked tab's own state arrives.
-    if (typeof windowId === "number") {
-      const windowContext = resolveWindowContext(value, windowId)
-      if (windowContext && windowContext.activeTabId === tabId) {
-        return normalizeActiveTabContext(windowContext.context)
-      }
-    }
-
-    if (isLoadingContext(value.activeTabContext)) {
+    const windowContext = resolveWindowContext(value, windowId)
+    if (!windowContext || windowContext.activeTabId !== tabId) {
       return { kind: "loading" }
     }
 
-    return { kind: "unsupported" }
-  }
-
-  if (typeof windowId === "number") {
-    const windowContext = resolveWindowContext(value, windowId)
-    if (windowContext) {
-      return normalizeActiveTabContext(windowContext.context)
+    const normalized = normalizeActiveTabContext(
+      windowContext.context,
+      windowContext.revision
+    )
+    if (
+      normalized.kind === "ready" &&
+      normalized.mangaState.sourceUrl !== activeUrl
+    ) {
+      return { kind: "loading" }
     }
+    return normalized
   }
 
-  return normalizeActiveTabContext(value.activeTabContext)
+  const windowContext = resolveWindowContext(value, windowId)
+  if (windowContext) {
+    return normalizeActiveTabContext(
+      windowContext.context,
+      windowContext.revision
+    )
+  }
+  return { kind: "loading" }
 }
 
 function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {
