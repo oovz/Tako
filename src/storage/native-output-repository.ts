@@ -664,11 +664,11 @@ export class NativeOutputRepository {
         changed[INDEX_KEY] = buildIndex(validated)
       }
       try {
-        if (Object.keys(changed).length > 0) {
-          await chrome.storage.local.set(changed)
-        }
         if (removed.length > 0) {
           await chrome.storage.local.remove(removed)
+        }
+        if (Object.keys(changed).length > 0) {
+          await chrome.storage.local.set(changed)
         }
       } catch (error) {
         this.invalidate()

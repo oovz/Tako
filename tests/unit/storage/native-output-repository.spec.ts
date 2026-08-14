@@ -24,21 +24,23 @@ const identity = {
 describe("NativeOutputRepository", () => {
   let local: Record<string, unknown>
   let set: ReturnType<typeof vi.fn>
+  let remove: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     local = {}
     set = vi.fn(async (values: Record<string, unknown>) => {
       Object.assign(local, structuredClone(values))
     })
+    remove = vi.fn(async (keys: string | string[]) => {
+      const removed = Array.isArray(keys) ? keys : [keys]
+      for (const key of removed) delete local[key]
+    })
     vi.stubGlobal("chrome", {
       storage: {
         local: {
           get: vi.fn(async () => structuredClone(local)),
           set,
-          remove: vi.fn(async (keys: string | string[]) => {
-            const removed = Array.isArray(keys) ? keys : [keys]
-            for (const key of removed) delete local[key]
-          }),
+          remove,
         },
       },
     } as unknown as typeof chrome)
@@ -213,6 +215,61 @@ describe("NativeOutputRepository", () => {
       outputIds: [],
       downloadIdToOutputId: {},
     })
+  })
+
+  it("removes pruned records before an index write failure and repairs on cold start", async () => {
+    const repository = new NativeOutputRepository()
+    await repository.prepare({ ...identity, now: 10 })
+    await repository.markAcceptanceUnknown({
+      outputId: identity.outputId,
+      now: 11,
+    })
+    await repository.attachDownload({
+      outputId: identity.outputId,
+      downloadId: 42,
+    })
+    await repository.markTerminal({
+      downloadId: 42,
+      phase: "complete",
+      now: 12,
+    })
+    await repository.sealManifest({
+      ...identity,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+      now: 13,
+      error: "no output failed",
+    })
+    await repository.markAccountingDisposition({
+      outputId: identity.outputId,
+      disposition: "accounted",
+      now: 14,
+    })
+    await repository.markBlobReleased({ outputId: identity.outputId, now: 15 })
+
+    set.mockRejectedValueOnce(new Error("index write failed"))
+    await expect(
+      repository.markDependencyReleased({
+        outputId: identity.outputId,
+        now: 16,
+      })
+    ).rejects.toThrow("index write failed")
+    expect(remove).toHaveBeenLastCalledWith(["pendingOutputs:output:output-1"])
+    expect(local["pendingOutputs:output:output-1"]).toBeUndefined()
+    expect(local["pendingOutputs:index"]).toMatchObject({
+      outputIds: [identity.outputId],
+    })
+
+    const restarted = new NativeOutputRepository()
+    await restarted.initialize()
+    expect(local["pendingOutputs:index"]).toEqual({
+      jobIds: [identity.jobId],
+      outputIds: [],
+      downloadIdToOutputId: {},
+    })
+    await expect(
+      restarted.getByOutputId(identity.outputId)
+    ).resolves.toBeUndefined()
   })
 
   it("rejects an invalid current schema instead of hydrating an empty state", async () => {
