@@ -4,7 +4,7 @@ import {
   logger,
   setLoggerForceDebug,
 } from "@/src/runtime/logger"
-import type { AdvancedSettings } from "@/src/storage/settings-types"
+import type { AdvancedSettings } from "@/src/domain/settings/types"
 
 const baseSettings: AdvancedSettings = {
   logLevel: "info",

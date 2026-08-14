@@ -16,7 +16,7 @@ interface ChapterState {
 
 /**
  * Find chapter index by canonical chapter ID only
- * (Mirror of CentralizedStateManager.findChapterIndex)
+ * (Canonical chapter-ID lookup behavior)
  */
 function findChapterIndex(
   chapters: ChapterState[],

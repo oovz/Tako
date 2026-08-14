@@ -13,7 +13,7 @@ import {
   setLoggerForceDebug,
   isDebugLoggingEnabled,
 } from "@/src/runtime/logger"
-import type { AdvancedSettings } from "@/src/storage/settings-types"
+import type { AdvancedSettings } from "@/src/domain/settings/types"
 
 describe("logger log level", () => {
   let originalConsoleDebug: typeof console.debug

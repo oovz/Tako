@@ -6,8 +6,8 @@ import {
   updateActionBadge,
 } from "@/src/runtime/projection"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<DownloadTaskState>): DownloadTaskState {
   const siteIntegrationId = overrides.siteIntegrationId ?? "mangadex"
@@ -203,63 +203,21 @@ describe("projectToQueueView", () => {
     ])
   })
 
-  it("formats action badge text for non-terminal task counts", () => {
-    expect(getBadgeText(0)).toBe("")
-    expect(getBadgeText(1)).toBe("1")
-    expect(getBadgeText(12)).toBe("12")
-    expect(getBadgeText(999)).toBe("999")
-    expect(getBadgeText(1000)).toBe("999+")
+  it.each([
+    [-999, ""],
+    [0, ""],
+    [1, "1"],
+    [998, "998"],
+    [999, "999"],
+    [1_000, "999+"],
+    [Number.MAX_SAFE_INTEGER, "999+"],
+  ])("formats action badge count %s as %s", (count, expected) => {
+    expect(getBadgeText(count)).toBe(expected)
   })
 
   it("returns without touching badge APIs when chrome.action is unavailable", async () => {
     vi.stubGlobal("chrome", {})
 
     await expect(updateActionBadge(3)).resolves.toBeUndefined()
-  })
-})
-
-/**
- * Adversarial tests for MAX_BADGE_COUNT (999) UI overflow protection.
- *
- * Source: src/runtime/projection.ts:4 (constant), :19-20 (enforcement)
- *
- * The guard caps badge text at "999+" when the non-terminal count exceeds
- * 999, preventing the browser badge from displaying unreasonably large
- * numbers or overflowing the action icon.
- */
-describe("getBadgeText overflow protection (adversarial)", () => {
-  it('caps badge count of 1000 to "999+"', () => {
-    expect(getBadgeText(1000)).toBe("999+")
-  })
-
-  it('keeps badge count of 999 as "999" (upper boundary)', () => {
-    expect(getBadgeText(999)).toBe("999")
-  })
-
-  it('keeps badge count of 100 as "100" (no unnecessary capping)', () => {
-    expect(getBadgeText(100)).toBe("100")
-  })
-
-  it('caps extremely large counts to "999+"', () => {
-    expect(getBadgeText(10000)).toBe("999+")
-    expect(getBadgeText(1000000)).toBe("999+")
-    expect(getBadgeText(Number.MAX_SAFE_INTEGER)).toBe("999+")
-  })
-
-  it("returns empty string for zero count (lower boundary)", () => {
-    expect(getBadgeText(0)).toBe("")
-  })
-
-  it("returns empty string for negative counts", () => {
-    expect(getBadgeText(-1)).toBe("")
-    expect(getBadgeText(-999)).toBe("")
-  })
-
-  it('returns "1" for a single non-terminal task', () => {
-    expect(getBadgeText(1)).toBe("1")
-  })
-
-  it("does not cap counts just below the limit (998)", () => {
-    expect(getBadgeText(998)).toBe("998")
   })
 })

@@ -60,11 +60,11 @@ describe("ZIP_WORKER_FINALIZATION_TIMEOUT_MS guard", () => {
     expect(ZIP_WORKER_FINALIZATION_TIMEOUT_MS).toBeGreaterThan(HARD_TIMEOUT_MS)
   })
 
-  it("is imported and referenced by chapter-processing.ts (contract)", async () => {
+  it("is owned by the archive worker session finalization boundary", async () => {
     // Read the source module as text to verify the constant is wired into the
     // finalization timeout without importing the worker (which has side effects).
     const source =
-      await import("@/entrypoints/offscreen/chapter-processing.ts?raw")
+      await import("@/entrypoints/offscreen/archive-worker-session.ts?raw")
     expect(String(source.default)).toContain(
       "ZIP_WORKER_FINALIZATION_TIMEOUT_MS"
     )

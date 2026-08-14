@@ -24,6 +24,7 @@ describe("openOptionsPage", () => {
     await expect(openOptionsPage()).resolves.toBeUndefined()
 
     expect(sendMessage).toHaveBeenCalledWith({
+      target: "background",
       type: "OPEN_OPTIONS",
       payload: {},
     })
@@ -35,6 +36,7 @@ describe("openOptionsPage", () => {
     await expect(openOptionsPage("downloads")).resolves.toBeUndefined()
 
     expect(sendMessage).toHaveBeenCalledWith({
+      target: "background",
       type: "OPEN_OPTIONS",
       payload: { page: "downloads" },
     })
@@ -50,7 +52,7 @@ describe("openOptionsPage", () => {
     sendMessage.mockResolvedValue(undefined)
 
     await expect(openOptionsPage("integrations")).rejects.toThrow(
-      "Failed to open options page"
+      "Invalid OPEN_OPTIONS response"
     )
   })
 })

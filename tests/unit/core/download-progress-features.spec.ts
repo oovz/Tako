@@ -8,9 +8,9 @@
 
 import { describe, it, expect } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
