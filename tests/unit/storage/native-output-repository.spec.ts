@@ -134,6 +134,87 @@ describe("NativeOutputRepository", () => {
     await expect(repository.hasLiveDependencies()).resolves.toBe(false)
   })
 
+  it("rewrites the index when removal-only pruning deletes the last records", async () => {
+    const repository = new NativeOutputRepository()
+    await repository.prepare({ ...identity, now: 10 })
+    await repository.markAcceptanceUnknown({
+      outputId: identity.outputId,
+      now: 11,
+    })
+    await repository.attachDownload({
+      outputId: identity.outputId,
+      downloadId: 42,
+    })
+    await repository.markTerminal({
+      downloadId: 42,
+      phase: "complete",
+      now: 12,
+    })
+    await repository.sealManifest({
+      jobId: identity.jobId,
+      attempt: identity.attempt,
+      taskId: identity.taskId,
+      chapterId: identity.chapterId,
+      fingerprint: identity.fingerprint,
+      documentInstanceId: identity.documentInstanceId,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+      now: 13,
+      error: "no output failed",
+    })
+    await repository.markAccountingDisposition({
+      outputId: identity.outputId,
+      disposition: "accounted",
+      now: 14,
+    })
+    await repository.markBlobReleased({ outputId: identity.outputId, now: 15 })
+    await repository.markDependencyReleased({
+      outputId: identity.outputId,
+      now: 16,
+    })
+
+    // The output was pruned by its release; the manifest remains, so the
+    // index must drop only the output mapping.
+    expect(local["pendingOutputs:index"]).toEqual({
+      jobIds: ["job-1"],
+      outputIds: [],
+      downloadIdToOutputId: {},
+    })
+    expect(local["pendingOutputs:output:output-1"]).toBeUndefined()
+
+    await repository.markJobDependencyReleased({
+      jobId: identity.jobId,
+      now: 17,
+    })
+
+    // The final transition removes only the manifest; the index must be
+    // rewritten to empty, never left referencing absent keys.
+    expect(local["pendingOutputs:index"]).toEqual({
+      jobIds: [],
+      outputIds: [],
+      downloadIdToOutputId: {},
+    })
+    expect(local["pendingOutputs:manifest:job-1"]).toBeUndefined()
+    await expect(repository.hasLiveDependencies()).resolves.toBe(false)
+  })
+
+  it("repairs a stale durable index during hydration", async () => {
+    local["pendingOutputs:index"] = {
+      jobIds: ["ghost"],
+      outputIds: ["missing-output"],
+      downloadIdToOutputId: { "42": "missing-output" },
+    }
+    const repository = new NativeOutputRepository()
+
+    await repository.initialize()
+
+    expect(local["pendingOutputs:index"]).toEqual({
+      jobIds: [],
+      outputIds: [],
+      downloadIdToOutputId: {},
+    })
+  })
+
   it("rejects an invalid current schema instead of hydrating an empty state", async () => {
     local["pendingOutputs:index"] = {
       jobIds: [],

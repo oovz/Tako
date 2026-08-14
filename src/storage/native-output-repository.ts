@@ -600,19 +600,34 @@ export class NativeOutputRepository {
         keys.length === 0 ? {} : await chrome.storage.local.get(keys)
       const manifestsByJobId: Record<string, NativeOutputManifest> = {}
       const outputsByOutputId: Record<string, NativeOutputRecord> = {}
+      let staleIndexEntry = false
       for (const jobId of index.jobIds) {
         const value = stored[manifestStorageKey(jobId)]
-        if (value === undefined) continue // stale index entry; self-heals
+        if (value === undefined) {
+          staleIndexEntry = true
+          continue
+        }
         manifestsByJobId[jobId] = parseManifest(value)
       }
       for (const outputId of index.outputIds) {
         const value = stored[outputStorageKey(outputId)]
-        if (value === undefined) continue // stale index entry; self-heals
+        if (value === undefined) {
+          staleIndexEntry = true
+          continue
+        }
         outputsByOutputId[outputId] = parseOutputRecord(value)
       }
       this.cache = structuredClone(
         parseCurrentNativeOutputState({ manifestsByJobId, outputsByOutputId })
       )
+      if (staleIndexEntry) {
+        // Repair the durable index so cold starts stop reading absent keys.
+        // A stale index that references absent records is safer than one that
+        // omits still-live records, but it must be corrected durably here.
+        await chrome.storage.local.set({
+          [INDEX_KEY]: buildIndex(this.cache),
+        })
+      }
       this.hydrated = true
       return structuredClone(this.cache)
     } catch (error) {
@@ -643,6 +658,11 @@ export class NativeOutputRepository {
       )
       const changed = diffChangedValues(this.cache, validated)
       const removed = diffRemovedKeys(this.cache, validated)
+      if (removed.length > 0 && !Object.hasOwn(changed, INDEX_KEY)) {
+        // Removal-only pruning still changes the durable index: rewrite it so
+        // cold starts never read keys that no longer exist.
+        changed[INDEX_KEY] = buildIndex(validated)
+      }
       try {
         if (Object.keys(changed).length > 0) {
           await chrome.storage.local.set(changed)
