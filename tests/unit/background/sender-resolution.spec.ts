@@ -1,334 +1,114 @@
-/**
- * Tests for sender resolution utilities.
- *
- * These tests guard against the class of bug where message handlers
- * assume sender.tab is always populated. Chrome MV3 sender context:
- * - Content scripts: sender.tab is populated, sender.url is the web page URL
- * - Extension pages (side panel, options, popup): sender.url is chrome-extension://
- *   Side panels MAY also have sender.tab populated (associated tab/window)
- * - Offscreen documents: sender.tab is UNDEFINED, sender.url is offscreen.html
- *
- * Ref: https://developer.chrome.com/docs/extensions/reference/api/runtime#type-MessageSender
- */
-import { describe, it, expect } from "vitest"
+import { describe, expect, it } from "vitest"
 
-import {
-  resolveSourceTabId,
-  classifySenderOrigin,
-  isSenderFromOptionsPage,
-  type SenderOrigin,
-} from "@/entrypoints/background/sender-resolution"
-
-// ---------------------------------------------------------------------------
-// Sender fixtures — reusable shapes for each Chrome MV3 sender context
-// ---------------------------------------------------------------------------
+import { resolveSourceTabId } from "@/entrypoints/background/sender-resolution"
+import { classifyRuntimeMessagePrincipal } from "@/src/runtime/runtime-message-sender"
 
 const EXTENSION_ID = "abcdefghijklmnop"
 
-function contentScriptSender(tabId: number): chrome.runtime.MessageSender {
-  return {
-    tab: {
-      id: tabId,
-      index: 0,
-      windowId: 1,
-      active: true,
-      pinned: false,
-      highlighted: false,
-      incognito: false,
-      selected: false,
-      discarded: false,
-      autoDiscardable: true,
-      frozen: false,
-      groupId: -1,
-    },
-    frameId: 0,
-    url: "https://mangadex.org/title/abc",
-    id: EXTENSION_ID,
-  }
+function tab(id: number): chrome.tabs.Tab {
+  return { id } as chrome.tabs.Tab
 }
 
-function sidePanelSender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/sidepanel.html`,
-    id: EXTENSION_ID,
-  }
-}
+describe("classifyRuntimeMessagePrincipal", () => {
+  it.each([
+    ["sidepanel", "/sidepanel.html", undefined, "sidepanel-document"],
+    ["options", "/options.html?tab=downloads", undefined, "options-document"],
+    ["offscreen", "/offscreen.html", undefined, "offscreen-document"],
+    ["sidepanel", "/sidepanel.html", tab(5), "sidepanel-document"],
+  ] as const)(
+    "classifies the exact %s extension principal",
+    (principal, path, senderTab, documentId) => {
+      expect(
+        classifyRuntimeMessagePrincipal(
+          {
+            id: EXTENSION_ID,
+            url: `chrome-extension://${EXTENSION_ID}${path}`,
+            tab: senderTab,
+            documentId,
+          },
+          EXTENSION_ID
+        )
+      ).toBe(principal)
+    }
+  )
 
-/**
- * Real-world Chrome MV3 side panel sender with sender.tab populated.
- * Chrome associates side panels with a tab/window, so sender.tab.id IS
- * set even though the side panel is an extension page (not a content script).
- * This must be classified as 'extension-page', NOT 'content-script'.
- */
-function sidePanelSenderWithTab(
-  tabId: number = 123
-): chrome.runtime.MessageSender {
-  return {
-    tab: {
-      id: tabId,
-      index: 0,
-      windowId: 1,
-      active: true,
-      pinned: false,
-      highlighted: false,
-      incognito: false,
-      selected: false,
-      discarded: false,
-      autoDiscardable: true,
-      frozen: false,
-      groupId: -1,
-    },
-    url: `chrome-extension://${EXTENSION_ID}/sidepanel.html`,
-    id: EXTENSION_ID,
-  }
-}
-
-function popupSender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/popup.html`,
-    id: EXTENSION_ID,
-  }
-}
-
-function optionsPageSender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/options.html?tab=downloads`,
-    id: EXTENSION_ID,
-  }
-}
-
-function offscreenSender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
-    id: EXTENSION_ID,
-    documentId: "offscreen-doc-1",
-  }
-}
-
-function unknownSender(): chrome.runtime.MessageSender {
-  return {}
-}
-
-function extensionPageWithOffscreenQuerySender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/sidepanel.html?view=offscreen`,
-    id: EXTENSION_ID,
-  }
-}
-
-function extensionPageWithOffscreenPathPrefixSender(): chrome.runtime.MessageSender {
-  return {
-    url: `chrome-extension://${EXTENSION_ID}/offscreen-settings.html`,
-    id: EXTENSION_ID,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// classifySenderOrigin
-// ---------------------------------------------------------------------------
-
-describe("classifySenderOrigin", () => {
-  it("identifies content script sender", () => {
+  it("classifies the extension service worker identity", () => {
     expect(
-      classifySenderOrigin(contentScriptSender(42), EXTENSION_ID)
-    ).toBe<SenderOrigin>("content-script")
+      classifyRuntimeMessagePrincipal({ id: EXTENSION_ID }, EXTENSION_ID)
+    ).toBe("background")
   })
 
-  it("identifies side panel as extension-page", () => {
+  it("classifies an exact tabless offscreen sender when documentId is omitted", () => {
     expect(
-      classifySenderOrigin(sidePanelSender(), EXTENSION_ID)
-    ).toBe<SenderOrigin>("extension-page")
-  })
-
-  it("identifies side panel with sender.tab as extension-page (not content-script)", () => {
-    // Chrome MV3 side panels may have sender.tab populated because they are
-    // associated with a tab/window. URL-based classification must take priority
-    // so the side panel is not misclassified as a content script.
-    expect(
-      classifySenderOrigin(sidePanelSenderWithTab(), EXTENSION_ID)
-    ).toBe<SenderOrigin>("extension-page")
-  })
-
-  it("identifies options page as extension-page", () => {
-    expect(
-      classifySenderOrigin(optionsPageSender(), EXTENSION_ID)
-    ).toBe<SenderOrigin>("extension-page")
-  })
-
-  it("identifies offscreen document", () => {
-    expect(
-      classifySenderOrigin(offscreenSender(), EXTENSION_ID)
-    ).toBe<SenderOrigin>("offscreen")
-  })
-
-  it("does not classify extension pages with offscreen in query text as offscreen documents", () => {
-    expect(
-      classifySenderOrigin(
-        extensionPageWithOffscreenQuerySender(),
-        EXTENSION_ID
-      )
-    ).toBe<SenderOrigin>("extension-page")
-  })
-
-  it("does not classify extension pages with offscreen path prefixes as offscreen documents", () => {
-    expect(
-      classifySenderOrigin(
-        extensionPageWithOffscreenPathPrefixSender(),
-        EXTENSION_ID
-      )
-    ).toBe<SenderOrigin>("extension-page")
-  })
-
-  it("returns unknown for empty sender", () => {
-    expect(
-      classifySenderOrigin(unknownSender(), EXTENSION_ID)
-    ).toBe<SenderOrigin>("unknown")
-  })
-
-  it("returns unknown for a sender that identifies as another extension", () => {
-    expect(
-      classifySenderOrigin(
+      classifyRuntimeMessagePrincipal(
         {
-          ...contentScriptSender(42),
-          id: "different-extension-id",
+          id: EXTENSION_ID,
+          url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
         },
         EXTENSION_ID
       )
-    ).toBe<SenderOrigin>("unknown")
+    ).toBe("offscreen")
   })
 
-  it("does not reinterpret another extension page with a tab as a content script", () => {
+  it("classifies a same-extension web-page sender as content", () => {
     expect(
-      classifySenderOrigin(
+      classifyRuntimeMessagePrincipal(
         {
-          ...sidePanelSenderWithTab(42),
-          id: "different-extension-id",
-          url: "chrome-extension://different-extension-id/sidepanel.html",
+          id: EXTENSION_ID,
+          url: "https://mangadex.org/title/abc",
+          tab: tab(42),
         },
         EXTENSION_ID
       )
-    ).toBe<SenderOrigin>("unknown")
+    ).toBe("content")
+  })
+
+  it.each([
+    [{}, "unknown sender"],
+    [
+      {
+        id: "another-extension",
+        url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
+      },
+      "mismatched extension id",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/offscreen-settings.html`,
+        documentId: "document",
+      },
+      "non-exact offscreen path",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/offscreen.html`,
+        tab: tab(7),
+        documentId: "document",
+      },
+      "offscreen identity with a tab",
+    ],
+  ])("rejects %s (%s)", (sender, _label) => {
+    expect(
+      classifyRuntimeMessagePrincipal(
+        sender as chrome.runtime.MessageSender,
+        EXTENSION_ID
+      )
+    ).toBe("unknown")
   })
 })
-
-// ---------------------------------------------------------------------------
-// resolveSourceTabId — THE critical function that was missing coverage
-// ---------------------------------------------------------------------------
 
 describe("resolveSourceTabId", () => {
-  it("returns sender.tab.id for content script sender", () => {
-    expect(resolveSourceTabId(contentScriptSender(42))).toBe(42)
+  it("prefers the explicit sidepanel payload tab", () => {
+    expect(resolveSourceTabId({ tab: tab(3) }, 9)).toBe(9)
   })
 
-  it("returns sender.tab.id even when payloadTabId is also provided (sender is authoritative)", () => {
-    expect(resolveSourceTabId(contentScriptSender(42), 99)).toBe(42)
+  it("uses sender.tab for content-script callers", () => {
+    expect(resolveSourceTabId({ tab: tab(3) })).toBe(3)
   })
 
-  it("falls back to payloadTabId for side panel sender (sender.tab undefined)", () => {
-    expect(resolveSourceTabId(sidePanelSender(), 99)).toBe(99)
-  })
-
-  it("falls back to payloadTabId for options page sender", () => {
-    expect(resolveSourceTabId(optionsPageSender(), 55)).toBe(55)
-  })
-
-  it("falls back to payloadTabId for offscreen sender", () => {
-    expect(resolveSourceTabId(offscreenSender(), 77)).toBe(77)
-  })
-
-  it("accepts payloadTabId zero for extension-page fallback senders", () => {
-    expect(resolveSourceTabId(sidePanelSender(), 0)).toBe(0)
-  })
-
-  it("returns undefined when side panel sender provides no payloadTabId", () => {
-    expect(resolveSourceTabId(sidePanelSender())).toBeUndefined()
-  })
-
-  it("returns undefined when no sender.tab and payloadTabId is negative", () => {
-    expect(resolveSourceTabId(sidePanelSender(), -1)).toBeUndefined()
-  })
-
-  it("returns undefined for completely empty sender with no fallback", () => {
-    expect(resolveSourceTabId(unknownSender())).toBeUndefined()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// isSenderFromOptionsPage
-// ---------------------------------------------------------------------------
-
-describe("isSenderFromOptionsPage", () => {
-  const optionsPrefix = `chrome-extension://${EXTENSION_ID}/options.html`
-
-  it("returns true for options page sender", () => {
-    expect(isSenderFromOptionsPage(optionsPageSender(), optionsPrefix)).toBe(
-      true
-    )
-  })
-
-  it("returns false for side panel sender", () => {
-    expect(isSenderFromOptionsPage(sidePanelSender(), optionsPrefix)).toBe(
-      false
-    )
-  })
-
-  it("returns false for popup sender", () => {
-    expect(isSenderFromOptionsPage(popupSender(), optionsPrefix)).toBe(false)
-  })
-
-  it("returns false for content script sender", () => {
-    expect(isSenderFromOptionsPage(contentScriptSender(1), optionsPrefix)).toBe(
-      false
-    )
-  })
-
-  it("returns false for offscreen sender", () => {
-    expect(isSenderFromOptionsPage(offscreenSender(), optionsPrefix)).toBe(
-      false
-    )
-  })
-
-  it("returns false for empty sender", () => {
-    expect(isSenderFromOptionsPage(unknownSender(), optionsPrefix)).toBe(false)
-  })
-
-  it("returns false for similarly named extension pages", () => {
-    expect(
-      isSenderFromOptionsPage(
-        {
-          url: `chrome-extension://${EXTENSION_ID}/options.html.backup?tab=downloads`,
-          id: EXTENSION_ID,
-        },
-        optionsPrefix
-      )
-    ).toBe(false)
-  })
-})
-
-describe("CLEAR_ALL_HISTORY sender authorization contract", () => {
-  const optionsPrefix = `chrome-extension://${EXTENSION_ID}/options.html`
-
-  it("authorizes options page sender only", () => {
-    expect(isSenderFromOptionsPage(optionsPageSender(), optionsPrefix)).toBe(
-      true
-    )
-  })
-
-  it("rejects content script sender", () => {
-    expect(
-      isSenderFromOptionsPage(contentScriptSender(100), optionsPrefix)
-    ).toBe(false)
-  })
-
-  it("rejects side panel sender", () => {
-    expect(isSenderFromOptionsPage(sidePanelSender(), optionsPrefix)).toBe(
-      false
-    )
-  })
-
-  it("rejects offscreen sender", () => {
-    expect(isSenderFromOptionsPage(offscreenSender(), optionsPrefix)).toBe(
-      false
-    )
+  it.each([-1, 1.5])("rejects invalid payload tab id %s", (payloadTabId) => {
+    expect(resolveSourceTabId({ tab: tab(3) }, payloadTabId)).toBe(3)
   })
 })

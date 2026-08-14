@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { RuntimeMessageSchema } from "@/src/runtime/message-schemas"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { runtimeMessageRegistry } from "@/src/runtime/runtime-message-contracts"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 const getAllSiteOverrides = vi.fn(async () => ({}))
 
@@ -70,7 +70,8 @@ describe("critical runtime contracts (behavior-based)", () => {
   })
 
   it("accepts the identity-bound OFFSCREEN_OUTPUT_READY handoff shape", () => {
-    const parsed = RuntimeMessageSchema.parse({
+    const parsed = runtimeMessageRegistry.OFFSCREEN_OUTPUT_READY.request.parse({
+      target: "background",
       type: "OFFSCREEN_OUTPUT_READY",
       payload: {
         jobId: "job-1",
@@ -78,6 +79,8 @@ describe("critical runtime contracts (behavior-based)", () => {
         outputId: "job-1:archive:0",
         taskId: "task-1",
         chapterId: "chapter-1",
+        fingerprint: "a".repeat(64),
+        documentInstanceId: "document-1",
         fileUrl: "blob:test-file-url",
         filename: "Series/Chapter 1.cbz",
         outputIndex: 0,
@@ -90,9 +93,11 @@ describe("critical runtime contracts (behavior-based)", () => {
   })
 
   it("accepts GET_SITE_INTEGRATION_ENABLEMENT runtime message payload shape", () => {
-    const parsed = RuntimeMessageSchema.parse({
-      type: "GET_SITE_INTEGRATION_ENABLEMENT",
-    })
+    const parsed =
+      runtimeMessageRegistry.GET_SITE_INTEGRATION_ENABLEMENT.request.parse({
+        target: "background",
+        type: "GET_SITE_INTEGRATION_ENABLEMENT",
+      })
 
     expect(parsed.type).toBe("GET_SITE_INTEGRATION_ENABLEMENT")
   })

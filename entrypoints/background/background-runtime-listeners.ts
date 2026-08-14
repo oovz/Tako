@@ -1,23 +1,17 @@
 import logger from "@/src/runtime/logger"
-import {
-  processDownloadQueue,
-  resumeDownloadTask,
-} from "@/entrypoints/background/download-queue"
+import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
+import type { ProviderPolicyQueueCoordinator } from "@/entrypoints/background/provider-policy-queue-coordinator"
 import {
   refreshLivenessAlarmForDurableWork,
   recoverFromLivenessTimeout,
-  scheduleOffscreenCloseIfIdle,
 } from "@/entrypoints/background/offscreen-lifecycle"
 import { markExtensionUpdateActionItemAvailable } from "@/src/runtime/options-action-items"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type { PendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
-import type { PendingOutputRecord } from "@/src/types/queue-state"
-import {
-  finalizePendingOutput,
-  reconcileAllPendingOutputs,
-} from "./native-output-finalizer"
-import { isDownloadTaskRunnerActive } from "./download-task-runner-registry"
-import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { SettingsRepository } from "@/src/storage/settings-repository"
+import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
+import type { NativeOutputCoordinator } from "./native-output-coordinator"
+import type { DestinationService } from "./destination"
 import { pendingUndoTokenFromAlarmName } from "@/src/runtime/pending-undo-actions"
 import { finalizePendingUndoAndCleanup } from "./pending-undo-coordinator"
 import {
@@ -25,9 +19,11 @@ import {
   registerActiveTaskProgressPort,
 } from "./active-task-progress-bus"
 import {
-  isExecutingDownloadTask,
-  isRunnableQueuedTask,
-} from "@/src/runtime/download-task-execution-state"
+  runtimePortRegistry,
+  type RuntimeMessagePrincipal,
+  type RuntimeMessageReadiness,
+} from "@/src/runtime/runtime-message-contracts"
+import { classifyRuntimeMessagePrincipal } from "@/src/runtime/runtime-message-sender"
 
 interface RuntimeListenerTabContextCache {
   handleTabRemoved: (tabId: number) => Promise<void>
@@ -35,20 +31,18 @@ interface RuntimeListenerTabContextCache {
 }
 
 interface RegisterBackgroundRuntimeListenersDependencies {
-  ensureStateManagerInitialized: () => Promise<void>
-  isStateManagerReady: () => boolean
-  getStateManager: () => CentralizedStateManager
-  pendingDownloadsStore: PendingDownloadsStore
-  requestBlobRevocation: (
-    record: Pick<
-      PendingOutputRecord,
-      "jobId" | "attempt" | "outputId" | "blobUrl"
-    >
-  ) => Promise<void>
+  waitForReadiness: (readiness: RuntimeMessageReadiness) => Promise<void>
+  getTabContextStateService: () => TabContextStateService
+  queueRepository: QueueRepository
+  nativeOutputCoordinator: NativeOutputCoordinator
+  queueScheduler: QueueScheduler
+  terminalCoordinator: OffscreenJobTerminalCoordinator
+  providerPolicyQueueCoordinator: ProviderPolicyQueueCoordinator
   tabContextCache: RuntimeListenerTabContextCache
-  ensureOffscreenDocumentReady: () => Promise<void>
   ensureLivenessAlarm: () => Promise<void>
   livenessAlarmName: string
+  settingsRepository: Pick<SettingsRepository, "getSettings">
+  destinationService: DestinationService
 }
 
 export function registerBackgroundRuntimeListeners(
@@ -57,14 +51,26 @@ export function registerBackgroundRuntimeListeners(
   try {
     chrome.runtime.onConnect.addListener((port) => {
       if (port.name !== ACTIVE_TASK_PROGRESS_PORT_NAME) return
+      const contract = runtimePortRegistry.ACTIVE_TASK_PROGRESS
+      const principal = classifyRuntimeMessagePrincipal(
+        port.sender ?? {},
+        chrome.runtime.id
+      )
       if (
-        port.sender?.id &&
-        chrome.runtime.id &&
-        port.sender.id !== chrome.runtime.id
+        !(
+          contract.allowedSenders as readonly RuntimeMessagePrincipal[]
+        ).includes(principal)
       ) {
+        port.disconnect()
         return
       }
-      registerActiveTaskProgressPort(port)
+      void deps
+        .waitForReadiness(contract.readiness)
+        .then(() => registerActiveTaskProgressPort(port))
+        .catch((error) => {
+          logger.debug("Rejecting progress Port before queue hydration", error)
+          port.disconnect()
+        })
     })
   } catch (error) {
     logger.debug(
@@ -76,7 +82,7 @@ export function registerBackgroundRuntimeListeners(
   chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     void (async () => {
       try {
-        await deps.ensureStateManagerInitialized()
+        await deps.waitForReadiness("integrations-ready")
         await deps.tabContextCache.handleTabReplaced(addedTabId, removedTabId)
       } catch (error) {
         logger.error(
@@ -99,60 +105,44 @@ export function registerBackgroundRuntimeListeners(
           return
         }
 
-        await deps.ensureStateManagerInitialized()
-        const terminalState =
-          downloadState === "complete"
-            ? "complete"
-            : downloadState === "interrupted"
-              ? "interrupted"
-              : null
-        if (!terminalState) return
-        const record = await finalizePendingOutput(
-          {
-            stateManager: deps.getStateManager(),
-            pendingOutputs: deps.pendingDownloadsStore,
-            requestBlobRevocation: deps.requestBlobRevocation,
-            onOutputSettled: () =>
-              scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore),
-          },
-          {
-            downloadId: delta.id,
-            state: terminalState,
-            error: delta.error?.current,
-          }
-        )
-
-        if (!record) {
+        await deps.waitForReadiness("runtime-ready")
+        const handled =
+          await deps.nativeOutputCoordinator.handleDownloadChanged(delta)
+        if (!handled) {
           logger.debug(`Download ${delta.id} is not a tracked extension output`)
-        } else if (record.taskId !== "legacy") {
-          const task = (
-            await deps.getStateManager().getGlobalState()
-          ).downloadQueue.find((candidate) => candidate.id === record.taskId)
-          const chapter = task?.chapters.find(
-            (candidate) => candidate.id === record.chapterId
-          )
-          if (
-            !isDownloadTaskRunnerActive(record.taskId) &&
-            (task?.status === "canceled" ||
-              (task?.status === "downloading" &&
-                chapter?.status !== "downloading"))
-          ) {
-            await deps.pendingDownloadsStore.releaseJob(record.jobId)
-            await activeDispatchLeaseStore.clear({
-              jobId: record.jobId,
-              attempt: record.attempt,
-            })
-            if (task.status === "downloading") {
-              await resumeDownloadTask(
-                deps.getStateManager(),
-                task.id,
-                deps.ensureOffscreenDocumentReady
-              )
-            }
-          }
         }
       } catch (error) {
         logger.error("Failed to process downloads.onChanged cleanup:", error)
+        try {
+          // `onChanged` is the primary terminal signal. If accounting or
+          // cleanup fails, retain a one-shot wakeup so the durable accepted
+          // download ID is reconciled without waiting for another restart.
+          await deps.ensureLivenessAlarm()
+        } catch (alarmError) {
+          logger.error(
+            "Unable to schedule native output reconciliation retry:",
+            alarmError
+          )
+        }
+      }
+    })()
+  })
+
+  chrome.downloads.onErased.addListener((downloadId) => {
+    void (async () => {
+      try {
+        await deps.waitForReadiness("runtime-ready")
+        await deps.nativeOutputCoordinator.handleDownloadErased(downloadId)
+      } catch (error) {
+        logger.error("Failed to process downloads.onErased cleanup:", error)
+        try {
+          await deps.ensureLivenessAlarm()
+        } catch (alarmError) {
+          logger.error(
+            "Unable to schedule erased native output reconciliation retry:",
+            alarmError
+          )
+        }
       }
     })()
   })
@@ -161,11 +151,12 @@ export function registerBackgroundRuntimeListeners(
     const pendingUndoToken = pendingUndoTokenFromAlarmName(alarm.name)
     if (pendingUndoToken) {
       void deps
-        .ensureStateManagerInitialized()
+        .waitForReadiness("runtime-ready")
         .then(() =>
           finalizePendingUndoAndCleanup(
-            deps.getStateManager(),
-            pendingUndoToken
+            deps.queueRepository,
+            pendingUndoToken,
+            deps.destinationService
           )
         )
         .catch((error) => {
@@ -179,43 +170,49 @@ export function registerBackgroundRuntimeListeners(
     }
 
     void deps
-      .ensureStateManagerInitialized()
+      .waitForReadiness("runtime-ready")
       .then(async () => {
+        let providerContinuationRetryRequired = false
         try {
-          const finalizerDependencies = {
-            stateManager: deps.getStateManager(),
-            pendingOutputs: deps.pendingDownloadsStore,
-            requestBlobRevocation: deps.requestBlobRevocation,
-            onOutputSettled: () =>
-              scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore),
+          // A successful DNR reconciliation leaves provider-policy blocks as
+          // durable queue state. Retry that short continuation from the same
+          // persisted alarm when the detached callback lost its worker turn.
+          try {
+            if (
+              await deps.providerPolicyQueueCoordinator.resumeBlockedQueue()
+            ) {
+              await deps.queueScheduler.activate()
+            }
+          } catch (error) {
+            providerContinuationRetryRequired = true
+            logger.warn(
+              "Provider policy queue continuation will be retried",
+              error
+            )
+            await deps.ensureLivenessAlarm()
           }
           // Retry ambiguous native handoffs and Blob cleanup while the
           // current service worker remains alive. Startup reconciliation
           // alone cannot unblock an output whose acceptance persistence
           // failed transiently.
-          await reconcileAllPendingOutputs(finalizerDependencies)
+          await deps.nativeOutputCoordinator.reconcile()
           await recoverFromLivenessTimeout(
-            deps.getStateManager(),
-            deps.pendingDownloadsStore,
-            async (activeTaskId) => {
-              if (activeTaskId) {
-                await resumeDownloadTask(
-                  deps.getStateManager(),
-                  activeTaskId,
-                  deps.ensureOffscreenDocumentReady
-                )
-              } else {
-                await processDownloadQueue(
-                  deps.getStateManager(),
-                  deps.ensureOffscreenDocumentReady
-                )
-              }
-            }
+            deps.queueRepository,
+            deps.nativeOutputCoordinator,
+            deps.terminalCoordinator,
+            deps.queueScheduler,
+            deps.settingsRepository
           )
         } finally {
           // One-shot alarms are re-armed only while durable work still
           // needs crash/liveness reconciliation.
-          await refreshLivenessAlarmForDurableWork(deps.getStateManager())
+          await refreshLivenessAlarmForDurableWork(
+            deps.queueRepository,
+            deps.nativeOutputCoordinator
+          )
+          if (providerContinuationRetryRequired) {
+            await deps.ensureLivenessAlarm()
+          }
         }
       })
       .catch(async (error) => {
@@ -236,8 +233,8 @@ export function registerBackgroundRuntimeListeners(
   chrome.tabs.onRemoved.addListener((tabId) => {
     void (async () => {
       try {
-        await deps.ensureStateManagerInitialized()
-        await deps.getStateManager().clearTabState(tabId)
+        await deps.waitForReadiness("integrations-ready")
+        await deps.getTabContextStateService().clearTabState(tabId)
         await deps.tabContextCache.handleTabRemoved(tabId)
       } catch (error) {
         logger.error(`Error clearing state for removed tab ${tabId}:`, error)
@@ -256,45 +253,6 @@ export function registerBackgroundRuntimeListeners(
   } catch (error) {
     logger.debug(
       "runtime.onUpdateAvailable listener unavailable; update action indicator disabled",
-      error
-    )
-  }
-
-  try {
-    chrome.runtime.onSuspend.addListener(() => {
-      logger.info("Service worker suspending - attempting best-effort cleanup")
-      try {
-        if (deps.isStateManagerReady()) {
-          void (async () => {
-            await deps.ensureStateManagerInitialized()
-            try {
-              const state = await deps.getStateManager().getGlobalState()
-              if (
-                state.downloadQueue.some(
-                  (task) =>
-                    isRunnableQueuedTask(task) || isExecutingDownloadTask(task)
-                )
-              ) {
-                return
-              }
-              await scheduleOffscreenCloseIfIdle(deps.pendingDownloadsStore)
-            } catch (error) {
-              logger.debug(
-                "Failed to schedule offscreen close on suspend:",
-                error
-              )
-            }
-          })()
-        }
-
-        logger.debug("Best-effort suspend cleanup requested")
-      } catch (error) {
-        logger.error("Error during service worker cleanup:", error)
-      }
-    })
-  } catch (error) {
-    logger.debug(
-      "runtime.onSuspend listener unavailable; suspend cleanup disabled",
       error
     )
   }
