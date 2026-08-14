@@ -1,34 +1,155 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
+import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
+import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
+import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type {
+  ActiveDispatchLease,
+  DownloadTaskState,
+} from "@/src/domain/queue/state"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
+import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
 
-const recoveryMocks = vi.hoisted(() => ({
-  armRecoveredTaskContinuation: vi.fn(),
+const mocks = vi.hoisted(() => ({
+  notifyTerminalDownloadTask: vi.fn(async () => undefined),
 }))
 
-vi.mock("@/entrypoints/background/offscreen-progress-handler", () => ({
-  armRecoveredTaskContinuation: recoveryMocks.armRecoveredTaskContinuation,
+vi.mock("@/entrypoints/background/download-queue-finalization", () => ({
+  notifyTerminalDownloadTask: mocks.notifyTerminalDownloadTask,
 }))
 
-function makeTask(overrides: Partial<DownloadTaskState>): DownloadTaskState {
-  const siteIntegrationId = overrides.siteIntegrationId ?? "mangadex"
+vi.mock("@/src/runtime/logger", () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
+
+function task(
+  status: DownloadTaskState["status"],
+  id = `task-${status}`
+): DownloadTaskState {
   return {
-    id: "task-1",
-    siteIntegrationId,
+    id,
+    siteIntegrationId: "mangadex",
     mangaId: "series-1",
-    seriesTitle: "Series 1",
-    chapters: [],
-    status: "queued",
+    seriesTitle: "Series",
+    chapters: [
+      {
+        id: "chapter-1",
+        url: "https://example.test/chapter-1",
+        title: "Chapter 1",
+        index: 0,
+        status:
+          status === "queued"
+            ? "queued"
+            : status === "downloading"
+              ? "downloading"
+              : "failed",
+        lastUpdated: 1,
+      },
+    ],
+    status,
     created: 1,
-    settingsSnapshot: createTaskSettingsSnapshot(
-      DEFAULT_SETTINGS,
-      siteIntegrationId
-    ),
-    ...overrides,
+    settingsSnapshot: {} as DownloadTaskState["settingsSnapshot"],
+  }
+}
+
+function activeLease(taskId = "active-task"): ActiveDispatchLease {
+  return {
+    jobId: "job-1",
+    attempt: 1,
+    taskId,
+    chapterId: "chapter-1",
+    fingerprint: "a".repeat(64),
+    documentInstanceId: "document-1",
+    saveMode: "downloads-api",
+    stage: "saving",
+    sequence: 4,
+    startedAt: 1,
+    lastActivityAt: 2,
+    leaseExpiresAt: 3,
+  }
+}
+
+function createHarness(queue: DownloadTaskState[] = []) {
+  const getQueue = vi.fn(async () => queue)
+  const getActiveDispatchLease = vi.fn<
+    QueueRepository["getActiveDispatchLease"]
+  >(async () => null)
+  const recoverQueueAfterStartup = vi.fn<
+    QueueRepository["recoverQueueAfterStartup"]
+  >(async () => ({
+    outcome: "unchanged" as const,
+    queue,
+    recoveredTaskIds: [],
+    interruptedTaskIds: [],
+    leaseCleared: false,
+  }))
+  const clearDispatchLease = vi.fn<QueueRepository["clearDispatchLease"]>(
+    async () => ({
+      outcome: "applied" as const,
+      lease: activeLease(),
+    })
+  )
+  const queueRepository = {
+    getQueue,
+    getActiveDispatchLease,
+    recoverQueueAfterStartup,
+    clearDispatchLease,
+  } as unknown as QueueRepository
+  const nativeOutputCoordinator = {
+    getLiveTaskIds: vi.fn(async () => [] as string[]),
+    reconcileStartupOpenManifests: vi.fn(async () => ({
+      observedJobSealed: false,
+    })),
+    reconcile: vi.fn(async () => undefined),
+    hasLiveDependencies: vi.fn(async () => false),
+    sealManifest: vi.fn(async () => undefined),
+  } as unknown as NativeOutputCoordinator
+  const writeSession = vi.fn(async () => undefined)
+  const setLivenessAlarmArmed = vi.fn(async () => undefined)
+  const settingsRepository = {
+    getSettings: vi.fn(async () => ({})),
+  }
+  const terminalCoordinator = new OffscreenJobTerminalCoordinator(
+    queueRepository,
+    nativeOutputCoordinator,
+    {} as QueueScheduler,
+    {} as never,
+    {
+      settingsRepository: settingsRepository as never,
+      historyRepository: {} as never,
+    } satisfies DownloadQueueFinalizationDependencies
+  )
+  return {
+    queueRepository,
+    nativeOutputCoordinator,
+    getQueue,
+    getActiveDispatchLease,
+    recoverQueueAfterStartup,
+    clearDispatchLease,
+    writeSession,
+    setLivenessAlarmArmed,
+    dependencies: {
+      queueRepository,
+      nativeOutputCoordinator,
+      terminalCoordinator,
+      settingsRepository: settingsRepository as never,
+      writeSession,
+      getOffscreenActiveTaskIds: vi.fn(async () => [] as string[]),
+      hasOffscreenDocument: vi.fn(async () => false),
+      terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+      getOffscreenJobState: vi.fn<() => Promise<OffscreenJobState | null>>(
+        async () => null
+      ),
+      setLivenessAlarmArmed,
+    },
   }
 }
 
@@ -37,578 +158,221 @@ describe("initializeFromStorage", () => {
     vi.clearAllMocks()
   })
 
-  it("normalizes zombie downloading task when offscreen is missing and re-projects queueView", async () => {
-    const queue: DownloadTaskState[] = [
-      makeTask({
-        id: "zombie",
-        status: "downloading",
-        chapters: [
-          {
-            id: "c1",
-            url: "c1",
-            title: "c1",
-            index: 1,
-            status: "completed",
-            lastUpdated: 1,
-          },
-          {
-            id: "c2",
-            url: "c2",
-            title: "c2",
-            index: 2,
-            status: "downloading",
-            lastUpdated: 1,
-          },
-          {
-            id: "c3",
-            url: "c3",
-            title: "c3",
-            index: 3,
-            status: "queued",
-            lastUpdated: 1,
-          },
-        ],
-      }),
-      makeTask({ id: "queued-next", status: "queued", created: 2 }),
-    ]
+  it("stops an unbound producer and passes its exact lease to recovery", async () => {
+    const activeTask = task("downloading", "active-task")
+    const harness = createHarness([activeTask])
+    const lease = { ...activeLease(), documentInstanceId: undefined }
+    vi.mocked(harness.getActiveDispatchLease).mockResolvedValue(lease)
+    vi.mocked(harness.dependencies.hasOffscreenDocument).mockResolvedValue(true)
 
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const ensureLivenessAlarm = vi.fn(async () => {})
-    const setLivenessAlarmArmed = vi.fn(async (_shouldArm: boolean) => {})
+    await initializeFromStorage(harness.dependencies)
 
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm,
-      setLivenessAlarmArmed,
-    })
-
-    expect(result.initFailed).toBe(false)
-    expect(writeQueue).toHaveBeenCalledTimes(1)
-
-    const persistedQueue = writeQueue.mock.calls[0]?.[0] as DownloadTaskState[]
-    const normalizedZombie = persistedQueue.find((task) => task.id === "zombie")
-    expect(normalizedZombie?.status).toBe("partial_success")
-    expect(normalizedZombie?.errorMessage).toBe("Download interrupted")
-    expect(normalizedZombie?.chapters.map((chapter) => chapter.status)).toEqual(
-      ["completed", "failed", "failed"]
-    )
-
-    const queueViewWrite = writeSession.mock.calls.find(
-      (call) =>
-        call[0] && Object.prototype.hasOwnProperty.call(call[0], "queueView")
-    )
-    expect(queueViewWrite).toBeDefined()
-    expect(queueViewWrite?.[0]).toEqual(
+    expect(
+      harness.dependencies.terminateOffscreenDocumentForUnboundLease
+    ).toHaveBeenCalledOnce()
+    expect(harness.dependencies.getOffscreenJobState).not.toHaveBeenCalled()
+    expect(harness.recoverQueueAfterStartup).toHaveBeenCalledWith(
       expect.objectContaining({
-        [SESSION_STORAGE_KEYS.queueView]: expect.any(Array),
-        [SESSION_STORAGE_KEYS.historyView]: expect.any(Array),
-        [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
-        [SESSION_STORAGE_KEYS.initFailed]: false,
-        error: null,
-      })
-    )
-    expect(applyQueue).toHaveBeenCalledWith(persistedQueue)
-
-    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
-    expect(ensureLivenessAlarm).not.toHaveBeenCalled()
-    expect(result.queueActivation).toEqual({ kind: "process-queue" })
-  })
-
-  it("preserves a provider-policy block across restart without treating it as active work", async () => {
-    const queue = [
-      makeTask({
-        id: "provider-blocked",
-        siteIntegrationId: "manhuagui",
-        status: "downloading",
-        activeBlock: "provider_network_policy_pending",
-      }),
-      makeTask({
-        id: "runnable-next",
-        status: "queued",
-        created: 2,
-      }),
-    ]
-    const writeQueue = vi.fn(async () => undefined)
-    const ensureLivenessAlarm = vi.fn(async () => undefined)
-    const setLivenessAlarmArmed = vi.fn(async () => undefined)
-
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm,
-      setLivenessAlarmArmed,
-    })
-
-    expect(result.queue[0]).toMatchObject({
-      id: "provider-blocked",
-      status: "queued",
-      activeBlock: "provider_network_policy_pending",
-    })
-    expect(result.queueActivation).toEqual({ kind: "process-queue" })
-    expect(ensureLivenessAlarm).not.toHaveBeenCalled()
-    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
-    expect(writeQueue).toHaveBeenCalledWith(result.queue)
-  })
-
-  it("marks initFailed in session when initialization throws", async () => {
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-
-    const result = await initializeFromStorage({
-      readQueue: async () => {
-        throw new Error("storage corruption")
-      },
-      writeQueue: async () => {},
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm: async () => {},
-    })
-
-    expect(result.initFailed).toBe(true)
-    expect(result.error).toBe("storage corruption")
-    expect(writeSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        [SESSION_STORAGE_KEYS.queueView]: [],
-        [SESSION_STORAGE_KEYS.historyView]: [],
-        [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
-        [SESSION_STORAGE_KEYS.initFailed]: true,
-        error: "storage corruption",
+        observedLease: expect.objectContaining({
+          jobId: lease.jobId,
+          fingerprint: lease.fingerprint,
+          documentInstanceId: undefined,
+        }),
+        offscreenJob: null,
       })
     )
   })
 
-  it("resumes the exact active task when its offscreen context is alive", async () => {
-    const queue: DownloadTaskState[] = [
-      makeTask({
-        id: "active-with-offscreen",
-        status: "downloading",
-        chapters: [
-          {
-            id: "c1",
-            url: "c1",
-            title: "c1",
-            index: 1,
-            status: "downloading",
-            lastUpdated: 1,
-          },
-        ],
-      }),
-    ]
+  it("passes native-output ownership into recovery and reconciles before liveness projection", async () => {
+    const nativeTask = task("downloading", "native-task")
+    const harness = createHarness([nativeTask])
+    vi.mocked(harness.nativeOutputCoordinator.getLiveTaskIds).mockResolvedValue(
+      [nativeTask.id]
+    )
+    vi.mocked(
+      harness.nativeOutputCoordinator.hasLiveDependencies
+    ).mockResolvedValue(true)
 
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const ensureLivenessAlarm = vi.fn(async () => {})
+    const result = await initializeFromStorage(harness.dependencies)
 
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => ["active-with-offscreen"],
-      ensureLivenessAlarm,
-    })
-
-    expect(result.initFailed).toBe(false)
-    expect(result.queue[0]?.status).toBe("downloading")
-    expect(result.queue[0]?.chapters[0]?.status).toBe("downloading")
-
-    expect(writeQueue).not.toHaveBeenCalled()
-    expect(applyQueue).toHaveBeenCalledWith(queue)
-    expect(result.queueActivation).toEqual({
-      kind: "resume-task",
-      taskId: "active-with-offscreen",
-    })
-    expect(ensureLivenessAlarm).toHaveBeenCalledTimes(1)
-    expect(recoveryMocks.armRecoveredTaskContinuation).not.toHaveBeenCalled()
+    expect(harness.recoverQueueAfterStartup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observedLease: null,
+        offscreenJob: null,
+        nativeOutputTaskIds: [nativeTask.id],
+      })
+    )
+    expect(
+      harness.nativeOutputCoordinator.reconcileStartupOpenManifests
+    ).toHaveBeenCalledWith({ offscreenJob: null, activeLease: null })
+    expect(
+      vi.mocked(harness.nativeOutputCoordinator.reconcileStartupOpenManifests)
+        .mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      vi.mocked(harness.nativeOutputCoordinator.getLiveTaskIds).mock
+        .invocationCallOrder[0]!
+    )
+    expect(harness.nativeOutputCoordinator.reconcile).toHaveBeenCalledOnce()
+    expect(harness.setLivenessAlarmArmed).toHaveBeenCalledWith(true)
+    expect(result).toEqual({ queue: [nativeTask], queueActivation: undefined })
   })
 
-  it("does not resume queued work when offscreen context is alive and another task is already downloading", async () => {
-    const queue: DownloadTaskState[] = [
-      makeTask({
-        id: "active-with-offscreen",
-        status: "downloading",
-        chapters: [
-          {
-            id: "c1",
-            url: "c1",
-            title: "c1",
-            index: 1,
-            status: "downloading",
-            lastUpdated: 1,
-          },
-        ],
-      }),
-      makeTask({ id: "queued-next", status: "queued", created: 2 }),
-    ]
+  it("activates the next queued task only after recovery leaves no live owner", async () => {
+    const queuedTask = task("queued")
+    const harness = createHarness([queuedTask])
 
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const ensureLivenessAlarm = vi.fn(async () => {})
-
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => ["active-with-offscreen"],
-      ensureLivenessAlarm,
+    await expect(initializeFromStorage(harness.dependencies)).resolves.toEqual({
+      queue: [queuedTask],
+      queueActivation: { kind: "process-queue" },
     })
-
-    expect(result.initFailed).toBe(false)
-    expect(writeQueue).not.toHaveBeenCalled()
-    expect(applyQueue).toHaveBeenCalledWith(queue)
-    expect(result.queueActivation).toEqual({
-      kind: "resume-task",
-      taskId: "active-with-offscreen",
-    })
-    expect(ensureLivenessAlarm).toHaveBeenCalledTimes(1)
+    expect(harness.setLivenessAlarmArmed).toHaveBeenCalledWith(false)
   })
 
-  it("resumes a downloading task when the offscreen is alive but idle between chapters", async () => {
-    const queue: DownloadTaskState[] = [
-      makeTask({
-        id: "zombie-idle-offscreen",
-        status: "downloading",
-        chapters: [
-          {
-            id: "c1",
-            url: "c1",
-            title: "c1",
-            index: 1,
-            status: "completed",
-            lastUpdated: 1,
-          },
-          {
-            id: "c2",
-            url: "c2",
-            title: "c2",
-            index: 2,
-            status: "queued",
-            lastUpdated: 1,
-          },
-        ],
-      }),
-    ]
-
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const ensureLivenessAlarm = vi.fn(async () => {})
-
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm,
+  it("prefers exact recovered task resumption over queue activation", async () => {
+    const activeTask = task("downloading", "active-task")
+    const harness = createHarness([activeTask])
+    harness.recoverQueueAfterStartup.mockResolvedValueOnce({
+      outcome: "applied",
+      queue: [activeTask],
+      recoveredTaskIds: [activeTask.id],
+      interruptedTaskIds: [],
+      leaseCleared: false,
+      resumeTaskId: activeTask.id,
     })
 
-    expect(result.initFailed).toBe(false)
-    expect(writeQueue).not.toHaveBeenCalled()
-    expect(result.queue[0]?.status).toBe("downloading")
-    expect(result.queue[0]?.chapters[1]?.status).toBe("queued")
-    expect(result.queueActivation).toEqual({
-      kind: "resume-task",
-      taskId: "zombie-idle-offscreen",
+    await expect(initializeFromStorage(harness.dependencies)).resolves.toEqual({
+      queue: [activeTask],
+      queueActivation: { kind: "resume-task", taskId: activeTask.id },
     })
   })
 
-  it("adds a completion timestamp to persisted terminal tasks that lack one", async () => {
-    const queue = [
-      makeTask({
-        id: "legacy-complete",
-        status: "completed",
-        completed: undefined,
-      }),
-    ]
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue,
-      writeSession: async () => undefined,
-      applyQueue,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm: async () => undefined,
-    })
-
-    expect(result.queue[0]?.completed).toEqual(expect.any(Number))
-    expect(writeQueue).toHaveBeenCalledWith(result.queue)
-    expect(applyQueue).toHaveBeenCalledWith(result.queue)
-  })
-
-  it("applies the latest persisted queue when storage changes during startup recovery", async () => {
-    const seededQueue: DownloadTaskState[] = [
-      makeTask({
-        id: "retried-canceled-options",
-        status: "canceled",
-        seriesTitle: "Retried Canceled Options",
-        completed: 10,
-        isRetried: true,
-      }),
-      makeTask({
-        id: "retried-failed-options",
+  it("settles an exactly queried terminal native job before startup recovery", async () => {
+    const activeTask = task("downloading", "active-task")
+    const harness = createHarness([activeTask])
+    const lease = activeLease(activeTask.id)
+    harness.getActiveDispatchLease
+      .mockResolvedValueOnce(lease)
+      .mockResolvedValueOnce(lease)
+      .mockResolvedValue(null)
+    harness.dependencies.hasOffscreenDocument.mockResolvedValue(true)
+    harness.dependencies.getOffscreenJobState.mockResolvedValue({
+      jobId: lease.jobId,
+      attempt: lease.attempt,
+      taskId: lease.taskId,
+      chapterId: lease.chapterId,
+      fingerprint: lease.fingerprint,
+      documentInstanceId: lease.documentInstanceId!,
+      status: "terminal",
+      stage: "saving",
+      lastSequence: lease.sequence,
+      outcome: {
         status: "failed",
-        seriesTitle: "Retried Failed Options",
-        completed: 20,
-        isRetried: true,
-        errorMessage: "Network error",
-      }),
-    ]
-
-    const readQueue = vi
-      .fn<() => Promise<DownloadTaskState[]>>()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(seededQueue)
-
-    const writeQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const writeSession = vi.fn(async (_values: Record<string, unknown>) => {})
-    const applyQueue = vi.fn(async (_queue: DownloadTaskState[]) => {})
-    const ensureLivenessAlarm = vi.fn(async () => {})
-
-    const result = await initializeFromStorage({
-      readQueue,
-      writeQueue,
-      writeSession,
-      applyQueue,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => [],
-      ensureLivenessAlarm,
-    })
-
-    expect(result.initFailed).toBe(false)
-    expect(readQueue).toHaveBeenCalledTimes(2)
-    expect(result.queue).toEqual(seededQueue)
-    expect(applyQueue).toHaveBeenCalledWith(seededQueue)
-    expect(writeQueue).not.toHaveBeenCalled()
-    expect(result.queueActivation).toBeUndefined()
-  })
-
-  it("fails closed when active offscreen task identities do not match persisted state", async () => {
-    const queue = [
-      makeTask({ id: "persisted-active", status: "downloading" }),
-      makeTask({ id: "queued-next", status: "queued", created: 2 }),
-    ]
-    const result = await initializeFromStorage({
-      readQueue: async () => queue,
-      writeQueue: async () => undefined,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => ["different-active-task"],
-      ensureLivenessAlarm: async () => undefined,
-    })
-
-    expect(result.initFailed).toBe(false)
-    expect(result.queueActivation).toBeUndefined()
-    expect(recoveryMocks.armRecoveredTaskContinuation).not.toHaveBeenCalled()
-  })
-
-  it("does not start queued work while an unmatched offscreen task is active", async () => {
-    const result = await initializeFromStorage({
-      readQueue: async () => [makeTask({ id: "queued", status: "queued" })],
-      writeQueue: async () => undefined,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => ["orphan-offscreen-task"],
-      ensureLivenessAlarm: async () => undefined,
-    })
-
-    expect(result.queueActivation).toBeUndefined()
-  })
-
-  it("keeps observing an identity-bound native output when no offscreen job remains", async () => {
-    const task = makeTask({
-      id: "native-pending",
-      status: "downloading",
-      browserDownloadWait: {
-        downloadIds: [42],
-        since: 1,
-        lastObservedAt: 2,
+        outputsRequested: 0,
+        outputsFailedBeforeHandoff: 0,
+        outputsCommitted: 0,
       },
-      chapters: [
-        {
-          id: "chapter-1",
-          url: "https://example.test/chapter-1",
-          title: "Chapter 1",
-          index: 1,
-          status: "downloading",
-          dispatchAttempt: 1,
-          outputs: { requested: 1, committed: 0, failed: 0 },
-          lastUpdated: 1,
-        },
-      ],
     })
-    const writeQueue = vi.fn(async () => undefined)
-    const setLivenessAlarmArmed = vi.fn(async () => undefined)
+    await initializeFromStorage(harness.dependencies)
 
-    const result = await initializeFromStorage({
-      readQueue: async () => [task],
-      writeQueue,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      hasOffscreenDocument: async () => false,
-      getOffscreenJobState: async () => null,
-      getActiveDispatchLease: async () => ({
-        jobId: "job-1",
-        attempt: 1,
-        taskId: task.id,
-        chapterId: "chapter-1",
-        stage: "saving",
-        sequence: 5,
-        startedAt: 1,
-        lastActivityAt: 2,
-        leaseExpiresAt: 3,
-      }),
-      hasReconcilablePendingOutputs: () => true,
-      hasPendingOutputWork: () => true,
-      setLivenessAlarmArmed,
-      ensureLivenessAlarm: async () => undefined,
+    expect(harness.nativeOutputCoordinator.sealManifest).toHaveBeenCalledWith({
+      jobId: lease.jobId,
+      attempt: lease.attempt,
+      taskId: lease.taskId,
+      chapterId: lease.chapterId,
+      fingerprint: lease.fingerprint,
+      documentInstanceId: lease.documentInstanceId,
+      outputsRequested: 0,
+      outputsFailedBeforeHandoff: 0,
     })
-
-    expect(result.queue[0]?.status).toBe("downloading")
-    expect(result.queue[0]?.chapters[0]?.status).toBe("downloading")
-    expect(result.queue[0]?.browserDownloadWait).toEqual({
-      downloadIds: [42],
-      since: 1,
-      lastObservedAt: 2,
-    })
-    expect(result.queueActivation).toBeUndefined()
-    expect(writeQueue).not.toHaveBeenCalled()
-    expect(setLivenessAlarmArmed).toHaveBeenCalledWith(false)
-  })
-
-  it("releases a durably settled terminal job before resuming queue finalization", async () => {
-    const task = makeTask({
-      id: "settled-active",
-      status: "downloading",
-      chapters: [
-        {
-          id: "chapter-1",
-          url: "https://example.test/chapter-1",
-          title: "Chapter 1",
-          index: 1,
-          status: "completed",
-          dispatchAttempt: 1,
-          outputs: { requested: 1, committed: 1, failed: 0 },
-          lastUpdated: 2,
-        },
-      ],
-    })
-    const lease = {
-      jobId: "job-settled",
-      attempt: 1,
-      taskId: task.id,
-      chapterId: "chapter-1",
-      stage: "saving" as const,
-      sequence: 8,
-      startedAt: 1,
-      lastActivityAt: 2,
-      leaseExpiresAt: 3,
-    }
-    const releasePendingOutputJob = vi.fn(async () => undefined)
-    const clearActiveDispatchLease = vi.fn(async () => true)
-
-    const result = await initializeFromStorage({
-      readQueue: async () => [task],
-      writeQueue: async () => undefined,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [{}],
-      getOffscreenActiveTaskIds: async () => [],
-      hasOffscreenDocument: async () => true,
-      getOffscreenJobState: async () => ({
+    expect(harness.clearDispatchLease).toHaveBeenCalledWith(
+      expect.objectContaining({
         jobId: lease.jobId,
         attempt: lease.attempt,
         taskId: lease.taskId,
         chapterId: lease.chapterId,
-        status: "terminal",
-        stage: "saving",
-        sequence: 8,
-        outcome: { status: "completed", outputsRequested: 1 },
-      }),
-      getActiveDispatchLease: async () => lease,
-      clearActiveDispatchLease,
-      releasePendingOutputJob,
-      ensureLivenessAlarm: async () => undefined,
+        fingerprint: lease.fingerprint,
+        documentInstanceId: lease.documentInstanceId,
+      })
+    )
+    expect(harness.recoverQueueAfterStartup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observedLease: null,
+        offscreenJob: null,
+      })
+    )
+    expect(
+      vi.mocked(harness.nativeOutputCoordinator.reconcile).mock
+        .invocationCallOrder[0]
+    ).toBeGreaterThan(
+      harness.recoverQueueAfterStartup.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("fails startup when the dispatch lease changes during recovery", async () => {
+    const harness = createHarness()
+    harness.recoverQueueAfterStartup.mockResolvedValueOnce({
+      outcome: "rejected",
+      reason: "lease-conflict",
     })
 
-    expect(releasePendingOutputJob).toHaveBeenCalledWith("job-settled")
-    expect(clearActiveDispatchLease).toHaveBeenCalledWith({
-      jobId: "job-settled",
-      attempt: 1,
+    await expect(initializeFromStorage(harness.dependencies)).rejects.toThrow(
+      "Startup dispatch lease changed during recovery"
+    )
+    expect(harness.nativeOutputCoordinator.reconcile).not.toHaveBeenCalled()
+  })
+
+  it("notifies each task interrupted by recovery and clears active progress", async () => {
+    const failedTask = task("failed", "failed-task")
+    const harness = createHarness([failedTask])
+    harness.recoverQueueAfterStartup.mockResolvedValueOnce({
+      outcome: "applied",
+      queue: [failedTask],
+      recoveredTaskIds: [failedTask.id],
+      interruptedTaskIds: [failedTask.id],
+      leaseCleared: true,
     })
-    expect(result.queueActivation).toEqual({
-      kind: "resume-task",
-      taskId: task.id,
+
+    await initializeFromStorage(harness.dependencies)
+
+    expect(mocks.notifyTerminalDownloadTask).toHaveBeenCalledWith({
+      task: failedTask,
+      finalStatus: "failed",
+      completedCount: 0,
+      totalChapters: 1,
+      settingsRepository: harness.dependencies.settingsRepository,
+    })
+    expect(harness.writeSession).toHaveBeenCalledWith({
+      [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
     })
   })
 
-  it("clears an orphan lease left after terminal task finalization", async () => {
-    const terminalTask = makeTask({
-      id: "terminal-task",
-      status: "completed",
-      completed: 10,
-    })
-    const queuedTask = makeTask({ id: "queued-next", created: 20 })
-    const lease = {
-      jobId: "job-finalized",
-      attempt: 2,
-      taskId: terminalTask.id,
-      chapterId: "chapter-finalized",
-      stage: "saving" as const,
-      sequence: 9,
-      startedAt: 1,
-      lastActivityAt: 2,
-      leaseExpiresAt: 3,
-    }
-    const releasePendingOutputJob = vi.fn(async () => undefined)
-    const clearActiveDispatchLease = vi.fn(async () => true)
+  it("keeps startup successful when the disposable session projection fails", async () => {
+    const harness = createHarness()
+    harness.writeSession.mockRejectedValue(new Error("session unavailable"))
 
-    const result = await initializeFromStorage({
-      readQueue: async () => [terminalTask, queuedTask],
-      writeQueue: async () => undefined,
-      writeSession: async () => undefined,
-      applyQueue: async () => undefined,
-      getOffscreenContexts: async () => [],
-      getOffscreenActiveTaskIds: async () => [],
-      hasOffscreenDocument: async () => false,
-      getOffscreenJobState: async () => null,
-      getActiveDispatchLease: async () => lease,
-      clearActiveDispatchLease,
-      releasePendingOutputJob,
-      ensureLivenessAlarm: async () => undefined,
+    await expect(initializeFromStorage(harness.dependencies)).resolves.toEqual({
+      queue: [],
+      queueActivation: undefined,
+    })
+  })
+
+  it("keeps recovery deferred when the exact offscreen job query fails", async () => {
+    const activeTask = task("downloading", "active-task")
+    const harness = createHarness([activeTask])
+    harness.getActiveDispatchLease.mockResolvedValue(activeLease(activeTask.id))
+    harness.dependencies.hasOffscreenDocument.mockResolvedValueOnce(true)
+    harness.dependencies.getOffscreenJobState.mockRejectedValueOnce(
+      new Error("offscreen query transport failed")
+    )
+
+    await expect(initializeFromStorage(harness.dependencies)).resolves.toEqual({
+      queue: [activeTask],
     })
 
-    expect(releasePendingOutputJob).toHaveBeenCalledWith(lease.jobId)
-    expect(clearActiveDispatchLease).toHaveBeenCalledWith({
-      jobId: lease.jobId,
-      attempt: lease.attempt,
-    })
-    expect(result.queueActivation).toEqual({ kind: "process-queue" })
+    expect(
+      harness.nativeOutputCoordinator.reconcileStartupOpenManifests
+    ).not.toHaveBeenCalled()
+    expect(harness.recoverQueueAfterStartup).not.toHaveBeenCalled()
+    expect(harness.setLivenessAlarmArmed).toHaveBeenCalledWith(true)
   })
 })

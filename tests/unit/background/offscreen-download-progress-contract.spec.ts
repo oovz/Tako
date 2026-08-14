@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { normalizeActiveTaskProgress } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { NotificationService } from "@/entrypoints/background/notification-service"
-import { OffscreenMessageSchema } from "@/src/runtime/message-schemas"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { runtimeMessageRegistry } from "@/src/runtime/runtime-message-contracts"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -16,8 +16,8 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/site-integrations/manifest", () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDisplayName: vi.fn(() => "MangaDex"),
 }))
 
 function makeTask(
@@ -62,47 +62,59 @@ describe("OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)", () => {
     })
   })
 
-  it("normalizes and aggregates concurrent chapter snapshots for active progress display", () => {
-    const normalized = normalizeActiveTaskProgress({
+  it("accepts the current aggregate progress projection without synthesizing fields", () => {
+    const projection = {
+      generation: "generation-1",
+      revision: 1,
+      updatedAt: 100,
       taskId: "task-1",
-      imagesProcessed: 1,
-      totalImages: 4,
-      activeChapterCount: 1,
+      imagesProcessed: 5,
+      totalImages: 20,
+      activeChapterCount: 2,
       activeChapters: [
         {
           chapterId: "ch-1",
           chapterTitle: "A",
           imagesProcessed: 2,
           totalImages: 8,
+          stage: "downloading",
+          phaseFraction: 0.25,
+          updatedAt: 99,
         },
         {
           chapterId: "ch-2",
           chapterTitle: "B",
           imagesProcessed: 3,
           totalImages: 12,
+          stage: "downloading",
+          phaseFraction: 0.25,
+          updatedAt: 100,
         },
       ],
+      stage: "downloading",
+      phaseFraction: 0.25,
+      outputCommitted: false,
       status: "downloading",
-    })
+    } as const
 
-    expect(normalized).toEqual(
-      expect.objectContaining({
-        activeChapterCount: 2,
-        imagesProcessed: 5,
-        totalImages: 20,
-      })
-    )
+    expect(normalizeActiveTaskProgress(projection)).toEqual(projection)
   })
 
   it("rejects non-canonical waiting status in progress message schema", () => {
-    const parsed = OffscreenMessageSchema.safeParse({
-      type: "OFFSCREEN_DOWNLOAD_PROGRESS",
-      payload: {
-        taskId: "task-1",
-        chapterId: "chapter-1",
-        status: "waiting",
-      },
-    })
+    const parsed =
+      runtimeMessageRegistry.OFFSCREEN_DOWNLOAD_PROGRESS.request.safeParse({
+        target: "background",
+        type: "OFFSCREEN_DOWNLOAD_PROGRESS",
+        payload: {
+          jobId: "job-1",
+          attempt: 1,
+          taskId: "task-1",
+          chapterId: "chapter-1",
+          sequence: 1,
+          stage: "downloading",
+          status: "waiting",
+        },
+      })
 
     expect(parsed.success).toBe(false)
   })

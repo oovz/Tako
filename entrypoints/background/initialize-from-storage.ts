@@ -1,332 +1,218 @@
 import logger from "@/src/runtime/logger"
-import { projectToQueueView } from "@/src/runtime/projection"
-import { normalizeInterruptedTask } from "@/entrypoints/background/task-lifecycle"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import type { ActiveDispatchLease } from "@/src/types/queue-state"
-import type { OffscreenJobState } from "@/src/types/offscreen-messages"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { SettingsRepository } from "@/src/storage/settings-repository"
+import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { notifyTerminalDownloadTask } from "@/entrypoints/background/download-queue-finalization"
+import { isExecutingDownloadTask } from "@/src/domain/queue/task-lifecycle"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import {
-  isExecutingDownloadTask,
-  isRunnableQueuedTask,
-  normalizeDownloadTaskExecutionState,
-} from "@/src/runtime/download-task-execution-state"
+  planStartupQueueActivation,
+  type StartupQueueActivation,
+} from "@/src/domain/queue/scheduler-policy"
 
 interface InitializeFromStorageDependencies {
-  readQueue: () => Promise<DownloadTaskState[]>
-  writeQueue: (queue: DownloadTaskState[]) => Promise<void>
+  settingsRepository: Pick<SettingsRepository, "getSettings">
+  queueRepository: QueueRepository
+  nativeOutputCoordinator: NativeOutputCoordinator
+  terminalCoordinator: OffscreenJobTerminalCoordinator
   writeSession: (values: Record<string, unknown>) => Promise<void>
-  applyQueue: (queue: DownloadTaskState[]) => Promise<void>
-  getOffscreenContexts: () => Promise<unknown[]>
   getOffscreenActiveTaskIds: () => Promise<string[]>
-  hasOffscreenDocument?: () => Promise<boolean>
-  getOffscreenJobState?: () => Promise<OffscreenJobState | null>
-  getActiveDispatchLease?: () => Promise<ActiveDispatchLease | null>
-  clearActiveDispatchLease?: (identity: {
+  hasOffscreenDocument: () => Promise<boolean>
+  terminateOffscreenDocumentForUnboundLease: () => Promise<void>
+  getOffscreenJobState: (identity: {
     jobId: string
     attempt: number
-  }) => Promise<boolean>
-  releasePendingOutputJob?: (jobId: string) => Promise<void>
-  hasReconcilablePendingOutputs?: (task: DownloadTaskState) => boolean
-  hasPendingOutputWork?: () => boolean
-  setLivenessAlarmArmed?: (shouldArm: boolean) => Promise<void>
-  ensureLivenessAlarm: () => Promise<void>
+    taskId: string
+    chapterId: string
+    fingerprint: string
+    documentInstanceId: string
+  }) => Promise<OffscreenJobState | null>
+  setLivenessAlarmArmed: (shouldArm: boolean) => Promise<void>
 }
-
-export type StartupQueueActivation =
-  { kind: "resume-task"; taskId: string } | { kind: "process-queue" }
 
 export interface InitializeFromStorageResult {
   queue: DownloadTaskState[]
-  initFailed: boolean
   queueActivation?: StartupQueueActivation
-  error?: string
-}
-
-function findNextQueued(
-  queue: DownloadTaskState[]
-): DownloadTaskState | undefined {
-  return queue.find(isRunnableQueuedTask)
-}
-
-function hasActiveDownloadingTask(queue: DownloadTaskState[]): boolean {
-  return queue.some(isExecutingDownloadTask)
-}
-
-function shouldPreferLatestQueueSnapshot(
-  initialQueue: DownloadTaskState[],
-  normalizedQueue: DownloadTaskState[],
-  latestQueue: DownloadTaskState[]
-): boolean {
-  return (
-    initialQueue.length === 0 &&
-    normalizedQueue.length === 0 &&
-    latestQueue.length > 0
-  )
 }
 
 export async function initializeFromStorage(
   dependencies: InitializeFromStorageDependencies
 ): Promise<InitializeFromStorageResult> {
-  const {
-    readQueue,
-    writeQueue,
-    writeSession,
-    applyQueue,
-    getOffscreenContexts,
-    getOffscreenActiveTaskIds,
-    ensureLivenessAlarm,
-  } = dependencies
-
-  try {
-    const hydratedQueue = await readQueue()
-    const offscreenAlive = dependencies.hasOffscreenDocument
-      ? await dependencies.hasOffscreenDocument()
-      : (await getOffscreenContexts()).length > 0
-    const exactJobState =
-      offscreenAlive && dependencies.getOffscreenJobState
-        ? await dependencies.getOffscreenJobState()
-        : null
-    const activeLease = dependencies.getActiveDispatchLease
-      ? await dependencies.getActiveDispatchLease()
-      : null
-    const offscreenActiveTaskIds =
-      exactJobState?.status === "active"
-        ? [exactJobState.taskId]
-        : offscreenAlive
-          ? [...new Set(await getOffscreenActiveTaskIds())].sort(
-              (left, right) => left.localeCompare(right)
-            )
-          : []
-
-    const normalizationTime = Date.now()
-    let normalizedQueue = hydratedQueue.map((task) => {
-      const taskWithCompletion =
-        task.status !== "queued" &&
-        task.status !== "downloading" &&
-        typeof task.completed !== "number"
-          ? { ...task, completed: normalizationTime }
-          : task
-      return normalizeDownloadTaskExecutionState(taskWithCompletion)
-    })
-    let queueChanged = normalizedQueue.some(
-      (task, index) => task !== hydratedQueue[index]
-    )
-
-    let activeTaskToResume: string | undefined
-    let recoveredActiveTaskId: string | undefined
-    const interruptedTaskIds = new Set<string>()
-    const hadZombieTask = normalizedQueue.some(isExecutingDownloadTask)
-    if (hadZombieTask) {
-      const downloadingTasks = normalizedQueue.filter(isExecutingDownloadTask)
-      const exactLifecycleEnabled =
-        dependencies.getOffscreenJobState !== undefined &&
-        dependencies.getActiveDispatchLease !== undefined
-      const exactJobMatches =
-        downloadingTasks.length === 1 &&
-        activeLease !== null &&
-        exactJobState !== null &&
-        activeLease.jobId === exactJobState.jobId &&
-        activeLease.attempt === exactJobState.attempt &&
-        activeLease.taskId === exactJobState.taskId &&
-        activeLease.chapterId === exactJobState.chapterId &&
-        downloadingTasks[0]?.id === activeLease.taskId
-
-      const exactLeaseChapter =
-        downloadingTasks.length === 1 && activeLease
-          ? downloadingTasks[0].chapters.find(
-              (chapter) => chapter.id === activeLease.chapterId
-            )
-          : undefined
-      const exactLeaseChapterIsTerminal =
-        exactLeaseChapter !== undefined &&
-        exactLeaseChapter.status !== "queued" &&
-        exactLeaseChapter.status !== "downloading"
-
-      if (
-        exactLifecycleEnabled &&
-        exactJobMatches &&
-        exactJobState?.status === "terminal" &&
-        exactLeaseChapterIsTerminal
-      ) {
-        await dependencies.releasePendingOutputJob?.(activeLease.jobId)
-        await dependencies.clearActiveDispatchLease?.({
-          jobId: activeLease.jobId,
-          attempt: activeLease.attempt,
-        })
-        activeTaskToResume = activeLease.taskId
-      } else if (exactLifecycleEnabled && exactJobMatches) {
-        recoveredActiveTaskId = activeLease.taskId
-      } else if (
-        exactLifecycleEnabled &&
-        downloadingTasks.length === 1 &&
-        dependencies.hasReconcilablePendingOutputs?.(downloadingTasks[0])
-      ) {
-        // Chrome owns an identity-bound output that can still complete. Keep
-        // observing it instead of replaying the chapter or sweeping the task.
-        recoveredActiveTaskId = undefined
-      } else if (
-        exactLifecycleEnabled &&
-        downloadingTasks.length === 1 &&
-        downloadingTasks[0].chapters.every(
-          (chapter) => chapter.status !== "downloading"
-        )
-      ) {
-        if (activeLease?.taskId === downloadingTasks[0].id) {
-          await dependencies.releasePendingOutputJob?.(activeLease.jobId)
-          await dependencies.clearActiveDispatchLease?.({
-            jobId: activeLease.jobId,
-            attempt: activeLease.attempt,
-          })
-        }
-        // The prior chapter was durably settled before the worker stopped.
-        // Resume only the queue/finalization path; no job replay is required.
-        activeTaskToResume = downloadingTasks[0].id
-      } else if (
-        !exactLifecycleEnabled &&
-        offscreenAlive &&
-        downloadingTasks.length === 1 &&
-        offscreenActiveTaskIds.length === 1 &&
-        offscreenActiveTaskIds[0] === downloadingTasks[0]?.id
-      ) {
-        // Compatibility branch for unit-test and migration callers that have
-        // not yet supplied the exact job protocol.
-        recoveredActiveTaskId = downloadingTasks[0].id
-      } else if (
-        !exactLifecycleEnabled &&
-        offscreenAlive &&
-        offscreenActiveTaskIds.length === 0
-      ) {
-        activeTaskToResume = downloadingTasks[0]?.id
-      } else {
-        if (activeLease) {
-          await dependencies.releasePendingOutputJob?.(activeLease.jobId)
-          await dependencies.clearActiveDispatchLease?.({
-            jobId: activeLease.jobId,
-            attempt: activeLease.attempt,
-          })
-        }
-        const interruptedAt = Date.now()
-        const reason = "Download interrupted"
-        for (const task of normalizedQueue) {
-          if (task.status === "downloading") interruptedTaskIds.add(task.id)
-        }
-        normalizedQueue = normalizedQueue.map((task) =>
-          task.status === "downloading"
-            ? normalizeInterruptedTask(task, reason, interruptedAt)
-            : task
-        )
-        queueChanged = true
-        await writeSession({ [SESSION_STORAGE_KEYS.activeTaskProgress]: null })
-        logger.warn("Startup recovery normalized an unreconciled job", {
-          persistedTaskIds: downloadingTasks.map((task) => task.id),
-          lease: activeLease,
-          offscreenJob: exactJobState,
-        })
-      }
-    } else if (activeLease) {
-      // A terminal task commit and lease deletion are separate storage writes.
-      // If the service worker stopped between them, remove the orphan before a
-      // queued task attempts the single-dispatch compare-and-swap.
-      await dependencies.releasePendingOutputJob?.(activeLease.jobId)
-      await dependencies.clearActiveDispatchLease?.({
+  const { writeSession, getOffscreenActiveTaskIds } = dependencies
+  const writeSessionProjection = async (
+    values: Record<string, unknown>
+  ): Promise<void> => {
+    try {
+      await writeSession(values)
+    } catch (error) {
+      logger.warn("Unable to publish startup session projection", error)
+    }
+  }
+  const initialQueue = await dependencies.queueRepository.getQueue()
+  let activeLease = await dependencies.queueRepository.getActiveDispatchLease()
+  let offscreenAlive = await dependencies.hasOffscreenDocument()
+  let exactJobState: OffscreenJobState | null = null
+  if (activeLease && !activeLease.documentInstanceId) {
+    await dependencies.terminateOffscreenDocumentForUnboundLease()
+    offscreenAlive = false
+  }
+  if (offscreenAlive && activeLease?.documentInstanceId) {
+    try {
+      exactJobState = await dependencies.getOffscreenJobState({
         jobId: activeLease.jobId,
         attempt: activeLease.attempt,
+        taskId: activeLease.taskId,
+        chapterId: activeLease.chapterId,
+        fingerprint: activeLease.fingerprint,
+        documentInstanceId: activeLease.documentInstanceId,
       })
+    } catch (error) {
+      logger.warn("Unable to query the exact startup offscreen job", error)
+      await dependencies.setLivenessAlarmArmed(true)
+      return { queue: initialQueue }
     }
-
-    if (queueChanged) {
-      await writeQueue(normalizedQueue)
+  }
+  if (activeLease && exactJobState?.status === "terminal") {
+    if (!exactJobState.outcome) {
+      throw new Error("Terminal startup offscreen job has no outcome")
     }
-
-    const latestPersistedQueue = await readQueue()
-    if (
-      shouldPreferLatestQueueSnapshot(
-        hydratedQueue,
-        normalizedQueue,
-        latestPersistedQueue
-      )
-    ) {
-      normalizedQueue = latestPersistedQueue
-    }
-
-    await applyQueue(normalizedQueue)
-
-    for (const task of normalizedQueue) {
-      if (!interruptedTaskIds.has(task.id)) continue
-      await notifyTerminalDownloadTask({
-        task,
-        finalStatus: task.status,
-        completedCount: task.chapters.filter(
-          (chapter) => chapter.status === "completed"
-        ).length,
-        totalChapters: task.chapters.length,
-      })
-    }
-
-    const projection = projectToQueueView(normalizedQueue)
-    await writeSession({
-      [SESSION_STORAGE_KEYS.queueView]: projection.queueView,
-      [SESSION_STORAGE_KEYS.historyView]: projection.historyView,
-      [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
-      [SESSION_STORAGE_KEYS.initFailed]: false,
-      [SESSION_STORAGE_KEYS.initError]: null,
+    await dependencies.terminalCoordinator.settle({
+      jobId: exactJobState.jobId,
+      attempt: exactJobState.attempt,
+      taskId: exactJobState.taskId,
+      chapterId: exactJobState.chapterId,
+      fingerprint: exactJobState.fingerprint,
+      documentInstanceId: exactJobState.documentInstanceId,
+      stage: exactJobState.stage,
+      sequence: exactJobState.lastSequence,
+      terminalAt: Date.now(),
+      outcome: exactJobState.outcome,
     })
+    activeLease = await dependencies.queueRepository.getActiveDispatchLease()
+    exactJobState = null
+  }
+  const offscreenActiveTaskIds =
+    exactJobState?.status === "active"
+      ? [exactJobState.taskId]
+      : offscreenAlive
+        ? [...new Set(await getOffscreenActiveTaskIds())].sort((left, right) =>
+            left.localeCompare(right)
+          )
+        : []
 
-    const hasOffscreenExecutingTask = normalizedQueue.some(
-      (task) =>
-        isExecutingDownloadTask(task) && task.browserDownloadWait === undefined
-    )
-    const hasOffscreenDispatchLease =
-      activeLease !== null &&
-      !normalizedQueue.some(
-        (task) => task.id === activeLease.taskId && task.browserDownloadWait
-      )
-    const hasDurableActiveWork =
-      hasOffscreenExecutingTask ||
-      hasOffscreenDispatchLease ||
-      offscreenActiveTaskIds.length > 0
-    if (dependencies.setLivenessAlarmArmed) {
-      await dependencies.setLivenessAlarmArmed(hasDurableActiveWork)
-    } else {
-      // Compatibility for callers that have not adopted conditional arming.
-      await ensureLivenessAlarm()
-    }
+  const observedLease = activeLease
+    ? {
+        jobId: activeLease.jobId,
+        attempt: activeLease.attempt,
+        taskId: activeLease.taskId,
+        chapterId: activeLease.chapterId,
+        fingerprint: activeLease.fingerprint,
+        documentInstanceId: activeLease.documentInstanceId,
+      }
+    : null
+  const observedBoundLease = activeLease?.documentInstanceId
+    ? {
+        jobId: activeLease.jobId,
+        attempt: activeLease.attempt,
+        taskId: activeLease.taskId,
+        chapterId: activeLease.chapterId,
+        fingerprint: activeLease.fingerprint,
+        documentInstanceId: activeLease.documentInstanceId,
+      }
+    : null
+  const offscreenJob = exactJobState
+    ? {
+        jobId: exactJobState.jobId,
+        attempt: exactJobState.attempt,
+        taskId: exactJobState.taskId,
+        chapterId: exactJobState.chapterId,
+        fingerprint: exactJobState.fingerprint,
+        documentInstanceId: exactJobState.documentInstanceId,
+        status: exactJobState.status,
+      }
+    : null
 
-    const nextQueuedTask = findNextQueued(normalizedQueue)
-    const queueActivation: StartupQueueActivation | undefined =
-      recoveredActiveTaskId
-        ? { kind: "resume-task", taskId: recoveredActiveTaskId }
-        : activeTaskToResume
-          ? { kind: "resume-task", taskId: activeTaskToResume }
-          : nextQueuedTask &&
-              !hasActiveDownloadingTask(normalizedQueue) &&
-              offscreenActiveTaskIds.length === 0
-            ? { kind: "process-queue" }
-            : undefined
-
-    return {
-      queue: normalizedQueue,
-      initFailed: false,
-      queueActivation,
-    }
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Extension initialization failed"
-    logger.error("initializeFromStorage failed", error)
-
-    await writeSession({
-      [SESSION_STORAGE_KEYS.queueView]: [],
-      [SESSION_STORAGE_KEYS.historyView]: [],
-      [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
-      [SESSION_STORAGE_KEYS.initFailed]: true,
-      [SESSION_STORAGE_KEYS.initError]: errorMessage,
+  const startupNativeOutput =
+    await dependencies.nativeOutputCoordinator.reconcileStartupOpenManifests({
+      offscreenJob: exactJobState,
+      activeLease: observedBoundLease,
     })
+  const nativeOutputTaskIds =
+    await dependencies.nativeOutputCoordinator.getLiveTaskIds()
+  const recoveryFacts = {
+    normalizationTime: Date.now(),
+    interruptedAt: Date.now(),
+    observedLease,
+    offscreenJob: startupNativeOutput.observedJobSealed ? null : offscreenJob,
+    nativeOutputTaskIds,
+  } satisfies Parameters<QueueRepository["recoverQueueAfterStartup"]>[0]
 
-    return {
-      queue: [],
-      initFailed: true,
-      error: errorMessage,
-    }
+  const recovery =
+    await dependencies.queueRepository.recoverQueueAfterStartup(recoveryFacts)
+  if (recovery.outcome === "rejected") {
+    throw new Error("Startup dispatch lease changed during recovery")
+  }
+
+  await dependencies.nativeOutputCoordinator.reconcile()
+  const normalizedQueue = await dependencies.queueRepository.getQueue()
+  const interruptedTaskIds = new Set(recovery.interruptedTaskIds)
+  if (interruptedTaskIds.size > 0) {
+    await writeSessionProjection({
+      [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
+    })
+    logger.warn("Startup recovery normalized an unreconciled job", {
+      persistedTaskIds: recovery.interruptedTaskIds,
+      lease: activeLease,
+      offscreenJob: exactJobState,
+    })
+  }
+
+  for (const task of normalizedQueue) {
+    if (!interruptedTaskIds.has(task.id)) continue
+    await notifyTerminalDownloadTask({
+      task,
+      finalStatus: task.status,
+      completedCount: task.chapters.filter(
+        (chapter) => chapter.status === "completed"
+      ).length,
+      totalChapters: task.chapters.length,
+      settingsRepository: dependencies.settingsRepository,
+    })
+  }
+
+  await writeSessionProjection({
+    [SESSION_STORAGE_KEYS.activeTaskProgress]: null,
+  })
+
+  const nativeTaskIds = new Set(
+    await dependencies.nativeOutputCoordinator.getLiveTaskIds()
+  )
+  const currentLease =
+    await dependencies.queueRepository.getActiveDispatchLease()
+  const hasOffscreenExecutingTask = normalizedQueue.some(
+    (task) => isExecutingDownloadTask(task) && !nativeTaskIds.has(task.id)
+  )
+  const hasNativeOutputDependencies =
+    await dependencies.nativeOutputCoordinator.hasLiveDependencies()
+  const hasDurableActiveWork =
+    hasOffscreenExecutingTask ||
+    currentLease !== null ||
+    offscreenActiveTaskIds.length > 0 ||
+    hasNativeOutputDependencies
+  await dependencies.setLivenessAlarmArmed(hasDurableActiveWork)
+
+  const queueActivation = planStartupQueueActivation({
+    queue: normalizedQueue,
+    resumeTaskId: recovery.resumeTaskId,
+    activeLease: currentLease,
+    offscreenActiveTaskIds,
+  })
+
+  return {
+    queue: normalizedQueue,
+    queueActivation,
   }
 }

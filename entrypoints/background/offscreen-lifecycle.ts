@@ -6,30 +6,36 @@
  */
 
 import logger from "@/src/runtime/logger"
-import { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type {
-  OffscreenStatusResponse,
-  OffscreenStatusMessage,
-  OffscreenJobState,
-  OffscreenQueryJobMessage,
-  OffscreenQueryJobResponse,
-  OffscreenCancelJobMessage,
-  OffscreenCancelJobResponse,
-} from "@/src/types/offscreen-messages"
-import type { PendingDownloadsStore } from "@/entrypoints/background/pending-downloads"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { SettingsRepository } from "@/src/storage/settings-repository"
+import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
+import type { NativeOutputJobIdentity } from "@/src/domain/native-output/state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { OffscreenInitializationState } from "@/src/runtime/runtime-message-contracts"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { notifyTerminalDownloadTask } from "@/entrypoints/background/download-queue-finalization"
-import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
-import { isDownloadTaskRunnerActive } from "@/entrypoints/background/download-task-runner-registry"
 import { clearActiveTaskProgress } from "@/entrypoints/background/active-task-progress-bus"
-import { normalizeInterruptedTask } from "@/entrypoints/background/task-lifecycle"
+import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-task-side-effect-gate"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
+import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import {
   isExecutingDownloadTask,
   isWatchdogEligibleTask,
-} from "@/src/runtime/download-task-execution-state"
+} from "@/src/domain/queue/task-lifecycle"
 
-// Global state for offscreen document creation
-let creatingOffscreen: Promise<void> | null = null
+// Coalesce ensure callers while serializing every create and close for the
+// single targetless offscreen-document API.
+let ensuringOffscreen: Promise<void> | null = null
+let offscreenLifecycleTail: Promise<void> = Promise.resolve()
 export const LIVENESS_ALARM_NAME = "offscreen-liveness"
+
+export type CloseOffscreenDocumentResult = "closed" | "stale"
+
+export type CloseOffscreenDocumentInput = {
+  documentInstanceId: string
+  browserDocumentId?: string
+}
 
 type RuntimeGetContexts = (params: {
   contextTypes: Array<"OFFSCREEN_DOCUMENT">
@@ -54,12 +60,58 @@ export async function hasOffscreenDocument(): Promise<boolean> {
   return await chrome.offscreen.hasDocument()
 }
 
-async function closeOffscreenDocumentSafe(): Promise<void> {
-  try {
+export async function terminateOffscreenDocumentForUnboundLease(): Promise<void> {
+  await runOffscreenLifecycleOperation(async () => {
+    if (!(await chrome.offscreen.hasDocument())) return
     await chrome.offscreen.closeDocument()
-  } catch (error) {
-    logger.debug("Offscreen close skipped (likely already closed):", error)
+  })
+}
+
+function runOffscreenLifecycleOperation<T>(
+  operation: () => Promise<T>
+): Promise<T> {
+  const result = offscreenLifecycleTail.then(operation)
+  offscreenLifecycleTail = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
+async function closeOffscreenDocumentIfCurrentInLifecycle(
+  input: CloseOffscreenDocumentInput
+): Promise<CloseOffscreenDocumentResult> {
+  const status = await queryOffscreenStatus()
+  if (!status || status.documentInstanceId !== input.documentInstanceId) {
+    return "stale"
   }
+
+  const contexts = await getOffscreenContexts()
+  if (contexts.length === 0) return "stale"
+  if (
+    input.browserDocumentId !== undefined &&
+    !contexts.some(
+      (context) =>
+        typeof context === "object" &&
+        context !== null &&
+        "documentId" in context &&
+        (context as { documentId?: unknown }).documentId ===
+          input.browserDocumentId
+    )
+  ) {
+    return "stale"
+  }
+
+  await chrome.offscreen.closeDocument()
+  return "closed"
+}
+
+export async function closeOffscreenDocumentIfCurrent(
+  input: CloseOffscreenDocumentInput
+): Promise<CloseOffscreenDocumentResult> {
+  return await runOffscreenLifecycleOperation(async () =>
+    closeOffscreenDocumentIfCurrentInLifecycle(input)
+  )
 }
 
 export async function ensureLivenessAlarm(): Promise<void> {
@@ -83,52 +135,61 @@ export async function setLivenessAlarmArmed(shouldArm: boolean): Promise<void> {
 }
 
 export async function refreshLivenessAlarmForDurableWork(
-  stateManager: CentralizedStateManager
+  stateManager: QueueRepository,
+  nativeOutputCoordinator: NativeOutputCoordinator
 ): Promise<void> {
-  const [globalState, lease] = await Promise.all([
-    stateManager.getGlobalState(),
-    activeDispatchLeaseStore.get(),
-  ])
-  const hasOffscreenExecutingTask = globalState.downloadQueue.some(
-    (task) =>
-      isExecutingDownloadTask(task) && task.browserDownloadWait === undefined
+  const [queue, lease, nativeOutputTaskIds, hasNativeOutputDependencies] =
+    await Promise.all([
+      stateManager.getQueue(),
+      stateManager.getActiveDispatchLease(),
+      nativeOutputCoordinator.getLiveTaskIds(),
+      nativeOutputCoordinator.hasLiveDependencies(),
+    ])
+  const nativeTaskIds = new Set(nativeOutputTaskIds)
+  const hasOffscreenExecutingTask = queue.some(
+    (task) => isExecutingDownloadTask(task) && !nativeTaskIds.has(task.id)
   )
-  const hasOffscreenDispatchLease =
-    lease !== null &&
-    !globalState.downloadQueue.some(
-      (task) => task.id === lease.taskId && task.browserDownloadWait
-    )
   await setLivenessAlarmArmed(
-    hasOffscreenExecutingTask || hasOffscreenDispatchLease
+    hasOffscreenExecutingTask || lease !== null || hasNativeOutputDependencies
   )
 }
 
-export async function queryOffscreenJob(): Promise<OffscreenJobState | null> {
+export async function queryOffscreenJob(
+  identity: NativeOutputJobIdentity
+): Promise<OffscreenJobState | null> {
   if (!(await hasOffscreenDocument())) return null
   const requestId = crypto.randomUUID()
-  const response = (await chrome.runtime.sendMessage<OffscreenQueryJobMessage>({
+  const response = await sendRuntimeMessage({
+    target: "offscreen",
     type: "OFFSCREEN_QUERY_JOB",
-    payload: { requestId },
-  })) as OffscreenQueryJobResponse
+    payload: { requestId, identity },
+  })
   if (!response.success || response.requestId !== requestId) {
     throw new Error("Invalid offscreen job-state response")
   }
   return response.job
 }
 
-async function cancelOffscreenJob(input: {
-  jobId: string
-  attempt: number
-  taskId: string
-  chapterId: string
-}): Promise<boolean> {
+async function cancelOffscreenJob(
+  input: NativeOutputJobIdentity
+): Promise<boolean> {
   try {
-    const response =
-      (await chrome.runtime.sendMessage<OffscreenCancelJobMessage>({
-        type: "OFFSCREEN_CANCEL_JOB",
-        payload: input,
-      })) as OffscreenCancelJobResponse
-    return response.success && response.canceled
+    const response = await sendRuntimeMessage({
+      target: "offscreen",
+      type: "OFFSCREEN_CANCEL_JOB",
+      payload: input,
+    })
+    return (
+      response.success &&
+      response.canceled &&
+      response.status === "canceled" &&
+      response.jobId === input.jobId &&
+      response.attempt === input.attempt &&
+      response.taskId === input.taskId &&
+      response.chapterId === input.chapterId &&
+      response.fingerprint === input.fingerprint &&
+      response.documentInstanceId === input.documentInstanceId
+    )
   } catch (error) {
     logger.debug("Cooperative offscreen cancellation failed", error)
     return false
@@ -136,115 +197,347 @@ async function cancelOffscreenJob(input: {
 }
 
 export async function recoverFromLivenessTimeout(
-  stateManager: CentralizedStateManager,
-  pendingDownloadsStore: PendingDownloadsStore,
-  onRecover: (activeTaskId?: string) => Promise<void>
+  stateManager: QueueRepository,
+  nativeOutputCoordinator: NativeOutputCoordinator,
+  terminalCoordinator: OffscreenJobTerminalCoordinator,
+  queueScheduler: QueueScheduler,
+  settingsRepository: Pick<SettingsRepository, "getSettings">
 ): Promise<void> {
-  const globalState = await stateManager.getGlobalState()
-  const activeTasks = globalState.downloadQueue.filter(isWatchdogEligibleTask)
-  if (activeTasks.length === 0) {
+  const nativeOutputTaskIds = new Set(
+    await nativeOutputCoordinator.getLiveTaskIds()
+  )
+  const queue = await stateManager.getQueue()
+  const activeTasks = queue.filter(
+    (task) => isWatchdogEligibleTask(task) && !nativeOutputTaskIds.has(task.id)
+  )
+  const lease = await stateManager.getActiveDispatchLease()
+  if (activeTasks.length === 0 && !lease) {
+    await queueScheduler.activate()
     return
   }
-
-  const lease = await activeDispatchLeaseStore.get()
   if (lease && Date.now() <= lease.leaseExpiresAt) {
     return
   }
 
+  if (lease && !lease.documentInstanceId) {
+    let interruptedTask: DownloadTaskState | undefined
+    await runTaskSideEffectExclusive(lease.taskId, async () => {
+      const currentLease = await stateManager.getActiveDispatchLease()
+      if (
+        !currentLease ||
+        currentLease.documentInstanceId !== undefined ||
+        currentLease.jobId !== lease.jobId ||
+        currentLease.attempt !== lease.attempt ||
+        currentLease.taskId !== lease.taskId ||
+        currentLease.chapterId !== lease.chapterId ||
+        currentLease.fingerprint !== lease.fingerprint ||
+        Date.now() <= currentLease.leaseExpiresAt
+      ) {
+        return
+      }
+      await terminateOffscreenDocumentForUnboundLease()
+      const task = await stateManager.getTask(currentLease.taskId)
+      if (task?.status === "queued" || task?.status === "downloading") {
+        const interruption = await stateManager.interruptDownloadTask({
+          taskId: currentLease.taskId,
+          errorMessage: "Download interrupted before offscreen acceptance",
+          now: Date.now(),
+          clearLease: currentLease,
+        })
+        if (interruption.outcome === "applied") {
+          interruptedTask = interruption.task
+        }
+        return
+      }
+      await stateManager.clearDispatchLease(currentLease)
+    })
+    if (interruptedTask) {
+      await notifyTerminalDownloadTask({
+        task: interruptedTask,
+        finalStatus: interruptedTask.status,
+        completedCount: interruptedTask.chapters.filter(
+          (chapter) => chapter.status === "completed"
+        ).length,
+        totalChapters: interruptedTask.chapters.length,
+        settingsRepository,
+      })
+    }
+    await clearActiveTaskProgress()
+    await queueScheduler.activate()
+    return
+  }
+
   let queriedJob: OffscreenJobState | null = null
+  let jobQuerySucceeded = false
   try {
-    queriedJob = await queryOffscreenJob()
+    if (!lease?.documentInstanceId) return
+    queriedJob = await queryOffscreenJob({
+      jobId: lease.jobId,
+      attempt: lease.attempt,
+      taskId: lease.taskId,
+      chapterId: lease.chapterId,
+      fingerprint: lease.fingerprint,
+      documentInstanceId: lease.documentInstanceId,
+    })
+    jobQuerySucceeded = true
   } catch (error) {
     logger.warn("Unable to query an expired offscreen job lease", error)
   }
 
-  if (
+  if (lease && !jobQuerySucceeded) {
+    await ensureLivenessAlarm()
+    return
+  }
+
+  const exactQueriedJob =
     lease &&
     queriedJob &&
     queriedJob.jobId === lease.jobId &&
     queriedJob.attempt === lease.attempt &&
     queriedJob.taskId === lease.taskId &&
     queriedJob.chapterId === lease.chapterId
-  ) {
-    const renewed = await activeDispatchLeaseStore.renew({
-      jobId: queriedJob.jobId,
-      attempt: queriedJob.attempt,
-      stage: queriedJob.stage,
-      sequence: queriedJob.sequence,
-      activityAt: Date.now(),
-      requireSequenceAdvance: queriedJob.status === "active",
-    })
-    if (queriedJob.status === "active" && renewed) return
+      ? queriedJob
+      : null
+  if (lease && queriedJob !== null && exactQueriedJob === null) {
+    await ensureLivenessAlarm()
+    return
+  }
+  let nativeOutputPhase = lease
+    ? await nativeOutputCoordinator.getJobPhase(lease.jobId)
+    : null
 
-    // A terminal result can outlive the service worker that originally awaited
-    // it. Re-enter the queue runner with the same lease; the offscreen job
-    // registry returns the cached result instead of executing twice.
-    if (queriedJob.status === "terminal" && renewed) {
-      if (!isDownloadTaskRunnerActive(queriedJob.taskId)) {
-        await onRecover(queriedJob.taskId)
-      }
-      return
-    }
+  const leaseOwnerAcceptsEvents =
+    lease !== null &&
+    queue.some(
+      (task) =>
+        task.id === lease.taskId &&
+        task.status === "downloading" &&
+        task.chapters.some(
+          (chapter) =>
+            chapter.id === lease.chapterId && chapter.status === "downloading"
+        )
+    )
+  if (
+    lease &&
+    leaseOwnerAcceptsEvents &&
+    exactQueriedJob?.status === "active"
+  ) {
+    const renewal = await stateManager.renewDispatchLease({
+      jobId: exactQueriedJob.jobId,
+      taskId: exactQueriedJob.taskId,
+      chapterId: exactQueriedJob.chapterId,
+      attempt: exactQueriedJob.attempt,
+      stage: exactQueriedJob.stage,
+      sequence: exactQueriedJob.lastSequence,
+      fingerprint: exactQueriedJob.fingerprint,
+      documentInstanceId: exactQueriedJob.documentInstanceId,
+      eventSignature: JSON.stringify(exactQueriedJob),
+      activityAt: Date.now(),
+      requireSequenceAdvance: true,
+    })
+    if (renewal.outcome !== "rejected") return
+    if (nativeOutputPhase !== null) return
   }
 
-  // Never destroy the document that owns Blob URLs still being consumed by
-  // Chrome. Native completion events will settle these records and a later
-  // alarm can finish recovery safely.
-  if (pendingDownloadsStore.hasBlobDependencies()) {
-    logger.warn("Deferring watchdog recovery while native outputs are pending")
+  if (
+    lease &&
+    nativeOutputPhase === "open" &&
+    jobQuerySucceeded &&
+    (queriedJob === null ||
+      (exactQueriedJob !== null && exactQueriedJob.status !== "active"))
+  ) {
+    await nativeOutputCoordinator.reconcileStartupOpenManifests({
+      offscreenJob: queriedJob,
+      activeLease: lease.documentInstanceId
+        ? {
+            jobId: lease.jobId,
+            attempt: lease.attempt,
+            taskId: lease.taskId,
+            chapterId: lease.chapterId,
+            fingerprint: lease.fingerprint,
+            documentInstanceId: lease.documentInstanceId,
+          }
+        : null,
+    })
+    nativeOutputPhase = await nativeOutputCoordinator.getJobPhase(lease.jobId)
+  }
+
+  if (lease && nativeOutputPhase === "sealed") {
+    const clearing = await stateManager.clearDispatchLease(lease)
+    if (clearing.outcome === "applied") {
+      await nativeOutputCoordinator.reconcile()
+      await queueScheduler.activate()
+    }
+    return
+  }
+
+  if (nativeOutputPhase === "open") return
+
+  if (lease && exactQueriedJob?.status === "terminal") {
+    const outcome = exactQueriedJob.outcome
+    if (!outcome) throw new Error("Terminal offscreen job has no outcome")
+    const settlement = await runTaskSideEffectExclusive(
+      exactQueriedJob.taskId,
+      async () =>
+        await terminalCoordinator.settle({
+          jobId: exactQueriedJob.jobId,
+          attempt: exactQueriedJob.attempt,
+          taskId: exactQueriedJob.taskId,
+          chapterId: exactQueriedJob.chapterId,
+          fingerprint: exactQueriedJob.fingerprint,
+          documentInstanceId: exactQueriedJob.documentInstanceId,
+          stage: exactQueriedJob.stage,
+          sequence: exactQueriedJob.lastSequence,
+          terminalAt: Date.now(),
+          outcome,
+        })
+    )
+    if (settlement === "native-output-pending") {
+      await terminalCoordinator.afterSettlement(
+        exactQueriedJob.taskId,
+        settlement
+      )
+    } else if (
+      settlement === "chapter-settled" &&
+      !queueScheduler.isTaskActive(exactQueriedJob.taskId)
+    ) {
+      await queueScheduler.resumeTask(exactQueriedJob.taskId)
+    }
     return
   }
 
   const recoveredAt = Date.now()
 
-  if (lease) {
-    await cancelOffscreenJob({
-      jobId: lease.jobId,
-      attempt: lease.attempt,
-      taskId: lease.taskId,
-      chapterId: lease.chapterId,
-    })
-  }
-
+  let clearedCapturedLease = lease === null
+  const leaseOwnerIsActive =
+    lease !== null && activeTasks.some((task) => task.id === lease.taskId)
   for (const activeTask of activeTasks) {
-    logger.warn(`Liveness timeout for task ${activeTask.id}`)
+    await runTaskSideEffectExclusive(activeTask.id, async () => {
+      logger.warn(`Liveness timeout for task ${activeTask.id}`)
 
-    const interruptedTask = normalizeInterruptedTask(
-      activeTask,
-      "Download process unresponsive",
-      recoveredAt
-    )
-    const successfulChapters = interruptedTask.chapters.filter(
-      (chapter) => chapter.status === "completed"
-    ).length
-    const transition = await stateManager.transitionDownloadTask(
-      activeTask.id,
-      ["downloading"],
-      {
-        status: interruptedTask.status,
-        chapters: interruptedTask.chapters,
-        errorMessage: interruptedTask.errorMessage,
-        errorCategory: interruptedTask.errorCategory,
-        completed: interruptedTask.completed,
+      const successfulChapters = activeTask.chapters.filter(
+        (chapter) => chapter.status === "completed"
+      ).length
+      const ownsLease = lease?.taskId === activeTask.id
+      const producerStopped = ownsLease
+        ? queriedJob === null ||
+          (await cancelOffscreenJob({
+            jobId: lease.jobId,
+            attempt: lease.attempt,
+            taskId: lease.taskId,
+            chapterId: lease.chapterId,
+            fingerprint: lease.fingerprint,
+            documentInstanceId: lease.documentInstanceId!,
+          }))
+        : true
+      const interruption = await stateManager.interruptDownloadTask({
+        taskId: activeTask.id,
+        errorMessage: "Download process unresponsive",
+        now: recoveredAt,
+        clearLease: ownsLease && producerStopped ? lease : undefined,
+      })
+      if (interruption.outcome !== "applied") {
+        return
       }
-    )
-    if (!transition.success) {
-      continue
-    }
 
-    await notifyTerminalDownloadTask({
-      task: transition.task,
-      finalStatus: transition.task.status,
-      completedCount: successfulChapters,
-      totalChapters: activeTask.chapters.length,
+      if (ownsLease && producerStopped) {
+        clearedCapturedLease = interruption.clearedLease !== null
+      }
+      if (!ownsLease || producerStopped) {
+        await nativeOutputCoordinator.cancelTask(activeTask.id)
+      }
+
+      try {
+        await notifyTerminalDownloadTask({
+          task: interruption.task,
+          finalStatus: interruption.task.status,
+          completedCount: successfulChapters,
+          totalChapters: activeTask.chapters.length,
+          settingsRepository,
+        })
+      } catch (error) {
+        logger.warn("Unable to publish watchdog terminal notification", {
+          taskId: activeTask.id,
+          error,
+        })
+      }
     })
   }
 
-  await clearActiveTaskProgress()
+  if (lease && !leaseOwnerIsActive) {
+    await runTaskSideEffectExclusive(lease.taskId, async () => {
+      const producerStopped =
+        queriedJob === null ||
+        (await cancelOffscreenJob({
+          jobId: lease.jobId,
+          attempt: lease.attempt,
+          taskId: lease.taskId,
+          chapterId: lease.chapterId,
+          fingerprint: lease.fingerprint,
+          documentInstanceId: lease.documentInstanceId!,
+        }))
+      if (!producerStopped) {
+        await ensureLivenessAlarm()
+        return
+      }
+      const clearing = await stateManager.clearDispatchLease(lease)
+      clearedCapturedLease = clearing.outcome === "applied"
+      if (clearedCapturedLease) {
+        await nativeOutputCoordinator.cancelTask(lease.taskId)
+      }
+    })
+  }
 
-  await activeDispatchLeaseStore.clear()
-  if (await hasOffscreenDocument()) await closeOffscreenDocumentSafe()
-  await onRecover()
+  try {
+    await clearActiveTaskProgress()
+  } catch (error) {
+    logger.warn("Unable to clear watchdog progress projection", error)
+  }
+  const currentLease = await stateManager.getActiveDispatchLease()
+  if (
+    clearedCapturedLease &&
+    !currentLease &&
+    !(await nativeOutputCoordinator.hasLiveDependencies()) &&
+    lease?.documentInstanceId
+  ) {
+    await closeOffscreenDocumentIfCurrent({
+      documentInstanceId: lease.documentInstanceId,
+    })
+  }
+  await queueScheduler.activate()
+}
+
+async function ensureOffscreenDocumentAdmission(): Promise<void> {
+  if (await hasOffscreenDocument()) {
+    const status = await queryOffscreenStatus()
+    if (!status) {
+      throw new Error("Existing offscreen document status is unavailable")
+    }
+    if (status.initializationState !== "failed") {
+      logger.info("Offscreen document already present")
+      return
+    }
+    const closeResult = await closeOffscreenDocumentIfCurrentInLifecycle({
+      documentInstanceId: status.documentInstanceId,
+    })
+    if (closeResult !== "closed") {
+      throw new Error(
+        "Offscreen document changed during failed-document replacement"
+      )
+    }
+  }
+
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: [
+      chrome.offscreen.Reason.BLOBS,
+      chrome.offscreen.Reason.WORKERS,
+      chrome.offscreen.Reason.DOM_PARSER,
+    ],
+    justification:
+      "Create archives in a Web Worker (fflate), handle Blob-based downloads, and parse fetched series page HTML with DOMParser when no content script is available",
+  })
+  logger.info("Offscreen document created")
 }
 
 /**
@@ -252,71 +545,68 @@ export async function recoverFromLivenessTimeout(
  */
 export async function ensureOffscreenDocumentReady(): Promise<void> {
   await ensureLivenessAlarm()
-  if (await hasOffscreenDocument()) {
-    logger.info("Offscreen document already present")
-    return
-  }
-
-  if (!creatingOffscreen) {
-    creatingOffscreen = chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: [
-        chrome.offscreen.Reason.BLOBS,
-        chrome.offscreen.Reason.WORKERS,
-        chrome.offscreen.Reason.DOM_PARSER,
-      ],
-      justification:
-        "Create archives in a Web Worker (fflate), handle Blob-based downloads, and parse fetched series page HTML with DOMParser when no content script is available",
-    })
-  }
+  const admission =
+    ensuringOffscreen ??
+    (ensuringOffscreen = runOffscreenLifecycleOperation(
+      ensureOffscreenDocumentAdmission
+    ))
 
   try {
-    await creatingOffscreen
-    logger.info("Offscreen document created")
+    await admission
   } finally {
-    creatingOffscreen = null
+    if (ensuringOffscreen === admission) ensuringOffscreen = null
   }
+}
+
+/**
+ * Admit immediate offscreen work while holding the same lifecycle chain that
+ * owns document creation and closure.
+ */
+export async function runOffscreenDocumentAdmissionExclusive<T>(
+  operation: () => Promise<T>
+): Promise<T> {
+  await ensureLivenessAlarm()
+  return await runOffscreenLifecycleOperation(async () => {
+    await ensureOffscreenDocumentAdmission()
+    return await operation()
+  })
 }
 
 /**
  * Query whether the offscreen document is ready and how much work it is doing.
  */
 export async function queryOffscreenStatus(): Promise<{
-  ready: boolean
+  initializationState: OffscreenInitializationState
   activeJobCount: number
+  activeSeriesResolutionCount: number
   activeTaskIds: string[]
+  documentInstanceId: string
 } | null> {
   try {
     if (!(await hasOffscreenDocument())) {
       return null
     }
 
-    const response = (await chrome.runtime.sendMessage<OffscreenStatusMessage>({
+    const response = await sendRuntimeMessage({
+      target: "offscreen",
       type: "OFFSCREEN_STATUS",
-    })) as OffscreenStatusResponse
+    })
 
-    if (
-      response &&
-      response.success &&
-      Array.isArray(response.activeTaskIds) &&
-      response.activeTaskIds.every(
-        (taskId) => typeof taskId === "string" && taskId.length > 0
-      )
-    ) {
+    if (response.success) {
       const activeTaskIds = [...new Set(response.activeTaskIds)].sort(
         (left, right) => left.localeCompare(right)
       )
-      const activeJobCount =
-        typeof response.activeJobCount === "number"
-          ? response.activeJobCount
-          : activeTaskIds.length
+      const activeJobCount = response.activeJobCount
+      const activeSeriesResolutionCount = response.activeSeriesResolutionCount
       if (activeJobCount !== activeTaskIds.length) {
         return null
       }
       return {
-        ready: response.isInitialized === true || response.ready === true,
+        initializationState: response.initializationState,
         activeJobCount,
+        activeSeriesResolutionCount,
         activeTaskIds,
+        documentInstanceId: response.documentInstanceId,
       }
     }
 
@@ -331,23 +621,66 @@ export async function queryOffscreenStatus(): Promise<{
  * Close the offscreen document when it is idle and no native downloads remain.
  */
 export async function scheduleOffscreenCloseIfIdle(
-  pendingDownloadsStore: PendingDownloadsStore
+  queueRepository: QueueRepository,
+  nativeOutputCoordinator: NativeOutputCoordinator
 ): Promise<void> {
   try {
-    const status = await queryOffscreenStatus()
-    if (!status || !status.ready) {
-      return // Not ready or not responding
-    }
+    await runOffscreenLifecycleOperation(async () => {
+      const candidateStatus = await queryOffscreenStatus()
+      if (
+        !candidateStatus ||
+        candidateStatus.initializationState !== "ready" ||
+        candidateStatus.activeJobCount !== 0 ||
+        candidateStatus.activeSeriesResolutionCount !== 0
+      ) {
+        return
+      }
 
-    const activeLease = await activeDispatchLeaseStore.get()
-    if (
-      status.activeJobCount === 0 &&
-      activeLease === null &&
-      !pendingDownloadsStore.hasBlobDependencies()
-    ) {
-      await closeOffscreenDocumentSafe()
+      const candidateContexts = await getOffscreenContexts()
+      if (candidateContexts.length === 0) return
+      const browserDocumentId = candidateContexts.find(
+        (context) =>
+          typeof context === "object" &&
+          context !== null &&
+          "documentId" in context &&
+          typeof (context as { documentId?: unknown }).documentId === "string"
+      ) as { documentId: string } | undefined
+
+      const currentContexts = browserDocumentId
+        ? await getOffscreenContexts()
+        : candidateContexts
+      const browserDocumentIsCurrent =
+        browserDocumentId === undefined ||
+        currentContexts.some(
+          (context) =>
+            typeof context === "object" &&
+            context !== null &&
+            "documentId" in context &&
+            (context as { documentId?: unknown }).documentId ===
+              browserDocumentId.documentId
+        )
+      const [activeLease, hasBlobDependencies] = await Promise.all([
+        queueRepository.getActiveDispatchLease(),
+        nativeOutputCoordinator.hasLiveDependencies(),
+      ])
+      const currentStatus = await queryOffscreenStatus()
+      if (
+        !browserDocumentIsCurrent ||
+        activeLease !== null ||
+        hasBlobDependencies ||
+        !currentStatus ||
+        currentStatus.initializationState !== "ready" ||
+        currentStatus.documentInstanceId !==
+          candidateStatus.documentInstanceId ||
+        currentStatus.activeJobCount !== 0 ||
+        currentStatus.activeSeriesResolutionCount !== 0
+      ) {
+        return
+      }
+
+      await chrome.offscreen.closeDocument()
       logger.info("Offscreen document closed due to inactivity")
-    }
+    })
   } catch (error) {
     logger.error("Error scheduling offscreen close:", error)
   }

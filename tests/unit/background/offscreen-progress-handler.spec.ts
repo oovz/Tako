@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { handleOffscreenDownloadProgress } from "@/entrypoints/background/offscreen-progress-handler"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type { OffscreenDownloadProgressMessage } from "@/src/types/offscreen-messages"
-import type { GlobalAppState } from "@/src/types/queue-state"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
+import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+
+type OffscreenDownloadProgressMessage =
+  RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_PROGRESS">
 
 const mocks = vi.hoisted(() => ({
   recordOffscreenActivity: vi.fn(async () => undefined),
@@ -25,10 +28,6 @@ vi.mock("@/entrypoints/background/offscreen-lifecycle", () => ({
   recordOffscreenActivity: mocks.recordOffscreenActivity,
 }))
 
-vi.mock("@/src/runtime/active-dispatch-lease", () => ({
-  activeDispatchLeaseStore: { renew: mocks.renewLease },
-}))
-
 vi.mock("@/entrypoints/background/active-task-progress-bus", () => ({
   getActiveTaskProgressSnapshot: mocks.getProgressSnapshot,
   publishActiveTaskProgress: mocks.publishProgress,
@@ -42,8 +41,8 @@ vi.mock("@/src/runtime/progress-timing-estimates", () => ({
   },
 }))
 
-vi.mock("@/src/storage/settings-service", () => ({
-  settingsService: {
+vi.mock("@/src/storage/settings-repository", () => ({
+  settingsRepository: {
     getSettings: mocks.getSettings,
     updateSettings: mocks.updateSettings,
   },
@@ -102,15 +101,21 @@ function progress(
   overrides: Partial<OffscreenDownloadProgressMessage["payload"]> = {}
 ): OffscreenDownloadProgressMessage {
   return {
+    target: "background",
     type: "OFFSCREEN_DOWNLOAD_PROGRESS",
     payload: {
       jobId: "job-1",
       attempt: 1,
       taskId: "task-1",
       chapterId: "chapter-1",
+      fingerprint: "a".repeat(64),
+      documentInstanceId: "document-1",
       sequence: 1,
       stage: "downloading",
       status: "downloading",
+      outputsRequested: 0,
+      outputsFailedBeforeHandoff: 0,
+      outputsCommitted: 0,
       ...overrides,
     },
   }
@@ -118,44 +123,39 @@ function progress(
 
 function makeStateManager(
   tasks: TaskFixture[] = [makeTask()],
-  updateResult: { success: boolean; updated?: boolean; reason?: string } = {
-    success: true,
-    updated: true,
-  }
+  updateResult?: Awaited<ReturnType<QueueRepository["updateChapterProgress"]>>
 ) {
   const state = { downloadQueue: tasks }
-  const updateDownloadingTaskChapter = vi.fn(
+  const updateChapterProgress = vi.fn(
     async (
-      taskId: string,
-      chapterId: string,
-      status: string,
-      updates?: {
-        errorMessage?: string
-        totalImages?: number
-        imagesFailed?: number
+      input: Parameters<QueueRepository["updateChapterProgress"]>[0]
+    ): ReturnType<QueueRepository["updateChapterProgress"]> => {
+      if (updateResult) return updateResult
+
+      const task = state.downloadQueue.find((task) => task.id === input.taskId)
+      const chapter = task?.chapters.find(
+        (candidate) => candidate.id === input.chapterId
+      )
+      if (chapter) {
+        chapter.status = "downloading"
+        Object.assign(chapter, input.updates)
       }
-    ) => {
-      if (updateResult.success && updateResult.updated !== false) {
-        const chapter = state.downloadQueue
-          .find((task) => task.id === taskId)
-          ?.chapters.find(
-            (candidate) =>
-              candidate.id === chapterId || candidate.url === chapterId
-          )
-        if (chapter) {
-          chapter.status = status
-          Object.assign(chapter, updates)
-        }
+      return {
+        outcome: "applied",
+        task: task as never,
+        chapter: chapter as never,
       }
-      return updateResult
     }
   )
   const manager = {
-    getGlobalState: vi.fn(async () => state),
-    updateDownloadingTaskChapter,
-  } as unknown as CentralizedStateManager
+    getTask: vi.fn(async (taskId: string) =>
+      state.downloadQueue.find((task) => task.id === taskId)
+    ),
+    renewDispatchLease: mocks.renewLease,
+    updateChapterProgress,
+  } as unknown as QueueRepository
 
-  return { manager, state, updateDownloadingTaskChapter }
+  return { manager, state, updateChapterProgress }
 }
 
 describe("offscreen progress handler behavior", () => {
@@ -174,7 +174,10 @@ describe("offscreen progress handler behavior", () => {
         customDirectoryHandleId: "folder-1",
       },
     })
-    mocks.renewLease.mockResolvedValue(true)
+    mocks.renewLease.mockResolvedValue({
+      outcome: "applied",
+      lease: {} as never,
+    })
     mocks.getProgressSnapshot.mockImplementation(async () => {
       const stored = await sessionGet([
         SESSION_STORAGE_KEYS.activeTaskProgress,
@@ -206,7 +209,7 @@ describe("offscreen progress handler behavior", () => {
   })
 
   it("rejects malformed and non-progress-shaped input without side effects", async () => {
-    const { manager, updateDownloadingTaskChapter } = makeStateManager()
+    const { manager, updateChapterProgress } = makeStateManager()
 
     const response = await handleOffscreenDownloadProgress(manager, {
       type: "OFFSCREEN_STATUS",
@@ -218,7 +221,7 @@ describe("offscreen progress handler behavior", () => {
     }
     expect(response.error).toBeTruthy()
     expect(mocks.recordOffscreenActivity).not.toHaveBeenCalled()
-    expect(updateDownloadingTaskChapter).not.toHaveBeenCalled()
+    expect(updateChapterProgress).not.toHaveBeenCalled()
     expect(sessionSet).not.toHaveBeenCalled()
   })
 
@@ -228,7 +231,7 @@ describe("offscreen progress handler behavior", () => {
     [{ taskId: "task-1", chapterId: "chapter-1", status: undefined }],
     [{ taskId: "task-1", chapterId: "chapter-1", status: "waiting" }],
   ])("rejects missing or unsupported progress identity %#", async (payload) => {
-    const { manager, updateDownloadingTaskChapter } = makeStateManager()
+    const { manager, updateChapterProgress } = makeStateManager()
 
     const response = await handleOffscreenDownloadProgress(manager, {
       type: "OFFSCREEN_DOWNLOAD_PROGRESS",
@@ -241,7 +244,7 @@ describe("offscreen progress handler behavior", () => {
         "Missing job, task, chapter, sequence, stage, or status in OFFSCREEN_DOWNLOAD_PROGRESS",
     })
     expect(mocks.recordOffscreenActivity).not.toHaveBeenCalled()
-    expect(updateDownloadingTaskChapter).not.toHaveBeenCalled()
+    expect(updateChapterProgress).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -256,15 +259,18 @@ describe("offscreen progress handler behavior", () => {
   ])(
     "acknowledges and ignores %s races",
     async (_label, tasks, taskId, chapterId) => {
-      const { manager, updateDownloadingTaskChapter } = makeStateManager(tasks)
+      const { manager, updateChapterProgress } = makeStateManager(tasks)
 
-      await expect(
-        handleOffscreenDownloadProgress(
-          manager,
-          progress({ taskId, chapterId, status: "completed" })
-        )
-      ).resolves.toEqual({ success: true })
-      expect(updateDownloadingTaskChapter).not.toHaveBeenCalled()
+      const response = await handleOffscreenDownloadProgress(
+        manager,
+        progress({ taskId, chapterId, status: "completed" })
+      )
+      expect(response).toEqual({
+        success: true,
+        disposition:
+          _label === "unknown chapter" ? "protocol_error" : "lease_not_current",
+      })
+      expect(updateChapterProgress).not.toHaveBeenCalled()
       expect(mocks.getSettings).not.toHaveBeenCalled()
       expect(sessionGet).not.toHaveBeenCalled()
       expect(sessionSet).not.toHaveBeenCalled()
@@ -361,10 +367,11 @@ describe("offscreen progress handler behavior", () => {
   })
 
   it("stops before destination side effects when atomic update rejects", async () => {
-    const { manager, updateDownloadingTaskChapter } = makeStateManager(
-      [makeTask()],
-      { success: false, reason: "task-not-downloading" }
-    )
+    const { manager, updateChapterProgress } = makeStateManager([makeTask()], {
+      outcome: "rejected",
+      reason: "task-not-active",
+      currentStatus: "canceled",
+    })
 
     await expect(
       handleOffscreenDownloadProgress(
@@ -374,9 +381,9 @@ describe("offscreen progress handler behavior", () => {
           errorCategory: "folder_permission_required",
         })
       )
-    ).resolves.toEqual({ success: true })
+    ).resolves.toEqual({ success: true, disposition: "lease_not_current" })
 
-    expect(updateDownloadingTaskChapter).toHaveBeenCalledTimes(1)
+    expect(updateChapterProgress).toHaveBeenCalledTimes(1)
     expect(mocks.getSettings).not.toHaveBeenCalled()
     expect(localSet).not.toHaveBeenCalled()
     expect(sessionGet).not.toHaveBeenCalled()
@@ -394,7 +401,7 @@ describe("offscreen progress handler behavior", () => {
         },
       ],
     })
-    const { manager, updateDownloadingTaskChapter } = makeStateManager([task])
+    const { manager, updateChapterProgress } = makeStateManager([task])
 
     const response = await handleOffscreenDownloadProgress(
       manager,
@@ -408,13 +415,26 @@ describe("offscreen progress handler behavior", () => {
       })
     )
 
-    expect(response).toEqual({ success: true })
-    expect(updateDownloadingTaskChapter).toHaveBeenCalledWith(
-      "task-1",
-      "canonical-1",
-      "downloading",
-      { totalImages: 7, imagesFailed: 2, errorMessage: undefined }
-    )
+    expect(response).toEqual({ success: true, disposition: "renewed" })
+    expect(updateChapterProgress).toHaveBeenCalledWith({
+      taskId: "task-1",
+      chapterId: "canonical-1",
+      lease: {
+        jobId: "job-1",
+        attempt: 1,
+        taskId: "task-1",
+        chapterId: "canonical-1",
+        fingerprint: "a".repeat(64),
+        documentInstanceId: "document-1",
+      },
+      now: 12345,
+      updates: {
+        totalImages: 7,
+        imagesFailed: 2,
+        errorMessage: undefined,
+        errorCategory: undefined,
+      },
+    })
     expect(mocks.publishProgress).toHaveBeenCalledWith(
       expect.objectContaining({
         taskId: "task-1",
@@ -443,7 +463,7 @@ describe("offscreen progress handler behavior", () => {
     )
   })
 
-  it("merges aliases, discards malformed snapshots, prunes inactive chapters, and aggregates concurrent progress", async () => {
+  it("keeps progress identities exact and prunes inactive chapters", async () => {
     sessionGet.mockResolvedValueOnce({
       [SESSION_STORAGE_KEYS.activeTaskProgress]: {
         taskId: "task-1",
@@ -451,8 +471,8 @@ describe("offscreen progress handler behavior", () => {
           null,
           { chapterId: "", imagesProcessed: 99 },
           {
-            chapterId: "https://example.test/chapter-1",
-            chapterTitle: "Older alias",
+            chapterId: "chapter-1",
+            chapterTitle: "Older exact snapshot",
             imagesProcessed: 3,
             totalImages: 8,
             updatedAt: 8,
@@ -531,6 +551,114 @@ describe("offscreen progress handler behavior", () => {
     ])
   })
 
+  it("rejects a chapter URL in place of the canonical chapter ID without mutation", async () => {
+    const { manager, updateChapterProgress } = makeStateManager()
+    mocks.renewLease.mockResolvedValueOnce({
+      outcome: "rejected",
+      reason: "lease-not-current",
+    })
+
+    const response = await handleOffscreenDownloadProgress(
+      manager,
+      progress({ chapterId: "https://example.test/chapter-1" })
+    )
+
+    expect(response).toEqual({
+      success: true,
+      disposition: "lease_not_current",
+    })
+    expect(updateChapterProgress).not.toHaveBeenCalled()
+    expect(mocks.getProgressSnapshot).not.toHaveBeenCalled()
+    expect(mocks.publishProgress).not.toHaveBeenCalled()
+  })
+
+  it("rejects delayed progress from a prior attempt before publishing the current retry", async () => {
+    sessionGet.mockResolvedValue({
+      [SESSION_STORAGE_KEYS.activeTaskProgress]: {
+        taskId: "task-1",
+        activeChapters: [
+          {
+            chapterId: "chapter-1",
+            chapterTitle: "Prior attempt",
+            imagesProcessed: 9,
+            totalImages: 10,
+            stage: "downloading",
+            phaseFraction: 0.9,
+            updatedAt: 1,
+          },
+        ],
+      },
+    })
+    const { manager, updateChapterProgress } = makeStateManager()
+    mocks.renewLease
+      .mockResolvedValueOnce({
+        outcome: "rejected",
+        reason: "lease-not-current",
+      })
+      .mockResolvedValueOnce({
+        outcome: "applied",
+        lease: {} as never,
+      })
+
+    const delayedResponse = await handleOffscreenDownloadProgress(
+      manager,
+      progress({
+        jobId: "job-prior",
+        attempt: 1,
+        sequence: 20,
+        imagesProcessed: 10,
+        totalImages: 10,
+      })
+    )
+    const currentResponse = await handleOffscreenDownloadProgress(
+      manager,
+      progress({
+        jobId: "job-current",
+        attempt: 2,
+        sequence: 1,
+        imagesProcessed: 1,
+        totalImages: 10,
+      })
+    )
+
+    expect(delayedResponse).toEqual({
+      success: true,
+      disposition: "lease_not_current",
+    })
+    expect(currentResponse).toEqual({
+      success: true,
+      disposition: "renewed",
+    })
+    expect(updateChapterProgress).toHaveBeenCalledTimes(1)
+    expect(updateChapterProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lease: expect.objectContaining({
+          jobId: "job-current",
+          attempt: 2,
+          taskId: "task-1",
+          chapterId: "chapter-1",
+        }),
+      })
+    )
+    expect(mocks.publishProgress).toHaveBeenCalledTimes(1)
+    expect(mocks.publishProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        imagesProcessed: 1,
+        totalImages: 10,
+        activeChapters: [
+          expect.objectContaining({
+            chapterId: "chapter-1",
+            imagesProcessed: 1,
+            totalImages: 10,
+          }),
+        ],
+      }),
+      { forcePersist: false }
+    )
+  })
+
   it.each([
     ["completed", undefined],
     ["failed", "network failure"],
@@ -551,23 +679,32 @@ describe("offscreen progress handler behavior", () => {
           ],
         },
       })
-      const { manager, updateDownloadingTaskChapter } = makeStateManager()
+      const { manager, updateChapterProgress } = makeStateManager()
 
       await handleOffscreenDownloadProgress(
         manager,
         progress({ status, error, totalImages: 4, imagesFailed: 2 })
       )
 
-      expect(updateDownloadingTaskChapter).toHaveBeenCalledWith(
-        "task-1",
-        "chapter-1",
-        "downloading",
-        {
-          totalImages: 4,
-          imagesFailed: 2,
-          errorMessage: status === "completed" ? undefined : error,
-          errorCategory: status === "completed" ? undefined : "unknown",
-        }
+      expect(updateChapterProgress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: "task-1",
+          chapterId: "chapter-1",
+          lease: {
+            jobId: "job-1",
+            attempt: 1,
+            taskId: "task-1",
+            chapterId: "chapter-1",
+            fingerprint: "a".repeat(64),
+            documentInstanceId: "document-1",
+          },
+          updates: {
+            totalImages: 4,
+            imagesFailed: 2,
+            errorMessage: status === "completed" ? undefined : error,
+            errorCategory: status === "completed" ? undefined : "unknown",
+          },
+        })
       )
       expect(mocks.publishProgress).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -597,8 +734,8 @@ describe("offscreen progress handler behavior", () => {
       },
     })
     const { manager } = makeStateManager([task], {
-      success: true,
-      updated: false,
+      outcome: "unchanged",
+      reason: "terminal-chapter",
     })
 
     await handleOffscreenDownloadProgress(
@@ -629,16 +766,16 @@ describe("offscreen progress handler behavior", () => {
   it.each([
     [
       "state read",
-      (manager: CentralizedStateManager) => {
-        vi.mocked(manager.getGlobalState).mockRejectedValueOnce(
+      (manager: QueueRepository) => {
+        vi.mocked(manager.getTask).mockRejectedValueOnce(
           new Error("state read failed")
         )
       },
     ],
     [
       "atomic chapter update",
-      (manager: CentralizedStateManager) => {
-        vi.mocked(manager.updateDownloadingTaskChapter).mockRejectedValueOnce(
+      (manager: QueueRepository) => {
+        vi.mocked(manager.updateChapterProgress).mockRejectedValueOnce(
           new Error("chapter update failed")
         )
       },
@@ -718,16 +855,16 @@ describe("offscreen progress handler behavior", () => {
 
   it("serializes overlapping progress handlers before renewing their sequence", async () => {
     const { manager, state } = makeStateManager()
-    const globalState = state as unknown as GlobalAppState
+    const task = state.downloadQueue[0] as unknown as DownloadTaskState
     let releaseFirstRead!: () => void
-    vi.mocked(manager.getGlobalState)
+    vi.mocked(manager.getTask)
       .mockImplementationOnce(
         async () =>
           await new Promise((resolve) => {
-            releaseFirstRead = () => resolve(globalState)
+            releaseFirstRead = () => resolve(task)
           })
       )
-      .mockImplementation(async () => globalState)
+      .mockImplementation(async () => task)
 
     const first = handleOffscreenDownloadProgress(
       manager,

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  DestinationIssueRepository,
   DestinationService,
-  getDestinationIssues,
-  recordDestinationIssue,
 } from "@/entrypoints/background/destination"
 import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 
@@ -16,12 +15,6 @@ const mocks = vi.hoisted(() => ({
   })),
   queryFsaPermission: vi.fn(),
   notifyDestinationActionRequired: vi.fn(),
-}))
-
-vi.mock("@/src/storage/settings-service", () => ({
-  settingsService: {
-    getSettings: vi.fn(async () => ({ notifications: true })),
-  },
 }))
 
 vi.mock("@/entrypoints/background/notification-service", () => ({
@@ -48,6 +41,7 @@ vi.mock("@/src/runtime/logger", () => ({
 
 describe("DestinationService explicit destination contract", () => {
   let storage: Record<string, unknown>
+  let service: DestinationService
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -62,10 +56,16 @@ describe("DestinationService explicit destination contract", () => {
         },
       },
     })
+    service = new DestinationService({
+      issueRepository: new DestinationIssueRepository(),
+      settingsReader: { getSettings: async () => ({ notifications: true }) },
+      notifier: {
+        notifyDestinationActionRequired: mocks.notifyDestinationActionRequired,
+      },
+    })
   })
 
   it("keeps a frozen Downloads API task independent from FSA state", async () => {
-    const service = new DestinationService()
     const context = {
       taskId: "task-downloads",
       destination: "downloads-api" as const,
@@ -80,7 +80,6 @@ describe("DestinationService explicit destination contract", () => {
 
   it("reports a missing custom destination without changing global settings", async () => {
     mocks.loadDownloadRootHandle.mockResolvedValue(undefined)
-    const service = new DestinationService()
     const context = {
       taskId: "task-fsa",
       chapterId: "chapter-1",
@@ -91,7 +90,7 @@ describe("DestinationService explicit destination contract", () => {
       ready: false,
       reason: "not_configured",
     })
-    expect(await getDestinationIssues()).toEqual([])
+    expect(await service.getIssues()).toEqual([])
   })
 
   it("resolves the fixed persisted download-root handle for an authorized FSA task", async () => {
@@ -103,9 +102,7 @@ describe("DestinationService explicit destination contract", () => {
       destination: "file-system-access" as const,
     }
 
-    await expect(
-      new DestinationService().getEffectiveDestination(context)
-    ).resolves.toEqual({
+    await expect(service.getEffectiveDestination(context)).resolves.toEqual({
       kind: "custom",
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
       handle,
@@ -119,9 +116,9 @@ describe("DestinationService explicit destination contract", () => {
       destinationOverride: "downloads-api" as const,
     }
 
-    await expect(
-      new DestinationService().getEffectiveDestination(context)
-    ).resolves.toEqual({ kind: "downloads" })
+    await expect(service.getEffectiveDestination(context)).resolves.toEqual({
+      kind: "downloads",
+    })
     expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
   })
 
@@ -133,13 +130,13 @@ describe("DestinationService explicit destination contract", () => {
     }
     const failure = { ready: false, reason: "permission_denied" } as const
 
-    const original = await recordDestinationIssue(context, failure)
+    const original = await service.recordDestinationIssue(context, failure)
     expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
-    const repeated = await recordDestinationIssue(context, failure)
+    const repeated = await service.recordDestinationIssue(context, failure)
 
     expect(repeated).toEqual(original)
     expect(repeated.occurredAt).toBe(original.occurredAt)
-    expect(await getDestinationIssues()).toHaveLength(1)
+    expect(await service.getIssues()).toHaveLength(1)
     expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
   })
 })

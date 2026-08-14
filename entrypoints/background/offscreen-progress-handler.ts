@@ -1,11 +1,10 @@
 import logger from "@/src/runtime/logger"
 import { isRecord } from "@/src/shared/type-guards"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import type { QueueRepository } from "@/src/storage/queue-repository"
 import type {
-  OffscreenDownloadProgressMessage,
-  OffscreenDownloadProgressResponse,
-} from "@/src/types/offscreen-messages"
-import { activeDispatchLeaseStore } from "@/src/runtime/active-dispatch-lease"
+  RuntimeMessageRequest,
+  RuntimeMessageResponse,
+} from "@/src/runtime/runtime-message-contracts"
 import {
   getActiveTaskProgressSnapshot,
   publishActiveTaskProgress,
@@ -16,7 +15,8 @@ import {
   calculateTimeWeightedTaskFraction,
 } from "@/src/runtime/progress-calculator"
 import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
-import type { OffscreenJobStage } from "@/src/types/queue-state"
+import type { OffscreenJobStage } from "@/src/runtime/offscreen-job-contracts"
+import { isTerminalChapterStatus } from "@/src/domain/queue/task-lifecycle"
 import { normalizeDownloadErrorCategory } from "@/src/shared/download-contract"
 
 interface ActiveChapterSnapshot {
@@ -28,6 +28,11 @@ interface ActiveChapterSnapshot {
   phaseFraction: number
   updatedAt: number
 }
+
+type OffscreenDownloadProgressMessage =
+  RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_PROGRESS">
+type OffscreenDownloadProgressResponse =
+  RuntimeMessageResponse<"OFFSCREEN_DOWNLOAD_PROGRESS">
 
 const progressJobLocks = new Map<string, Promise<void>>()
 
@@ -139,54 +144,37 @@ function readActiveChapterMap(
 
 function normalizeActiveChapters(input: {
   activeChapters: ActiveChapterSnapshot[]
-  taskChapters: Array<{ id?: string; url?: string; status: string }>
+  taskChapters: Array<{ id: string; status: string }>
 }): ActiveChapterSnapshot[] {
-  const downloadingChapterCanonicalIds = new Set<string>()
-  const chapterKeyToCanonicalId = new Map<string, string>()
-
-  for (const chapter of input.taskChapters) {
-    if (chapter.status !== "downloading") {
-      continue
-    }
-
-    const chapterIdKey = typeof chapter.id === "string" ? chapter.id.trim() : ""
-    const chapterUrlKey =
-      typeof chapter.url === "string" ? chapter.url.trim() : ""
-    const canonicalKey = chapterIdKey.length > 0 ? chapterIdKey : chapterUrlKey
-    if (canonicalKey.length === 0) {
-      continue
-    }
-
-    downloadingChapterCanonicalIds.add(canonicalKey)
-    if (chapterIdKey.length > 0) {
-      chapterKeyToCanonicalId.set(chapterIdKey, canonicalKey)
-    }
-    if (chapterUrlKey.length > 0) {
-      chapterKeyToCanonicalId.set(chapterUrlKey, canonicalKey)
-    }
-  }
+  const knownChapterIds = new Set(
+    input.taskChapters.map((chapter) => chapter.id)
+  )
+  const downloadingChapterIds = new Set(
+    input.taskChapters
+      .filter((chapter) => chapter.status === "downloading")
+      .map((chapter) => chapter.id)
+  )
 
   const normalizedActiveChapterMap = new Map<string, ActiveChapterSnapshot>()
   for (const chapterSnapshot of input.activeChapters) {
-    const canonicalKey =
-      chapterKeyToCanonicalId.get(chapterSnapshot.chapterId) ??
-      chapterSnapshot.chapterId
+    if (!knownChapterIds.has(chapterSnapshot.chapterId)) {
+      continue
+    }
     if (
-      downloadingChapterCanonicalIds.size > 0 &&
-      !downloadingChapterCanonicalIds.has(canonicalKey)
+      downloadingChapterIds.size > 0 &&
+      !downloadingChapterIds.has(chapterSnapshot.chapterId)
     ) {
       continue
     }
 
-    const previousSnapshot = normalizedActiveChapterMap.get(canonicalKey)
+    const previousSnapshot = normalizedActiveChapterMap.get(
+      chapterSnapshot.chapterId
+    )
     if (
       !previousSnapshot ||
       chapterSnapshot.updatedAt >= previousSnapshot.updatedAt
     ) {
-      normalizedActiveChapterMap.set(canonicalKey, {
-        ...chapterSnapshot,
-        chapterId: canonicalKey,
-      })
+      normalizedActiveChapterMap.set(chapterSnapshot.chapterId, chapterSnapshot)
     }
   }
 
@@ -196,7 +184,7 @@ function normalizeActiveChapters(input: {
 }
 
 export async function handleOffscreenDownloadProgress(
-  stateManager: CentralizedStateManager,
+  stateManager: QueueRepository,
   message: OffscreenDownloadProgressMessage
 ): Promise<OffscreenDownloadProgressResponse> {
   try {
@@ -261,36 +249,50 @@ export async function handleOffscreenDownloadProgress(
     }
 
     return await runProgressJobExclusive(jobId, async () => {
-      const renewed = await activeDispatchLeaseStore.renew({
+      const renewal = await stateManager.renewDispatchLease({
         jobId,
+        taskId,
+        chapterId,
         attempt,
+        fingerprint: payload.fingerprint,
+        documentInstanceId: payload.documentInstanceId,
+        eventSignature: JSON.stringify(payload),
         stage,
         sequence,
+        activityAt: Date.now(),
       })
-      if (!renewed) {
+      if (renewal.outcome === "rejected") {
         logger.debug("Ignoring progress for stale or unknown job", {
           jobId,
           attempt,
           sequence,
         })
-        return { success: true }
+        return {
+          success: true,
+          disposition:
+            renewal.reason === "stale-sequence"
+              ? "stale_or_reordered"
+              : renewal.reason === "lease-not-current"
+                ? "lease_not_current"
+                : "protocol_error",
+        }
+      }
+      if (renewal.outcome === "unchanged") {
+        return { success: true, disposition: "stale_or_reordered" }
       }
 
-      const globalStateBeforeUpdate = await stateManager.getGlobalState()
-      const taskBeforeUpdate = globalStateBeforeUpdate.downloadQueue.find(
-        (task) => task.id === taskId
-      )
+      const taskBeforeUpdate = await stateManager.getTask(taskId)
       if (!taskBeforeUpdate) {
         logger.debug(
           `Ignoring OFFSCREEN_DOWNLOAD_PROGRESS for unknown task: ${taskId}`
         )
-        return { success: true }
+        return { success: true, disposition: "lease_not_current" }
       }
       if (taskBeforeUpdate.status !== "downloading") {
         logger.debug(
           `Ignoring OFFSCREEN_DOWNLOAD_PROGRESS for inactive task: ${taskId}`
         )
-        return { success: true }
+        return { success: true, disposition: "lease_not_current" }
       }
 
       const taskChapter = taskBeforeUpdate.chapters.find(
@@ -300,7 +302,7 @@ export async function handleOffscreenDownloadProgress(
         logger.debug(
           `Ignoring OFFSCREEN_DOWNLOAD_PROGRESS for unknown chapter: ${chapterId}`
         )
-        return { success: true }
+        return { success: true, disposition: "protocol_error" }
       }
 
       const payloadChapterTitle =
@@ -313,39 +315,6 @@ export async function handleOffscreenDownloadProgress(
           : stableTaskChapterTitle.length > 0
             ? stableTaskChapterTitle
             : undefined
-      const normalizedChapterId = chapterId.trim()
-      const canonicalChapterId = (() => {
-        const stableChapterId =
-          typeof taskChapter.id === "string" ? taskChapter.id.trim() : ""
-        if (stableChapterId.length > 0) {
-          return stableChapterId
-        }
-
-        const stableChapterUrl =
-          typeof taskChapter.url === "string" ? taskChapter.url.trim() : ""
-        if (stableChapterUrl.length > 0) {
-          return stableChapterUrl
-        }
-
-        return normalizedChapterId
-      })()
-      const chapterIdentityAliases = new Set<string>([
-        normalizedChapterId,
-        ...(typeof taskChapter.id === "string" &&
-        taskChapter.id.trim().length > 0
-          ? [taskChapter.id.trim()]
-          : []),
-        ...(typeof taskChapter.url === "string" &&
-        taskChapter.url.trim().length > 0
-          ? [taskChapter.url.trim()]
-          : []),
-      ])
-      const isTerminalChapterStatus = (
-        chapterStatus: string | undefined
-      ): boolean =>
-        chapterStatus === "completed" ||
-        chapterStatus === "failed" ||
-        chapterStatus === "partial_success"
       const shouldIgnoreStaleChapterProgress =
         isTerminalChapterStatus(taskChapter.status) && status === "downloading"
 
@@ -361,11 +330,19 @@ export async function handleOffscreenDownloadProgress(
           imagesFailed !== taskChapter.imagesFailed) ||
         taskChapter.status !== "downloading"
       if (shouldPersistChapterUpdate) {
-        const chapterUpdate = await stateManager.updateDownloadingTaskChapter(
+        const chapterUpdate = await stateManager.updateChapterProgress({
           taskId,
-          canonicalChapterId,
-          status === "downloading" ? "downloading" : taskChapter.status,
-          {
+          chapterId,
+          lease: {
+            jobId,
+            attempt,
+            taskId,
+            chapterId,
+            fingerprint: payload.fingerprint,
+            documentInstanceId: payload.documentInstanceId,
+          },
+          now: Date.now(),
+          updates: {
             totalImages:
               typeof totalImages === "number" ? totalImages : undefined,
             imagesFailed:
@@ -375,14 +352,14 @@ export async function handleOffscreenDownloadProgress(
               status === "failed" || status === "partial_success"
                 ? (errorCategory ?? "unknown")
                 : undefined,
-          }
-        )
-        if (!chapterUpdate.success) {
+          },
+        })
+        if (chapterUpdate.outcome === "rejected") {
           logger.debug(
             `Ignoring OFFSCREEN_DOWNLOAD_PROGRESS after parent task transition: ${taskId}`,
             chapterUpdate
           )
-          return { success: true }
+          return { success: true, disposition: "lease_not_current" }
         }
       }
       const isTerminalProgress = status !== "downloading"
@@ -427,25 +404,10 @@ export async function handleOffscreenDownloadProgress(
           taskId
         )
 
-        const deleteChapterAliases = (): void => {
-          for (const alias of chapterIdentityAliases) {
-            activeChapterMap.delete(alias)
-          }
-        }
-        let existingChapterSnapshot: ActiveChapterSnapshot | undefined
-        for (const alias of chapterIdentityAliases) {
-          const snapshot = activeChapterMap.get(alias)
-          if (
-            snapshot &&
-            (!existingChapterSnapshot ||
-              snapshot.updatedAt >= existingChapterSnapshot.updatedAt)
-          ) {
-            existingChapterSnapshot = snapshot
-          }
-        }
+        const existingChapterSnapshot = activeChapterMap.get(chapterId)
 
         if (shouldIgnoreStaleChapterProgress) {
-          deleteChapterAliases()
+          activeChapterMap.delete(chapterId)
         } else {
           const nextImagesProcessed = Math.max(
             0,
@@ -467,9 +429,8 @@ export async function handleOffscreenDownloadProgress(
             : (payloadPhaseFraction ??
               (progressStage === "downloading" ? imageFraction : 0))
 
-          deleteChapterAliases()
-          activeChapterMap.set(canonicalChapterId, {
-            chapterId: canonicalChapterId,
+          activeChapterMap.set(chapterId, {
+            chapterId,
             chapterTitle:
               progressChapterTitle ?? existingChapterSnapshot?.chapterTitle,
             imagesProcessed: nextImagesProcessed,
@@ -483,10 +444,7 @@ export async function handleOffscreenDownloadProgress(
         const activeChapters = [...activeChapterMap.values()].sort(
           (left, right) => left.chapterId.localeCompare(right.chapterId)
         )
-        const globalStateAfterUpdate = await stateManager.getGlobalState()
-        const taskAfterUpdate = globalStateAfterUpdate.downloadQueue.find(
-          (task) => task.id === taskId
-        )
+        const taskAfterUpdate = await stateManager.getTask(taskId)
         const normalizedActiveChapters = normalizeActiveChapters({
           activeChapters,
           taskChapters: taskAfterUpdate?.chapters ?? [],
@@ -558,7 +516,7 @@ export async function handleOffscreenDownloadProgress(
         await progressTimingEstimator.finish(jobId)
       }
 
-      return { success: true }
+      return { success: true, disposition: "renewed" }
     })
   } catch (e: unknown) {
     logger.error("Error handling OFFSCREEN_DOWNLOAD_PROGRESS", e)
