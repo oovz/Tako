@@ -79,6 +79,93 @@ export default defineConfig(
     },
   },
   {
+    files: ["src/domain/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/src/storage",
+                "@/src/storage/*",
+                "@/src/runtime",
+                "@/src/runtime/*",
+                "@/src/site-integrations",
+                "@/src/site-integrations/*",
+                "@/entrypoints",
+                "@/entrypoints/*",
+                "@/components",
+                "@/components/*",
+                "../storage",
+                "../storage/*",
+                "../../storage",
+                "../../storage/*",
+                "../../../storage",
+                "../../../storage/*",
+                "../runtime",
+                "../runtime/*",
+                "../../runtime",
+                "../../runtime/*",
+                "../../../runtime",
+                "../../../runtime/*",
+                "../site-integrations",
+                "../site-integrations/*",
+                "../../site-integrations",
+                "../../site-integrations/*",
+                "../../../site-integrations",
+                "../../../site-integrations/*",
+                "../entrypoints",
+                "../entrypoints/*",
+                "../../entrypoints",
+                "../../entrypoints/*",
+                "../../../entrypoints",
+                "../../../entrypoints/*",
+                "../components",
+                "../components/*",
+                "../../components",
+                "../../components/*",
+                "../../../components",
+                "../../../components/*",
+              ],
+              message:
+                "Domain code must depend only on domain, shared, and type modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/domain/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/entrypoints",
+                "@/entrypoints/*",
+                "../entrypoints",
+                "../entrypoints/*",
+                "../../entrypoints",
+                "../../entrypoints/*",
+                "../../../entrypoints",
+                "../../../entrypoints/*",
+                "../../../../entrypoints",
+                "../../../../entrypoints/*",
+              ],
+              message:
+                "Reusable src modules must not import entrypoint modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: [
       "entrypoints/background/**/*.{ts,tsx}",
       "src/runtime/background-*.{ts,tsx}",
