@@ -7,6 +7,7 @@ import type { NativeOutputJobIdentity } from "@/src/domain/native-output/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
+import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 
 import type { NativeOutputCoordinator } from "./native-output-coordinator"
 import { runTaskSideEffectExclusive } from "./download-task-side-effect-gate"
@@ -42,6 +43,12 @@ export class DownloadTaskCancellationCoordinator {
         now: Date.now(),
       })
       if (transition.outcome !== "applied") {
+        // Replay of an already-applied cancel: the task is gone or already
+        // terminal, which IS the durable result of this command.
+        const task = await this.queueRepository.getTask(taskId)
+        if (!task || isTerminalDownloadTask(task)) {
+          return { result: { kind: "active" }, queueCanContinue: true }
+        }
         throw new Error(
           transition.reason === "task-not-found"
             ? "Download task not found."

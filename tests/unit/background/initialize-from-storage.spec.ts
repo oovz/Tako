@@ -110,6 +110,7 @@ function createHarness(queue: DownloadTaskState[] = []) {
     })),
     reconcile: vi.fn(async () => undefined),
     hasLiveDependencies: vi.fn(async () => false),
+    hasReconcilableLiveDependencies: vi.fn(async () => false),
     sealManifest: vi.fn(async () => undefined),
   } as unknown as NativeOutputCoordinator
   const writeSession = vi.fn(async () => undefined)
@@ -191,6 +192,9 @@ describe("initializeFromStorage", () => {
     )
     vi.mocked(
       harness.nativeOutputCoordinator.hasLiveDependencies
+    ).mockResolvedValue(true)
+    vi.mocked(
+      harness.nativeOutputCoordinator.hasReconcilableLiveDependencies
     ).mockResolvedValue(true)
 
     const result = await initializeFromStorage(harness.dependencies)

@@ -130,7 +130,23 @@ export class NativeOutputCoordinator {
     })
   }
 
+  /**
+   * True while any native-output record or manifest is still live. Erased
+   * downloads awaiting a user decision REMAIN live: the offscreen document
+   * owns their Blob URL and must not be closed before terminal state or
+   * explicit surrender.
+   */
   async hasLiveDependencies(): Promise<boolean> {
+    return await this.deps.repository.hasLiveDependencies()
+  }
+
+  /**
+   * True while durable work exists that can progress WITHOUT user action.
+   * Erased downloads blocked behind `native_output_action_required` are
+   * excluded: their only next step is the user's forget/cancel decision, so
+   * the crash-recovery alarm must not re-arm forever for them.
+   */
+  async hasReconcilableLiveDependencies(): Promise<boolean> {
     if (!(await this.deps.repository.hasLiveDependencies())) return false
     const [snapshot, queue] = await Promise.all([
       this.deps.repository.snapshot(),
@@ -539,7 +555,8 @@ export class NativeOutputCoordinator {
    * Task-wide FORGET_UNOBSERVABLE_OUTPUTS command. Surrenders every waiting
    * output whose Chrome download was erased, releases the task's
    * action-required block so the queue can continue, and reconciles each
-   * affected job (Blob revocation, settlement, dependency release).
+   * affected job (Blob revocation, settlement, dependency release). A replay
+   * after an already-applied forget converges with `surrendered: 0`.
    */
   async forgetTaskUnobservableOutputs(
     taskId: string
@@ -547,7 +564,7 @@ export class NativeOutputCoordinator {
     return await this.serialized(async () => {
       const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
       if (surrendered === 0) {
-        throw new Error("No unobservable browser downloads to forget")
+        return { surrendered }
       }
       const released =
         await this.deps.queueRepository.releaseNativeOutputActionBlock(taskId)

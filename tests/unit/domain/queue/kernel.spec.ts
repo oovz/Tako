@@ -1682,6 +1682,32 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     })
   })
 
+  it("cancels a native-output action-required queued task without Undo so surrender runs", () => {
+    const task = createTask("task-1", "queued", {
+      activeBlock: "native_output_action_required",
+      errorCategory: "browser_download_unobservable",
+    })
+    const state = createState([task])
+    const before = structuredClone(state)
+    const canceled = cancelDownloadTask(state, {
+      taskId: "task-1",
+      undoToken: "unused",
+      now: 500,
+    })
+
+    expectApplied(canceled, state, before, ["queue"])
+    expect(canceled.next.pendingUndoActions).toEqual([])
+    expect(canceled.next.queue[0]).toMatchObject({
+      status: "canceled",
+      completed: 500,
+    })
+    expect(canceled.result).toMatchObject({
+      outcome: "applied",
+      canceledLease: null,
+      undo: null,
+    })
+  })
+
   it("rejects cancellation for missing/terminal tasks and duplicate queued Undo tokens", () => {
     const action = createUndoAction({ token: "duplicate" })
     const state = createState([createTask()], null, [action])

@@ -2105,6 +2105,25 @@ export function cancelDownloadTask(
   }
 
   if (task.status === "queued") {
+    if (task.activeBlock === "native_output_action_required") {
+      // A native-output action-required task cancels through the coordinator's
+      // surrender path, NOT ordinary queued Undo: Undo would resurrect a task
+      // whose erased native outputs were surrendered and released.
+      const canceledTask = cancelDownloadingTask(task, input.now)
+      return {
+        next: {
+          ...state,
+          queue: replaceTaskAt(state.queue, taskIndex, canceledTask),
+        },
+        changedKeys: QUEUE_KEY,
+        result: {
+          outcome: "applied",
+          task: canceledTask,
+          canceledLease: null,
+          undo: null,
+        },
+      }
+    }
     if (
       state.pendingUndoActions.some(
         (action) => action.token === input.undoToken

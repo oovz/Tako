@@ -196,7 +196,7 @@ export async function initializeFromStorage(
     (task) => isExecutingDownloadTask(task) && !nativeTaskIds.has(task.id)
   )
   const hasNativeOutputDependencies =
-    await dependencies.nativeOutputCoordinator.hasLiveDependencies()
+    await dependencies.nativeOutputCoordinator.hasReconcilableLiveDependencies()
   const hasDurableActiveWork =
     hasOffscreenExecutingTask ||
     currentLease !== null ||
