@@ -43,6 +43,15 @@ interface SiteIntegrationManifest {
   requiredOrigins: string[]
   requiresPageProbe: boolean
   requiresBroadHttpsPermission?: boolean
+  network?: {
+    credentialPolicies?: Array<{
+      purpose: string
+      mode: "include" | "omit"
+      originKind: "fixed" | "provider-issued"
+      origins: string[]
+    }>
+    sessionRefererRules?: SessionRefererRuleDeclaration[]
+  }
 
   policyDefaults: {
     image: { concurrency: number; delayMs: number }
@@ -53,6 +62,7 @@ interface SiteIntegrationManifest {
   runtimes: {
     background: boolean
     offscreen: boolean
+    dispatchContext: "none" | "optional" | "required"
   }
 }
 ```
@@ -68,7 +78,18 @@ satisfy a manifest shape.
 MangaDex is the current example of `requiresBroadHttpsPermission: true`. It is
 disabled by default; its Options enable gesture requests optional `https://*/*`.
 A denied/revoked permission leaves it unavailable. Broad browser permission
-never broadens the integration's runtime URL policy.
+never broadens the integration's runtime URL policy. `credentialPolicies` is
+currently descriptive validation and inventory metadata; the owning provider
+code remains the runtime request-role factory. `originKind: "provider-issued"`
+means a provider-issued dynamic origin (for example, a MangaDex At-Home host)
+validated by the owning provider's runtime policy, not arbitrary HTTPS access;
+the generated required-origin inventory is not necessarily exhaustive for that
+dynamic host set. The shared policy consumer is live today:
+`src/site-integrations/request-policy.ts` builds the endpoint policy and
+`src/site-integrations/http-client.ts` enforces origin, credential mode,
+redirect, response-type, and size limits for every provider request. New
+provider code must route all requests through `integrationHttpClient`; raw
+`fetch()` is prohibited.
 
 ## Context-resolution hierarchy
 
@@ -117,10 +138,15 @@ URL ownership. It communicates through `chrome.runtime`; storage/downloads/
 permissions/alarms remain Service Worker responsibilities.
 
 The component making requests owns the rate limiter, Retry-After handling,
-backoff, and `nextChapterDispatchAt` deadline. Series resolvers also receive an
-AbortSignal that must be passed to provider fetches so a resolution deadline
-cancels the underlying request. Service Worker suspension must not erase a
-provider delay.
+backoff, and `nextChapterDispatchAt` deadline. Series resolvers receive an
+AbortSignal; the owning provider passes it to network requests and offscreen
+pagination so a deadline or superseded navigation stops the underlying work.
+Service Worker suspension must not erase a provider delay.
+
+MangaDex chapter downloads use the typed `resolveImageUrls` At-Home resolver in
+both bundled runtimes. The generic HTML parser fallback is for integrations that
+do not provide a resolver and is not registered for MangaDex; keep the
+provider's At-Home request and quality policy in that single resolver.
 
 ### Dispatch context
 
@@ -142,23 +168,31 @@ envelope. Normal browser-managed credentials are declared per request origin.
 
 ## Shared request security
 
-All provider/API/image requests must go through the shared hardened request
-layer, which enforces:
+Provider request paths use the shared hardened layer when their integration
+delegates to it; provider-specific request roles remain explicit in the owning
+integration. The common layer enforces:
 
 - HTTPS unless an origin is explicitly approved;
 - integration-specific origin allowlists;
 - redirect rejection before follow (current limit: zero), plus defensive
   final-URL validation;
 - private, link-local, and loopback rejection unless explicitly required;
-- declared credential mode;
+- the credential mode supplied by the provider request role;
 - response-size limits and AbortSignal cancellation;
 - metadata/HTML response bodies capped at 10 MiB before parsing;
-- raster MIME plus magic-byte validation;
-- encoded pixel-dimension limits before canvas allocation, with a post-decode
-  consistency check;
+- raw image fetches validate the response `Content-Type` MIME and byte size;
+- image transformation paths validate encoded signatures and dimensions before
+  canvas allocation, with a post-decode consistency check;
+- AVIF is rejected by the shared transformation preflight until bounded support
+  exists;
 - sanitized filenames;
 - structured retry/error categories;
 - redacted logging of query values, credentials, headers, and bodies.
+
+HTML response decoding is intentionally strict rather than browser-equivalent:
+the response must provide a BOM, HTTP charset, or supported meta charset, and
+malformed bytes fail through the fatal decoder. Providers that consume HTML must
+satisfy that metadata contract.
 
 `handlesOwnRetries` changes retry classification/backoff only; it never bypasses
 proactive rate limiting.
@@ -184,8 +218,10 @@ reinterprets it.
 ## Image and output rules
 
 - Resolve ordered image candidates deterministically.
-- Validate final response MIME, magic bytes, size, and dimensions.
-- Preserve source extensions only after validation.
+- Validate final response MIME and size at the raw fetch boundary; transformed
+  images additionally validate encoded signatures and dimensions.
+- Derive exactly one output extension from the validated MIME; never duplicate a
+  source suffix.
 - Keep descramblers deterministic and pixel-tested against representative
   fixtures.
 - Never report chapter/task completion when offscreen merely prepared a Blob.
@@ -194,6 +230,15 @@ reinterprets it.
 - For loose images, record requested, committed, and failed output counts so a
   partial image result produces task `partial_success` rather than false
   failure.
+
+### Cover images
+
+An integration may provide `offscreen.cover.downloadImage` when a cover uses a
+different origin, credential mode, or response policy from chapter images. The
+generic chapter `downloadImage` hook is used only when those policies are the
+same. Cover prefetch is optional and nonfatal, but the hook remains abortable,
+uses the provider URL/credential policy, and must not bypass the shared rate
+admission owned by the caller.
 
 ## Settings schema
 
@@ -263,7 +308,7 @@ parallel test implementation.
 | Pixiv Comic  | Internal API/build data and image reconstruction                                                                                                                          |
 | Shonen Jump+ | Numeric `/episode/{id}` pages only; fetched SSR `readableProduct`, viewer API, tile reconstruction. Homepage and `/series*` catalog routes are intentionally unsupported. |
 | Manhuagui    | SSR grouping, packed reader payload, explicit adult gate, referrer-sensitive images                                                                                       |
-| Comic Nettai | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access                                                                                  |
+| Comic Nettai | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access; PUBLUS images are limited to JPEG/PNG/WebP/GIF and reject AVIF before fetching  |
 
 Related: [Architecture](Architecture), [Permissions](Permissions), and
 [Template Macros](Template-Macros).

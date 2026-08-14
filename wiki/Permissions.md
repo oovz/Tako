@@ -38,14 +38,22 @@ rate-limited scheduling, image transforms/descrambling, CBZ/ZIP creation, File
 System Access writes, and Blob URL ownership. Offscreen can use only
 `chrome.runtime` extension messaging. It remains alive while a Chrome download
 still depends on one of its Blob URLs and is closed only when it is otherwise
-idle and those downloads are terminal.
+idle and those downloads have a positive terminal outcome (or the owner has
+already disappeared during recovery).
 
 ## `downloads`
 
 Starts browser-managed file saves and observes `complete | interrupted` state.
 The returned `downloadId` means a download was accepted, not that the file is
-complete. Tako does not cancel files already handed to Chrome when the broader
-task is canceled.
+complete. `downloads.onErased` only removes a history entry; it does not prove
+completion or interruption. Tako retains the pending output and Blob owner until
+positive terminal evidence; owner-loss recovery may release only the Blob
+dependency, not claim a transfer result. If the user explicitly chooses “forget
+all pending downloads” for an unobservable history entry, Tako revokes every
+pending Blob owned by the affected job and discards those unknowable outcomes.
+The confirmation is task-wide because a job may contain sibling archive or loose
+image outputs. Ordinary task cancellation does not cancel files already handed
+to Chrome.
 
 ## `scripting`
 
@@ -62,11 +70,12 @@ contents.
 
 ## `alarms`
 
-Provides a coarse wake-up for offscreen job-lease watchdog checks. The alarm is
-explicitly configured to persist across sessions and is verified/recreated
-whenever the Service Worker initializes. Native Chrome download completion is
-handled by `downloads.onChanged` and startup reconciliation rather than this
-watchdog alarm.
+Provides a coarse wake-up for offscreen job-lease watchdog checks and targeted
+native-output repair. The alarm is explicitly configured to persist across
+sessions and is verified/recreated whenever the Service Worker initializes.
+Native Chrome download completion is handled by `downloads.onChanged`; startup
+reconciliation covers worker-loss gaps, while live repair only handles ambiguous
+acceptance and durable cleanup/accounting obligations.
 
 ## `declarativeNetRequestWithHostAccess`
 

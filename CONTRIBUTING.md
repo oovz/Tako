@@ -21,10 +21,20 @@ pnpm test:e2e     # Deterministic extension behavior
 pnpm test:live    # Real-site validation (requires supported sites to be accessible)
 ```
 
-`pnpm test:e2e` builds a separate `.output\chrome-mv3-e2e-test` artifact. It
-contains test-only local-mock support and must not be loaded as a production
-extension. `pnpm build` remains the source of the normal `.output\chrome-mv3`
-artifact.
+Build/test artifacts use three explicit modes:
+
+| Mode              | Command                   | Artifact and policy                                                                                                |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Production        | `pnpm build` / `pnpm zip` | `.output\chrome-mv3`; no deterministic state seed, redirect relaxation, or coverage instrumentation                |
+| Deterministic E2E | `pnpm test:e2e`           | `.output\chrome-mv3-e2e-test`; local mock state/redirect support only                                              |
+| Live E2E          | `pnpm test:live`          | `.output\chrome-mv3-live-test`; live state seeding is enabled, while production redirect rejection remains enabled |
+
+The deterministic and live artifacts must not be loaded as production
+extensions. Coverage instrumentation is limited to the deterministic E2E mode.
+
+The architecture is currently maintained as a substantial Phase 2 checkpoint
+with partial Phase 3 work. Do not describe Phase 3 as complete until the full
+transition-kernel, invariant, property, and differential-test exit gate is met.
 
 The E2E fixture defaults to Playwright's Chromium tip-of-tree channel. To use a
 compatible installed channel instead, set `TMD_TEST_E2E_BROWSER_CHANNEL` before

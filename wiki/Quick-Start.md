@@ -51,9 +51,9 @@ Shonen Jump+ must be opened on a numeric `/episode/{id}` page. Its homepage and
 
 ## Change output format or save location
 
-1. Right-click the Tako icon and choose **Options**, or open the Side Panel menu
-   and select **Settings**.
-2. Under **Output**, pick CBZ, ZIP, or loose images.
+1. Right-click the Tako icon and choose **Options**, or use **Settings** in the
+   Side Panel header.
+2. Under **Downloads**, pick CBZ, ZIP, or loose images.
 3. Optionally set a custom download folder using File System Access. If its
    permission later needs attention, Tako stops that task and offers repair
    actions instead of silently switching folders.
