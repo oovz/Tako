@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest"
-import { mockRateLimitedFetch } from "./pixiv-comic-test-setup"
+import {
+  mockRateLimitedFetch,
+  rateLimitService,
+} from "./pixiv-comic-test-setup"
+import {
+  fetchPixivChapterList as fetchPixivChapterListImpl,
+  fetchPixivSeriesMetadata as fetchPixivSeriesMetadataImpl,
+} from "@/src/site-integrations/pixiv-comic/series-api"
+
+const fetchPixivSeriesMetadata = (seriesId: string) =>
+  fetchPixivSeriesMetadataImpl(seriesId, rateLimitService)
+const fetchPixivChapterList = (seriesId: string) =>
+  fetchPixivChapterListImpl(seriesId, rateLimitService)
 
 export function registerPixivComicSeriesApiCases(): void {
   describe("Pixiv Comic integration", () => {
@@ -24,12 +36,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const metadata =
-        await pixivComicIntegration.background.series!.fetchSeriesMetadata!(
-          "9012"
-        )
+      const metadata = await fetchPixivSeriesMetadata("9012")
 
       expect(metadata).toMatchObject({
         title: "煙たい話",
@@ -37,15 +44,13 @@ export function registerPixivComicSeriesApiCases(): void {
         description: "★コミックス①〜⑥巻好評発売中★ 恋じゃない。",
         coverUrl: "https://img-comic.pximg.net/images/work_main/9012.jpg",
       })
-      expect(mockRateLimitedFetch.mock.calls[0]?.[2]).toMatchObject({
+      const request = mockRateLimitedFetch.mock.calls[0]?.[0] as {
+        init?: RequestInit
+      }
+      expect(request.init).toMatchObject({
         credentials: "include",
       })
-      expect(
-        new Headers(
-          (mockRateLimitedFetch.mock.calls[0]?.[2] as RequestInit | undefined)
-            ?.headers
-        ).has("cookie")
-      ).toBe(false)
+      expect(new Headers(request.init?.headers).has("cookie")).toBe(false)
     })
 
     it("fetches chapter list from episodes/v2 API and maps readable/locked entries", async () => {
@@ -77,10 +82,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("9012")
+      const chapterResult = await fetchPixivChapterList("9012")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters
@@ -100,7 +102,10 @@ export function registerPixivComicSeriesApiCases(): void {
         locked: true,
         chapterNumber: 2,
       })
-      expect(mockRateLimitedFetch.mock.calls[0]?.[2]).toMatchObject({
+      const request = mockRateLimitedFetch.mock.calls[0]?.[0] as {
+        init?: RequestInit
+      }
+      expect(request.init).toMatchObject({
         credentials: "include",
       })
     })
@@ -134,10 +139,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("6842")
+      const chapterResult = await fetchPixivChapterList("6842")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters
@@ -171,10 +173,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("6289")
+      const chapterResult = await fetchPixivChapterList("6289")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters
@@ -210,10 +209,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("9012")
+      const chapterResult = await fetchPixivChapterList("9012")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters
@@ -240,12 +236,10 @@ export function registerPixivComicSeriesApiCases(): void {
         json: async () => ({ data: { episodes: [] } }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      await pixivComicIntegration.background.series!.fetchChapterList!("9012")
+      await fetchPixivChapterList("9012")
 
-      const calls = mockRateLimitedFetch.mock.calls.map((call) =>
-        String(call[0])
+      const calls = mockRateLimitedFetch.mock.calls.map(
+        (call) => (call[0] as { url: string }).url
       )
       expect(
         calls.some((url) =>
@@ -283,10 +277,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("9012")
+      const chapterResult = await fetchPixivChapterList("9012")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters
@@ -330,10 +321,7 @@ export function registerPixivComicSeriesApiCases(): void {
         }),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const chapterResult =
-        await pixivComicIntegration.background.series!.fetchChapterList!("9012")
+      const chapterResult = await fetchPixivChapterList("9012")
       const chapters = Array.isArray(chapterResult)
         ? chapterResult
         : chapterResult.chapters

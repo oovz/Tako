@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "pixiv-comic",
+  "name": "Pixiv Comic",
+  "author": "TMD Team",
+  "version": "1.1.0",
+  "maturity": "stable",
+  "shipped": true,
+  "enabledByDefault": true,
+  "implementationType": "unofficial-api",
+  "volatility": "high",
+  "authentication": "browser-session",
+  "regions": ["global"],
+  "accountConstraints": ["browser-session-cookie"],
+  "patterns": { "domains": ["comic.pixiv.net"], "seriesMatches": ["/works/*"] },
+  "requiredOrigins": [
+    "https://comic.pixiv.net/*",
+    "https://pximg.net/*",
+    "https://*.pximg.net/*",
+    "https://img-comic.pximg.net/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 1000 },
+    "chapter": { "concurrency": 1, "delayMs": 2000 }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "optional", "schemaVersion": 1 }
+  },
+  "resolution": {
+    "seriesStrategies": ["private-api"],
+    "chapterStrategies": ["private-api"],
+    "imageStrategies": ["private-api"],
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 4000
+    }
+  },
+  "endpointPolicies": [
+    {
+      "id": "pixiv-comic-homepage",
+      "purpose": "Pixiv Comic application shell",
+      "origins": ["https://comic.pixiv.net/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "pixiv-comic-works-api",
+      "purpose": "Pixiv Comic work metadata",
+      "origins": ["https://comic.pixiv.net/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "pixiv-comic-episodes-api",
+      "purpose": "Pixiv Comic episode metadata",
+      "origins": ["https://comic.pixiv.net/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "pixiv-comic-image-cdn",
+      "purpose": "Pixiv Comic image CDN",
+      "origins": ["https://img-comic.pximg.net/*", "https://*.pximg.net/*"],
+      "originKind": "provider-issued",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "dynamicOrigins": [],
+  "sessionRefererRules": [
+    {
+      "id": 41001,
+      "priority": 1,
+      "requestDomains": ["img-comic.pximg.net"],
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "referer": "https://comic.pixiv.net/"
+    }
+  ],
+  "customSettings": [],
+  "fixtures": {
+    "paths": ["src/site-integrations/pixiv-comic/fixtures/contract.json"],
+    "liveFreshnessDays": 14
+  }
+}

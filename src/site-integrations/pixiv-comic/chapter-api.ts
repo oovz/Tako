@@ -1,16 +1,12 @@
-import type { ParseImageUrlsFromHtmlInput } from "../../types/site-integrations"
 import logger from "@/src/runtime/logger"
-import {
-  getRateLimitPolicyFromContext,
-  rateLimitedFetchForIntegration,
-} from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
-import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
-import { descramblePixivImage } from "./descrambler"
-import { createIntegrationUrlAssertion } from "../request-policy"
-import { ProviderContractError } from "../provider-contract-error"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
+import { descramblePixivImage } from "./descrambler"
+import { createIntegrationEndpointUrlAssertion } from "../request-policy"
+import { ProviderContractError } from "../provider-contract-error"
+import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 import { parseEpisodeIdFromUrl } from "./page-context"
 import {
   PIXIV_BASE_URL,
@@ -23,8 +19,17 @@ import {
   type PixivReadV4Page,
   type PixivResolveContext,
 } from "./shared"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { ChapterRuntimeData } from "@/src/types/site-integrations"
+import type { PixivDispatchContext } from "./contracts/dispatch-context"
 
-const assertPixivRequestUrl = createIntegrationUrlAssertion("pixiv-comic")
+const assertPixivImageUrl = createIntegrationEndpointUrlAssertion(
+  "pixiv-comic",
+  "pixiv-comic-image-cdn"
+)
 
 const toHex = (bytes: Uint8Array): string =>
   bytes.reduce((acc, value) => acc + value.toString(16).padStart(2, "0"), "")
@@ -114,7 +119,7 @@ const computeClientHash = async (
 ): Promise<string> => {
   const payload = `${timestamp}${salt}`
   if (!globalThis.crypto?.subtle) {
-    throw new Error(
+    throw new ProviderContractError(
       "Web Crypto subtle API is required for Pixiv API authentication"
     )
   }
@@ -136,29 +141,35 @@ const parseStoryId = (chapter: { id: string; url: string }): string => {
     return parsedFromUrl
   }
 
-  throw new Error(
+  throw new ProviderContractError(
     `Unable to resolve Pixiv Comic story id from chapter: ${chapter.url}`
   )
 }
 
 async function fetchPixivBuildId(
-  context?: PixivResolveContext
+  context: PixivResolveContext
 ): Promise<string> {
   logger.debug("[pixiv-comic] Fetching homepage to resolve Next.js build ID", {
     usesBrowserManagedCredentials: true,
   })
-  const response = await rateLimitedFetchForIntegration(
-    "pixiv-comic",
-    `${PIXIV_BASE_URL}/`,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-homepage",
+    url: `${PIXIV_BASE_URL}/`,
+    scope: "chapter",
+    init: {
       credentials: "include",
+      signal: context.signal,
     },
-    context?.rateLimitSettings?.chapter
-  )
+    policyOverride: context.rateLimitSettings?.chapter,
+    rateLimitService: context.rateLimitService,
+  })
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch Pixiv homepage: HTTP ${response.status}`)
+    throw Object.assign(
+      new Error(`Failed to fetch Pixiv homepage: HTTP ${response.status}`),
+      { status: response.status }
+    )
   }
 
   const { html } = await decodeHtmlResponse(response)
@@ -172,18 +183,21 @@ async function fetchPixivBuildId(
 async function fetchPixivSalt(
   storyId: string,
   buildId: string,
-  context?: PixivResolveContext
+  context: PixivResolveContext
 ): Promise<{ salt: string; pages: PixivReadV4Page[] }> {
   const saltUrl = `${PIXIV_BASE_URL}/_next/data/${buildId}/viewer/stories/${storyId}.json?id=${storyId}`
-  const response = await rateLimitedFetchForIntegration(
-    "pixiv-comic",
-    saltUrl,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-episodes-api",
+    url: saltUrl,
+    scope: "chapter",
+    init: {
       credentials: "include",
+      signal: context.signal,
     },
-    context?.rateLimitSettings?.chapter
-  )
+    policyOverride: context.rateLimitSettings?.chapter,
+    rateLimitService: context.rateLimitService,
+  })
 
   if (!response.ok) {
     const error = new Error(
@@ -218,10 +232,10 @@ async function fetchPixivSalt(
 
 async function resolvePixivReadPages(
   chapter: { id: string; url: string },
-  context?: PixivResolveContext
+  context: PixivResolveContext
 ): Promise<PixivReadV4Page[]> {
   const storyId = parseStoryId(chapter)
-  const taskId = context?.taskId
+  const taskId = context.taskId
 
   let buildId = taskId ? getPixivBuildIdCache(taskId) : undefined
   logger.debug("[pixiv-comic] Resolving read pages", {
@@ -262,10 +276,15 @@ async function resolvePixivReadPages(
 
     try {
       saltResult = await fetchPixivSalt(storyId, refreshedBuildId, context)
-    } catch {
-      throw new ProviderContractError(
-        "Pixiv Comic API may have changed (build ID stale)"
-      )
+    } catch (error) {
+      const refreshedStatusCode = (error as { status?: number })?.status
+      if (refreshedStatusCode === 404) {
+        throw new ProviderContractError(
+          "Pixiv Comic API may have changed (build ID stale)",
+          error
+        )
+      }
+      throw error
     }
   }
 
@@ -274,19 +293,25 @@ async function resolvePixivReadPages(
   const headers = createPixivHeaders(timestamp) as Record<string, string>
   headers["x-client-hash"] = clientHash
 
-  const response = await rateLimitedFetchForIntegration(
-    "pixiv-comic",
-    `${PIXIV_EPISODES_API_URL}/${storyId}/read_v4`,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-episodes-api",
+    url: `${PIXIV_EPISODES_API_URL}/${storyId}/read_v4`,
+    scope: "chapter",
+    init: {
       credentials: "include",
       headers,
+      signal: context.signal,
     },
-    context?.rateLimitSettings?.chapter
-  )
+    policyOverride: context.rateLimitSettings?.chapter,
+    rateLimitService: context.rateLimitService,
+  })
 
   if (!response.ok) {
-    throw new Error(`Pixiv Comic read_v4 failed: HTTP ${response.status}`)
+    throw Object.assign(
+      new Error(`Pixiv Comic read_v4 failed: HTTP ${response.status}`),
+      { status: response.status }
+    )
   }
 
   const payload = (await readResponseJson(response)) as {
@@ -318,20 +343,23 @@ async function resolvePixivReadPages(
 
 export async function resolvePixivChapterImageUrls(
   chapter: { id: string; url: string },
-  context?: PixivResolveContext
+  context: PixivResolveContext
 ): Promise<string[]> {
   const pages = await resolvePixivReadPages(chapter, context)
-  const urls = pages
-    .map((page) => {
-      const sourceUrl = page.url ?? page.src ?? page.image_url
-      if (!sourceUrl) {
-        return null
-      }
-      return withChapterToken(normalizePixivImageUrl(sourceUrl), page.key)
-    })
-    .filter(
-      (value): value is string => typeof value === "string" && value.length > 0
+  if (pages.length > MAX_CHAPTER_IMAGES) {
+    throw new ProviderContractError(
+      `Pixiv Comic chapter exceeds the ${MAX_CHAPTER_IMAGES} image limit.`
     )
+  }
+  const urls = pages.map((page) => {
+    const sourceUrl = page.url ?? page.src ?? page.image_url
+    if (typeof sourceUrl !== "string" || sourceUrl.length === 0) {
+      throw new ProviderContractError(
+        "Pixiv Comic API may have changed (page image URL is missing)"
+      )
+    }
+    return withChapterToken(normalizePixivImageUrl(sourceUrl), page.key)
+  })
 
   if (urls.length === 0) {
     throw new ProviderContractError(
@@ -347,46 +375,23 @@ export async function resolvePixivChapterImageUrls(
   return urls
 }
 
-export function parsePixivImageUrlsFromHtml({
-  chapterHtml,
-}: ParseImageUrlsFromHtmlInput): Promise<string[]> {
-  const imageUrls = Array.from(
-    chapterHtml.matchAll(/https?:\/\/[^"'\s<>]+/gi),
-    (match) => match[0].replace(/&amp;/gi, "&")
-  ).flatMap((candidate) => {
-    try {
-      const normalized = normalizePixivImageUrl(candidate)
-      return /\.(?:jpe?g|png|webp)$/i.test(new URL(normalized).pathname)
-        ? [normalized]
-        : []
-    } catch {
-      return []
-    }
-  })
-
-  if (imageUrls.length === 0) {
-    logger.debug(
-      "[pixiv-comic] No image URLs found in chapter HTML fallback parser"
-    )
-  }
-
-  return Promise.resolve([...new Set(imageUrls)])
-}
-
-export function processPixivImageUrls(urls: string[]): Promise<string[]> {
-  return Promise.resolve(filterValidImageUrls(urls))
-}
-
 export async function downloadPixivChapterImage(
   imageUrl: string,
-  opts?: {
+  opts: {
     signal?: AbortSignal
-    context?: Record<string, unknown>
+    dispatchContext?: PixivDispatchContext
+    runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
   }
-): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-  if (opts?.signal?.aborted) {
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (opts.signal?.aborted) {
     throw new Error("aborted")
   }
 
@@ -408,24 +413,36 @@ export async function downloadPixivChapterImage(
     requestHeaders[PIXIV_GRIDSHUFFLE_HEADER] = pixivKey
   }
 
-  const { data: rawData, mimeType } = await fetchImageWithStallDetection(
-    sourceImageUrl,
-    {
-      integrationId: "pixiv-comic",
-      signal: opts?.signal,
-      rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, "image"),
-      skipRateLimit: opts?.skipRateLimit,
-      onBytesReceived: opts?.onBytesReceived,
-      assertUrlAllowed: assertPixivRequestUrl,
-      init: {
-        credentials: "include",
-        headers: requestHeaders,
-      },
-    }
-  )
+  const {
+    data: rawData,
+    mimeType,
+    liveResourceLease,
+  } = await fetchImageWithStallDetection(sourceImageUrl, {
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-image-cdn",
+    signal: opts.signal,
+    rateLimitPolicy: opts.runtime.rateLimitSettings.image,
+    rateLimitService: opts.runtime.rateLimitService,
+    skipRateLimit: opts.skipRateLimit,
+    onBytesReceived: opts.onBytesReceived,
+    assertUrlAllowed: assertPixivImageUrl,
+    init: {
+      credentials: "include",
+      headers: requestHeaders,
+    },
+    liveResourceLedger: opts.liveResourceLedger,
+  })
   const downloadedImage = pixivKey
-    ? await descramblePixivImage(rawData, mimeType, pixivKey, sourceImageUrl)
-    : { data: rawData, mimeType }
+    ? await descramblePixivImage(
+        rawData,
+        mimeType,
+        pixivKey,
+        sourceImageUrl,
+        opts.signal,
+        opts.liveResourceLedger,
+        liveResourceLease
+      )
+    : { data: rawData, mimeType, liveResourceLease }
   const filename =
     new URL(sourceImageUrl).pathname.split("/").filter(Boolean).pop() ||
     "image.jpg"
@@ -438,4 +455,43 @@ export async function downloadPixivChapterImage(
   })
 
   return { ...downloadedImage, filename }
+}
+
+export async function downloadPixivCoverImage(
+  imageUrl: string,
+  opts: {
+    signal?: AbortSignal
+    dispatchContext?: PixivDispatchContext
+    runtime: ChapterRuntimeData
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
+  }
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  const sourceImageUrl = normalizePixivImageUrl(imageUrl)
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(sourceImageUrl, {
+      integrationId: "pixiv-comic",
+      endpointId: "pixiv-comic-image-cdn",
+      signal: opts.signal,
+      rateLimitService: opts.runtime.rateLimitService,
+      skipRateLimit: opts.skipRateLimit,
+      onBytesReceived: opts.onBytesReceived,
+      assertUrlAllowed: assertPixivImageUrl,
+      init: { credentials: "include" },
+      liveResourceLedger: opts.liveResourceLedger,
+    })
+  return {
+    data,
+    mimeType,
+    liveResourceLease,
+    filename:
+      new URL(sourceImageUrl).pathname.split("/").filter(Boolean).pop() ||
+      "cover.jpg",
+  }
 }

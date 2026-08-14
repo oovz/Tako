@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "providerId": "pixiv-comic",
+  "data": {
+    "dispatchContext": {
+      "taskId": "fixture-task-1"
+    }
+  }
+}

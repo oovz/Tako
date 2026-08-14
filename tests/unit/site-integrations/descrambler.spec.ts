@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { descramblePixivImage } from "@/src/site-integrations/pixiv-comic/descrambler"
+import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 function makePngHeader(width: number, height: number): ArrayBuffer {
   const bytes = new Uint8Array(24)
@@ -174,8 +176,8 @@ describe("descramblePixivImage", () => {
       "https://example.com/img_gridshuffle32:32.png"
     )
 
-    expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0)
-    expect(context.putImageData).toHaveBeenCalledTimes(1)
+    expect(context.drawImage).toHaveBeenCalledTimes(16)
+    expect(context.putImageData).not.toHaveBeenCalled()
     expect(canvas.convertToBlob).toHaveBeenCalledWith({
       type: "image/png",
       quality: undefined,
@@ -256,7 +258,8 @@ describe("descramblePixivImage", () => {
 
     // With MIN_GRID_DIMENSION=8, a 256×256 image → 32×32=1024 cells (under cap)
     // Should descramble normally, not return original buffer
-    expect(context.putImageData).toHaveBeenCalledTimes(1)
+    expect(context.drawImage).toHaveBeenCalledTimes(1024)
+    expect(context.putImageData).not.toHaveBeenCalled()
   })
 
   it("rejects images whose descrambling grid exceeds the safety cap", async () => {
@@ -309,6 +312,57 @@ describe("descramblePixivImage", () => {
     )
 
     // 128:128 on 128×128 → 1×1=1 cell. Should descramble, not cap to 64.
-    expect(context.putImageData).toHaveBeenCalledTimes(1)
+    expect(context.drawImage).toHaveBeenCalledTimes(1)
+    expect(context.putImageData).not.toHaveBeenCalled()
+  })
+
+  it("reserves the dimension-derived output peak and rejects an oversized Blob before reading it", async () => {
+    const width = 8_192
+    const height = 4_096
+    const pixelCount = width * height
+    const buffer = makePngHeader(width, height)
+    const expectedOutputReservation = pixelCount * 4
+    const expectedConvertUsage =
+      buffer.byteLength + pixelCount * 8 + expectedOutputReservation
+    const ledger = new OffscreenLiveResourceLedger(expectedConvertUsage)
+    const sourceLease = ledger.reserve(buffer.byteLength, "Pixiv source")
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(1))
+    let usageDuringConvert = 0
+    const convertToBlob = vi.fn(async () => {
+      usageDuringConvert = ledger.getUsedBytes()
+      return {
+        size: MAX_IMAGE_BYTES + 1,
+        type: "image/png",
+        arrayBuffer,
+      } as unknown as Blob
+    })
+    const bitmap = createMockBitmap(width, height)
+    ;(globalThis as { createImageBitmap?: unknown }).createImageBitmap = vi.fn(
+      async () => bitmap
+    )
+    ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = class {
+      getContext() {
+        return { drawImage: vi.fn() }
+      }
+      convertToBlob = convertToBlob
+    }
+
+    await expect(
+      descramblePixivImage(
+        buffer,
+        "image/png",
+        "test-key",
+        "https://example.com/img_gridshuffle8192:4096.png",
+        undefined,
+        ledger,
+        sourceLease
+      )
+    ).rejects.toThrow(`${MAX_IMAGE_BYTES} byte limit`)
+
+    expect(expectedOutputReservation).toBeGreaterThan(MAX_IMAGE_BYTES)
+    expect(usageDuringConvert).toBe(expectedConvertUsage)
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(bitmap.close).toHaveBeenCalledOnce()
+    expect(ledger.getUsedBytes()).toBe(0)
   })
 })

@@ -2,7 +2,7 @@ import type { Chapter } from "../../types/chapter"
 import type { SeriesMetadata } from "../../types/series-metadata"
 import type { SeriesChapterListResult } from "../../types/site-integrations"
 import logger from "@/src/runtime/logger"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import {
   parseChapterNumber,
   sanitizeLabel,
@@ -20,25 +20,32 @@ import {
 } from "./shared"
 import { ProviderContractError } from "../provider-contract-error"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 async function fetchPixivWorkV5(
   workId: string,
+  rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<PixivOfficialWork> {
   const endpoint = `${PIXIV_BASE_URL}/api/app/works/v5/${workId}`
-  const response = await rateLimitedFetchForIntegration(
-    "pixiv-comic",
-    endpoint,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-works-api",
+    url: endpoint,
+    scope: "chapter",
+    init: {
       credentials: "include",
       headers: createPixivAppHeaders(),
       signal,
-    }
-  )
+    },
+    rateLimitService,
+  })
 
   if (!response.ok) {
-    throw new Error(`Pixiv Comic works/v5 failed: HTTP ${response.status}`)
+    throw Object.assign(
+      new Error(`Pixiv Comic works/v5 failed: HTTP ${response.status}`),
+      { status: response.status }
+    )
   }
 
   const payload = (await readResponseJson(response)) as PixivWorkV5Response
@@ -55,24 +62,30 @@ async function fetchPixivWorkV5(
 async function fetchPixivEpisodesV2(
   workId: string,
   order: "asc" | "desc" = "asc",
+  rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<
   NonNullable<NonNullable<PixivEpisodesV2Response["data"]>["episodes"]>
 > {
   const endpoint = `${PIXIV_BASE_URL}/api/app/works/${workId}/episodes/v2?order=${order}`
-  const response = await rateLimitedFetchForIntegration(
-    "pixiv-comic",
-    endpoint,
-    "chapter",
-    {
+  const response = await integrationHttpClient.request({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-episodes-api",
+    url: endpoint,
+    scope: "chapter",
+    init: {
       credentials: "include",
       headers: createPixivAppHeaders(),
       signal,
-    }
-  )
+    },
+    rateLimitService,
+  })
 
   if (!response.ok) {
-    throw new Error(`Pixiv Comic episodes/v2 failed: HTTP ${response.status}`)
+    throw Object.assign(
+      new Error(`Pixiv Comic episodes/v2 failed: HTTP ${response.status}`),
+      { status: response.status }
+    )
   }
 
   const payload = (await readResponseJson(response)) as PixivEpisodesV2Response
@@ -151,10 +164,11 @@ function resolvePixivCoverUrl(work: PixivOfficialWork): string | undefined {
 
 export async function fetchPixivSeriesMetadata(
   seriesId: string,
+  rateLimitService: RateLimitService,
   _language?: string,
   signal?: AbortSignal
 ): Promise<SeriesMetadata> {
-  const work = await fetchPixivWorkV5(seriesId, signal)
+  const work = await fetchPixivWorkV5(seriesId, rateLimitService, signal)
 
   return {
     title: sanitizeLabel(work.name || "") || `Pixiv Comic ${seriesId}`,
@@ -168,10 +182,16 @@ export async function fetchPixivSeriesMetadata(
 
 export async function fetchPixivChapterList(
   seriesId: string,
+  rateLimitService: RateLimitService,
   _language?: string,
   signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
-  const episodes = await fetchPixivEpisodesV2(seriesId, "asc", signal)
+  const episodes = await fetchPixivEpisodesV2(
+    seriesId,
+    "asc",
+    rateLimitService,
+    signal
+  )
   const chapterById = new Map<string, Chapter>()
   const duplicateChapterIds = new Set<string>()
 

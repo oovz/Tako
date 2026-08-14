@@ -4,8 +4,10 @@ import type {
   ServiceWorkerIntegration,
 } from "@/src/types/site-integrations"
 import { preparePixivDispatchContext } from "./background-context"
+import type { PixivDispatchContext } from "./contracts/dispatch-context"
 import { fetchPixivChapterList, fetchPixivSeriesMetadata } from "./series-api"
 import { parseWorkIdFromUrl } from "./page-context"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function resolvePixivSeriesDataError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
@@ -16,6 +18,7 @@ async function resolvePixivSeriesData(input: {
   seriesId?: string
   language?: string
   signal?: AbortSignal
+  rateLimitService: RateLimitService
 }): Promise<SeriesDataResolutionResult> {
   const workId = input.seriesId ?? parseWorkIdFromUrl(input.seriesUrl)
   if (!workId) {
@@ -23,8 +26,18 @@ async function resolvePixivSeriesData(input: {
   }
 
   const [metadataResult, chapterListResult] = await Promise.allSettled([
-    fetchPixivSeriesMetadata(workId, undefined, input.signal),
-    fetchPixivChapterList(workId, undefined, input.signal),
+    fetchPixivSeriesMetadata(
+      workId,
+      input.rateLimitService,
+      undefined,
+      input.signal
+    ),
+    fetchPixivChapterList(
+      workId,
+      input.rateLimitService,
+      undefined,
+      input.signal
+    ),
   ])
 
   return {
@@ -46,18 +59,17 @@ async function resolvePixivSeriesData(input: {
   }
 }
 
-const background: ServiceWorkerIntegration = {
+const background: ServiceWorkerIntegration<PixivDispatchContext> = {
   name: "Pixiv Comic Background",
   series: {
-    fetchSeriesMetadata: fetchPixivSeriesMetadata,
-    fetchChapterList: fetchPixivChapterList,
     resolveSeriesData: resolvePixivSeriesData,
   },
   prepareDispatchContext: (input) =>
     Promise.resolve(preparePixivDispatchContext(input.taskId)),
 }
 
-export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "pixiv-comic",
-  background,
-}
+export const backgroundSiteAdapter: BackgroundSiteAdapter<PixivDispatchContext> =
+  {
+    id: "pixiv-comic",
+    background,
+  }

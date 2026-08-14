@@ -1,19 +1,52 @@
 import { describe, expect, it, vi } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import {
   makeHtmlResponse,
   makePngHeader,
   mockRateLimitedFetch,
+  rateLimitService,
+  rateLimitSettings,
+  siteIntegrationSettingsReader,
 } from "./pixiv-comic-test-setup"
+import { backgroundSiteAdapter } from "@/src/site-integrations/pixiv-comic/background-runtime"
+import { offscreenSiteAdapter as offscreenSiteAdapterImpl } from "@/src/site-integrations/pixiv-comic/offscreen-runtime"
 
 export function registerPixivComicBackgroundImageCases(): void {
+  const runtime = { rateLimitService, rateLimitSettings }
+  const resolveChapterPlan = (
+    chapter: Parameters<
+      typeof offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan
+    >[0],
+    input?: Record<string, unknown>
+  ) =>
+    offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan(chapter, {
+      ...(input ?? {}),
+      runtime,
+    } as Parameters<
+      typeof offscreenSiteAdapterImpl.offscreen.chapter.resolveChapterPlan
+    >[1])
+  const downloadImage = (url: string, input?: Record<string, unknown>) =>
+    offscreenSiteAdapterImpl.offscreen.chapter.downloadImage(url, {
+      ...(input ?? {}),
+      runtime,
+    } as Parameters<
+      typeof offscreenSiteAdapterImpl.offscreen.chapter.downloadImage
+    >[1])
+
+  const offscreenSiteAdapter = {
+    offscreen: {
+      chapter: {
+        resolveChapterPlan,
+        downloadImage,
+      },
+    },
+  }
+
   describe("Pixiv Comic integration", () => {
     it("prepares task-scoped context without reading browser cookies", async () => {
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
       const context =
-        await pixivComicIntegration.background.prepareDispatchContext?.({
+        await backgroundSiteAdapter.background.prepareDispatchContext?.({
           taskId: "task-1",
           seriesKey: "pixiv-comic#9012",
           chapter: {
@@ -25,6 +58,7 @@ export function registerPixivComicBackgroundImageCases(): void {
           settingsSnapshot: {
             ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "pixiv-comic"),
           },
+          siteIntegrationSettingsReader,
         })
 
       expect(context).toEqual({
@@ -43,12 +77,9 @@ export function registerPixivComicBackgroundImageCases(): void {
         arrayBuffer: async () => payload,
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const result =
-        await pixivComicIntegration.background.chapter.downloadImage(
-          "https://img-comic.pximg.net/a/b/c/page01.webp"
-        )
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://img-comic.pximg.net/a/b/c/page01.webp"
+      )
 
       expect(result.mimeType).toBe("image/webp")
       expect(result.filename).toBe("page01.webp")
@@ -66,11 +97,8 @@ export function registerPixivComicBackgroundImageCases(): void {
           new TextEncoder().encode("<html>captcha</html>").buffer,
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-
       await expect(
-        pixivComicIntegration.background.chapter.downloadImage(
+        offscreenSiteAdapter.offscreen.chapter.downloadImage(
           "https://img-comic.pximg.net/a/b/c/page01.webp"
         )
       ).rejects.toThrow("Unsupported MIME type: text/html")
@@ -132,17 +160,13 @@ export function registerPixivComicBackgroundImageCases(): void {
           }),
         })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const urls =
-        await pixivComicIntegration.background.chapter.resolveImageUrls?.(
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "100",
             url: "https://comic.pixiv.net/viewer/stories/100",
           },
-          {
-            taskId: "task-100",
-          }
+          { dispatchContext: { taskId: "task-100" } }
         )
 
       expect(urls).toEqual([
@@ -150,8 +174,8 @@ export function registerPixivComicBackgroundImageCases(): void {
         "https://img-comic.pximg.net/chapters/100/002.jpg#tmdPixivKey=azI%3D",
       ])
 
-      const calls = mockRateLimitedFetch.mock.calls.map((call) =>
-        String(call[0])
+      const calls = mockRateLimitedFetch.mock.calls.map(
+        (call) => (call[0] as { url: string }).url
       )
       expect(
         calls.some((url) =>
@@ -164,7 +188,7 @@ export function registerPixivComicBackgroundImageCases(): void {
         )
       ).toBe(true)
       for (const call of mockRateLimitedFetch.mock.calls) {
-        const requestInit = call[2] as RequestInit | undefined
+        const requestInit = (call[0] as { init?: RequestInit }).init
         expect(requestInit?.credentials).toBe("include")
         expect(new Headers(requestInit?.headers).has("cookie")).toBe(false)
       }
@@ -210,23 +234,54 @@ export function registerPixivComicBackgroundImageCases(): void {
           }),
         })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const urls =
-        await pixivComicIntegration.background.chapter.resolveImageUrls?.(
+      const { imageUrls: urls } =
+        await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "103",
             url: "https://comic.pixiv.net/viewer/stories/103",
           },
-          {
-            taskId: "task-103",
-          }
+          { dispatchContext: { taskId: "task-103" } }
         )
 
       expect(urls).toEqual([
         "https://img-comic.pximg.net/chapters/103/001.jpg#tmdPixivKey=azE%3D",
         "https://img-comic.pximg.net/chapters/103/002.jpg#tmdPixivKey=azI%3D",
       ])
+    })
+
+    it("rejects a mixed page list instead of omitting a page without an image URL", async () => {
+      mockRateLimitedFetch
+        .mockResolvedValueOnce(
+          makeHtmlResponse(
+            '<script src="/_next/static/build-mixed/_buildManifest.js"></script>'
+          )
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ pageProps: { salt: "salt-value" } }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            pages: [
+              {
+                url: "https://img-comic.pximg.net/chapters/107/001.jpg",
+                key: "k1",
+              },
+              { key: "missing-url" },
+            ],
+          }),
+        })
+
+      await expect(
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
+          {
+            id: "107",
+            url: "https://comic.pixiv.net/viewer/stories/107",
+          },
+          { dispatchContext: { taskId: "task-107" } }
+        )
+      ).rejects.toThrow("page image URL is missing")
     })
 
     it("normalizes relative API image paths against Pixiv and rejects untrusted origins", async () => {
@@ -256,19 +311,19 @@ export function registerPixivComicBackgroundImageCases(): void {
           }),
         })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
       await expect(
-        pixivComicIntegration.background.chapter.resolveImageUrls?.(
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "104",
             url: "https://comic.pixiv.net/viewer/stories/104",
           },
-          { taskId: "task-104" }
+          { dispatchContext: { taskId: "task-104" } }
         )
-      ).resolves.toEqual([
-        "https://comic.pixiv.net/c/q90_gridshuffle32:32/images/page/104/1.jpg?token=abc#tmdPixivKey=azE%3D",
-      ])
+      ).resolves.toEqual({
+        imageUrls: [
+          "https://comic.pixiv.net/c/q90_gridshuffle32:32/images/page/104/1.jpg?token=abc#tmdPixivKey=azE%3D",
+        ],
+      })
 
       mockRateLimitedFetch
         .mockResolvedValueOnce({
@@ -283,12 +338,12 @@ export function registerPixivComicBackgroundImageCases(): void {
         })
 
       await expect(
-        pixivComicIntegration.background.chapter.resolveImageUrls?.(
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "105",
             url: "https://comic.pixiv.net/viewer/stories/105",
           },
-          { taskId: "task-104" }
+          { dispatchContext: { taskId: "task-104" } }
         )
       ).rejects.toThrow("Untrusted Pixiv image URL")
     })
@@ -303,9 +358,7 @@ export function registerPixivComicBackgroundImageCases(): void {
         arrayBuffer: async () => makePngHeader(),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      await pixivComicIntegration.background.chapter.downloadImage(
+      await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://img-comic.pximg.net/a/b/c/page01.webp#tmdPixivKey=azE%3D"
       )
     })
@@ -349,12 +402,9 @@ export function registerPixivComicBackgroundImageCases(): void {
         }
       )
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const result =
-        await pixivComicIntegration.background.chapter.downloadImage(
-          "https://img-comic.pximg.net/c/gridshuffle32:32/page.gif#tmdPixivKey=azE%3D"
-        )
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://img-comic.pximg.net/c/gridshuffle32:32/page.gif#tmdPixivKey=azE%3D"
+      )
 
       expect(result.mimeType).toBe("image/png")
       expect(new Uint8Array(result.data)).toEqual(new Uint8Array([9, 8, 7]))
@@ -382,7 +432,7 @@ export function registerPixivComicBackgroundImageCases(): void {
         }
       }
 
-      let reconstructedPixels = new Uint8ClampedArray()
+      const reconstructedPixels = new Uint8ClampedArray(width * height * 4)
       vi.stubGlobal(
         "createImageBitmap",
         vi.fn(async () => ({ width, height, close: vi.fn() }))
@@ -396,16 +446,45 @@ export function registerPixivComicBackgroundImageCases(): void {
           ) {}
           getContext() {
             return {
-              drawImage: vi.fn(),
+              drawImage: vi.fn(
+                (
+                  _bitmap: unknown,
+                  sourceX: number,
+                  sourceY: number,
+                  copyWidth?: number,
+                  copyHeight?: number,
+                  destX?: number,
+                  destY?: number
+                ) => {
+                  if (
+                    copyWidth === undefined ||
+                    copyHeight === undefined ||
+                    destX === undefined ||
+                    destY === undefined
+                  ) {
+                    return
+                  }
+                  for (let y = 0; y < copyHeight; y += 1) {
+                    for (let x = 0; x < copyWidth; x += 1) {
+                      const sourceOffset =
+                        ((sourceY + y) * width + sourceX + x) * 4
+                      const destinationOffset =
+                        ((destY + y) * width + destX + x) * 4
+                      reconstructedPixels.set(
+                        sourcePixels.subarray(sourceOffset, sourceOffset + 4),
+                        destinationOffset
+                      )
+                    }
+                  }
+                }
+              ),
               getImageData: () => ({ data: sourcePixels, width, height }),
               createImageData: () => ({
                 data: new Uint8ClampedArray(width * height * 4),
                 width,
                 height,
               }),
-              putImageData: (imageData: { data: Uint8ClampedArray }) => {
-                reconstructedPixels = imageData.data.slice()
-              },
+              putImageData: vi.fn(),
             }
           }
           convertToBlob(options: { type: string }) {
@@ -424,12 +503,9 @@ export function registerPixivComicBackgroundImageCases(): void {
         arrayBuffer: async () => makePngHeader(),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const result =
-        await pixivComicIntegration.background.chapter.downloadImage(
-          "https://img-comic.pximg.net/c/gridshuffle32:32/page.webp#tmdPixivKey=azE%3D"
-        )
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://img-comic.pximg.net/c/gridshuffle32:32/page.webp#tmdPixivKey=azE%3D"
+      )
       const output = new Uint8Array(result.data)
       const markers = Array.from({ length: 4 }, (_, row) =>
         Array.from(
@@ -460,26 +536,24 @@ export function registerPixivComicBackgroundImageCases(): void {
         arrayBuffer: async () => makePngHeader(),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
       const abortController = new AbortController()
-      await pixivComicIntegration.background.chapter.downloadImage(
+      await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://img-comic.pximg.net/a/b/c/page01.jpg?foo=bar#tmdPixivKey=azE%3D",
         {
           signal: abortController.signal,
-          context: {
+          dispatchContext: {
             taskId: "task-image",
           },
         }
       )
 
       expect(mockRateLimitedFetch).toHaveBeenCalledTimes(1)
-      const [, scope, requestInit] = mockRateLimitedFetch.mock.calls[0] as [
-        string,
-        string,
-        RequestInit,
-      ]
-      expect(scope).toBe("image")
+      const request = mockRateLimitedFetch.mock.calls[0]?.[0] as {
+        scope: string
+        init: RequestInit
+      }
+      const requestInit = request.init
+      expect(request.scope).toBe("image")
       expect(requestInit.credentials).toBe("include")
       expect(requestInit).not.toHaveProperty("referrer")
       expect(requestInit).not.toHaveProperty("referrerPolicy")
@@ -500,18 +574,14 @@ export function registerPixivComicBackgroundImageCases(): void {
         arrayBuffer: async () => makePngHeader(),
       })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      await pixivComicIntegration.background.chapter.downloadImage(
+      await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/136645/jEPBvqSTmG1KdJJGxzSS/1.jpg?20230208180812#tmdPixivKey=azE%3D"
       )
 
       expect(mockRateLimitedFetch).toHaveBeenCalledTimes(1)
-      const [requestedUrl] = mockRateLimitedFetch.mock.calls[0] as [
-        string,
-        string,
-        RequestInit,
-      ]
+      const requestedUrl = (
+        mockRateLimitedFetch.mock.calls[0]?.[0] as { url: string }
+      ).url
       expect(requestedUrl).toBe(
         "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/136645/jEPBvqSTmG1KdJJGxzSS/1.jpg?20230208180812"
       )
@@ -558,25 +628,31 @@ export function registerPixivComicBackgroundImageCases(): void {
           }),
         })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      await pixivComicIntegration.background.chapter.resolveImageUrls?.(
+      await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
         {
           id: "101",
           url: "https://comic.pixiv.net/viewer/stories/101",
         },
-        {
-          taskId: "task-101",
-        }
+        { dispatchContext: { taskId: "task-101" } }
       )
 
       const readV4Call = mockRateLimitedFetch.mock.calls.find((call) =>
-        String(call[0]).includes("/api/app/episodes/101/read_v4")
+        (call[0] as { url: string }).url.includes(
+          "/api/app/episodes/101/read_v4"
+        )
       )
       expect(readV4Call).toBeDefined()
 
-      const requestInit = readV4Call?.[2] as
-        { credentials?: RequestCredentials; headers?: HeadersInit } | undefined
+      const requestInit = (
+        readV4Call?.[0] as
+          | {
+              init?: {
+                credentials?: RequestCredentials
+                headers?: HeadersInit
+              }
+            }
+          | undefined
+      )?.init
       expect(requestInit?.credentials).toBe("include")
       const headers = requestInit?.headers
       const clientTime =
@@ -629,23 +705,22 @@ export function registerPixivComicBackgroundImageCases(): void {
           }),
         })
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      await pixivComicIntegration.background.chapter.resolveImageUrls?.(
+      await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
         {
           id: "102",
           url: "https://comic.pixiv.net/viewer/stories/102",
         },
-        {
-          taskId: "task-102",
-        }
+        { dispatchContext: { taskId: "task-102" } }
       )
 
       const readV4Call = mockRateLimitedFetch.mock.calls.find((call) =>
-        String(call[0]).includes("/api/app/episodes/102/read_v4")
+        (call[0] as { url: string }).url.includes(
+          "/api/app/episodes/102/read_v4"
+        )
       )
-      const requestInit = readV4Call?.[2] as
-        { headers?: HeadersInit } | undefined
+      const requestInit = (
+        readV4Call?.[0] as { init?: { headers?: HeadersInit } } | undefined
+      )?.init
       const headers = requestInit?.headers
       const actualHash =
         headers instanceof Headers
@@ -676,15 +751,13 @@ export function registerPixivComicBackgroundImageCases(): void {
         })
       vi.stubGlobal("crypto", {})
 
-      const { pixivComicIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
       await expect(
-        pixivComicIntegration.background.chapter.resolveImageUrls?.(
+        offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
           {
             id: "106",
             url: "https://comic.pixiv.net/viewer/stories/106",
           },
-          { taskId: "task-106" }
+          { dispatchContext: { taskId: "task-106" } }
         )
       ).rejects.toThrow(
         "Web Crypto subtle API is required for Pixiv API authentication"

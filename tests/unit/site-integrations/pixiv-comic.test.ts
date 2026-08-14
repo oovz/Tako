@@ -9,30 +9,34 @@ import {
   createPixivAppHeaders,
   sanitizePixivHtmlText,
 } from "@/src/site-integrations/pixiv-comic/shared"
-vi.mock("@/src/runtime/rate-limit", () => {
-  const rateLimitedFetchByUrlScope = vi.fn(
-    async (
-      url: string,
-      _scope?: unknown,
-      _init?: RequestInit,
-      _policy?: unknown
-    ) => {
-      throw new Error(`Unexpected fetch: ${url}`)
-    }
-  )
+import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
-  return {
-    rateLimitedFetchByUrlScope,
-    rateLimitedFetchForIntegration: (
-      _integrationId: string,
-      url: string,
-      scope: unknown,
-      init?: RequestInit,
-      policy?: unknown
-    ) => rateLimitedFetchByUrlScope(url, scope, init, policy),
-    getRateLimitPolicyFromContext: vi.fn(() => undefined),
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+const rateLimitSettings = {
+  image: { concurrency: 1, delayMs: 0 },
+  chapter: { concurrency: 1, delayMs: 0 },
+}
+const mockIntegrationRequest = vi.fn(
+  async (input: { url?: string; init?: RequestInit }): Promise<Response> => {
+    throw new Error(`Unexpected fetch: ${input.url}`)
   }
-})
+)
+
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: {
+    request: (input: { url?: string; init?: RequestInit }) =>
+      mockIntegrationRequest(input),
+  },
+  fetchSharedResource: vi.fn(),
+}))
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -44,14 +48,33 @@ vi.mock("@/src/runtime/logger", () => ({
 }))
 
 async function importModule() {
-  return await import("@/src/site-integrations/pixiv-comic/series-api")
+  const module = await import("@/src/site-integrations/pixiv-comic/series-api")
+  return {
+    ...module,
+    fetchPixivSeriesMetadata: (
+      seriesId: string,
+      language?: string,
+      signal?: AbortSignal
+    ) =>
+      module.fetchPixivSeriesMetadata(
+        seriesId,
+        rateLimitService,
+        language,
+        signal
+      ),
+    fetchPixivChapterList: (
+      seriesId: string,
+      language?: string,
+      signal?: AbortSignal
+    ) =>
+      module.fetchPixivChapterList(
+        seriesId,
+        rateLimitService,
+        language,
+        signal
+      ),
+  }
 }
-
-async function importChapterApi() {
-  return await import("@/src/site-integrations/pixiv-comic/chapter-api")
-}
-
-const { rateLimitedFetchByUrlScope } = await import("@/src/runtime/rate-limit")
 
 const PIXIV_WORK_ID = "9999001"
 const PIXIV_WORK_V5_RESPONSE = {
@@ -109,9 +132,9 @@ const PIXIV_EPISODES_V2_RESPONSE = {
 }
 
 function mockFetchResponse(url: string, body: unknown, status = 200): void {
-  vi.mocked(rateLimitedFetchByUrlScope).mockImplementationOnce(
-    async (reqUrl: string) => {
-      if (reqUrl === url) {
+  vi.mocked(mockIntegrationRequest).mockImplementationOnce(
+    async (input: { url?: string }) => {
+      if (input.url === url) {
         return {
           ok: true,
           status,
@@ -125,7 +148,7 @@ function mockFetchResponse(url: string, body: unknown, status = 200): void {
           },
         } as Response
       }
-      throw new Error(`Unexpected fetch URL: ${reqUrl}`)
+      throw new Error(`Unexpected fetch URL: ${input.url}`)
     }
   )
 }
@@ -336,63 +359,15 @@ describe("Pixiv Comic site integration", () => {
   })
 
   describe("chapter-api utilities", () => {
-    it("parses image URLs from chapter HTML", async () => {
-      const { parsePixivImageUrlsFromHtml } = await importChapterApi()
-      const html =
-        '<div><img src="https://img-comic.pximg.net/page1.jpg"><img src="https://public-img-comic.pximg.net/page2.png"></div>'
-      const urls = await parsePixivImageUrlsFromHtml({
-        chapterId: "70001",
-        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
-        chapterHtml: html,
-      })
-      expect(urls).toEqual([
-        "https://img-comic.pximg.net/page1.jpg",
-        "https://public-img-comic.pximg.net/page2.png",
-      ])
+    it("rejects malformed chapter plans instead of filtering provider output", () => {
+      expect(() =>
+        ChapterImagePlanSchema.parse({
+          imageUrls: ["https://img.pixiv.net/page1.jpg", "not-a-url"],
+        })
+      ).toThrow()
     })
 
-    it("preserves signed query strings and ignores unrelated image origins in HTML fallback", async () => {
-      const { parsePixivImageUrlsFromHtml } = await importChapterApi()
-      const urls = await parsePixivImageUrlsFromHtml({
-        chapterId: "70001",
-        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
-        chapterHtml: [
-          '<img src="https://img-comic.pximg.net/page1.jpg?Expires=1&amp;Signature=abc">',
-          '<img src="https://attacker.example/tracker.png?chapter=70001">',
-          '<img src="https://comic.pixiv.net/assets/logo.png">',
-          '<img src="http://img-comic.pximg.net/insecure.jpg">',
-        ].join(""),
-      })
-
-      expect(urls).toEqual([
-        "https://img-comic.pximg.net/page1.jpg?Expires=1&Signature=abc",
-      ])
-    })
-
-    it("returns empty array when no image URLs are found in HTML", async () => {
-      const { parsePixivImageUrlsFromHtml } = await importChapterApi()
-      const urls = await parsePixivImageUrlsFromHtml({
-        chapterId: "70001",
-        chapterUrl: "https://comic.pixiv.net/viewer/stories/70001",
-        chapterHtml: "<div>no images</div>",
-      })
-      expect(urls).toEqual([])
-    })
-
-    it("filters invalid image URLs via processPixivImageUrls", async () => {
-      const { processPixivImageUrls } = await importChapterApi()
-      const urls = await processPixivImageUrls([
-        "https://img.pixiv.net/page1.jpg",
-        "not-a-url",
-        "https://img.pixiv.net/page2.png",
-      ])
-      expect(urls).toEqual([
-        "https://img.pixiv.net/page1.jpg",
-        "https://img.pixiv.net/page2.png",
-      ])
-    })
-
-    it("offscreen image downloads use the outer image scheduler without re-entering the URL limiter", async () => {
+    it("offscreen image downloads use the declared image endpoint client", async () => {
       const { offscreenSiteAdapter } =
         await import("@/src/site-integrations/pixiv-comic/offscreen-runtime")
       const payload = new Uint8Array([1, 2, 3]).buffer
@@ -408,15 +383,25 @@ describe("Pixiv Comic site integration", () => {
           }) as unknown as Response
       )
       vi.stubGlobal("fetch", fetch)
+      mockIntegrationRequest.mockImplementationOnce(
+        async (input: { url?: string; init?: RequestInit }) =>
+          fetch(input.url ?? "", {
+            credentials: "include",
+            ...input.init,
+          })
+      )
 
       const image = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://img-comic.pximg.net/path/page.jpg",
-        { signal: new AbortController().signal, context: undefined }
+        {
+          signal: new AbortController().signal,
+          runtime: { rateLimitService, rateLimitSettings },
+        }
       )
 
       expect(image.filename).toBe("page.jpg")
       expect(image.mimeType).toBe("image/jpeg")
-      expect(rateLimitedFetchByUrlScope).not.toHaveBeenCalled()
+      expect(mockIntegrationRequest).toHaveBeenCalledOnce()
       const [, init] = fetch.mock.calls.at(-1) ?? []
       expect(init).toMatchObject({
         credentials: "include",
@@ -428,25 +413,6 @@ describe("Pixiv Comic site integration", () => {
       ).toBe(false)
       expect((init as RequestInit | undefined)?.signal).toBeInstanceOf(
         AbortSignal
-      )
-    })
-
-    it("builds the aggregate integration from the production runtime adapters", async () => {
-      const { pixivComicIntegration, pixivComicBackgroundIntegration } =
-        await import("@/src/site-integrations/pixiv-comic")
-      const { backgroundSiteAdapter } =
-        await import("@/src/site-integrations/pixiv-comic/background-runtime")
-      const { offscreenSiteAdapter } =
-        await import("@/src/site-integrations/pixiv-comic/offscreen-runtime")
-
-      expect(pixivComicIntegration.background).toBe(
-        pixivComicBackgroundIntegration
-      )
-      expect(pixivComicBackgroundIntegration.series).toBe(
-        backgroundSiteAdapter.background.series
-      )
-      expect(pixivComicBackgroundIntegration.chapter).toBe(
-        offscreenSiteAdapter.offscreen.chapter
       )
     })
   })

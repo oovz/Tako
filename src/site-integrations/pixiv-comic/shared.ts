@@ -1,5 +1,9 @@
-import type { RateLimitPolicySnapshot } from "@/src/runtime/rate-limit"
+import type {
+  RateLimitPolicySnapshot,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
+import { ProviderContractError } from "../provider-contract-error"
 
 export const PIXIV_BASE_URL = "https://comic.pixiv.net"
 export const PIXIV_EPISODES_API_URL = `${PIXIV_BASE_URL}/api/app/episodes`
@@ -59,6 +63,8 @@ export function cachePixivBuildId(taskId: string, buildId: string): void {
 export type PixivResolveContext = {
   taskId?: string
   rateLimitSettings?: RateLimitPolicySnapshot
+  rateLimitService: RateLimitService
+  signal?: AbortSignal
 }
 
 export type PixivReadV4Page = {
@@ -128,7 +134,7 @@ export function normalizePixivImageUrl(value: string): string {
   try {
     parsed = new URL(value, PIXIV_IMAGE_REFERRER)
   } catch {
-    throw new Error("Invalid Pixiv image URL")
+    throw new ProviderContractError("Invalid Pixiv image URL")
   }
 
   const isPixivComicDeliveryPath =
@@ -139,7 +145,9 @@ export function normalizePixivImageUrl(value: string): string {
     parsed.protocol !== "https:" ||
     (!isPixivComicDeliveryPath && !isPixivImageHost)
   ) {
-    throw new Error(`Untrusted Pixiv image URL: ${parsed.origin}`)
+    throw new ProviderContractError(
+      `Untrusted Pixiv image URL: ${parsed.origin}`
+    )
   }
 
   return parsed.toString()

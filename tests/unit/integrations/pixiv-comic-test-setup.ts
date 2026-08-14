@@ -1,6 +1,24 @@
 import { vi } from "vitest"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 
 export const mockRateLimitedFetch = vi.fn()
+export const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+export const rateLimitSettings = {
+  image: { concurrency: 1, delayMs: 0 },
+  chapter: { concurrency: 1, delayMs: 0 },
+}
+export const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
+  getAll: vi.fn(async () => ({})),
+  getForSite: vi.fn(async () => ({})),
+}
 
 export function makePngHeader(width = 32, height = 32): ArrayBuffer {
   const bytes = new Uint8Array(24)
@@ -33,39 +51,15 @@ vi.mock("@/src/runtime/logger", () => ({
 }))
 
 vi.mock("@/src/runtime/rate-limit", () => ({
-  rateLimitedFetchForIntegration: (
-    _integrationId: string,
-    ...args: unknown[]
-  ) => mockRateLimitedFetch(...args),
-  rateLimitedFetchByUrlScope: (...args: unknown[]) =>
-    mockRateLimitedFetch(...args),
-  getRateLimitPolicyFromContext: vi.fn(() => undefined),
   getRateLimitPolicyFromSnapshot: vi.fn(() => undefined),
 }))
 
-vi.mock("@/src/site-integrations/manifest", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/src/site-integrations/manifest")>()
-  return {
-    ...original,
-    getPatternBySiteIntegrationId: vi.fn(() => ({
-      domains: ["comic.pixiv.net"],
-      seriesMatches: ["/works/*"],
-    })),
-  }
-})
-
-vi.mock("@/src/types/site-integrations", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/src/types/site-integrations")>()
-  return {
-    ...original,
-    IntegrationContextValidator: {
-      validateContentScriptContext: vi.fn(),
-      validateBackgroundOrOffscreenContext: vi.fn(),
-    },
-  }
-})
+vi.mock("@/src/site-integrations/http-client", () => ({
+  integrationHttpClient: {
+    request: (...args: unknown[]) => mockRateLimitedFetch(...args),
+  },
+  fetchSharedResource: (...args: Parameters<typeof fetch>) => fetch(...args),
+}))
 
 export type BrowserGlobalsSnapshot = {
   windowValue: typeof global.window

@@ -1,5 +1,10 @@
+import {
+  PixivDispatchContextSchema,
+  type PixivDispatchContext,
+} from "./contracts/dispatch-context"
+
 export function preparePixivDispatchContext(
   taskId: string
-): Record<string, unknown> {
-  return { taskId }
+): PixivDispatchContext {
+  return PixivDispatchContextSchema.parse({ taskId })
 }
