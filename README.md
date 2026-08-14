@@ -43,13 +43,13 @@ copyright controls.
 
 ## Supported sites
 
-| Site                                        | Notes                                               |
-| ------------------------------------------- | --------------------------------------------------- |
-| [MangaDex](https://mangadex.org)            | Disabled by default; requests optional HTTPS access |
-| [Pixiv Comic](https://comic.pixiv.net)      | Supported                                           |
-| [Shonen Jump+](https://shonenjumpplus.com)  | Start from a numeric `/episode/{id}` page           |
-| [Manhuagui](https://www.manhuagui.com)      | Supported                                           |
-| [Comic Nettai](https://www.comicnettai.com) | Supported                                           |
+| Site                                        | Maturity | Notes                                               |
+| ------------------------------------------- | -------- | --------------------------------------------------- |
+| [MangaDex](https://mangadex.org)            | Stable   | Disabled by default; requests optional HTTPS access |
+| [Pixiv Comic](https://comic.pixiv.net)      | Stable   | Browser-session provider                            |
+| [Shonen Jump+](https://shonenjumpplus.com)  | Stable   | Start from a numeric `/episode/{id}` page           |
+| [Manhuagui](https://www.manhuagui.com)      | Stable   | Browser-session provider                            |
+| [Comic Nettai](https://www.comicnettai.com) | Stable   | Browser-session provider                            |
 
 The Shonen Jump+ homepage and `/series` catalog routes are not downloadable
 series contexts. For integration details or a new-site request, see the
@@ -98,16 +98,6 @@ pnpm test:unit
 pnpm test:integration
 pnpm test:e2e
 pnpm check:site-integrations
-pnpm audit --prod --audit-level=high
-```
-
-The full dependency-graph checker needs the JSON report and the audit process's
-exit code. Generate both before comparing the report with the reviewed baseline:
-
-```powershell
-pnpm audit --json | Out-File -Encoding utf8 dependency-audit.json
-$auditExit = $LASTEXITCODE
-pnpm check:dependency-audit -- dependency-audit.json .github/dependency-audit-baseline.json $auditExit
 ```
 
 Build and test artifacts are separated by mode:
@@ -121,19 +111,15 @@ Build and test artifacts are separated by mode:
 Only the production build is suitable for release. Test builds contain
 mode-specific state seeding or request routing and must not be distributed.
 
-The architecture is at the Phase 2 checkpoint with selected Phase 3 work in
-place. Queue and output state are durable, while the larger repository and
-transition-kernel extraction remains incomplete. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the working agreement and validation
-sequence.
-
 ## Runtime outline
 
 The Manifest V3 Service Worker owns durable state and privileged Chrome APIs.
 The Side Panel and Options page send validated commands and render stored
 projections. An offscreen document handles provider data, image processing,
 archive creation, File System Access writes, and Blob-backed handoff to Chrome
-Downloads. Provider code is registered from the typed site-integration manifest.
+Downloads. Provider definitions are validated from `definition.json` against
+`src/site-integrations/definition.schema.json`; generated registries connect the
+packaged provider runtimes to each browser context.
 
 See [Architecture](https://github.com/oovz/Tako/wiki/Architecture) for the job,
 restart, and native-output protocols.

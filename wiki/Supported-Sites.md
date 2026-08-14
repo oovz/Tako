@@ -13,10 +13,9 @@ integrations.
 | [Manhuagui](https://www.manhuagui.com)      | Stable   | On                                               | Fetched SSR HTML + packed chapter data                       |
 | [Comic Nettai](https://www.comicnettai.com) | Stable   | On                                               | Fetched SSR HTML + PUBLUS viewer                             |
 
-The bundled set can grow. New integrations begin as Experimental and move to
-Stable after deterministic regression fixtures and several days of live smoke
-testing. “Stable” describes observed reliability; it does not imply that the
-provider publishes an official API.
+All bundled integrations are Stable. Maturity describes the supported behavior
+of the current implementation; it is independent of whether an integration uses
+an official API, an unofficial browser-session API, or DOM/HTML scraping.
 
 For Shonen Jump+, open a numeric `/episode/{id}` page before opening Tako. The
 homepage and `/series` catalog routes do not expose the episode context required

@@ -236,27 +236,28 @@ until destination commit.
 
 ## Storage ownership
 
-| Store                    | Canonical data                                                                                                                                |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chrome.storage.local`   | queue/history, settings, queue revision, dispatch lease, pending native output identity, destination issues, pending Undo actions, migrations |
-| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                     |
-| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                     |
-| Runtime Port             | high-frequency active-task progress only                                                                                                      |
-| React state              | component/view state and chapter selection drafts for current UI interactions                                                                 |
+| Store                    | Canonical data                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chrome.storage.local`   | queue/history, settings, queue revision, dispatch lease, pending native output identity, destination issues, pending Undo actions, and migration epoch |
+| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                              |
+| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                              |
+| Runtime Port             | high-frequency active-task progress only                                                                                                               |
+| React state              | component/view state and chapter selection drafts for current UI interactions                                                                          |
 
 Large Blobs are never stored in Chrome storage.
 
 ## Site integrations
 
-Each manifest declares identity, maturity, shipped/default state, implementation
-type, match patterns, required origins, page-probe need, broad-permission need,
-capabilities, rate/timeout policies, and custom settings.
+Each provider `definition.json` declares identity, maturity, shipped/default
+state, implementation type, match patterns, required/optional origins,
+page-probe mode, capabilities, rate/timeout policies, endpoint policies, and
+custom settings. The JSON is validated against `definition.schema.json` and
+emitted into generated catalogs and context-specific registries.
 
 The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+,
-Manhuagui, and Comic Nettai. The set is extensible. New integrations begin
-Experimental and may become Stable after deterministic fixtures and several days
-of live smoke testing. Stability describes observed behavior, not API
-officiality.
+Manhuagui, and Comic Nettai, and all are Stable. Stability describes the
+supported current implementation, not API officiality or immunity from upstream
+site changes.
 
 MangaDex is disabled by default. Enabling it from Options requests optional
 `https://*/*` access for dynamic MangaDex@Home nodes. Runtime URL policy remains

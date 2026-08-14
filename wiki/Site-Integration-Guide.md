@@ -18,54 +18,23 @@ Use the term **site integration** and the field `siteIntegrationId`
 consistently. Provider-specific fields must not leak into shared queue/message
 contracts.
 
-## Manifest first
+## Definition first
 
-`src/site-integrations/manifest.ts` is the single registry. Every entry
-declares:
+`src/site-integrations/*/definition.json` is the source of truth for provider
+identity, maturity, URL patterns, origins, request policies, runtime surfaces,
+resolution strategies, page-probe mode, custom settings, and fixture paths.
+Every definition is validated against
+`src/site-integrations/definition.schema.json`; the generator then emits the
+typed catalog, context-specific runtime registries, page-probe registry, and
+permission inventory.
 
-```typescript
-interface SiteIntegrationManifest {
-  id: string
-  name: string
-  version: string
-  author: string
-  maturity: "experimental" | "stable"
-  shipped: boolean
-  enabledByDefault: boolean
-  implementationType:
-    "official-api" | "unofficial-api" | "dom-scraping" | "hybrid"
-
-  patterns: {
-    domains: string[]
-    seriesMatches: string[]
-    excludeMatches?: string[]
-  }
-  requiredOrigins: string[]
-  requiresPageProbe: boolean
-  requiresBroadHttpsPermission?: boolean
-  network?: {
-    credentialPolicies?: Array<{
-      purpose: string
-      mode: "include" | "omit"
-      originKind: "fixed" | "provider-issued"
-      origins: string[]
-    }>
-    sessionRefererRules?: SessionRefererRuleDeclaration[]
-  }
-
-  policyDefaults: {
-    image: { concurrency: number; delayMs: number }
-    chapter: { concurrency: number; delayMs: number }
-  }
-  handlesOwnRetries?: boolean
-  customSettings?: SettingsFieldSchema[]
-  runtimes: {
-    background: boolean
-    offscreen: boolean
-    dispatchContext: "none" | "optional" | "required"
-  }
-}
-```
+The current `definition.json` fields include `maturity`, `shipped`,
+`enabledByDefault`, `implementationType`, `volatility`, `authentication`,
+`patterns`, `requiredOrigins`, `optionalOrigins`, `policyDefaults`,
+`retryOwner`, `pageProbe` (`none`, `optional`, or `required`), `runtimes`,
+`resolution`, `endpointPolicies`, `dynamicOrigins`, `sessionRefererRules`,
+`customSettings`, and `fixtures`. Do not recreate a separate manifest or infer
+provider policy from generated output.
 
 `enabledByDefault` is the only fresh-profile default. A missing user override
 resolves from it everywhere: Options, active-tab detection, background dispatch,
@@ -73,23 +42,23 @@ generated registries, and tests. Do not duplicate a different fallback.
 
 Set a runtime flag to `true` only when that context has a real, bundled
 implementation. The generator must not create placeholder adapters just to
-satisfy a manifest shape.
+satisfy a definition shape.
 
-MangaDex is the current example of `requiresBroadHttpsPermission: true`. It is
-disabled by default; its Options enable gesture requests optional `https://*/*`.
-A denied/revoked permission leaves it unavailable. Broad browser permission
-never broadens the integration's runtime URL policy. `credentialPolicies` is
-currently descriptive validation and inventory metadata; the owning provider
-code remains the runtime request-role factory. `originKind: "provider-issued"`
-means a provider-issued dynamic origin (for example, a MangaDex At-Home host)
-validated by the owning provider's runtime policy, not arbitrary HTTPS access;
-the generated required-origin inventory is not necessarily exhaustive for that
-dynamic host set. The shared policy consumer is live today:
-`src/site-integrations/request-policy.ts` builds the endpoint policy and
-`src/site-integrations/http-client.ts` enforces origin, credential mode,
-redirect, response-type, and size limits for every provider request. New
-provider code must route all requests through `integrationHttpClient`; raw
-`fetch()` is prohibited.
+MangaDex is the current example of a provider with optional `https://*/*`
+access. It is disabled by default; its Options enable gesture requests that
+optional origin. A denied/revoked permission leaves it unavailable. Broad
+browser permission never broadens the integration's runtime URL policy. Each
+`endpointPolicies` entry declares credentials, redirects, response type, and
+response-size bounds; the owning provider code remains the runtime request-role
+factory. `originKind: "provider-issued"` means a provider-issued dynamic origin
+(for example, a MangaDex At-Home host) validated by the owning provider's
+runtime policy, not arbitrary HTTPS access; the generated required-origin
+inventory is not necessarily exhaustive for that dynamic host set. The shared
+policy consumer is live today: `src/site-integrations/request-policy.ts` builds
+the endpoint policy and `src/site-integrations/http-client.ts` enforces origin,
+credential mode, redirect, response-type, and size limits for every provider
+request. New provider code must route all requests through
+`integrationHttpClient`; raw `fetch()` is prohibited.
 
 ## Context-resolution hierarchy
 
@@ -257,12 +226,13 @@ interface SettingsFieldSchema {
 }
 ```
 
-Validate persisted values when a field is renamed or removed, and add a
-migration when the old value has a safe replacement.
+When a persisted custom-setting shape changes, add an automatic, versioned,
+one-time migration before switching the runtime validator to the new shape.
+Remove the legacy decoder after the migration epoch is no longer supported.
 
 ## Maturity and promotion
 
-New integrations begin `experimental`. They may become `stable` after:
+New integrations begin `experimental`. They normally become `stable` after:
 
 - deterministic parser/image/descrambler fixtures pass;
 - live smoke tests pass over several days;
@@ -270,30 +240,29 @@ New integrations begin `experimental`. They may become `stable` after:
 - unknown provider changes fail closed with a mapped message;
 - no known archive corruption or systematic extraction failure remains.
 
-Unofficial APIs, HTML parsing, and descrambling can be Stable after this
-evidence. The soak period supplements regression tests; it does not replace
-them.
+Unofficial APIs, HTML parsing, DOM scraping, and descrambling may all be Stable.
+Maturity describes the supported current implementation, not the likelihood that
+an upstream site will remain unchanged.
 
 ## Recommended implementation flow
 
-1. Add the manifest entry and runtime schemas.
+1. Add or update the provider `definition.json` and runtime schemas.
 2. Implement URL/API/fetched-HTML series resolution.
 3. Add a one-shot probe only if a fixture proves it is necessary.
 4. Implement offscreen chapter/image behavior through the shared request layer.
 5. Add deterministic unit fixtures, including locked/unavailable cases.
 6. Add mocked Side Panel/download E2E coverage.
 7. Add live smoke coverage when publicly testable.
-8. Regenerate registry artifacts; do not edit generated files manually.
+8. Run `pnpm generate:site-integrations` (or `pnpm check:site-integrations` to
+   verify generated output); never edit generated files manually.
 9. Inspect the built Chrome manifest and verify required versus optional
    origins.
 
 ## Validation commands
 
 ```powershell
-node scripts/generate-site-integration-registries.mjs --check
-pnpm exec tsc --noEmit
-pnpm exec vitest run --project unit
-pnpm build
+pnpm generate:site-integrations
+pnpm check:site-integrations
 ```
 
 Run site-specific live tests manually where access and automation policy permit.

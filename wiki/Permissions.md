@@ -28,8 +28,10 @@ substitute for those narrow application policies.
 ## `unlimitedStorage`
 
 Removes the normal quota from `chrome.storage.local`. Tako stores the durable
-queue, history, dispatch lease, pending output identity, destination issues,
-settings, and migrations locally in the browser profile.
+queue, history, dispatch lease, pending output identity, destination issues, and
+settings locally in the browser profile. Persisted schema changes use an
+automatic, versioned, one-time migration before the current runtime validators
+hydrate state.
 
 ## `offscreen`
 

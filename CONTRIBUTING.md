@@ -32,10 +32,6 @@ Build/test artifacts use three explicit modes:
 The deterministic and live artifacts must not be loaded as production
 extensions. Coverage instrumentation is limited to the deterministic E2E mode.
 
-The architecture is currently maintained as a substantial Phase 2 checkpoint
-with partial Phase 3 work. Do not describe Phase 3 as complete until the full
-transition-kernel, invariant, property, and differential-test exit gate is met.
-
 The E2E fixture defaults to Playwright's Chromium tip-of-tree channel. To use a
 compatible installed channel instead, set `TMD_TEST_E2E_BROWSER_CHANNEL` before
 running the tests. For example, an installed Edge channel can be selected with:
@@ -70,6 +66,7 @@ finishing:
 
 ```powershell
 pnpm lint
+pnpm check:architecture
 pnpm type-check
 pnpm format:check
 pnpm test:unit
