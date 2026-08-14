@@ -8,7 +8,7 @@
  * - `/api/viewer/pagination_readable_products`
  *
  * Image hosts (`cdn-ak-img.shonenjumpplus.com` and the gigaviewer CDN) are
- * NOT mocked here — Phase 3 covers them with pre-scrambled fixtures.
+ * NOT mocked here — download-workflow specs cover them with pre-scrambled fixtures.
  */
 
 import type { Route } from "@playwright/test"
@@ -110,7 +110,7 @@ export const registerShonenJumpPlusRoutes: RouteRegistrar = async (
   )
 
   // The series-cover URL intentionally uses Shonen Jump+'s production CDN
-  // hostname. Serve it deterministically in the Layer-1 context resolver
+  // hostname. Serve it deterministically in the context resolver
   // tests; chapter image reconstruction remains covered by the DNR-backed
   // local-server workflow tests.
   await context.route(

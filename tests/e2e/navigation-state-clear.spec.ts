@@ -2,7 +2,7 @@ import { expect, type BrowserContext } from "@playwright/test"
 import { test } from "./fixtures/extension"
 import {
   getSessionState,
-  initializeTabViaAction,
+  seedTabContext,
   openSidepanelHarness,
   reloadSidepanelHarness,
 } from "./fixtures/state-helpers"
@@ -10,7 +10,7 @@ import {
   MANGADEX_TEST_SERIES_URL,
   buildExampleUrl,
   buildMangadexUrl,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 import type { MangaPageState } from "../../src/types/tab-state"
 
 async function waitForTabStateCleared(
@@ -32,13 +32,11 @@ async function waitForTabStateCleared(
 test.describe("Navigation state management", () => {
   test("clears state when navigating from a supported page to an unsupported page", async ({
     context,
-    extensionId,
     page,
   }) => {
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "supported-to-unsupported-test",
@@ -83,10 +81,9 @@ test.describe("Navigation state management", () => {
     extensionId,
     page,
   }) => {
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "sidepanel-unsupported-test",

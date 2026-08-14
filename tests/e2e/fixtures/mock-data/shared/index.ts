@@ -2,7 +2,7 @@
  * @file index.ts
  * @description Barrel for cross-integration shared mock primitives.
  *
- * Phase-3 additions:
+ * Download-workflow additions:
  * - {@link SMALL_PNG_BYTES} / {@link cloneSmallPngBytes}: deterministic PNG
  *   bytes every integration's image route serves.
  */

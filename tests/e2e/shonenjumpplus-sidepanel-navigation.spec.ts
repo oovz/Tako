@@ -5,7 +5,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateCleared,
 } from "./fixtures/state-helpers"
-import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains"
+import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains-constants"
 import { ShonenJumpPlus } from "./fixtures/mock-data"
 
 test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {

@@ -6,13 +6,13 @@
  * to prevent regression of the cbz/zip bug.
  *
  * Bug Context: Prior to fix, changing defaultFormat in Options did not affect
- * actual downloads because SYNC_SETTINGS_TO_STATE only synced partial fields.
+ * actual downloads after the durable settings document changes.
  */
 
 import type { Page } from "@playwright/test"
 import { test, expect } from "./fixtures/extension"
 import { OptionsPageObject } from "./pages/options"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { getGlobalState } from "./fixtures/state-helpers"
 
 let optionsPage: Page

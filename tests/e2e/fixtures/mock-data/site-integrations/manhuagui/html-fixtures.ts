@@ -12,8 +12,8 @@
  *   that site-owned state untouched and waits for the user to consent and
  *   reload the page.
  *
- * Chapter-viewer HTML (packed image payload) is NOT synthesized at Layer 1.
- * Phase 3 extends this module with a `buildManhuaguiChapterPageHtml` helper
+ * Chapter-viewer HTML (packed image payload) is NOT synthesized in metadata fixtures.
+ * Download-workflow tests extend this module with a `buildManhuaguiChapterPageHtml` helper
  * that wraps the image URLs with `eval(function(p,a,c,k,e,d){…})(…)`.
  */
 
@@ -331,7 +331,7 @@ export function buildManhuaguiChapterPageHtml(
 </html>`
 }
 
-/** Backward-compatible alias for call sites from Phase-2 Layer-1 specs. */
+/** Alias retained for existing metadata-fixture call sites. */
 export const CHAPTER_PAGE_PLACEHOLDER_HTML = buildManhuaguiChapterPageHtml({
   seriesId: BASIC_SERIES.series.seriesId,
   chapterId: BASIC_CHAPTERS.chapters[0]!.id,

@@ -4,7 +4,7 @@ import {
   getTabId,
   openSidepanelHarness,
 } from "./fixtures/state-helpers"
-import { MANGADEX_BASE_URL } from "./fixtures/test-domains"
+import { MANGADEX_BASE_URL } from "./fixtures/test-domains-constants"
 import { Mangadex } from "./fixtures/mock-data"
 
 async function waitForTabSeriesTitle(

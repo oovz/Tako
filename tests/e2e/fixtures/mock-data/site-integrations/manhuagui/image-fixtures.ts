@@ -1,6 +1,6 @@
 /**
  * @file image-fixtures.ts
- * @description Manhuagui image-host metadata used by Phase-3
+ * @description Manhuagui image-host metadata used by download-workflow
  * download-workflow mocks.
  *
  * Images themselves are the shared 1x1 PNG; this module only centralizes

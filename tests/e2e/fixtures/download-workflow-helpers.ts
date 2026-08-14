@@ -1,6 +1,6 @@
 /**
  * @file download-workflow-helpers.ts
- * @description Shared helpers for Phase-3 `{integration}-download-workflow.spec.ts`.
+ * @description Shared helpers for `{integration}-download-workflow.spec.ts`.
  *
  * Every mocked download-workflow spec follows the same template:
  *
@@ -24,9 +24,14 @@
 
 import type { BrowserContext, Page } from "@playwright/test"
 import { expect } from "@playwright/test"
-import type { DownloadTaskState, GlobalAppState } from "@/src/types/queue-state"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import { waitForGlobalState } from "./state-helpers"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import {
+  focusTab,
+  type QueueTestState,
+  waitForActiveSeriesContextRevision,
+  waitForGlobalState,
+} from "./state-helpers"
 
 export type StoredSiteIntegrationSettings = Record<
   string,
@@ -195,9 +200,8 @@ export async function readSeededDirectoryFile(
 /**
  * Persist the download settings required to exercise the custom-folder
  * pipeline (destination = 'file-system-access', format = 'cbz', concurrency = 1) plus
- * any site-integration preferences the test needs. The SW is notified via
- * `SYNC_SETTINGS_TO_STATE` so the queue picks up the new values before the
- * next `START_DOWNLOAD`.
+ * any site-integration preferences the test needs. The background observes
+ * the durable settings write through its synchronous storage subscriber.
  */
 export async function persistCustomModeDownloadSettings(
   optionsPage: Page,
@@ -240,30 +244,6 @@ export async function persistCustomModeDownloadSettings(
         "settings:global": mergedSettings,
         siteIntegrationSettings: mergedSiteSettings,
       })
-
-      const issuedAt = Date.now()
-      const response = await chrome.runtime.sendMessage({
-        type: "SYNC_SETTINGS_TO_STATE",
-        commandId: crypto.randomUUID(),
-        issuedAt,
-        payload: { settings: mergedSettings },
-      })
-      if (
-        !response ||
-        typeof response !== "object" ||
-        response.success !== true
-      ) {
-        throw new Error(
-          `SYNC_SETTINGS_TO_STATE was rejected: ${
-            response &&
-            typeof response === "object" &&
-            "error" in response &&
-            typeof response.error === "string"
-              ? response.error
-              : "unknown error"
-          }`
-        )
-      }
 
       return {
         globalSettings: mergedSettings,
@@ -315,29 +295,6 @@ export async function persistBrowserModeDownloadSettings(
           ...(sitePatch ?? {}),
         },
       })
-      const issuedAt = Date.now()
-      const response = await chrome.runtime.sendMessage({
-        type: "SYNC_SETTINGS_TO_STATE",
-        commandId: crypto.randomUUID(),
-        issuedAt,
-        payload: { settings: mergedSettings },
-      })
-      if (
-        !response ||
-        typeof response !== "object" ||
-        response.success !== true
-      ) {
-        throw new Error(
-          `SYNC_SETTINGS_TO_STATE was rejected: ${
-            response &&
-            typeof response === "object" &&
-            "error" in response &&
-            typeof response.error === "string"
-              ? response.error
-              : "unknown error"
-          }`
-        )
-      }
       return mergedSettings
     },
     { sitePatch: siteSettingsPatch }
@@ -409,37 +366,107 @@ export async function startSingleChapterDownload(
   optionsPage: Page,
   input: StartDownloadInput
 ): Promise<string> {
-  const response = await optionsPage.evaluate(async (payload) => {
-    const issuedAt = Date.now()
-    return (await chrome.runtime.sendMessage({
-      type: "START_DOWNLOAD",
-      commandId: crypto.randomUUID(),
-      issuedAt,
-      payload: {
-        sourceTabId: payload.sourceTabId,
-        siteIntegrationId: payload.siteIntegrationId,
-        mangaId: payload.mangaId,
-        seriesTitle: payload.seriesTitle,
-        chapters: [
-          {
-            id: payload.chapter.id,
-            title: payload.chapter.title,
-            url: payload.chapter.url,
-            index: payload.chapter.index,
-            chapterLabel: payload.chapter.chapterLabel,
-            chapterNumber: payload.chapter.chapterNumber,
-            volumeLabel: payload.chapter.volumeLabel,
-            volumeNumber: payload.chapter.volumeNumber,
-            language: payload.chapter.language,
-          },
-        ],
-      },
-    })) as { success?: boolean; taskId?: string; error?: string }
-  }, input)
+  const extensionId = new URL(optionsPage.url()).hostname
+  const sidepanelPage = await optionsPage.context().newPage()
+  await sidepanelPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+    waitUntil: "domcontentloaded",
+  })
+  try {
+    // Opening the temporary Side Panel page activates an extension tab and
+    // starts an asynchronous background projection. Wait for that activation
+    // to stop owning the source window before reactivating the manga tab;
+    // otherwise the older Side Panel projection can land after the source
+    // activation and invalidate the snapshot captured below.
+    await sidepanelPage.bringToFront()
+    await expect
+      .poll(
+        () =>
+          optionsPage.evaluate(async (sourceTabId) => {
+            const sourceTab = await chrome.tabs.get(sourceTabId)
+            const stored = await chrome.storage.session.get(
+              "activeTabContextByWindow"
+            )
+            const projection = (
+              stored.activeTabContextByWindow as
+                Record<string, { activeTabId?: number }> | undefined
+            )?.[String(sourceTab.windowId)]
+            return (
+              sourceTab.active === false &&
+              projection?.activeTabId !== sourceTabId
+            )
+          }, input.sourceTabId),
+        { timeout: 15_000, intervals: [100] }
+      )
+      .toBe(true)
 
-  expect(response?.success).toBe(true)
-  expect(typeof response?.taskId).toBe("string")
-  return response.taskId as string
+    await focusTab(optionsPage.context(), input.sourceTabId)
+    const seriesRevision = await waitForActiveSeriesContextRevision(
+      optionsPage.context(),
+      input.sourceTabId
+    )
+    const snapshotIdentity = await optionsPage.evaluate(
+      async ({ sourceTabId, seriesRevision }) => {
+        const tab = await chrome.tabs.get(sourceTabId)
+        const stored = await chrome.storage.session.get(
+          "activeTabContextByWindow"
+        )
+        const projection = (
+          stored.activeTabContextByWindow as Record<
+            string,
+            {
+              revision?: number
+              context?: {
+                sourceUrl?: string
+                siteIntegrationId?: string
+                mangaId?: string
+              }
+            }
+          >
+        )?.[String(tab.windowId)]
+        if (
+          projection?.revision !== seriesRevision ||
+          typeof projection.context?.sourceUrl !== "string" ||
+          typeof projection.context.siteIntegrationId !== "string" ||
+          typeof projection.context.mangaId !== "string"
+        ) {
+          throw new Error("Active series snapshot changed before dispatch")
+        }
+        return {
+          sourceWindowId: tab.windowId,
+          sourceTabId,
+          sourceUrl: projection.context.sourceUrl,
+          siteIntegrationId: projection.context.siteIntegrationId,
+          seriesId: projection.context.mangaId,
+          seriesRevision,
+        }
+      },
+      { sourceTabId: input.sourceTabId, seriesRevision }
+    )
+    const response = await sidepanelPage.evaluate(
+      async (payload) => {
+        const issuedAt = Date.now()
+        return (await chrome.runtime.sendMessage({
+          target: "background",
+          type: "START_DOWNLOAD",
+          commandId: crypto.randomUUID(),
+          issuedAt,
+          payload: {
+            ...payload.snapshotIdentity,
+            selectedChapterIds: [payload.chapter.id],
+          },
+        })) as { success?: boolean; taskId?: string; error?: string }
+      },
+      { chapter: input.chapter, snapshotIdentity }
+    )
+
+    expect(response?.success, response?.error ?? JSON.stringify(response)).toBe(
+      true
+    )
+    expect(typeof response?.taskId).toBe("string")
+    return response.taskId as string
+  } finally {
+    await sidepanelPage.close()
+  }
 }
 
 /**
@@ -454,7 +481,7 @@ export async function waitForTerminalTask(
 ): Promise<DownloadTaskState> {
   const globalState = await waitForGlobalState(
     context,
-    (state: GlobalAppState) =>
+    (state: QueueTestState) =>
       state.downloadQueue.some(
         (task) =>
           task.id === taskId &&

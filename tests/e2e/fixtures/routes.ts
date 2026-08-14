@@ -10,7 +10,8 @@
  * 2. A small `example.com` catch-all for chapter URLs that intentionally
  *    bounce to the synthetic EXAMPLE_BASE_URL in specs.
  * 3. Invocation of every site integration's `RouteRegistrar` — one per
- *    supported integration in `SITE_INTEGRATION_MANIFESTS`. Registrars live
+ *    supported integration in the generated site integration catalog. Runtime
+ *    adapter lookup is static.
  *    next to their mock data at
  *    `tests/e2e/fixtures/mock-data/site-integrations/{id}/routes.ts`.
  *

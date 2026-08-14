@@ -6,7 +6,7 @@
  * The download pipeline touches two hosts:
  *
  *   1. `shonenjumpplus.com/episode/{id}` — episode HTML. The background
- *      integration fetches this via `rateLimitedFetchByUrlScope(chapter.url)`
+ *      integration fetches this via the declared endpoint client
  *      in offscreen and reads `<script id="episode-json">` to discover
  *      image URLs. The content-script-level chapter-list API endpoints
  *      (`/api/viewer/...`) also live on this host and are served here.
@@ -187,7 +187,7 @@ const shonenJumpPlusSiteHandler: MockRouteHandler = (req) => {
 
   // `/episode/{id}` or `/episode/{id}/...` — return HTML with
   // embedded episode-json containing mock pages so
-  // `resolveImageUrls` finds downloadable URLs.
+  // chapter-plan resolution finds downloadable URLs.
   const episodeMatch = pathname.match(/^\/episode\/(\d+)\/?$/)
   if (episodeMatch) {
     const episodeId = episodeMatch[1]

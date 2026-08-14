@@ -1,8 +1,9 @@
 import { test, expect } from "./fixtures/extension"
 import {
   getSessionState,
-  initializeTabViaAction,
+  seedTabContext,
   openSidepanelHarness,
+  waitForActiveSeriesContextRevision,
   waitForTabStateById,
   waitForGlobalState,
 } from "./fixtures/state-helpers"
@@ -11,7 +12,7 @@ import {
   MANGADEX_TEST_SERIES_URL,
   buildExampleUrl,
   buildMangadexUrl,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 
 const SERIES_URL = MANGADEX_TEST_SERIES_URL
 
@@ -41,10 +42,9 @@ test.describe("selection consistency across tabs", () => {
       { id: "chapter-2", url: buildExampleUrl("/ch2"), title: "Chapter 2" },
     ]
 
-    const tabIdA = await initializeTabViaAction(
+    const tabIdA = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "106937",
@@ -124,10 +124,9 @@ test.describe("chapter selection flow", () => {
       { id: "chapter-3", url: buildExampleUrl("/ch3"), title: "Chapter 3" },
     ]
 
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "106937",
@@ -145,6 +144,7 @@ test.describe("chapter selection flow", () => {
     })
 
     const sp = await openSidepanelHarness(context, extensionId, page)
+    await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
       timeout: 15000,
@@ -192,10 +192,9 @@ test.describe("chapter selection flow", () => {
       { id: "chapter-2", url: buildExampleUrl("/ch2"), title: "Chapter 2" },
     ]
 
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "selection-reset-series",
@@ -281,10 +280,9 @@ test.describe("chapter selection flow", () => {
       { id: "chapter-2", url: buildExampleUrl("/new-2"), title: "Chapter 2" },
     ]
 
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "no-new-quick-select",
@@ -339,10 +337,9 @@ test.describe("chapter selection flow", () => {
       },
     ]
 
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_LOCKED_SELECTION_SERIES_ID,

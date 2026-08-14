@@ -109,7 +109,7 @@ const HOMEPAGE_WITH_BUILD_ID_HTML = `<!DOCTYPE html>
  * Resolve a deterministic per-chapter page list for the given story id.
  * Story ids that match the known chapter datasets are mapped to their
  * chapter-number index; unknown ids get a single-page fallback so
- * `resolveImageUrls` always returns at least one URL.
+ * chapter-plan resolution always returns at least one URL.
  */
 function resolveMockPageCountForStory(storyId: string): number {
   const known = [...BASIC_CHAPTERS.chapters, ...SMALL_SERIES.chapters].find(

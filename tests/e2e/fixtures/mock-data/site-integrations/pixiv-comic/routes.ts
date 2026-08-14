@@ -2,9 +2,9 @@
  * @file routes.ts
  * @description Playwright route registrar for the Pixiv Comic integration.
  *
- * Layer-1 coverage: the page host (`comic.pixiv.net`) serves HTML, work
+ * Context-resolution coverage: the page host (`comic.pixiv.net`) serves HTML, work
  * metadata, and episode lists. Image hosts (`img-comic.pximg.net`) and the
- * Next.js `_next/data/*` reader endpoints are NOT mocked here — Phase 3
+ * Next.js `_next/data/*` reader endpoints are NOT mocked here — download-workflow
  * adds them alongside download-workflow specs.
  */
 

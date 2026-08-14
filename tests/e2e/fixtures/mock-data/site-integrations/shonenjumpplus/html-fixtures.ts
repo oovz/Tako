@@ -9,8 +9,8 @@
  * - `.js-readable-products-pagination[data-aggregate-id]` (for chapter list
  *   pagination calls)
  *
- * This Layer-1 fixture omits the scrambled-image payload (`pageStructure.pages`)
- * since Layer-1 e2e tests do not download images. Phase 3 extends the
+ * This metadata fixture omits the scrambled-image payload (`pageStructure.pages`)
+ * since metadata-focused E2E tests do not download images. Download-workflow tests extend the
  * episode-json builder with real page entries and scramble seeds.
  */
 
@@ -56,8 +56,8 @@ export function buildShonenJumpPlusEpisodePageHtml(
         thumbnailUri: options.thumbnailUri ?? "",
       },
       pageStructure: {
-        // Layer-1 mocks intentionally leave pages empty — download pipeline
-        // is exercised only in Phase 3 specs with pre-scrambled fixtures.
+        // Metadata mocks intentionally leave pages empty — download pipeline
+        // is exercised only in download-workflow specs with pre-scrambled fixtures.
         pages: [],
       },
     },

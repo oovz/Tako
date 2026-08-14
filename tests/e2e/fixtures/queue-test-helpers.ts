@@ -2,9 +2,11 @@ import type { BrowserContext, Worker } from "@playwright/test"
 
 import { seedDownloadQueueStateInContext } from "./state-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "../../../src/types/queue-state"
-import type { ChapterState } from "../../../src/types/tab-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type {
+  DownloadTaskState,
+  TaskChapter,
+} from "../../../src/domain/queue/state"
 
 function isBackgroundWorkerUrl(url: string): boolean {
   return (
@@ -14,15 +16,17 @@ function isBackgroundWorkerUrl(url: string): boolean {
 
 export function makeChapter(
   url: string,
-  status: ChapterState["status"]
-): ChapterState {
+  status: TaskChapter["status"],
+  index: number = 1
+): TaskChapter {
   return {
     id: url,
     url,
     title: url,
+    index,
     status,
     lastUpdated: Date.now(),
-  } as ChapterState
+  }
 }
 
 export function makeTask(

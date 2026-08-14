@@ -1,6 +1,6 @@
 /**
  * @file manhuagui-download-workflow.spec.ts
- * @description Phase-3 download-workflow coverage for the Manhuagui
+ * @description Download-workflow coverage for the Manhuagui
  * integration.
  *
  * This spec exercises the production chapter pipeline end-to-end without
@@ -24,7 +24,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
-import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains"
+import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 import { Manhuagui } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,

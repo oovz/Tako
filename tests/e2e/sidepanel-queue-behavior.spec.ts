@@ -11,8 +11,8 @@ import {
   makeTask,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
-import { buildExampleUrl } from "./fixtures/test-domains"
-import type { DownloadTaskState } from "../../src/types/queue-state"
+import { buildExampleUrl } from "./fixtures/test-domains-constants"
+import type { DownloadTaskState } from "../../src/domain/queue/state"
 
 const exampleRootUrl = buildExampleUrl("/")
 

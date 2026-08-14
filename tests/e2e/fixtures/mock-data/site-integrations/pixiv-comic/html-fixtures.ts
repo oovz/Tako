@@ -5,8 +5,8 @@
  * Pixiv Comic is a Next.js SPA — the content script only needs the work id
  * surfaced via canonical metadata (`<meta property="og:url">` or
  * `<link rel="canonical">`). The Next.js build id referenced in
- * `chapter-api.ts` is only required for chapter-image resolution (Phase 3);
- * Layer-1 mocks can omit it.
+ * `chapter-api.ts` is only required for chapter-image resolution in download-workflow tests;
+ * Context-resolution mocks can omit it.
  */
 
 import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
@@ -59,8 +59,8 @@ export const HOME_PAGE_HTML = `<!DOCTYPE html>
 </html>`
 
 /**
- * Viewer HTML shell used for `/viewer/stories/{id}` routes. Layer-1 mocks
- * do not need the embedded reader payload — Phase 3 extends this fixture
+ * Viewer HTML shell used for `/viewer/stories/{id}` routes. Context-resolution mocks
+ * do not need the embedded reader payload — download-workflow tests extend this fixture
  * with Next.js build-id markers and reader scripts.
  */
 export const VIEWER_PAGE_HTML = `<!DOCTYPE html>

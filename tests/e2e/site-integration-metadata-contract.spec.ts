@@ -9,7 +9,7 @@ import {
   MANHUAGUI_BASE_URL,
   PIXIV_COMIC_BASE_URL,
   SHONENJUMPPLUS_BASE_URL,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 import {
   Mangadex,
   Manhuagui,

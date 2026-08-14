@@ -5,7 +5,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateCleared,
 } from "./fixtures/state-helpers"
-import { COMICNETTAI_BASE_URL } from "./fixtures/test-domains"
+import { COMICNETTAI_BASE_URL } from "./fixtures/test-domains-constants"
 import { ComicNettai } from "./fixtures/mock-data"
 
 test.describe("Comic Nettai side panel navigation workflows (mocked)", () => {

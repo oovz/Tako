@@ -5,7 +5,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateCleared,
 } from "./fixtures/state-helpers"
-import { PIXIV_COMIC_BASE_URL } from "./fixtures/test-domains"
+import { PIXIV_COMIC_BASE_URL } from "./fixtures/test-domains-constants"
 import { PixivComic } from "./fixtures/mock-data"
 
 test.describe("Pixiv Comic side panel navigation workflows (mocked)", () => {
@@ -45,15 +45,15 @@ test.describe("Pixiv Comic side panel navigation workflows (mocked)", () => {
     await page.goto(work1Url, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
-    await expect(sp.locator("#root")).toBeVisible()
-    await page.bringToFront()
-
     await waitForTabSeriesTitle(
       context,
       tabId,
       PixivComic.BASIC_SERIES.series.seriesTitle
     )
+
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+    await page.bringToFront()
 
     await page.goto(PIXIV_COMIC_BASE_URL, { waitUntil: "domcontentloaded" })
     await waitForTabStateCleared(context, tabId)

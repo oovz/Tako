@@ -1,8 +1,8 @@
 import { test, expect } from "./fixtures/extension"
 import { seedDownloadQueueState } from "./fixtures/state-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "../../src/storage/default-settings"
-import type { DownloadTaskState } from "../../src/types/queue-state"
+import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
+import type { DownloadTaskState } from "../../src/domain/queue/state"
 import type { ChapterState } from "../../src/types/tab-state"
 
 function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
@@ -117,6 +117,7 @@ test.describe("Options Downloads history management", () => {
     const clearResult = await sidepanelPage.evaluate(async () => {
       const issuedAt = Date.now()
       return (await chrome.runtime.sendMessage({
+        target: "background",
         type: "CLEAR_ALL_HISTORY",
         commandId: crypto.randomUUID(),
         issuedAt,
@@ -130,7 +131,9 @@ test.describe("Options Downloads history management", () => {
     await sidepanelPage.close()
 
     expect(clearResult.success).toBe(false)
-    expect(clearResult.error).toContain("only available from Options page")
+    expect(clearResult.error).toBe(
+      "CLEAR_ALL_HISTORY is not authorized for sidepanel"
+    )
 
     const remainingStatuses = await page.evaluate(async () => {
       const result = await chrome.storage.local.get("downloadQueue")

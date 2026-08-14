@@ -1,6 +1,6 @@
 /**
  * @file pixiv-comic-download-workflow.spec.ts
- * @description Phase-3 download-workflow coverage for the Pixiv Comic
+ * @description Download-workflow coverage for the Pixiv Comic
  * integration.
  *
  * Exercises the full pipeline end-to-end without live network:
@@ -22,7 +22,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
-import { PIXIV_COMIC_BASE_URL } from "./fixtures/test-domains"
+import { PIXIV_COMIC_BASE_URL } from "./fixtures/test-domains-constants"
 import { PixivComic } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,

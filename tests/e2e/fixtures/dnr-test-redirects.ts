@@ -13,7 +13,7 @@
  *
  * Rule IDs are sourced from a dedicated test-only range (9_000 – 9_999) so
  * they never collide with production rules (e.g. image referer-rewrite
- * rules in `background-startup.ts` use ids outside this range).
+ * provider session-rule manager uses ids outside this range).
  */
 
 import type { Worker } from "@playwright/test"
@@ -53,7 +53,7 @@ export interface DnrRedirectRule {
    * offscreen document, popup, options page). This is critical for
    * deterministic sidepanel-activation specs: content-script fetches
    * from `mangadex.org` pages would otherwise be redirected to the
-   * mock server and race with the test's `INITIALIZE_TAB` payload,
+   * mock server and race with the test's seeded tab context,
    * clobbering synthetic series titles. Pass an explicit list here only
    * when a rule intentionally needs to apply to page-context requests.
    */
@@ -130,7 +130,7 @@ function assertTestRuleId(id: number): void {
  * options-page fetches. Restricting the scope keeps sidepanel-activation
  * specs deterministic: the content script's own `api.mangadex.org` fetch
  * fails (or goes unmocked) so it cannot clobber the test's synthetic
- * `INITIALIZE_TAB` payload with mock data.
+ * seeded tab context with mock data.
  *
  * A lower-priority block rule then rejects every other HTTP(S) request from
  * that origin. This prevents a new provider endpoint from turning a mocked

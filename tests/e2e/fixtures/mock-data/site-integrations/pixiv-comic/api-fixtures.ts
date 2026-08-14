@@ -6,7 +6,7 @@
  * `@/src/site-integrations/pixiv-comic/shared.ts` (`PixivWorkV5Response`,
  * `PixivEpisodesV2Response`). Keep this file synchronized with those types;
  * if Pixiv's API shape changes, unit tests will catch the drift first, then
- * the Layer-1 e2e specs, then live tests.
+ * context-resolution E2E specs, then live tests.
  */
 
 import { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"

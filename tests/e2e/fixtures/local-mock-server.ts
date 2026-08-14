@@ -7,7 +7,7 @@
  * Playwright's `context.route` intercepts fetches from pages, content
  * scripts, service workers, and extension pages (options, side panel).
  * It does NOT reliably intercept fetches from offscreen documents — and
- * our `resolveImageUrls` / `downloadImage` calls all run in offscreen
+ * our chapter-plan resolution / image-download calls all run in offscreen
  * (see `entrypoints/offscreen/main.ts`).
  *
  * To plug that hole we run a local HTTP server on a random ephemeral

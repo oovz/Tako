@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 import { assertTaskSucceeded } from "@/tests/e2e/fixtures/download-workflow-helpers"
 

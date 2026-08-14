@@ -1,7 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
-  initializeTabViaAction,
+  seedTabContext,
   openSidepanelHarness,
   openSidepanelViaChromeApi,
   setSessionState,
@@ -10,7 +10,7 @@ import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import {
   MANGADEX_TEST_SERIES_URL,
   buildExampleUrl,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 
 async function getActionTitle(
   context: import("@playwright/test").BrowserContext,
@@ -142,10 +142,18 @@ async function waitForSidepanelSeries(
 ): Promise<void> {
   await page.waitForFunction(
     async ({ title }) => {
-      const result = await chrome.storage.session.get("activeTabContext")
-      const state = result.activeTabContext as
-        { seriesTitle?: string } | undefined
-      return state?.seriesTitle === title
+      const [activeTab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      })
+      if (typeof activeTab?.windowId !== "number") return false
+
+      const result = await chrome.storage.session.get(
+        "activeTabContextByWindow"
+      )
+      const byWindow = result.activeTabContextByWindow as
+        Record<number, { context?: { seriesTitle?: string } }> | undefined
+      return byWindow?.[activeTab.windowId]?.context?.seriesTitle === title
     },
     { title: seriesTitle },
     { timeout: timeoutMs }
@@ -168,10 +176,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       { id: "chapter-2", url: "https://example.com/ch2", title: "Chapter 2" },
     ]
 
-    const tabId = await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "db692d58-4b13-4174-ae8c-30c515c0689c",
@@ -285,10 +292,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       { id: "chapter-2", url: "https://example.com/ch2", title: "Chapter 2" },
     ]
 
-    await initializeTabViaAction(
+    await seedTabContext(
       supportedPage,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "test-series-entrypoint",
@@ -352,10 +358,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       { id: "chapter-2", url: "https://example.com/ch2", title: "Chapter 2" },
     ]
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "test-series-refresh",
@@ -380,10 +385,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
     await page.reload({ waitUntil: "domcontentloaded" })
 
     // Re-initialize tab state after refresh
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "test-series-refresh",
@@ -422,10 +426,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       { id: "chapter-1", url: "https://example.com/ch1", title: "Chapter 1" },
     ]
 
-    await initializeTabViaAction(
+    await seedTabContext(
       supportedPage,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         // MangaDex emits the bare title UUID as its canonical series identity.
@@ -472,10 +475,9 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
       waitUntil: "domcontentloaded",
     })
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: "test-series-no-chapters",

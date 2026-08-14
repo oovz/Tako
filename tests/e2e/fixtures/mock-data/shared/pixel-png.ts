@@ -1,6 +1,6 @@
 /**
  * @file pixel-png.ts
- * @description Shared PNG byte fixtures used by Phase-3 e2e image routes.
+ * @description Shared PNG byte fixtures used by download-workflow image routes.
  *
  * Every site integration's mocked image host serves these bytes. The fixture
  * is deliberately tiny (1x1 transparent) so:

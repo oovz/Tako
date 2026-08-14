@@ -1,8 +1,8 @@
 import { test, expect } from "./fixtures/extension"
 import { seedDownloadQueueState } from "./fixtures/state-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "../../src/storage/default-settings"
-import type { DownloadTaskState } from "../../src/types/queue-state"
+import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
+import type { DownloadTaskState } from "../../src/domain/queue/state"
 import type { ChapterState } from "../../src/types/tab-state"
 
 function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
@@ -120,6 +120,50 @@ test.describe("Options UI behavior", () => {
         return result
       })
       .toEqual({ queuedTaskPresent: false, hasQueuedCancellationUndo: true })
+  })
+
+  test("Downloads tab states the task-wide scope of forgetting an unobservable download", async ({
+    page,
+    extensionId,
+  }) => {
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      { waitUntil: "domcontentloaded" }
+    )
+    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
+    await seedDownloadQueueState(page, [
+      makeTask("unobservable-options", "downloading", {
+        seriesTitle: "Unobservable Options",
+        errorCategory: "network_unavailable",
+        chapters: [
+          {
+            ...makeChapter("earlier-failure", "downloading"),
+            errorCategory: "network_unavailable",
+          },
+          {
+            ...makeChapter("erased-output", "downloading"),
+            errorCategory: "browser_download_unobservable",
+          },
+        ],
+      }),
+    ])
+
+    const taskCard = page
+      .getByRole("heading", { name: "Unobservable Options" })
+      .locator("xpath=ancestor::*[@aria-busy][1]")
+    await taskCard.getByRole("button", { name: "Cancel" }).click()
+
+    await expect(
+      taskCard.getByText("Forget all pending downloads for this task?")
+    ).toBeVisible()
+    await expect(
+      taskCard.getByText(
+        "The browser download can no longer be inspected. Forgetting it releases all of Tako's pending outputs for this task; files may be incomplete."
+      )
+    ).toBeVisible()
+    await expect(
+      taskCard.getByRole("button", { name: "Forget all downloads" })
+    ).toBeVisible()
   })
 
   test("Downloads tab shows retried badge and terminal timestamp labels for restarted tasks", async ({

@@ -25,7 +25,7 @@ import { registerPixivComicLocalServerHandlers } from "./mock-data/site-integrat
 import { registerShonenJumpPlusLocalServerHandlers } from "./mock-data/site-integrations/shonenjumpplus/local-server"
 import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comicnettai/local-server"
 import { registerTestRoutes } from "./routes"
-import { SITE_INTEGRATION_MANIFESTS } from "../../../src/site-integrations/manifest"
+import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
@@ -264,6 +264,7 @@ async function initializeDeterministicMockProfile(
         const response = await probePage.evaluate(
           async (payload) => {
             return await chrome.runtime.sendMessage({
+              target: "e2e",
               type: payload.messageType,
               payload: {
                 downloadQueue: [],
@@ -405,7 +406,7 @@ async function setupExtensionContext(
     path.join(os.tmpdir(), "tmd-playwright-")
   )
 
-  // Phase 3 download-workflow specs need to intercept offscreen-initiated
+  // Download-workflow specs need to intercept offscreen-initiated
   // fetches. Playwright's context.route doesn't cover those, so we spin up
   // a local HTTP mock server and install DNR redirect rules later to
   // steer specific external URLs at it.
@@ -497,8 +498,8 @@ async function setupExtensionContext(
       )
     }
 
-    if (shouldUseMockRoutes) {
-      const mockEnablement = Object.fromEntries(
+    if (shouldUseMockRoutes || shouldEnableLiveIntegrations) {
+      const testEnablement = Object.fromEntries(
         SITE_INTEGRATION_MANIFESTS.filter((manifest) => manifest.shipped).map(
           (manifest) => [manifest.id, true]
         )
@@ -506,46 +507,8 @@ async function setupExtensionContext(
       await initializeDeterministicMockProfile(
         context,
         extensionId,
-        mockEnablement
+        testEnablement
       )
-    }
-
-    if (shouldEnableLiveIntegrations) {
-      const liveEnablement = Object.fromEntries(
-        SITE_INTEGRATION_MANIFESTS.filter((manifest) => manifest.shipped).map(
-          (manifest) => [manifest.id, true]
-        )
-      )
-      const liveHarnessState = await backgroundWorker.evaluate(
-        async ({ enablement, wildcardOrigin }) => {
-          const hasWildcardPermission = await chrome.permissions.contains({
-            origins: [wildcardOrigin],
-          })
-          if (!hasWildcardPermission) {
-            throw new Error(
-              "The live-test extension build is missing its isolated wildcard host permission"
-            )
-          }
-
-          await chrome.storage.local.set({
-            siteIntegrationEnablement: enablement,
-          })
-          return { hasWildcardPermission, enablement }
-        },
-        {
-          enablement: liveEnablement,
-          wildcardOrigin: "https://*/*",
-        }
-      )
-
-      if (
-        !liveHarnessState.hasWildcardPermission ||
-        Object.values(liveHarnessState.enablement).some((enabled) => !enabled)
-      ) {
-        throw new Error(
-          "Failed to initialize the live integration test profile"
-        )
-      }
     }
 
     if (dnrRulesToInstall.length > 0) {

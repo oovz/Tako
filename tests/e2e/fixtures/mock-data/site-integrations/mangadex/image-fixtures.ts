@@ -1,7 +1,7 @@
 /**
  * @file image-fixtures.ts
  * @description MangaDex at-home server response builder + image host
- * configuration used by Phase-3 download-workflow mocks.
+ * configuration used by download-workflow mocks.
  *
  * The production MangaDex chapter-image pipeline looks up
  * `GET https://api.mangadex.org/at-home/server/{chapterId}` which returns:

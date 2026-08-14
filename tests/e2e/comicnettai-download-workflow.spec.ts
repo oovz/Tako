@@ -4,7 +4,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
-import { COMICNETTAI_BASE_URL } from "./fixtures/test-domains"
+import { COMICNETTAI_BASE_URL } from "./fixtures/test-domains-constants"
 import { ComicNettai } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,

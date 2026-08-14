@@ -1,6 +1,6 @@
 /**
  * @file mangadex-download-workflow.spec.ts
- * @description Phase-3 download-workflow coverage for the MangaDex
+ * @description Download-workflow coverage for the MangaDex
  * integration.
  *
  * Exercises the full pipeline end-to-end without live network:
@@ -22,7 +22,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
-import { MANGADEX_BASE_URL } from "./fixtures/test-domains"
+import { MANGADEX_BASE_URL } from "./fixtures/test-domains-constants"
 import { Mangadex } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,
@@ -145,7 +145,12 @@ test.describe("MangaDex download workflow (mocked)", () => {
 
       let sidepanel = await openSidepanelHarness(context, extensionId, page)
       try {
-        await expect(sidepanel.getByText(series.seriesTitle)).toBeVisible()
+        await expect(
+          sidepanel.getByRole("heading", {
+            level: 2,
+            name: series.seriesTitle,
+          })
+        ).toBeVisible()
         await sidepanel
           .getByRole("button", { name: /Select Chapters/i })
           .click()

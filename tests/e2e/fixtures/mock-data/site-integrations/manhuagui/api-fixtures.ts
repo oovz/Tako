@@ -1,6 +1,6 @@
 /**
  * @file api-fixtures.ts
- * @description Manhuagui script + packed-payload builders used by Phase-3
+ * @description Manhuagui script + packed-payload builders used by download-workflow
  * download-workflow mocks.
  *
  * Manhuagui's reader stack has two moving parts beyond the series HTML:

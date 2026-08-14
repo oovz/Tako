@@ -1,6 +1,6 @@
 /**
  * @file shonenjumpplus-download-workflow.spec.ts
- * @description Phase-3 download-workflow coverage for the Shonen Jump+
+ * @description Download-workflow coverage for the Shonen Jump+
  * integration.
  *
  * Exercises the pipeline end-to-end without live network:
@@ -11,7 +11,7 @@
  *
  * Regression targets:
  * - `extractImageUrlsFromEpisodeJsonScript` (HTML attribute decoding).
- * - `rateLimitedFetchByUrlScope(chapter.url)` returning HTML with an
+ * - the integration endpoint client fetching chapter HTML with an
  *   embedded episode-json script (not a separate JSON endpoint).
  * - Tile-based image reconstruction through `descrambleGigaviewerImage`.
  * - Archive output pixel integrity, not merely creation of a non-empty CBZ.
@@ -25,7 +25,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
-import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains"
+import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains-constants"
 import { ShonenJumpPlus } from "./fixtures/mock-data"
 import {
   assertTaskSucceeded,

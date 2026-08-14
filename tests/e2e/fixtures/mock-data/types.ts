@@ -8,7 +8,7 @@
 
 import type { BrowserContext } from "@playwright/test"
 import type { ChapterState } from "@/src/types/tab-state"
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 
 // ============================================================================
 // Site-Specific Integration Mock Data Types

@@ -3,7 +3,7 @@ import { waitForGlobalState, getTabId } from "./fixtures/state-helpers"
 import {
   MANGADEX_TEST_SERIES_URL,
   buildExampleUrl,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 import {
   makeChapter,
   makeTask,
@@ -11,7 +11,7 @@ import {
   getExtensionWorker,
 } from "./fixtures/queue-test-helpers"
 import { projectToQueueView } from "@/src/runtime/projection"
-import type { DownloadTaskState } from "../../src/types/queue-state"
+import type { DownloadTaskState } from "../../src/domain/queue/state"
 
 const exampleRootUrl = buildExampleUrl("/")
 

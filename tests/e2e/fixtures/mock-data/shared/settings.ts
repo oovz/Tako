@@ -6,7 +6,7 @@
  * configuration scenarios.
  */
 
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 
 // Note: Type annotations removed - these are flexible test fixtures
 // These settings presets are used for E2E tests with the Side Panel UI

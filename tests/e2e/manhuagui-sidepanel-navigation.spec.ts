@@ -6,7 +6,7 @@ import {
   waitForTabSeriesTitle,
   waitForTabStateCleared,
 } from "./fixtures/state-helpers"
-import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains"
+import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 import { Manhuagui } from "./fixtures/mock-data"
 
 test.describe("Manhuagui side panel navigation workflows (mocked)", () => {

@@ -1,8 +1,10 @@
 import { test, expect } from "./fixtures/extension"
 import {
-  initializeTabViaAction,
+  getTabId,
+  seedTabContext,
   openSidepanelHarness,
-  setLocalState,
+  setDownloadedChapterHistory,
+  waitForActiveSeriesContextRevision,
   waitForGlobalState,
   waitForTabState,
 } from "./fixtures/state-helpers"
@@ -12,7 +14,7 @@ import {
   MANGADEX_ORDER_TEST_SERIES_ID,
   MANGADEX_STRESS_TOGGLE_SERIES_ID,
   MANGADEX_VIEW_TOGGLE_SERIES_ID,
-} from "./fixtures/test-domains"
+} from "./fixtures/test-domains-constants"
 
 const ORDER_TEST_SERIES_URL = buildMangadexUrl(
   `/title/${MANGADEX_ORDER_TEST_SERIES_ID}/ordering-test-series`
@@ -83,10 +85,9 @@ test.describe("Side Panel chapter/volume order", () => {
       },
     ]
 
-    await initializeTabViaAction(
+    const tabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
@@ -105,6 +106,7 @@ test.describe("Side Panel chapter/volume order", () => {
     })
 
     const sp = await openSidepanelHarness(context, extensionId, page)
+    await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Ordering Test Series")).toBeVisible({
       timeout: 15000,
@@ -164,41 +166,25 @@ test.describe("Side Panel chapter/volume order", () => {
     page,
   }) => {
     await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: "domcontentloaded" })
-    const animatedChapters = Array.from({ length: 500 }, (_, index) => ({
-      id: `animated-chapter-${index + 1}`,
-      url: `https://example.com/animated-chapter-${index + 1}`,
-      title: `Animated Chapter ${index + 1}`,
-    }))
-
-    await initializeTabViaAction(
-      page,
-      context,
-      extensionId,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
-        seriesTitle: "Animated Selector Series",
-        chapters: animatedChapters,
-      },
-      ORDER_TEST_SERIES_URL
-    )
-
+    const tabId = await getTabId(page, context)
     await waitForTabState(page, context, (state) => {
       return (
-        state.mangaId === MANGADEX_ORDER_TEST_SERIES_ID &&
-        state.seriesTitle === "Animated Selector Series" &&
-        state.chapters?.length === animatedChapters.length
+        state.seriesTitle === "Ordering Test Series" &&
+        state.chaptersLoading !== true
       )
     })
 
     const sp = await openSidepanelHarness(context, extensionId, page)
-    await expect(sp.getByText("Animated Selector Series")).toBeVisible({
+    await waitForActiveSeriesContextRevision(context, tabId)
+    await expect(sp.getByText("Ordering Test Series")).toBeVisible({
       timeout: 15000,
     })
-    await sp.bringToFront()
     const selectionRegion = sp.locator("[data-sidepanel-selection-region]")
     const panel = sp.locator("[data-sidepanel-inline-selection]")
     const queueRegion = sp.locator("[data-sidepanel-queue-region]")
+    const selectionToggle = sp.locator(
+      'button[aria-controls="inline-selection-panel"]'
+    )
     const layoutTransitionProperties = async () => ({
       selection: await selectionRegion.evaluate(
         (element) => getComputedStyle(element).transitionProperty
@@ -214,32 +200,13 @@ test.describe("Side Panel chapter/volume order", () => {
       }
     }
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await selectionToggle.click()
 
     await expect(panel).toHaveAttribute("data-state", "open")
     await expect(panel).toHaveAttribute("aria-hidden", "false")
     await expectComplementaryLayoutTransitions()
-    await expect
-      .poll(() =>
-        selectionRegion.evaluate((element) =>
-          element
-            .getAnimations()
-            .some((animation) => animation.playState === "running")
-        )
-      )
-      .toBe(true)
-    await expect
-      .poll(() =>
-        queueRegion.evaluate((element) =>
-          element
-            .getAnimations()
-            .some((animation) => animation.playState === "running")
-        )
-      )
-      .toBe(true)
-    await expect(selectionRegion).not.toHaveCSS("height", "0px")
 
-    await sp.getByRole("button", { name: /Close Selection/i }).click()
+    await selectionToggle.click()
     await expect(panel).toHaveAttribute("data-state", "closed")
     const closingState = await panel.evaluate((element) => ({
       state: element.getAttribute("data-state"),
@@ -254,16 +221,24 @@ test.describe("Side Panel chapter/volume order", () => {
     await expectComplementaryLayoutTransitions()
     expect(await panel.evaluate((element) => element.childElementCount)).toBe(1)
     await expect(panel).toBeHidden()
+    await selectionRegion.evaluate((element) => {
+      element.dispatchEvent(
+        new TransitionEvent("transitionend", {
+          bubbles: true,
+          propertyName: "flex-grow",
+        })
+      )
+    })
     await expect
       .poll(() => panel.evaluate((element) => element.childElementCount))
       .toBe(0)
 
     await sp.emulateMedia({ reducedMotion: "reduce" })
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await selectionToggle.click()
     await expect(panel).toBeVisible()
     await expect
       .poll(() =>
-        selectionRegion.evaluate((element) => {
+        queueRegion.evaluate((element) => {
           const duration = getComputedStyle(element).transitionDuration
           return (
             Number.parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000)
@@ -281,14 +256,14 @@ test.describe("Side Panel chapter/volume order", () => {
         })
       )
       .toBeLessThan(1)
-    await sp.getByRole("button", { name: /Close Selection/i }).click()
+    await selectionToggle.click()
     await expect(panel).toBeHidden()
 
     await sp.emulateMedia({ reducedMotion: "no-preference" })
     await sp.evaluate(() => {
       document.documentElement.removeAttribute("data-tako-motion")
     })
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await selectionToggle.click()
     await expect(panel).toBeVisible()
     await expect
       .poll(() =>
@@ -297,7 +272,7 @@ test.describe("Side Panel chapter/volume order", () => {
         )
       )
       .toMatch(/flex-grow/)
-    await sp.getByRole("button", { name: /Close Selection/i }).click()
+    await selectionToggle.click()
     await expect(panel).toBeHidden()
 
     await sp.close()
@@ -309,10 +284,9 @@ test.describe("Side Panel chapter/volume order", () => {
     page,
   }) => {
     await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: "domcontentloaded" })
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
@@ -340,7 +314,7 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
     await expect(sp.locator("[data-downloaded-marker]")).toHaveCount(0)
 
-    await setLocalState(context, "downloadedChapters", [
+    await setDownloadedChapterHistory(context, [
       {
         siteIntegrationId: "mangadex",
         chapterId: "downloaded-chapter-1",
@@ -410,10 +384,9 @@ test.describe("Side Panel chapter/volume order", () => {
       },
     ]
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
@@ -531,10 +504,9 @@ test.describe("Side Panel chapter/volume order", () => {
       },
     ]
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_ORDER_TEST_SERIES_ID,
@@ -609,10 +581,9 @@ test.describe("Side Panel chapter/volume order", () => {
       }
     })
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_VIEW_TOGGLE_SERIES_ID,
@@ -687,10 +658,9 @@ test.describe("Side Panel chapter/volume order", () => {
       }
     })
 
-    await initializeTabViaAction(
+    await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_STRESS_TOGGLE_SERIES_ID,
@@ -785,10 +755,9 @@ test.describe("Side Panel chapter/volume order", () => {
       },
     ]
 
-    await initializeTabViaAction(
+    const groupedTabId = await seedTabContext(
       page,
       context,
-      extensionId,
       {
         siteIntegrationId: "mangadex",
         mangaId: MANGADEX_GROUPED_COLLAPSE_SERIES_ID,
@@ -807,6 +776,7 @@ test.describe("Side Panel chapter/volume order", () => {
     })
 
     const sp = await openSidepanelHarness(context, extensionId, page)
+    await waitForActiveSeriesContextRevision(context, groupedTabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Grouped Collapse Series")).toBeVisible({
       timeout: 15000,

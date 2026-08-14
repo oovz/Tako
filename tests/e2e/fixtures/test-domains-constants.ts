@@ -4,9 +4,9 @@
  *
  * This file MUST NOT import from `mock-data/` (or any module that imports
  * from it). Every integration's `routes.ts` / `api-fixtures.ts` reads from
- * here so the fixture graph stays acyclic. `test-domains.ts` re-exports
- * everything from this file for backward compatibility with callers that
- * predate the split.
+ * here so the fixture graph stays acyclic. Import these values directly from
+ * this module; route registration belongs to `routes.ts` and integration
+ * mock-data modules own their integration-specific exports.
  */
 
 import {

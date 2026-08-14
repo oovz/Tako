@@ -9,17 +9,30 @@
  */
 
 import { expect, type Page, type BrowserContext } from "@playwright/test"
-import { SESSION_STORAGE_KEYS } from "../../../src/runtime/storage-keys"
-import type {
-  DownloadTaskState,
-  GlobalAppState,
-} from "../../../src/types/queue-state"
+import {
+  LOCAL_STORAGE_KEYS,
+  SETTINGS_STORAGE_KEYS,
+} from "../../../src/runtime/storage-keys"
+import type { DownloadTaskState } from "../../../src/domain/queue/state"
+import { rebuildSeriesHistory } from "../../../src/domain/history/cleanup-policy"
+import type { DownloadedChapterRecord } from "../../../src/domain/history/types"
+import type { ExtensionSettings } from "../../../src/domain/settings/types"
 import type { MangaPageState } from "../../../src/types/tab-state"
-import { StateAction } from "../../../src/types/state-actions"
-import type { InitializeTabReadyPayload } from "../../../src/types/state-action-tab-payloads"
-import { MANGADEX_GENERIC_SERIES_URL } from "./test-domains"
+import type { ResolvedTabReadyContext } from "../../../src/types/resolved-tab-context"
+import { MANGADEX_GENERIC_SERIES_URL } from "./test-domains-constants"
 
-type InitializeTabActionPayload = Omit<InitializeTabReadyPayload, "context">
+type TabContextSeedPayload = Omit<
+  ResolvedTabReadyContext,
+  "context" | "sourceUrl"
+>
+
+export interface QueueTestState {
+  downloadQueue: DownloadTaskState[]
+  settings: ExtensionSettings
+  lastActivity: number
+}
+
+const E2E_SEED_TAB_CONTEXT_MESSAGE = "E2E_SEED_TAB_CONTEXT"
 
 function isBackgroundWorkerUrl(url: string): boolean {
   return (
@@ -82,6 +95,30 @@ export async function bindSidepanelHarness(
   boundPage: Page,
   options: SidepanelHarnessOptions = {}
 ): Promise<void> {
+  const tabId = await getTabId(boundPage, boundPage.context())
+  await sidepanelPage.bringToFront()
+  await sidepanelPage.evaluate((targetTabId) => {
+    document.documentElement.dataset.playwrightBoundActivation = ""
+    const listener = (activeInfo: { tabId: number }) => {
+      if (activeInfo.tabId !== targetTabId) return
+      document.documentElement.dataset.playwrightBoundActivation = "observed"
+      chrome.tabs.onActivated.removeListener(listener)
+    }
+    chrome.tabs.onActivated.addListener(listener)
+  }, tabId)
+  // Start observing before switching tabs. Waiting on the synthetic harness
+  // page after the switch can reactivate that page in Chromium, unlike a real
+  // Side Panel target, and overwrite the source-tab projection under test.
+  const activationObserved = sidepanelPage.waitForFunction(
+    () =>
+      document.documentElement.dataset.playwrightBoundActivation === "observed",
+    undefined,
+    { timeout: 5_000 }
+  )
+  await focusTab(boundPage.context(), tabId)
+  await activationObserved
+  // Leave the source tab active after all harness-page observation. The
+  // side-panel UI may now be inspected over CDP without changing its owner.
   await boundPage.bringToFront()
   if (options.returnFocusToSidepanel) {
     await sidepanelPage.bringToFront()
@@ -152,6 +189,7 @@ export async function openSidepanelHarness(
   await sidepanelPage
     .locator("#root")
     .waitFor({ state: "visible", timeout: 15_000 })
+  await sidepanelPage.waitForLoadState("load")
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
   return sidepanelPage
 }
@@ -165,14 +203,14 @@ export async function reloadSidepanelHarness(
   await sidepanelPage
     .locator("#root")
     .waitFor({ state: "visible", timeout: 15_000 })
+  await sidepanelPage.waitForLoadState("load")
   await bindSidepanelHarness(sidepanelPage, boundPage, options)
 }
 
-export async function initializeTabViaAction(
+export async function seedTabContext(
   page: Page,
   context: BrowserContext,
-  extensionId: string,
-  payload: InitializeTabActionPayload,
+  payload: TabContextSeedPayload,
   navigateToUrl: string = MANGADEX_GENERIC_SERIES_URL
 ): Promise<number> {
   const expectedSiteId = payload.siteIntegrationId
@@ -200,9 +238,7 @@ export async function initializeTabViaAction(
   }
 
   if (!expectedSiteId || !expectedSeriesId || !expectedSeriesTitle) {
-    throw new Error(
-      "initializeTabViaAction requires ready INITIALIZE_TAB payload with site+series fields"
-    )
+    throw new Error("seedTabContext requires site, series, and title fields")
   }
 
   const tabId = await getTabId(page, context)
@@ -210,105 +246,64 @@ export async function initializeTabViaAction(
     await page.goto(navigateToUrl, { waitUntil: "domcontentloaded" })
   }
   const worker = await getServiceWorker(context)
-  const readTargetProjection = () =>
-    worker.evaluate(async (targetTabId) => {
-      const tab = await chrome.tabs.get(targetTabId)
-      const session = await chrome.storage.session.get(
-        "activeTabContextByWindow"
-      )
-      const projections = session.activeTabContextByWindow as
-        | Record<
-            string,
-            {
-              activeTabId?: number
-              revision?: number
-              context?: {
-                loading?: boolean
-                chaptersLoading?: boolean
-              } | null
-            }
-          >
-        | undefined
-      const projection = projections?.[String(tab.windowId)]
-      return {
-        activeTabId: projection?.activeTabId,
-        chaptersLoading: projection?.context?.chaptersLoading === true,
-        loading: projection?.context?.loading === true,
-        revision: projection?.revision ?? -1,
-        tabComplete: tab.status === "complete",
-      }
-    }, tabId)
-
-  const sendInitAction = async (): Promise<void> => {
-    const ext = await context.newPage()
-    try {
-      await ext.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
-        waitUntil: "domcontentloaded",
-      })
-      const projectionBeforeFocus = await readTargetProjection()
-      // Keep the target tab active while the extension page sends the action.
-      // The production cache only publishes active-window context for an
-      // active target; Playwright can still evaluate the inactive sender page.
-      await focusTab(context, tabId)
-      await page.bringToFront()
-      await expect
-        .poll(
-          async () => {
-            const projection = await readTargetProjection()
-            return (
-              projection.tabComplete &&
-              projection.activeTabId === tabId &&
-              projection.revision > projectionBeforeFocus.revision &&
-              !projection.loading &&
-              !projection.chaptersLoading
-            )
-          },
-          { timeout: 15_000, intervals: [100] }
-        )
-        .toBe(true)
-
-      const response = await ext.evaluate(
-        async ({ tabId, payload, action }) => {
-          const issuedAt = Date.now()
-          return await chrome.runtime.sendMessage({
-            type: "STATE_ACTION",
-            action,
-            commandId: crypto.randomUUID(),
-            issuedAt,
-            payload: {
-              context: "ready",
-              ...payload,
+  const resolvedContext: ResolvedTabReadyContext = {
+    context: "ready",
+    sourceUrl: navigateToUrl,
+    ...payload,
+  }
+  const extensionId = new URL(worker.url()).host
+  const senderPage = await context.newPage()
+  try {
+    await senderPage.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
+      waitUntil: "domcontentloaded",
+    })
+    await focusTab(context, tabId)
+    await page.bringToFront()
+    await expect
+      .poll(
+        () =>
+          senderPage.evaluate(
+            async ({ targetTabId, expectedUrl }) => {
+              const tab = await chrome.tabs.get(targetTabId)
+              return (
+                tab.active === true &&
+                tab.status === "complete" &&
+                (tab.url ?? tab.pendingUrl) === expectedUrl
+              )
             },
-            tabId,
-            timestamp: issuedAt,
-          })
-        },
-        { tabId, payload, action: StateAction.INITIALIZE_TAB }
+            { targetTabId: tabId, expectedUrl: navigateToUrl }
+          ),
+        { timeout: 15_000, intervals: [100] }
       )
-      if (
-        !response ||
-        typeof response !== "object" ||
-        !("success" in response)
-      ) {
-        throw new Error(
-          "INITIALIZE_TAB returned an invalid background response"
-        )
+      .toBe(true)
+    const response = await senderPage.evaluate(
+      async ({ messageType, targetTabId, context: nextContext }) =>
+        (await chrome.runtime.sendMessage({
+          target: "e2e",
+          type: messageType,
+          payload: {
+            tabId: targetTabId,
+            context: nextContext,
+          },
+        })) as { success?: boolean; error?: string } | undefined,
+      {
+        messageType: E2E_SEED_TAB_CONTEXT_MESSAGE,
+        targetTabId: tabId,
+        context: resolvedContext,
       }
-      if (response.success !== true) {
-        throw new Error(
-          `INITIALIZE_TAB was rejected: ${
-            "error" in response && typeof response.error === "string"
-              ? response.error
-              : "unknown error"
-          }`
-        )
-      }
-    } finally {
-      await ext.close()
+    )
+    if (!response?.success) {
+      throw new Error(
+        response?.error ??
+          "E2E tab context seed adapter is unavailable; verify the mocked E2E build flag"
+      )
     }
+  } finally {
+    await senderPage.close()
   }
 
-  await sendInitAction()
+  await focusTab(context, tabId)
+  await page.bringToFront()
   await expect
     .poll(
       async () =>
@@ -316,22 +311,6 @@ export async function initializeTabViaAction(
           await getSessionState<MangaPageState>(context, `tab_${tabId}`)
         ),
       { timeout: 15_000, intervals: [100] }
-    )
-    .toBe(true)
-
-  await expect
-    .poll(
-      async () => {
-        const activeContext = await getSessionState<
-          MangaPageState | { seriesTitle?: string; mangaId?: string }
-        >(context, "activeTabContext")
-        return !!(
-          activeContext &&
-          activeContext.seriesTitle === expectedSeriesTitle &&
-          (activeContext as { mangaId?: string }).mangaId === expectedSeriesId
-        )
-      },
-      { timeout: 5_000, intervals: [100] }
     )
     .toBe(true)
 
@@ -465,6 +444,41 @@ export async function setLocalState<T = unknown>(
   )
 }
 
+/**
+ * Persist a complete, schema-valid history aggregate for query-driven E2E
+ * scenarios. History storage is an atomic three-key document; writing only
+ * `downloadedChapters` leaves a partial aggregate that the background query
+ * service must reject.
+ */
+export async function setDownloadedChapterHistory(
+  context: BrowserContext,
+  downloadedChapters: DownloadedChapterRecord[]
+): Promise<void> {
+  const worker = await getServiceWorker(context)
+  const aggregate = {
+    downloadedChapters: structuredClone(downloadedChapters),
+    seriesDownloadHistory: rebuildSeriesHistory(downloadedChapters),
+    clearCutoffs: { bySeries: {}, byChapter: {} },
+  }
+  await worker.evaluate(
+    async (values: {
+      downloadedChapters: DownloadedChapterRecord[]
+      seriesDownloadHistory: Record<string, unknown>
+      clearCutoffs: {
+        bySeries: Record<string, number>
+        byChapter: Record<string, number>
+      }
+    }) => {
+      await chrome.storage.local.set({
+        downloadedChapters: values.downloadedChapters,
+        seriesDownloadHistory: values.seriesDownloadHistory,
+        downloadHistoryClearCutoffs: values.clearCutoffs,
+      })
+    },
+    aggregate
+  )
+}
+
 export async function seedDownloadQueueState(
   page: Page,
   queue: DownloadTaskState[]
@@ -521,6 +535,7 @@ export async function seedDownloadQueueStateInContext(
       const response = await senderPage.evaluate(
         async (downloadQueue: DownloadTaskState[]) =>
           (await chrome.runtime.sendMessage({
+            target: "e2e",
             type: "E2E_SEED_DOWNLOAD_QUEUE",
             payload: { downloadQueue },
           })) as { success?: boolean; error?: string } | undefined,
@@ -567,11 +582,7 @@ export async function seedDownloadQueueStateInContext(
           }) => {
             const [localResult, sessionResult] = await Promise.all([
               chrome.storage.local.get("downloadQueue"),
-              chrome.storage.session.get([
-                "globalState",
-                "queueView",
-                "historyView",
-              ]),
+              chrome.storage.session.get(["queueView", "historyView"]),
             ])
             const result = localResult as {
               downloadQueue?: unknown[]
@@ -592,11 +603,6 @@ export async function seedDownloadQueueStateInContext(
               })
               .filter((id): id is string => id !== null)
               .sort()
-            const globalState = sessionResult.globalState as
-              { downloadQueue?: unknown[] } | undefined
-            const globalQueue = Array.isArray(globalState?.downloadQueue)
-              ? globalState.downloadQueue
-              : []
             const queueView = Array.isArray(sessionResult.queueView)
               ? sessionResult.queueView
               : []
@@ -637,8 +643,6 @@ export async function seedDownloadQueueStateInContext(
               queueIds.length === expectedIds.length &&
               queueIds.every((id, index) => id === expectedIds[index]) &&
               JSON.stringify(canonicalize(localQueue)) === expectedSerialized &&
-              JSON.stringify(canonicalize(globalQueue)) ===
-                expectedSerialized &&
               JSON.stringify(summaryIds(queueView)) ===
                 JSON.stringify(expectedQueueViewIds) &&
               JSON.stringify(summaryIds(historyView)) ===
@@ -712,6 +716,7 @@ export async function ensureOffscreenAliveForActiveQueue(
     for (let attempt = 0; attempt < 50; attempt++) {
       try {
         const response = (await chrome.runtime.sendMessage({
+          target: "offscreen",
           type: "OFFSCREEN_STATUS",
         })) as { success?: boolean } | undefined
         if (response?.success) {
@@ -743,10 +748,30 @@ export async function getTabState(
  */
 export async function getGlobalState(
   context: BrowserContext
-): Promise<GlobalAppState | undefined> {
-  return await getSessionState<GlobalAppState>(
-    context,
-    SESSION_STORAGE_KEYS.globalState
+): Promise<QueueTestState | undefined> {
+  const worker = await getServiceWorker(context)
+  return await worker.evaluate(
+    async ({ queueKey, settingsKey }) => {
+      const stored = (await chrome.storage.local.get([
+        queueKey,
+        settingsKey,
+      ])) as Record<string, unknown>
+      const settings = stored[settingsKey]
+      if (typeof settings !== "object" || settings === null) {
+        return undefined
+      }
+      return {
+        downloadQueue: Array.isArray(stored[queueKey])
+          ? (stored[queueKey] as DownloadTaskState[])
+          : [],
+        settings,
+        lastActivity: Date.now(),
+      } as QueueTestState
+    },
+    {
+      queueKey: LOCAL_STORAGE_KEYS.downloadQueue,
+      settingsKey: SETTINGS_STORAGE_KEYS.global,
+    }
   )
 }
 
@@ -923,6 +948,67 @@ export async function focusTab(
 }
 
 /**
+ * Activate a supported source tab and wait for the background-owned series
+ * projection that START_DOWNLOAD validates. A persisted tab_<id> snapshot can
+ * render before this per-window ownership/revision fence is ready.
+ */
+export async function waitForActiveSeriesContextRevision(
+  context: BrowserContext,
+  tabId: number,
+  options: { timeout?: number } = {}
+): Promise<number> {
+  const timeout = options.timeout ?? 15_000
+  const worker = await getServiceWorker(context)
+  let revision: number | undefined
+
+  await focusTab(context, tabId)
+  await expect
+    .poll(
+      async () => {
+        const ownership = await worker.evaluate(async (targetTabId) => {
+          const tab = await chrome.tabs.get(targetTabId)
+          const stored = await chrome.storage.session.get(
+            "activeTabContextByWindow"
+          )
+          const byWindow = stored.activeTabContextByWindow as
+            | Record<
+                string,
+                {
+                  activeTabId?: number
+                  revision?: number
+                  context?: MangaPageState | null
+                }
+              >
+            | undefined
+          return {
+            active: tab.active,
+            projection: byWindow?.[String(tab.windowId)],
+          }
+        }, tabId)
+        const projection = ownership.projection
+        const ready =
+          ownership.active === true &&
+          projection?.activeTabId === tabId &&
+          typeof projection.revision === "number" &&
+          projection.context !== null &&
+          typeof projection.context === "object" &&
+          typeof projection.context.siteIntegrationId === "string" &&
+          typeof projection.context.mangaId === "string" &&
+          projection.context.chaptersLoading !== true
+        revision = ready ? projection.revision : undefined
+        return ready
+      },
+      { timeout, intervals: [100] }
+    )
+    .toBe(true)
+
+  if (revision === undefined) {
+    throw new Error(`No current series context revision for tab ${tabId}`)
+  }
+  return revision
+}
+
+/**
  * Wait for tab state to match a condition
  */
 export async function waitForTabState(
@@ -1091,11 +1177,11 @@ export async function waitForTabStateCleared(
  */
 export async function waitForGlobalState(
   context: BrowserContext,
-  condition: (state: GlobalAppState) => boolean,
+  condition: (state: QueueTestState) => boolean,
   options: { timeout?: number } = {}
-): Promise<GlobalAppState> {
+): Promise<QueueTestState> {
   const timeout = options.timeout ?? 10000
-  let lastState: GlobalAppState | undefined
+  let lastState: QueueTestState | undefined
   let lastError: unknown
 
   try {
@@ -1171,6 +1257,7 @@ export async function mockMangaPageState(
     volumes: [],
     lastUpdated: Date.now(),
     ...partialState,
+    sourceUrl: partialState.sourceUrl ?? navigateToUrl,
   }
 
   await setSessionState(context, `tab_${tabId}`, defaultState)
@@ -1203,62 +1290,4 @@ export async function clearSessionStorage(
       }
     }
   })
-}
-
-/**
- * Send a state action to the background service worker
- */
-export async function sendStateAction(
-  context: BrowserContext,
-  action: string,
-  payload: unknown,
-  tabId?: number
-): Promise<void> {
-  const worker = await getServiceWorker(context)
-  await worker.evaluate(
-    async (args: { action: string; payload: unknown; tabId?: number }) => {
-      const maxAttempts = 10
-      const delayMs = 100
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if ((chrome as any)?.runtime?.sendMessage) {
-          const response = await chrome.runtime.sendMessage({
-            type: "STATE_ACTION",
-            action: args.action,
-            commandId: crypto.randomUUID(),
-            issuedAt: Date.now(),
-            payload: args.payload,
-            tabId: args.tabId,
-            timestamp: Date.now(),
-          })
-          if (
-            !response ||
-            typeof response !== "object" ||
-            !("success" in response) ||
-            response.success !== true
-          ) {
-            const error =
-              response &&
-              typeof response === "object" &&
-              "error" in response &&
-              typeof response.error === "string"
-                ? response.error
-                : "unknown error"
-            throw new Error(`STATE_ACTION was rejected: ${error}`)
-          }
-          return
-        }
-
-        if (typeof setTimeout === "function") {
-          await new Promise((resolve) => setTimeout(resolve, delayMs))
-        } else {
-          const start = Date.now()
-          while (Date.now() - start < delayMs) {
-            void 0
-          }
-        }
-      }
-    },
-    { action, payload, tabId }
-  )
 }

@@ -6,7 +6,7 @@
  * Offscreen-initiated fetches for Manhuagui cover three hosts:
  *
  *   1. `www.manhuagui.com/comic/{seriesId}/{chapterId}.html` — chapter
- *      viewer HTML. Offscreen's `resolveImageUrls` reads the packed
+ *      viewer HTML. Offscreen's chapter-plan resolver reads the packed
  *      payload from this page.
  *   2. `cf.mhgui.com/scripts/config_*.js` — reader-config script that
  *      selects an image host for the chapter. Offscreen fetches it

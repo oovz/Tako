@@ -1,12 +1,12 @@
 import { test, expect } from "./fixtures/extension"
 import { getTabId } from "./fixtures/state-helpers"
-import { buildExampleUrl } from "./fixtures/test-domains"
+import { buildExampleUrl } from "./fixtures/test-domains-constants"
 import {
   makeChapter,
   makeTask,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
-import type { DownloadTaskState } from "../../src/types/queue-state"
+import type { DownloadTaskState } from "../../src/domain/queue/state"
 
 const exampleRootUrl = buildExampleUrl("/")
 
