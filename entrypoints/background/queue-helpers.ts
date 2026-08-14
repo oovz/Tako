@@ -2,7 +2,7 @@
  * Download Queue Helper Functions
  *
  * Helper utilities for download task resolution and validation.
- * Used by download-queue.ts for plan generation and path validation.
+ * Used by the queue task executor and chapter dispatch coordinator.
  */
 
 import logger from "@/src/runtime/logger"
@@ -14,7 +14,7 @@ import {
 } from "@/src/shared/template-resolver"
 import type { Book } from "@/src/types/book"
 import type { Chapter, ChapterInput } from "@/src/types/chapter"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 import {
   buildSeriesComicInfoBase,
   composeChapterMetadata,
@@ -96,11 +96,16 @@ export function resolveDownloadPlan(
         `Directory template resolution failed: ${dirRes.error || "no path"}`
       )
     }
-    // Determine file base via optional filename template
-    const fileBase = resolveFileName(
-      settingsSnapshot.fileNameTemplate ?? "<CHAPTER_TITLE>",
+    const fileNameRes = resolveFileName(
+      settingsSnapshot.fileNameTemplate,
       dirCtx
     )
+    if (!fileNameRes.success || !fileNameRes.resolvedName) {
+      throw new Error(
+        `Filename template resolution failed: ${fileNameRes.error || "no filename"}`
+      )
+    }
+    const fileBase = fileNameRes.resolvedName
     if (format === "none") {
       // When not archiving, resolvedPath is the directory where images will be stored under a subdirectory per chapter
       composed.resolvedPath = `${dirRes.resolvedPath}/${fileBase}` // offscreen will create subfolder

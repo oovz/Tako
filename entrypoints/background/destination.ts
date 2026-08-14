@@ -8,12 +8,10 @@ import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type {
   DestinationIssue,
   DestinationIssueKind,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 import type { DownloadDestination } from "@/src/shared/download-contract"
 import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
-import { settingsService } from "@/src/storage/settings-service"
-import { getNotificationService } from "./notification-service"
-import { normalizeDestinationIssues } from "@/src/runtime/destination-issue-state"
+import { parseDestinationIssues } from "@/src/runtime/destination-issue-state"
 
 type EffectiveDestination =
   | { kind: "custom"; handleId: string; handle: FileSystemDirectoryHandle }
@@ -25,8 +23,6 @@ export interface DestinationContext {
   destination: DownloadDestination
   destinationOverride?: "downloads-api"
 }
-
-const destinationIssueMutations = new StorageMutationQueue()
 
 export type DestinationPreflight =
   | { ready: true }
@@ -65,14 +61,6 @@ export function issueKindForPreflight(
   }
 }
 
-export async function getDestinationIssues(): Promise<DestinationIssue[]> {
-  const stored = await chrome.storage.local.get(
-    LOCAL_STORAGE_KEYS.destinationIssues
-  )
-  const value = stored[LOCAL_STORAGE_KEYS.destinationIssues]
-  return normalizeDestinationIssues(value)
-}
-
 export function createDestinationIssue(
   context: DestinationContext,
   kind: DestinationIssueKind
@@ -86,79 +74,102 @@ export function createDestinationIssue(
   }
 }
 
-export async function notifyDestinationIssue(
+export interface DestinationIssueNotifier {
+  notifyDestinationActionRequired(input: {
+    issue: DestinationIssue
+    notificationsEnabled: boolean
+  }): void | Promise<void>
+}
+
+export interface DestinationSettingsReader {
+  getSettings(): Promise<{ notifications: boolean }>
+}
+
+export type DestinationIssueRecordResult = {
   issue: DestinationIssue
-): Promise<void> {
-  try {
-    const settings = await settingsService.getSettings()
-    getNotificationService().notifyDestinationActionRequired({
-      issue,
-      notificationsEnabled: settings.notifications,
+  inserted: boolean
+}
+
+/** Owns the durable destination-issue document and its read-modify-write queue. */
+export class DestinationIssueRepository {
+  private readonly mutations = new StorageMutationQueue()
+
+  async getAll(): Promise<DestinationIssue[]> {
+    return await this.mutations.run(() => this.readDocument())
+  }
+
+  async record(issue: DestinationIssue): Promise<DestinationIssueRecordResult> {
+    return await this.mutations.run(async () => {
+      const current = await this.readDocument()
+      const existing = current.find((candidate) => candidate.id === issue.id)
+      if (existing) return { issue: existing, inserted: false }
+
+      await chrome.storage.local.set({
+        [LOCAL_STORAGE_KEYS.destinationIssues]: [...current, issue],
+      })
+      return { issue, inserted: true }
     })
-  } catch (error) {
-    logger.debug(
-      "[DestinationService] Failed to show destination notification",
-      error
+  }
+
+  async clearForTask(taskId: string): Promise<void> {
+    await this.mutations.run(async () => {
+      const current = await this.readDocument()
+      const next = current.filter((issue) => issue.taskId !== taskId)
+      if (next.length === current.length) return
+      await chrome.storage.local.set({
+        [LOCAL_STORAGE_KEYS.destinationIssues]: next,
+      })
+    })
+  }
+
+  private async readDocument(): Promise<DestinationIssue[]> {
+    const stored = await chrome.storage.local.get(
+      LOCAL_STORAGE_KEYS.destinationIssues
     )
+    return parseDestinationIssues(stored[LOCAL_STORAGE_KEYS.destinationIssues])
   }
 }
 
-async function recordDestinationIssueKind(
-  context: DestinationContext,
-  kind: DestinationIssueKind
-): Promise<DestinationIssue> {
-  return await destinationIssueMutations.run(async () => {
-    const issueId = `${context.taskId}:${context.chapterId ?? ""}:${kind}`
-    const current = await getDestinationIssues()
-    const existing = current.find((candidate) => candidate.id === issueId)
-    if (existing) return existing
-
-    const issue = createDestinationIssue(context, kind)
-    await chrome.storage.local.set({
-      [LOCAL_STORAGE_KEYS.destinationIssues]: [...current, issue],
-    })
-    await notifyDestinationIssue(issue)
-    return issue
-  })
-}
-
-export async function recordDestinationIssue(
-  context: DestinationContext,
-  result: Exclude<DestinationPreflight, { ready: true }>
-): Promise<DestinationIssue> {
-  return await recordDestinationIssueKind(
-    context,
-    issueKindForPreflight(result)
-  )
-}
-
-export async function recordDestinationRuntimeIssue(
-  context: DestinationContext,
-  kind: Extract<
-    DestinationIssueKind,
-    | "fsa_permission_required"
-    | "fsa_folder_missing"
-    | "fsa_write_failed"
-    | "disk_full"
-  >
-): Promise<DestinationIssue> {
-  return await recordDestinationIssueKind(context, kind)
-}
-
-export async function clearDestinationIssuesForTask(
-  taskId: string
-): Promise<void> {
-  await destinationIssueMutations.run(async () => {
-    const current = await getDestinationIssues()
-    const next = current.filter((issue) => issue.taskId !== taskId)
-    if (next.length === current.length) return
-    await chrome.storage.local.set({
-      [LOCAL_STORAGE_KEYS.destinationIssues]: next,
-    })
-  })
+export interface DestinationServiceDependencies {
+  issueRepository: DestinationIssueRepository
+  settingsReader: DestinationSettingsReader
+  notifier: DestinationIssueNotifier
 }
 
 export class DestinationService {
+  constructor(private readonly deps: DestinationServiceDependencies) {}
+
+  async getIssues(): Promise<DestinationIssue[]> {
+    return await this.deps.issueRepository.getAll()
+  }
+
+  async recordDestinationIssue(
+    context: DestinationContext,
+    result: Exclude<DestinationPreflight, { ready: true }>
+  ): Promise<DestinationIssue> {
+    return await this.recordDestinationIssueKind(
+      context,
+      issueKindForPreflight(result)
+    )
+  }
+
+  async recordDestinationRuntimeIssue(
+    context: DestinationContext,
+    kind: Extract<
+      DestinationIssueKind,
+      | "fsa_permission_required"
+      | "fsa_folder_missing"
+      | "fsa_write_failed"
+      | "disk_full"
+    >
+  ): Promise<DestinationIssue> {
+    return await this.recordDestinationIssueKind(context, kind)
+  }
+
+  async clearDestinationIssuesForTask(taskId: string): Promise<void> {
+    await this.deps.issueRepository.clearForTask(taskId)
+  }
+
   async preflight(context: DestinationContext): Promise<DestinationPreflight> {
     const destination = context.destinationOverride ?? context.destination
     if (destination === "downloads-api") {
@@ -206,14 +217,14 @@ export class DestinationService {
 
     const preflight = await this.preflight(context)
     if (!preflight.ready) {
-      await recordDestinationIssue(context, preflight)
+      await this.recordDestinationIssue(context, preflight)
       throw new DestinationPreflightError(preflight.reason)
     }
 
     const handle = await loadDownloadRootHandle()
     if (!handle) {
       const unavailable = { ready: false, reason: "not_configured" } as const
-      await recordDestinationIssue(context, unavailable)
+      await this.recordDestinationIssue(context, unavailable)
       throw new DestinationPreflightError(unavailable.reason)
     }
 
@@ -223,6 +234,27 @@ export class DestinationService {
       handle,
     }
   }
-}
 
-export const destinationService = new DestinationService()
+  private async recordDestinationIssueKind(
+    context: DestinationContext,
+    kind: DestinationIssueKind
+  ): Promise<DestinationIssue> {
+    const issue = createDestinationIssue(context, kind)
+    const result = await this.deps.issueRepository.record(issue)
+    if (result.inserted) {
+      try {
+        const settings = await this.deps.settingsReader.getSettings()
+        await this.deps.notifier.notifyDestinationActionRequired({
+          issue: result.issue,
+          notificationsEnabled: settings.notifications,
+        })
+      } catch (error) {
+        logger.debug(
+          "[DestinationService] Failed to show destination notification",
+          error
+        )
+      }
+    }
+    return result.issue
+  }
+}

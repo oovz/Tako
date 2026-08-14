@@ -1,121 +1,94 @@
-import logger from "@/src/runtime/logger"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { siteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
-import { siteOverridesService } from "@/src/storage/site-overrides-service"
+import { getDefinition } from "@/src/site-integrations/catalog"
+import type { SiteIntegrationDefinition } from "@/src/site-integrations/definition-types"
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
+import type { SettingsRepository } from "@/src/storage/settings-repository"
+import type { SiteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
+import type { SiteOverridesService } from "@/src/storage/site-overrides-service"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { ChapterState, MangaPageState } from "@/src/types/tab-state"
 
-export interface StartDownloadPayload {
-  siteIntegrationId: string
-  mangaId: string
-  seriesTitle: string
-  chapters: Array<{
-    id: string
-    title: string
-    url: string
-    index: number
-    chapterLabel?: string
-    chapterNumber?: number
-    volumeId?: string
-    volumeLabel?: string
-    volumeNumber?: number
-    language?: string
-  }>
-  metadata?: SeriesMetadataSnapshot
+export interface StartDownloadSettingsInputs {
+  settings: Awaited<ReturnType<SettingsRepository["getSettings"]>>
+  siteSettings: Record<string, unknown>
+  siteOverride: Awaited<ReturnType<SiteOverridesService["getAll"]>>[string]
+  sitePolicyDefaults: SiteIntegrationDefinition["policyDefaults"] | undefined
 }
 
-export async function enqueueStartDownloadTask(
-  stateManager: CentralizedStateManager,
-  payload: StartDownloadPayload,
-  tabId: number
-): Promise<{ success: boolean; taskId?: string; reason?: string }> {
-  if (!payload.siteIntegrationId || !payload.mangaId || !payload.seriesTitle) {
-    return { success: false, reason: "Invalid START_DOWNLOAD payload" }
-  }
+export interface StartDownloadSettingsDependencies {
+  settingsRepository: Pick<SettingsRepository, "getSettings">
+  siteIntegrationSettingsService: Pick<
+    SiteIntegrationSettingsService,
+    "getForSite"
+  >
+  siteOverridesService: Pick<SiteOverridesService, "getAll">
+}
 
-  if (!Array.isArray(payload.chapters) || payload.chapters.length === 0) {
-    return { success: false, reason: "No chapters selected for download" }
-  }
+export async function loadStartDownloadSettingsInputs(
+  siteIntegrationId: string,
+  deps: StartDownloadSettingsDependencies
+): Promise<StartDownloadSettingsInputs> {
+  const [settings, siteOverrides, siteSettings] = await Promise.all([
+    deps.settingsRepository.getSettings(),
+    deps.siteOverridesService.getAll(),
+    deps.siteIntegrationSettingsService.getForSite(siteIntegrationId),
+  ])
 
-  if (
-    payload.chapters.some(
-      (chapter) =>
-        typeof chapter.id !== "string" || chapter.id.trim().length === 0
-    )
-  ) {
-    return { success: false, reason: "Invalid START_DOWNLOAD payload" }
+  return {
+    settings,
+    siteSettings,
+    siteOverride: siteOverrides[siteIntegrationId],
+    sitePolicyDefaults: getDefinition(siteIntegrationId)?.policyDefaults,
   }
+}
 
-  const now = Date.now()
-  const globalState = await stateManager.getGlobalState()
-  const siteOverrides = await siteOverridesService.getAll()
-  const siteOverride = siteOverrides[payload.siteIntegrationId]
-  const siteSettings = (await siteIntegrationSettingsService.getForSite(
-    payload.siteIntegrationId
-  )) as Record<string, unknown>
-  const sitePolicyDefaults = siteIntegrationRegistry.findById(
-    payload.siteIntegrationId
-  )?.policyDefaults
+export function buildStartDownloadTask(input: {
+  context: MangaPageState
+  selectedChapters: ChapterState[]
+  settingsInputs: StartDownloadSettingsInputs
+  taskId: string
+  now: number
+}): DownloadTaskState {
+  const { context, selectedChapters, settingsInputs, taskId, now } = input
   const settingsSnapshot = createTaskSettingsSnapshot(
-    globalState.settings,
-    payload.siteIntegrationId,
+    settingsInputs.settings,
+    context.siteIntegrationId,
     {
-      siteSettings,
-      siteOverride,
-      sitePolicyDefaults,
-      comicInfo: payload.metadata,
+      siteSettings: settingsInputs.siteSettings,
+      siteOverride: settingsInputs.siteOverride,
+      sitePolicyDefaults: settingsInputs.sitePolicyDefaults,
+      comicInfo: context.metadata,
     }
   )
 
-  const chapters: DownloadTaskState["chapters"] = payload.chapters.map(
-    (chapter) => {
-      const normalizedTitle = sanitizeLabel(chapter.title || "Untitled chapter")
-      const normalizedChapterLabel = chapter.chapterLabel
+  const chapters: DownloadTaskState["chapters"] = selectedChapters.map(
+    (chapter) => ({
+      id: chapter.id,
+      url: chapter.url,
+      title: sanitizeLabel(chapter.title),
+      index: chapter.index,
+      language: chapter.language,
+      chapterLabel: chapter.chapterLabel
         ? sanitizeLabel(chapter.chapterLabel)
-        : undefined
-      const normalizedVolumeLabel = chapter.volumeLabel
+        : undefined,
+      chapterNumber: chapter.chapterNumber,
+      volumeId: chapter.volumeId ? sanitizeLabel(chapter.volumeId) : undefined,
+      volumeNumber: chapter.volumeNumber,
+      volumeLabel: chapter.volumeLabel
         ? sanitizeLabel(chapter.volumeLabel)
-        : undefined
-
-      return {
-        id: chapter.id,
-        url: chapter.url,
-        title: normalizedTitle,
-        index: chapter.index,
-        language: chapter.language,
-        chapterLabel: normalizedChapterLabel,
-        chapterNumber:
-          typeof chapter.chapterNumber === "number"
-            ? chapter.chapterNumber
-            : undefined,
-        volumeId: chapter.volumeId
-          ? sanitizeLabel(chapter.volumeId)
-          : undefined,
-        volumeNumber:
-          typeof chapter.volumeNumber === "number"
-            ? chapter.volumeNumber
-            : undefined,
-        volumeLabel: normalizedVolumeLabel,
-        status: "queued",
-        outputs: { requested: 0, committed: 0, failed: 0 },
-        lastUpdated: now,
-      }
-    }
+        : undefined,
+      status: "queued",
+      outputs: { requested: 0, committed: 0, failed: 0 },
+      lastUpdated: now,
+    })
   )
 
-  const taskId = crypto.randomUUID()
-  const task: DownloadTaskState = {
+  return {
     id: taskId,
-    siteIntegrationId: payload.siteIntegrationId,
-    mangaId: payload.mangaId,
-    seriesTitle: sanitizeLabel(payload.seriesTitle),
-    seriesCoverUrl:
-      typeof payload.metadata?.coverUrl === "string"
-        ? payload.metadata.coverUrl
-        : undefined,
+    siteIntegrationId: context.siteIntegrationId,
+    mangaId: context.mangaId,
+    seriesTitle: sanitizeLabel(context.seriesTitle),
+    seriesCoverUrl: context.metadata?.coverUrl,
     chapters,
     status: "queued",
     created: now,
@@ -124,16 +97,4 @@ export async function enqueueStartDownloadTask(
     lastSuccessfulDownloadId: undefined,
     settingsSnapshot,
   }
-
-  await stateManager.addDownloadTask(task)
-  logger.info("[Queue]", {
-    event: "START_DOWNLOAD_ENQUEUED",
-    taskId,
-    sourceTabId: tabId,
-    chapters: chapters.length,
-    siteIntegrationId: payload.siteIntegrationId,
-    mangaId: payload.mangaId,
-  })
-
-  return { success: true, taskId }
 }

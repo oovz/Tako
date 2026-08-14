@@ -1,65 +1,13 @@
 import logger from "@/src/runtime/logger"
-import type { CentralizedStateManager } from "@/src/runtime/centralized-state"
+import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
+import type { QueueRepository } from "@/src/storage/queue-repository"
 import { areNotificationsEnabled } from "@/entrypoints/background/notification-preferences"
 import { getNotificationService } from "@/entrypoints/background/notification-service"
-import { settingsService } from "@/src/storage/settings-service"
-import {
-  chapterPersistenceService,
-  composeDownloadedChapterKey,
-} from "@/src/storage/chapter-persistence-service"
-import type { DownloadTaskState } from "@/src/types/queue-state"
-import type { DownloadErrorCategory } from "@/src/shared/download-contract"
-
-export type ChapterDispatchOutcome = {
-  chapterId: string
-  status: "completed" | "partial_success" | "failed"
-  errorMessage?: string
-  errorCategory?: DownloadErrorCategory
-  imagesFailed?: number
-}
-
-function materializeChapterOutcomes(
-  task: DownloadTaskState,
-  chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined>
-): ChapterDispatchOutcome[] {
-  return chapterOutcomesByIndex.map((outcome, index) => {
-    if (outcome) {
-      return outcome
-    }
-
-    const chapter = task.chapters[index]
-    return {
-      chapterId: chapter?.id || `unknown-chapter-${index + 1}`,
-      status: "failed",
-      errorMessage: "Chapter did not complete dispatch",
-      errorCategory: "unknown",
-    }
-  })
-}
-
-function resolveFinalTaskStatus(
-  chapterOutcomes: ChapterDispatchOutcome[]
-): DownloadTaskState["status"] {
-  const completedCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "completed"
-  ).length
-  const partialCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "partial_success"
-  ).length
-  const failedCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "failed"
-  ).length
-
-  if (failedCount === 0 && partialCount === 0) {
-    return "completed"
-  }
-
-  if (completedCount > 0 || partialCount > 0) {
-    return "partial_success"
-  }
-
-  return "failed"
-}
+import type { SettingsRepository } from "@/src/storage/settings-repository"
+import { composeDownloadedChapterKey } from "@/src/domain/history/types"
+import type { HistoryRepository } from "@/src/storage/history-repository"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { ChapterDispatchOutcome } from "@/src/domain/queue/task-lifecycle"
 
 function resolvePersistedFormat(
   settingsSnapshot: DownloadTaskState["settingsSnapshot"]
@@ -67,10 +15,21 @@ function resolvePersistedFormat(
   return settingsSnapshot.archiveFormat
 }
 
+export interface DownloadQueueFinalizationDependencies {
+  settingsRepository: Pick<SettingsRepository, "getSettings">
+  historyRepository: Pick<
+    HistoryRepository,
+    | "markChapterAsDownloaded"
+    | "getDownloadedChapters"
+    | "restoreChapterFromCompletedTask"
+  >
+}
+
 export async function persistCompletedChapter(
   task: DownloadTaskState,
   chapterId: string,
-  persistedFormat: "cbz" | "zip" | "none"
+  persistedFormat: "cbz" | "zip" | "none",
+  deps: DownloadQueueFinalizationDependencies
 ): Promise<void> {
   const chapter = task.chapters.find(
     (taskChapter) => taskChapter.id === chapterId
@@ -79,7 +38,7 @@ export async function persistCompletedChapter(
     return
   }
 
-  await chapterPersistenceService.markChapterAsDownloaded({
+  await deps.historyRepository.markChapterAsDownloaded({
     siteIntegrationId: task.siteIntegrationId,
     chapterId: chapter.id,
     url: chapter.url,
@@ -100,9 +59,10 @@ export async function persistCompletedChapter(
  * only fully completed chapters as downloaded.
  */
 export async function reconcileCompletedChapterHistory(
-  tasks: DownloadTaskState[]
+  tasks: DownloadTaskState[],
+  deps: DownloadQueueFinalizationDependencies
 ): Promise<void> {
-  const existing = await chapterPersistenceService.getDownloadedChapters()
+  const existing = await deps.historyRepository.getDownloadedChapters()
   const persistedKeys = new Set(
     existing.map((record) =>
       composeDownloadedChapterKey(
@@ -124,7 +84,7 @@ export async function reconcileCompletedChapterHistory(
       )
       if (persistedKeys.has(key)) continue
       const restored =
-        await chapterPersistenceService.restoreChapterFromCompletedTask(
+        await deps.historyRepository.restoreChapterFromCompletedTask(
           {
             siteIntegrationId: task.siteIntegrationId,
             chapterId: chapter.id,
@@ -148,82 +108,82 @@ export async function reconcileCompletedChapterHistory(
 async function persistCompletedChapters(
   task: DownloadTaskState,
   chapterOutcomes: ChapterDispatchOutcome[],
-  persistedFormat: "cbz" | "zip" | "none"
+  persistedFormat: "cbz" | "zip" | "none",
+  deps: DownloadQueueFinalizationDependencies
 ): Promise<void> {
   for (const outcome of chapterOutcomes) {
     if (outcome.status !== "completed") {
       continue
     }
 
-    await persistCompletedChapter(task, outcome.chapterId, persistedFormat)
+    await persistCompletedChapter(
+      task,
+      outcome.chapterId,
+      persistedFormat,
+      deps
+    )
   }
 }
 
 export async function finalizeDownloadTaskAfterDispatch(input: {
-  stateManager: CentralizedStateManager
+  stateManager: QueueRepository
   taskId: string
-  task: DownloadTaskState
   chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined>
   settingsSnapshot: DownloadTaskState["settingsSnapshot"]
-}): Promise<{
-  chapterOutcomes: ChapterDispatchOutcome[]
-  completedCount: number
-  finalStatus: DownloadTaskState["status"]
-  finalized: boolean
-}> {
-  const chapterOutcomes = materializeChapterOutcomes(
-    input.task,
-    input.chapterOutcomesByIndex
-  )
-  const completedCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "completed"
-  ).length
-  const failedCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "failed"
-  ).length
-  const finalStatus = resolveFinalTaskStatus(chapterOutcomes)
-  const persistedFormat = resolvePersistedFormat(input.settingsSnapshot)
-
-  await persistCompletedChapters(input.task, chapterOutcomes, persistedFormat)
-
-  const firstFailedOutcome = chapterOutcomes.find((o) => o.status === "failed")
-  const transition = await input.stateManager.transitionDownloadTask(
-    input.taskId,
-    ["downloading"],
-    {
-      status: finalStatus,
-      completed: Date.now(),
-      errorMessage:
-        failedCount > 0
-          ? `Some chapters failed (${completedCount}/${chapterOutcomes.length})`
-          : undefined,
-      errorCategory:
-        firstFailedOutcome?.errorCategory ??
-        (finalStatus === "failed" || finalStatus === "partial_success"
-          ? "unknown"
-          : undefined),
+  dispatchLease?: DispatchLeaseAuthority
+  finalizationDependencies: DownloadQueueFinalizationDependencies
+}): Promise<
+  | { finalized: false }
+  | {
+      chapterOutcomes: ChapterDispatchOutcome[]
+      completedCount: number
+      finalStatus: DownloadTaskState["status"]
+      finalized: true
     }
-  )
+> {
+  const persistedFormat = resolvePersistedFormat(input.settingsSnapshot)
+  const finalization = await input.stateManager.finalizeDownloadTask({
+    taskId: input.taskId,
+    chapterOutcomesByIndex: input.chapterOutcomesByIndex,
+    completedAt: Date.now(),
+    clearLease: input.dispatchLease,
+  })
 
-  return {
-    chapterOutcomes,
-    completedCount,
-    finalStatus,
-    finalized: transition.success,
+  if (finalization.outcome === "applied") {
+    try {
+      await persistCompletedChapters(
+        finalization.task,
+        finalization.chapterOutcomes,
+        persistedFormat,
+        input.finalizationDependencies
+      )
+    } catch (error) {
+      logger.warn(
+        "[Queue] Completion history projection will be retried",
+        error
+      )
+    }
+    return {
+      chapterOutcomes: finalization.chapterOutcomes,
+      completedCount: finalization.completedCount,
+      finalStatus: finalization.finalStatus,
+      finalized: true,
+    }
   }
+
+  return { finalized: false }
 }
 
 export async function notifyDownloadTaskCompletion(input: {
-  stateManager: CentralizedStateManager
+  stateManager: QueueRepository
   taskId: string
   finalStatus: DownloadTaskState["status"]
   completedCount: number
   totalChapters: number
+  settingsRepository: Pick<SettingsRepository, "getSettings">
 }): Promise<void> {
   try {
-    const taskAfterCompletion = (
-      await input.stateManager.getGlobalState()
-    ).downloadQueue.find((queuedTask) => queuedTask.id === input.taskId)
+    const taskAfterCompletion = await input.stateManager.getTask(input.taskId)
     if (!taskAfterCompletion) {
       return
     }
@@ -233,6 +193,7 @@ export async function notifyDownloadTaskCompletion(input: {
       finalStatus: input.finalStatus,
       completedCount: input.completedCount,
       totalChapters: input.totalChapters,
+      settingsRepository: input.settingsRepository,
     })
   } catch (error) {
     logger.debug("[Queue] Completion side effects failed (non-fatal)", error)
@@ -244,11 +205,12 @@ export async function notifyTerminalDownloadTask(input: {
   finalStatus: DownloadTaskState["status"]
   completedCount: number
   totalChapters: number
+  settingsRepository: Pick<SettingsRepository, "getSettings">
 }): Promise<void> {
   try {
     const taskAfterCompletion = input.task
 
-    const settings = await settingsService.getSettings()
+    const settings = await input.settingsRepository.getSettings()
     const notificationsEnabled = areNotificationsEnabled(settings)
     if (!notificationsEnabled) {
       return
@@ -256,7 +218,7 @@ export async function notifyTerminalDownloadTask(input: {
 
     const notificationService = getNotificationService()
     if (input.finalStatus === "completed") {
-      notificationService.showDownloadCompleteNotification({
+      await notificationService.showDownloadCompleteNotification({
         task: taskAfterCompletion,
         notificationsEnabled,
         chaptersCompleted: input.completedCount,
@@ -268,7 +230,7 @@ export async function notifyTerminalDownloadTask(input: {
       input.finalStatus === "failed" ||
       input.finalStatus === "partial_success"
     ) {
-      notificationService.notifyTaskFailed({
+      await notificationService.notifyTaskFailed({
         task: taskAfterCompletion,
         notificationsEnabled,
         errorMessage: taskAfterCompletion.errorMessage,
