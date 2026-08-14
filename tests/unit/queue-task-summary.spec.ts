@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
 import type {
   DownloadTaskState,
   QueueTaskSummary,
   TaskChapter,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 
 function toRecord(summary: QueueTaskSummary): Record<string, unknown> {
   return summary as unknown as Record<string, unknown>
@@ -163,6 +163,26 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("completedAt")
   })
 
+  it("projects an explicit unobservable-output signal from every chapter", () => {
+    const task = makeTask({
+      status: "downloading",
+      errorCategory: "network_unavailable",
+      chapters: [
+        makeChapter("c1", "downloading", {
+          errorCategory: "network_unavailable",
+        }),
+        makeChapter("c2", "downloading", {
+          errorCategory: "browser_download_unobservable",
+        }),
+      ],
+    })
+
+    expect(toQueueTaskSummary(task)).toMatchObject({
+      failureCategory: "network_unavailable",
+      hasUnobservableOutput: true,
+    })
+  })
+
   it("never infers a presentation category by parsing technical strings", () => {
     const otherError = makeTask({
       status: "failed",
@@ -233,22 +253,14 @@ describe("toQueueTaskSummary", () => {
     expect(restartSummary.isRetryTask).toBe(true)
   })
 
-  it("projects durable block and native-download wait diagnostics", () => {
-    const browserDownloadWait = {
-      downloadIds: [101, 102],
-      since: 1_000,
-      lastObservedAt: 1_500,
-    }
+  it("projects durable block diagnostics", () => {
     const summary = toQueueTaskSummary(
       makeTask({
         status: "queued",
         activeBlock: "provider_network_policy_pending",
-        browserDownloadWait,
       })
     )
 
     expect(summary.activeBlock).toBe("provider_network_policy_pending")
-    expect(summary.browserDownloadWait).toEqual(browserDownloadWait)
-    expect(summary.browserDownloadWait).not.toBe(browserDownloadWait)
   })
 })

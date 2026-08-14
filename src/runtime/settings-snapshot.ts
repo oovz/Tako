@@ -1,42 +1,13 @@
-import type { ExtensionSettings } from "@/src/storage/settings-types"
-import type { SiteOverrideRecord } from "@/src/storage/site-overrides-service"
+import { normalizeSeriesMetadataSnapshot } from "@/src/runtime/series-data-normalization"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
+import type { SiteOverrideRecord } from "@/src/domain/site-integrations/storage-schemas"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
-import {
-  canonicalizeSettingsDocument,
-  SETTINGS_LIMITS,
-} from "@/src/storage/settings-service"
+import { parseSettingsDocument } from "@/src/domain/settings/schema"
 
 type SitePolicyDefaults = {
   image?: Partial<ExtensionSettings["globalPolicy"]["image"]>
   chapter?: Partial<ExtensionSettings["globalPolicy"]["chapter"]>
-}
-
-function canonicalizePolicy(
-  policy: Partial<ExtensionSettings["globalPolicy"]["image"]>,
-  fallback: ExtensionSettings["globalPolicy"]["image"]
-): ExtensionSettings["globalPolicy"]["image"] {
-  const rawConcurrency = policy.concurrency ?? fallback.concurrency
-  const rawDelayMs = policy.delayMs ?? fallback.delayMs
-  const concurrency = Number.isFinite(rawConcurrency)
-    ? Math.min(
-        SETTINGS_LIMITS.MAX_CONCURRENCY,
-        Math.max(SETTINGS_LIMITS.MIN_CONCURRENCY, Math.trunc(rawConcurrency))
-      )
-    : fallback.concurrency
-  const delayMs = Number.isFinite(rawDelayMs)
-    ? Math.max(SETTINGS_LIMITS.MIN_DELAY_MS, rawDelayMs)
-    : fallback.delayMs
-
-  return { concurrency, delayMs }
-}
-
-function canonicalizeRetryCount(value: number, fallback: number): number {
-  if (!Number.isFinite(value)) return fallback
-  return Math.min(
-    SETTINGS_LIMITS.MAX_RETRIES,
-    Math.max(SETTINGS_LIMITS.MIN_RETRIES, Math.trunc(value))
-  )
 }
 
 export function createTaskSettingsSnapshot(
@@ -49,10 +20,7 @@ export function createTaskSettingsSnapshot(
     comicInfo?: SeriesMetadataSnapshot
   } = {}
 ): TaskSettingsSnapshot {
-  const canonicalSettings = canonicalizeSettingsDocument(settings)
-  if (!canonicalSettings) {
-    throw new Error("Cannot create task snapshot from invalid settings")
-  }
+  const canonicalSettings = parseSettingsDocument(settings)
 
   const {
     siteSettings = {},
@@ -61,27 +29,18 @@ export function createTaskSettingsSnapshot(
     comicInfo,
   } = options
   const canonicalSiteOverride = siteOverride
-  const imagePolicy = canonicalizePolicy(
-    {
-      ...canonicalSettings.globalPolicy.image,
-      ...(sitePolicyDefaults?.image ?? {}),
-      ...(canonicalSiteOverride?.imagePolicy ?? {}),
-    },
-    canonicalSettings.globalPolicy.image
-  )
-  const chapterPolicy = canonicalizePolicy(
-    {
-      ...canonicalSettings.globalPolicy.chapter,
-      ...(sitePolicyDefaults?.chapter ?? {}),
-      delayMs:
-        canonicalSiteOverride?.chapterPolicy?.delayMs ??
-        sitePolicyDefaults?.chapter?.delayMs ??
-        canonicalSettings.globalPolicy.chapter.delayMs,
-      concurrency: 1,
-    },
-    canonicalSettings.globalPolicy.chapter
-  )
-  chapterPolicy.concurrency = 1
+  const imagePolicy = {
+    ...canonicalSettings.globalPolicy.image,
+    ...(sitePolicyDefaults?.image ?? {}),
+    ...(canonicalSiteOverride?.imagePolicy ?? {}),
+  }
+  const chapterPolicy = {
+    concurrency: 1 as const,
+    delayMs:
+      canonicalSiteOverride?.chapterPolicy?.delayMs ??
+      sitePolicyDefaults?.chapter?.delayMs ??
+      canonicalSettings.globalPolicy.chapter.delayMs,
+  }
 
   return {
     archiveFormat:
@@ -92,8 +51,7 @@ export function createTaskSettingsSnapshot(
     pathTemplate:
       canonicalSiteOverride?.pathTemplate ??
       canonicalSettings.downloads.pathTemplate,
-    fileNameTemplate:
-      canonicalSettings.downloads.fileNameTemplate || "<CHAPTER_TITLE>",
+    fileNameTemplate: canonicalSettings.downloads.fileNameTemplate,
     includeComicInfo: canonicalSettings.downloads.includeComicInfo,
     includeCoverImage: canonicalSettings.downloads.includeCoverImage,
     siteSettings: { ...siteSettings },
@@ -102,21 +60,17 @@ export function createTaskSettingsSnapshot(
       chapter: chapterPolicy,
     },
     retrySettings: {
-      image: canonicalizeRetryCount(
+      image:
         canonicalSiteOverride?.retries?.image ??
-          canonicalSettings.globalRetries.image,
-        canonicalSettings.globalRetries.image
-      ),
-      chapter: canonicalizeRetryCount(
+        canonicalSettings.globalRetries.image,
+      chapter:
         canonicalSiteOverride?.retries?.chapter ??
-          canonicalSettings.globalRetries.chapter,
-        canonicalSettings.globalRetries.chapter
-      ),
+        canonicalSettings.globalRetries.chapter,
     },
     normalizeImageFilenames:
       canonicalSettings.downloads.normalizeImageFilenames,
     imagePaddingDigits: canonicalSettings.downloads.imagePaddingDigits,
-    comicInfo,
+    comicInfo: normalizeSeriesMetadataSnapshot(comicInfo),
     siteIntegrationId,
   }
 }

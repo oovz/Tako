@@ -1,24 +1,35 @@
-import type { ExtensionSettings } from "@/src/storage/settings-types"
+import type {
+  ArchiveFormat,
+  ConflictPolicy,
+  DownloadDestination,
+  ImagePaddingDigits,
+} from "@/src/shared/download-contract"
+import type { RateScopePolicy } from "@/src/types/rate-policy"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 
 export type SeriesMetadataSnapshot = Omit<SeriesMetadata, "title">
 
+export interface RetrySettingsSnapshot {
+  image: number
+  chapter: number
+}
+
 export interface TaskSettingsSnapshot {
-  archiveFormat: ExtensionSettings["downloads"]["defaultFormat"]
-  destination: ExtensionSettings["downloads"]["destination"]
-  conflictPolicy: ExtensionSettings["downloads"]["conflictPolicy"]
+  archiveFormat: ArchiveFormat
+  destination: DownloadDestination
+  conflictPolicy: ConflictPolicy
   pathTemplate: string
-  fileNameTemplate?: string
+  fileNameTemplate: string
   includeComicInfo: boolean
   includeCoverImage: boolean
   siteSettings: Record<string, unknown>
   rateLimitSettings: {
-    image: ExtensionSettings["globalPolicy"]["image"]
-    chapter: ExtensionSettings["globalPolicy"]["chapter"]
+    image: RateScopePolicy
+    chapter: RateScopePolicy
   }
-  retrySettings: ExtensionSettings["globalRetries"]
-  normalizeImageFilenames: ExtensionSettings["downloads"]["normalizeImageFilenames"]
-  imagePaddingDigits: ExtensionSettings["downloads"]["imagePaddingDigits"]
+  retrySettings: RetrySettingsSnapshot
+  normalizeImageFilenames: boolean
+  imagePaddingDigits: ImagePaddingDigits
   comicInfo?: SeriesMetadataSnapshot
   siteIntegrationId: string
 }

@@ -2,23 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   cancelPendingUndoExpiry,
-  normalizePendingUndoActions,
   pendingUndoAlarmName,
   pendingUndoTokenFromAlarmName,
   schedulePendingUndoExpiry,
 } from "@/src/runtime/pending-undo-actions"
-import type { PendingUndoAction } from "@/src/types/queue-state"
-import {
-  makeDownloadTask,
-  resetCentralizedStateTestEnvironment,
-} from "../core/centralized-state-test-setup"
+import { resetQueueRepositoryTestEnvironment } from "../core/queue-repository-test-setup"
 
 describe("pending Undo persistence helpers", () => {
   const createAlarm = vi.fn(async () => undefined)
   const clearAlarm = vi.fn(async () => true)
 
   beforeEach(() => {
-    resetCentralizedStateTestEnvironment()
+    resetQueueRepositoryTestEnvironment()
     createAlarm.mockClear()
     clearAlarm.mockClear()
     Object.assign(globalThis.chrome, {
@@ -31,35 +26,6 @@ describe("pending Undo persistence helpers", () => {
 
   afterEach(() => {
     vi.useRealTimers()
-  })
-
-  it("normalizes only complete persisted actions and task snapshots", () => {
-    const action: PendingUndoAction = {
-      token: "undo-1",
-      type: "cancel_queued",
-      taskSnapshot: makeDownloadTask({ id: "task-1" }),
-      previousQueuePosition: 2,
-      createdAt: 1_000,
-      expiresAt: 6_000,
-    }
-
-    expect(
-      normalizePendingUndoActions([
-        action,
-        { ...action, token: "" },
-        { ...action, type: "unknown" },
-        { ...action, previousQueuePosition: -1 },
-        { ...action, expiresAt: 999 },
-        { ...action, taskSnapshot: null },
-      ])
-    ).toEqual([
-      expect.objectContaining({
-        token: "undo-1",
-        type: "cancel_queued",
-        previousQueuePosition: 2,
-        taskSnapshot: expect.objectContaining({ id: "task-1" }),
-      }),
-    ])
   })
 
   it("uses an in-process five-second deadline plus a durable one-shot alarm", async () => {

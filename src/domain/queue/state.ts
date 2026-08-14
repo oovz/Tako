@@ -1,10 +1,17 @@
-import type { ExtensionSettings } from "@/src/storage/settings-types"
 import type {
   DownloadErrorCategory,
   DownloadTaskStatus,
 } from "@/src/shared/download-contract"
 import type { ChapterStatus } from "@/src/types/chapter"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
+
+export const QUEUE_AGGREGATE_KEYS = [
+  "queue",
+  "lease",
+  "pendingUndoActions",
+] as const
+
+export type QueueAggregateKey = (typeof QUEUE_AGGREGATE_KEYS)[number]
 
 export type DestinationIssueKind =
   | "fsa_permission_required"
@@ -26,12 +33,7 @@ export type ActiveTaskBlock =
   | "destination_action_required"
   | "provider_network_policy_pending"
   | "provider_network_policy_action_required"
-
-export interface BrowserDownloadWaitState {
-  downloadIds: number[]
-  since: number
-  lastObservedAt?: number
-}
+  | "native_output_action_required"
 
 export type OffscreenJobStage =
   | "dispatching"
@@ -53,6 +55,10 @@ export interface ActiveDispatchLease {
   taskId: string
   chapterId: string
   attempt: number
+  fingerprint: string
+  documentInstanceId?: string
+  saveMode: "fsa" | "downloads-api"
+  lastEventSignature?: string
   stage: OffscreenJobStage
   startedAt: number
   lastActivityAt: number
@@ -60,24 +66,30 @@ export interface ActiveDispatchLease {
   sequence: number
 }
 
-export interface PendingOutputRecord {
-  outputId: string
+export type DispatchLeaseAuthority = DispatchLeaseIdentity &
+  Pick<ActiveDispatchLease, "fingerprint" | "documentInstanceId">
+
+export type FullDispatchLeaseIdentity = DispatchLeaseAuthority & {
+  documentInstanceId: string
+}
+
+export type DispatchLeaseIdentity = Pick<
+  ActiveDispatchLease,
+  "jobId" | "attempt" | "taskId" | "chapterId"
+>
+
+export interface NativeOutputSettlement {
   jobId: string
   attempt: number
   taskId: string
   chapterId: string
-  downloadId?: number
-  blobUrl: string
-  filename: string
-  outputIndex: number
-  outputCount: number
-  outputKind: "archive" | "image"
-  state: "prepared" | "in_progress" | "complete" | "interrupted"
-  createdAt: number
-  terminalAt?: number
-  blobRevokedAt?: number
-  accountedAt?: number
-  error?: string
+  requested: number
+  completed: number
+  interrupted: number
+  /** Outputs whose Chrome download history entry was erased and the user surrendered observation of. */
+  surrendered: number
+  lastSuccessfulDownloadId?: number
+  appliedAt: number
 }
 
 export interface TaskChapter {
@@ -98,6 +110,7 @@ export interface TaskChapter {
   totalImages?: number
   imagesFailed?: number
   outputs?: OutputAccounting
+  nativeOutputSettlement?: NativeOutputSettlement
   dispatchAttempt?: number
   lastUpdated: number
 }
@@ -113,7 +126,6 @@ export interface DownloadTaskState {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
-  browserDownloadWait?: BrowserDownloadWaitState
   destinationOverride?: "downloads-api"
   created: number
   started?: number
@@ -141,6 +153,12 @@ export type PendingUndoReceipt = Pick<
   "token" | "type" | "expiresAt"
 >
 
+export interface QueueAggregateState {
+  queue: DownloadTaskState[]
+  lease: ActiveDispatchLease | null
+  pendingUndoActions: PendingUndoAction[]
+}
+
 export interface QueueTaskSummary {
   id: string
   seriesKey: string
@@ -149,7 +167,6 @@ export interface QueueTaskSummary {
   coverUrl?: string
   status: DownloadTaskStatus
   activeBlock?: ActiveTaskBlock
-  browserDownloadWait?: BrowserDownloadWaitState
   chapters: {
     total: number
     completed: number
@@ -160,13 +177,9 @@ export interface QueueTaskSummary {
     completed?: number
   }
   failureCategory?: DownloadErrorCategory
+  /** True when any chapter has a native output whose result is unobservable. */
+  hasUnobservableOutput?: boolean
   isRetried?: boolean
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number
-}
-
-export interface GlobalAppState {
-  downloadQueue: DownloadTaskState[]
-  settings: ExtensionSettings
-  lastActivity: number
 }

@@ -1,98 +1,108 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { CentralizedStateManager } from "@/src/runtime/centralized-state"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { QueueRepository as BaseQueueRepository } from "@/src/storage/queue-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import {
   makeDownloadTask,
   mockLocalStorage,
-  resetCentralizedStateTestEnvironment,
-} from "./centralized-state-test-setup"
+  resetQueueRepositoryTestEnvironment,
+} from "./queue-repository-test-setup"
 
-describe("pending Undo task transactions", () => {
+class QueueRepository extends BaseQueueRepository {
+  constructor() {
+    super(new QueueProjectionService())
+  }
+}
+
+describe("pending Undo task persistence", () => {
   beforeEach(() => {
-    resetCentralizedStateTestEnvironment()
+    resetQueueRepositoryTestEnvironment()
   })
 
   it("restores a queued cancellation at its exact queue position", async () => {
-    const stateManager = new CentralizedStateManager()
-    await stateManager.initialize()
-    for (const id of ["task-a", "task-b", "task-c"]) {
-      await stateManager.addDownloadTask(
-        makeDownloadTask({ id, mangaId: id, seriesTitle: id })
-      )
-    }
-    const cancellation = await stateManager.cancelDownloadTaskAtomically(
-      "task-b",
-      1_000
+    const repository = new QueueRepository()
+    const tasks = ["task-a", "task-b", "task-c"].map((id) =>
+      makeDownloadTask({ id, mangaId: id, seriesTitle: id })
     )
+    for (const task of tasks) {
+      await repository.enqueueDownloadTask(task)
+    }
+    const cancellation = await repository.cancelDownloadTask({
+      taskId: "task-b",
+      undoToken: "undo-task-b",
+      now: 1_000,
+    })
 
-    expect(cancellation.success && cancellation.undo).toMatchObject({
+    expect(cancellation.outcome).toBe("applied")
+    if (cancellation.outcome !== "applied" || !cancellation.undo) {
+      throw new Error("Expected queued cancellation Undo receipt")
+    }
+    expect(cancellation.undo).toMatchObject({
       type: "cancel_queued",
       expiresAt: 6_000,
     })
-    expect(
-      (await stateManager.getGlobalState()).downloadQueue.map((task) => task.id)
-    ).toEqual(["task-a", "task-c"])
-    const originalSnapshot = (await stateManager.getPendingUndoActions())[0]
-      .taskSnapshot
-
-    const token = cancellation.success ? cancellation.undo?.token : undefined
+    expect((await repository.getQueue()).map((task) => task.id)).toEqual([
+      "task-a",
+      "task-c",
+    ])
+    const token = cancellation.undo.token
     expect(token).toBeTypeOf("string")
-    const restored = await stateManager.restorePendingUndoAction(
-      token as string,
-      5_999
-    )
+    const restored = await repository.restorePendingUndoAction({
+      token,
+      now: 5_999,
+    })
 
-    expect(restored).toMatchObject({ success: true })
-    const restoredQueue = (await stateManager.getGlobalState()).downloadQueue
+    expect(restored).toMatchObject({ outcome: "applied", restored: true })
+    const restoredQueue = await repository.getQueue()
     expect(restoredQueue.map((task) => task.id)).toEqual([
       "task-a",
       "task-b",
       "task-c",
     ])
-    expect(restoredQueue[1]).toEqual(originalSnapshot)
-    expect(await stateManager.getPendingUndoActions()).toEqual([])
+    expect(restoredQueue[1]).toEqual(tasks[1])
+    await expect(
+      repository.restorePendingUndoAction({ token, now: 5_999 })
+    ).resolves.toMatchObject({ outcome: "rejected", reason: "undo-not-found" })
   })
 
   it("restores an immediately hidden terminal history record", async () => {
-    const stateManager = new CentralizedStateManager()
-    await stateManager.initialize()
+    const repository = new QueueRepository()
     const completedTask = makeDownloadTask({
       id: "completed-task",
       mangaId: "completed-task",
       status: "completed",
       completed: 500,
     })
-    await stateManager.addDownloadTask(completedTask)
+    await repository.enqueueDownloadTask(completedTask)
 
-    const removal = await stateManager.removeTerminalDownloadTask(
-      completedTask.id
-    )
+    const removal = await repository.removeTerminalDownloadTask({
+      taskId: completedTask.id,
+      undoToken: "undo-completed-task",
+      now: 1_000,
+    })
 
     expect(removal).toMatchObject({
-      success: true,
+      outcome: "applied",
       undo: { type: "remove_history" },
     })
-    expect((await stateManager.getGlobalState()).downloadQueue).toEqual([])
-    const originalSnapshot = (await stateManager.getPendingUndoActions())[0]
-      .taskSnapshot
-    if (!removal.success) throw new Error("Expected removal to succeed")
+    expect(await repository.getQueue()).toEqual([])
+    if (removal.outcome !== "applied") {
+      throw new Error("Expected removal to succeed")
+    }
 
     await expect(
-      stateManager.restorePendingUndoAction(
-        removal.undo.token,
-        removal.undo.expiresAt - 1
-      )
-    ).resolves.toMatchObject({ success: true })
-    expect((await stateManager.getGlobalState()).downloadQueue).toEqual([
-      originalSnapshot,
-    ])
+      repository.restorePendingUndoAction({
+        token: removal.undo.token,
+        now: removal.undo.expiresAt - 1,
+      })
+    ).resolves.toMatchObject({ outcome: "applied", restored: true })
+    expect(await repository.getQueue()).toEqual([completedTask])
   })
 
   it("rejects late Undo and normalizes a queued cancellation into history", async () => {
-    const stateManager = new CentralizedStateManager()
-    await stateManager.initialize()
-    await stateManager.addDownloadTask(
+    const repository = new QueueRepository()
+    await repository.enqueueDownloadTask(
       makeDownloadTask({
         id: "expiring-task",
         mangaId: "expiring-task",
@@ -108,23 +118,26 @@ describe("pending Undo task transactions", () => {
         ],
       })
     )
-    const cancellation = await stateManager.cancelDownloadTaskAtomically(
-      "expiring-task",
-      2_000
-    )
-    if (!cancellation.success || !cancellation.undo) {
+    const cancellation = await repository.cancelDownloadTask({
+      taskId: "expiring-task",
+      undoToken: "undo-expiring-task",
+      now: 2_000,
+    })
+    if (cancellation.outcome !== "applied" || !cancellation.undo) {
       throw new Error("Expected queued cancellation Undo receipt")
     }
 
-    const lateUndo = await stateManager.restorePendingUndoAction(
-      cancellation.undo.token,
-      cancellation.undo.expiresAt
-    )
+    const lateUndo = await repository.restorePendingUndoAction({
+      token: cancellation.undo.token,
+      now: cancellation.undo.expiresAt,
+    })
 
-    expect(lateUndo).toMatchObject({ success: false, reason: "expired" })
-    expect(
-      (await stateManager.getGlobalState()).downloadQueue[0]
-    ).toMatchObject({
+    expect(lateUndo).toMatchObject({
+      outcome: "applied",
+      restored: false,
+      reason: "expired",
+    })
+    expect((await repository.getQueue())[0]).toMatchObject({
       id: "expiring-task",
       status: "canceled",
       completed: 2_000,
@@ -135,24 +148,36 @@ describe("pending Undo task transactions", () => {
         }),
       ],
     })
-    expect(await stateManager.getPendingUndoActions()).toEqual([])
+    await expect(
+      repository.restorePendingUndoAction({
+        token: cancellation.undo.token,
+        now: cancellation.undo.expiresAt,
+      })
+    ).resolves.toMatchObject({ outcome: "rejected", reason: "undo-not-found" })
   })
 
   it("reconciles expired actions while retaining unexpired restart state", async () => {
-    const stateManager = new CentralizedStateManager()
-    await stateManager.initialize()
-    await stateManager.addDownloadTask(
+    const repository = new QueueRepository()
+    await repository.enqueueDownloadTask(
       makeDownloadTask({ id: "old-task", mangaId: "old-task" })
     )
-    await stateManager.addDownloadTask(
+    await repository.enqueueDownloadTask(
       makeDownloadTask({ id: "new-task", mangaId: "new-task" })
     )
-    await stateManager.cancelDownloadTaskAtomically("old-task", 1_000)
-    await stateManager.cancelDownloadTaskAtomically("new-task", 5_000)
+    await repository.cancelDownloadTask({
+      taskId: "old-task",
+      undoToken: "undo-old-task",
+      now: 1_000,
+    })
+    await repository.cancelDownloadTask({
+      taskId: "new-task",
+      undoToken: "undo-new-task",
+      now: 5_000,
+    })
 
-    const recovery =
-      await stateManager.reconcileExpiredPendingUndoActions(7_000)
+    const recovery = await repository.reconcileExpiredPendingUndoActions(7_000)
 
+    expect(recovery.outcome).toBe("applied")
     expect(recovery.finalized).toHaveLength(1)
     expect(recovery.finalized[0]).toMatchObject({
       taskSnapshot: { id: "old-task" },
@@ -161,15 +186,14 @@ describe("pending Undo task transactions", () => {
     expect(recovery.pending[0]).toMatchObject({
       taskSnapshot: { id: "new-task" },
     })
-    expect((await stateManager.getGlobalState()).downloadQueue).toEqual([
+    expect(await repository.getQueue()).toEqual([
       expect.objectContaining({ id: "old-task", status: "canceled" }),
     ])
   })
 
-  it("does not expose either half when the atomic Undo staging commit fails", async () => {
-    const stateManager = new CentralizedStateManager()
-    await stateManager.initialize()
-    await stateManager.addDownloadTask(
+  it("does not expose either half when the serialized Undo staging write fails", async () => {
+    const repository = new QueueRepository()
+    await repository.enqueueDownloadTask(
       makeDownloadTask({ id: "atomic-task", mangaId: "atomic-task" })
     )
     vi.mocked(chrome.storage.local.set).mockRejectedValueOnce(
@@ -177,10 +201,14 @@ describe("pending Undo task transactions", () => {
     )
 
     await expect(
-      stateManager.cancelDownloadTaskAtomically("atomic-task", 1_000)
+      repository.cancelDownloadTask({
+        taskId: "atomic-task",
+        undoToken: "undo-atomic-task",
+        now: 1_000,
+      })
     ).rejects.toThrow("Undo staging write failed")
 
-    expect((await stateManager.getGlobalState()).downloadQueue).toEqual([
+    expect(await repository.getQueue()).toEqual([
       expect.objectContaining({ id: "atomic-task", status: "queued" }),
     ])
     expect(
