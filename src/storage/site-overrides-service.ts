@@ -2,133 +2,70 @@
  * Site Overrides Service
  * Stores per-site overrides in chrome.storage.local under key 'siteOverrides'.
  *
- * Flat structure - presence equals enabled:
+ * Flat structure of current per-provider queue policy overrides:
  *   { [siteId]: {
- *       outputFormat?: 'cbz' | 'zip' | 'none',
- *       pathTemplate?: string,
- *       rate?: { requestsPerMinute?: number },
- *       retries?: { maxAttempts?: number }
+ *       imagePolicy?: { concurrency?: number, delayMs?: number },
+ *       chapterPolicy?: { concurrency?: number, delayMs?: number },
+ *       retries?: { image?: number, chapter?: number }
  *   } }
  */
 
-import { ArchiveFormatSchema } from "@/src/shared/download-contract"
-import { z } from "zod"
 import { StorageMutationQueue } from "./storage-mutation-queue"
-import { RATE_POLICY_LIMITS } from "@/src/shared/rate-policy-limits"
-
-export type SiteOverrideRecord = {
-  // Format override
-  outputFormat?: "cbz" | "zip" | "none"
-  // Path override
-  pathTemplate?: string
-  // Per-scope rate policies (preferred new shape)
-  imagePolicy?: { concurrency?: number; delayMs?: number }
-  // Chapter concurrency is not accepted as a site override in the current scheduler.
-  chapterPolicy?: { delayMs?: number }
-  // Retry overrides (preferred new shape)
-  retries?: { image?: number; chapter?: number }
-}
-
-export type SiteOverridesMap = Record<string, SiteOverrideRecord>
+import {
+  SiteOverridesMapSchema,
+  type SiteOverrideRecord,
+  type SiteOverridesMap,
+} from "@/src/domain/site-integrations/storage-schemas"
+import { assertKnownSiteIntegrationIds } from "./site-integration-document-validation"
 
 export const SITE_OVERRIDES_STORAGE_KEY = "siteOverrides"
 
-const RatePolicySchema = z.object({
-  concurrency: z
-    .number()
-    .int()
-    .min(RATE_POLICY_LIMITS.MIN_CONCURRENCY)
-    .max(RATE_POLICY_LIMITS.MAX_CONCURRENCY)
-    .optional(),
-  delayMs: z
-    .number()
-    .int()
-    .min(RATE_POLICY_LIMITS.MIN_DELAY_MS)
-    .max(RATE_POLICY_LIMITS.MAX_DELAY_MS)
-    .optional(),
-})
-
-const ChapterPolicySchema = z.object({
-  delayMs: z
-    .number()
-    .int()
-    .min(RATE_POLICY_LIMITS.MIN_DELAY_MS)
-    .max(RATE_POLICY_LIMITS.MAX_DELAY_MS)
-    .optional(),
-})
-
-const RetryOverridesSchema = z.object({
-  image: z.number().optional(),
-  chapter: z.number().optional(),
-})
-
-const SiteOverrideRecordSchema = z.object({
-  outputFormat: ArchiveFormatSchema.optional(),
-  pathTemplate: z.string().optional(),
-  imagePolicy: RatePolicySchema.optional(),
-  chapterPolicy: ChapterPolicySchema.optional(),
-  retries: RetryOverridesSchema.optional(),
-})
-
-const SiteOverridesMapSchema = z
-  .record(z.string(), z.unknown())
-  .transform((entries) => {
-    const map: SiteOverridesMap = {}
-    for (const [key, value] of Object.entries(entries)) {
-      const parsed = SiteOverrideRecordSchema.safeParse(value)
-      if (parsed.success) {
-        map[key] = parsed.data
-      }
-    }
-    return map
-  })
-
-const StrictSiteOverridesMapSchema = z.record(
-  z.string(),
-  SiteOverrideRecordSchema
-)
-
-export const normalizeSiteOverridesMap = (raw: unknown): SiteOverridesMap => {
-  const parsed = SiteOverridesMapSchema.safeParse(raw)
-  return parsed.success ? parsed.data : {}
+export function parseSiteOverridesDocument(value: unknown): SiteOverridesMap {
+  const parsed = SiteOverridesMapSchema.parse(value)
+  assertKnownSiteIntegrationIds(parsed, "site overrides")
+  return parsed
 }
 
-const mutationQueue = new StorageMutationQueue()
+export class SiteOverridesService {
+  private readonly mutations = new StorageMutationQueue()
 
-async function persistSiteOverrides(map: SiteOverridesMap): Promise<void> {
-  const validated = StrictSiteOverridesMapSchema.parse(map)
-  await chrome.storage.local.set({ [SITE_OVERRIDES_STORAGE_KEY]: validated })
-}
+  private async persist(map: SiteOverridesMap): Promise<void> {
+    const validated = parseSiteOverridesDocument(map)
+    await chrome.storage.local.set({ [SITE_OVERRIDES_STORAGE_KEY]: validated })
+  }
 
-export const siteOverridesService = {
   async getAll(): Promise<SiteOverridesMap> {
     const res = await chrome.storage.local.get(SITE_OVERRIDES_STORAGE_KEY)
-    return normalizeSiteOverridesMap(res[SITE_OVERRIDES_STORAGE_KEY])
-  },
+    if (!(SITE_OVERRIDES_STORAGE_KEY in res)) return {}
+    return parseSiteOverridesDocument(res[SITE_OVERRIDES_STORAGE_KEY])
+  }
 
   async setAll(map: SiteOverridesMap): Promise<void> {
-    await mutationQueue.run(() => persistSiteOverrides(map))
-  },
+    parseSiteOverridesDocument(map)
+    await this.mutations.run(() => this.persist(map))
+  }
   async updateForSite(
     siteId: string,
     updates: SiteOverrideRecord
   ): Promise<void> {
-    await mutationQueue.run(async () => {
+    assertKnownSiteIntegrationIds({ [siteId]: {} }, "site overrides")
+    await this.mutations.run(async () => {
       const current = await this.getAll()
       current[siteId] = { ...(current[siteId] || {}), ...updates }
-      await persistSiteOverrides(current)
+      await this.persist(current)
     })
-  },
+  }
   async removeSite(siteId: string): Promise<void> {
-    await mutationQueue.run(async () => {
+    assertKnownSiteIntegrationIds({ [siteId]: {} }, "site overrides")
+    await this.mutations.run(async () => {
       const current = await this.getAll()
       if (current[siteId]) {
         delete current[siteId]
-        await persistSiteOverrides(current)
+        await this.persist(current)
       }
     })
-  },
+  }
   async clear(): Promise<void> {
-    await mutationQueue.run(() => persistSiteOverrides({}))
-  },
+    await this.mutations.run(() => this.persist({}))
+  }
 }

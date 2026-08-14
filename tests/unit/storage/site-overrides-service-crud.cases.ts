@@ -52,13 +52,13 @@ export function registerSiteOverridesCrudCases(): void {
 
     it("should overwrite existing overrides", async () => {
       mockStorageData.siteOverrides = {
-        "pixiv-comic": { pathTemplate: "/legacy/path" },
+        "pixiv-comic": { pathTemplate: "/previous/path" },
         mangadex: { outputFormat: "cbz" as const },
       }
 
       const newMap = {
         mangadex: { outputFormat: "zip" as const },
-        manganato: { pathTemplate: "/new/path" },
+        comicnettai: { pathTemplate: "/new/path" },
       }
 
       await siteOverridesService.setAll(newMap)
@@ -71,13 +71,15 @@ export function registerSiteOverridesCrudCases(): void {
   describe("updateForSite", () => {
     it("serializes concurrent updates for different sites", async () => {
       await Promise.all([
-        siteOverridesService.updateForSite("site-a", { outputFormat: "cbz" }),
-        siteOverridesService.updateForSite("site-b", { outputFormat: "zip" }),
+        siteOverridesService.updateForSite("mangadex", { outputFormat: "cbz" }),
+        siteOverridesService.updateForSite("pixiv-comic", {
+          outputFormat: "zip",
+        }),
       ])
 
       await expect(siteOverridesService.getAll()).resolves.toEqual({
-        "site-a": { outputFormat: "cbz" },
-        "site-b": { outputFormat: "zip" },
+        mangadex: { outputFormat: "cbz" },
+        "pixiv-comic": { outputFormat: "zip" },
       })
     })
 
@@ -154,22 +156,40 @@ export function registerSiteOverridesCrudCases(): void {
       expect(overrides.mangadex).toEqual({ outputFormat: "zip" })
     })
 
-    it("should not error when removing non-existent site", async () => {
+    it("rejects an unknown provider ID when removing overrides", async () => {
       mockStorageData.siteOverrides = {
         mangadex: { outputFormat: "cbz" as const },
       }
 
       await expect(
         siteOverridesService.removeSite("non-existent")
-      ).resolves.not.toThrow()
+      ).rejects.toThrow(/Unknown site integration ID/)
 
       const overrides = await siteOverridesService.getAll()
-      expect(overrides.mangadex).toEqual({ outputFormat: "cbz" })
+      expect(overrides).toEqual({ mangadex: { outputFormat: "cbz" } })
+    })
+
+    it("rejects unknown provider IDs on write without touching storage", async () => {
+      await expect(
+        siteOverridesService.setAll({
+          "unknown-provider": { outputFormat: "cbz" },
+        })
+      ).rejects.toThrow(/Unknown site integration ID/)
+      expect(mockStorageData.siteOverrides).toBeUndefined()
+    })
+
+    it("rejects unknown provider IDs in a present stored document", async () => {
+      mockStorageData.siteOverrides = {
+        "unknown-provider": { outputFormat: "cbz" },
+      }
+      await expect(siteOverridesService.getAll()).rejects.toThrow(
+        /Unknown site integration ID/
+      )
     })
 
     it("should handle removal from empty overrides", async () => {
       await expect(
-        siteOverridesService.removeSite("any-site")
+        siteOverridesService.removeSite("comicnettai")
       ).resolves.not.toThrow()
 
       const overrides = await siteOverridesService.getAll()
@@ -182,7 +202,7 @@ export function registerSiteOverridesCrudCases(): void {
       mockStorageData.siteOverrides = {
         "pixiv-comic": { outputFormat: "cbz" as const },
         mangadex: { outputFormat: "zip" as const },
-        manganato: { pathTemplate: "/path" },
+        comicnettai: { pathTemplate: "/path" },
       }
 
       await siteOverridesService.clear()

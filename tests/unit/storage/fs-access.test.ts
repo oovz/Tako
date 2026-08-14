@@ -112,6 +112,18 @@ describe("File System Access helpers", () => {
       )
     })
 
+    it("does not misreport a permission-query failure as expired access", async () => {
+      const dir = createDirectoryHandle(undefined, {
+        queryPermission: async () => {
+          throw new Error("handle store unavailable")
+        },
+      })
+
+      await expect(checkPermissionBeforeWrite(dir)).rejects.toThrow(
+        "Unable to query directory write permission"
+      )
+    })
+
     it("rejects with a directory error when the stored handle no longer resolves", async () => {
       const callOrder: string[] = []
       const dir = createDirectoryHandle(undefined, {

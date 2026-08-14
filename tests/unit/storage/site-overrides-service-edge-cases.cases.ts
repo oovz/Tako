@@ -20,14 +20,13 @@ export function registerSiteOverridesEdgeCases(): void {
       expect(overrides.mangadex.imagePolicy?.delayMs).toBeUndefined()
     })
 
-    it("should handle special characters in site ID", async () => {
+    it("rejects a provider ID outside the generated catalog", async () => {
       const siteId = "site-with-dashes_and_underscores.dots"
-      await siteOverridesService.updateForSite(siteId, {
-        outputFormat: "cbz",
-      })
-
-      const overrides = await siteOverridesService.getAll()
-      expect(overrides[siteId]).toEqual({ outputFormat: "cbz" })
+      await expect(
+        siteOverridesService.updateForSite(siteId, {
+          outputFormat: "cbz",
+        })
+      ).rejects.toThrow(/Unknown site integration ID/)
     })
 
     it("should handle rapid sequential updates", async () => {
@@ -63,6 +62,21 @@ export function registerSiteOverridesEdgeCases(): void {
       await expect(
         siteOverridesService.updateForSite("mangadex", {
           imagePolicy: { concurrency: 2.5 },
+        })
+      ).rejects.toThrow()
+
+      await expect(siteOverridesService.getAll()).resolves.toEqual({})
+    })
+
+    it("rejects retry overrides outside the current settings limits", async () => {
+      await expect(
+        siteOverridesService.updateForSite("mangadex", {
+          retries: { image: 11 },
+        })
+      ).rejects.toThrow()
+      await expect(
+        siteOverridesService.updateForSite("mangadex", {
+          retries: { chapter: 1.5 },
         })
       ).rejects.toThrow()
 

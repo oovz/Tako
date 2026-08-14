@@ -33,12 +33,12 @@ globalThis.chrome = {
   },
 } as any
 
-export let siteOverridesService: typeof import("@/src/storage/site-overrides-service").siteOverridesService
+export let siteOverridesService: import("@/src/storage/site-overrides-service").SiteOverridesService
 
 export async function resetSiteOverridesServiceTestEnvironment(): Promise<void> {
   vi.clearAllMocks()
   Object.keys(mockStorageData).forEach((key) => delete mockStorageData[key])
   vi.resetModules()
   const module = await import("@/src/storage/site-overrides-service")
-  siteOverridesService = module.siteOverridesService
+  siteOverridesService = new module.SiteOverridesService()
 }

@@ -9,13 +9,13 @@ export function registerSiteIntegrationEnablementServiceCases(): void {
   describe("site-integration-enablement-service", () => {
     it("serializes concurrent enablement updates", async () => {
       await Promise.all([
-        siteIntegrationEnablementService.setEnabled("site-a", true),
-        siteIntegrationEnablementService.setEnabled("site-b", false),
+        siteIntegrationEnablementService.setEnabled("mangadex", true),
+        siteIntegrationEnablementService.setEnabled("pixiv-comic", false),
       ])
 
       await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual({
-        "site-a": true,
-        "site-b": false,
+        mangadex: true,
+        "pixiv-comic": false,
       })
     })
 
@@ -25,40 +25,21 @@ export function registerSiteIntegrationEnablementServiceCases(): void {
       expect(mockStorageData[canonicalStorageKey]).toEqual({ mangadex: false })
     })
 
-    it("ignores legacy siteIntegrationOverrides data when canonical enablement is absent", async () => {
-      mockStorageData.siteIntegrationOverrides = {
-        mangadex: false,
-        "pixiv-comic": true,
-      }
-
-      await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual(
-        {}
-      )
+    it("rejects unknown provider IDs on write without touching storage", async () => {
+      await expect(
+        siteIntegrationEnablementService.setAll({ "unknown-provider": true })
+      ).rejects.toThrow(/Unknown site integration ID/)
+      await expect(
+        siteIntegrationEnablementService.setEnabled("unknown-provider", true)
+      ).rejects.toThrow(/Unknown site integration ID/)
       expect(mockStorageData[canonicalStorageKey]).toBeUndefined()
-      expect(mockStorageData.siteIntegrationOverrides).toEqual({
-        mangadex: false,
-        "pixiv-comic": true,
-      })
     })
 
-    it("returns canonical enablement data when both canonical and legacy keys exist", async () => {
-      mockStorageData[canonicalStorageKey] = {
-        mangadex: true,
-      }
-      mockStorageData.siteIntegrationOverrides = {
-        mangadex: false,
-      }
-
-      await expect(siteIntegrationEnablementService.getAll()).resolves.toEqual({
-        mangadex: true,
-      })
-
-      expect(mockStorageData[canonicalStorageKey]).toEqual({
-        mangadex: true,
-      })
-      expect(mockStorageData.siteIntegrationOverrides).toEqual({
-        mangadex: false,
-      })
+    it("rejects unknown provider IDs in a present stored document", async () => {
+      mockStorageData[canonicalStorageKey] = { "unknown-provider": true }
+      await expect(siteIntegrationEnablementService.getAll()).rejects.toThrow(
+        /Unknown site integration ID/
+      )
     })
   })
 }

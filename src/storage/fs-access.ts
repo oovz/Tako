@@ -214,11 +214,14 @@ export async function checkPermissionBeforeWrite(
     // Directory enumeration itself is permission-gated. Query the stored
     // handle first so revoked access is not misreported as a missing folder.
     const permission = await queryFsaPermission(dir, true)
-    if (permission !== "granted") {
+    if (permission === "prompt" || permission === "denied") {
       throw new PermissionExpiredError({
         component: "fs-access",
         operation: "checkPermissionBeforeWrite",
       })
+    }
+    if (permission !== "granted") {
+      throw new Error("Unable to query directory write permission")
     }
 
     try {

@@ -28,7 +28,7 @@ globalThis.chrome = {
   },
 } as typeof chrome
 
-export let siteIntegrationEnablementService: typeof import("@/src/storage/site-integration-enablement-service").siteIntegrationEnablementService
+export let siteIntegrationEnablementService: import("@/src/storage/site-integration-enablement-service").SiteIntegrationEnablementService
 export let canonicalStorageKey: string
 
 export async function resetSiteIntegrationEnablementServiceTestEnvironment(): Promise<void> {
@@ -38,6 +38,7 @@ export async function resetSiteIntegrationEnablementServiceTestEnvironment(): Pr
   vi.resetModules()
   const module =
     await import("@/src/storage/site-integration-enablement-service")
-  siteIntegrationEnablementService = module.siteIntegrationEnablementService
+  siteIntegrationEnablementService =
+    new module.SiteIntegrationEnablementService()
   canonicalStorageKey = module.SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY
 }

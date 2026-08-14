@@ -85,7 +85,7 @@ export function registerSiteOverridesStructureAndIntegrationCases(): void {
 
       vi.resetModules()
       const newModule = await import("@/src/storage/site-overrides-service")
-      const newService = newModule.siteOverridesService
+      const newService = new newModule.SiteOverridesService()
 
       const overrides = await newService.getAll()
       expect(overrides["pixiv-comic"]).toEqual({ outputFormat: "cbz" })

@@ -34,5 +34,11 @@ export function registerSiteIntegrationSettingsResolutionCases(): void {
         autoReadMangaDexSettings: false,
       })
     })
+
+    it("rejects an unknown provider ID before resolving settings", async () => {
+      await expect(
+        siteIntegrationSettingsService.getForSite("unknown-provider")
+      ).rejects.toThrow(/Unknown site integration ID/)
+    })
   })
 }

@@ -28,7 +28,7 @@ globalThis.chrome = {
   },
 } as typeof chrome
 
-export let siteIntegrationSettingsService: typeof import("@/src/storage/site-integration-settings-service").siteIntegrationSettingsService
+export let siteIntegrationSettingsService: import("@/src/storage/site-integration-settings-service").SiteIntegrationSettingsService
 export let siteIntegrationSettingsStorageKey: typeof import("@/src/storage/site-integration-settings-service").SITE_INTEGRATION_SETTINGS_STORAGE_KEY
 
 export async function resetSiteIntegrationSettingsServiceTestEnvironment(): Promise<void> {
@@ -37,7 +37,7 @@ export async function resetSiteIntegrationSettingsServiceTestEnvironment(): Prom
 
   vi.resetModules()
   const module = await import("@/src/storage/site-integration-settings-service")
-  siteIntegrationSettingsService = module.siteIntegrationSettingsService
+  siteIntegrationSettingsService = new module.SiteIntegrationSettingsService()
   siteIntegrationSettingsStorageKey =
     module.SITE_INTEGRATION_SETTINGS_STORAGE_KEY
 }

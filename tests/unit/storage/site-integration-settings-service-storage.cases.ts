@@ -7,19 +7,21 @@ import {
 
 export function registerSiteIntegrationSettingsStorageCases(): void {
   describe("site-integration-settings-service", () => {
-    it("serializes concurrent updates for different sites", async () => {
+    it("serializes concurrent updates without losing fields", async () => {
       await Promise.all([
-        siteIntegrationSettingsService.updateForSite("site-a", {
-          quality: "high",
+        siteIntegrationSettingsService.updateForSite("mangadex", {
+          imageQuality: "data",
         }),
-        siteIntegrationSettingsService.updateForSite("site-b", {
-          quality: "low",
+        siteIntegrationSettingsService.updateForSite("mangadex", {
+          autoReadMangaDexSettings: false,
         }),
       ])
 
       await expect(siteIntegrationSettingsService.getAll()).resolves.toEqual({
-        "site-a": { quality: "high" },
-        "site-b": { quality: "low" },
+        mangadex: {
+          imageQuality: "data",
+          autoReadMangaDexSettings: false,
+        },
       })
     })
 
@@ -31,12 +33,6 @@ export function registerSiteIntegrationSettingsStorageCases(): void {
           imageQuality: "data-saver",
         },
       }
-      mockStorageData.siteDynamicSettings = {
-        mangadex: {
-          imageQuality: "data",
-        },
-      }
-
       await expect(siteIntegrationSettingsService.getAll()).resolves.toEqual({
         mangadex: {
           imageQuality: "data-saver",
@@ -44,18 +40,7 @@ export function registerSiteIntegrationSettingsStorageCases(): void {
       })
     })
 
-    it("ignores legacy siteDynamicSettings when canonical settings are absent", async () => {
-      mockStorageData.siteDynamicSettings = {
-        mangadex: {
-          autoReadMangaDexSettings: true,
-        },
-      }
-
-      await expect(siteIntegrationSettingsService.getAll()).resolves.toEqual({})
-      expect(mockStorageData[siteIntegrationSettingsStorageKey]).toBeUndefined()
-    })
-
-    it("drops malformed per-site entries while preserving valid site settings", async () => {
+    it("rejects the complete current document when any site entry is malformed", async () => {
       mockStorageData[siteIntegrationSettingsStorageKey] = {
         mangadex: {
           imageQuality: "data",
@@ -65,12 +50,7 @@ export function registerSiteIntegrationSettingsStorageCases(): void {
         brokenArray: ["bad"],
       }
 
-      await expect(siteIntegrationSettingsService.getAll()).resolves.toEqual({
-        mangadex: {
-          imageQuality: "data",
-          autoReadMangaDexSettings: false,
-        },
-      })
+      await expect(siteIntegrationSettingsService.getAll()).rejects.toThrow()
     })
 
     it("rejects invalid known select and multiselect values on write", async () => {
@@ -89,16 +69,27 @@ export function registerSiteIntegrationSettingsStorageCases(): void {
       expect(mockStorageData[siteIntegrationSettingsStorageKey]).toBeUndefined()
     })
 
-    it("keeps unknown forward-compatible settings writable", async () => {
-      await siteIntegrationSettingsService.setAll({
-        futureIntegration: { futureSetting: ["value"] },
-        mangadex: { futureSetting: { nested: true } },
-      })
+    it("rejects an unknown provider ID before updating settings", async () => {
+      await expect(
+        siteIntegrationSettingsService.updateForSite("unknown-provider", {
+          value: true,
+        })
+      ).rejects.toThrow(/Unknown site integration ID/)
+      expect(mockStorageData[siteIntegrationSettingsStorageKey]).toBeUndefined()
+    })
 
-      await expect(siteIntegrationSettingsService.getAll()).resolves.toEqual({
-        futureIntegration: { futureSetting: ["value"] },
-        mangadex: { futureSetting: { nested: true } },
-      })
+    it("rejects unknown providers and settings on write", async () => {
+      await expect(
+        siteIntegrationSettingsService.setAll({
+          futureIntegration: { futureSetting: ["value"] },
+        })
+      ).rejects.toThrow(/Unknown site integration ID/)
+      await expect(
+        siteIntegrationSettingsService.setAll({
+          mangadex: { futureSetting: { nested: true } },
+        })
+      ).rejects.toThrow(/Unknown site integration setting/)
+      expect(mockStorageData[siteIntegrationSettingsStorageKey]).toBeUndefined()
     })
   })
 }
