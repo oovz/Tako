@@ -4,45 +4,15 @@ import {
   type PublusImageMetadata,
 } from "./publus-image"
 import { parseTrustedComicNettaiCdnUrl } from "./shared"
-
-type PublusConfigContent = {
-  file?: string
-  index?: number
-  type?: string
-}
-
-type PublusConfigPage = {
-  No?: number | string
-  NS?: number
-  PS?: number
-  RS?: number
-  BlockWidth?: number
-  BlockHeight?: number
-}
-
-type PublusConfigPageEntry = {
-  Page?: PublusConfigPage
-}
-
-type PublusConfigFile = {
-  FileLinkInfo?: {
-    PageLinkInfoList?: PublusConfigPageEntry[]
-  }
-}
-
-type PublusConfigKeys = {
-  key1?: string
-  key2?: string
-  key3?: string
-}
-
-export type PublusConfig = Record<string, unknown> & {
-  configuration?: {
-    "file-name-version"?: string
-    contents?: readonly PublusConfigContent[]
-    keys?: PublusConfigKeys
-  }
-}
+import { ProviderContractError } from "../provider-contract-error"
+import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
+import {
+  parsePublusConfig,
+  type PublusConfig,
+  type PublusConfigContent,
+  type PublusConfigFile,
+  type PublusConfigPage,
+} from "./contracts/publus"
 
 type PublusDecodeState = [Uint8Array, number, number[], number[], number[]]
 
@@ -560,12 +530,7 @@ function decodeUtf8(
 
 export function decodePublusConfigurationPack(rawText: string): PublusConfig {
   const parsed: unknown = JSON.parse(rawText)
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(
-      "Invalid Comic Nettai PUBLUS configuration pack: expected JSON object"
-    )
-  }
-  const preDecodedConfig = parsed as PublusConfig
+  const preDecodedConfig = parsePublusConfig(parsed)
   if (preDecodedConfig.configuration) {
     return preDecodedConfig
   }
@@ -611,12 +576,7 @@ export function decodePublusConfigurationPack(rawText: string): PublusConfig {
 
   const [json, key1Hex, key2Hex, key3Hex] = decodeUtf8(decoded)
   const decodedConfig: unknown = JSON.parse(json)
-  if (typeof decodedConfig !== "object" || decodedConfig === null) {
-    throw new Error(
-      "Invalid Comic Nettai PUBLUS decoded configuration: expected JSON object"
-    )
-  }
-  const config = decodedConfig as PublusConfig
+  const config = parsePublusConfig(decodedConfig)
   config.configuration ??= {}
   config.configuration.keys = {
     key1: key1Hex,
@@ -740,14 +700,7 @@ function buildPublusImageMetadata(input: {
   }
 }
 
-const PUBLUS_IMAGE_TYPES = new Set([
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "gif",
-  "avif",
-])
+const PUBLUS_IMAGE_TYPES = new Set(["jpg", "jpeg", "png", "webp", "gif"])
 
 function assertPublusContentPath(file: string): void {
   const segments = file.split("/")
@@ -763,7 +716,7 @@ function assertPublusContentPath(file: string): void {
       (segment) => segment === "" || segment === "." || segment === ".."
     )
   ) {
-    throw new Error(
+    throw new ProviderContractError(
       `Comic Nettai PUBLUS content has an invalid content path: ${file}`
     )
   }
@@ -878,26 +831,37 @@ export function buildPublusImageUrlsFromConfig(
   )
   const keys = config.configuration?.keys
   if (!keys?.key1 || !keys.key2 || !keys.key3) {
-    throw new Error("Comic Nettai PUBLUS configuration keys are missing")
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS configuration keys are missing"
+    )
   }
 
   const key1 = hexToBytes(keys.key1)
   const key2 = hexToBytes(keys.key2)
   const key3 = hexToBytes(keys.key3)
   const key = xorKeys(key1, key2, key3)
-  const contents = [...(config.configuration?.contents ?? [])]
-    .filter(
-      (item): item is PublusConfigContent & { file: string; type: string } =>
-        typeof item.file === "string" && typeof item.type === "string"
+  const rawContents = config.configuration?.contents ?? []
+  if (rawContents.length > MAX_CHAPTER_IMAGES) {
+    throw new ProviderContractError(
+      `Comic Nettai PUBLUS chapter exceeds the ${MAX_CHAPTER_IMAGES} image limit.`
     )
-    .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+  }
+  const contents = rawContents.map((item) => {
+    if (typeof item.file !== "string" || typeof item.type !== "string") {
+      throw new ProviderContractError(
+        "Comic Nettai PUBLUS content is missing its file or image type."
+      )
+    }
+    return item as PublusConfigContent & { file: string; type: string }
+  })
+  contents.sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
 
   const urls: string[] = []
   for (const item of contents) {
     assertPublusContentPath(item.file)
     const imageType = item.type.toLowerCase()
     if (!PUBLUS_IMAGE_TYPES.has(imageType)) {
-      throw new Error(
+      throw new ProviderContractError(
         `Comic Nettai PUBLUS content uses an unsupported image type: ${item.type}`
       )
     }
@@ -909,7 +873,7 @@ export function buildPublusImageUrlsFromConfig(
       !page ||
       (typeof pageNumber !== "number" && typeof pageNumber !== "string")
     ) {
-      throw new Error(
+      throw new ProviderContractError(
         `Comic Nettai PUBLUS reconstruction metadata is missing for ${item.file}`
       )
     }
@@ -931,7 +895,7 @@ export function buildPublusImageUrlsFromConfig(
       key3,
     })
     if (!metadata) {
-      throw new Error(
+      throw new ProviderContractError(
         `Comic Nettai PUBLUS reconstruction metadata is invalid for ${item.file}`
       )
     }

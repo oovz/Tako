@@ -1,16 +1,7 @@
-import {
-  getRateLimitPolicyFromContext,
-  getRateLimitPolicyFromSnapshot,
-  rateLimitedFetchForIntegration,
-  scheduleForIntegrationScope,
-} from "@/src/runtime/rate-limit"
+import { getRateLimitPolicyFromSnapshot } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
-import {
-  allowsDeterministicE2eRedirect,
-  shouldAcceptDeterministicE2eMockResponse,
-} from "@/src/runtime/deterministic-e2e-redirect"
 import logger from "@/src/runtime/logger"
-import { filterValidImageUrls } from "@/src/shared/site-integration-utils"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 import {
   buildComicNettaiViewerApiUrl,
@@ -19,8 +10,8 @@ import {
 import {
   buildPublusImageUrlsFromConfig,
   decodePublusConfigurationPack,
-  type PublusConfig,
 } from "./publus-config"
+import type { PublusConfig } from "./contracts/publus"
 import {
   descramblePublusImage,
   parsePublusImageTransportUrl,
@@ -29,16 +20,21 @@ import {
   readResponseJson,
   readResponseText,
 } from "@/src/shared/html-response-decoder"
-import {
-  assertIntegrationRequestUrl,
-  assertIntegrationResponseUrl,
-  createIntegrationUrlAssertion,
-} from "../request-policy"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { ChapterRuntimeData } from "@/src/types/site-integrations"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { createIntegrationEndpointUrlAssertion } from "../request-policy"
 import { ProviderContractError } from "../provider-contract-error"
 
 export { buildPublusImageUrlsFromConfig } from "./publus-config"
 
-const assertComicNettaiRequestUrl = createIntegrationUrlAssertion("comicnettai")
+const assertComicNettaiImageUrl = createIntegrationEndpointUrlAssertion(
+  "comicnettai",
+  "comicnettai-cdn-image"
+)
 
 type ComicNettaiViewerContentResponse = {
   status?: string | number
@@ -62,8 +58,11 @@ function assertViewerContentResponse(value: unknown): string {
   const viewerStatus = String(response.status ?? "missing")
   if (viewerStatus !== "200") {
     const httpStatus = /^\d{3}$/.test(viewerStatus) ? viewerStatus : "422"
-    throw new Error(
-      `Comic Nettai chapter could not be opened (HTTP ${httpStatus}; viewer status ${viewerStatus}). The chapter may be unavailable or locked.`
+    throw Object.assign(
+      new Error(
+        `Comic Nettai chapter could not be opened (HTTP ${httpStatus}; viewer status ${viewerStatus}). The chapter may be unavailable or locked.`
+      ),
+      { status: Number(httpStatus) }
     )
   }
 
@@ -81,23 +80,31 @@ function assertViewerContentResponse(value: unknown): string {
 
 async function fetchJson(
   url: string,
-  settingsSnapshot?: Partial<TaskSettingsSnapshot>
+  rateLimitService: RateLimitService,
+  settingsSnapshot?: Partial<TaskSettingsSnapshot>,
+  signal?: AbortSignal
 ): Promise<unknown> {
-  const response = await rateLimitedFetchForIntegration(
-    "comicnettai",
+  const response = await integrationHttpClient.request({
+    integrationId: "comicnettai",
+    endpointId: "comicnettai-viewer-api",
     url,
-    "chapter",
-    {
+    scope: "chapter",
+    init: {
       headers: {
         accept: "application/json,*/*",
       },
       credentials: "include",
+      signal,
     },
-    getRateLimitPolicyFromSnapshot(settingsSnapshot, "chapter")
-  )
+    policyOverride: getRateLimitPolicyFromSnapshot(settingsSnapshot, "chapter"),
+    rateLimitService,
+  })
   if (!response.ok) {
-    throw new Error(
-      `Comic Nettai content request failed (HTTP ${response.status}). The site may be unavailable.`
+    throw Object.assign(
+      new Error(
+        `Comic Nettai content request failed (HTTP ${response.status}). The site may be unavailable.`
+      ),
+      { status: response.status }
     )
   }
 
@@ -106,38 +113,44 @@ async function fetchJson(
 
 export async function resolveComicNettaiChapterImageUrls(
   chapter: { id: string; url: string },
-  settingsSnapshot?: Partial<TaskSettingsSnapshot>
+  rateLimitService: RateLimitService,
+  settingsSnapshot?: Partial<TaskSettingsSnapshot>,
+  signal?: AbortSignal
 ): Promise<string[]> {
   const contentCheckUrl = buildComicNettaiViewerApiUrl(chapter.url)
-  const contentPayload = await fetchJson(contentCheckUrl, settingsSnapshot)
+  const contentPayload = await fetchJson(
+    contentCheckUrl,
+    rateLimitService,
+    settingsSnapshot,
+    signal
+  )
   const contentBaseUrl = assertViewerContentResponse(contentPayload)
 
   const configUrl = new URL(
     "configuration_pack.json",
     contentBaseUrl
   ).toString()
-  const configResponse = await scheduleForIntegrationScope(
-    "comicnettai",
-    "chapter",
-    async () => {
-      assertIntegrationRequestUrl("comicnettai", configUrl)
-      const response = await fetch(configUrl, {
-        headers: {
-          accept: "application/json,*/*",
-        },
-        credentials: "omit",
-        redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
-      })
-      if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
-        assertIntegrationResponseUrl("comicnettai", configUrl, response.url)
-      }
-      return response
+  const configResponse = await integrationHttpClient.request({
+    integrationId: "comicnettai",
+    endpointId: "comicnettai-cdn-config",
+    url: configUrl,
+    scope: "chapter",
+    init: {
+      headers: {
+        accept: "application/json,*/*",
+      },
+      credentials: "omit",
+      signal,
     },
-    getRateLimitPolicyFromSnapshot(settingsSnapshot, "chapter")
-  )
+    policyOverride: getRateLimitPolicyFromSnapshot(settingsSnapshot, "chapter"),
+    rateLimitService,
+  })
   if (!configResponse.ok) {
-    throw new Error(
-      `Comic Nettai chapter configuration could not be loaded (HTTP ${configResponse.status}). The site may be unavailable.`
+    throw Object.assign(
+      new Error(
+        `Comic Nettai chapter configuration could not be loaded (HTTP ${configResponse.status}). The site may be unavailable.`
+      ),
+      { status: configResponse.status }
     )
   }
 
@@ -158,29 +171,22 @@ export async function resolveComicNettaiChapterImageUrls(
   }
 }
 
-export function processComicNettaiImageUrls(urls: string[]): Promise<string[]> {
-  return Promise.resolve(
-    filterValidImageUrls(urls).filter((url) => {
-      try {
-        parseTrustedComicNettaiCdnUrl(url, "Comic Nettai PUBLUS image URL")
-        return true
-      } catch {
-        return false
-      }
-    })
-  )
-}
-
 export async function downloadComicNettaiChapterImage(
   imageUrl: string,
-  opts?: {
+  opts: {
     signal?: AbortSignal
-    context?: Record<string, unknown>
+    runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
   }
-): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
-  if (opts?.signal?.aborted) {
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (opts.signal?.aborted) {
     throw new Error("aborted")
   }
 
@@ -190,31 +196,82 @@ export async function downloadComicNettaiChapterImage(
     "Comic Nettai PUBLUS image URL"
   ).toString()
   if (!metadata) {
-    throw new Error(
+    throw new ProviderContractError(
       "Comic Nettai PUBLUS reconstruction metadata is missing from the image request"
     )
   }
 
-  const { data: rawData, mimeType } = await fetchImageWithStallDetection(
-    trustedSourceUrl,
-    {
-      integrationId: "comicnettai",
-      signal: opts?.signal,
-      init: { credentials: "omit" },
-      rateLimitPolicy: getRateLimitPolicyFromContext(opts?.context, "image"),
-      skipRateLimit: opts?.skipRateLimit,
-      onBytesReceived: opts?.onBytesReceived,
-      assertUrlAllowed: assertComicNettaiRequestUrl,
-    }
-  )
+  const {
+    data: rawData,
+    mimeType,
+    liveResourceLease,
+  } = await fetchImageWithStallDetection(trustedSourceUrl, {
+    integrationId: "comicnettai",
+    endpointId: "comicnettai-cdn-image",
+    signal: opts.signal,
+    init: { credentials: "omit" },
+    rateLimitPolicy: opts.runtime.rateLimitSettings.image,
+    rateLimitService: opts.runtime.rateLimitService,
+    skipRateLimit: opts.skipRateLimit,
+    onBytesReceived: opts.onBytesReceived,
+    assertUrlAllowed: assertComicNettaiImageUrl,
+    liveResourceLedger: opts.liveResourceLedger,
+  })
   const downloadedImage = await descramblePublusImage(
     rawData,
     mimeType,
-    metadata
+    metadata,
+    opts.signal,
+    opts.liveResourceLedger,
+    liveResourceLease
   )
   const filename =
     new URL(trustedSourceUrl).pathname.split("/").filter(Boolean).pop() ||
     "page.jpeg"
 
   return { ...downloadedImage, filename }
+}
+
+export async function downloadComicNettaiCoverImage(
+  imageUrl: string,
+  opts: {
+    signal?: AbortSignal
+    runtime: ChapterRuntimeData
+    skipRateLimit?: boolean
+    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
+  }
+): Promise<{
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  if (opts.signal?.aborted) {
+    throw new Error("aborted")
+  }
+  const trustedUrl = parseTrustedComicNettaiCdnUrl(
+    imageUrl,
+    "Comic Nettai cover image URL"
+  ).toString()
+  const { data, mimeType, liveResourceLease } =
+    await fetchImageWithStallDetection(trustedUrl, {
+      integrationId: "comicnettai",
+      endpointId: "comicnettai-cdn-image",
+      signal: opts.signal,
+      rateLimitService: opts.runtime.rateLimitService,
+      init: { credentials: "omit" },
+      skipRateLimit: opts.skipRateLimit,
+      onBytesReceived: opts.onBytesReceived,
+      assertUrlAllowed: assertComicNettaiImageUrl,
+      liveResourceLedger: opts.liveResourceLedger,
+    })
+  return {
+    data,
+    mimeType,
+    liveResourceLease,
+    filename:
+      new URL(trustedUrl).pathname.split("/").filter(Boolean).pop() ||
+      "cover.jpg",
+  }
 }

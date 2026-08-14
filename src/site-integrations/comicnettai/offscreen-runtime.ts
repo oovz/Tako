@@ -3,9 +3,12 @@ import type {
   OffscreenSiteAdapter,
   SeriesDataResolutionResult,
 } from "@/src/types/site-integrations"
+import type { JsonObject } from "@/src/types/site-integrations"
+import { ChapterImagePlanSchema } from "../chapter-plan"
+import type { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import {
   downloadComicNettaiChapterImage,
-  processComicNettaiImageUrls,
+  downloadComicNettaiCoverImage,
   resolveComicNettaiChapterImageUrls,
 } from "./chapter-api"
 import {
@@ -15,11 +18,16 @@ import {
 
 const offscreen: OffscreenIntegration = {
   name: "Comic Nettai Offscreen",
+  cover: {
+    downloadImage: downloadComicNettaiCoverImage,
+  },
   series: {
     async resolveSeriesData({
       seriesUrl,
       document,
       language,
+      signal,
+      rateLimitService,
     }): Promise<SeriesDataResolutionResult> {
       const result: SeriesDataResolutionResult = {}
       try {
@@ -32,7 +40,10 @@ const offscreen: OffscreenIntegration = {
       try {
         result.chapterList = await extractComicNettaiChapterListWithPagination(
           document,
-          seriesUrl
+          seriesUrl,
+          rateLimitService,
+          undefined,
+          signal
         )
       } catch (error) {
         result.chapterListError =
@@ -45,20 +56,25 @@ const offscreen: OffscreenIntegration = {
     },
   },
   chapter: {
-    resolveImageUrls(chapter, _context, settingsSnapshot) {
-      return resolveComicNettaiChapterImageUrls(chapter, settingsSnapshot)
-    },
-
-    processImageUrls(urls: string[]) {
-      return processComicNettaiImageUrls(urls)
+    async resolveChapterPlan(chapter, input) {
+      const imageUrls = await resolveComicNettaiChapterImageUrls(
+        chapter,
+        input.runtime.rateLimitService,
+        input.settings,
+        input.signal
+      )
+      return ChapterImagePlanSchema.parse({ imageUrls })
     },
 
     downloadImage(
       imageUrl: string,
-      opts?: {
+      opts: {
         signal?: AbortSignal
-        context?: Record<string, unknown>
+        dispatchContext?: JsonObject
+        runtime: import("@/src/types/site-integrations").ChapterRuntimeData
+        skipRateLimit?: boolean
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+        liveResourceLedger?: OffscreenLiveResourceLedger
       }
     ) {
       return downloadComicNettaiChapterImage(imageUrl, {

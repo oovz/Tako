@@ -13,12 +13,9 @@ import {
   parseComicNettaiSeriesIdFromPath,
   parseComicNettaiViewerCid,
 } from "./shared"
-import {
-  assertIntegrationRequestUrl,
-  assertIntegrationResponseUrl,
-} from "../request-policy"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { readResponseText } from "@/src/shared/html-response-decoder"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 function buildLockedComicNettaiChapterUrl(
   thumbnailUrl: string,
@@ -159,7 +156,11 @@ const MAX_COMICNETTAI_PAGINATION_PAGES = 100
 const COMICNETTAI_PAGINATION_CONCURRENCY = 4
 const COMICNETTAI_PAGINATION_TIMEOUT_MS = 10_000
 
-type ComicNettaiDocumentLoader = (url: string) => Promise<Document>
+type ComicNettaiDocumentLoader = (
+  url: string,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
+) => Promise<Document>
 
 function getPaginationPageNumber(url: URL): number {
   const rawPage = url.searchParams.get("page")
@@ -230,39 +231,52 @@ function discoverPaginationUrls(
 }
 
 export async function loadComicNettaiPaginationDocument(
-  url: string
+  url: string,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
 ): Promise<Document> {
   const controller = new AbortController()
+  const timeoutError = new Error(
+    `Comic Nettai pagination request timed out after ${COMICNETTAI_PAGINATION_TIMEOUT_MS}ms`
+  )
+  const abortExternal = () => controller.abort(signal?.reason)
+  signal?.addEventListener("abort", abortExternal, { once: true })
+  if (signal?.aborted) abortExternal()
   const timeout = globalThis.setTimeout(() => {
-    controller.abort(
-      new Error(
-        `Comic Nettai pagination request timed out after ${COMICNETTAI_PAGINATION_TIMEOUT_MS}ms`
-      )
-    )
+    controller.abort(timeoutError)
   }, COMICNETTAI_PAGINATION_TIMEOUT_MS)
 
   try {
-    assertIntegrationRequestUrl("comicnettai", url)
-    const response = await rateLimitedFetchForIntegration(
-      "comicnettai",
+    const response = await integrationHttpClient.request({
+      integrationId: "comicnettai",
+      endpointId: "comicnettai-viewer-page",
       url,
-      "chapter",
-      {
+      scope: "chapter",
+      init: {
         credentials: "include",
-        redirect: "error",
         signal: controller.signal,
-      }
-    )
-    assertIntegrationResponseUrl("comicnettai", url, response.url)
+      },
+      rateLimitService,
+    })
     if (!response.ok) {
-      throw new Error(
-        `Comic Nettai pagination request failed (HTTP ${response.status})`
+      throw Object.assign(
+        new Error(
+          `Comic Nettai pagination request failed (HTTP ${response.status})`
+        ),
+        { status: response.status }
       )
     }
     const html = await readResponseText(response)
     return new DOMParser().parseFromString(html, "text/html")
   } catch (error) {
     if (controller.signal.aborted) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error
+          ? signal.reason
+          : new Error("Comic Nettai series resolution was canceled", {
+              cause: error,
+            })
+      }
       throw new Error("Comic Nettai pagination request timed out", {
         cause: error,
       })
@@ -270,13 +284,16 @@ export async function loadComicNettaiPaginationDocument(
     throw error
   } finally {
     globalThis.clearTimeout(timeout)
+    signal?.removeEventListener("abort", abortExternal)
   }
 }
 
 export async function extractComicNettaiChapterListWithPagination(
   currentDocument: Document,
   currentUrl: string,
-  loadDocument: ComicNettaiDocumentLoader = loadComicNettaiPaginationDocument
+  rateLimitService: RateLimitService,
+  loadDocument: ComicNettaiDocumentLoader = loadComicNettaiPaginationDocument,
+  signal?: AbortSignal
 ): Promise<SeriesChapterListResult> {
   const listingUrl = new URL(currentUrl)
   if (
@@ -298,6 +315,11 @@ export async function extractComicNettaiChapterListWithPagination(
   queuedUrls.delete(currentPage)
 
   while (queuedUrls.size > 0) {
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new Error("Comic Nettai series resolution was canceled")
+    }
     const batch = [...queuedUrls.entries()]
       .sort(([left], [right]) => left - right)
       .slice(0, COMICNETTAI_PAGINATION_CONCURRENCY)
@@ -311,10 +333,15 @@ export async function extractComicNettaiChapterListWithPagination(
         .map(async ([page, url]) => ({
           page,
           url,
-          document: await loadDocument(url),
+          document: await loadDocument(url, rateLimitService, signal),
         }))
     )
     for (const loaded of loadedDocuments) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error
+          ? signal.reason
+          : new Error("Comic Nettai series resolution was canceled")
+      }
       documents.set(loaded.page, loaded.document)
       for (const [page, url] of discoverPaginationUrls(
         loaded.document,

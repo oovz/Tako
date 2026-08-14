@@ -8,10 +8,10 @@ import {
 } from "@/src/site-integrations/comicnettai/shared"
 import {
   buildPublusImageUrlsFromConfig,
-  downloadComicNettaiChapterImage,
-  processComicNettaiImageUrls,
-  resolveComicNettaiChapterImageUrls,
+  downloadComicNettaiChapterImage as downloadComicNettaiChapterImageImpl,
+  resolveComicNettaiChapterImageUrls as resolveComicNettaiChapterImageUrlsImpl,
 } from "@/src/site-integrations/comicnettai/chapter-api"
+import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import {
   buildPublusPageTileRects,
   descramblePublusImage,
@@ -20,10 +20,74 @@ import {
 import {
   extractComicNettaiSeriesMetadataFromDocument,
   extractComicNettaiChapterListFromDocument,
-  extractComicNettaiChapterListWithPagination,
-  loadComicNettaiPaginationDocument,
+  extractComicNettaiChapterListWithPagination as extractComicNettaiChapterListWithPaginationImpl,
+  loadComicNettaiPaginationDocument as loadComicNettaiPaginationDocumentImpl,
 } from "@/src/site-integrations/comicnettai/series-dom"
-import * as rateLimit from "@/src/runtime/rate-limit"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "@/src/site-integrations/http-client"
+import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+const rateLimitSettings = {
+  image: { concurrency: 1, delayMs: 0 },
+  chapter: { concurrency: 1, delayMs: 0 },
+}
+
+function downloadComicNettaiChapterImage(
+  imageUrl: string,
+  opts?: Record<string, unknown>
+) {
+  return downloadComicNettaiChapterImageImpl(imageUrl, {
+    ...(opts ?? {}),
+    runtime: { rateLimitService, rateLimitSettings },
+  } as Parameters<typeof downloadComicNettaiChapterImageImpl>[1])
+}
+
+function resolveComicNettaiChapterImageUrls(
+  chapter: { id: string; url: string },
+  settingsSnapshot?: Parameters<
+    typeof resolveComicNettaiChapterImageUrlsImpl
+  >[2],
+  signal?: AbortSignal
+) {
+  return resolveComicNettaiChapterImageUrlsImpl(
+    chapter,
+    rateLimitService,
+    settingsSnapshot,
+    signal
+  )
+}
+
+function loadComicNettaiPaginationDocument(url: string, signal?: AbortSignal) {
+  return loadComicNettaiPaginationDocumentImpl(url, rateLimitService, signal)
+}
+
+function extractComicNettaiChapterListWithPagination(
+  currentDocument: Document,
+  currentUrl: string,
+  loadDocument?: (
+    url: string,
+    rateLimitService: RateLimitService,
+    signal?: AbortSignal
+  ) => Promise<Document>,
+  signal?: AbortSignal
+) {
+  return extractComicNettaiChapterListWithPaginationImpl(
+    currentDocument,
+    currentUrl,
+    rateLimitService,
+    loadDocument,
+    signal
+  )
+}
 
 function makePngHeader(width: number, height: number): Uint8Array {
   const bytes = new Uint8Array(24)
@@ -218,7 +282,6 @@ describe("Comic Nettai site integration", () => {
   })
 
   it("fetches viewer metadata and configuration_pack.json to resolve image URLs", async () => {
-    const scheduleSpy = vi.spyOn(rateLimit, "scheduleForIntegrationScope")
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "https://www.comicnettai.com/api/viewer/c?cid=mock-cid") {
         return new Response(
@@ -254,12 +317,6 @@ describe("Comic Nettai site integration", () => {
         url: "https://www.comicnettai.com/publus/viewer.html?cid=mock-cid",
       })
     ).resolves.toHaveLength(3)
-    expect(scheduleSpy).toHaveBeenCalledWith(
-      "comicnettai",
-      "chapter",
-      expect.any(Function),
-      undefined
-    )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "https://cdn.comicnettai.com/9_hash/epub/book_contents/c958/configuration_pack.json",
@@ -331,14 +388,12 @@ describe("Comic Nettai site integration", () => {
     })
   })
 
-  it("filters invalid image candidates and rejects images without reconstruction metadata", async () => {
-    await expect(
-      processComicNettaiImageUrls([
-        "https://cdn.comicnettai.com/page.jpeg",
-        "https://attacker.example/page.jpeg",
-        "not-a-url",
-      ])
-    ).resolves.toEqual(["https://cdn.comicnettai.com/page.jpeg"])
+  it("rejects malformed chapter plans and images without reconstruction metadata", async () => {
+    expect(() =>
+      ChapterImagePlanSchema.parse({
+        imageUrls: ["https://cdn.comicnettai.com/page.jpeg", "not-a-url"],
+      })
+    ).toThrow()
 
     vi.stubGlobal(
       "fetch",
@@ -427,7 +482,25 @@ describe("Comic Nettai site integration", () => {
       expect(buildPublusImageUrlsFromConfig(BASE_URL, config)).toEqual([])
     })
 
-    it("filters out content items missing file or type", () => {
+    it("rejects oversized content lists before copying or sorting them", () => {
+      const config = {
+        ...LIVE_PUBLUS_CONFIG,
+        configuration: {
+          ...LIVE_PUBLUS_CONFIG.configuration,
+          contents: Array.from({ length: 2_001 }, (_, index) => ({
+            file: `item/xhtml/p-${index}.xhtml`,
+            index,
+            type: "jpeg",
+          })),
+        },
+      }
+
+      expect(() => buildPublusImageUrlsFromConfig(BASE_URL, config)).toThrow(
+        "exceeds the 2000 image limit"
+      )
+    })
+
+    it("rejects mixed content when any item is missing file or type", () => {
       const config = {
         ...LIVE_PUBLUS_CONFIG,
         configuration: {
@@ -448,8 +521,9 @@ describe("Comic Nettai site integration", () => {
         },
       }
 
-      const urls = buildPublusImageUrlsFromConfig(BASE_URL, config)
-      expect(urls).toHaveLength(1)
+      expect(() => buildPublusImageUrlsFromConfig(BASE_URL, config)).toThrow(
+        "content is missing its file or image type"
+      )
     })
 
     it("sorts contents by index before building URLs", () => {
@@ -513,22 +587,24 @@ describe("Comic Nettai site integration", () => {
         buildPublusImageUrlsFromConfig(BASE_URL, absolutePathConfig)
       ).toThrow("invalid content path")
 
-      const unsupportedTypeConfig = {
-        ...LIVE_PUBLUS_CONFIG,
-        configuration: {
-          ...LIVE_PUBLUS_CONFIG.configuration,
-          contents: [
-            {
-              file: "item/xhtml/p-cover.xhtml",
-              index: 1,
-              type: "svg",
-            },
-          ],
-        },
+      for (const type of ["svg", "avif"]) {
+        const unsupportedTypeConfig = {
+          ...LIVE_PUBLUS_CONFIG,
+          configuration: {
+            ...LIVE_PUBLUS_CONFIG.configuration,
+            contents: [
+              {
+                file: "item/xhtml/p-cover.xhtml",
+                index: 1,
+                type,
+              },
+            ],
+          },
+        }
+        expect(() =>
+          buildPublusImageUrlsFromConfig(BASE_URL, unsupportedTypeConfig)
+        ).toThrow("unsupported image type")
       }
-      expect(() =>
-        buildPublusImageUrlsFromConfig(BASE_URL, unsupportedTypeConfig)
-      ).toThrow("unsupported image type")
     })
   })
 
@@ -546,6 +622,66 @@ describe("Comic Nettai site integration", () => {
         tileHeight: 32,
       })
     ).rejects.toThrow("reconstruction is unavailable")
+  })
+
+  it("reserves the dimension-derived output peak and rejects an oversized PUBLUS Blob before reading it", async () => {
+    const width = 8_192
+    const height = 4_096
+    const pixelCount = width * height
+    const buffer = makePngHeader(width, height).buffer as ArrayBuffer
+    const expectedOutputReservation = pixelCount * 4
+    const expectedConvertUsage =
+      buffer.byteLength + pixelCount * 8 + expectedOutputReservation
+    const ledger = new OffscreenLiveResourceLedger(expectedConvertUsage)
+    const sourceLease = ledger.reserve(buffer.byteLength, "PUBLUS source")
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(1))
+    let usageDuringConvert = 0
+    const convertToBlob = vi.fn(async () => {
+      usageDuringConvert = ledger.getUsedBytes()
+      return {
+        size: MAX_IMAGE_BYTES + 1,
+        type: "image/png",
+        arrayBuffer,
+      } as unknown as Blob
+    })
+    const close = vi.fn()
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width, height, close }))
+    )
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { imageSmoothingEnabled: true, drawImage: vi.fn() }
+        }
+        convertToBlob = convertToBlob
+      }
+    )
+
+    await expect(
+      descramblePublusImage(
+        buffer,
+        "image/png",
+        {
+          mode: 1,
+          seed1: 2,
+          seed2: 3,
+          seed3: 4,
+          tileWidth: width,
+          tileHeight: height,
+        },
+        undefined,
+        ledger,
+        sourceLease
+      )
+    ).rejects.toThrow(`${MAX_IMAGE_BYTES} byte limit`)
+
+    expect(expectedOutputReservation).toBeGreaterThan(MAX_IMAGE_BYTES)
+    expect(usageDuringConvert).toBe(expectedConvertUsage)
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalledOnce()
+    expect(ledger.getUsedBytes()).toBe(0)
   })
 
   describe("series-dom extraction", () => {
@@ -904,7 +1040,9 @@ describe("Comic Nettai site integration", () => {
       expect(chapters.map((chapter) => chapter.id)).toEqual(["new", "old"])
       expect(loadDocument).toHaveBeenCalledOnce()
       expect(loadDocument).toHaveBeenCalledWith(
-        "https://www.comicnettai.com/book/9?page=2"
+        "https://www.comicnettai.com/book/9?page=2",
+        rateLimitService,
+        undefined
       )
     })
 
@@ -987,9 +1125,9 @@ describe("Comic Nettai site integration", () => {
       await rejection
     })
 
-    it("uses the integration URL limiter and browser-managed credentials for pagination", async () => {
+    it("uses the endpoint client and browser-managed credentials for pagination", async () => {
       const fetchForIntegration = vi
-        .spyOn(rateLimit, "rateLimitedFetchForIntegration")
+        .spyOn(integrationHttpClient, "request")
         .mockResolvedValue(
           new Response("<html><body></body></html>", { status: 200 })
         )
@@ -1009,13 +1147,15 @@ describe("Comic Nettai site integration", () => {
       ).resolves.toBe(parsedDocument)
 
       expect(fetchForIntegration).toHaveBeenCalledWith(
-        "comicnettai",
-        "https://www.comicnettai.com/book/9?page=2",
-        "chapter",
         expect.objectContaining({
-          credentials: "include",
-          redirect: "error",
-          signal: expect.any(AbortSignal),
+          integrationId: "comicnettai",
+          endpointId: "comicnettai-viewer-page",
+          url: "https://www.comicnettai.com/book/9?page=2",
+          scope: "chapter",
+          init: expect.objectContaining({
+            credentials: "include",
+            signal: expect.any(AbortSignal),
+          }),
         })
       )
       expect(parseFromString).toHaveBeenCalledWith(

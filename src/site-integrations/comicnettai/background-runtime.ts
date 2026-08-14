@@ -3,16 +3,18 @@ import type {
   SeriesDataResolutionResult,
   ServiceWorkerIntegration,
 } from "@/src/types/site-integrations"
-import { rateLimitedFetchForIntegration } from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { resolveSeriesDataViaOffscreen } from "@/src/runtime/resolve-series-data-offscreen"
 import { COMICNETTAI_ORIGIN, parseComicNettaiSeriesIdFromPath } from "./shared"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 async function resolveComicNettaiSeriesData(input: {
   seriesUrl: string
   seriesId?: string
   language?: string
   signal?: AbortSignal
+  rateLimitService: RateLimitService
 }): Promise<SeriesDataResolutionResult> {
   let parsedUrl: URL
   try {
@@ -35,15 +37,20 @@ async function resolveComicNettaiSeriesData(input: {
     )
   }
 
-  const response = await rateLimitedFetchForIntegration(
-    "comicnettai",
-    input.seriesUrl,
-    "chapter",
-    { credentials: "include", signal: input.signal }
-  )
+  const response = await integrationHttpClient.request({
+    integrationId: "comicnettai",
+    endpointId: "comicnettai-viewer-page",
+    url: input.seriesUrl,
+    scope: "chapter",
+    rateLimitService: input.rateLimitService,
+    init: { credentials: "include", signal: input.signal },
+  })
   if (!response.ok) {
-    throw new Error(
-      `Comic Nettai series page could not be loaded (HTTP ${response.status}).`
+    throw Object.assign(
+      new Error(
+        `Comic Nettai series page could not be loaded (HTTP ${response.status}).`
+      ),
+      { status: response.status }
     )
   }
 
@@ -53,6 +60,8 @@ async function resolveComicNettaiSeriesData(input: {
     seriesUrl: input.seriesUrl,
     html,
     language: input.language,
+    signal: input.signal,
+    rateLimitService: input.rateLimitService,
   })
   return { ...resolved, seriesId }
 }

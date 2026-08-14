@@ -2,6 +2,13 @@ import {
   assertDecodedImageWithinLimits,
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
+import { withRendererPixelBudget } from "@/src/runtime/renderer-budget"
+import { ProviderContractError } from "../provider-contract-error"
+import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 
 export type PublusImageMetadata = {
   mode: number
@@ -671,76 +678,137 @@ export function parsePublusImageTransportUrl(imageUrl: string): {
 export async function descramblePublusImage(
   buffer: ArrayBuffer,
   mimeType: string,
-  metadata: PublusImageMetadata
-): Promise<{ data: ArrayBuffer; mimeType: string }> {
-  if (
-    typeof createImageBitmap !== "function" ||
-    typeof OffscreenCanvas === "undefined"
-  ) {
-    throw new Error(
-      "Comic Nettai PUBLUS image reconstruction is unavailable in this browser context"
-    )
-  }
-
-  const dimensions = readEncodedImageDimensions(buffer, mimeType)
-  assertDecodedImageWithinLimits(
-    dimensions.width,
-    dimensions.height,
-    "Comic Nettai"
-  )
-  const blob = new Blob([buffer], { type: mimeType })
-  const bitmap = await createImageBitmap(blob)
-
+  metadata: PublusImageMetadata,
+  signal?: AbortSignal,
+  liveResourceLedger?: OffscreenLiveResourceLedger,
+  sourceLease?: OffscreenLiveResourceLease
+): Promise<{
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
+}> {
+  const encodedSourceLease = sourceLease
+  let sourceBlobLease: OffscreenLiveResourceLease | undefined
+  let decodedSurfaceLease: OffscreenLiveResourceLease | undefined
+  let outputBlobLease: OffscreenLiveResourceLease | undefined
+  let outputBufferLease: OffscreenLiveResourceLease | undefined
   try {
-    assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Comic Nettai")
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-    const context = canvas.getContext("2d")
-    if (!context) {
-      throw new Error(
-        "Comic Nettai PUBLUS image reconstruction could not create a canvas context"
+    if (
+      typeof createImageBitmap !== "function" ||
+      typeof OffscreenCanvas === "undefined"
+    ) {
+      throw new ProviderContractError(
+        "Comic Nettai PUBLUS image reconstruction is unavailable in this browser context"
       )
     }
+    const dimensions = readEncodedImageDimensions(buffer, mimeType)
+    assertDecodedImageWithinLimits(
+      dimensions.width,
+      dimensions.height,
+      "Comic Nettai"
+    )
+    return await withRendererPixelBudget(
+      dimensions.width * dimensions.height,
+      signal,
+      async () => {
+        decodedSurfaceLease = liveResourceLedger?.reserve(
+          dimensions.width * dimensions.height * 8,
+          "Comic Nettai decoded source and destination surfaces"
+        )
+        sourceBlobLease = liveResourceLedger?.reserve(
+          buffer.byteLength,
+          "Comic Nettai encoded source Blob"
+        )
+        const blob = new Blob([buffer], { type: mimeType })
+        const bitmap = await createImageBitmap(blob)
+        sourceBlobLease?.release()
+        sourceBlobLease = undefined
 
-    context.imageSmoothingEnabled = false
-    const rects = buildPublusPageTileRects({
-      ...metadata,
-      sourceWidth: bitmap.width,
-      sourceHeight: bitmap.height,
-    })
-    if (rects.length === 0) {
-      throw new Error(
-        "Comic Nettai PUBLUS image reconstruction produced no valid tiles"
-      )
-    }
+        try {
+          assertDecodedImageWithinLimits(
+            bitmap.width,
+            bitmap.height,
+            "Comic Nettai"
+          )
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+          const context = canvas.getContext("2d")
+          if (!context) {
+            throw new ProviderContractError(
+              "Comic Nettai PUBLUS image reconstruction could not create a canvas context"
+            )
+          }
 
-    for (const rect of rects) {
-      // The viewer's rect names are source-oriented: destX/destY point into the shuffled bitmap,
-      // while srcX/srcY are the ordered canvas coordinates.
-      context.drawImage(
-        bitmap,
-        rect.destX,
-        rect.destY,
-        rect.width,
-        rect.height,
-        rect.srcX,
-        rect.srcY,
-        rect.width,
-        rect.height
-      )
-    }
+          context.imageSmoothingEnabled = false
+          const rects = buildPublusPageTileRects({
+            ...metadata,
+            sourceWidth: bitmap.width,
+            sourceHeight: bitmap.height,
+          })
+          if (rects.length === 0) {
+            throw new ProviderContractError(
+              "Comic Nettai PUBLUS image reconstruction produced no valid tiles"
+            )
+          }
 
-    const outputMimeType = mimeType.startsWith("image/")
-      ? mimeType
-      : "image/png"
-    const outputBlob = await canvas.convertToBlob({
-      type: outputMimeType,
-      quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
-    })
-    return {
-      data: await outputBlob.arrayBuffer(),
-      mimeType: outputBlob.type || outputMimeType,
-    }
+          for (const rect of rects) {
+            // The viewer's rect names are source-oriented: destX/destY point into the shuffled bitmap,
+            // while srcX/srcY are the ordered canvas coordinates.
+            context.drawImage(
+              bitmap,
+              rect.destX,
+              rect.destY,
+              rect.width,
+              rect.height,
+              rect.srcX,
+              rect.srcY,
+              rect.width,
+              rect.height
+            )
+          }
+
+          const outputMimeType = mimeType.startsWith("image/")
+            ? mimeType
+            : "image/png"
+          outputBlobLease = liveResourceLedger?.reserve(
+            Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
+            "Comic Nettai encoded output Blob"
+          )
+          const outputBlob = await canvas.convertToBlob({
+            type: outputMimeType,
+            quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
+          })
+          if (outputBlob.size > MAX_IMAGE_BYTES) {
+            throw new ProviderContractError(
+              `Comic Nettai encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${outputBlob.size})`
+            )
+          }
+          outputBlobLease?.resize(outputBlob.size)
+          outputBufferLease = liveResourceLedger?.reserve(
+            outputBlob.size,
+            "Comic Nettai encoded output ArrayBuffer"
+          )
+          const data = await outputBlob.arrayBuffer()
+          outputBlobLease?.release()
+          outputBlobLease = undefined
+          const liveResourceLease = outputBufferLease?.transfer(
+            "retained Comic Nettai encoded output"
+          )
+          outputBufferLease = undefined
+          return {
+            data,
+            mimeType: outputBlob.type || outputMimeType,
+            liveResourceLease,
+          }
+        } finally {
+          bitmap.close()
+        }
+      }
+    )
   } finally {
-    bitmap.close()
+    encodedSourceLease?.release()
+    sourceBlobLease?.release()
+    decodedSurfaceLease?.release()
+    outputBlobLease?.release()
+    outputBufferLease?.release()
   }
 }

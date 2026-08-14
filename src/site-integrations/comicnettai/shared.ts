@@ -1,3 +1,5 @@
+import { ProviderContractError } from "../provider-contract-error"
+
 export const COMICNETTAI_ORIGIN = "https://www.comicnettai.com"
 export const COMICNETTAI_CDN_HOST = "cdn.comicnettai.com"
 
@@ -18,11 +20,11 @@ export function parseTrustedComicNettaiCdnUrl(
   try {
     url = new URL(rawUrl)
   } catch {
-    throw new Error(`${purpose} is not a valid URL`)
+    throw new ProviderContractError(`${purpose} is not a valid URL`)
   }
 
   if (!isTrustedComicNettaiCdnUrl(url)) {
-    throw new Error(
+    throw new ProviderContractError(
       `${purpose} must use the trusted Comic Nettai CDN (${COMICNETTAI_CDN_HOST})`
     )
   }
@@ -57,7 +59,9 @@ export function parseComicNettaiViewerCid(chapterUrl: string): string | null {
 export function buildComicNettaiViewerApiUrl(chapterUrl: string): string {
   const cid = parseComicNettaiViewerCid(chapterUrl)
   if (!cid) {
-    throw new Error(`Invalid Comic Nettai viewer URL: ${chapterUrl}`)
+    throw new ProviderContractError(
+      `Invalid Comic Nettai viewer URL: ${chapterUrl}`
+    )
   }
 
   const endpoint = new URL("/api/viewer/c", COMICNETTAI_ORIGIN)
