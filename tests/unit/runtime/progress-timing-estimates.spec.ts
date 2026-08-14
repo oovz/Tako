@@ -113,6 +113,12 @@ describe("ProgressTimingEstimator", () => {
         context,
         now: 1_000,
       })
-    ).resolves.toBeTruthy()
+    ).resolves.toEqual({
+      resolving: 800,
+      downloading: 1_000,
+      transforming: 0,
+      archiving: 2_500,
+      saving: 1_000,
+    })
   })
 })

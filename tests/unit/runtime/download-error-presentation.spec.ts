@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
+import {
+  getDownloadCancelPresentation,
+  getDownloadErrorMessage,
+} from "@/src/runtime/download-error-presentation"
 import { DOWNLOAD_ERROR_CATEGORIES } from "@/src/shared/download-contract"
 
 describe("download error presentation", () => {
@@ -25,6 +28,10 @@ describe("download error presentation", () => {
       "browser_download_interrupted",
       "downloadError_browserDownloadInterrupted",
     ],
+    [
+      "browser_download_unobservable",
+      "downloadError_browserDownloadUnobservable",
+    ],
     ["archive_creation_failed", "downloadError_archiveCreationFailed"],
     ["unknown", "downloadError_unknown"],
   ] as const)("maps %s to packaged copy", (category, expectedKey) => {
@@ -46,5 +53,31 @@ describe("download error presentation", () => {
     expect(getDownloadErrorMessage(raw)).toBe("downloadError_unknown")
     expect(getDownloadErrorMessage(raw)).not.toContain(raw)
     expect(getDownloadErrorMessage(raw)).not.toContain("token=secret")
+  })
+
+  it("uses explicit task-wide forget copy for unobservable downloads", () => {
+    expect(
+      getDownloadCancelPresentation("browser_download_unobservable")
+    ).toEqual({
+      title: "sidepanel_forgetUnobservableDownload",
+      description: "sidepanel_forgetUnobservableWarning",
+      confirmLabel: "sidepanel_forgetDownload",
+    })
+  })
+
+  it("uses task-wide forget copy when another chapter owns the unobservable output", () => {
+    expect(getDownloadCancelPresentation("network_unavailable", true)).toEqual({
+      title: "sidepanel_forgetUnobservableDownload",
+      description: "sidepanel_forgetUnobservableWarning",
+      confirmLabel: "sidepanel_forgetDownload",
+    })
+  })
+
+  it("keeps ordinary cancellation copy for other failures", () => {
+    expect(getDownloadCancelPresentation("network_unavailable")).toEqual({
+      title: "sidepanel_cancelThisDownload",
+      description: "sidepanel_cancelProgressWarning",
+      confirmLabel: "common_yes",
+    })
   })
 })
