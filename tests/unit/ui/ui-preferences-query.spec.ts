@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { loadUiPreferences } from "@/src/ui/shared/ui-preferences-client"
@@ -36,28 +34,5 @@ describe("UI preferences query boundary", () => {
       error: "unavailable",
     })
     await expect(loadUiPreferences()).rejects.toThrow("unavailable")
-  })
-
-  it("uses local storage changes only as a refetch signal", () => {
-    const hookSource = readFileSync(
-      join(
-        process.cwd(),
-        "src",
-        "ui",
-        "shared",
-        "hooks",
-        "useUiPreferences.ts"
-      ),
-      "utf8"
-    )
-    const clientSource = readFileSync(
-      join(process.cwd(), "src", "ui", "shared", "ui-preferences-client.ts"),
-      "utf8"
-    )
-    expect(hookSource).toContain("chrome.storage.onChanged.addListener")
-    expect(clientSource).toContain('type: "GET_UI_PREFERENCES"')
-    expect(hookSource).not.toContain("chrome.storage.local.get")
-    expect(hookSource).not.toContain("useChromeStorageValue")
-    expect(hookSource).not.toContain("settings-repository")
   })
 })

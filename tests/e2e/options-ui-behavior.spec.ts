@@ -122,7 +122,7 @@ test.describe("Options UI behavior", () => {
       .toEqual({ queuedTaskPresent: false, hasQueuedCancellationUndo: true })
   })
 
-  test("Downloads tab states the task-wide scope of forgetting an unobservable download", async ({
+  test("Downloads tab cancels a native-output action-required task without Undo", async ({
     page,
     extensionId,
   }) => {
@@ -132,38 +132,55 @@ test.describe("Options UI behavior", () => {
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
     await seedDownloadQueueState(page, [
-      makeTask("unobservable-options", "downloading", {
+      makeTask("unobservable-options", "queued", {
         seriesTitle: "Unobservable Options",
-        errorCategory: "network_unavailable",
+        activeBlock: "native_output_action_required",
+        errorCategory: "browser_download_unobservable",
         chapters: [
           {
-            ...makeChapter("earlier-failure", "downloading"),
-            errorCategory: "network_unavailable",
-          },
-          {
-            ...makeChapter("erased-output", "downloading"),
+            ...makeChapter("erased-output", "queued"),
             errorCategory: "browser_download_unobservable",
           },
         ],
       }),
     ])
 
+    // Queued blocked tasks cancel immediately through the surrender path; the
+    // cancellation is NOT an ordinary reversible Undo action.
     const taskCard = page
       .getByRole("heading", { name: "Unobservable Options" })
       .locator("xpath=ancestor::*[@aria-busy][1]")
     await taskCard.getByRole("button", { name: "Cancel" }).click()
 
-    await expect(
-      taskCard.getByText("Forget all pending downloads for this task?")
-    ).toBeVisible()
-    await expect(
-      taskCard.getByText(
-        "The browser download can no longer be inspected. Forgetting it releases all of Tako's pending outputs for this task; files may be incomplete."
-      )
-    ).toBeVisible()
-    await expect(
-      taskCard.getByRole("button", { name: "Forget all downloads" })
-    ).toBeVisible()
+    await expect(taskCard.getByText("Canceled at")).toBeVisible()
+    await expect
+      .poll(async () => {
+        const result = await page.evaluate(async () => {
+          const stored = await chrome.storage.local.get([
+            "downloadQueue",
+            "pendingUndoActions",
+          ])
+          const downloadQueue = (stored.downloadQueue ?? []) as Array<{
+            id: string
+            status: string
+          }>
+          const pendingUndoActions = (stored.pendingUndoActions ??
+            []) as Array<{
+            taskSnapshot?: { id?: string }
+          }>
+          const task = downloadQueue.find(
+            (candidate) => candidate.id === "unobservable-options"
+          )
+          return {
+            taskStatus: task?.status,
+            hasBlockedUndo: pendingUndoActions.some(
+              (action) => action.taskSnapshot?.id === "unobservable-options"
+            ),
+          }
+        })
+        return result
+      })
+      .toEqual({ taskStatus: "canceled", hasBlockedUndo: false })
   })
 
   test("Downloads tab shows retried badge and terminal timestamp labels for restarted tasks", async ({

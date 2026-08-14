@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs"
-import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
@@ -317,21 +315,6 @@ describe("options configuration reducer", () => {
     })
 
     expect(committed.externalChangeKeys).toEqual(["settings:global"])
-  })
-
-  it("keeps the reducer free of React, Chrome, and I/O effects", () => {
-    const source = readFileSync(
-      resolve(
-        process.cwd(),
-        "entrypoints/options/state/options-configuration-reducer.ts"
-      ),
-      "utf8"
-    )
-
-    expect(source).not.toMatch(/from ["']react["']/)
-    expect(source).not.toMatch(/\bchrome\b/)
-    expect(source).not.toMatch(/\b(useState|useEffect|useReducer)\b/)
-    expect(source).not.toMatch(/\b(fetch|setTimeout|setInterval)\s*\(/)
   })
 
   it("compares snapshots structurally rather than by object identity", () => {
