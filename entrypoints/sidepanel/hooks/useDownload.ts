@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 // no local item mutations; rely on centralized state
 import type { MangaPageState, ChapterState } from "@/src/types/tab-state"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
-import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { sendRuntimeMessageWithRetry } from "@/src/runtime/send-runtime-message"
 import logger from "@/src/runtime/logger"
 import { createPendingActionGuard } from "@/entrypoints/sidepanel/hooks/pending-action-guard"
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
@@ -189,7 +189,8 @@ export function useDownload({
           ),
         })
 
-        const enqueueResponse = await sendRuntimeMessage(startDownloadMessage)
+        const enqueueResponse =
+          await sendRuntimeMessageWithRetry(startDownloadMessage)
         if (enqueueResponse?.success !== true) {
           const code =
             enqueueResponse && "code" in enqueueResponse

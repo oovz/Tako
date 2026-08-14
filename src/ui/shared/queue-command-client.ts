@@ -1,5 +1,5 @@
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
-import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { sendRuntimeMessageWithRetry } from "@/src/runtime/send-runtime-message"
 import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 
 export type CancelQueueTaskResult =
@@ -13,7 +13,7 @@ function assertSuccess(response: { success: boolean; error?: string }): void {
 
 export const queueCommandClient = {
   async cancelTask(taskId: string): Promise<CancelQueueTaskResult> {
-    const response = await sendRuntimeMessage({
+    const response = await sendRuntimeMessageWithRetry({
       target: "background",
       type: "CANCEL_TASK",
       ...createCommandEnvelope(),
@@ -28,7 +28,7 @@ export const queueCommandClient = {
   async forgetUnobservableOutputs(
     taskId: string
   ): Promise<{ surrendered: number }> {
-    const response = await sendRuntimeMessage({
+    const response = await sendRuntimeMessageWithRetry({
       target: "background",
       type: "FORGET_UNOBSERVABLE_OUTPUTS",
       ...createCommandEnvelope(),
@@ -42,7 +42,7 @@ export const queueCommandClient = {
 
   async retryFailedChapters(taskId: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "RETRY_FAILED_CHAPTERS",
         ...createCommandEnvelope(),
@@ -53,7 +53,7 @@ export const queueCommandClient = {
 
   async restartTask(taskId: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "RESTART_TASK",
         ...createCommandEnvelope(),
@@ -64,7 +64,7 @@ export const queueCommandClient = {
 
   async moveTaskToTop(taskId: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "MOVE_TASK_TO_TOP",
         ...createCommandEnvelope(),
@@ -73,23 +73,20 @@ export const queueCommandClient = {
     )
   },
 
-  async removeTask(taskId: string): Promise<PendingUndoReceipt> {
-    const response = await sendRuntimeMessage({
+  async removeTask(taskId: string): Promise<PendingUndoReceipt | undefined> {
+    const response = await sendRuntimeMessageWithRetry({
       target: "background",
       type: "REMOVE_TASK",
       ...createCommandEnvelope(),
       payload: { taskId },
     })
     assertSuccess(response)
-    if (!("data" in response)) {
-      throw new Error("Remove task response is missing its Undo receipt")
-    }
-    return response.data.undo
+    return "data" in response ? response.data.undo : undefined
   },
 
   async undoQueueAction(token: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "UNDO_QUEUE_ACTION",
         ...createCommandEnvelope(),
@@ -100,7 +97,7 @@ export const queueCommandClient = {
 
   async retryDestination(taskId: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "RETRY_DESTINATION",
         ...createCommandEnvelope(),
@@ -111,7 +108,7 @@ export const queueCommandClient = {
 
   async continueDownload(taskId: string): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "CONTINUE_DOWNLOAD",
         ...createCommandEnvelope(),
@@ -122,7 +119,7 @@ export const queueCommandClient = {
 
   async clearTerminalHistory(): Promise<void> {
     assertSuccess(
-      await sendRuntimeMessage({
+      await sendRuntimeMessageWithRetry({
         target: "background",
         type: "CLEAR_ALL_HISTORY",
         ...createCommandEnvelope(),

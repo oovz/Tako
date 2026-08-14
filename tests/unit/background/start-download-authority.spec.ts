@@ -426,6 +426,51 @@ describe("START_DOWNLOAD background authority", () => {
     expect(enqueueDownloadTask).not.toHaveBeenCalled()
   })
 
+  it("converges a replayed START envelope on the existing durable task", async () => {
+    enqueueDownloadTask.mockResolvedValue({
+      outcome: "rejected",
+      reason: "task-id-conflict",
+    } as never)
+    const existingTask = {
+      id: "command-start",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-1",
+      seriesTitle: "Series",
+      chapters: [],
+      status: "queued",
+      created: 1,
+      settingsSnapshot: {},
+    }
+    const commandsWithLookup = new QueueApplicationCommands({
+      startDownloadSettings: {
+        settingsRepository: { getSettings: mocks.getSettings },
+        siteOverridesService: { getAll: mocks.getSiteOverrides },
+        siteIntegrationSettingsService: {
+          getForSite: mocks.getSiteSettings,
+        },
+      },
+      queueRepository: {
+        enqueueDownloadTask,
+        getTask: vi.fn(async () => existingTask),
+      } as unknown as QueueRepository,
+      nativeOutputCoordinator: {} as NativeOutputCoordinator,
+      cancellationCoordinator: {} as DownloadTaskCancellationCoordinator,
+      queueScheduler: {
+        activate: mocks.processDownloadQueue,
+      } as unknown as QueueScheduler,
+      destinationService: {} as never,
+      siteIntegrationEnablementService: {
+        getAll: vi.fn(async () => ({ mangadex: true })),
+      },
+      getCurrentSeriesContext,
+    })
+
+    await expect(
+      commandsWithLookup.startDownload(payload, "command-start")
+    ).resolves.toEqual({ taskId: "command-start" })
+    expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
+  })
+
   it("keeps the START handler as a thin payload delegation", async () => {
     const startDownload = vi.fn(async () => ({ taskId: "task-1" }))
     const handlers = createBackgroundQueueMessageHandlers({

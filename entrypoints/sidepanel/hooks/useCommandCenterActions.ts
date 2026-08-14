@@ -110,7 +110,11 @@ export function useCommandCenterActions() {
 
     try {
       const result = await queueCommandClient.forgetUnobservableOutputs(taskId)
-      toast.success(t("sidepanel_forgetSucceeded", String(result.surrendered)))
+      if (result.surrendered > 0) {
+        toast.success(
+          t("sidepanel_forgetSucceeded", String(result.surrendered))
+        )
+      }
     } catch (error) {
       logger.error(
         "[CommandCenter] Failed to forget unobservable outputs:",
@@ -145,7 +149,8 @@ export function useCommandCenterActions() {
     addPendingTaskId(setRemovingTaskIds, taskId)
 
     try {
-      showUndoToast(await queueCommandClient.removeTask(taskId))
+      const undo = await queueCommandClient.removeTask(taskId)
+      if (undo !== undefined) showUndoToast(undo)
     } catch (error) {
       logger.error("[CommandCenter] Failed to remove task:", error)
       toast.error(t("sidepanel_toastRemoveFailed"))

@@ -312,6 +312,16 @@ describe("QueueApplicationCommands", () => {
     expect(mocks.processDownloadQueue).toHaveBeenCalledWith()
   })
 
+  it("converges a remove replay after the task is already gone", async () => {
+    vi.mocked(queueRepository.removeTerminalDownloadTask).mockResolvedValue({
+      outcome: "rejected",
+      reason: "task-not-found",
+    } as never)
+
+    await expect(commands.removeTask("task-1")).resolves.toBeUndefined()
+    expect(mocks.schedulePendingUndoAction).not.toHaveBeenCalled()
+  })
+
   it("commits remove and queued cancel before scheduling Undo without activation", async () => {
     const events: string[] = []
     vi.mocked(queueRepository.removeTerminalDownloadTask).mockImplementation(

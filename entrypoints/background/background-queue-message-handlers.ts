@@ -63,7 +63,9 @@ export function createBackgroundQueueMessageHandlers(
       const undo = await deps.queueApplicationCommands.removeTask(
         message.payload.taskId
       )
-      return { success: true, data: { undo } }
+      return undo === undefined
+        ? { success: true }
+        : { success: true, data: { undo } }
     },
     CANCEL_TASK: async (message) => {
       const result = await deps.queueApplicationCommands.cancelTask(

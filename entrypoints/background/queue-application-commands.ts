@@ -249,17 +249,20 @@ export class QueueApplicationCommands {
     return { removedCount: result.removedTaskIds.length }
   }
 
-  async removeTask(taskId: string): Promise<PendingUndoReceipt> {
+  async removeTask(taskId: string): Promise<PendingUndoReceipt | undefined> {
     const result = await this.deps.queueRepository.removeTerminalDownloadTask({
       taskId,
       undoToken: crypto.randomUUID(),
       now: Date.now(),
     })
     if (result.outcome !== "applied") {
+      if (result.reason === "task-not-found") {
+        // Replay of an already-applied remove: the task is already gone,
+        // which IS the durable result of this command. No new Undo exists.
+        return undefined
+      }
       throw new Error(
-        result.reason === "task-not-found"
-          ? "Download task not found."
-          : "Only completed, failed, partial-success, or canceled tasks can be removed."
+        "Only completed, failed, partial-success, or canceled tasks can be removed."
       )
     }
     await schedulePendingUndoAction(

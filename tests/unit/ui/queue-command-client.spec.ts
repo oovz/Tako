@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/src/runtime/send-runtime-message", () => ({
   sendRuntimeMessage: mocks.sendRuntimeMessage,
+  sendRuntimeMessageWithRetry: mocks.sendRuntimeMessage,
 }))
 
 vi.mock("@/src/runtime/command-envelope", () => ({

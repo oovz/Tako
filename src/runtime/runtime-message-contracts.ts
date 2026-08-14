@@ -524,6 +524,7 @@ export const runtimeMessageRegistry = {
       payload: z.strictObject({ taskId: z.string().min(1) }),
     }),
     response: z.union([
+      SuccessSchema,
       z.strictObject({
         success: z.literal(true),
         data: z.strictObject({ undo: PendingUndoReceiptSchema }),
@@ -565,7 +566,7 @@ export const runtimeMessageRegistry = {
     response: z.union([
       z.strictObject({
         success: z.literal(true),
-        surrendered: z.number().int().positive(),
+        surrendered: z.number().int().nonnegative(),
       }),
       RuntimeFailureSchema,
     ]),
