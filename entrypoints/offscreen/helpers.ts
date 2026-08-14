@@ -2,9 +2,10 @@ import type { Chapter } from "@/src/types/chapter"
 import type { ComicInfoV2 } from "@/src/types/comic-info"
 import { buildSeriesComicInfoBase } from "@/src/shared/chapter-metadata"
 import type {
-  OffscreenOutputReadyMessage,
-  OffscreenOutputReadyResponse,
-} from "@/src/types/offscreen-messages"
+  RuntimeMessageRequest,
+  RuntimeMessageResponse,
+} from "@/src/runtime/runtime-message-contracts"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 
 function throwIfDownloadRequestAborted(signal?: AbortSignal): void {
@@ -16,9 +17,9 @@ function throwIfDownloadRequestAborted(signal?: AbortSignal): void {
 /**
  * Consumer-side type for series metadata passed to ComicInfo generation.
  *
- * The wire format (Zod-validated) is `Record<string, unknown> | undefined`;
- * callers narrow to this type before passing it in. See
- * `createProcessChapterStreamingOptions` in `download-request-mappers.ts`.
+ * The wire format is validated as a JSON object before it reaches offscreen
+ * processing. See `createProcessChapterStreamingOptions` in
+ * `download-request-mappers.ts`.
  */
 export type SeriesMetadataInput = SeriesMetadataSnapshot | undefined
 
@@ -53,14 +54,12 @@ export function buildComicInfoMetadata(input: {
 }
 
 export async function sendDownloadApiRequest(
-  payload: OffscreenOutputReadyMessage["payload"],
+  payload: RuntimeMessageRequest<"OFFSCREEN_OUTPUT_READY">["payload"],
   signal?: AbortSignal
-): Promise<OffscreenOutputReadyResponse> {
+): Promise<RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY">> {
   throwIfDownloadRequestAborted(signal)
-  return chrome.runtime.sendMessage<
-    OffscreenOutputReadyMessage,
-    OffscreenOutputReadyResponse
-  >({
+  return sendRuntimeMessage({
+    target: "background",
     type: "OFFSCREEN_OUTPUT_READY",
     payload,
   })

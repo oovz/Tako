@@ -1,6 +1,10 @@
 import type { Chapter } from "@/src/types/chapter"
 import { generateComicInfo } from "@/src/runtime/comicinfo-generator"
-import { normalizeImageFilename } from "@/src/shared/filename-sanitizer"
+import {
+  getExtensionFromMimeType,
+  normalizeImageFilename,
+} from "@/src/shared/filename-sanitizer"
+import { normalizeAllowedImageMimeType } from "@/src/shared/site-integration-utils"
 import { buildComicInfoMetadata, type SeriesMetadataInput } from "./helpers"
 
 export function buildImageOutputFilename(input: {
@@ -19,24 +23,27 @@ export function buildImageOutputFilename(input: {
     normalizeImageFilenames,
     imagePaddingDigits,
   } = input
+  const canonicalMimeType = normalizeAllowedImageMimeType(mimeType)
   if (normalizeImageFilenames) {
     return normalizeImageFilename(
       index,
       totalImages,
-      mimeType,
+      canonicalMimeType,
       imagePaddingDigits
     )
   }
 
-  return `${String(index + 1).padStart(3, "0")}-${originalFilename}.${mimeType?.includes("png") ? "png" : mimeType?.includes("webp") ? "webp" : "jpg"}`
+  const baseFilename = originalFilename.replace(
+    /\.(?:jpe?g|png|webp|gif)$/i,
+    ""
+  )
+  return `${String(index + 1).padStart(3, "0")}-${baseFilename}.${getExtensionFromMimeType(canonicalMimeType)}`
 }
 
 export function buildCoverOutputFilename(mimeType: string): string {
-  const extension = mimeType?.includes("png")
-    ? "png"
-    : mimeType?.includes("webp")
-      ? "webp"
-      : "jpg"
+  const extension = getExtensionFromMimeType(
+    normalizeAllowedImageMimeType(mimeType)
+  )
   return `000-cover.${extension}`
 }
 

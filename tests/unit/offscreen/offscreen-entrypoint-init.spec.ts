@@ -23,6 +23,7 @@ describe("offscreen entrypoint initialization failure handling", () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    sendMessage.mockResolvedValue({ success: true })
 
     const mockElement = {
       textContent: "",
@@ -33,6 +34,7 @@ describe("offscreen entrypoint initialization failure handling", () => {
 
     vi.stubGlobal("chrome", {
       runtime: {
+        id: "test-extension",
         sendMessage,
         onMessage: {
           addListener,
@@ -69,7 +71,7 @@ describe("offscreen entrypoint initialization failure handling", () => {
     expect(addListener).toHaveBeenCalledTimes(1)
 
     const listener = addListener.mock.calls[0]?.[0] as (
-      message: { type: string; payload?: unknown },
+      message: { target: string; type: string; payload?: unknown },
       sender: chrome.runtime.MessageSender,
       sendResponse: (response: { success: boolean; error?: string }) => void
     ) => boolean
@@ -78,10 +80,20 @@ describe("offscreen entrypoint initialization failure handling", () => {
     expect(
       listener(
         {
+          target: "offscreen",
           type: "REVOKE_BLOB_URL",
-          payload: { blobUrl: "blob:queued-before-init-failure" },
+          payload: {
+            jobId: "job-queued",
+            attempt: 1,
+            taskId: "task-queued",
+            chapterId: "chapter-queued",
+            fingerprint: "a".repeat(64),
+            documentInstanceId: "document-queued",
+            outputId: "job-queued:archive:0",
+            blobUrl: "blob:queued-before-init-failure",
+          },
         },
-        {} as chrome.runtime.MessageSender,
+        { id: "test-extension" } as chrome.runtime.MessageSender,
         queuedResponse
       )
     ).toBe(true)
@@ -100,24 +112,46 @@ describe("offscreen entrypoint initialization failure handling", () => {
         error: expect.stringContaining("registry init failed"),
       })
     )
+    await vi.waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith({
+        target: "background",
+        type: "OFFSCREEN_INITIALIZATION_FAILED",
+        payload: {
+          errorMessage: "registry init failed",
+          documentInstanceId: expect.any(String),
+        },
+      })
+    )
 
     const postFailureResponse = vi.fn()
     expect(
       listener(
         {
+          target: "offscreen",
           type: "REVOKE_BLOB_URL",
-          payload: { blobUrl: "blob:after-init-failure" },
+          payload: {
+            jobId: "job-after-failure",
+            attempt: 1,
+            taskId: "task-after-failure",
+            chapterId: "chapter-after-failure",
+            fingerprint: "b".repeat(64),
+            documentInstanceId: "document-after-failure",
+            outputId: "job-after-failure:archive:0",
+            blobUrl: "blob:after-init-failure",
+          },
         },
-        {} as chrome.runtime.MessageSender,
+        { id: "test-extension" } as chrome.runtime.MessageSender,
         postFailureResponse
       )
     ).toBe(true)
 
-    expect(postFailureResponse).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: false,
-        error: expect.stringContaining("registry init failed"),
-      })
+    await vi.waitFor(() =>
+      expect(postFailureResponse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining("registry init failed"),
+        })
+      )
     )
   })
 })

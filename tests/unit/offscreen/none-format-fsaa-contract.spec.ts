@@ -1,34 +1,57 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+const { offscreenSiteAdaptersById, getDefinitionMock } = vi.hoisted(() => ({
+  offscreenSiteAdaptersById: {} as Record<string, unknown>,
+  getDefinitionMock: vi.fn(),
+}))
+
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
+import { createOffscreenDispatchFingerprint } from "@/src/runtime/offscreen-job-fingerprint"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type { OffscreenIntegration } from "@/src/types/site-integrations"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import {
   loadDownloadRootHandle,
   queryFsaPermission,
   writeBlobToPath,
 } from "@/src/storage/fs-access"
 
-vi.mock("@/src/runtime/site-integration-registry", () => ({
-  siteIntegrationRegistry: {
-    getSiteIntegration: vi.fn(),
-    findById: vi.fn(),
-  },
-  registerSiteIntegration: vi.fn(),
+vi.mock("@/src/runtime/generated/site-integration-offscreen-registry", () => ({
+  offscreenSiteAdaptersById,
+}))
+
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDefinition: getDefinitionMock,
+  setEnablementMap: vi.fn(),
+  isEnabled: (id: string, enablement: Record<string, boolean>) =>
+    enablement[id] === true,
 }))
 
 vi.mock("@/src/runtime/rate-limit", () => ({
-  scheduleForIntegrationScope: async (
-    _id: string,
-    _scope: string,
-    fn: () => Promise<unknown>
-  ) => fn(),
+  RateLimitService: class {
+    constructor(private readonly policySource: any) {}
+
+    resolveEffectivePolicy(integrationId: string, scope: string) {
+      return this.policySource.resolveEffectivePolicy(integrationId, scope)
+    }
+
+    scheduleForIntegrationScope(
+      _integrationId: string,
+      _scope: string,
+      task: () => Promise<unknown>
+    ) {
+      return task()
+    }
+
+    cleanupRateLimiters() {}
+  },
 }))
 
 vi.mock("@/src/shared/filename-sanitizer", () => ({
   sanitizeFilename: (value: string) => value,
   normalizeImageFilename: () => "normalized.jpg",
+  getExtensionFromMimeType: (mimeType: string) =>
+    mimeType === "image/png" ? "png" : "jpg",
 }))
 
 vi.mock("@/entrypoints/offscreen/image-processor", () => ({
@@ -45,7 +68,6 @@ vi.mock("@/entrypoints/offscreen/image-processor", () => ({
   },
   withRetries: async (fn: () => Promise<unknown>) => fn(),
   withTimeout: async (fn: () => Promise<unknown>) => fn(),
-  fetchChapterHtml: vi.fn(),
   getHttpStatusFromError: () => 500,
 }))
 
@@ -55,18 +77,29 @@ vi.mock("@/src/storage/fs-access", () => ({
   writeBlobToPath: vi.fn(),
 }))
 
-vi.mock("@/src/shared/settings-utils", () => ({
-  resolveEffectiveRetries: async () => ({ image: 3, chapter: 3 }),
-}))
-
 const messages: unknown[] = []
 
 global.chrome = {
   runtime: {
     sendMessage: vi.fn(async (message: { type?: string }) => {
       messages.push(message)
+      if (message.type === "GET_SITE_INTEGRATION_ENABLEMENT") {
+        return { success: true, enablement: { "test-site": true } }
+      }
       if (message.type === "OFFSCREEN_OUTPUT_READY") {
-        return { success: true, accepted: true, id: 101 }
+        return {
+          success: true,
+          disposition: "tracked",
+          phase: "prepared",
+        }
+      }
+      if (
+        message.type === "OFFSCREEN_JOB_ACCEPTED" ||
+        message.type === "OFFSCREEN_DOWNLOAD_PROGRESS" ||
+        message.type === "OFFSCREEN_JOB_HEARTBEAT" ||
+        message.type === "OFFSCREEN_JOB_TERMINAL"
+      ) {
+        return { success: true, disposition: "renewed" }
       }
       return { success: true }
     }),
@@ -122,17 +155,31 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     const mockOffscreenIntegration = {
       id: "test-site",
       scope: "test",
+      dispatchContext: {
+        parse: (value: unknown) => value as Record<string, unknown>,
+      },
       chapter: {
-        resolveImageUrls: async () => ["img1.jpg", "img2.jpg"],
+        resolveChapterPlan: async () => ({
+          imageUrls: [
+            "https://example.test/img1.jpg",
+            "https://example.test/img2.jpg",
+          ],
+        }),
         downloadImage: mockDownloadImage,
-        parseImageUrlsFromHtml: async () => ["img1.jpg", "img2.jpg"],
-        processImageUrls: async (raw: unknown) => raw,
       },
     } as unknown as OffscreenIntegration
 
-    vi.mocked(siteIntegrationRegistry.findById).mockReturnValue({
-      integration: { offscreen: mockOffscreenIntegration },
-    } as never)
+    offscreenSiteAdaptersById["test-site"] = {
+      id: "test-site",
+      offscreen: mockOffscreenIntegration,
+    }
+    getDefinitionMock.mockReturnValue({
+      resolution: { imageTransform: { kind: "none", estimatedCostMs: 0 } },
+      retryOwner: "platform",
+      runtimes: {
+        dispatchContext: { mode: "optional", schemaVersion: 1 },
+      },
+    })
   })
 
   afterEach(() => {
@@ -145,7 +192,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     )
     vi.mocked(queryFsaPermission).mockResolvedValue("granted")
 
-    const outcome = await worker.processDownloadChapter({
+    const dispatch = {
       jobId: "job-none-custom",
       attempt: 1,
       taskId: "task-none-custom",
@@ -178,11 +225,39 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
       },
       saveMode: "fsa",
       integrationContext: {
-        taskId: "task-123",
+        schemaVersion: 1,
+        data: { taskId: "task-123" },
       },
+    } satisfies Omit<
+      RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"],
+      "fingerprint"
+    >
+    const fingerprint = await createOffscreenDispatchFingerprint(dispatch)
+    const acknowledgment = await worker.processDownloadChapter({
+      ...dispatch,
+      fingerprint,
     })
 
-    expect(outcome.status).toBe("completed")
+    expect(acknowledgment).toMatchObject({
+      accepted: true,
+      fingerprint,
+      documentInstanceId: worker.documentInstanceId,
+    })
+    await vi.waitFor(() =>
+      expect(
+        worker.getJobState({
+          jobId: dispatch.jobId,
+          attempt: dispatch.attempt,
+          taskId: dispatch.taskId,
+          chapterId: dispatch.chapter.id,
+          fingerprint,
+          documentInstanceId: worker.documentInstanceId,
+        })
+      ).toMatchObject({
+        status: "terminal",
+        outcome: { status: "completed" },
+      })
+    )
     expect(loadDownloadRootHandle).toHaveBeenCalledTimes(1)
     expect(queryFsaPermission).toHaveBeenCalledWith(expect.anything(), true)
     expect(writeBlobToPath).toHaveBeenCalled()
@@ -232,7 +307,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     )
     vi.mocked(queryFsaPermission).mockResolvedValue("prompt")
 
-    const outcome = await worker.processDownloadChapter({
+    const dispatch = {
       jobId: "job-none-custom-permission-lost",
       attempt: 1,
       taskId: "task-none-custom-permission-lost",
@@ -255,11 +330,35 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
       },
       saveMode: "fsa",
       integrationContext: {
-        taskId: "task-123",
+        schemaVersion: 1,
+        data: { taskId: "task-123" },
       },
+    } satisfies Omit<
+      RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"],
+      "fingerprint"
+    >
+    const fingerprint = await createOffscreenDispatchFingerprint(dispatch)
+    const acknowledgment = await worker.processDownloadChapter({
+      ...dispatch,
+      fingerprint,
     })
 
-    expect(outcome.status).toBe("failed")
+    expect(acknowledgment).toMatchObject({ accepted: true, fingerprint })
+    await vi.waitFor(() =>
+      expect(
+        worker.getJobState({
+          jobId: dispatch.jobId,
+          attempt: dispatch.attempt,
+          taskId: dispatch.taskId,
+          chapterId: dispatch.chapter.id,
+          fingerprint,
+          documentInstanceId: worker.documentInstanceId,
+        })
+      ).toMatchObject({
+        status: "terminal",
+        outcome: { status: "failed" },
+      })
+    )
     expect(
       messages.some(
         (message) =>

@@ -8,8 +8,11 @@ import {
   type ProcessChapterStreamingOptions,
 } from "@/entrypoints/offscreen/chapter-processing"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import * as comicInfoGenerator from "@/src/runtime/comicinfo-generator"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { writeBlobToPath } from "@/src/storage/fs-access"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -56,11 +59,29 @@ vi.mock("@/entrypoints/offscreen/archive-worker-factory", () => ({
     })(),
 }))
 
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+
 function createRuntime(): ChapterProcessingRuntime {
   return {
+    liveResourceLedger: new OffscreenLiveResourceLedger(),
+    rateLimitService,
     withImageRetries: async (fn) => fn(),
     resolveWritableDownloadRoot: vi.fn(),
-    requestBrowserBlobDownload: vi.fn(async () => ({ success: true })),
+    requestBrowserBlobDownload: vi.fn(
+      async () =>
+        ({
+          success: true,
+          disposition: "tracked",
+          phase: "waiting",
+        }) as const
+    ),
     getMemoryStats: vi.fn(() => null),
   }
 }
@@ -94,6 +115,7 @@ function createBaseOptions<TFormat extends "cbz" | "zip" | "none">(
     comicInfoVersion: "2.0" as const,
     onProgress: vi.fn(async () => undefined),
     onArchiveProgress: vi.fn(async () => undefined),
+    abortSignal: new AbortController().signal,
     normalizeImageFilenames: true,
     imagePaddingDigits: 3 as const,
     settingsSnapshot: {
@@ -161,16 +183,17 @@ describe("chapter processing format contracts", () => {
       writableRoot
     )
     vi.mocked(writeBlobToPath).mockClear()
+    const opts = {
+      ...createBaseOptions("cbz"),
+      downloadMode: "custom" as const,
+      settingsSnapshot: {
+        ...createBaseOptions("cbz").settingsSnapshot,
+        conflictPolicy: "overwrite" as const,
+      },
+    }
 
     const outcome = await processArchiveFormatChapter(runtime, {
-      opts: {
-        ...createBaseOptions("cbz"),
-        downloadMode: "custom",
-        settingsSnapshot: {
-          ...createBaseOptions("cbz").settingsSnapshot,
-          conflictPolicy: "overwrite",
-        },
-      },
+      opts,
       urls: ["https://example.com/1.jpg", "https://example.com/2.jpg"],
       integrationId: "test-site",
       downloadImage: createDownloadImage(),
@@ -191,7 +214,7 @@ describe("chapter processing format contracts", () => {
       "Series/Chapter 1.cbz",
       expect.any(Blob),
       "overwrite",
-      expect.objectContaining({ signal: undefined })
+      expect.objectContaining({ signal: opts.abortSignal })
     )
     expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
@@ -222,6 +245,43 @@ describe("chapter processing format contracts", () => {
         .mocked(runtime.requestBrowserBlobDownload)
         .mock.calls.map((call) => call[0].filename)
     ).toEqual(["Series/Chapter 1/001.jpg", "Series/Chapter 1/002.jpg"])
+  })
+
+  it("uses the exact emitted output count when optional ComicInfo generation returns null", async () => {
+    vi.spyOn(comicInfoGenerator, "generateComicInfo").mockReturnValueOnce(null)
+    const runtime = createRuntime()
+
+    const outcome = await processNoneFormatChapter(runtime, {
+      opts: {
+        ...createBaseOptions("none"),
+        includeComicInfo: true,
+      },
+      urls: ["https://example.com/1.jpg", "https://example.com/2.jpg"],
+      integrationId: "test-site",
+      downloadImage: createDownloadImage(),
+      normalizeSettings: {
+        normalizeImageFilenames: true,
+        imagePaddingDigits: 3,
+      },
+    })
+
+    expect(outcome).toEqual({
+      status: "completed",
+      outputsRequested: 2,
+      outputsFailedBeforeHandoff: 0,
+      outputsCommitted: 0,
+    })
+    expect(runtime.requestBrowserBlobDownload).toHaveBeenCalledTimes(2)
+    expect(
+      vi
+        .mocked(runtime.requestBrowserBlobDownload)
+        .mock.calls.map((call) => call[0].outputCount)
+    ).toEqual([2, 2])
+    expect(
+      vi
+        .mocked(runtime.requestBrowserBlobDownload)
+        .mock.calls.some((call) => call[0].filename.endsWith("/ComicInfo.xml"))
+    ).toBe(false)
   })
 
   it("hands off each no-archive browser image without waiting for later images", async () => {
@@ -511,8 +571,16 @@ describe("chapter processing format contracts", () => {
   it("reports partial success when one no-archive page handoff fails", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.requestBrowserBlobDownload)
-      .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: false, error: "download rejected" })
+      .mockResolvedValueOnce({
+        success: true,
+        disposition: "tracked",
+        phase: "waiting",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        disposition: "not_persisted",
+        reason: "download rejected",
+      })
 
     const outcome = await processNoneFormatChapter(runtime, {
       opts: createBaseOptions("none"),
@@ -541,7 +609,11 @@ describe("chapter processing format contracts", () => {
     vi.mocked(runtime.requestBrowserBlobDownload).mockImplementationOnce(
       async () => {
         controller.abort()
-        return { success: true }
+        return {
+          success: true,
+          disposition: "tracked",
+          phase: "waiting",
+        }
       }
     )
 
@@ -550,6 +622,13 @@ describe("chapter processing format contracts", () => {
         opts: {
           ...createBaseOptions("none"),
           abortSignal: controller.signal,
+          settingsSnapshot: {
+            ...createBaseOptions("none").settingsSnapshot,
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
         },
         urls: ["https://example.com/1.jpg", "https://example.com/2.jpg"],
         integrationId: "test-site",
@@ -570,8 +649,9 @@ describe("chapter processing format contracts", () => {
   it("reports failure when every no-archive page handoff fails", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.requestBrowserBlobDownload).mockResolvedValue({
-      success: false,
-      error: "download rejected",
+      success: true,
+      disposition: "not_persisted",
+      reason: "download rejected",
     })
 
     const outcome = await processNoneFormatChapter(runtime, {
@@ -600,8 +680,16 @@ describe("chapter processing format contracts", () => {
     vi.mocked(runtime.requestBrowserBlobDownload).mockImplementation(
       async ({ filename }) =>
         filename.endsWith("/ComicInfo.xml")
-          ? { success: false, error: "download rejected" }
-          : { success: true }
+          ? {
+              success: true,
+              disposition: "not_persisted",
+              reason: "download rejected",
+            }
+          : {
+              success: true,
+              disposition: "tracked",
+              phase: "waiting",
+            }
     )
 
     const outcome = await processNoneFormatChapter(runtime, {

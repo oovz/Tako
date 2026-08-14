@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { strFromU8, unzipSync } from "fflate"
 
 type WorkerResponse =
+  | { type: "input-consumed"; inputId: string }
   | { type: "progress"; bytes: number; chunks: number; final: boolean }
   | {
       success: true
@@ -161,6 +162,26 @@ describe("zip.worker streaming archive protocol", () => {
     // afterEach removes the worker-global stub.
     const terminal = await waitForTerminalMessage()
     expect(terminal.success).toBe(true)
+  })
+
+  it("acknowledges one exact input identity after consuming its buffer", async () => {
+    await installWorkerRuntime()
+    sendMessage({ type: "init", chapterTitle: "Ack", extension: "cbz" })
+
+    sendMessage({
+      type: "addImage",
+      inputId: "input-1",
+      filename: "001.jpg",
+      buffer: new Uint8Array([0xff, 0xd8]).buffer,
+      index: 0,
+      mimeType: "image/jpeg",
+    })
+
+    expect(
+      postedMessages.filter(
+        (message) => "type" in message && message.type === "input-consumed"
+      )
+    ).toEqual([{ type: "input-consumed", inputId: "input-1" }])
   })
 
   it("creates a readable archive containing the streamed images and ComicInfo", async () => {

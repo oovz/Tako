@@ -1,10 +1,14 @@
 import type { Chapter } from "@/src/types/chapter"
-import type { OffscreenDownloadChapterPayload } from "@/src/runtime/message-schemas"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type {
   ProcessChapterStreamingOptions,
   ProcessDownloadChapterSettingsSnapshot,
 } from "./chapter-processing"
 import type { CoverImageAsset } from "./download-runtime-helpers"
+import type { JsonObject } from "@/src/types/site-integrations"
+
+type OffscreenDownloadChapterPayload =
+  RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]
 
 export function readProcessDownloadChapterSettingsSnapshot(
   settingsSnapshot: OffscreenDownloadChapterPayload["settingsSnapshot"]
@@ -32,6 +36,7 @@ export function createChapterForProcessing(
 
 export function createProcessChapterStreamingOptions(input: {
   request: OffscreenDownloadChapterPayload
+  integrationContext: JsonObject | undefined
   snapshot: ProcessDownloadChapterSettingsSnapshot
   chapter: Chapter
   abortSignal: AbortSignal
@@ -41,6 +46,7 @@ export function createProcessChapterStreamingOptions(input: {
 }): ProcessChapterStreamingOptions {
   const {
     request,
+    integrationContext,
     snapshot,
     chapter,
     abortSignal,
@@ -63,10 +69,7 @@ export function createProcessChapterStreamingOptions(input: {
     onProgress,
     onArchiveProgress,
     coverImage,
-    integrationContext: request.integrationContext,
-    // Narrow from wire format (Record<string, unknown>, Zod-validated) to
-    // consumer types. The Zod schema confirms the shape is a record; the
-    // snapshot is already narrowed via readProcessDownloadChapterSettingsSnapshot.
+    integrationContext,
     seriesMetadata: request.book.metadata,
     settingsSnapshot: snapshot,
   }

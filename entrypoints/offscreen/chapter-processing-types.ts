@@ -1,7 +1,14 @@
 import type { Chapter } from "@/src/types/chapter"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
 import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
 import type { SeriesMetadataInput } from "./helpers"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { JsonObject } from "@/src/types/site-integrations"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 export type ChapterOutcomeStatus = "completed" | "partial_success" | "failed"
 
@@ -12,9 +19,9 @@ export type ChapterOutcome = {
   errorMessage?: string
   errorCategory?: ErrorCategory
   imagesFailed?: number
-  outputsRequested?: number
-  outputsFailedBeforeHandoff?: number
-  outputsCommitted?: number
+  outputsRequested: number
+  outputsFailedBeforeHandoff: number
+  outputsCommitted: number
 }
 
 export type ArchiveNormalizationSettings = {
@@ -30,6 +37,7 @@ export type WorkerZipResult = {
   imageCount?: number
   format?: string
   error?: string
+  liveResourceLease?: OffscreenLiveResourceLease
 }
 
 export type WorkerZipProgress = {
@@ -55,12 +63,16 @@ export type ProcessChapterStreamingOptions = {
     imageProgress?: { current: number; total: number }
   ) => Promise<void>
   onArchiveProgress: (pct: number, label?: string) => Promise<void>
-  abortSignal?: AbortSignal
+  abortSignal: AbortSignal
   normalizeImageFilenames?: boolean
   imagePaddingDigits?: "auto" | 2 | 3 | 4 | 5
-  coverImage?: { data: ArrayBuffer; mimeType: string }
+  coverImage?: {
+    data: ArrayBuffer
+    mimeType: string
+    liveResourceLease?: OffscreenLiveResourceLease
+  }
   onImageDownloaded?: () => void
-  integrationContext?: Record<string, unknown>
+  integrationContext?: JsonObject
   seriesMetadata?: SeriesMetadataInput
   settingsSnapshot: ProcessDownloadChapterSettingsSnapshot
 }
@@ -79,25 +91,26 @@ export type ChapterDownloadImageResult = {
   filename: string
   data: ArrayBuffer
   mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
 }
 
 export type ChapterDownloadImageFn = (
   url: string,
   options: {
     signal?: AbortSignal
-    context?: Record<string, unknown>
+    dispatchContext?: JsonObject
+    runtime: import("@/src/types/site-integrations").ChapterRuntimeData
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+    liveResourceLedger?: OffscreenLiveResourceLedger
   }
 ) => Promise<ChapterDownloadImageResult>
 
 export type BrowserBlobDownloadResponse =
-  | {
-      success: boolean
-      error?: string
-    }
-  | undefined
+  RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY"> | undefined
 
 export interface ChapterProcessingRuntime {
+  liveResourceLedger: OffscreenLiveResourceLedger
+  rateLimitService: RateLimitService
   withImageRetries: <T>(
     fn: () => Promise<T>,
     hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> }
@@ -113,12 +126,13 @@ export interface ChapterProcessingRuntime {
     taskId: string
     chapterId: string
     blob: Blob
+    resourceLease: OffscreenLiveResourceLease
     filename: string
     outputId: string
     outputIndex: number
     outputCount: number
     outputKind: "archive" | "image"
-    signal?: AbortSignal
+    signal: AbortSignal
   }) => Promise<BrowserBlobDownloadResponse>
   getMemoryStats: () => {
     usedMB: number

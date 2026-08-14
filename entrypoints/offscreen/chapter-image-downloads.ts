@@ -1,6 +1,8 @@
 import logger from "@/src/runtime/logger"
-import { scheduleForIntegrationScope } from "@/src/runtime/rate-limit"
-import type { RateLimitPolicySnapshot } from "@/src/runtime/rate-limit"
+import type {
+  RateLimitPolicySnapshot,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
 import { PromiseQueue } from "./image-processor"
 import type {
   ChapterDownloadImageFn,
@@ -10,9 +12,13 @@ import type {
 import {
   MAX_CHAPTER_IMAGE_BYTES,
   MAX_CHAPTER_IMAGES,
+  MAX_IMAGE_BYTES,
 } from "@/src/constants/timeouts"
+import { NonRetryableDownloadError } from "@/src/shared/download-contract"
+import { OffscreenLiveResourceLimitError } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { JsonObject } from "@/src/types/site-integrations"
 
-export class ChapterResourceLimitError extends Error {
+export class ChapterResourceLimitError extends NonRetryableDownloadError {
   constructor(message: string) {
     super(message)
     this.name = "ChapterResourceLimitError"
@@ -37,8 +43,9 @@ type DownloadChapterImagesOptions = {
   urls: string[]
   integrationId: string
   chapterId: string
-  integrationContext?: Record<string, unknown>
+  integrationContext?: JsonObject
   rateLimitSettings: RateLimitPolicySnapshot
+  rateLimitService: RateLimitService
   abortSignal?: AbortSignal
   onProgress: (
     pct: number,
@@ -74,6 +81,7 @@ export async function downloadChapterImages(
     chapterId,
     integrationContext,
     rateLimitSettings,
+    rateLimitService,
     abortSignal,
     onProgress,
     onImageDownloaded,
@@ -106,14 +114,18 @@ export async function downloadChapterImages(
   let committedBytes = initialAggregateBytes
   let reservedBytes = 0
   let resourceLimitMessage: string | null = null
-  const imageDownloadContext = {
-    ...(integrationContext ?? {}),
-    rateLimitSettings,
-    chapterId,
+  const chapterController = new AbortController()
+  const imageRuntime = { rateLimitSettings, chapterId, rateLimitService }
+  const cancelPendingDownloads = (
+    reason: unknown = new Error("job-cancelled")
+  ) => {
+    if (!chapterController.signal.aborted) {
+      chapterController.abort(reason)
+    }
+    downloadQueue.cancelPending(reason)
   }
-  const cancelPendingDownloads = () => {
-    downloadQueue.cancelPending(new Error("job-cancelled"))
-  }
+
+  const onAbort = () => cancelPendingDownloads()
 
   const emitInFlightProgress = async (): Promise<void> => {
     try {
@@ -159,9 +171,10 @@ export async function downloadChapterImages(
   }
 
   const tasks: Promise<void>[] = []
-  abortSignal?.addEventListener("abort", cancelPendingDownloads, {
+  abortSignal?.addEventListener("abort", onAbort, {
     once: true,
   })
+  if (abortSignal?.aborted) onAbort()
   try {
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i]
@@ -169,6 +182,7 @@ export async function downloadChapterImages(
       tasks.push(
         downloadQueue.add(async () => {
           const imageByteState = createImageByteState()
+          let downloadedResult: ChapterDownloadImageResult | undefined
           const reportImageBytes = async (bytesReceived: number) => {
             const normalizedBytes = Math.max(0, Math.trunc(bytesReceived))
             const delta = normalizedBytes - imageByteState.receivedBytes
@@ -177,27 +191,34 @@ export async function downloadChapterImages(
             await emitInFlightProgress()
           }
           try {
-            if (abortSignal?.aborted) throw new Error("job-cancelled")
-            const result =
+            if (chapterController.signal.aborted) {
+              throw new Error("job-cancelled")
+            }
+            downloadedResult =
               await runtime.withImageRetries<ChapterDownloadImageResult>(
                 () =>
-                  scheduleForIntegrationScope(
+                  rateLimitService.scheduleForIntegrationScope(
                     integrationId,
                     "image",
                     () => {
-                      if (abortSignal?.aborted) {
+                      if (chapterController.signal.aborted) {
                         throw new Error("job-cancelled")
                       }
                       return downloadImage(url, {
-                        signal: abortSignal,
-                        context: imageDownloadContext,
+                        signal: chapterController.signal,
+                        dispatchContext: integrationContext,
+                        runtime: imageRuntime,
                         onBytesReceived: reportImageBytes,
+                        liveResourceLedger: runtime.liveResourceLedger,
                       })
                     },
                     rateLimitSettings.image
                   ),
                 {
                   onAttemptStart: async (attempt) => {
+                    if (chapterController.signal.aborted) {
+                      throw new Error("job-cancelled")
+                    }
                     if (attempt > 1) releaseImageBytes(imageByteState)
                     await emitInFlightProgress()
                   },
@@ -206,7 +227,12 @@ export async function downloadChapterImages(
             if (resourceLimitMessage) {
               throw new ChapterResourceLimitError(resourceLimitMessage)
             }
-            const resultBytes = result.data.byteLength
+            const resultBytes = downloadedResult.data.byteLength
+            if (resultBytes > MAX_IMAGE_BYTES) {
+              throw new ChapterResourceLimitError(
+                `Transformed image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${resultBytes})`
+              )
+            }
             if (resultBytes > imageByteState.reservedBytes) {
               reserveImageBytes(
                 imageByteState,
@@ -217,7 +243,11 @@ export async function downloadChapterImages(
               reservedBytes -= released
               imageByteState.reservedBytes = resultBytes
             }
-            await onDownloaded({ url, index: imageIndex, result })
+            await onDownloaded({
+              url,
+              index: imageIndex,
+              result: downloadedResult,
+            })
             commitImageBytes(imageByteState)
             succeeded++
             onImageDownloaded?.()
@@ -225,9 +255,12 @@ export async function downloadChapterImages(
             releaseImageBytes(imageByteState)
             if (
               error instanceof ChapterResourceLimitError ||
-              isFatalError?.(error)
+              error instanceof OffscreenLiveResourceLimitError
             ) {
-              downloadQueue.cancelPending(error)
+              resourceLimitMessage ??= error.message
+              cancelPendingDownloads(error)
+            } else if (isFatalError?.(error)) {
+              cancelPendingDownloads(error)
             }
             failed++
             failedUrls.push(url)
@@ -244,6 +277,7 @@ export async function downloadChapterImages(
               total,
             })
           } finally {
+            downloadedResult?.liveResourceLease?.release()
             processed++
             const pct = Math.max(10, Math.round((processed / total) * 100))
             await onProgress(pct, undefined, { current: processed, total })
@@ -253,7 +287,7 @@ export async function downloadChapterImages(
     }
     await Promise.allSettled(tasks)
   } finally {
-    abortSignal?.removeEventListener("abort", cancelPendingDownloads)
+    abortSignal?.removeEventListener("abort", onAbort)
   }
 
   if (resourceLimitMessage) {

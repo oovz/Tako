@@ -8,7 +8,11 @@ import type { ChapterProcessingRuntime } from "@/entrypoints/offscreen/chapter-p
 import {
   MAX_CHAPTER_IMAGE_BYTES,
   MAX_CHAPTER_IMAGES,
+  MAX_IMAGE_BYTES,
 } from "@/src/constants/timeouts"
+import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image-core"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -19,25 +23,25 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/runtime/rate-limit", () => ({
-  scheduleForIntegrationScope: vi.fn(
-    async (
-      _integrationId: string,
-      _scope: string,
-      task: () => Promise<unknown>
-    ) => task()
-  ),
-}))
-
 const RATE_LIMIT_SETTINGS = {
   image: { concurrency: 10, delayMs: 0 },
   chapter: { concurrency: 1, delayMs: 0 },
 }
 
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+
 describe("downloadChapterImages", () => {
   it("rejects a chapter whose declared image count exceeds the job budget", async () => {
     const downloadImage = vi.fn()
     const runtime = {
+      rateLimitService,
       withImageRetries: vi.fn(),
     } as unknown as ChapterProcessingRuntime
 
@@ -50,6 +54,7 @@ describe("downloadChapterImages", () => {
         integrationId: "test-site",
         chapterId: "chapter-1",
         rateLimitSettings: RATE_LIMIT_SETTINGS,
+        rateLimitService,
         onProgress: vi.fn(),
         downloadImage,
         onDownloaded: vi.fn(),
@@ -61,6 +66,8 @@ describe("downloadChapterImages", () => {
 
   it("rejects when aggregate chapter image bytes cross the job budget", async () => {
     const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: new OffscreenLiveResourceLedger(),
+      rateLimitService,
       withImageRetries: async (fn) => fn(),
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
@@ -73,6 +80,7 @@ describe("downloadChapterImages", () => {
         integrationId: "test-site",
         chapterId: "chapter-1",
         rateLimitSettings: RATE_LIMIT_SETTINGS,
+        rateLimitService,
         initialAggregateBytes: MAX_CHAPTER_IMAGE_BYTES,
         onProgress: vi.fn(async () => undefined),
         downloadImage: vi.fn(async () => ({
@@ -90,6 +98,8 @@ describe("downloadChapterImages", () => {
     const controller = new AbortController()
     const onDownloadFailed = vi.fn()
     const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: new OffscreenLiveResourceLedger(),
+      rateLimitService,
       withImageRetries: async (fn) => fn(),
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
@@ -121,6 +131,7 @@ describe("downloadChapterImages", () => {
       integrationId: "test-site",
       chapterId: "chapter-1",
       rateLimitSettings: RATE_LIMIT_SETTINGS,
+      rateLimitService,
       initialAggregateBytes: MAX_CHAPTER_IMAGE_BYTES - 16,
       abortSignal: controller.signal,
       onProgress: vi.fn(async () => undefined),
@@ -165,6 +176,8 @@ describe("downloadChapterImages", () => {
         )
     )
     const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: new OffscreenLiveResourceLedger(),
+      rateLimitService,
       withImageRetries: async (fn) => fn(),
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
@@ -175,6 +188,7 @@ describe("downloadChapterImages", () => {
       urls,
       integrationId: "test-site",
       chapterId: "chapter-1",
+      rateLimitService,
       rateLimitSettings: {
         image: { concurrency: 2, delayMs: 0 },
         chapter: { concurrency: 2, delayMs: 0 },
@@ -191,6 +205,116 @@ describe("downloadChapterImages", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(downloadImage).toHaveBeenCalledTimes(2)
+  })
+
+  it("backpressures ten pending tiny-image fetches at the live-resource cap", async () => {
+    const urls = Array.from(
+      { length: 10 },
+      (_, index) => `https://example.com/${index + 1}.jpg`
+    )
+    const ledger = new OffscreenLiveResourceLedger()
+    const fetchReleases: Array<() => void> = []
+    let activeFetches = 0
+    let peakActiveFetches = 0
+    let peakUsedBytes = 0
+    let rendered = 0
+    const observeUsage = () => {
+      peakUsedBytes = Math.max(peakUsedBytes, ledger.getUsedBytes())
+    }
+    const fetcher = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          activeFetches++
+          peakActiveFetches = Math.max(peakActiveFetches, activeFetches)
+          observeUsage()
+          fetchReleases.push(() => {
+            activeFetches--
+            resolve(
+              new Response(new Uint8Array([1]), {
+                headers: { "content-type": "image/jpeg" },
+              })
+            )
+          })
+        })
+    )
+    const downloadImage = vi.fn(
+      async (
+        url: string,
+        options: {
+          signal?: AbortSignal
+          onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+          liveResourceLedger?: OffscreenLiveResourceLedger
+        }
+      ) => {
+        const result = await fetchImageWithStallDetection(url, {
+          signal: options.signal,
+          onBytesReceived: options.onBytesReceived,
+          fetcher,
+          liveResourceLedger: options.liveResourceLedger,
+          stallTimeoutMs: 5_000,
+          hardTimeoutMs: 5_000,
+        })
+        const renderLease = options.liveResourceLedger?.reserve(
+          1,
+          "tiny image render"
+        )
+        rendered++
+        observeUsage()
+        renderLease?.release()
+        return {
+          ...result,
+          filename: `${rendered}.jpg`,
+        }
+      }
+    )
+    const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: ledger,
+      rateLimitService,
+      withImageRetries: async (fn) => fn(),
+      resolveWritableDownloadRoot: vi.fn(),
+      requestBrowserBlobDownload: vi.fn(),
+      getMemoryStats: vi.fn(() => null),
+    }
+
+    const resultPromise = downloadChapterImages(runtime, {
+      urls,
+      integrationId: "test-site",
+      chapterId: "chapter-1",
+      rateLimitSettings: RATE_LIMIT_SETTINGS,
+      rateLimitService,
+      onProgress: vi.fn(async () => undefined),
+      downloadImage,
+      onDownloaded: vi.fn(),
+      onDownloadFailed: vi.fn(),
+    })
+    const admissionLimit = Math.floor(
+      ledger.getCapacityBytes() / (2 * MAX_IMAGE_BYTES)
+    )
+
+    await vi.waitFor(() => {
+      expect(fetcher.mock.calls.length).toBeGreaterThanOrEqual(admissionLimit)
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const initiallyAdmitted = fetcher.mock.calls.length
+
+    for (let index = 0; index < urls.length; index++) {
+      await vi.waitFor(() => {
+        expect(fetchReleases.length).toBeGreaterThan(index)
+      })
+      fetchReleases[index]()
+    }
+
+    await expect(resultPromise).resolves.toMatchObject({
+      total: 10,
+      processed: 10,
+      succeeded: 10,
+      failed: 0,
+    })
+    expect(initiallyAdmitted).toBe(admissionLimit)
+    expect(peakActiveFetches).toBe(admissionLimit)
+    expect(peakUsedBytes).toBeLessThanOrEqual(ledger.getCapacityBytes())
+    expect(rendered).toBe(10)
+    expect(ledger.getUsedBytes()).toBe(0)
   })
 
   it("drops queued image jobs when the chapter abort signal fires", async () => {
@@ -221,6 +345,8 @@ describe("downloadChapterImages", () => {
     )
 
     const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: new OffscreenLiveResourceLedger(),
+      rateLimitService,
       withImageRetries: async (fn) => fn(),
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
@@ -232,6 +358,7 @@ describe("downloadChapterImages", () => {
       integrationId: "test-site",
       chapterId: "chapter-1",
       rateLimitSettings: RATE_LIMIT_SETTINGS,
+      rateLimitService,
       abortSignal: controller.signal,
       onProgress,
       downloadImage,
@@ -284,6 +411,8 @@ describe("downloadChapterImages", () => {
           })
       )
       const runtime: ChapterProcessingRuntime = {
+        liveResourceLedger: new OffscreenLiveResourceLedger(),
+        rateLimitService,
         withImageRetries: async (fn, hooks) => {
           await hooks?.onAttemptStart?.(1)
           return fn()
@@ -298,6 +427,7 @@ describe("downloadChapterImages", () => {
         integrationId: "test-site",
         chapterId: "chapter-1",
         rateLimitSettings: RATE_LIMIT_SETTINGS,
+        rateLimitService,
         onProgress,
         downloadImage,
         onDownloaded: vi.fn(),

@@ -1,10 +1,13 @@
-import type { OffscreenDownloadProgressMessage } from "@/src/types/offscreen-messages"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type { ProcessChapterStreamingOptions } from "./chapter-processing"
 import type { ChapterOutcome } from "./chapter-processing-types"
 
+type OffscreenDownloadProgressMessage =
+  RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_PROGRESS">
+
 export type UnsequencedProgressPayload = Omit<
   OffscreenDownloadProgressMessage["payload"],
-  "jobId" | "attempt" | "sequence"
+  "jobId" | "attempt" | "fingerprint" | "documentInstanceId" | "sequence"
 >
 
 export function createProgressPayload(input: {
@@ -39,6 +42,9 @@ export function createProgressPayload(input: {
     imagesProcessed,
     imagesFailed,
     totalImages,
+    outputsRequested: 0,
+    outputsFailedBeforeHandoff: 0,
+    outputsCommitted: 0,
   }
 }
 
@@ -78,8 +84,8 @@ export function createTerminalProgressPayload(input: {
     status: outcome.status,
     stage: "saving",
     phaseFraction:
-      (outcome.outputsRequested ?? 0) > 0 &&
-      (outcome.outputsCommitted ?? 0) >= (outcome.outputsRequested ?? 0)
+      outcome.outputsRequested > 0 &&
+      outcome.outputsCommitted >= outcome.outputsRequested
         ? 1
         : 0.99,
     imagesProcessed,

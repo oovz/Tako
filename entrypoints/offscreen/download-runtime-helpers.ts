@@ -1,17 +1,26 @@
 import logger from "@/src/runtime/logger"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
-import { scheduleForIntegrationScope } from "@/src/runtime/rate-limit"
-import type { RateLimitPolicySnapshot } from "@/src/runtime/rate-limit"
+import { offscreenSiteAdaptersById } from "@/src/runtime/generated/site-integration-offscreen-registry"
+import type {
+  RateLimitPolicySnapshot,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
 import {
   loadDownloadRootHandle,
   queryFsaPermission,
 } from "@/src/storage/fs-access"
 import { sendDownloadApiRequest } from "./helpers"
 import type { ChapterDownloadImageResult } from "./chapter-processing"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import { OffscreenLiveResourceLimitError } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { JsonObject } from "@/src/types/site-integrations"
 
 export type CoverImageAsset = {
   data: ArrayBuffer
   mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
 }
 
 type ImageRetryHooks = {
@@ -21,63 +30,71 @@ type ImageRetryHooks = {
 export async function prefetchCoverImage(input: {
   coverUrl?: string
   integrationId?: string
-  integrationContext?: Record<string, unknown>
-  rateLimitSettings?: RateLimitPolicySnapshot
+  integrationContext?: JsonObject
+  rateLimitSettings: RateLimitPolicySnapshot
+  rateLimitService: RateLimitService
   signal?: AbortSignal
   onActivity?: () => void | Promise<void>
   withImageRetries: <T>(
     fn: () => Promise<T>,
     hooks?: ImageRetryHooks
   ) => Promise<T>
+  liveResourceLedger: OffscreenLiveResourceLedger
 }): Promise<CoverImageAsset | undefined> {
   const {
     coverUrl,
     integrationId,
     integrationContext,
     rateLimitSettings,
+    rateLimitService,
     signal,
     onActivity,
     withImageRetries,
+    liveResourceLedger,
   } = input
   if (!coverUrl || !integrationId) {
     return undefined
   }
 
   try {
-    const integrationInfo = siteIntegrationRegistry.findById(integrationId)
-    if (!integrationInfo?.integration) {
-      return undefined
-    }
-
-    const OffscreenIntegration = integrationInfo.integration.offscreen
+    const OffscreenIntegration =
+      offscreenSiteAdaptersById[integrationId]?.offscreen
     if (!OffscreenIntegration) {
       return undefined
     }
     const reportActivity = async () => {
       await onActivity?.()
     }
+    const downloadCoverImage =
+      OffscreenIntegration.cover?.downloadImage ??
+      OffscreenIntegration.chapter.downloadImage
     const result = await withImageRetries<ChapterDownloadImageResult>(
       () =>
-        scheduleForIntegrationScope(
+        rateLimitService.scheduleForIntegrationScope(
           integrationId,
           "image",
           () =>
-            OffscreenIntegration.chapter.downloadImage(coverUrl, {
+            downloadCoverImage(coverUrl, {
               signal,
+              skipRateLimit: true,
               onBytesReceived: reportActivity,
-              context: {
-                ...(integrationContext ?? {}),
-                ...(rateLimitSettings ? { rateLimitSettings } : {}),
-              },
+              liveResourceLedger,
+              dispatchContext: integrationContext,
+              runtime: { rateLimitSettings, rateLimitService },
             }),
-          rateLimitSettings?.image
+          rateLimitSettings.image
         ),
       {
         onAttemptStart: reportActivity,
       }
     )
-    return { data: result.data, mimeType: result.mimeType }
+    return {
+      data: result.data,
+      mimeType: result.mimeType,
+      liveResourceLease: result.liveResourceLease,
+    }
   } catch (error) {
+    if (error instanceof OffscreenLiveResourceLimitError) throw error
     logger.debug("Single chapter cover image fetch failed (non-fatal):", error)
     return undefined
   }
@@ -87,14 +104,16 @@ export async function prefetchOptionalCoverImage(input: {
   includeCoverImage?: boolean
   coverUrl?: string
   integrationId?: string
-  integrationContext?: Record<string, unknown>
-  rateLimitSettings?: RateLimitPolicySnapshot
+  integrationContext?: JsonObject
+  rateLimitSettings: RateLimitPolicySnapshot
+  rateLimitService: RateLimitService
   signal?: AbortSignal
   onActivity?: () => void | Promise<void>
   withImageRetries: <T>(
     fn: () => Promise<T>,
     hooks?: ImageRetryHooks
   ) => Promise<T>
+  liveResourceLedger: OffscreenLiveResourceLedger
 }): Promise<CoverImageAsset | undefined> {
   const {
     includeCoverImage = true,
@@ -102,9 +121,11 @@ export async function prefetchOptionalCoverImage(input: {
     integrationId,
     integrationContext,
     rateLimitSettings,
+    rateLimitService,
     signal,
     onActivity,
     withImageRetries,
+    liveResourceLedger,
   } = input
   if (!includeCoverImage) {
     return undefined
@@ -115,9 +136,11 @@ export async function prefetchOptionalCoverImage(input: {
     integrationId,
     integrationContext,
     rateLimitSettings,
+    rateLimitService,
     signal,
     onActivity,
     withImageRetries,
+    liveResourceLedger,
   })
 }
 
@@ -150,12 +173,14 @@ export async function requestBrowserBlobDownload(input: {
   outputId: string
   taskId: string
   chapterId: string
-  blob: Blob
+  fingerprint: string
+  documentInstanceId: string
+  fileUrl: string
   filename: string
   outputIndex: number
   outputCount: number
   outputKind: "archive" | "image"
-  signal?: AbortSignal
+  signal: AbortSignal
 }): Promise<Awaited<ReturnType<typeof sendDownloadApiRequest>>> {
   const {
     jobId,
@@ -163,40 +188,31 @@ export async function requestBrowserBlobDownload(input: {
     outputId,
     taskId,
     chapterId,
-    blob,
+    fingerprint,
+    documentInstanceId,
+    fileUrl,
     filename,
     outputIndex,
     outputCount,
     outputKind,
     signal,
   } = input
-  if (signal?.aborted) {
+  if (signal.aborted) {
     throw new Error("job-cancelled")
   }
-  const fileUrl = URL.createObjectURL(blob)
-  // A runtime transport failure is ambiguous: the Service Worker may have
-  // already called downloads.download() and died before returning the
-  // acceptance response. Rejections therefore leave the Blob alive for the
-  // identity-bound replay or durable pending-output recovery to reconcile.
-  const response = await sendDownloadApiRequest(
-    {
-      jobId,
-      attempt,
-      outputId,
-      taskId,
-      chapterId,
-      fileUrl,
-      filename,
-      outputIndex,
-      outputCount,
-      outputKind,
-    },
-    signal
-  )
-
-  if (!response.success) {
-    URL.revokeObjectURL(fileUrl)
-  }
-
-  return response
+  const payload = {
+    jobId,
+    attempt,
+    outputId,
+    taskId,
+    chapterId,
+    fingerprint,
+    documentInstanceId,
+    fileUrl,
+    filename,
+    outputIndex,
+    outputCount,
+    outputKind,
+  } as const
+  return await sendDownloadApiRequest(payload, signal)
 }

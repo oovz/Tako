@@ -5,7 +5,11 @@ const sendMessage = vi.fn()
 describe("sendDownloadApiRequest", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    sendMessage.mockResolvedValue({ success: true, accepted: true, id: 1 })
+    sendMessage.mockResolvedValue({
+      success: true,
+      disposition: "tracked",
+      phase: "prepared",
+    })
     vi.stubGlobal("chrome", {
       runtime: { sendMessage },
     } as unknown as typeof chrome)
@@ -22,6 +26,8 @@ describe("sendDownloadApiRequest", () => {
     const first = sendDownloadApiRequest({
       jobId: "job-1",
       attempt: 1,
+      fingerprint: "a".repeat(64),
+      documentInstanceId: "document-1",
       outputId: "job-1:image:0",
       taskId: "task-1",
       chapterId: "chapter-1",
@@ -34,6 +40,8 @@ describe("sendDownloadApiRequest", () => {
     const second = sendDownloadApiRequest({
       jobId: "job-1",
       attempt: 1,
+      fingerprint: "a".repeat(64),
+      documentInstanceId: "document-1",
       outputId: "job-1:image:1",
       taskId: "task-1",
       chapterId: "chapter-1",
@@ -59,6 +67,8 @@ describe("sendDownloadApiRequest", () => {
         {
           jobId: "job-1",
           attempt: 1,
+          fingerprint: "a".repeat(64),
+          documentInstanceId: "document-1",
           outputId: "job-1:image:0",
           taskId: "task-1",
           chapterId: "chapter-1",

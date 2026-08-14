@@ -17,6 +17,9 @@ describe("terminal offscreen progress", () => {
           errorMessage: "HTTP 503: unavailable",
           errorCategory: "network_unavailable",
           imagesFailed: 2,
+          outputsRequested: 0,
+          outputsFailedBeforeHandoff: 0,
+          outputsCommitted: 0,
         },
         imagesProcessed: 3,
         totalImages: 5,
@@ -40,6 +43,7 @@ describe("terminal offscreen progress", () => {
         outcome: {
           status: "completed",
           outputsRequested: 1,
+          outputsFailedBeforeHandoff: 0,
           outputsCommitted: 0,
         },
         imagesProcessed: 5,
@@ -57,6 +61,7 @@ describe("terminal offscreen progress", () => {
         outcome: {
           status: "completed",
           outputsRequested: 1,
+          outputsFailedBeforeHandoff: 0,
           outputsCommitted: 1,
         },
         imagesProcessed: 5,

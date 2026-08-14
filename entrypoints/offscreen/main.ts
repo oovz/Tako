@@ -5,16 +5,17 @@
 
 import type { Chapter } from "@/src/types/chapter"
 import type {
-  OffscreenDownloadProgressMessage,
-  OffscreenParseSeriesHtmlResponse,
-} from "@/src/types/offscreen-messages"
-import type {
-  OffscreenDownloadChapterPayload,
-  OffscreenParseSeriesHtmlPayload,
-} from "@/src/runtime/message-schemas"
-import { withRetries, fetchChapterHtml } from "./image-processor"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
-import { initializeOffscreenSiteIntegrations } from "@/src/runtime/site-integration-offscreen-initialization"
+  RuntimeMessageRequest,
+  RuntimeMessageResponse,
+} from "@/src/runtime/runtime-message-contracts"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
+import { withRetries } from "./image-processor"
+import { offscreenSiteAdaptersById } from "@/src/runtime/generated/site-integration-offscreen-registry"
+import { getDefinition, isEnabled } from "@/src/site-integrations/catalog"
+import {
+  initializeOffscreenSiteIntegrations,
+  loadOffscreenSiteIntegrationEnablement,
+} from "@/src/runtime/site-integration-offscreen-initialization"
 import logger from "@/src/runtime/logger"
 import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
 import {
@@ -34,7 +35,6 @@ import {
 } from "./download-runtime-helpers"
 import {
   createStreamingProgressHandlers,
-  createTerminalProgressPayload,
   type UnsequencedProgressPayload,
 } from "./progress-helpers"
 import {
@@ -46,8 +46,24 @@ import { classifyOffscreenErrorCategory } from "./error-categories"
 import { registerOffscreenRuntime } from "./runtime-bridge"
 import { createOffscreenStatusController } from "./status-ui"
 import { OFFSCREEN_HEARTBEAT_INTERVAL_MS } from "@/src/constants/timeouts"
-import type { OffscreenJobStage } from "@/src/types/queue-state"
-import type { OffscreenJobState } from "@/src/types/offscreen-messages"
+import type {
+  OffscreenJobIncarnation,
+  OffscreenJobOutcome,
+  OffscreenJobStage,
+  OffscreenJobState,
+} from "@/src/runtime/offscreen-job-contracts"
+import { offscreenDispatchFingerprintMatches } from "@/src/runtime/offscreen-job-fingerprint"
+import { NonRetryableDownloadError } from "@/src/shared/download-contract"
+import { BrowserBlobLeaseRegistry } from "./browser-blob-lease-registry"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { OffscreenLiveResourceLease } from "@/src/runtime/offscreen-live-resource-ledger"
+import { readSiteIntegrationDispatchContext } from "@/src/runtime/site-integration-dispatch-context-envelope"
+import { parseChapterImagePlan } from "@/src/site-integrations/chapter-plan"
+import type { JsonObject } from "@/src/types/site-integrations"
+import {
+  RateLimitService,
+  type RateLimitPolicySnapshot,
+} from "@/src/runtime/rate-limit"
 
 // Chrome extension offscreen document: DOM/web APIs are available here, but
 // chrome.runtime is the only Chrome extension API exposed to this context.
@@ -75,13 +91,24 @@ type JobExecutionContext = {
   handlesOwnRetries: boolean
 }
 
-type PendingChapterProgressEntry = {
-  payload: OffscreenDownloadProgressMessage["payload"]
-  timerId: ReturnType<typeof setTimeout>
-}
+type OffscreenDownloadChapterPayload =
+  RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]
+type OffscreenDownloadChapterAck = Omit<
+  Extract<
+    RuntimeMessageResponse<"OFFSCREEN_DOWNLOAD_CHAPTER">,
+    { success: true }
+  >,
+  "success"
+>
+type OffscreenParseSeriesHtmlPayload =
+  RuntimeMessageRequest<"OFFSCREEN_PARSE_SERIES_HTML">["payload"]
+type OffscreenParseSeriesHtmlResponse =
+  RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML">
+type RevokeBlobUrlPayload = RuntimeMessageRequest<"REVOKE_BLOB_URL">["payload"]
 
 type OffscreenJobRecord = {
   request: OffscreenDownloadChapterPayload
+  integrationContext: JsonObject | undefined
   controller: AbortController
   stage: OffscreenJobStage
   sequence: number
@@ -89,13 +116,27 @@ type OffscreenJobRecord = {
   outcome?: ChapterOutcome
   promise: Promise<ChapterOutcome>
   heartbeatTimer?: ReturnType<typeof setInterval>
+  heartbeatInFlight: boolean
+  eventTail: Promise<void>
   updatedAt: number
+}
+
+const MAX_CANCELED_SERIES_RESOLUTION_REQUESTS = 128
+
+function createSnapshotRateLimitService(
+  settings: RateLimitPolicySnapshot
+): RateLimitService {
+  return new RateLimitService({
+    resolveEffectivePolicy: (_integrationId, scope) =>
+      Promise.resolve(settings[scope]),
+  })
 }
 
 function awaitWithTimeoutAndSignal<T>(
   promise: Promise<T>,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onTimeout?: () => void
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false
@@ -108,7 +149,11 @@ function awaitWithTimeoutAndSignal<T>(
     }
     const onAbort = () => finish(() => reject(new Error("job-cancelled")))
     const timeoutId = setTimeout(
-      () => finish(() => reject(new Error("resolveImageUrls timeout"))),
+      () =>
+        finish(() => {
+          onTimeout?.()
+          reject(new Error("resolveChapterPlan timeout"))
+        }),
       timeoutMs
     )
     signal?.addEventListener("abort", onAbort, { once: true })
@@ -134,23 +179,34 @@ function awaitWithTimeoutAndSignal<T>(
  * Offscreen Worker Manager
  */
 export class OffscreenWorker {
-  private readonly chapterProgressLastSentAt = new Map<string, number>()
-  private readonly pendingChapterProgress = new Map<
-    string,
-    PendingChapterProgressEntry
-  >()
   private readonly activeTaskControllers = new Map<
     string,
     TaskControllerEntry
   >()
   private readonly jobs = new Map<string, OffscreenJobRecord>()
+  private readonly browserBlobs: BrowserBlobLeaseRegistry
+  private readonly seriesResolutionControllers = new Map<
+    string,
+    AbortController
+  >()
+  private readonly canceledSeriesResolutionRequests = new Set<string>()
+
+  constructor(
+    readonly documentInstanceId: string = crypto.randomUUID(),
+    private readonly liveResourceLedger = new OffscreenLiveResourceLedger()
+  ) {
+    this.browserBlobs = new BrowserBlobLeaseRegistry(
+      undefined,
+      undefined,
+      liveResourceLedger
+    )
+  }
 
   async initialize(): Promise<void> {
     try {
       logger.debug("🔧 Initializing offscreen worker...")
 
-      // Initialize site integration registry first (required for findSiteIntegrationForUrl)
-      logger.debug("🔌 Initializing site integration registry in offscreen...")
+      logger.debug("🔌 Loading site integration enablement in offscreen...")
       await initializeOffscreenSiteIntegrations()
 
       logger.debug(
@@ -204,7 +260,7 @@ export class OffscreenWorker {
     return await resolveWritableDownloadRoot(input)
   }
 
-  private requestBrowserBlobDownload(input: {
+  private async requestBrowserBlobDownload(input: {
     jobId: string
     attempt: number
     outputId: string
@@ -215,9 +271,57 @@ export class OffscreenWorker {
     outputIndex: number
     outputCount: number
     outputKind: "archive" | "image"
-    signal?: AbortSignal
+    signal: AbortSignal
+    resourceLease: OffscreenLiveResourceLease
   }): ReturnType<typeof requestBrowserBlobDownload> {
-    return requestBrowserBlobDownload(input)
+    if (input.signal.aborted) {
+      throw new Error("job-cancelled")
+    }
+    const record = this.jobs.get(input.jobId)
+    if (
+      !record ||
+      record.status !== "active" ||
+      record.request.attempt !== input.attempt ||
+      record.request.taskId !== input.taskId ||
+      record.request.chapter.id !== input.chapterId
+    ) {
+      throw new Error("Offscreen job authority is not current")
+    }
+    const identity = this.browserBlobs.retain({
+      jobId: input.jobId,
+      attempt: input.attempt,
+      taskId: input.taskId,
+      chapterId: input.chapterId,
+      fingerprint: record.request.fingerprint,
+      documentInstanceId: this.documentInstanceId,
+      outputId: input.outputId,
+      blob: input.blob,
+      resourceLease: input.resourceLease,
+    })
+
+    const response = await requestBrowserBlobDownload({
+      ...input,
+      fingerprint: record.request.fingerprint,
+      documentInstanceId: this.documentInstanceId,
+      fileUrl: identity.blobUrl,
+    })
+    if (response.success !== true) {
+      // A runtime/handler failure does not prove that the durable background
+      // handoff failed. Keep the Blob owned here so reconciliation can still
+      // resolve an already-prepared output.
+      throw new Error(response.error)
+    }
+    if (
+      response.disposition === "not_persisted" &&
+      !this.revokeBlobUrl(identity)
+    ) {
+      throw new Error("Blob URL ownership changed before rejection cleanup")
+    }
+    return response
+  }
+
+  revokeBlobUrl(input: RevokeBlobUrlPayload): boolean {
+    return this.browserBlobs.revoke(input)
   }
 
   private acquireTaskController(taskId: string): TaskControllerEntry {
@@ -239,11 +343,11 @@ export class OffscreenWorker {
     settingsSnapshot: ProcessDownloadChapterSettingsSnapshot
   ): JobExecutionContext {
     const retries = settingsSnapshot.retrySettings
-    const integrationMeta = siteIntegrationRegistry.findById(siteIntegrationId)
+    const integrationMeta = getDefinition(siteIntegrationId)
     return {
       integrationId: siteIntegrationId,
       retries,
-      handlesOwnRetries: integrationMeta?.handlesOwnRetries === true,
+      handlesOwnRetries: integrationMeta?.retryOwner === "provider",
     }
   }
 
@@ -265,22 +369,29 @@ export class OffscreenWorker {
     }
   }
 
-  public processDownloadChapter(
+  public async processDownloadChapter(
     request: OffscreenDownloadChapterPayload
-  ): Promise<ChapterOutcome> {
+  ): Promise<OffscreenDownloadChapterAck> {
+    const integrationContext = readSiteIntegrationDispatchContext(
+      request.book.siteIntegrationId,
+      request.integrationContext
+    )
+    if (!(await offscreenDispatchFingerprintMatches(request))) {
+      throw new Error("Offscreen dispatch fingerprint mismatch")
+    }
     const existing = this.jobs.get(request.jobId)
     if (existing) {
       if (
         existing.request.attempt !== request.attempt ||
         existing.request.taskId !== request.taskId ||
-        existing.request.chapter.id !== request.chapter.id
+        existing.request.chapter.id !== request.chapter.id ||
+        existing.request.fingerprint !== request.fingerprint
       ) {
-        return Promise.reject(new Error("Job identity collision"))
+        throw new Error("Job identity collision")
       }
-      return existing.promise
+      return this.createDispatchAck(existing)
     }
 
-    const supersededExecutions: Promise<ChapterOutcome>[] = []
     for (const job of this.jobs.values()) {
       if (
         job.request.taskId !== request.taskId ||
@@ -289,42 +400,51 @@ export class OffscreenWorker {
         continue
       }
       if (job.request.attempt > request.attempt) {
-        return Promise.reject(new Error("Stale chapter dispatch attempt"))
+        throw new Error("Stale chapter dispatch attempt")
       }
       if (job.request.attempt === request.attempt) {
-        return Promise.reject(new Error("Chapter dispatch identity collision"))
+        throw new Error("Chapter dispatch identity collision")
       }
-      supersededExecutions.push(job.promise)
       if (job.status === "active") {
-        // Abort first, then use the promise barrier below. Abort is advisory:
-        // an older attempt may still be inside a non-abortable browser/FSA
-        // operation and must settle before the replacement starts.
-        job.status = "canceled"
-        job.updatedAt = Date.now()
-        this.stopJobHeartbeat(job)
-        job.controller.abort("Superseded by a newer dispatch attempt")
-        this.clearPendingChapterProgress(
-          `${job.request.taskId}:${job.request.chapter.id}`
-        )
+        throw new Error("Previous chapter dispatch is still active")
       }
     }
 
     const taskControllerEntry = this.acquireTaskController(request.taskId)
     const record: OffscreenJobRecord = {
       request,
+      integrationContext,
       controller: taskControllerEntry.controller,
       stage: "dispatching",
       sequence: 0,
       status: "active",
-      promise: Promise.resolve({ status: "failed" as const }),
+      promise: Promise.resolve({
+        status: "failed" as const,
+        outputsRequested: 0,
+        outputsFailedBeforeHandoff: 0,
+        outputsCommitted: 0,
+      }),
+      heartbeatInFlight: false,
+      eventTail: Promise.resolve(),
       updatedAt: Date.now(),
     }
-    record.promise = Promise.allSettled(supersededExecutions).then(() =>
-      this.executeDownloadChapter(record, taskControllerEntry)
-    )
     this.jobs.set(request.jobId, record)
-    this.pruneTerminalJobs()
-    return record.promise
+    record.promise = new Promise<void>((resolve) =>
+      setTimeout(resolve, 0)
+    ).then(() => this.executeDownloadChapter(record, taskControllerEntry))
+    void record.promise.catch((error) => {
+      logger.error("Offscreen chapter execution failed", error)
+    })
+    return this.createDispatchAck(record)
+  }
+
+  private createDispatchAck(
+    record: OffscreenJobRecord
+  ): OffscreenDownloadChapterAck {
+    return {
+      accepted: true,
+      ...this.jobIncarnation(record),
+    }
   }
 
   private async executeDownloadChapter(
@@ -340,12 +460,33 @@ export class OffscreenWorker {
     }
 
     try {
+      if (record.status !== "active" || record.controller.signal.aborted) {
+        return (
+          record.outcome ?? {
+            status: "failed",
+            errorMessage: "job-cancelled",
+            outputsRequested: 0,
+            outputsFailedBeforeHandoff: 0,
+            outputsCommitted: 0,
+          }
+        )
+      }
       await this.sendJobAccepted(record)
       this.startJobHeartbeat(record)
       await this.waitForNotBefore(record)
 
+      const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
+      if (!isEnabled(request.book.siteIntegrationId, currentEnablement)) {
+        throw new NonRetryableDownloadError(
+          `Site integration ${request.book.siteIntegrationId} is disabled`
+        )
+      }
+
       const snapshot = readProcessDownloadChapterSettingsSnapshot(
         request.settingsSnapshot
+      )
+      const rateLimitService = createSnapshotRateLimitService(
+        snapshot.rateLimitSettings
       )
       const chapterForProcessing = createChapterForProcessing(request.chapter)
       const job = this.createJobExecutionContext(
@@ -366,8 +507,9 @@ export class OffscreenWorker {
         includeCoverImage: snapshot.includeCoverImage,
         coverUrl: request.book.coverUrl,
         integrationId: job.integrationId,
-        integrationContext: request.integrationContext,
+        integrationContext: record.integrationContext,
         rateLimitSettings: snapshot.rateLimitSettings,
+        rateLimitService,
         signal: taskControllerEntry.controller.signal,
         onActivity: () => progressHandlers.onArchiveProgress(0, "cover"),
         withImageRetries: <T>(
@@ -382,10 +524,12 @@ export class OffscreenWorker {
             hooks,
             taskControllerEntry.controller.signal
           ),
+        liveResourceLedger: this.liveResourceLedger,
       })
 
       const streamingOptions = createProcessChapterStreamingOptions({
         request,
+        integrationContext: record.integrationContext,
         snapshot,
         chapter: chapterForProcessing,
         abortSignal: taskControllerEntry.controller.signal,
@@ -393,15 +537,16 @@ export class OffscreenWorker {
         onArchiveProgress: progressHandlers.onArchiveProgress,
         coverImage,
       })
-      const outcome = await this.processChapterStreaming(streamingOptions, job)
+      const outcome = await this.processChapterStreaming(
+        streamingOptions,
+        job,
+        rateLimitService
+      )
 
       if (taskControllerEntry.controller.signal.aborted) {
         record.status = "canceled"
         record.outcome = outcome
         record.updatedAt = Date.now()
-        this.clearPendingChapterProgress(
-          `${request.taskId}:${request.chapter.id}`
-        )
         return outcome
       }
 
@@ -410,18 +555,8 @@ export class OffscreenWorker {
       record.stage = "saving"
       record.outcome = outcome
       record.updatedAt = Date.now()
-
-      await this.sendJobProgressMessage(
-        record,
-        createTerminalProgressPayload({
-          taskId: request.taskId,
-          chapterId: request.chapter.id,
-          chapterTitle: request.chapter.title,
-          outcome,
-          totalImages: latestImageProgress.total,
-          imagesProcessed: latestImageProgress.current,
-        })
-      )
+      await this.sendJobTerminal(record, outcome)
+      this.pruneTerminalJobs()
       return outcome
     } catch (error) {
       const outcome: ChapterOutcome = {
@@ -429,6 +564,9 @@ export class OffscreenWorker {
         errorMessage:
           error instanceof Error ? error.message : "Failed to process chapter",
         errorCategory: classifyOffscreenErrorCategory(error),
+        outputsRequested: 0,
+        outputsFailedBeforeHandoff: 0,
+        outputsCommitted: 0,
       }
       record.status = taskControllerEntry.controller.signal.aborted
         ? "canceled"
@@ -438,18 +576,9 @@ export class OffscreenWorker {
       record.updatedAt = Date.now()
       if (!taskControllerEntry.controller.signal.aborted) {
         releaseTaskControllerOnce()
-        await this.sendJobProgressMessage(
-          record,
-          createTerminalProgressPayload({
-            taskId: request.taskId,
-            chapterId: request.chapter.id,
-            chapterTitle: request.chapter.title,
-            outcome,
-            totalImages: 0,
-            imagesProcessed: 0,
-          })
-        )
+        await this.sendJobTerminal(record, outcome)
       }
+      this.pruneTerminalJobs()
       return outcome
     } finally {
       this.stopJobHeartbeat(record)
@@ -464,31 +593,35 @@ export class OffscreenWorker {
   }
 
   private async sendJobAccepted(record: OffscreenJobRecord): Promise<void> {
-    record.stage = "accepted"
-    const sequence = this.nextJobSequence(record)
-    // The service worker's positive acknowledgement is the execution fence.
-    // In particular, a canceled or replaced lease must not continue merely
-    // because the offscreen document already received the dispatch envelope.
-    await this.sendMessageWithRetry({
-      type: "OFFSCREEN_JOB_ACCEPTED",
-      payload: {
-        jobId: record.request.jobId,
-        attempt: record.request.attempt,
-        taskId: record.request.taskId,
-        chapterId: record.request.chapter.id,
-        acceptedAt: Date.now(),
-        sequence,
-      },
+    await this.runJobEventExclusive(record, async () => {
+      record.stage = "accepted"
+      const sequence = this.nextJobSequence(record)
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "OFFSCREEN_JOB_ACCEPTED",
+        payload: {
+          ...this.jobIncarnation(record),
+          acceptedAt: Date.now(),
+          sequence,
+        },
+      })
+      this.requireCurrentRenewal(record, response)
     })
   }
 
   private startJobHeartbeat(record: OffscreenJobRecord): void {
     this.stopJobHeartbeat(record)
     record.heartbeatTimer = setInterval(() => {
-      if (record.status !== "active") return
-      void this.sendJobHeartbeat(record).catch((error) => {
-        logger.debug("Job heartbeat delivery failed (will retry)", error)
-      })
+      if (record.status !== "active" || record.heartbeatInFlight) return
+      record.heartbeatInFlight = true
+      void this.sendJobHeartbeat(record)
+        .catch((error) => {
+          logger.debug("Job heartbeat delivery failed", error)
+          this.loseJobAuthority(record, error)
+        })
+        .finally(() => {
+          record.heartbeatInFlight = false
+        })
     }, OFFSCREEN_HEARTBEAT_INTERVAL_MS)
   }
 
@@ -500,18 +633,20 @@ export class OffscreenWorker {
   }
 
   private async sendJobHeartbeat(record: OffscreenJobRecord): Promise<void> {
-    const sequence = this.nextJobSequence(record)
-    await this.sendMessageWithRetry({
-      type: "OFFSCREEN_JOB_HEARTBEAT",
-      payload: {
-        jobId: record.request.jobId,
-        attempt: record.request.attempt,
-        taskId: record.request.taskId,
-        chapterId: record.request.chapter.id,
-        stage: record.stage,
-        sequence,
-        sentAt: Date.now(),
-      },
+    await this.runJobEventExclusive(record, async () => {
+      if (record.status !== "active") return
+      const sequence = this.nextJobSequence(record)
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "OFFSCREEN_JOB_HEARTBEAT",
+        payload: {
+          ...this.jobIncarnation(record),
+          stage: record.stage,
+          sequence,
+          sentAt: Date.now(),
+        },
+      })
+      this.requireCurrentRenewal(record, response)
     })
   }
 
@@ -548,14 +683,116 @@ export class OffscreenWorker {
     record: OffscreenJobRecord,
     payload: UnsequencedProgressPayload
   ): Promise<void> {
-    record.stage = payload.stage
-    const sequence = this.nextJobSequence(record)
-    await this.sendChapterProgressMessage({
-      ...payload,
+    await this.runJobEventExclusive(record, async () => {
+      if (record.status !== "active") return
+      record.stage = payload.stage
+      const sequence = this.nextJobSequence(record)
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "OFFSCREEN_DOWNLOAD_PROGRESS",
+        payload: {
+          ...payload,
+          ...this.jobIncarnation(record),
+          sequence,
+        },
+      })
+      this.requireCurrentRenewal(record, response)
+    })
+  }
+
+  private async sendJobTerminal(
+    record: OffscreenJobRecord,
+    outcome: OffscreenJobOutcome
+  ): Promise<void> {
+    await this.runJobEventExclusive(record, async () => {
+      const sequence = this.nextJobSequence(record)
+      try {
+        const response = await sendRuntimeMessage({
+          target: "background",
+          type: "OFFSCREEN_JOB_TERMINAL",
+          payload: {
+            ...this.jobIncarnation(record),
+            sequence,
+            stage: "saving",
+            terminalAt: Date.now(),
+            outcome,
+          },
+        })
+        if (
+          response.success &&
+          response.disposition !== "renewed" &&
+          response.disposition !== "stale_or_reordered"
+        ) {
+          logger.warn("Terminal job event lost current lease authority", {
+            jobId: record.request.jobId,
+            disposition: response.disposition,
+          })
+        }
+        if (!response.success) {
+          logger.warn("Terminal job event was not accepted", response.error)
+        }
+      } catch (error) {
+        logger.warn("Terminal job event delivery failed", error)
+      }
+    })
+  }
+
+  private async runJobEventExclusive<T>(
+    record: OffscreenJobRecord,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const result = record.eventTail.catch(() => undefined).then(operation)
+    record.eventTail = result.then(
+      () => undefined,
+      () => undefined
+    )
+    return await result
+  }
+
+  private jobIncarnation(record: OffscreenJobRecord): OffscreenJobIncarnation {
+    return {
       jobId: record.request.jobId,
       attempt: record.request.attempt,
-      sequence,
-    })
+      taskId: record.request.taskId,
+      chapterId: record.request.chapter.id,
+      fingerprint: record.request.fingerprint,
+      documentInstanceId: this.documentInstanceId,
+    }
+  }
+
+  private requireCurrentRenewal(
+    record: OffscreenJobRecord,
+    response: RuntimeMessageResponse<
+      | "OFFSCREEN_JOB_ACCEPTED"
+      | "OFFSCREEN_JOB_HEARTBEAT"
+      | "OFFSCREEN_DOWNLOAD_PROGRESS"
+    >
+  ): void {
+    if (!response.success) {
+      const error = new Error(response.error)
+      this.loseJobAuthority(record, error)
+      throw error
+    }
+    if (
+      response.disposition === "renewed" ||
+      response.disposition === "stale_or_reordered"
+    ) {
+      return
+    }
+    const error = new Error(
+      `Offscreen job authority lost: ${response.disposition}`
+    )
+    this.loseJobAuthority(record, error)
+    throw error
+  }
+
+  private loseJobAuthority(record: OffscreenJobRecord, reason: unknown): void {
+    if (record.status !== "active") return
+    record.status = "canceled"
+    record.updatedAt = Date.now()
+    this.stopJobHeartbeat(record)
+    record.controller.abort(reason)
+    this.pruneTerminalJobs()
   }
 
   private pruneTerminalJobs(): void {
@@ -567,48 +804,74 @@ export class OffscreenWorker {
     }
   }
 
-  getCurrentJobState(): OffscreenJobState | null {
-    const records = [...this.jobs.values()].sort((left, right) => {
-      if (left.status === "active" && right.status !== "active") return -1
-      if (right.status === "active" && left.status !== "active") return 1
-      return right.updatedAt - left.updatedAt
-    })
-    const record = records[0]
-    if (!record) return null
-    return {
-      jobId: record.request.jobId,
-      attempt: record.request.attempt,
-      taskId: record.request.taskId,
-      chapterId: record.request.chapter.id,
-      status: record.status,
-      stage: record.stage,
-      sequence: record.sequence,
-      outcome: record.outcome,
-    }
-  }
-
-  cancelJob(input: {
-    jobId: string
-    attempt: number
-    taskId: string
-    chapterId: string
-  }): boolean {
+  getJobState(input: OffscreenJobIncarnation): OffscreenJobState | null {
     const record = this.jobs.get(input.jobId)
     if (
       !record ||
       record.request.attempt !== input.attempt ||
       record.request.taskId !== input.taskId ||
       record.request.chapter.id !== input.chapterId ||
-      record.status !== "active"
+      record.request.fingerprint !== input.fingerprint ||
+      this.documentInstanceId !== input.documentInstanceId
     ) {
-      return false
+      return null
+    }
+    return this.toJobState(record)
+  }
+
+  private toJobState(record: OffscreenJobRecord): OffscreenJobState {
+    return {
+      ...this.jobIncarnation(record),
+      status: record.status,
+      stage: record.stage,
+      lastSequence: record.sequence,
+      outcome: record.outcome,
+    }
+  }
+
+  cancelJob(
+    input: OffscreenJobIncarnation
+  ): Omit<
+    Extract<RuntimeMessageResponse<"OFFSCREEN_CANCEL_JOB">, { success: true }>,
+    "success"
+  > {
+    const record = this.jobs.get(input.jobId)
+    if (!record) {
+      return {
+        canceled: false,
+        ...input,
+        status: "absent",
+        lastSequence: 0,
+      }
+    }
+    if (
+      record.request.attempt !== input.attempt ||
+      record.request.taskId !== input.taskId ||
+      record.request.chapter.id !== input.chapterId ||
+      record.request.fingerprint !== input.fingerprint ||
+      this.documentInstanceId !== input.documentInstanceId
+    ) {
+      throw new Error("Job cancellation identity collision")
+    }
+    if (record.status !== "active") {
+      return {
+        canceled: record.status === "canceled",
+        ...this.jobIncarnation(record),
+        status: record.status,
+        lastSequence: record.sequence,
+      }
     }
     record.status = "canceled"
     record.updatedAt = Date.now()
     this.stopJobHeartbeat(record)
     record.controller.abort("User cancelled")
-    this.clearPendingChapterProgress(`${input.taskId}:${input.chapterId}`)
-    return true
+    this.pruneTerminalJobs()
+    return {
+      canceled: true,
+      ...this.jobIncarnation(record),
+      status: "canceled",
+      lastSequence: record.sequence,
+    }
   }
 
   /**
@@ -618,45 +881,111 @@ export class OffscreenWorker {
   public async parseSeriesHtml(
     request: OffscreenParseSeriesHtmlPayload
   ): Promise<OffscreenParseSeriesHtmlResponse> {
-    const integrationInfo = siteIntegrationRegistry.findById(
-      request.siteIntegrationId
-    )
-    if (!integrationInfo?.integration?.offscreen?.series?.resolveSeriesData) {
+    if (this.seriesResolutionControllers.has(request.requestId)) {
       return {
         success: false,
-        error: `Site integration ${request.siteIntegrationId} does not implement offscreen series resolution`,
+        error: "Series HTML request identity collision",
+      }
+    }
+    if (this.canceledSeriesResolutionRequests.delete(request.requestId)) {
+      return {
+        success: false,
+        error: "Series HTML parsing was canceled",
       }
     }
 
-    const document = new DOMParser().parseFromString(request.html, "text/html")
-    if (!document.body || document.body.childElementCount === 0) {
-      return {
-        success: false,
-        error: "Parsed series HTML document is empty",
+    const controller = new AbortController()
+    this.seriesResolutionControllers.set(request.requestId, controller)
+    try {
+      const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
+      if (controller.signal.aborted) {
+        return {
+          success: false,
+          error: "Series HTML parsing was canceled",
+        }
       }
-    }
+      if (!isEnabled(request.siteIntegrationId, currentEnablement)) {
+        return {
+          success: false,
+          error: `Site integration ${request.siteIntegrationId} is disabled`,
+        }
+      }
 
-    const result =
-      await integrationInfo.integration.offscreen.series.resolveSeriesData({
+      const integration =
+        offscreenSiteAdaptersById[request.siteIntegrationId]?.offscreen
+      if (!integration?.series?.resolveSeriesData) {
+        return {
+          success: false,
+          error: `Site integration ${request.siteIntegrationId} does not implement offscreen series resolution`,
+        }
+      }
+
+      const document = new DOMParser().parseFromString(
+        request.html,
+        "text/html"
+      )
+      if (!document.body || document.body.childElementCount === 0) {
+        return {
+          success: false,
+          error: "Parsed series HTML document is empty",
+        }
+      }
+
+      const rateLimitService = createSnapshotRateLimitService(
+        request.rateLimitSettings
+      )
+
+      const result = await integration.series.resolveSeriesData({
+        requestId: request.requestId,
         seriesUrl: request.seriesUrl,
         html: request.html,
         document,
         language: request.language,
+        signal: controller.signal,
+        rateLimitService,
       })
-    return {
-      success: true,
-      seriesMetadata: result.seriesMetadata,
-      chapterList: result.chapterList,
-      metadataError: result.metadataError,
-      chapterListError: result.chapterListError,
-      chapterListNotice: result.chapterListNotice,
+      return {
+        success: true,
+        seriesMetadata: result.seriesMetadata,
+        chapterList: result.chapterList,
+        metadataError: result.metadataError,
+        chapterListError: result.chapterListError,
+        chapterListNotice: result.chapterListNotice,
+      }
+    } finally {
+      if (
+        this.seriesResolutionControllers.get(request.requestId) === controller
+      ) {
+        this.seriesResolutionControllers.delete(request.requestId)
+      }
     }
+  }
+
+  cancelSeriesHtml(requestId: string): boolean {
+    const controller = this.seriesResolutionControllers.get(requestId)
+    if (!controller) {
+      this.canceledSeriesResolutionRequests.add(requestId)
+      while (
+        this.canceledSeriesResolutionRequests.size >
+        MAX_CANCELED_SERIES_RESOLUTION_REQUESTS
+      ) {
+        const oldest = this.canceledSeriesResolutionRequests
+          .values()
+          .next().value
+        if (typeof oldest !== "string") break
+        this.canceledSeriesResolutionRequests.delete(oldest)
+      }
+      return true
+    }
+    controller.abort(new Error("Series resolution was superseded"))
+    return true
   }
 
   // Resolve chapter assets, then dispatch to the specific archive or non-archive flow.
   private async processChapterStreaming(
     opts: ProcessChapterStreamingOptions,
-    job: JobExecutionContext
+    job: JobExecutionContext,
+    rateLimitService: RateLimitService
   ): Promise<ChapterOutcome> {
     const { chapter, abortSignal, onProgress } = opts
     const normalizeSettings: ArchiveNormalizationSettings = {
@@ -667,30 +996,54 @@ export class OffscreenWorker {
     try {
       const integrationId = job.integrationId
 
-      const integrationInfo = siteIntegrationRegistry.findById(integrationId)
-      if (!integrationInfo || !integrationInfo.integration?.offscreen) {
+      const integration = offscreenSiteAdaptersById[integrationId]?.offscreen
+      if (!integration) {
         throw new Error(`No site integration found for ID: ${integrationId}`)
       }
 
-      const OffscreenIntegration = integrationInfo.integration.offscreen
+      const OffscreenIntegration = integration
       const downloadImage: ChapterDownloadImageFn = (url, options) =>
-        OffscreenIntegration.chapter.downloadImage(url, options)
+        OffscreenIntegration.chapter.downloadImage(url, {
+          ...options,
+          liveResourceLedger: this.liveResourceLedger,
+        })
 
       await onProgress(5, "fetching")
       if (abortSignal?.aborted) throw new Error("job-cancelled")
 
       const chapterRetries = job.retries.chapter
       const resolveWithTimeout = async () => {
-        const resolvePromise = OffscreenIntegration.chapter.resolveImageUrls!(
-          { id: chapter.id, url: chapter.url },
-          opts.integrationContext,
-          opts.settingsSnapshot ? { ...opts.settingsSnapshot } : undefined
-        )
-        return awaitWithTimeoutAndSignal(
-          resolvePromise,
-          DEFAULT_FETCH_TIMEOUT_MS,
-          abortSignal
-        )
+        const resolverController = new AbortController()
+        const abortResolver = () =>
+          resolverController.abort(abortSignal?.reason ?? "job-cancelled")
+        abortSignal?.addEventListener("abort", abortResolver, { once: true })
+        if (abortSignal?.aborted) abortResolver()
+        try {
+          const resolvePromise =
+            OffscreenIntegration.chapter.resolveChapterPlan(
+              { id: chapter.id, url: chapter.url },
+              {
+                dispatchContext: opts.integrationContext,
+                runtime: {
+                  chapterId: chapter.id,
+                  rateLimitSettings: opts.settingsSnapshot.rateLimitSettings,
+                  rateLimitService,
+                },
+                settings: { ...opts.settingsSnapshot },
+                signal: resolverController.signal,
+              }
+            )
+          return parseChapterImagePlan(
+            await awaitWithTimeoutAndSignal(
+              resolvePromise,
+              DEFAULT_FETCH_TIMEOUT_MS,
+              abortSignal,
+              () => resolverController.abort("resolveChapterPlan timeout")
+            )
+          )
+        } finally {
+          abortSignal?.removeEventListener("abort", abortResolver)
+        }
       }
 
       // Report each resolve/fetch retry as meaningful progress. The dedicated
@@ -701,76 +1054,23 @@ export class OffscreenWorker {
         return resolveWithTimeout()
       }
 
-      const urls = OffscreenIntegration.chapter.resolveImageUrls
-        ? await (job.handlesOwnRetries
-            ? resolveWithProgress()
-            : withRetries(
-                resolveWithProgress,
-                chapterRetries,
-                1000,
-                undefined,
-                abortSignal
-              ))
-        : await (async () => {
-            const parseImageUrlsFromHtml =
-              OffscreenIntegration.chapter.parseImageUrlsFromHtml
-            if (!parseImageUrlsFromHtml) {
-              throw new Error(
-                `Site integration ${integrationId} does not implement resolveImageUrls or parseImageUrlsFromHtml`
-              )
-            }
+      const plan = job.handlesOwnRetries
+        ? await resolveWithProgress()
+        : await withRetries(
+            resolveWithProgress,
+            chapterRetries,
+            1000,
+            undefined,
+            abortSignal
+          )
 
-            let html: string
-            let htmlFetchErrorMessage: string | undefined
-            try {
-              const fetchHtmlWithProgress = async () => {
-                await onProgress(10, "parsing")
-                return fetchChapterHtml(
-                  chapter.url,
-                  DEFAULT_FETCH_TIMEOUT_MS,
-                  integrationId,
-                  opts.settingsSnapshot?.rateLimitSettings?.chapter,
-                  abortSignal
-                )
-              }
-              html = await withRetries(
-                fetchHtmlWithProgress,
-                chapterRetries,
-                1000,
-                undefined,
-                abortSignal
-              )
-            } catch (error) {
-              htmlFetchErrorMessage =
-                error instanceof Error
-                  ? error.message
-                  : typeof error === "string"
-                    ? error
-                    : undefined
-              html = ""
-            }
-
-            const raw = await parseImageUrlsFromHtml({
-              chapterId: chapter.id,
-              chapterUrl: chapter.url,
-              chapterHtml: html,
-            })
-            if (raw.length === 0 && htmlFetchErrorMessage) {
-              throw new Error(
-                `Failed to fetch chapter HTML: ${htmlFetchErrorMessage}`
-              )
-            }
-
-            return OffscreenIntegration.chapter.processImageUrls(raw, chapter)
-          })()
-
-      if (urls.length === 0) {
-        throw new Error("No images found")
-      }
+      const urls = plan.imageUrls
 
       await onProgress(10, "ready", { current: 0, total: urls.length })
 
       const chapterProcessingRuntime: ChapterProcessingRuntime = {
+        liveResourceLedger: this.liveResourceLedger,
+        rateLimitService,
         withImageRetries: <T>(
           fn: () => Promise<T>,
           hooks?: {
@@ -820,187 +1120,22 @@ export class OffscreenWorker {
         status: "failed",
         errorMessage: message,
         errorCategory: classifyOffscreenErrorCategory(error),
+        outputsRequested: 0,
+        outputsFailedBeforeHandoff: 0,
+        outputsCommitted: 0,
       }
+    } finally {
+      opts.coverImage?.liveResourceLease?.release()
     }
-  }
-
-  private async sendChapterProgressMessage(
-    payload: OffscreenDownloadProgressMessage["payload"],
-    throwOnFailure = false
-  ): Promise<void> {
-    try {
-      const chapterKey = `${payload.taskId}:${payload.chapterId}`
-      if (payload.status !== "downloading") {
-        // Flush any pending throttled progress before sending the terminal update.
-        // This ensures the last downloading-state progress is not lost when the
-        // terminal status arrives within the throttle window.
-        await this.flushPendingChapterProgress(chapterKey)
-        await this.dispatchChapterProgressMessage(chapterKey, payload)
-        this.chapterProgressLastSentAt.delete(chapterKey)
-        return
-      }
-
-      const previousSentAt = this.chapterProgressLastSentAt.get(chapterKey) ?? 0
-      const elapsedMs = Date.now() - previousSentAt
-      const throttleWindowMs = 250
-      if (previousSentAt > 0 && elapsedMs < throttleWindowMs) {
-        this.schedulePendingChapterProgress(
-          chapterKey,
-          payload,
-          throttleWindowMs - elapsedMs
-        )
-        return
-      }
-
-      this.clearPendingChapterProgress(chapterKey)
-      await this.dispatchChapterProgressMessage(chapterKey, payload)
-    } catch (error) {
-      logger.error("❌ Failed to send chapter progress update message:", error)
-      if (throwOnFailure) throw error
-    }
-  }
-
-  private clearPendingChapterProgress(chapterKey: string): void {
-    const pendingEntry = this.pendingChapterProgress.get(chapterKey)
-    if (!pendingEntry) {
-      return
-    }
-
-    clearTimeout(pendingEntry.timerId)
-    this.pendingChapterProgress.delete(chapterKey)
-  }
-
-  private clearPendingTaskProgress(taskId: string): void {
-    const taskPrefix = `${taskId}:`
-    for (const chapterKey of this.pendingChapterProgress.keys()) {
-      if (chapterKey.startsWith(taskPrefix)) {
-        this.clearPendingChapterProgress(chapterKey)
-      }
-    }
-  }
-
-  /**
-   * Flush any pending throttled chapter progress by sending it immediately,
-   * then clearing the pending entry. Used before terminal progress so the
-   * last downloading-state update is not lost.
-   */
-  private async flushPendingChapterProgress(chapterKey: string): Promise<void> {
-    const pendingEntry = this.pendingChapterProgress.get(chapterKey)
-    if (!pendingEntry) {
-      return
-    }
-
-    clearTimeout(pendingEntry.timerId)
-    this.pendingChapterProgress.delete(chapterKey)
-    await this.dispatchChapterProgressMessage(chapterKey, pendingEntry.payload)
-  }
-
-  private schedulePendingChapterProgress(
-    chapterKey: string,
-    payload: OffscreenDownloadProgressMessage["payload"],
-    delayMs: number
-  ): void {
-    const existingEntry = this.pendingChapterProgress.get(chapterKey)
-    if (existingEntry) {
-      clearTimeout(existingEntry.timerId)
-    }
-
-    const timerId = setTimeout(
-      () => {
-        const pendingEntry = this.pendingChapterProgress.get(chapterKey)
-        if (!pendingEntry || pendingEntry.timerId !== timerId) {
-          return
-        }
-
-        this.pendingChapterProgress.delete(chapterKey)
-        void this.dispatchChapterProgressMessage(
-          chapterKey,
-          pendingEntry.payload
-        ).catch((error) => {
-          logger.error(
-            "❌ Failed to flush throttled chapter progress update:",
-            error
-          )
-        })
-      },
-      Math.max(0, delayMs)
-    )
-
-    this.pendingChapterProgress.set(chapterKey, {
-      payload,
-      timerId,
-    })
-  }
-
-  private async dispatchChapterProgressMessage(
-    chapterKey: string,
-    payload: OffscreenDownloadProgressMessage["payload"]
-  ): Promise<void> {
-    this.chapterProgressLastSentAt.set(chapterKey, Date.now())
-    try {
-      await this.sendMessageWithRetry(
-        {
-          type: "OFFSCREEN_DOWNLOAD_PROGRESS",
-          payload,
-        },
-        3,
-        250
-      )
-    } catch (error) {
-      this.chapterProgressLastSentAt.delete(chapterKey)
-      throw error
-    }
-    logger.debug(
-      `📊 Sent chapter progress update ${payload.taskId}/${payload.chapterId}:`,
-      payload
-    )
-  }
-
-  // Runtime message retry with small backoff to tolerate transient SW wakeups.
-  // Only retries on connection-level errors (port closed, SW restarting).
-  // Does NOT retry on "receiving end does not exist" (permanent — no listener registered).
-  private async sendMessageWithRetry<
-    T extends import("@/src/types/extension-messages").ExtensionMessage,
-    R,
-  >(msg: T, attempts = 3, baseDelayMs = 250): Promise<R> {
-    let lastError: Error | undefined
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const response = await chrome.runtime.sendMessage<T, R>(msg)
-        if (
-          response &&
-          typeof response === "object" &&
-          "success" in response &&
-          (response as { success?: unknown }).success === false
-        ) {
-          const errorMessage =
-            "error" in response &&
-            typeof (response as { error?: unknown }).error === "string"
-              ? (response as { error: string }).error
-              : "message receiver rejected the request"
-          throw new Error(errorMessage)
-        }
-        return response
-      } catch (e) {
-        lastError =
-          e instanceof Error ? e : new Error("sendMessage failed", { cause: e })
-        const message = lastError.message.toLowerCase()
-        const isTransient =
-          message.includes("port closed") ||
-          message.includes("message port closed")
-        if (!isTransient || i === attempts - 1) {
-          throw lastError
-        }
-        const delay = baseDelayMs * Math.pow(2, i)
-        await new Promise((r) => setTimeout(r, delay))
-      }
-    }
-    throw lastError ?? new Error("sendMessage failed after retries")
   }
 
   getActiveJobCount(): number {
     return [...this.jobs.values()].filter((job) => job.status === "active")
       .length
+  }
+
+  getActiveSeriesResolutionCount(): number {
+    return this.seriesResolutionControllers.size
   }
 
   getActiveTaskIds(): string[] {
@@ -1011,39 +1146,6 @@ export class OffscreenWorker {
           .map((job) => job.request.taskId)
       ),
     ].sort((left, right) => left.localeCompare(right))
-  }
-
-  cancelTask(taskId: string): boolean {
-    let canceled = false
-    for (const job of this.jobs.values()) {
-      if (job.request.taskId !== taskId || job.status !== "active") continue
-      canceled =
-        this.cancelJob({
-          jobId: job.request.jobId,
-          attempt: job.request.attempt,
-          taskId,
-          chapterId: job.request.chapter.id,
-        }) || canceled
-    }
-    if (canceled) return true
-
-    const taskControllerEntry = this.activeTaskControllers.get(taskId)
-    if (!taskControllerEntry) {
-      return false
-    }
-
-    try {
-      taskControllerEntry.controller.abort("User cancelled")
-    } catch (error) {
-      logger.debug("Failed to abort task controller (non-fatal):", error)
-    }
-    this.clearPendingTaskProgress(taskId)
-
-    // Proactively remove the entry so it doesn't linger if the
-    // processDownloadChapter promise takes time to settle after abort.
-    this.activeTaskControllers.delete(taskId)
-
-    return true
   }
 }
 
@@ -1070,6 +1172,5 @@ document.addEventListener("DOMContentLoaded", () => {
 // NOTE: Offscreen documents can use DOM/web APIs, but from the Chrome extension
 // API surface they can ONLY use chrome.runtime, NOT chrome.storage.
 // The previous chrome.storage.session listener caused TypeError because chrome.storage is undefined in offscreen context
-// All work dispatch happens via chrome.runtime.sendMessage handled in processMessage() above
 
 logger.debug("✅ Offscreen document script loaded")

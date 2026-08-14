@@ -5,20 +5,8 @@
  * using site integration architecture with retry logic and rate limiting.
  */
 
-import { scheduleForIntegrationScope } from "@/src/runtime/rate-limit"
-import type { EffectivePolicy } from "@/src/runtime/rate-limit"
-import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
+import { isNonRetryableDownloadError } from "@/src/shared/download-contract"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
-import {
-  allowsDeterministicE2eRedirect,
-  shouldAcceptDeterministicE2eMockResponse,
-} from "@/src/runtime/deterministic-e2e-redirect"
-import logger from "@/src/runtime/logger"
-import {
-  assertIntegrationRequestUrl,
-  assertIntegrationResponseUrl,
-  createIntegrationUrlAssertion,
-} from "@/src/site-integrations/request-policy"
 
 export { fetchImageWithStallDetection }
 
@@ -77,80 +65,12 @@ class PromiseQueue {
 }
 
 /**
- * Fetch chapter HTML with timeout and retry.
- *
- * HTML bytes are decoded strictly from the response's declared charset metadata
- * (BOM, Content-Type, or <meta charset>). Undeclared or mismatched encodings are
- * treated as hard failures instead of guessing fallback decoders.
- */
-async function fetchChapterHtml(
-  chapterUrl: string,
-  timeoutMs: number,
-  integrationId: string,
-  rateLimitPolicy?: EffectivePolicy,
-  signal?: AbortSignal
-): Promise<string> {
-  const controller = new AbortController()
-  const onAbort = () => controller.abort(new Error("job-cancelled"))
-  signal?.addEventListener("abort", onAbort, { once: true })
-  if (signal?.aborted) onAbort()
-  const timer = setTimeout(
-    () => controller.abort(new Error("fetch-html-timeout")),
-    timeoutMs
-  )
-  try {
-    assertIntegrationRequestUrl(integrationId, chapterUrl)
-    const fetchFn = () =>
-      fetch(chapterUrl, {
-        signal: controller.signal,
-        credentials: "omit",
-        redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
-      })
-    const response = await awaitWithAbortSignal(
-      scheduleForIntegrationScope(
-        integrationId,
-        "chapter",
-        fetchFn,
-        rateLimitPolicy
-      ),
-      controller.signal
-    )
-    if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
-      assertIntegrationResponseUrl(integrationId, chapterUrl, response.url)
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
-
-    const decoded = await awaitWithAbortSignal(
-      decodeHtmlResponse(response),
-      controller.signal
-    )
-    const html = decoded.html
-    logger.debug(
-      `📄 Fetched HTML for ${chapterUrl} (${html.length} chars, encoding=${decoded.encoding}, source=${decoded.source})`
-    )
-
-    return html
-  } catch (error) {
-    logger.error(`❌ Failed to fetch HTML: ${chapterUrl}`, error)
-    throw error
-  } finally {
-    clearTimeout(timer)
-    signal?.removeEventListener("abort", onAbort)
-  }
-}
-
-/**
  * Retry wrapper with exponential backoff
  */
 function getHttpStatusFromError(error: unknown): number | null {
-  if (!(error instanceof Error)) return null
-  const match = error.message.match(/HTTP\s+(\d{3})/)
-  if (!match) return null
-  const code = Number.parseInt(match[1], 10)
-  return Number.isNaN(code) ? null : code
+  if (!error || typeof error !== "object") return null
+  const status = (error as { status?: unknown }).status
+  return typeof status === "number" && Number.isInteger(status) ? status : null
 }
 
 function isCancellationError(error: unknown): boolean {
@@ -168,44 +88,6 @@ function isCancellationError(error: unknown): boolean {
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("job-cancelled")
-}
-
-function awaitWithAbortSignal<T>(
-  promise: Promise<T>,
-  signal: AbortSignal
-): Promise<T> {
-  if (signal.aborted) {
-    return Promise.reject(
-      signal.reason instanceof Error
-        ? signal.reason
-        : new Error("job-cancelled")
-    )
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener("abort", onAbort)
-      reject(
-        signal.reason instanceof Error
-          ? signal.reason
-          : new Error("job-cancelled")
-      )
-    }
-    signal.addEventListener("abort", onAbort, { once: true })
-    void promise.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort)
-        resolve(value)
-      },
-      (error) => {
-        signal.removeEventListener("abort", onAbort)
-        reject(
-          error instanceof Error
-            ? error
-            : new Error("Aborted operation failed", { cause: error })
-        )
-      }
-    )
-  })
 }
 
 function waitForRetryDelay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -243,6 +125,9 @@ async function withRetries<T>(
       if (isCancellationError(error)) {
         throw error
       }
+      if (isNonRetryableDownloadError(error)) {
+        throw error
+      }
       if (attempt === maxAttempts) throw error
       const status = getHttpStatusFromError(error)
       if (status !== null && status >= 400 && status < 500 && status !== 429) {
@@ -255,57 +140,4 @@ async function withRetries<T>(
   throw new Error("Retry failed") // Never reached
 }
 
-/**
- * Download series cover image with rate limiting
- * Cover image inclusion
- *
- * @param coverUrl - URL of the cover image
- * @param integrationId - Site integration ID for rate limiting scope
- * @param retries - Number of retry attempts
- * @returns Cover image data with extension, or null if unavailable
- */
-export async function downloadCoverImage(
-  coverUrl: string | undefined,
-  integrationId: string | undefined,
-  fetchTimeoutMs: number,
-  retries: number = 3
-): Promise<{ data: ArrayBuffer; mimeType: string; extension: string } | null> {
-  if (!coverUrl) {
-    logger.debug("[COVER] No cover URL provided")
-    return null
-  }
-
-  try {
-    logger.debug("[COVER] Downloading:", coverUrl)
-
-    const { data, mimeType } = await withRetries(
-      () =>
-        fetchImageWithStallDetection(coverUrl, {
-          integrationId,
-          stallTimeoutMs: fetchTimeoutMs,
-          hardTimeoutMs: fetchTimeoutMs,
-          assertUrlAllowed: integrationId
-            ? createIntegrationUrlAssertion(integrationId)
-            : undefined,
-        }),
-      retries,
-      300 // Base delay for retries
-    )
-
-    const subtype = mimeType.split("/")[1]
-    let extension: string
-    if (subtype === "jpeg") extension = "jpeg"
-    else if (subtype === "jpg") extension = "jpg"
-    else extension = subtype || "jpg"
-
-    logger.debug(
-      `[COVER] Downloaded successfully: ${data.byteLength} bytes, type: ${mimeType}`
-    )
-    return { data, mimeType, extension }
-  } catch (error) {
-    logger.error("[COVER] Download error:", error)
-    return null // Continue without cover
-  }
-}
-
-export { PromiseQueue, withRetries, fetchChapterHtml }
+export { PromiseQueue, withRetries }

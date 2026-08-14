@@ -8,8 +8,10 @@ import {
   type ProcessChapterStreamingOptions,
 } from "@/entrypoints/offscreen/chapter-processing"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { writeBlobToPath } from "@/src/storage/fs-access"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 const workerState = vi.hoisted(() => ({
   instances: [] as Array<{
@@ -106,11 +108,29 @@ vi.mock("@/entrypoints/offscreen/archive-worker-factory", () => ({
     })(),
 }))
 
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+
 function createRuntime(): ChapterProcessingRuntime {
   return {
+    liveResourceLedger: new OffscreenLiveResourceLedger(),
+    rateLimitService,
     withImageRetries: async (fn) => fn(),
     resolveWritableDownloadRoot: vi.fn(),
-    requestBrowserBlobDownload: vi.fn(async () => ({ success: true })),
+    requestBrowserBlobDownload: vi.fn(
+      async () =>
+        ({
+          success: true,
+          disposition: "tracked",
+          phase: "waiting",
+        }) as const
+    ),
     getMemoryStats: vi.fn(() => null),
   }
 }
@@ -136,6 +156,7 @@ function createOptions<TFormat extends "cbz" | "zip" | "none">(
     comicInfoVersion: "2.0",
     onProgress: vi.fn(async () => undefined),
     onArchiveProgress: vi.fn(async () => undefined),
+    abortSignal: new AbortController().signal,
     normalizeImageFilenames: true,
     imagePaddingDigits: 3,
     settingsSnapshot: {
@@ -330,6 +351,9 @@ describe("archive chapter edge cases", () => {
         "1/1 images could not be downloaded"
       ),
       imagesFailed: 1,
+      outputsRequested: 1,
+      outputsCommitted: 0,
+      outputsFailedBeforeHandoff: 1,
     })
     expect(outcome.errorMessage).toContain("HTTP 503")
     expect(
@@ -376,16 +400,37 @@ describe("archive chapter edge cases", () => {
     })
   })
 
-  it("surfaces native download handoff failures and always terminates", async () => {
+  it("accounts only an explicit not-persisted native handoff and always terminates", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.requestBrowserBlobDownload).mockResolvedValue({
-      success: false,
-      error: "downloads permission denied",
+      success: true,
+      disposition: "not_persisted",
+      reason: "downloads permission denied",
     })
 
     await expect(
       processArchiveFormatChapter(runtime, archiveInput(createOptions("cbz")))
-    ).rejects.toThrow("downloads permission denied")
+    ).resolves.toEqual({
+      status: "failed",
+      errorMessage: "downloads permission denied",
+      errorCategory: "browser_download_interrupted",
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 1,
+      outputsCommitted: 0,
+    })
+    expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
+  })
+
+  it("propagates a generic native handoff failure without failed-before-handoff accounting", async () => {
+    const runtime = createRuntime()
+    vi.mocked(runtime.requestBrowserBlobDownload).mockResolvedValue({
+      success: false,
+      error: "dispatcher failed after durable prepare",
+    })
+
+    await expect(
+      processArchiveFormatChapter(runtime, archiveInput(createOptions("cbz")))
+    ).rejects.toThrow("dispatcher failed after durable prepare")
     expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
   })
 
@@ -478,13 +523,13 @@ describe("archive chapter edge cases", () => {
     ).rejects.toThrow("job-cancelled")
   })
 
-  it("uses a stable fallback error when the native handoff returns no response", async () => {
+  it("propagates an ownership-unknown native handoff response", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.requestBrowserBlobDownload).mockResolvedValue(undefined)
 
     await expect(
       processArchiveFormatChapter(runtime, archiveInput(createOptions("zip")))
-    ).rejects.toThrow("background downloads.download failed")
+    ).rejects.toThrow("Native output ownership response was not delivered")
   })
 
   it("does not retry a custom archive write after its abort signal fires", async () => {
@@ -543,8 +588,16 @@ describe("no-archive chapter edge cases", () => {
     vi.mocked(runtime.requestBrowserBlobDownload).mockImplementation(
       async ({ filename }) =>
         filename.endsWith(".jpg") && !filename.includes("cover")
-          ? { success: true }
-          : { success: false, error: "handoff rejected" }
+          ? {
+              success: true,
+              disposition: "tracked",
+              phase: "waiting",
+            }
+          : {
+              success: true,
+              disposition: "not_persisted",
+              reason: "handoff rejected",
+            }
     )
     const opts = {
       ...createOptions("none"),
@@ -576,7 +629,7 @@ describe("no-archive chapter edge cases", () => {
     ])
   })
 
-  it("propagates ComicInfo generation errors after handing off completed images", async () => {
+  it("propagates ComicInfo generation errors before handing off images", async () => {
     const runtime = createRuntime()
     buildComicInfoMock.mockImplementationOnce(() => {
       throw new Error("XML serialization failed")
@@ -588,7 +641,7 @@ describe("no-archive chapter edge cases", () => {
         noneInput({ ...createOptions("none"), includeComicInfo: true })
       )
     ).rejects.toThrow("XML serialization failed")
-    expect(runtime.requestBrowserBlobDownload).toHaveBeenCalledTimes(1)
+    expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
 
   it("returns a structured outcome when a custom page write fails after downloads have begun", async () => {
@@ -760,8 +813,9 @@ describe("no-archive chapter edge cases", () => {
   it("reports all requested outputs failed when image, cover, and metadata handoffs fail", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.requestBrowserBlobDownload).mockResolvedValue({
-      success: false,
-      error: "handoff failed",
+      success: true,
+      disposition: "not_persisted",
+      reason: "handoff failed",
     })
     const opts = {
       ...createOptions("none"),

@@ -15,11 +15,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const setUserSiteIntegrationEnablementMock = vi.fn()
+const setEnablementMapMock = vi.fn()
 
-vi.mock("@/src/site-integrations/registry", () => ({
-  setUserSiteIntegrationEnablement: setUserSiteIntegrationEnablementMock,
-  SITE_INTEGRATION_MANIFESTS: [],
+vi.mock("@/src/site-integrations/catalog", () => ({
+  setEnablementMap: setEnablementMapMock,
 }))
 
 vi.mock("@/src/runtime/logger", () => ({
@@ -75,6 +74,7 @@ describe("offscreen site integration enablement loader", () => {
     // Must have asked the background for the enablement map.
     expect(runtimeSendMessage).toHaveBeenCalledTimes(1)
     expect(runtimeSendMessage).toHaveBeenCalledWith({
+      target: "background",
       type: "GET_SITE_INTEGRATION_ENABLEMENT",
     })
 
@@ -83,10 +83,33 @@ describe("offscreen site integration enablement loader", () => {
     expect(storageLocalSet).not.toHaveBeenCalled()
 
     // User-disabled integrations must be propagated (not silently defaulted).
-    expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({
+    expect(setEnablementMapMock).toHaveBeenCalledWith({
       mangadex: false,
       "pixiv-comic": true,
     })
+  })
+
+  it("loads fresh enablement for each offscreen data-plane admission", async () => {
+    runtimeSendMessage
+      .mockResolvedValueOnce({
+        success: true,
+        enablement: { mangadex: false },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        enablement: { mangadex: true },
+      })
+
+    const {
+      initializeOffscreenSiteIntegrations,
+      loadOffscreenSiteIntegrationEnablement,
+    } = await import("@/src/runtime/site-integration-offscreen-initialization")
+
+    await initializeOffscreenSiteIntegrations()
+    await expect(loadOffscreenSiteIntegrationEnablement()).resolves.toEqual({
+      mangadex: true,
+    })
+    expect(runtimeSendMessage).toHaveBeenCalledTimes(2)
   })
 
   it("fails closed when the background rejects the enablement read", async () => {
@@ -103,9 +126,10 @@ describe("offscreen site integration enablement loader", () => {
     )
 
     expect(runtimeSendMessage).toHaveBeenCalledWith({
+      target: "background",
       type: "GET_SITE_INTEGRATION_ENABLEMENT",
     })
-    expect(setUserSiteIntegrationEnablementMock).not.toHaveBeenCalled()
+    expect(setEnablementMapMock).not.toHaveBeenCalled()
     expect(storageLocalGet).not.toHaveBeenCalled()
   })
 
@@ -128,9 +152,10 @@ describe("offscreen site integration enablement loader", () => {
 
     expect(runtimeSendMessage).toHaveBeenCalledTimes(2)
     expect(runtimeSendMessage).toHaveBeenLastCalledWith({
+      target: "background",
       type: "GET_SITE_INTEGRATION_ENABLEMENT",
     })
-    expect(setUserSiteIntegrationEnablementMock).toHaveBeenCalledWith({
+    expect(setEnablementMapMock).toHaveBeenCalledWith({
       mangadex: false,
     })
     expect(storageLocalGet).not.toHaveBeenCalled()

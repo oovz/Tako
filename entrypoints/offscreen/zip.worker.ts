@@ -18,6 +18,7 @@ type InitMsg = {
 type AddComicInfoMsg = { type: "addComicInfo"; xml: string }
 type AddImageMsg = {
   type: "addImage"
+  inputId?: string
   filename: string
   buffer: ArrayBuffer
   // Additional data for normalization
@@ -31,6 +32,7 @@ type InboundMsg =
   InitMsg | AddComicInfoMsg | AddImageMsg | FinalizeMsg | ResetMsg
 
 export type ZipWorkerResponse =
+  | { type: "input-consumed"; inputId: string }
   | {
       type: "progress"
       bytes: number
@@ -237,7 +239,12 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           if (streamState.resourceLimitFailed) return
           const zip = ensureZip()
           const bytes = new Uint8Array(message.buffer)
-          if (bytes.byteLength === 0) return
+          if (bytes.byteLength === 0) {
+            if (message.inputId) {
+              post({ type: "input-consumed", inputId: message.inputId })
+            }
+            return
+          }
 
           let filename = message.filename
           if (
@@ -257,6 +264,9 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           zip.add(image)
           image.push(bytes, true)
           streamState.imageCount += 1
+          if (message.inputId) {
+            post({ type: "input-consumed", inputId: message.inputId })
+          }
           return
         }
         case "finalize":

@@ -6,6 +6,7 @@ import {
   type WriteBlobToPathResult,
 } from "@/src/storage/fs-access"
 import createZipArchiveWorker from "./archive-worker-factory"
+import { ArchiveWorkerSession } from "./archive-worker-session"
 import {
   ChapterResourceLimitError,
   downloadChapterImages,
@@ -19,16 +20,19 @@ import {
 import {
   MAX_ARCHIVE_BYTES,
   MAX_CHAPTER_IMAGES,
-  ZIP_WORKER_FINALIZATION_TIMEOUT_MS,
+  MAX_METADATA_RESPONSE_BYTES,
 } from "@/src/constants/timeouts"
 import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
+import type {
   ArchiveNormalizationSettings,
+  BrowserBlobDownloadResponse,
   ChapterDownloadImageFn,
   ChapterOutcome,
   ChapterProcessingRuntime,
   ProcessChapterStreamingOptions,
-  WorkerZipProgress,
-  WorkerZipResult,
 } from "./chapter-processing-types"
 import type { SeriesMetadataInput } from "./helpers"
 import { FsaWriteError, toFsaWriteError } from "./error-categories"
@@ -48,101 +52,27 @@ export type {
   WorkerZipResult,
 } from "./chapter-processing-types"
 
-function isWorkerZipProgress(
-  value: WorkerZipResult | WorkerZipProgress
-): value is WorkerZipProgress {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    "type" in value &&
-    value.type === "progress"
-  )
-}
-
-function createArchiveWorker(
-  onProgress?: (progress: WorkerZipProgress) => void | Promise<void>
-): {
-  worker: Worker
-  resultPromise: Promise<WorkerZipResult>
-  startFinalizationTimeout: () => void
-  clearResultTimeout: () => void
-  rejectResult: (error: unknown) => void
-} {
-  const worker = createZipArchiveWorker()
-
-  let resolveResult!: (value: WorkerZipResult) => void
-  let rejectResult!: (error: unknown) => void
-  const resultPromise = new Promise<WorkerZipResult>((resolve, reject) => {
-    resolveResult = resolve
-    rejectResult = reject
-  })
-
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  const clearResultTimeout = () => {
-    if (timeout) {
-      clearTimeout(timeout)
-      timeout = undefined
-    }
+function requireNativeOutputDisposition(
+  response: BrowserBlobDownloadResponse
+): Extract<NonNullable<BrowserBlobDownloadResponse>, { success: true }> {
+  if (!response) {
+    throw new Error("Native output ownership response was not delivered")
   }
-  const startFinalizationTimeout = () => {
-    clearResultTimeout()
-    timeout = setTimeout(() => {
-      try {
-        worker.terminate()
-      } catch (error) {
-        logger.debug("zip worker terminate failed (non-fatal)", error)
-      }
-      rejectResult(new Error("Zip worker timed out"))
-    }, ZIP_WORKER_FINALIZATION_TIMEOUT_MS)
+  if (response.success !== true) {
+    throw new Error(response.error)
   }
-
-  worker.onmessage = (
-    event: MessageEvent<WorkerZipResult | WorkerZipProgress>
-  ) => {
-    if (isWorkerZipProgress(event.data)) {
-      startFinalizationTimeout()
-      if (onProgress) {
-        void Promise.resolve(onProgress(event.data)).catch((error) => {
-          logger.debug("zip worker progress handling failed (non-fatal)", error)
-        })
-      }
-      return
-    }
-
-    clearResultTimeout()
-    resolveResult(event.data)
-  }
-  worker.onerror = (event) => {
-    clearResultTimeout()
-    const workerError =
-      event.error instanceof Error
-        ? event.error
-        : new Error(
-            event.message
-              ? `Zip worker error: ${event.message}${event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : ""}`
-              : "Zip worker error"
-          )
-    rejectResult(workerError)
-  }
-
-  return {
-    worker,
-    resultPromise,
-    startFinalizationTimeout,
-    clearResultTimeout,
-    rejectResult,
-  }
+  return response
 }
 
 function initializeArchiveWorker(input: {
-  worker: Worker
+  session: ArchiveWorkerSession
   chapter: Chapter
   format: "cbz" | "zip"
   normalizeSettings: ArchiveNormalizationSettings
   totalImages: number
 }): void {
-  const { worker, chapter, format, normalizeSettings, totalImages } = input
-  worker.postMessage({
+  const { session, chapter, format, normalizeSettings, totalImages } = input
+  session.post({
     type: "init",
     chapterTitle: sanitizeFilename(chapter.title),
     extension: format,
@@ -162,7 +92,7 @@ function assertChapterImageCount(imageCount: number): void {
 }
 
 function addComicInfoToArchiveWorker(input: {
-  worker: Worker
+  session: ArchiveWorkerSession
   includeComicInfo: boolean | undefined
   chapter: Chapter
   seriesTitle: string
@@ -172,7 +102,7 @@ function addComicInfoToArchiveWorker(input: {
   hasCoverImage: boolean
 }): void {
   const {
-    worker,
+    session,
     includeComicInfo,
     chapter,
     seriesTitle,
@@ -194,30 +124,44 @@ function addComicInfoToArchiveWorker(input: {
     return
   }
 
-  worker.postMessage({ type: "addComicInfo", xml })
+  session.post({ type: "addComicInfo", xml })
   logger.debug(
     `📋 Added ComicInfo.xml as first entry (${pageCount} pages estimated)`
   )
 }
 
 function addCoverToArchiveWorker(
-  worker: Worker,
-  coverImage?: { data: ArrayBuffer; mimeType: string }
+  session: ArchiveWorkerSession,
+  liveResourceLedger: OffscreenLiveResourceLedger,
+  inputId: string,
+  coverImage?: {
+    data: ArrayBuffer
+    mimeType: string
+    liveResourceLease?: OffscreenLiveResourceLease
+  }
 ): void {
   if (!coverImage) {
     return
   }
 
-  const coverBuffer = coverImage.data.slice(0)
-  worker.postMessage(
+  const coverBuffer = coverImage.data
+  const inputLease =
+    coverImage.liveResourceLease ??
+    liveResourceLedger.reserve(
+      coverBuffer.byteLength,
+      "untracked archive cover input"
+    )
+  session.post(
     {
       type: "addImage",
+      inputId,
       filename: buildCoverOutputFilename(coverImage.mimeType),
       buffer: coverBuffer,
       index: 0,
       mimeType: coverImage.mimeType,
     },
-    [coverBuffer]
+    [coverBuffer],
+    inputLease
   )
 }
 
@@ -361,7 +305,19 @@ export async function processNoneFormatChapter(
   assertChapterImageCount(urls.length + (coverImage ? 1 : 0))
   const chapterDir = chapter.resolvedPath || sanitizeFilename(chapter.title)
   const total = urls.length
-  const outputCount = total + (coverImage ? 1 : 0) + (includeComicInfo ? 1 : 0)
+  const comicInfoXml = includeComicInfo
+    ? buildOptionalComicInfoXml({
+        includeComicInfo,
+        chapter,
+        seriesTitle,
+        seriesMetadata,
+        pageCount: total + (coverImage ? 1 : 0),
+        comicInfoVersion,
+        hasCoverImage: !!coverImage,
+      })
+    : null
+  const outputCount =
+    total + (coverImage ? 1 : 0) + (comicInfoXml === null ? 0 : 1)
   const collisionPolicy = getConflictPolicy(opts)
   let writableRoot: FileSystemDirectoryHandle | null = null
   let committedFsaOutputs = 0
@@ -396,10 +352,14 @@ export async function processNoneFormatChapter(
         /\\/g,
         "/"
       )
-    const coverBlob = new Blob([coverImage.data], {
-      type: coverImage.mimeType || "application/octet-stream",
-    })
+    const coverBlobLease = runtime.liveResourceLedger.reserve(
+      coverImage.data.byteLength,
+      "none-format cover Blob"
+    )
     try {
+      const coverBlob = new Blob([coverImage.data], {
+        type: coverImage.mimeType || "application/octet-stream",
+      })
       if (writableRoot) {
         await onArchiveProgress(92, "saving cover")
         await writeFsaOutput({
@@ -420,13 +380,17 @@ export async function processNoneFormatChapter(
           taskId,
           chapterId: chapter.id,
           blob: coverBlob,
+          resourceLease: coverBlobLease,
           filename: coverPath,
           outputIndex: 0,
           outputCount,
           outputKind: "image",
           signal: abortSignal,
         })
-        if (!coverResp || coverResp.success !== true) {
+        if (
+          requireNativeOutputDisposition(coverResp).disposition ===
+          "not_persisted"
+        ) {
           failedAdditionalHandoffs++
           logger.debug("cover image download request failed", coverResp)
         }
@@ -444,15 +408,18 @@ export async function processNoneFormatChapter(
         totalImages: total,
         committedImages: committedFsaImages,
       })
+    } finally {
+      coverBlobLease.release()
     }
   }
 
-  const { succeeded, failed } = await downloadChapterImages(runtime, {
+  const { failed } = await downloadChapterImages(runtime, {
     urls,
     integrationId,
     chapterId: chapter.id,
     integrationContext: opts.integrationContext,
     rateLimitSettings: opts.settingsSnapshot.rateLimitSettings,
+    rateLimitService: runtime.rateLimitService,
     abortSignal,
     onProgress,
     onImageDownloaded: opts.onImageDownloaded,
@@ -469,14 +436,18 @@ export async function processNoneFormatChapter(
         imagePaddingDigits: normalizeSettings.imagePaddingDigits,
       })
       const filePath = `${chapterDir}/${filename}`.replace(/\\/g, "/")
-      const blob = new Blob([result.data], {
-        type: result.mimeType || "application/octet-stream",
-      })
+      const blobLease = runtime.liveResourceLedger.reserve(
+        result.data.byteLength,
+        "none-format image Blob"
+      )
+      try {
+        const blob = new Blob([result.data], {
+          type: result.mimeType || "application/octet-stream",
+        })
 
-      if (writableRoot) {
-        if (fsaWriteFailure) throw fsaWriteFailure
-        await onArchiveProgress(95, "saving images")
-        try {
+        if (writableRoot) {
+          if (fsaWriteFailure) throw fsaWriteFailure
+          await onArchiveProgress(95, "saving images")
           await writeFsaOutput({
             dir: writableRoot,
             path: filePath,
@@ -487,31 +458,38 @@ export async function processNoneFormatChapter(
           })
           committedFsaOutputs++
           committedFsaImages++
-        } catch (error) {
-          if (abortSignal?.aborted) throw error
-          fsaWriteFailure ??= toFsaWriteError(error)
-          throw fsaWriteFailure
+          return
         }
-        return
-      }
 
-      await onArchiveProgress(95, "download handoff")
-      const response = await runtime.requestBrowserBlobDownload({
-        jobId,
-        attempt,
-        outputId: `${jobId}:image:${index}`,
-        taskId,
-        chapterId: chapter.id,
-        blob,
-        filename: filePath,
-        outputIndex: (coverImage ? 1 : 0) + index,
-        outputCount,
-        outputKind: "image",
-        signal: abortSignal,
-      })
-      if (!response || response.success !== true) {
-        failedPageHandoffs++
-        logger.debug("image download request failed", response)
+        await onArchiveProgress(95, "download handoff")
+        const response = await runtime.requestBrowserBlobDownload({
+          jobId,
+          attempt,
+          outputId: `${jobId}:image:${index}`,
+          taskId,
+          chapterId: chapter.id,
+          blob,
+          resourceLease: blobLease,
+          filename: filePath,
+          outputIndex: (coverImage ? 1 : 0) + index,
+          outputCount,
+          outputKind: "image",
+          signal: abortSignal,
+        })
+        if (
+          requireNativeOutputDisposition(response).disposition ===
+          "not_persisted"
+        ) {
+          failedPageHandoffs++
+          logger.debug("image download request failed", response)
+        }
+      } catch (error) {
+        if (abortSignal?.aborted) throw error
+        if (!writableRoot) throw error
+        fsaWriteFailure ??= toFsaWriteError(error)
+        throw fsaWriteFailure
+      } finally {
+        blobLease.release()
       }
     },
     onDownloadFailed: ({ url, error }) => {
@@ -531,48 +509,35 @@ export async function processNoneFormatChapter(
     })
   }
 
-  if (includeComicInfo) {
+  if (comicInfoXml) {
     if (abortSignal?.aborted) throw new Error("job-cancelled")
-    const comicInfoXml = buildOptionalComicInfoXml({
-      includeComicInfo,
-      chapter,
-      seriesTitle,
-      seriesMetadata,
-      pageCount: succeeded + (coverImage ? 1 : 0),
-      comicInfoVersion,
-      hasCoverImage: !!coverImage,
-    })
-    if (comicInfoXml) {
-      totalAdditionalOutputs++
-      const comicInfoPath = `${chapterDir}/ComicInfo.xml`.replace(/\\/g, "/")
+    totalAdditionalOutputs++
+    const comicInfoPath = `${chapterDir}/ComicInfo.xml`.replace(/\\/g, "/")
+    const comicInfoBlobLease = runtime.liveResourceLedger.reserve(
+      MAX_METADATA_RESPONSE_BYTES,
+      "ComicInfo Blob"
+    )
+    try {
       const comicInfoBlob = new Blob([comicInfoXml], {
         type: "application/xml",
       })
+      if (comicInfoBlob.size > MAX_METADATA_RESPONSE_BYTES) {
+        throw new ChapterResourceLimitError(
+          `ComicInfo bytes exceed ${MAX_METADATA_RESPONSE_BYTES} byte limit (got ${comicInfoBlob.size})`
+        )
+      }
+      comicInfoBlobLease.resize(comicInfoBlob.size)
       if (writableRoot) {
-        try {
-          await onArchiveProgress(98, "saving metadata")
-          await writeFsaOutput({
-            dir: writableRoot,
-            path: comicInfoPath,
-            blob: comicInfoBlob,
-            collisionPolicy,
-            signal: abortSignal,
-            onBytesWritten: () => onArchiveProgress(98, "saving metadata"),
-          })
-          committedFsaOutputs++
-        } catch (error) {
-          if (abortSignal?.aborted) {
-            throw new Error("job-cancelled", { cause: error })
-          }
-          fsaWriteFailure = toFsaWriteError(error)
-          return createFsaDestinationFailureOutcome({
-            error: fsaWriteFailure,
-            outputsRequested: outputCount,
-            outputsCommitted: committedFsaOutputs,
-            totalImages: total,
-            committedImages: committedFsaImages,
-          })
-        }
+        await onArchiveProgress(98, "saving metadata")
+        await writeFsaOutput({
+          dir: writableRoot,
+          path: comicInfoPath,
+          blob: comicInfoBlob,
+          collisionPolicy,
+          signal: abortSignal,
+          onBytesWritten: () => onArchiveProgress(98, "saving metadata"),
+        })
+        committedFsaOutputs++
       } else {
         await onArchiveProgress(98, "download handoff")
         const comicInfoResp = await runtime.requestBrowserBlobDownload({
@@ -582,17 +547,36 @@ export async function processNoneFormatChapter(
           taskId,
           chapterId: chapter.id,
           blob: comicInfoBlob,
+          resourceLease: comicInfoBlobLease,
           filename: comicInfoPath,
           outputIndex: (coverImage ? 1 : 0) + total,
           outputCount,
           outputKind: "image",
           signal: abortSignal,
         })
-        if (!comicInfoResp || comicInfoResp.success !== true) {
+        if (
+          requireNativeOutputDisposition(comicInfoResp).disposition ===
+          "not_persisted"
+        ) {
           failedAdditionalHandoffs++
           logger.debug("ComicInfo.xml download request failed", comicInfoResp)
         }
       }
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        throw new Error("job-cancelled", { cause: error })
+      }
+      if (!writableRoot) throw error
+      fsaWriteFailure = toFsaWriteError(error)
+      return createFsaDestinationFailureOutcome({
+        error: fsaWriteFailure,
+        outputsRequested: outputCount,
+        outputsCommitted: committedFsaOutputs,
+        totalImages: total,
+        committedImages: committedFsaImages,
+      })
+    } finally {
+      comicInfoBlobLease.release()
     }
   }
 
@@ -653,36 +637,42 @@ export async function processArchiveFormatChapter(
     }
   }
 
-  const {
-    worker,
-    resultPromise,
-    startFinalizationTimeout,
-    clearResultTimeout,
-    rejectResult,
-  } = createArchiveWorker()
+  const archiveAllowance = runtime.liveResourceLedger.reserve(
+    2 * MAX_ARCHIVE_BYTES,
+    "archive worker compressed chunks and merged result"
+  )
+  let session: ArchiveWorkerSession
+  try {
+    session = new ArchiveWorkerSession(
+      createZipArchiveWorker(),
+      undefined,
+      undefined,
+      archiveAllowance
+    )
+  } catch (error) {
+    archiveAllowance.release()
+    throw error
+  }
   const archivePageCount = urls.length + (coverImage ? 1 : 0)
+  let archiveResultLease: OffscreenLiveResourceLease | undefined
+  let archiveBlobLease: OffscreenLiveResourceLease | undefined
 
   const onAbort = () => {
-    clearResultTimeout()
-    try {
-      worker.terminate()
-    } catch (error) {
-      logger.debug("zip worker terminate failed (non-fatal)", error)
-    }
-    rejectResult(new Error("job-cancelled"))
+    session.reject(new Error("job-cancelled"))
+    session.dispose()
   }
   abortSignal?.addEventListener("abort", onAbort, { once: true })
 
   try {
     initializeArchiveWorker({
-      worker,
+      session,
       chapter,
       format,
       normalizeSettings,
       totalImages: archivePageCount,
     })
     addComicInfoToArchiveWorker({
-      worker,
+      session,
       includeComicInfo,
       chapter,
       seriesTitle,
@@ -691,7 +681,12 @@ export async function processArchiveFormatChapter(
       comicInfoVersion,
       hasCoverImage: !!coverImage,
     })
-    addCoverToArchiveWorker(worker, coverImage)
+    addCoverToArchiveWorker(
+      session,
+      runtime.liveResourceLedger,
+      `${jobId}:archive-input:cover`,
+      coverImage
+    )
 
     const { total, succeeded, failed, failedUrls, failedReasons } =
       await downloadChapterImages(runtime, {
@@ -700,6 +695,7 @@ export async function processArchiveFormatChapter(
         chapterId: chapter.id,
         integrationContext: opts.integrationContext,
         rateLimitSettings: opts.settingsSnapshot.rateLimitSettings,
+        rateLimitService: runtime.rateLimitService,
         abortSignal,
         onProgress,
         onImageDownloaded: opts.onImageDownloaded,
@@ -710,15 +706,23 @@ export async function processArchiveFormatChapter(
         onDownloaded: ({ index, result }) => {
           const filename = sanitizeFilename(result.filename)
           const buffer = result.data
-          worker.postMessage(
+          const inputLease =
+            result.liveResourceLease ??
+            runtime.liveResourceLedger.reserve(
+              buffer.byteLength,
+              "untracked archive image input"
+            )
+          session.post(
             {
               type: "addImage",
+              inputId: `${jobId}:archive-input:${index}`,
               filename,
               buffer,
               index,
               mimeType: result.mimeType,
             },
-            [buffer]
+            [buffer],
+            inputLease
           )
         },
         onDownloadFailed: ({ url, error, failedCount, total: totalImages }) => {
@@ -760,12 +764,35 @@ export async function processArchiveFormatChapter(
         `   Format: ${format} (archive format - partial archives not allowed)`
       )
       logger.error(`   ${succeeded}/${total} succeeded, ${failed} failed`)
-      return { status: "failed", errorMessage: errorMsg, imagesFailed: failed }
+      return {
+        status: "failed",
+        errorMessage: errorMsg,
+        imagesFailed: failed,
+        outputsRequested: 1,
+        outputsFailedBeforeHandoff: 1,
+        outputsCommitted: 0,
+      }
     }
 
-    startFinalizationTimeout()
-    worker.postMessage({ type: "finalize" })
-    const result = await resultPromise
+    let result
+    try {
+      result = await session.finalize()
+    } catch (error) {
+      if (abortSignal?.aborted) throw error
+      const errorMsg =
+        error instanceof Error ? error.message : "Archive creation failed"
+      const memStats = runtime.getMemoryStats()
+      if (memStats) {
+        logger.error(
+          `   Memory at failure: ${memStats.usedMB.toFixed(1)}MB / ${memStats.totalMB.toFixed(1)}MB`
+        )
+      }
+      throw new Error(
+        `Archive creation failed: ${errorMsg} (${succeeded}/${total} images, ${failed} failed)`,
+        { cause: error }
+      )
+    }
+    archiveResultLease = result.liveResourceLease
     if (!result?.success || !result.buffer) {
       const errorMsg = result?.error || "Archive creation failed"
       logger.error(`❌ Archive creation failed: ${errorMsg}`)
@@ -790,7 +817,13 @@ export async function processArchiveFormatChapter(
     await onArchiveProgress(95, "preparing download")
 
     const mimeType = format === "cbz" ? "application/x-cbz" : "application/zip"
+    archiveBlobLease = runtime.liveResourceLedger.reserve(
+      result.buffer.byteLength,
+      "archive output Blob"
+    )
     const blob = new Blob([result.buffer], { type: mimeType })
+    archiveResultLease?.release()
+    archiveResultLease = undefined
     logger.debug(`[Archive Download] format=${format}, finalPath=${finalPath}`)
 
     if (writableRoot) {
@@ -829,18 +862,23 @@ export async function processArchiveFormatChapter(
       taskId,
       chapterId: chapter.id,
       blob,
+      resourceLease: archiveBlobLease,
       filename: normalized,
       outputIndex: 0,
       outputCount: 1,
       outputKind: "archive",
       signal: abortSignal,
     })
-    if (!response || response.success !== true) {
-      const errorMessage =
-        response && "error" in response
-          ? response.error
-          : "background downloads.download failed"
-      throw new Error(errorMessage)
+    const handoff = requireNativeOutputDisposition(response)
+    if (handoff.disposition === "not_persisted") {
+      return {
+        status: "failed",
+        errorMessage: handoff.reason,
+        errorCategory: "browser_download_interrupted",
+        outputsRequested: 1,
+        outputsFailedBeforeHandoff: 1,
+        outputsCommitted: 0,
+      }
     }
 
     await onArchiveProgress(100, "download started")
@@ -852,8 +890,10 @@ export async function processArchiveFormatChapter(
     }
   } finally {
     abortSignal?.removeEventListener("abort", onAbort)
+    archiveResultLease?.release()
+    archiveBlobLease?.release()
     try {
-      worker.terminate()
+      session.dispose()
     } catch (error) {
       logger.debug("zip worker terminate failed (non-fatal)", error)
     }
