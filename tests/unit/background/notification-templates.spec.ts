@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { NotificationService } from "@/entrypoints/background/notification-service"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState, TaskChapter } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { QueueRepository } from "@/src/storage/queue-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
+import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -14,8 +16,8 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/site-integrations/manifest", () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDisplayName: vi.fn(() => "MangaDex"),
 }))
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
@@ -129,7 +131,8 @@ describe("notification content templates", () => {
       tabsQuery.mockResolvedValue([{ id: 12, windowId: 34 }])
 
       await new NotificationService().handleNotificationClick(
-        "destination_issue_task-1::fsa_folder_missing"
+        "destination_issue_task-1::fsa_folder_missing",
+        new QueueRepository(new QueueProjectionService())
       )
 
       const targetUrl = "chrome-extension://test/options.html?tab=downloads"

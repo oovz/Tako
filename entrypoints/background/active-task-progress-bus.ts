@@ -184,25 +184,15 @@ export async function clearActiveTaskProgress(): Promise<void> {
 export async function settleActiveTaskProgressChapter(input: {
   taskId: string
   chapterId: string
-  chapters: Array<{ id?: string; url?: string; status: string }>
+  chapters: Array<{ id: string; status: string }>
   destinationCommitted: boolean
 }): Promise<void> {
   await runActiveTaskProgressExclusive(async () => {
     const { progress } = await getActiveTaskProgressSnapshot()
     if (!progress || progress.taskId !== input.taskId) return
 
-    const settledChapter = input.chapters.find(
-      (chapter) =>
-        chapter.id === input.chapterId || chapter.url === input.chapterId
-    )
-    const aliases = new Set(
-      [input.chapterId, settledChapter?.id, settledChapter?.url].filter(
-        (value): value is string =>
-          typeof value === "string" && value.length > 0
-      )
-    )
     const activeChapters = progress.activeChapters.filter(
-      (chapter) => !aliases.has(chapter.chapterId)
+      (chapter) => chapter.chapterId !== input.chapterId
     )
     const settledCount = input.chapters.filter(
       (chapter) =>

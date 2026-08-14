@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  handleInitializeTab: vi.fn(async () => ({ success: true })),
+  commitResolvedTabContext: vi.fn(async () => ({ success: true })),
   resolveSeriesData: vi.fn(),
   executePageProbe: vi.fn(),
+  getBackgroundSiteAdapterById: vi.fn(),
   matchUrl: vi.fn(),
   getForSite: vi.fn(),
 }))
 
-vi.mock("@/entrypoints/background/action-handlers/tab-state-handlers", () => ({
-  handleInitializeTab: mocks.handleInitializeTab,
+vi.mock("@/entrypoints/background/tab-context-state-service", () => ({
+  TabContextStateService: class {},
 }))
 vi.mock("@/src/runtime/resolve-site-integration-series-data", () => ({
   resolveSiteIntegrationSeriesData: mocks.resolveSeriesData,
+}))
+vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
+  getBackgroundSiteAdapterById: mocks.getBackgroundSiteAdapterById,
 }))
 vi.mock("@/src/site-integrations/page-probe", () => ({
   executeApprovedPageProbe: mocks.executePageProbe,
@@ -28,9 +32,45 @@ vi.mock("@/src/storage/site-integration-settings-service", () => ({
     getForSite: mocks.getForSite,
   },
 }))
-import { createTabContextResolver } from "@/entrypoints/background/tab-context-resolver"
+import { createTabContextResolver as createTabContextResolverImpl } from "@/entrypoints/background/tab-context-resolver"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 
 describe("tab context resolver", () => {
+  const rateLimitService = {
+    resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+    scheduleForIntegrationScope: vi.fn(
+      async <T>(
+        _integrationId: string,
+        _scope: string,
+        task: () => Promise<T>
+      ) => task()
+    ),
+    cleanupRateLimiters: vi.fn(),
+  } as unknown as RateLimitService
+  const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
+    getAll: vi.fn(async () => ({})),
+    getForSite: vi.fn(async () => ({})),
+  }
+  type ResolverDependencies = Parameters<typeof createTabContextResolverImpl>[0]
+  function createTabContextResolver(
+    deps: Omit<
+      ResolverDependencies,
+      "rateLimitService" | "siteIntegrationSettingsReader"
+    > &
+      Partial<
+        Pick<
+          ResolverDependencies,
+          "rateLimitService" | "siteIntegrationSettingsReader"
+        >
+      >
+  ) {
+    return createTabContextResolverImpl({
+      ...deps,
+      rateLimitService,
+      siteIntegrationSettingsReader,
+    })
+  }
   const getTab = vi.fn()
   const getSession = vi.fn()
   const setSession = vi.fn()
@@ -44,9 +84,22 @@ describe("tab context resolver", () => {
     }
   }
 
+  function createStateService() {
+    const service = {
+      commitResolvedTabContext: (...args: unknown[]) =>
+        (mocks.commitResolvedTabContext as (...args: unknown[]) => unknown)(
+          service,
+          ...args
+        ),
+      getTabState: vi.fn(async () => null),
+    }
+    return service
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getForSite.mockResolvedValue({ autoReadMangaDexSettings: true })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValue({ background: {} })
     getSession.mockResolvedValue({})
     getTab.mockResolvedValue({
       id: 9,
@@ -82,6 +135,7 @@ describe("tab context resolver", () => {
     const cache = createCache()
     const beforeStateMutation = vi.fn(async () => undefined)
     cache.getCachedContext.mockReturnValue({
+      sourceUrl: "https://comic.pixiv.net/works/123",
       siteIntegrationId: "pixiv-comic",
       mangaId: "123",
       seriesTitle: "Cached",
@@ -90,8 +144,10 @@ describe("tab context resolver", () => {
       lastUpdated: 1,
     })
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
+      rateLimitService,
+      siteIntegrationSettingsReader,
       beforeStateMutation,
     })
 
@@ -116,8 +172,10 @@ describe("tab context resolver", () => {
       lastUpdated: 1,
     })
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
+      rateLimitService,
+      siteIntegrationSettingsReader,
     })
 
     await resolver.resolveTabContext(9, { allowCached: true })
@@ -136,8 +194,10 @@ describe("tab context resolver", () => {
         })
     )
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
+      rateLimitService,
+      siteIntegrationSettingsReader,
       beforeResolution,
     })
 
@@ -168,7 +228,7 @@ describe("tab context resolver", () => {
       }
     )
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: createCache() as never,
       resolutionTimeoutMs: 5,
     })
@@ -177,20 +237,32 @@ describe("tab context resolver", () => {
 
     expect(providerSignal).toBeInstanceOf(AbortSignal)
     expect(providerSignal?.aborted).toBe(true)
-    expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
-      {},
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
+      expect.anything(),
       { context: "error", error: expect.any(String) },
       9,
-      { requestId: 4, windowId: 3, supersedeInFlight: true }
+      {
+        requestId: 4,
+        windowId: 3,
+        supersedeInFlight: true,
+        expectedUrl: "https://comic.pixiv.net/works/123",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
   })
 
   it("resolves provider data and commits a request-scoped tab payload", async () => {
     const cache = createCache()
-    const stateManager = {} as never
+    const stateManager = {
+      commitResolvedTabContext: (...args: unknown[]) =>
+        (mocks.commitResolvedTabContext as (...args: unknown[]) => unknown)(
+          stateManager,
+          ...args
+        ),
+    } as never
     const beforeStateMutation = vi.fn(async () => undefined)
     const resolver = createTabContextResolver({
-      getStateManager: () => stateManager,
+      getTabContextStateService: () => stateManager,
       tabContextCache: cache as never,
       beforeStateMutation,
     })
@@ -200,11 +272,13 @@ describe("tab context resolver", () => {
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith({
       siteIntegrationId: "pixiv-comic",
       seriesUrl: "https://comic.pixiv.net/works/123",
-      mangadexPreferences: undefined,
+      pageProbeData: undefined,
+      rateLimitService,
+      siteIntegrationSettingsReader,
       signal: expect.any(AbortSignal),
       onPartial: expect.any(Function),
     })
-    expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
       stateManager,
       expect.objectContaining({
         context: "ready",
@@ -212,11 +286,16 @@ describe("tab context resolver", () => {
         seriesTitle: "A series",
       }),
       9,
-      { requestId: 4, windowId: 3 }
+      {
+        requestId: 4,
+        windowId: 3,
+        expectedUrl: "https://comic.pixiv.net/works/123",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
     expect(beforeStateMutation).toHaveBeenCalledOnce()
     expect(beforeStateMutation).toHaveBeenCalledBefore(
-      mocks.handleInitializeTab
+      mocks.commitResolvedTabContext
     )
   })
 
@@ -234,6 +313,11 @@ describe("tab context resolver", () => {
       })
     })
     const stateManager = {
+      commitResolvedTabContext: (...args: unknown[]) =>
+        (mocks.commitResolvedTabContext as (...args: unknown[]) => unknown)(
+          stateManager,
+          ...args
+        ),
       getTabState: vi.fn(async () => ({
         siteIntegrationId: "pixiv-comic",
         mangaId: "previous-series",
@@ -252,7 +336,7 @@ describe("tab context resolver", () => {
         lastUpdated: 1,
       })),
     }
-    const getStateManager = vi.fn(() => {
+    const getTabContextStateService = vi.fn(() => {
       if (!stateManagerReady) {
         throw new Error("State manager accessed before readiness")
       }
@@ -278,19 +362,19 @@ describe("tab context resolver", () => {
       }
     })
     const resolver = createTabContextResolver({
-      getStateManager,
+      getTabContextStateService,
       tabContextCache: cache as never,
       beforeStateMutation,
     })
 
     const resolution = resolver.resolveTabContext(9)
     await vi.waitFor(() => expect(beforeStateMutation).toHaveBeenCalledOnce())
-    expect(getStateManager).not.toHaveBeenCalled()
+    expect(getTabContextStateService).not.toHaveBeenCalled()
 
     releaseStateManager?.()
     await resolution
 
-    expect(mocks.handleInitializeTab).toHaveBeenNthCalledWith(
+    expect(mocks.commitResolvedTabContext).toHaveBeenNthCalledWith(
       1,
       stateManager,
       expect.objectContaining({
@@ -301,9 +385,14 @@ describe("tab context resolver", () => {
         chaptersLoading: true,
       }),
       9,
-      { requestId: 4, windowId: 3 }
+      {
+        requestId: 4,
+        windowId: 3,
+        expectedUrl: "https://comic.pixiv.net/works/123",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
-    expect(mocks.handleInitializeTab).toHaveBeenLastCalledWith(
+    expect(mocks.commitResolvedTabContext).toHaveBeenLastCalledWith(
       stateManager,
       expect.objectContaining({
         context: "ready",
@@ -311,7 +400,12 @@ describe("tab context resolver", () => {
         chaptersLoading: undefined,
       }),
       9,
-      { requestId: 4, windowId: 3 }
+      {
+        requestId: 4,
+        windowId: 3,
+        expectedUrl: "https://comic.pixiv.net/works/123",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
   })
 
@@ -323,8 +417,10 @@ describe("tab context resolver", () => {
     })
     const beforeResolution = vi.fn(() => readiness)
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
+      rateLimitService,
+      siteIntegrationSettingsReader,
       beforeResolution,
     })
 
@@ -340,26 +436,200 @@ describe("tab context resolver", () => {
     expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
   })
 
+  it("retries when a source activation coalesces with an owner that observed the tab inactive", async () => {
+    const activeTab = {
+      id: 9,
+      active: true,
+      windowId: 3,
+      url: "https://comic.pixiv.net/works/123",
+    }
+    let releaseInactiveRead: (() => void) | undefined
+    const inactiveRead = new Promise<typeof activeTab>((resolve) => {
+      releaseInactiveRead = () => resolve({ ...activeTab, active: false })
+    })
+    getTab
+      .mockResolvedValueOnce(activeTab)
+      .mockReturnValueOnce(inactiveRead)
+      .mockResolvedValue(activeTab)
+    const cache = createCache()
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+    })
+
+    const first = resolver.resolveTabContext(9)
+    await vi.waitFor(() => expect(getTab).toHaveBeenCalledTimes(2))
+    const activation = resolver.resolveTabContext(9)
+    releaseInactiveRead?.()
+
+    await Promise.all([first, activation])
+
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledOnce()
+  })
+
+  it("starts a fresh owner when a new activation supersedes pending work", async () => {
+    const cache = createCache()
+    let releaseReadiness: (() => void) | undefined
+    const readiness = new Promise<void>((resolve) => {
+      releaseReadiness = resolve
+    })
+    const beforeResolution = vi.fn(() => readiness)
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+      beforeResolution,
+    })
+
+    const first = resolver.resolveTabContext(9)
+    await vi.waitFor(() => expect(beforeResolution).toHaveBeenCalledOnce())
+    const second = resolver.resolveTabContext(9, {
+      supersedeInFlight: true,
+    })
+    await vi.waitFor(() => expect(beforeResolution).toHaveBeenCalledTimes(2))
+
+    releaseReadiness?.()
+    await Promise.all([first, second])
+
+    expect(cache.projectLoadingForTab).toHaveBeenCalledOnce()
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+  })
+
+  it("does not publish an aborted owner's error over its replacement", async () => {
+    const cache = createCache()
+    cache.projectLoadingForTab
+      .mockResolvedValueOnce({ requestId: 4 })
+      .mockResolvedValueOnce({ requestId: 5 })
+    mocks.resolveSeriesData.mockImplementationOnce(
+      (input: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          input.signal?.addEventListener(
+            "abort",
+            () => reject(input.signal?.reason ?? new Error("aborted")),
+            { once: true }
+          )
+        })
+    )
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+    })
+
+    const first = resolver.resolveTabContext(9)
+    await vi.waitFor(() =>
+      expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    )
+    const replacement = resolver.resolveTabContext(9, {
+      supersedeInFlight: true,
+    })
+
+    await Promise.all([first, replacement])
+
+    expect(cache.projectLoadingForTab).toHaveBeenNthCalledWith(2, 9, 3, true)
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledOnce()
+    expect(mocks.commitResolvedTabContext).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ context: "error" }),
+      9,
+      expect.anything()
+    )
+  })
+
+  it("does not let a stale retry supersede the newer in-flight owner", async () => {
+    const cache = createCache()
+    let releaseFirst: (() => void) | undefined
+    let releaseSecond: (() => void) | undefined
+    const result = {
+      seriesId: "123",
+      seriesMetadata: { title: "A series" },
+      chapterList: { chapters: [], volumes: [] },
+    }
+    mocks.resolveSeriesData
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = () => resolve(result)
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSecond = () => resolve(result)
+          })
+      )
+    cache.isRequestIdCurrent
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true)
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+    })
+
+    const first = resolver.resolveTabContext(9, { supersedeInFlight: true })
+    await vi.waitFor(() =>
+      expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    )
+    const second = resolver.resolveTabContext(9, { supersedeInFlight: true })
+    await vi.waitFor(() =>
+      expect(mocks.resolveSeriesData).toHaveBeenCalledTimes(2)
+    )
+
+    releaseFirst?.()
+    await vi.waitFor(() => expect(cache.isRequestIdCurrent).toHaveBeenCalled())
+    expect(mocks.resolveSeriesData).toHaveBeenCalledTimes(2)
+
+    releaseSecond?.()
+    await Promise.all([first, second])
+    expect(mocks.resolveSeriesData).toHaveBeenCalledTimes(2)
+  })
+
   it("drops a stale provider result before state mutation", async () => {
     const cache = createCache()
     cache.isRequestIdCurrent.mockResolvedValue(false)
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
     await resolver.resolveTabContext(9)
 
-    expect(mocks.handleInitializeTab).not.toHaveBeenCalled()
+    expect(mocks.commitResolvedTabContext).not.toHaveBeenCalled()
   })
 
-  it("retries once when a newer loading request supersedes a valid result", async () => {
+  it("does not resurrect a request superseded by a newer loading revision", async () => {
     const cache = createCache()
-    cache.isRequestIdCurrent
-      .mockResolvedValueOnce(false)
-      .mockResolvedValue(true)
+    cache.isRequestIdCurrent.mockResolvedValue(false)
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+    })
+
+    await resolver.resolveTabContext(9)
+
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    expect(cache.projectLoadingForTab).toHaveBeenCalledOnce()
+    expect(mocks.commitResolvedTabContext).not.toHaveBeenCalled()
+  })
+
+  it("retries against a changed URL while the request still owns the revision", async () => {
+    const initialTab = {
+      id: 9,
+      active: true,
+      windowId: 3,
+      url: "https://comic.pixiv.net/works/123",
+    }
+    const navigatedTab = {
+      ...initialTab,
+      url: "https://comic.pixiv.net/works/456",
+    }
+    getTab
+      .mockResolvedValueOnce(initialTab)
+      .mockResolvedValueOnce(initialTab)
+      .mockResolvedValueOnce(navigatedTab)
+      .mockResolvedValue(navigatedTab)
+    const cache = createCache()
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
@@ -367,7 +637,7 @@ describe("tab context resolver", () => {
 
     expect(mocks.resolveSeriesData).toHaveBeenCalledTimes(2)
     expect(cache.projectLoadingForTab).toHaveBeenCalledTimes(2)
-    expect(mocks.handleInitializeTab).toHaveBeenCalledTimes(1)
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledOnce()
   })
 
   it("uses and persists the constrained probe only for enabled MangaDex page preferences", async () => {
@@ -381,9 +651,15 @@ describe("tab context resolver", () => {
       integrationId: "mangadex",
       role: "series",
     })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      background: {
+        shouldExecutePageProbe: vi.fn(async () => true),
+        persistPageProbeData: vi.fn(async () => undefined),
+      },
+    })
     mocks.executePageProbe.mockResolvedValue({
       url: "https://mangadex.org/title/12345678-1234-1234-1234-123456789abc",
-      mangadexPreferences: { dataSaver: false, filteredLanguages: ["en"] },
+      data: { dataSaver: false, filteredLanguages: ["en"] },
     })
     mocks.resolveSeriesData.mockResolvedValue({
       seriesId: "12345678-1234-1234-1234-123456789abc",
@@ -392,7 +668,7 @@ describe("tab context resolver", () => {
     })
     const cache = createCache()
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
@@ -401,20 +677,13 @@ describe("tab context resolver", () => {
     expect(mocks.executePageProbe).toHaveBeenCalledWith(9, "mangadex")
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith(
       expect.objectContaining({
-        mangadexPreferences: expect.objectContaining({
+        pageProbeData: expect.objectContaining({
           dataSaver: false,
           filteredLanguages: ["en"],
         }),
       })
     )
-    expect(setSession).toHaveBeenCalledWith({
-      mangadexUserPreferencesBySeries: {
-        "mangadex#12345678-1234-1234-1234-123456789abc": {
-          dataSaver: false,
-          filteredLanguages: ["en"],
-        },
-      },
-    })
+    expect(mocks.getBackgroundSiteAdapterById).toHaveBeenCalledWith("mangadex")
   })
 
   it("does not inject the MangaDex page probe when auto-read is disabled", async () => {
@@ -429,6 +698,9 @@ describe("tab context resolver", () => {
       integrationId: "mangadex",
       role: "series",
     })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      background: { shouldExecutePageProbe: vi.fn(async () => false) },
+    })
     mocks.resolveSeriesData.mockResolvedValue({
       seriesId: "12345678-1234-1234-1234-123456789abc",
       seriesMetadata: { title: "MangaDex series" },
@@ -436,7 +708,7 @@ describe("tab context resolver", () => {
     })
     const cache = createCache()
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
@@ -444,7 +716,7 @@ describe("tab context resolver", () => {
 
     expect(mocks.executePageProbe).not.toHaveBeenCalled()
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith(
-      expect.objectContaining({ mangadexPreferences: undefined })
+      expect.objectContaining({ pageProbeData: undefined })
     )
     expect(setSession).not.toHaveBeenCalled()
   })
@@ -457,7 +729,7 @@ describe("tab context resolver", () => {
         () => new Promise(() => undefined)
       )
       const resolver = createTabContextResolver({
-        getStateManager: () => ({}) as never,
+        getTabContextStateService: () => createStateService() as never,
         tabContextCache: cache as never,
         resolutionTimeoutMs: 10,
       })
@@ -466,7 +738,7 @@ describe("tab context resolver", () => {
       await vi.advanceTimersByTimeAsync(20)
       await pending
 
-      expect(mocks.handleInitializeTab).toHaveBeenLastCalledWith(
+      expect(mocks.commitResolvedTabContext).toHaveBeenLastCalledWith(
         expect.anything(),
         {
           context: "error",
@@ -474,7 +746,13 @@ describe("tab context resolver", () => {
             "This site’s series information could not be loaded. Try again.",
         },
         9,
-        { requestId: 4, windowId: 3, supersedeInFlight: true }
+        {
+          requestId: 4,
+          windowId: 3,
+          supersedeInFlight: true,
+          expectedUrl: "https://comic.pixiv.net/works/123",
+          ownerSignal: expect.any(AbortSignal),
+        }
       )
     } finally {
       vi.useRealTimers()
@@ -502,8 +780,7 @@ describe("tab context resolver", () => {
           })
       )
       const resolver = createTabContextResolver({
-        getStateManager: () =>
-          ({ getTabState: vi.fn(async () => null) }) as never,
+        getTabContextStateService: () => createStateService() as never,
         tabContextCache: cache as never,
         resolutionTimeoutMs: 10,
       })
@@ -516,12 +793,18 @@ describe("tab context resolver", () => {
         seriesMetadata: { title: "Too late" },
       })
 
-      expect(mocks.handleInitializeTab).toHaveBeenCalledTimes(1)
-      expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+      expect(mocks.commitResolvedTabContext).toHaveBeenCalledTimes(1)
+      expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ context: "error" }),
         9,
-        { requestId: 4, windowId: 3, supersedeInFlight: true }
+        {
+          requestId: 4,
+          windowId: 3,
+          supersedeInFlight: true,
+          expectedUrl: "https://comic.pixiv.net/works/123",
+          ownerSignal: expect.any(AbortSignal),
+        }
       )
     } finally {
       vi.useRealTimers()
@@ -539,31 +822,40 @@ describe("tab context resolver", () => {
       integrationId: "manhuagui",
       role: "series",
     })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      background: {},
+    })
     mocks.executePageProbe.mockResolvedValue({
       url: "https://www.manhuagui.com/comic/99999/",
-      integrationContext: { adultGatePresent: true },
+      data: { adultGatePresent: true },
     })
     const cache = createCache()
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
     await resolver.resolveTabContext(9)
 
     expect(mocks.resolveSeriesData).not.toHaveBeenCalled()
-    expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
       expect.anything(),
       {
         context: "error",
         error: "This site’s series information could not be loaded. Try again.",
       },
       9,
-      { requestId: 4, windowId: 3, supersedeInFlight: true }
+      {
+        requestId: 4,
+        windowId: 3,
+        supersedeInFlight: true,
+        expectedUrl: "https://www.manhuagui.com/comic/21243/",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
   })
 
-  it("fails resolution when a required integration page probe fails", async () => {
+  it("continues when an optional integration page probe fails", async () => {
     getTab.mockResolvedValue({
       id: 9,
       active: true,
@@ -574,27 +866,78 @@ describe("tab context resolver", () => {
       integrationId: "manhuagui",
       role: "series",
     })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      background: {},
+    })
     mocks.executePageProbe.mockRejectedValue(
       new Error("page probe unavailable")
     )
     const cache = createCache()
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
     await resolver.resolveTabContext(9)
 
-    expect(mocks.resolveSeriesData).not.toHaveBeenCalled()
-    expect(mocks.handleInitializeTab).toHaveBeenCalledWith(
+    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
       expect.anything(),
-      {
-        context: "error",
-        error: "This site’s series information could not be loaded. Try again.",
-      },
+      expect.objectContaining({ context: "ready" }),
       9,
-      { requestId: 4, windowId: 3, supersedeInFlight: true }
+      {
+        requestId: 4,
+        windowId: 3,
+        expectedUrl: "https://www.manhuagui.com/comic/21243/",
+        ownerSignal: expect.any(AbortSignal),
+      }
     )
+  })
+
+  it("continues base MangaDex resolution when optional probe settings time out", async () => {
+    vi.useFakeTimers()
+    try {
+      getTab.mockResolvedValue({
+        id: 9,
+        active: true,
+        windowId: 3,
+        url: "https://mangadex.org/title/12345678-1234-1234-1234-123456789abc",
+      })
+      mocks.matchUrl.mockReturnValue({
+        integrationId: "mangadex",
+        role: "series",
+      })
+      mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+        background: {
+          shouldExecutePageProbe: vi.fn(() => new Promise(() => undefined)),
+        },
+      })
+      const cache = createCache()
+      const resolver = createTabContextResolver({
+        getTabContextStateService: () => createStateService() as never,
+        tabContextCache: cache as never,
+        resolutionTimeoutMs: 10,
+      })
+
+      const pending = resolver.resolveTabContext(9)
+      await vi.advanceTimersByTimeAsync(10)
+      await pending
+
+      expect(mocks.executePageProbe).not.toHaveBeenCalled()
+      expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+      expect(mocks.commitResolvedTabContext).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ context: "ready" }),
+        9,
+        expect.objectContaining({
+          requestId: 4,
+          windowId: 3,
+          ownerSignal: expect.any(AbortSignal),
+        })
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("forwards a validated integration page context only to its owning resolver", async () => {
@@ -608,9 +951,12 @@ describe("tab context resolver", () => {
       integrationId: "manhuagui",
       role: "series",
     })
+    mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
+      background: {},
+    })
     mocks.executePageProbe.mockResolvedValue({
       url: "https://www.manhuagui.com/comic/21243/",
-      integrationContext: {
+      data: {
         adultGatePresent: false,
         chapterHtml: '<div class="chapter"></div>',
       },
@@ -622,7 +968,7 @@ describe("tab context resolver", () => {
     })
     const cache = createCache()
     const resolver = createTabContextResolver({
-      getStateManager: () => ({}) as never,
+      getTabContextStateService: () => createStateService() as never,
       tabContextCache: cache as never,
     })
 
@@ -631,11 +977,12 @@ describe("tab context resolver", () => {
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith({
       siteIntegrationId: "manhuagui",
       seriesUrl: "https://www.manhuagui.com/comic/21243/",
-      mangadexPreferences: undefined,
-      integrationContext: {
+      pageProbeData: {
         adultGatePresent: false,
         chapterHtml: '<div class="chapter"></div>',
       },
+      rateLimitService,
+      siteIntegrationSettingsReader,
       signal: expect.any(AbortSignal),
       onPartial: expect.any(Function),
     })

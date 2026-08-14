@@ -113,6 +113,7 @@ describe("active task progress bus", () => {
       [SESSION_STORAGE_KEYS.activeTaskProgressRevision]: 4,
       [SESSION_STORAGE_KEYS.activeTaskProgress]: {
         ...progress(),
+        generation: "persisted-generation",
         revision: 4,
         updatedAt: 40,
       },

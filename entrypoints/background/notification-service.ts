@@ -1,12 +1,11 @@
 import logger from "@/src/runtime/logger"
-import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import { normalizePersistedDownloadTask } from "@/src/runtime/persisted-download-task"
-import { getSiteIntegrationDisplayName } from "@/src/site-integrations/manifest"
+import { getDisplayName } from "@/src/site-integrations/catalog"
+import type { QueueRepository } from "@/src/storage/queue-repository"
 import type {
   DestinationIssue,
   DestinationIssueKind,
   DownloadTaskState,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 
 interface TaskCompletionNotificationInput {
   task: DownloadTaskState
@@ -78,13 +77,16 @@ async function openDownloadsOptionsPage(): Promise<void> {
 }
 
 export class NotificationService {
-  showDownloadCompleteNotification(
+  async showDownloadCompleteNotification(
     data: DownloadCompleteNotificationData
-  ): void {
-    this.notifyTaskCompleted(data)
+  ): Promise<void> {
+    await this.notifyTaskCompleted(data)
   }
 
-  async handleNotificationClick(notificationId: string): Promise<void> {
+  async handleNotificationClick(
+    notificationId: string,
+    queueRepository: QueueRepository
+  ): Promise<void> {
     if (notificationId.startsWith(DESTINATION_ISSUE_NOTIFICATION_PREFIX)) {
       try {
         await openDownloadsOptionsPage()
@@ -98,7 +100,10 @@ export class NotificationService {
       return
     }
 
-    const downloadId = await this.readPersistedDownloadId(notificationId)
+    const downloadId = await this.readPersistedDownloadId(
+      notificationId,
+      queueRepository
+    )
     if (typeof downloadId === "number") {
       void chrome.downloads.show(downloadId)
     }
@@ -126,7 +131,8 @@ export class NotificationService {
   }
 
   private async readPersistedDownloadId(
-    notificationId: string
+    notificationId: string,
+    queueRepository: QueueRepository
   ): Promise<number | undefined> {
     const taskId = extractTaskId(notificationId)
     if (!taskId) {
@@ -134,20 +140,7 @@ export class NotificationService {
     }
 
     try {
-      const result = await chrome.storage.local.get(
-        LOCAL_STORAGE_KEYS.downloadQueue
-      )
-      const queue = result[LOCAL_STORAGE_KEYS.downloadQueue]
-      if (!Array.isArray(queue)) {
-        return undefined
-      }
-
-      const task = queue
-        .map(normalizePersistedDownloadTask)
-        .find(
-          (entry): entry is DownloadTaskState =>
-            entry !== null && entry.id === taskId
-        )
+      const task = await queueRepository.getTask(taskId)
 
       return typeof task?.lastSuccessfulDownloadId === "number"
         ? task.lastSuccessfulDownloadId
@@ -164,12 +157,12 @@ export class NotificationService {
     }
   }
 
-  notifyTaskCompleted({
+  async notifyTaskCompleted({
     task,
     notificationsEnabled,
     chaptersCompleted,
     chaptersTotal,
-  }: TaskCompletionNotificationInput): void {
+  }: TaskCompletionNotificationInput): Promise<void> {
     if (!notificationsEnabled) {
       return
     }
@@ -182,22 +175,22 @@ export class NotificationService {
         .length ||
         totalCount)
 
-    void chrome.notifications.create(notificationId, {
+    await chrome.notifications.create(notificationId, {
       type: "basic",
       iconUrl: getIconUrl(),
       title: "Download complete",
       message: `${task.seriesTitle}: ${completedCount}/${totalCount} chapters saved`,
-      contextMessage: getSiteIntegrationDisplayName(task.siteIntegrationId),
+      contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 1,
       requireInteraction: false,
     })
   }
 
-  notifyTaskFailed({
+  async notifyTaskFailed({
     task,
     notificationsEnabled,
     errorMessage,
-  }: TaskFailureNotificationInput): void {
+  }: TaskFailureNotificationInput): Promise<void> {
     if (!notificationsEnabled) {
       return
     }
@@ -208,7 +201,7 @@ export class NotificationService {
         chapter.status === "failed" || chapter.status === "partial_success"
     ).length
 
-    void chrome.notifications.create(notificationId, {
+    await chrome.notifications.create(notificationId, {
       type: "basic",
       iconUrl: getIconUrl(),
       title:
@@ -216,7 +209,7 @@ export class NotificationService {
           ? "Download partially complete"
           : "Download failed",
       message: `${task.seriesTitle}: ${failedCount}/${task.chapters.length} chapters failed`,
-      contextMessage: getSiteIntegrationDisplayName(task.siteIntegrationId),
+      contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 2,
       requireInteraction: false,
     })

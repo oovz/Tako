@@ -3,13 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { NotificationService } from "@/entrypoints/background/notification-service"
+import { QueueRepository } from "@/src/storage/queue-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import {
   addPersistentError,
   clearPersistentError,
   getPersistentErrors,
 } from "@/src/runtime/errors"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
-import type { DownloadTaskState } from "@/src/types/queue-state"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -20,8 +22,8 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-vi.mock("@/src/site-integrations/manifest", () => ({
-  getSiteIntegrationDisplayName: vi.fn(() => "MangaDex"),
+vi.mock("@/src/site-integrations/catalog", () => ({
+  getDisplayName: vi.fn(() => "MangaDex"),
 }))
 
 function makeTask(
@@ -158,14 +160,19 @@ describe("notification behavior", () => {
 
     // Click handler is now registered in background main(), not the constructor.
     // Test the handler directly.
-    await service.handleNotificationClick(`task_complete_${task.id}`)
-
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(storageLocalGet).toHaveBeenCalledWith(
-      LOCAL_STORAGE_KEYS.downloadQueue
+    await service.handleNotificationClick(
+      `task_complete_${task.id}`,
+      new QueueRepository(new QueueProjectionService())
     )
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(storageLocalGet).toHaveBeenCalledWith([
+      LOCAL_STORAGE_KEYS.downloadQueue,
+      LOCAL_STORAGE_KEYS.activeDispatchLease,
+      LOCAL_STORAGE_KEYS.pendingUndoActions,
+    ])
     expect(downloadsShow).toHaveBeenCalledWith(321)
     expect(notificationsClear).toHaveBeenCalledWith(`task_complete_${task.id}`)
   })
@@ -181,6 +188,10 @@ describe("notification behavior", () => {
           status: "queued",
           created: Date.now(),
           lastSuccessfulDownloadId: 654,
+          settingsSnapshot: createTaskSettingsSnapshot(
+            DEFAULT_SETTINGS,
+            "mangadex"
+          ),
           chapters: [
             {
               id: "ch-1",
@@ -199,14 +210,19 @@ describe("notification behavior", () => {
 
     // Click handler is now registered in background main(), not the constructor.
     // Test the handler directly.
-    await service.handleNotificationClick("task_complete_task-click-stale")
-
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(storageLocalGet).toHaveBeenCalledWith(
-      LOCAL_STORAGE_KEYS.downloadQueue
+    await service.handleNotificationClick(
+      "task_complete_task-click-stale",
+      new QueueRepository(new QueueProjectionService())
     )
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(storageLocalGet).toHaveBeenCalledWith([
+      LOCAL_STORAGE_KEYS.downloadQueue,
+      LOCAL_STORAGE_KEYS.activeDispatchLease,
+      LOCAL_STORAGE_KEYS.pendingUndoActions,
+    ])
     expect(downloadsShow).toHaveBeenCalledWith(654)
     expect(notificationsClear).toHaveBeenCalledWith(
       "task_complete_task-click-stale"
