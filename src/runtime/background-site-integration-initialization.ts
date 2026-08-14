@@ -1,79 +1,37 @@
-import { siteIntegrationRegistry } from "./site-integration-registry"
+import { backgroundSiteAdaptersById } from "@/src/runtime/generated/site-integration-background-registry"
 import {
-  initializeSiteIntegrationMetadataOnly,
-  registerSiteIntegrationRuntime,
-} from "./site-integration-initialization"
-import {
-  SITE_INTEGRATION_MANIFESTS,
-  getSiteIntegrationManifestById,
-} from "../site-integrations/manifest"
-import type { BackgroundSiteAdapter } from "../types/site-integrations"
-import { backgroundSiteAdaptersById } from "./generated/site-integration-background-registry"
-import { isEnabled } from "../site-integrations/registry"
+  getDefinition,
+  getDefinitions,
+  isEnabled,
+} from "@/src/site-integrations/catalog"
+import type { BackgroundSiteAdapter } from "@/src/types/site-integrations"
 
-function resolveStaticBackgroundSiteAdapter(
-  siteId: string
+function resolveEnabledAdapter(
+  siteIntegrationId: string
 ): BackgroundSiteAdapter | undefined {
-  const manifest = getSiteIntegrationManifestById(siteId)
-  if (!manifest || !manifest.shipped || !isEnabled(manifest.id)) {
-    return undefined
-  }
-
-  return backgroundSiteAdaptersById[manifest.id]
+  const definition = getDefinition(siteIntegrationId)
+  if (!definition?.shipped || !isEnabled(siteIntegrationId)) return undefined
+  return backgroundSiteAdaptersById[siteIntegrationId]
 }
 
-function registerBackgroundSiteAdapter(
-  integration: BackgroundSiteAdapter
-): void {
-  const manifest = getSiteIntegrationManifestById(integration.id)
-  if (!manifest || !manifest.shipped || !isEnabled(manifest.id)) {
-    return
-  }
-
-  registerSiteIntegrationRuntime(integration)
-}
-
-export async function getBackgroundSiteAdapterById(
-  siteId: string
+/**
+ * Resolve the statically packaged provider adapter. There is no runtime
+ * registration or metadata merge: the generated map is authoritative.
+ */
+export function getBackgroundSiteAdapterById(
+  siteIntegrationId: string
 ): Promise<BackgroundSiteAdapter | undefined> {
-  // Hydrate user enablement before evaluating a default-disabled integration.
-  // Otherwise a fresh service-worker module would reject MangaDex before the
-  // stored, permission-backed override has had a chance to load.
-  await initializeSiteIntegrationMetadataOnly()
-
-  if (!isEnabled(siteId)) {
-    return undefined
-  }
-
-  const registeredIntegration =
-    siteIntegrationRegistry.findById(siteId)?.integration
-  if (registeredIntegration?.background) {
-    return {
-      id: registeredIntegration.id,
-      background: registeredIntegration.background,
-    }
-  }
-
-  const integration = resolveStaticBackgroundSiteAdapter(siteId)
-  if (!integration) {
-    return undefined
-  }
-
-  registerBackgroundSiteAdapter(integration)
-  return integration
+  return Promise.resolve(resolveEnabledAdapter(siteIntegrationId))
 }
 
-export async function initializeBackgroundSiteIntegrations(): Promise<void> {
-  await initializeSiteIntegrationMetadataOnly()
-
-  for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    if (!manifest.shipped || !isEnabled(manifest.id)) {
-      continue
-    }
-
-    const integration = backgroundSiteAdaptersById[manifest.id]
-    if (integration) {
-      registerBackgroundSiteAdapter(integration)
+/** Validate that every enabled shipped provider has its generated adapter. */
+export function validateBackgroundSiteIntegrations(): void {
+  for (const definition of getDefinitions()) {
+    if (!definition.shipped || !isEnabled(definition.id)) continue
+    if (!backgroundSiteAdaptersById[definition.id]) {
+      throw new Error(
+        `Missing generated background adapter for ${definition.id}`
+      )
     }
   }
 }

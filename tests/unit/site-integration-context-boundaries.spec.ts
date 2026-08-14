@@ -47,7 +47,7 @@ function readImportSpecifiers(filePath: string): string[] {
   const source = fs.readFileSync(filePath, "utf8")
   const specifiers: string[] = []
   const importPattern =
-    /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+    /\b(?:import|export)\s+(?!type\b)(?:[^'"]*?\s+from\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)(?!\s*\.)/g
 
   for (const match of source.matchAll(importPattern)) {
     const specifier = match[1] ?? match[2]
@@ -107,9 +107,9 @@ function expectNoReachableFiles(
 describe("site integration context boundaries", () => {
   it("keeps background and offscreen site runtime graphs separated", () => {
     const backgroundFiles = collectReachableSourceFiles([
-      "entrypoints/background/background-startup.ts",
-      "entrypoints/background/background-message-router.ts",
-      "entrypoints/background/download-queue-runner.ts",
+      "entrypoints/background/background-runtime-kernel.ts",
+      "entrypoints/background/background-runtime-message-handlers.ts",
+      "entrypoints/background/download-task-executor.ts",
       "src/runtime/background-site-integration-initialization.ts",
     ])
     const offscreenFiles = collectReachableSourceFiles([
@@ -153,12 +153,12 @@ describe("site integration context boundaries", () => {
 
   it("does not use dynamic site runtime loading in production source", () => {
     const runtimeFiles = collectReachableSourceFiles([
-      "entrypoints/background/background-startup.ts",
+      "entrypoints/background/background-runtime-kernel.ts",
       "entrypoints/offscreen/main.ts",
     ])
     const offenders = runtimeFiles.filter((file) => {
       const source = fs.readFileSync(path.join(workspaceRoot, file), "utf8")
-      return /import\.meta\.glob|import\s*\(\s*['"][^'"]*site-integration/.test(
+      return /import\.meta\.glob|import\s*\(\s*['"][^'"]*site-integration[^'"]*['"]\s*\)(?!\s*\.)/.test(
         source
       )
     })

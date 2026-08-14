@@ -13,14 +13,17 @@
  */
 
 import {
-  getAllSiteIntegrationPatterns,
-  getSiteIntegrationManifestById,
+  getDefinitions,
+  getDefinition,
+  isEnabled,
   type SiteIntegrationId,
-} from "../site-integrations/manifest"
-import { isEnabled } from "../site-integrations/registry"
+} from "./catalog"
 
-// Get patterns from manifest SSOT
-const SITE_PATTERNS = getAllSiteIntegrationPatterns()
+const SITE_PATTERNS = Object.fromEntries(
+  getDefinitions()
+    .filter((definition) => definition.shipped)
+    .map((definition) => [definition.id, definition.patterns])
+)
 type SitePatternId = SiteIntegrationId
 
 export interface UrlMatchResult {
@@ -69,13 +72,13 @@ function compilePatterns(): CompiledPattern[] {
   const compiled: CompiledPattern[] = []
 
   for (const [integrationId, patterns] of Object.entries(SITE_PATTERNS)) {
-    const manifest = getSiteIntegrationManifestById(integrationId)
+    const definition = getDefinition(integrationId)
     compiled.push({
-      integrationId,
+      integrationId: integrationId as SitePatternId,
       domains: patterns.domains.map((hostname) => ({
         hostname,
         includeSubdomains:
-          manifest?.requiredOrigins.includes(`https://*.${hostname}/*`) ===
+          definition?.requiredOrigins.includes(`https://*.${hostname}/*`) ===
           true,
       })),
       seriesRegex: patterns.seriesMatches.map(pathPatternToRegex),

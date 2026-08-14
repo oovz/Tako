@@ -5,10 +5,6 @@ const storageMocks = vi.hoisted(() => ({
   setAll: vi.fn(),
 }))
 
-vi.mock("@/src/storage/site-integration-enablement-service", () => ({
-  siteIntegrationEnablementService: storageMocks,
-}))
-
 vi.mock("@/src/runtime/logger", () => ({
   default: {
     debug: vi.fn(),
@@ -61,7 +57,9 @@ describe("site integration optional host permissions", () => {
   it("disables a broad-host integration when its permission is missing", async () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: true })
 
-    await expect(reconcileBroadHttpsPermissionEnablement()).resolves.toEqual({
+    await expect(
+      reconcileBroadHttpsPermissionEnablement(storageMocks)
+    ).resolves.toEqual({
       changed: true,
       enablement: { mangadex: false },
     })
@@ -72,7 +70,9 @@ describe("site integration optional host permissions", () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: true })
     contains.mockResolvedValue(true)
 
-    await expect(reconcileBroadHttpsPermissionEnablement()).resolves.toEqual({
+    await expect(
+      reconcileBroadHttpsPermissionEnablement(storageMocks)
+    ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: true },
     })
@@ -83,7 +83,9 @@ describe("site integration optional host permissions", () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: false })
     contains.mockResolvedValue(true)
 
-    await expect(reconcileBroadHttpsPermissionEnablement()).resolves.toEqual({
+    await expect(
+      reconcileBroadHttpsPermissionEnablement(storageMocks)
+    ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: false },
     })

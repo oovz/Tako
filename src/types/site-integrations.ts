@@ -1,24 +1,28 @@
 import type { Chapter } from "./chapter"
 import type { SeriesMetadata } from "./series-metadata"
 import type { TaskSettingsSnapshot } from "./state-snapshots"
+import type { RateScopePolicy } from "./rate-policy"
+import type { ChapterImagePlan } from "@/src/site-integrations/chapter-plan"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 import type { VolumeState } from "./tab-state"
-import type { MangadexPreferencesPayload } from "./runtime-command-messages"
+import type { JsonValue } from "@/src/shared/type-guards"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+
+/** JSON-safe object carried across the background/offscreen boundary. */
+export type JsonObject = { [key: string]: JsonValue }
+
+/** Narrow background-owned reader for provider-defined durable settings. */
+export interface SiteIntegrationSettingsReader {
+  getAll(): Promise<Record<string, Record<string, unknown>>>
+  getForSite(siteIntegrationId: string): Promise<Record<string, unknown>>
+}
 
 export type SeriesChapterListResult =
   | Chapter[]
   | { chapters: Chapter[]; volumes?: VolumeState[]; truncated?: boolean }
-
-/**
- * HTML-only fallback input for integrations that cannot resolve image URLs
- * directly from structured APIs or request context.
- *
- * `chapterId` remains the canonical identity key even when HTML parsing is used.
- */
-export interface ParseImageUrlsFromHtmlInput {
-  chapterId: string
-  chapterUrl: string
-  chapterHtml: string
-}
 
 /**
  * Input for a unified background resolver that can derive series data from a
@@ -29,13 +33,14 @@ export interface SeriesDataResolutionInput {
   seriesUrl: string
   seriesId?: string
   language?: string
-  mangadexPreferences?: MangadexPreferencesPayload
   /**
-   * Validated data collected by a constrained one-shot page probe. The owning
-   * integration is responsible for decoding this opaque record.
+   * Opaque data collected by the owning integration's constrained one-shot
+   * page probe. The provider adapter is responsible for decoding it.
    */
-  integrationContext?: Record<string, unknown>
+  pageProbeData?: unknown
   signal?: AbortSignal
+  rateLimitService: RateLimitService
+  siteIntegrationSettingsReader: SiteIntegrationSettingsReader
   /**
    * Optional callback for partial results. Called when metadata is available
    * but the chapter list is still being fetched.
@@ -45,14 +50,13 @@ export interface SeriesDataResolutionInput {
 
 /**
  * Result shape returned by a unified background resolver.
- * Mirrors the wire format used by FETCH_SERIES_DATA so the same normalization
- * logic can be shared between provider resolvers.
+ * Shared by provider resolvers and series-data normalization.
  */
 export interface SeriesDataResolutionResult {
   /** Stable provider series identifier used for task/history grouping. */
   seriesId?: string
   seriesMetadata?: SeriesMetadata
-  chapterList?: unknown
+  chapterList?: SeriesChapterListResult
   metadataError?: string
   chapterListError?: string
   chapterListNotice?: "adult-consent-required"
@@ -60,27 +64,22 @@ export interface SeriesDataResolutionResult {
   chaptersLoading?: boolean
 }
 
-export interface ServiceWorkerIntegration {
+export interface ServiceWorkerIntegration<
+  DispatchContext extends JsonObject = JsonObject,
+> {
   name: string
+  /** Optional provider-owned policy for whether a page probe may run. */
+  shouldExecutePageProbe?: (input: {
+    siteIntegrationSettingsReader: SiteIntegrationSettingsReader
+  }) => Promise<boolean>
+  /** Optional provider-owned persistence of successful page-probe data. */
+  persistPageProbeData?: (input: {
+    seriesId: string
+    pageProbeData: unknown
+  }) => Promise<void>
   series?: {
-    /**
-     * Legacy granular loaders. Required unless `resolveSeriesData` is provided.
-     */
-    fetchSeriesMetadata?(
-      seriesId: string,
-      language?: string,
-      signal?: AbortSignal
-    ): Promise<SeriesMetadata>
-    fetchChapterList?(
-      seriesId: string,
-      language?: string,
-      signal?: AbortSignal
-    ): Promise<SeriesChapterListResult>
-    /**
-     * Unified URL-based resolver. Preferred when an integration can resolve
-     * series metadata and chapter list from the series page URL alone.
-     */
-    resolveSeriesData?(
+    /** Canonical provider-owned series metadata/chapter resolver. */
+    resolveSeriesData(
       input: SeriesDataResolutionInput
     ): Promise<SeriesDataResolutionResult>
   }
@@ -89,77 +88,110 @@ export interface ServiceWorkerIntegration {
     seriesKey: string
     chapter: Chapter
     settingsSnapshot: TaskSettingsSnapshot
-  }) => Promise<Record<string, unknown> | undefined>
+    siteIntegrationSettingsReader: SiteIntegrationSettingsReader
+  }) => Promise<DispatchContext | undefined>
 }
 
-export interface ChapterImageIntegration {
+export interface ChapterRuntimeData {
+  chapterId?: string
+  rateLimitService: RateLimitService
+  rateLimitSettings: {
+    image: RateScopePolicy
+    chapter: RateScopePolicy
+  }
+}
+
+export interface ChapterImageIntegration<
+  DispatchContext extends JsonObject = JsonObject,
+> {
   chapter: {
-    /**
-     * Canonical image-resolution path.
-     *
-     * Integrations should prefer this hook whenever they can fetch or derive
-     * image URLs without first materializing full chapter HTML.
-     */
-    resolveImageUrls?: (
+    resolveChapterPlan(
       chapter: { id: string; url: string },
-      context?: Record<string, unknown>,
-      settings?: Partial<TaskSettingsSnapshot>
-    ) => Promise<string[]>
-    /**
-     * Optional HTML fallback path used only when `resolveImageUrls` is not
-     * implemented. The provided `chapterHtml` is already decoded from bytes using
-     * the response's declared charset metadata.
-     */
-    parseImageUrlsFromHtml?: (
-      input: ParseImageUrlsFromHtmlInput
-    ) => Promise<string[]>
-    processImageUrls(urls: string[], chapterInfo: Chapter): Promise<string[]>
-    downloadImage(
-      imageUrl: string,
-      opts?: {
+      input: {
+        dispatchContext?: DispatchContext
+        runtime: ChapterRuntimeData
+        settings?: Partial<TaskSettingsSnapshot>
         signal?: AbortSignal
-        context?: Record<string, unknown>
+      }
+    ): Promise<ChapterImagePlan>
+    downloadImage(
+      this: void,
+      imageUrl: string,
+      opts: {
+        signal?: AbortSignal
+        dispatchContext?: DispatchContext
+        runtime: ChapterRuntimeData
+        skipRateLimit?: boolean
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+        liveResourceLedger?: OffscreenLiveResourceLedger
       }
     ): Promise<{
       data: ArrayBuffer
       filename: string
       mimeType: string
+      liveResourceLease?: OffscreenLiveResourceLease
     }>
   }
 }
 
-export type BackgroundIntegration = ServiceWorkerIntegration &
-  ChapterImageIntegration
+export interface CoverImageIntegration<
+  DispatchContext extends JsonObject = JsonObject,
+> {
+  downloadImage(
+    this: void,
+    imageUrl: string,
+    opts: {
+      signal?: AbortSignal
+      dispatchContext?: DispatchContext
+      runtime: ChapterRuntimeData
+      skipRateLimit?: boolean
+      onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+      liveResourceLedger?: OffscreenLiveResourceLedger
+    }
+  ): Promise<{
+    data: ArrayBuffer
+    filename: string
+    mimeType: string
+    liveResourceLease?: OffscreenLiveResourceLease
+  }>
+}
 
-export interface OffscreenIntegration extends ChapterImageIntegration {
+export interface OffscreenIntegration<
+  DispatchContext extends JsonObject = JsonObject,
+> extends ChapterImageIntegration<DispatchContext> {
   name: string
+  /** Provider-specific cover policy; chapter reconstruction is not reused. */
+  cover?: CoverImageIntegration<DispatchContext>
   /**
    * Optional DOM-based series resolution used by the offscreen document.
    * The background fetches the series page HTML and sends it here for parsing.
    */
   series?: {
     resolveSeriesData(input: {
+      requestId: string
       seriesUrl: string
       html: string
       document: Document
       language?: string
+      signal?: AbortSignal
+      rateLimitService: RateLimitService
     }): Promise<SeriesDataResolutionResult>
+  }
+  dispatchContext?: {
+    parse(value: JsonObject): DispatchContext
   }
 }
 
-export interface BackgroundSiteAdapter {
+export interface BackgroundSiteAdapter<
+  DispatchContext extends JsonObject = JsonObject,
+> {
   id: string
-  background: ServiceWorkerIntegration
+  background: ServiceWorkerIntegration<DispatchContext>
 }
 
-export interface OffscreenSiteAdapter {
+export interface OffscreenSiteAdapter<
+  DispatchContext extends JsonObject = JsonObject,
+> {
   id: string
-  offscreen: OffscreenIntegration
-}
-
-export type RuntimeSiteIntegration = {
-  id: string
-  background?: ServiceWorkerIntegration
-  offscreen?: OffscreenIntegration
+  offscreen: OffscreenIntegration<DispatchContext>
 }

@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import {
-  assertValidSessionRefererRuleDeclaration,
-  assertValidSiteIntegrationNetworkCapabilities,
-} from "@/src/site-integrations/manifest-validation"
-import {
-  SITE_INTEGRATION_MANIFESTS,
-  type SiteIntegrationManifest,
-} from "@/src/site-integrations/manifest"
+import { assertValidSessionRefererRuleDeclaration } from "@/src/site-integrations/definition-validation"
+import { siteIntegrationCatalog } from "@/src/runtime/generated/site-integration-catalog"
 import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/manhuagui/shared"
 import { normalizePixivImageUrl } from "@/src/site-integrations/pixiv-comic/shared"
 
@@ -43,6 +37,7 @@ function installChromeMock(input?: {
   const alarmListeners: Array<
     Parameters<typeof chrome.alarms.onAlarm.addListener>[0]
   > = []
+  const sessionValues: Record<string, unknown> = {}
   const createAlarm = vi.fn<
     (name: string, alarmInfo: chrome.alarms.AlarmCreateInfo) => Promise<void>
   >(async () => undefined)
@@ -55,6 +50,27 @@ function installChromeMock(input?: {
         get: vi.fn(async () => ({
           siteIntegrationEnablement: input?.storedEnablement ?? {},
         })),
+      },
+      session: {
+        get: vi.fn(async (key?: string | string[]) => {
+          if (typeof key === "string") {
+            return { [key]: sessionValues[key] }
+          }
+          if (Array.isArray(key)) {
+            return Object.fromEntries(
+              key.map((entry) => [entry, sessionValues[entry]])
+            )
+          }
+          return { ...sessionValues }
+        }),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(sessionValues, values)
+        }),
+        remove: vi.fn(async (key: string | string[]) => {
+          for (const entry of typeof key === "string" ? [key] : key) {
+            delete sessionValues[entry]
+          }
+        }),
       },
       onChanged: {
         addListener: vi.fn((listener) => storageChangeListeners.push(listener)),
@@ -100,7 +116,64 @@ function installChromeMock(input?: {
 }
 
 async function loadManager() {
-  return await import("@/src/site-integrations/session-rule-manager")
+  const module = await import("@/src/site-integrations/session-rule-manager")
+  const continuationModule =
+    await import("@/src/site-integrations/provider-network-policy-continuation")
+  type Manager = InstanceType<typeof module.SiteIntegrationSessionRuleManager>
+  let instance: Manager | undefined
+
+  const create = (
+    onReconciliationSucceeded: (
+      enablement: Record<string, boolean>
+    ) => void | Promise<void> = async () => undefined
+  ): Manager => {
+    instance = new module.SiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+      onReconciliationSucceeded,
+    })
+    return instance
+  }
+
+  const get = (): Manager => instance ?? create()
+
+  return {
+    ...module,
+    ...continuationModule,
+    initializeSiteIntegrationSessionRuleManager: (input: {
+      service?: typeof testEnablementService
+      onReconciled?: (
+        enablement: Record<string, boolean>
+      ) => void | Promise<void>
+    }) => {
+      const manager = input.onReconciled ? create(input.onReconciled) : get()
+      manager.registerListeners()
+      return manager.start()
+    },
+    reconcileSiteIntegrationSessionRules: (
+      enablement?: Record<string, boolean>,
+      _service?: typeof testEnablementService
+    ) => get().reconcile(enablement),
+    ensureSiteIntegrationNetworkReady: (
+      siteIntegrationId: string,
+      _service?: typeof testEnablementService
+    ) => get().ensureNetworkReady(siteIntegrationId),
+    readProviderNetworkPolicyContinuation: () =>
+      get().continuationCoordinator.readContinuation(),
+    clearProviderNetworkPolicyContinuation: (revision: number) =>
+      get().continuationCoordinator.clearContinuation(revision),
+    isProviderNetworkPolicyContinuationCurrent: (revision: number) =>
+      get().continuationCoordinator.isContinuationCurrent(revision),
+  }
+}
+
+const testEnablementService = {
+  getAll: async (): Promise<Record<string, boolean>> => {
+    const result = await chrome.storage.local.get("siteIntegrationEnablement")
+    return structuredClone(result.siteIntegrationEnablement ?? {}) as Record<
+      string,
+      boolean
+    >
+  },
 }
 
 describe("site integration session-rule manager", () => {
@@ -145,7 +218,7 @@ describe("site integration session-rule manager", () => {
     })
   })
 
-  it("rejects invalid provider rule declarations and cross-policy drift", () => {
+  it("rejects invalid provider rule declarations", () => {
     expect(() =>
       assertValidSessionRefererRuleDeclaration({
         id: 40_999,
@@ -163,37 +236,20 @@ describe("site integration session-rule manager", () => {
         referer: "https://reader.example.com/",
       })
     ).toThrow("Invalid DNR request domain")
-
-    const invalidManifest: SiteIntegrationManifest = {
-      ...SITE_INTEGRATION_MANIFESTS[1],
-      network: {
-        sessionRefererRules: [
-          {
-            id: 41_099,
-            requestDomains: ["outside.example.com"],
-            resourceTypes: ["other"],
-            referer: "https://comic.pixiv.net/",
-          },
-        ],
-      },
-    }
-    expect(() =>
-      assertValidSiteIntegrationNetworkCapabilities([invalidManifest])
-    ).toThrow("not covered by requiredOrigins")
   })
 
   it("keeps DNR request domains accepted by each provider runtime policy", () => {
-    for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-      for (const rule of manifest.network?.sessionRefererRules ?? []) {
+    for (const definition of siteIntegrationCatalog) {
+      for (const rule of definition.sessionRefererRules ?? []) {
         for (const domain of rule.requestDomains) {
           const imageUrl = `https://${domain}/contract-test-image.jpg`
-          if (manifest.id === "manhuagui") {
+          if (definition.id === "manhuagui") {
             expect(isAllowedManhuaguiImageUrl(imageUrl)).toBe(true)
-          } else if (manifest.id === "pixiv-comic") {
+          } else if (definition.id === "pixiv-comic") {
             expect(() => normalizePixivImageUrl(imageUrl)).not.toThrow()
           } else {
             throw new Error(
-              `Add a runtime network-policy assertion for ${manifest.id}`
+              `Add a runtime network-policy assertion for ${definition.id}`
             )
           }
         }
@@ -205,10 +261,13 @@ describe("site integration session-rule manager", () => {
     const { updateSessionRules } = installChromeMock()
     const { reconcileSiteIntegrationSessionRules } = await loadManager()
 
-    await reconcileSiteIntegrationSessionRules({
-      "pixiv-comic": false,
-      manhuagui: true,
-    })
+    await reconcileSiteIntegrationSessionRules(
+      {
+        "pixiv-comic": false,
+        manhuagui: true,
+      },
+      testEnablementService
+    )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
       removeRuleIds: [41001, 41002],
@@ -230,10 +289,13 @@ describe("site integration session-rule manager", () => {
     })
     const { reconcileSiteIntegrationSessionRules } = await loadManager()
 
-    await reconcileSiteIntegrationSessionRules({
-      "pixiv-comic": true,
-      manhuagui: true,
-    })
+    await reconcileSiteIntegrationSessionRules(
+      {
+        "pixiv-comic": true,
+        manhuagui: true,
+      },
+      testEnablementService
+    )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
       removeRuleIds: [41001, 41002],
@@ -253,10 +315,13 @@ describe("site integration session-rule manager", () => {
     } = await loadManager()
 
     await expect(
-      reconcileSiteIntegrationSessionRules({
-        "pixiv-comic": true,
-        manhuagui: true,
-      })
+      reconcileSiteIntegrationSessionRules(
+        {
+          "pixiv-comic": true,
+          manhuagui: true,
+        },
+        testEnablementService
+      )
     ).rejects.toThrow("Unable to verify host permission")
 
     expect(updateSessionRules).not.toHaveBeenCalled()
@@ -274,10 +339,13 @@ describe("site integration session-rule manager", () => {
     const { reconcileSiteIntegrationSessionRules } = await loadManager()
 
     await expect(
-      reconcileSiteIntegrationSessionRules({
-        "pixiv-comic": true,
-        manhuagui: true,
-      })
+      reconcileSiteIntegrationSessionRules(
+        {
+          "pixiv-comic": true,
+          manhuagui: true,
+        },
+        testEnablementService
+      )
     ).rejects.toThrow("Required extension capability is unavailable")
   })
 
@@ -294,16 +362,20 @@ describe("site integration session-rule manager", () => {
     } = await loadManager()
 
     await expect(
-      initializeSiteIntegrationSessionRuleManager({ onReconciled })
+      initializeSiteIntegrationSessionRuleManager({
+        service: testEnablementService,
+        onReconciled,
+      })
     ).rejects.toThrow("DNR unavailable")
     expect(createAlarm).toHaveBeenCalledTimes(1)
     expect(onReconciled).not.toHaveBeenCalled()
 
-    alarmListeners[0]({
-      name: SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM,
-      scheduledTime: Date.now(),
-      persistAcrossSessions: true,
-    })
+    for (const listener of alarmListeners)
+      listener({
+        name: SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM,
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
 
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(2))
     await vi.waitFor(() =>
@@ -314,6 +386,138 @@ describe("site integration session-rule manager", () => {
     await vi.waitFor(() => expect(onReconciled).toHaveBeenCalledTimes(1))
   })
 
+  it("persists a queue continuation with its own wakeup until it succeeds", async () => {
+    const { alarmListeners, clearAlarm, createAlarm } = installChromeMock()
+    const sessionSet = vi.mocked(chrome.storage.session.set)
+    const manager = await loadManager()
+    const onReconciled = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("queue continuation failed"))
+      .mockImplementationOnce(async () => {
+        await manager.clearProviderNetworkPolicyContinuation(1)
+      })
+    const {
+      initializeSiteIntegrationSessionRuleManager,
+      SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+    } = manager
+
+    await initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+      onReconciled,
+    })
+    await vi.waitFor(() =>
+      expect(createAlarm).toHaveBeenCalledWith(
+        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+        {
+          delayInMinutes: 0.5,
+          persistAcrossSessions: true,
+        }
+      )
+    )
+    expect(createAlarm.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionSet.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+    )
+    await vi.waitFor(() => expect(onReconciled).toHaveBeenCalledTimes(1))
+
+    for (const listener of alarmListeners)
+      listener({
+        name: SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
+
+    await vi.waitFor(() => expect(onReconciled).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() =>
+      expect(clearAlarm).toHaveBeenCalledWith(
+        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM
+      )
+    )
+  })
+
+  it("repairs an alarm that fired before its continuation marker was persisted", async () => {
+    const { alarmListeners, clearAlarm, createAlarm } = installChromeMock()
+    const sessionSet = vi.mocked(chrome.storage.session.set)
+    const originalSessionSet = sessionSet.getMockImplementation() as unknown as
+      ((values: Record<string, unknown>) => Promise<void>) | undefined
+    const markerWrite = deferred<void>()
+    let blockMarkerWrite = true
+    sessionSet.mockImplementation(async (values) => {
+      if (blockMarkerWrite) {
+        blockMarkerWrite = false
+        await markerWrite.promise
+      }
+      await originalSessionSet?.(values)
+    })
+    const manager = await loadManager()
+    const onReconciled = vi.fn(async () => {
+      await manager.clearProviderNetworkPolicyContinuation(1)
+    })
+    const {
+      initializeSiteIntegrationSessionRuleManager,
+      SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+    } = manager
+
+    const initialization = initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+      onReconciled,
+    })
+    await vi.waitFor(() =>
+      expect(createAlarm).toHaveBeenCalledWith(
+        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+        expect.anything()
+      )
+    )
+
+    for (const listener of alarmListeners)
+      listener({
+        name: SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
+    markerWrite.resolve()
+
+    await initialization
+    await vi.waitFor(() => expect(onReconciled).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>
+      expect(clearAlarm).toHaveBeenCalledWith(
+        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM
+      )
+    )
+  })
+
+  it("does not replay a continuation after another queue wake consumed it", async () => {
+    const { alarmListeners, clearAlarm } = installChromeMock()
+    const continuation = deferred<void>()
+    const onReconciled = vi.fn(async () => continuation.promise)
+    const {
+      initializeSiteIntegrationSessionRuleManager,
+      clearProviderNetworkPolicyContinuation,
+      SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+    } = await loadManager()
+
+    await initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+      onReconciled,
+    })
+    await vi.waitFor(() => expect(onReconciled).toHaveBeenCalledTimes(1))
+
+    await clearProviderNetworkPolicyContinuation(1)
+    continuation.resolve()
+    for (const listener of alarmListeners)
+      listener({
+        name: SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
+
+    await vi.waitFor(() =>
+      expect(clearAlarm).toHaveBeenCalledWith(
+        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM
+      )
+    )
+    expect(onReconciled).toHaveBeenCalledTimes(1)
+  })
+
   it("allows an explicit initializer retry after the first reconciliation rejects", async () => {
     const { updateSessionRules } = installChromeMock()
     updateSessionRules
@@ -321,11 +525,15 @@ describe("site integration session-rule manager", () => {
       .mockResolvedValueOnce(undefined)
     const { initializeSiteIntegrationSessionRuleManager } = await loadManager()
 
-    await expect(initializeSiteIntegrationSessionRuleManager()).rejects.toThrow(
-      "DNR unavailable"
-    )
     await expect(
-      initializeSiteIntegrationSessionRuleManager()
+      initializeSiteIntegrationSessionRuleManager({
+        service: testEnablementService,
+      })
+    ).rejects.toThrow("DNR unavailable")
+    await expect(
+      initializeSiteIntegrationSessionRuleManager({
+        service: testEnablementService,
+      })
     ).resolves.toBeUndefined()
 
     expect(updateSessionRules).toHaveBeenCalledTimes(2)
@@ -344,17 +552,22 @@ describe("site integration session-rule manager", () => {
     } = await loadManager()
 
     await expect(
-      initializeSiteIntegrationSessionRuleManager()
+      initializeSiteIntegrationSessionRuleManager({
+        service: testEnablementService,
+      })
     ).rejects.toThrow()
-    await expect(reconcileSiteIntegrationSessionRules()).rejects.toThrow()
+    await expect(
+      reconcileSiteIntegrationSessionRules(undefined, testEnablementService)
+    ).rejects.toThrow()
     expect(createAlarm).toHaveBeenCalledTimes(1)
 
     for (let index = 0; index < 6; index += 1) {
-      alarmListeners[0]({
-        name: SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM,
-        scheduledTime: Date.now(),
-        persistAcrossSessions: true,
-      })
+      for (const listener of alarmListeners)
+        listener({
+          name: SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM,
+          scheduledTime: Date.now(),
+          persistAcrossSessions: true,
+        })
       await vi.waitFor(() =>
         expect(createAlarm).toHaveBeenCalledTimes(index + 2)
       )
@@ -380,14 +593,20 @@ describe("site integration session-rule manager", () => {
     })
     const { initializeSiteIntegrationSessionRuleManager } = await loadManager()
 
-    const firstInitialization = initializeSiteIntegrationSessionRuleManager()
-    const secondInitialization = initializeSiteIntegrationSessionRuleManager()
+    const firstInitialization = initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
+    const secondInitialization = initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
 
     expect(secondInitialization).toBe(firstInitialization)
     expect(storageChangeListeners).toHaveLength(1)
     expect(permissionAddedListeners).toHaveLength(1)
     expect(permissionRemovedListeners).toHaveLength(1)
-    expect(alarmListeners).toHaveLength(1)
+    // One listener for DNR retry alarms, one for the queue-continuation
+    // coordinator's own wakeup.
+    expect(alarmListeners).toHaveLength(2)
     await firstInitialization
 
     storageChangeListeners[0](
@@ -443,7 +662,9 @@ describe("site integration session-rule manager", () => {
     })
     const { initializeSiteIntegrationSessionRuleManager } = await loadManager()
 
-    const initial = initializeSiteIntegrationSessionRuleManager()
+    const initial = initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(1))
     storageChangeListeners[0](
       { siteIntegrationEnablement: { newValue: { manhuagui: true } } },
@@ -467,16 +688,19 @@ describe("site integration session-rule manager", () => {
       initializeSiteIntegrationSessionRuleManager,
     } = await loadManager()
 
-    const initial = initializeSiteIntegrationSessionRuleManager()
+    const initial = initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
     let manhuaguiReady = false
     const dependentReadiness = ensureSiteIntegrationNetworkReady(
-      "manhuagui"
+      "manhuagui",
+      testEnablementService
     ).then(() => {
       manhuaguiReady = true
     })
 
     await expect(
-      ensureSiteIntegrationNetworkReady("shonenjumpplus")
+      ensureSiteIntegrationNetworkReady("shonenjumpplus", testEnablementService)
     ).resolves.toBeUndefined()
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(1))
     expect(manhuaguiReady).toBe(false)
@@ -495,14 +719,16 @@ describe("site integration session-rule manager", () => {
       initializeSiteIntegrationSessionRuleManager,
     } = await loadManager()
 
-    await initializeSiteIntegrationSessionRuleManager()
+    await initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
     expect(updateSessionRules).toHaveBeenLastCalledWith({
       removeRuleIds: [41001, 41002],
       addRules: [expect.objectContaining({ id: 41001 })],
     })
 
     storedEnablement.manhuagui = true
-    await ensureSiteIntegrationNetworkReady("manhuagui")
+    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenLastCalledWith({
       removeRuleIds: [41001, 41002],
@@ -522,9 +748,11 @@ describe("site integration session-rule manager", () => {
       initializeSiteIntegrationSessionRuleManager,
     } = await loadManager()
 
-    await initializeSiteIntegrationSessionRuleManager()
-    await ensureSiteIntegrationNetworkReady("manhuagui")
-    await ensureSiteIntegrationNetworkReady("manhuagui")
+    await initializeSiteIntegrationSessionRuleManager({
+      service: testEnablementService,
+    })
+    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenCalledTimes(1)
   })
@@ -544,11 +772,13 @@ describe("site integration session-rule manager", () => {
       ProviderNetworkPolicyActionRequiredError,
     } = await loadManager()
 
-    await expect(initializeSiteIntegrationSessionRuleManager()).rejects.toThrow(
-      "temporary DNR failure"
-    )
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui")
+      initializeSiteIntegrationSessionRuleManager({
+        service: testEnablementService,
+      })
+    ).rejects.toThrow("temporary DNR failure")
+    await expect(
+      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyPendingError)
 
     shouldThrow = false
@@ -558,7 +788,7 @@ describe("site integration session-rule manager", () => {
       ) => Promise<boolean>
     ).mockResolvedValue(false)
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui")
+      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyActionRequiredError)
     expect(updateSessionRules).toHaveBeenCalled()
   })

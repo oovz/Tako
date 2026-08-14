@@ -2,7 +2,9 @@ import logger from "@/src/runtime/logger"
 import { getBackgroundSiteAdapterById } from "@/src/runtime/background-site-integration-initialization"
 import type { Chapter } from "@/src/types/chapter"
 import type { TaskSettingsSnapshot } from "@/src/types/state-snapshots"
-import { getSiteIntegrationManifestById } from "@/src/site-integrations/manifest"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+import { getDefinition } from "@/src/site-integrations/catalog"
+import type { SiteIntegrationDispatchContextEnvelope } from "@/src/runtime/site-integration-dispatch-context-envelope"
 
 export interface SiteIntegrationDispatchContextInput {
   siteIntegrationId: string
@@ -10,6 +12,7 @@ export interface SiteIntegrationDispatchContextInput {
   seriesKey: string
   chapter: Chapter
   settingsSnapshot: TaskSettingsSnapshot
+  siteIntegrationSettingsReader: SiteIntegrationSettingsReader
 }
 
 /**
@@ -18,12 +21,19 @@ export interface SiteIntegrationDispatchContextInput {
  */
 export async function resolveSiteIntegrationDispatchContext(
   input: SiteIntegrationDispatchContextInput
-): Promise<Record<string, unknown> | undefined> {
-  const capability =
-    getSiteIntegrationManifestById(input.siteIntegrationId)?.runtimes
-      .dispatchContext ?? "none"
+): Promise<SiteIntegrationDispatchContextEnvelope | undefined> {
+  const definition = getDefinition(input.siteIntegrationId)
+  const dispatchContext = definition?.runtimes.dispatchContext
+  const capability = dispatchContext?.mode ?? "none"
   if (capability === "none") return undefined
+  const schemaVersion = dispatchContext?.schemaVersion
+  if (!schemaVersion) {
+    throw new Error(
+      `Dispatch context schema version is missing for ${input.siteIntegrationId}`
+    )
+  }
 
+  let data: SiteIntegrationDispatchContextEnvelope["data"] | undefined
   try {
     const integration = await getBackgroundSiteAdapterById(
       input.siteIntegrationId
@@ -39,11 +49,12 @@ export async function resolveSiteIntegrationDispatchContext(
       return undefined
     }
 
-    return await prepareDispatchContext({
+    data = await prepareDispatchContext({
       taskId: input.taskId,
       seriesKey: input.seriesKey,
       chapter: input.chapter,
       settingsSnapshot: input.settingsSnapshot,
+      siteIntegrationSettingsReader: input.siteIntegrationSettingsReader,
     })
   } catch (error) {
     if (capability === "required") {
@@ -58,4 +69,7 @@ export async function resolveSiteIntegrationDispatchContext(
     })
     return undefined
   }
+
+  if (data === undefined) return undefined
+  return { schemaVersion, data }
 }

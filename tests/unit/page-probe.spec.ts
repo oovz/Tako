@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { OPTIONAL_BROAD_HTTPS_ORIGIN } from "@/src/site-integrations/host-permission-service"
-import {
-  collectApprovedPageProbeData,
-  executeApprovedPageProbe,
-} from "@/src/site-integrations/page-probe"
+const probes = vi.hoisted(() => ({
+  mangadex: {
+    id: "mangadex",
+    collect: () => ({ url: globalThis.location.href }),
+    parse: (raw: unknown) => raw as { url: string; data?: unknown },
+  },
+}))
+
+vi.mock("@/src/runtime/generated/site-integration-page-probe-registry", () => ({
+  siteIntegrationPageProbesById: probes,
+}))
+
+import { executeApprovedPageProbe } from "@/src/site-integrations/page-probe"
+import { pageProbe as mangadexPageProbe } from "@/src/site-integrations/mangadex/probe"
+import { pageProbe as manhuaguiPageProbe } from "@/src/site-integrations/manhuagui/probe"
 
 describe("approved one-shot page probe", () => {
   const executeScript = vi.fn()
@@ -14,100 +24,86 @@ describe("approved one-shot page probe", () => {
     vi.stubGlobal("chrome", { scripting: { executeScript } })
   })
 
-  it("injects a fixed isolated-world function without selectors or code input", async () => {
+  it("looks up a provider probe and injects only its self-contained collector", async () => {
     executeScript.mockResolvedValue([
-      {
-        result: {
-          url: "https://mangadex.org/title/series",
-          mangadexPreferences: {
-            dataSaver: false,
-            filteredLanguages: ["en"],
-          },
-        },
-      },
+      { result: { url: "https://mangadex.org/title/series" } },
     ])
 
     await expect(executeApprovedPageProbe(12, "mangadex")).resolves.toEqual({
       url: "https://mangadex.org/title/series",
-      mangadexPreferences: {
-        dataSaver: false,
-        filteredLanguages: ["en"],
-      },
     })
     expect(executeScript).toHaveBeenCalledWith({
       target: { tabId: 12, frameIds: [0] },
       world: "ISOLATED",
       injectImmediately: true,
-      func: collectApprovedPageProbeData,
-      args: ["mangadex"],
+      func: probes.mangadex.collect,
     })
-    expect(OPTIONAL_BROAD_HTTPS_ORIGIN).toBe("https://*/*")
   })
 
-  it("rejects malformed probe output", async () => {
-    executeScript.mockResolvedValue([{ result: { url: 42 } }])
-    await expect(executeApprovedPageProbe(12, "mangadex")).rejects.toThrow(
-      "invalid URL"
+  it("rejects an unknown provider probe instead of executing page code", async () => {
+    await expect(executeApprovedPageProbe(12, "unknown")).rejects.toThrow(
+      "No page probe is registered"
     )
+    expect(executeScript).not.toHaveBeenCalled()
   })
 
-  it("rejects probe data that includes fields outside the approved preference shape", async () => {
-    executeScript.mockResolvedValue([
-      {
-        result: {
-          url: "https://mangadex.org/title/series",
-          mangadexPreferences: {
+  it("collects and parses bounded MangaDex preferences", () => {
+    vi.stubGlobal("location", { href: "https://mangadex.org/title/series" })
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() =>
+        JSON.stringify({
+          userPreferences: {
             dataSaver: false,
-            authToken: "must-not-leave-the-page",
+            filteredLanguages: ["en", "ja"],
+            ignored: "dropped",
           },
-        },
-      },
-    ])
-
-    await expect(executeApprovedPageProbe(12, "mangadex")).rejects.toThrow(
-      "invalid MangaDex preferences"
-    )
+        })
+      ),
+    })
+    const collected = mangadexPageProbe.collect() as {
+      url: string
+      data: unknown
+    }
+    expect(collected.url).toBe("https://mangadex.org/title/series")
+    expect(mangadexPageProbe.parse(collected)).toEqual({
+      url: collected.url,
+      data: { dataSaver: false, filteredLanguages: ["en", "ja"] },
+    })
   })
 
-  it("accepts only the bounded Manhuagui live chapter snapshot shape", async () => {
-    executeScript.mockResolvedValue([
-      {
-        result: {
-          url: "https://www.manhuagui.com/comic/21243/",
-          integrationContext: {
-            adultGatePresent: false,
-            chapterHtml:
-              '<div class="chapter"><h4>Volume 1</h4><div class="chapter-list"></div></div>',
-          },
-        },
-      },
-    ])
+  it("rejects hostile MangaDex probe shapes", () => {
+    expect(() =>
+      mangadexPageProbe.parse({
+        url: "https://mangadex.org/title/series",
+        data: { token: "must-not-leave-the-page" },
+      })
+    ).toThrow()
+  })
 
-    await expect(executeApprovedPageProbe(12, "manhuagui")).resolves.toEqual({
+  it("parses only the bounded Manhuagui adult-gate snapshot", () => {
+    expect(
+      manhuaguiPageProbe.parse({
+        url: "https://www.manhuagui.com/comic/21243/",
+        data: {
+          adultGatePresent: false,
+          chapterHtml: '<div class="chapter"></div>',
+        },
+      })
+    ).toEqual({
       url: "https://www.manhuagui.com/comic/21243/",
-      integrationContext: {
+      data: {
         adultGatePresent: false,
-        chapterHtml:
-          '<div class="chapter"><h4>Volume 1</h4><div class="chapter-list"></div></div>',
+        chapterHtml: '<div class="chapter"></div>',
       },
     })
   })
 
-  it("rejects Manhuagui probe fields outside its approved snapshot", async () => {
-    executeScript.mockResolvedValue([
-      {
-        result: {
-          url: "https://www.manhuagui.com/comic/21243/",
-          integrationContext: {
-            adultGatePresent: false,
-            cookie: "must-not-leave-the-page",
-          },
-        },
-      },
-    ])
-
-    await expect(executeApprovedPageProbe(12, "manhuagui")).rejects.toThrow(
-      "invalid Manhuagui context"
-    )
+  it("rejects Manhuagui probe fields outside its approved snapshot", () => {
+    expect(() =>
+      manhuaguiPageProbe.parse({
+        url: "https://www.manhuagui.com/comic/21243/",
+        data: { adultGatePresent: false, cookie: "must-not-leave-the-page" },
+      })
+    ).toThrow()
   })
 })

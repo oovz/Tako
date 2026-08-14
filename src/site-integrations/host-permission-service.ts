@@ -1,32 +1,27 @@
 import logger from "@/src/runtime/logger"
+import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
+import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
 import {
-  siteIntegrationEnablementService,
-  type SiteIntegrationEnablementMap,
-} from "@/src/storage/site-integration-enablement-service"
-import {
-  SITE_INTEGRATION_MANIFESTS,
-  getSiteIntegrationManifestById,
-} from "./manifest"
-import { isEnabled } from "./registry"
+  getDefinitions,
+  isEnabled,
+  requiresBroadHttpsPermission,
+} from "./catalog"
 
 export const OPTIONAL_BROAD_HTTPS_ORIGIN = "https://*/*"
 
 export function integrationRequiresBroadHttpsPermission(
   integrationId: string
 ): boolean {
-  const manifest = getSiteIntegrationManifestById(integrationId)
-  return Boolean(
-    manifest?.shipped && manifest.requiresBroadHttpsPermission === true
-  )
+  return requiresBroadHttpsPermission(integrationId)
 }
 
 export function enablementRequiresBroadHttpsPermission(
   enablement: SiteIntegrationEnablementMap
 ): boolean {
-  return SITE_INTEGRATION_MANIFESTS.some(
-    (manifest) =>
-      manifest.requiresBroadHttpsPermission === true &&
-      isEnabled(manifest.id, enablement)
+  return getDefinitions().some(
+    (definition) =>
+      requiresBroadHttpsPermission(definition.id) &&
+      isEnabled(definition.id, enablement)
   )
 }
 
@@ -79,11 +74,13 @@ export async function removeBroadHttpsPermissionIfUnused(
  * optional host permission is absent. The explicit false is persisted so all
  * extension contexts converge through the normal storage listener.
  */
-export async function reconcileBroadHttpsPermissionEnablement(): Promise<{
+export async function reconcileBroadHttpsPermissionEnablement(
+  service: Pick<SiteIntegrationEnablementService, "getAll" | "setAll">
+): Promise<{
   changed: boolean
   enablement: SiteIntegrationEnablementMap
 }> {
-  const current = await siteIntegrationEnablementService.getAll()
+  const current = await service.getAll()
   if (!enablementRequiresBroadHttpsPermission(current)) {
     try {
       await removeBroadHttpsPermissionIfUnused(current)
@@ -105,9 +102,9 @@ export async function reconcileBroadHttpsPermissionEnablement(): Promise<{
 
   const next = { ...current }
   let changed = false
-  for (const manifest of SITE_INTEGRATION_MANIFESTS) {
+  for (const manifest of getDefinitions()) {
     if (
-      manifest.requiresBroadHttpsPermission === true &&
+      requiresBroadHttpsPermission(manifest.id) &&
       isEnabled(manifest.id, current)
     ) {
       next[manifest.id] = false
@@ -116,7 +113,7 @@ export async function reconcileBroadHttpsPermissionEnablement(): Promise<{
   }
 
   if (changed) {
-    await siteIntegrationEnablementService.setAll(next)
+    await service.setAll(next)
     logger.warn(
       "Disabled site integrations whose optional HTTPS host permission is missing"
     )

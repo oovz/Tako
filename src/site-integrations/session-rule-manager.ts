@@ -1,35 +1,23 @@
 import logger from "@/src/runtime/logger"
 import {
-  normalizeEnablementMap,
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
-  siteIntegrationEnablementService,
-  type SiteIntegrationEnablementMap,
+  type SiteIntegrationEnablementService,
 } from "@/src/storage/site-integration-enablement-service"
 import {
-  getSiteIntegrationManifestById,
-  SITE_INTEGRATION_MANIFESTS,
-  type SessionRefererRuleDeclaration,
-  type SiteIntegrationManifest,
-} from "./manifest"
-import { assertValidSessionRefererRuleDeclaration } from "./manifest-validation"
-import { isEnabled } from "./registry"
-
-let reconciliationTail: Promise<void> = Promise.resolve()
-let activeReconciliation: Promise<void> | null = null
-let listenersRegistered = false
-let initialReconciliation: Promise<void> | null = null
-let requestedRevision = 0
-let successfulRevision = 0
-let requestedEnablement: SiteIntegrationEnablementMap | undefined
-let reconciliationDirty = true
-let lastSuccessfulAt: number | null = null
-let installedManagedRuleIds = new Set<number>()
-let lastSuccessfulEnablement: SiteIntegrationEnablementMap | undefined
-let retryAttempt = 0
-let retryAlarmScheduled = false
-let onReconciliationSucceeded:
-  | ((enablement: SiteIntegrationEnablementMap) => void | Promise<void>)
-  | undefined
+  normalizeEnablementMap,
+  type SiteIntegrationEnablementMap,
+} from "@/src/domain/site-integrations/storage-schemas"
+import { getDefinition, getDefinitions } from "./catalog"
+import type {
+  SiteIntegrationSessionRefererRule as SessionRefererRuleDeclaration,
+  SiteIntegrationDefinition,
+} from "./definition-types"
+import { assertValidSessionRefererRuleDeclaration } from "./definition-validation"
+import { isEnabled } from "./catalog"
+import {
+  ProviderNetworkPolicyContinuationCoordinator,
+  type ProviderNetworkPolicyStateSnapshot,
+} from "./provider-network-policy-continuation"
 
 export const SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM =
   "site-integration-session-rule-retry"
@@ -69,17 +57,17 @@ export class ProviderNetworkPolicyActionRequiredError extends Error {
 }
 
 function getManagedRuleDeclarations(): Array<{
-  manifest: SiteIntegrationManifest
+  manifest: SiteIntegrationDefinition
   declaration: SessionRefererRuleDeclaration
 }> {
   const declarations: Array<{
-    manifest: SiteIntegrationManifest
+    manifest: SiteIntegrationDefinition
     declaration: SessionRefererRuleDeclaration
   }> = []
   const ids = new Set<number>()
 
-  for (const manifest of SITE_INTEGRATION_MANIFESTS) {
-    for (const declaration of manifest.network?.sessionRefererRules ?? []) {
+  for (const manifest of getDefinitions()) {
+    for (const declaration of manifest.sessionRefererRules ?? []) {
       assertValidSessionRefererRuleDeclaration(declaration)
       if (ids.has(declaration.id)) {
         throw new Error(`Duplicate managed DNR rule id: ${declaration.id}`)
@@ -89,7 +77,9 @@ function getManagedRuleDeclarations(): Array<{
     }
   }
 
-  return declarations
+  return declarations.sort(
+    (left, right) => left.declaration.id - right.declaration.id
+  )
 }
 
 export function buildSessionRefererRule(
@@ -127,7 +117,7 @@ export function buildSessionRefererRule(
 }
 
 async function hasRequiredHostAccess(
-  manifest: SiteIntegrationManifest
+  manifest: SiteIntegrationDefinition
 ): Promise<boolean> {
   if (manifest.requiredOrigins.length === 0) {
     return true
@@ -150,202 +140,242 @@ async function hasRequiredHostAccess(
   }
 }
 
-async function reconcileSessionRulesNow(
-  enablement?: SiteIntegrationEnablementMap
-): Promise<{
-  installedRuleIds: Set<number>
-  enablement: SiteIntegrationEnablementMap
-}> {
-  const updateSessionRules =
-    chrome.declarativeNetRequest?.updateSessionRules?.bind(
-      chrome.declarativeNetRequest
-    )
-  if (!updateSessionRules) {
-    throw new Error(
-      "Required extension capability is unavailable: chrome.declarativeNetRequest.updateSessionRules"
-    )
+export class SiteIntegrationSessionRuleManager {
+  private reconciliationTail: Promise<void> = Promise.resolve()
+  private activeReconciliation: Promise<void> | null = null
+  private listenersRegistered = false
+  private initialReconciliation: Promise<void> | null = null
+  private requestedRevision = 0
+  private successfulRevision = 0
+  private requestedEnablement: SiteIntegrationEnablementMap | undefined
+  private reconciliationDirty = true
+  private lastSuccessfulAt: number | null = null
+  private installedManagedRuleIds = new Set<number>()
+  private lastSuccessfulEnablement: SiteIntegrationEnablementMap | undefined
+  private retryAttempt = 0
+  private retryAlarmScheduled = false
+  private readonly service: Pick<SiteIntegrationEnablementService, "getAll">
+  private readonly continuation: ProviderNetworkPolicyContinuationCoordinator
+
+  constructor(input: {
+    service: Pick<SiteIntegrationEnablementService, "getAll">
+    onReconciliationSucceeded: (
+      enablement: SiteIntegrationEnablementMap
+    ) => void | Promise<void>
+  }) {
+    this.service = input.service
+    this.continuation = new ProviderNetworkPolicyContinuationCoordinator({
+      state: () => this.getContinuationStateSnapshot(),
+      reconcile: () => this.reconcile(undefined),
+      onQueueResume: input.onReconciliationSucceeded,
+    })
   }
 
-  const currentEnablement =
-    enablement ?? (await siteIntegrationEnablementService.getAll())
-  const declarations = getManagedRuleDeclarations()
-  const addRules: chrome.declarativeNetRequest.Rule[] = []
+  get continuationCoordinator(): ProviderNetworkPolicyContinuationCoordinator {
+    return this.continuation
+  }
 
-  for (const { manifest, declaration } of declarations) {
-    if (!manifest.shipped || !isEnabled(manifest.id, currentEnablement)) {
-      continue
+  private getContinuationStateSnapshot(): ProviderNetworkPolicyStateSnapshot {
+    return {
+      dirty: this.reconciliationDirty,
+      successfulRevision: this.successfulRevision,
+      requestedRevision: this.requestedRevision,
+      lastSuccessfulEnablement: this.lastSuccessfulEnablement,
+      isRevisionCurrent: (revision) =>
+        !this.reconciliationDirty &&
+        this.successfulRevision === this.requestedRevision &&
+        this.successfulRevision === revision,
     }
-    if (!(await hasRequiredHostAccess(manifest))) {
-      logger.warn("Skipping provider DNR rule without required host access", {
-        siteIntegrationId: manifest.id,
-        ruleId: declaration.id,
-      })
-      continue
+  }
+
+  private async reconcileSessionRulesNow(
+    enablement: SiteIntegrationEnablementMap | undefined
+  ): Promise<{
+    installedRuleIds: Set<number>
+    enablement: SiteIntegrationEnablementMap
+  }> {
+    const updateSessionRules =
+      chrome.declarativeNetRequest?.updateSessionRules?.bind(
+        chrome.declarativeNetRequest
+      )
+    if (!updateSessionRules) {
+      throw new Error(
+        "Required extension capability is unavailable: chrome.declarativeNetRequest.updateSessionRules"
+      )
     }
-    addRules.push(buildSessionRefererRule(declaration, chrome.runtime.id))
-  }
 
-  await updateSessionRules({
-    removeRuleIds: declarations.map(({ declaration }) => declaration.id),
-    addRules,
-  })
-  logger.debug("Reconciled provider session DNR rules", {
-    installedRuleIds: addRules.map((rule) => rule.id),
-  })
-  return {
-    installedRuleIds: new Set(addRules.map((rule) => rule.id)),
-    enablement: currentEnablement,
-  }
-}
+    const currentEnablement = enablement ?? (await this.service.getAll())
+    const declarations = getManagedRuleDeclarations()
+    const addRules: chrome.declarativeNetRequest.Rule[] = []
 
-async function clearRetryAlarmAfterSuccess(): Promise<void> {
-  retryAttempt = 0
-  retryAlarmScheduled = false
-  if (!chrome.alarms?.clear) return
-
-  try {
-    await chrome.alarms.clear(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM)
-  } catch (error) {
-    logger.warn("Unable to clear the provider DNR retry alarm", error)
-  }
-}
-
-async function scheduleRetryAlarm(): Promise<void> {
-  if (retryAlarmScheduled) return
-  if (!chrome.alarms?.create) {
-    throw new Error(
-      "Required extension capability is unavailable: chrome.alarms.create"
-    )
-  }
-
-  const delayInMinutes =
-    RETRY_DELAYS_MINUTES[
-      Math.min(retryAttempt, RETRY_DELAYS_MINUTES.length - 1)
-    ]
-  await chrome.alarms.create(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM, {
-    delayInMinutes,
-    persistAcrossSessions: true,
-  })
-  retryAlarmScheduled = true
-  retryAttempt = Math.min(retryAttempt + 1, RETRY_DELAYS_MINUTES.length - 1)
-}
-
-async function runRequestedReconciliations(): Promise<void> {
-  try {
-    while (true) {
-      while (successfulRevision < requestedRevision) {
-        const targetRevision = requestedRevision
-        const enablement = requestedEnablement
-        const outcome = await reconcileSessionRulesNow(enablement)
-        installedManagedRuleIds = outcome.installedRuleIds
-        lastSuccessfulEnablement = outcome.enablement
-        successfulRevision = targetRevision
-        lastSuccessfulAt = Date.now()
+    for (const { manifest, declaration } of declarations) {
+      if (!manifest.shipped || !isEnabled(manifest.id, currentEnablement)) {
+        continue
       }
-
-      await clearRetryAlarmAfterSuccess()
-      if (successfulRevision === requestedRevision) {
-        reconciliationDirty = false
-        if (onReconciliationSucceeded && lastSuccessfulEnablement) {
-          void Promise.resolve(
-            onReconciliationSucceeded(lastSuccessfulEnablement)
-          ).catch((error) => {
-            logger.warn(
-              "Failed to continue the queue after provider policy reconciliation",
-              error
-            )
-          })
-        }
-        return
+      if (!(await hasRequiredHostAccess(manifest))) {
+        logger.warn("Skipping provider DNR rule without required host access", {
+          siteIntegrationId: manifest.id,
+          ruleId: declaration.id,
+        })
+        continue
       }
+      addRules.push(buildSessionRefererRule(declaration, chrome.runtime.id))
     }
-  } catch (error) {
-    reconciliationDirty = true
+
+    await updateSessionRules({
+      removeRuleIds: declarations.map(({ declaration }) => declaration.id),
+      addRules,
+    })
+    logger.debug("Reconciled provider session DNR rules", {
+      installedRuleIds: addRules.map((rule) => rule.id),
+    })
+    return {
+      installedRuleIds: new Set(addRules.map((rule) => rule.id)),
+      enablement: currentEnablement,
+    }
+  }
+
+  private async clearRetryAlarmAfterSuccess(): Promise<void> {
+    this.retryAttempt = 0
+    this.retryAlarmScheduled = false
+    if (!chrome.alarms?.clear) return
+
     try {
-      await scheduleRetryAlarm()
-    } catch (alarmError) {
-      logger.warn("Unable to schedule provider DNR reconciliation retry", {
-        error: alarmError,
-      })
+      await chrome.alarms.clear(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM)
+    } catch (error) {
+      logger.warn("Unable to clear the provider DNR retry alarm", error)
     }
-    throw error
-  }
-}
-
-/**
- * Serialize and coalesce DNR updates so storage, permission, alarm, and
- * dispatch-time readiness requests cannot race.
- */
-export function reconcileSiteIntegrationSessionRules(
-  enablement?: SiteIntegrationEnablementMap
-): Promise<void> {
-  requestedRevision += 1
-  requestedEnablement = enablement
-  reconciliationDirty = true
-
-  if (activeReconciliation) {
-    return activeReconciliation
   }
 
-  const run = reconciliationTail.then(runRequestedReconciliations)
-  const trackedRun = run.finally(() => {
-    if (activeReconciliation === trackedRun) {
-      activeReconciliation = null
+  private async scheduleRetryAlarm(): Promise<void> {
+    if (this.retryAlarmScheduled) return
+    if (!chrome.alarms?.create) {
+      throw new Error(
+        "Required extension capability is unavailable: chrome.alarms.create"
+      )
     }
-  })
-  activeReconciliation = trackedRun
-  reconciliationTail = trackedRun.catch(() => undefined)
-  return trackedRun
-}
 
-/**
- * Register lifecycle listeners synchronously from the service-worker entrypoint.
- * The returned promise is the initial session-rule readiness dependency.
- */
-function hasSameEnablement(
-  left: SiteIntegrationEnablementMap | undefined,
-  right: SiteIntegrationEnablementMap
-): boolean {
-  if (!left) return false
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
-  for (const key of keys) {
-    if (left[key] !== right[key]) return false
-  }
-  return true
-}
-
-function affectsManagedSessionRules(
-  permissions: chrome.permissions.Permissions
-): boolean {
-  if (
-    permissions.permissions?.some(
-      (permission) =>
-        permission === "declarativeNetRequest" ||
-        permission === "declarativeNetRequestWithHostAccess"
+    const delayInMinutes =
+      RETRY_DELAYS_MINUTES[
+        Math.min(this.retryAttempt, RETRY_DELAYS_MINUTES.length - 1)
+      ]
+    await chrome.alarms.create(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM, {
+      delayInMinutes,
+      persistAcrossSessions: true,
+    })
+    this.retryAlarmScheduled = true
+    this.retryAttempt = Math.min(
+      this.retryAttempt + 1,
+      RETRY_DELAYS_MINUTES.length - 1
     )
-  ) {
+  }
+
+  private async runRequestedReconciliations(): Promise<void> {
+    try {
+      while (true) {
+        while (this.successfulRevision < this.requestedRevision) {
+          const targetRevision = this.requestedRevision
+          const enablement = this.requestedEnablement
+          const outcome = await this.reconcileSessionRulesNow(enablement)
+          this.installedManagedRuleIds = outcome.installedRuleIds
+          this.lastSuccessfulEnablement = outcome.enablement
+          this.successfulRevision = targetRevision
+          this.lastSuccessfulAt = Date.now()
+        }
+
+        if (this.successfulRevision === this.requestedRevision) {
+          this.reconciliationDirty = false
+          if (this.lastSuccessfulEnablement) {
+            await this.continuation.noteReconciliationSucceeded(
+              this.successfulRevision,
+              this.lastSuccessfulEnablement
+            )
+          }
+          await this.clearRetryAlarmAfterSuccess()
+          return
+        }
+      }
+    } catch (error) {
+      this.reconciliationDirty = true
+      try {
+        await this.scheduleRetryAlarm()
+      } catch (alarmError) {
+        logger.warn("Unable to schedule provider DNR reconciliation retry", {
+          error: alarmError,
+        })
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Serialize and coalesce DNR updates so storage, permission, alarm, and
+   * dispatch-time readiness requests cannot race.
+   */
+  reconcile(enablement?: SiteIntegrationEnablementMap): Promise<void> {
+    this.requestedRevision += 1
+    this.requestedEnablement = enablement
+    this.reconciliationDirty = true
+
+    if (this.activeReconciliation) {
+      return this.activeReconciliation
+    }
+
+    const run = this.reconciliationTail.then(() =>
+      this.runRequestedReconciliations()
+    )
+    const trackedRun = run.finally(() => {
+      if (this.activeReconciliation === trackedRun) {
+        this.activeReconciliation = null
+      }
+    })
+    this.activeReconciliation = trackedRun
+    this.reconciliationTail = trackedRun.catch(() => undefined)
+    return trackedRun
+  }
+
+  private hasSameEnablement(
+    left: SiteIntegrationEnablementMap | undefined,
+    right: SiteIntegrationEnablementMap
+  ): boolean {
+    if (!left) return false
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+    for (const key of keys) {
+      if (left[key] !== right[key]) return false
+    }
     return true
   }
 
-  const relevantOrigins = new Set(
-    getManagedRuleDeclarations().flatMap(
-      ({ manifest }) => manifest.requiredOrigins
-    )
-  )
-  return (
-    permissions.origins?.some((origin) => relevantOrigins.has(origin)) ?? false
-  )
-}
+  private affectsManagedSessionRules(
+    permissions: chrome.permissions.Permissions
+  ): boolean {
+    if (
+      permissions.permissions?.some(
+        (permission) =>
+          permission === "declarativeNetRequest" ||
+          permission === "declarativeNetRequestWithHostAccess"
+      )
+    ) {
+      return true
+    }
 
-export function initializeSiteIntegrationSessionRuleManager(input?: {
-  onReconciled?: (
-    enablement: SiteIntegrationEnablementMap
-  ) => void | Promise<void>
-}): Promise<void> {
-  if (input?.onReconciled) {
-    onReconciliationSucceeded = input.onReconciled
+    const relevantOrigins = new Set(
+      getManagedRuleDeclarations().flatMap(
+        ({ manifest }) => manifest.requiredOrigins
+      )
+    )
+    return (
+      permissions.origins?.some((origin) => relevantOrigins.has(origin)) ??
+      false
+    )
   }
-  if (!listenersRegistered) {
+
+  /**
+   * Register lifecycle listeners synchronously from the service-worker
+   * entrypoint. This method intentionally performs no asynchronous work.
+   */
+  registerListeners(): void {
+    if (this.listenersRegistered) return
     chrome.storage?.onChanged?.addListener((changes, areaName) => {
       if (
         areaName !== "local" ||
@@ -356,7 +386,7 @@ export function initializeSiteIntegrationSessionRuleManager(input?: {
       const enablement = normalizeEnablementMap(
         changes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]?.newValue
       )
-      void reconcileSiteIntegrationSessionRules(enablement).catch((error) => {
+      void this.reconcile(enablement).catch((error) => {
         logger.warn(
           "Failed to reconcile DNR rules after enablement change",
           error
@@ -367,8 +397,8 @@ export function initializeSiteIntegrationSessionRuleManager(input?: {
     const reconcileAfterPermissionChange = (
       permissions: chrome.permissions.Permissions
     ) => {
-      if (!affectsManagedSessionRules(permissions)) return
-      void reconcileSiteIntegrationSessionRules().catch((error) => {
+      if (!this.affectsManagedSessionRules(permissions)) return
+      void this.reconcile().catch((error) => {
         logger.warn(
           "Failed to reconcile DNR rules after permission change",
           error
@@ -379,93 +409,94 @@ export function initializeSiteIntegrationSessionRuleManager(input?: {
     chrome.permissions?.onRemoved?.addListener(reconcileAfterPermissionChange)
 
     chrome.alarms?.onAlarm?.addListener((alarm) => {
-      if (alarm.name !== SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM) {
-        return
-      }
-      retryAlarmScheduled = false
-      void reconcileSiteIntegrationSessionRules().catch((error) => {
+      if (alarm.name !== SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM) return
+      this.retryAlarmScheduled = false
+      void this.reconcile().catch((error) => {
         logger.warn("Failed to reconcile DNR rules from retry alarm", error)
       })
     })
-    listenersRegistered = true
+    this.continuation.registerListeners()
+    this.listenersRegistered = true
   }
 
-  initialReconciliation ??= reconcileSiteIntegrationSessionRules().catch(
-    (error) => {
-      initialReconciliation = null
+  start(): Promise<void> {
+    this.initialReconciliation ??= this.reconcile().catch((error) => {
+      this.initialReconciliation = null
       throw error
-    }
-  )
-  return initialReconciliation
-}
-
-/**
- * Block only providers that declare session-scoped network rules. A fresh
- * enablement read closes enable-and-dispatch races; DNR is rewritten only when
- * that input changed or the current service-worker revision is dirty.
- */
-export async function ensureSiteIntegrationNetworkReady(
-  siteIntegrationId: string
-): Promise<void> {
-  const manifest = getSiteIntegrationManifestById(siteIntegrationId)
-  const declarations = manifest?.network?.sessionRefererRules ?? []
-  if (declarations.length === 0) return
-
-  let currentEnablement: SiteIntegrationEnablementMap
-  try {
-    currentEnablement = await siteIntegrationEnablementService.getAll()
-  } catch (error) {
-    let cause = error
-    try {
-      // Route the failure through reconciliation so the durable retry alarm is
-      // armed for the task that is about to wait.
-      await reconcileSiteIntegrationSessionRules()
-    } catch (reconciliationError) {
-      cause = reconciliationError
-    }
-    throw new ProviderNetworkPolicyPendingError(siteIntegrationId, cause)
+    })
+    return this.initialReconciliation
   }
 
-  try {
-    if (!hasSameEnablement(lastSuccessfulEnablement, currentEnablement)) {
-      await reconcileSiteIntegrationSessionRules(currentEnablement)
-    } else if (
-      activeReconciliation ||
-      reconciliationDirty ||
-      lastSuccessfulAt === null ||
-      successfulRevision < requestedRevision
-    ) {
-      await (activeReconciliation ??
-        reconcileSiteIntegrationSessionRules(currentEnablement))
-    }
-  } catch (error) {
-    throw new ProviderNetworkPolicyPendingError(siteIntegrationId, error)
-  }
+  /**
+   * Block only providers that declare session-scoped network rules. A fresh
+   * enablement read closes enable-and-dispatch races; DNR is rewritten only when
+   * that input changed or the current service-worker revision is dirty.
+   */
+  async ensureNetworkReady(siteIntegrationId: string): Promise<void> {
+    const manifest = getDefinition(siteIntegrationId)
+    const declarations = manifest?.sessionRefererRules ?? []
+    if (declarations.length === 0) return
 
-  const missingRuleIds = declarations
-    .map((declaration) => declaration.id)
-    .filter((ruleId) => !installedManagedRuleIds.has(ruleId))
-  if (missingRuleIds.length > 0) {
-    if (lastSuccessfulEnablement?.[siteIntegrationId] === false) {
-      throw new ProviderNetworkPolicyActionRequiredError(
-        siteIntegrationId,
-        "integration_disabled"
-      )
-    }
-    let hostAccess: boolean
+    let currentEnablement: SiteIntegrationEnablementMap
     try {
-      hostAccess = manifest ? await hasRequiredHostAccess(manifest) : false
+      currentEnablement = await this.service.getAll()
+    } catch (error) {
+      let cause = error
+      try {
+        // Route the failure through reconciliation so the durable retry alarm is
+        // armed for the task that is about to wait.
+        await this.reconcile()
+      } catch (reconciliationError) {
+        cause = reconciliationError
+      }
+      throw new ProviderNetworkPolicyPendingError(siteIntegrationId, cause)
+    }
+
+    try {
+      if (
+        !this.hasSameEnablement(
+          this.lastSuccessfulEnablement,
+          currentEnablement
+        )
+      ) {
+        await this.reconcile(currentEnablement)
+      } else if (
+        this.activeReconciliation ||
+        this.reconciliationDirty ||
+        this.lastSuccessfulAt === null ||
+        this.successfulRevision < this.requestedRevision
+      ) {
+        await (this.activeReconciliation ?? this.reconcile(currentEnablement))
+      }
     } catch (error) {
       throw new ProviderNetworkPolicyPendingError(siteIntegrationId, error)
     }
-    if (!hostAccess) {
-      throw new ProviderNetworkPolicyActionRequiredError(
-        siteIntegrationId,
-        "host_permission_denied"
+
+    const missingRuleIds = declarations
+      .map((declaration) => declaration.id)
+      .filter((ruleId) => !this.installedManagedRuleIds.has(ruleId))
+    if (missingRuleIds.length > 0) {
+      if (!isEnabled(siteIntegrationId, this.lastSuccessfulEnablement ?? {})) {
+        throw new ProviderNetworkPolicyActionRequiredError(
+          siteIntegrationId,
+          "integration_disabled"
+        )
+      }
+      let hostAccess: boolean
+      try {
+        hostAccess = manifest ? await hasRequiredHostAccess(manifest) : false
+      } catch (error) {
+        throw new ProviderNetworkPolicyPendingError(siteIntegrationId, error)
+      }
+      if (!hostAccess) {
+        throw new ProviderNetworkPolicyActionRequiredError(
+          siteIntegrationId,
+          "host_permission_denied"
+        )
+      }
+      throw new Error(
+        `Provider network policy is not ready for ${siteIntegrationId}; missing DNR rule(s): ${missingRuleIds.join(", ")}`
       )
     }
-    throw new Error(
-      `Provider network policy is not ready for ${siteIntegrationId}; missing DNR rule(s): ${missingRuleIds.join(", ")}`
-    )
   }
 }

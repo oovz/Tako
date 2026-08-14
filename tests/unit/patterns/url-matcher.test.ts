@@ -14,7 +14,7 @@ import {
   matchUrl,
   isSupportedDomain,
 } from "@/src/site-integrations/url-matcher"
-import { setUserSiteIntegrationEnablement } from "@/src/site-integrations/registry"
+import { setEnablementMap as setUserSiteIntegrationEnablement } from "@/src/site-integrations/catalog"
 
 function expectMatchedUrl(
   url: string,

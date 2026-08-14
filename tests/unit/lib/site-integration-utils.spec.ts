@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  filterValidImageUrls,
   normalizeAllowedImageMimeType,
   parseChapterNumber,
   parseRateLimitRetryAfterHeader,
@@ -76,8 +75,10 @@ describe("site integration utils", () => {
       expect(normalizeAllowedImageMimeType("image/gif")).toBe("image/gif")
     })
 
-    it("accepts image/avif", () => {
-      expect(normalizeAllowedImageMimeType("image/avif")).toBe("image/avif")
+    it("rejects image/avif until bounded dimension support exists", () => {
+      expect(() => normalizeAllowedImageMimeType("image/avif")).toThrow(
+        "Unsupported MIME type"
+      )
     })
 
     it("rejects text/html", () => {
@@ -165,26 +166,6 @@ describe("site integration utils", () => {
       expect(parseVolumeInfo("Special Edition")).toEqual({
         volumeLabel: "Special Edition",
       })
-    })
-  })
-
-  describe("filterValidImageUrls", () => {
-    it("keeps only absolute HTTP(S) image candidates", () => {
-      expect(
-        filterValidImageUrls([
-          "https://cdn.example.com/page1.jpg",
-          "http://cdn.example.com/page2.webp",
-          "data:image/png;base64,AAAA",
-          "blob:chrome-extension://extension-id/file",
-          "file:///C:/Users/example/page.jpg",
-          "chrome-extension://extension-id/page.jpg",
-          "not-a-url",
-          "",
-        ])
-      ).toEqual([
-        "https://cdn.example.com/page1.jpg",
-        "http://cdn.example.com/page2.webp",
-      ])
     })
   })
 

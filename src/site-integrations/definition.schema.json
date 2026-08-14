@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tako.invalid/site-integration-definition.schema.json",
+  "title": "Tako site integration definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "author",
+    "version",
+    "maturity",
+    "shipped",
+    "enabledByDefault",
+    "implementationType",
+    "volatility",
+    "authentication",
+    "regions",
+    "accountConstraints",
+    "patterns",
+    "requiredOrigins",
+    "optionalOrigins",
+    "policyDefaults",
+    "retryOwner",
+    "pageProbe",
+    "runtimes",
+    "resolution",
+    "endpointPolicies",
+    "dynamicOrigins",
+    "sessionRefererRules",
+    "customSettings",
+    "fixtures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "author": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "maturity": { "enum": ["experimental", "stable"] },
+    "shipped": { "type": "boolean" },
+    "enabledByDefault": { "type": "boolean" },
+    "implementationType": {
+      "enum": ["official-api", "unofficial-api", "dom-scraping", "hybrid"]
+    },
+    "volatility": { "enum": ["low", "medium", "high"] },
+    "authentication": { "enum": ["anonymous", "browser-session"] },
+    "regions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "accountConstraints": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domains", "seriesMatches"],
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "seriesMatches": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "excludeMatches": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "requiredOrigins": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "optionalOrigins": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+      "uniqueItems": true
+    },
+    "policyDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "chapter"],
+      "properties": {
+        "image": { "$ref": "#/$defs/ratePolicy" },
+        "chapter": { "$ref": "#/$defs/ratePolicy" }
+      }
+    },
+    "retryOwner": { "enum": ["platform", "provider"] },
+    "pageProbe": { "enum": ["none", "optional", "required"] },
+    "runtimes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["background", "offscreen", "dispatchContext"],
+      "properties": {
+        "background": { "type": "boolean" },
+        "offscreen": { "type": "boolean" },
+        "dispatchContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["none", "optional", "required"] },
+            "schemaVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seriesStrategies",
+        "chapterStrategies",
+        "imageStrategies",
+        "imageTransform"
+      ],
+      "properties": {
+        "seriesStrategies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "chapterStrategies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "imageStrategies": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "imageTransform": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "estimatedCostMs"],
+          "properties": {
+            "kind": { "enum": ["none", "integrated-descramble"] },
+            "estimatedCostMs": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "endpointPolicies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/endpointPolicy" }
+    },
+    "dynamicOrigins": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dynamicOrigin" }
+    },
+    "sessionRefererRules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sessionRefererRule" }
+    },
+    "customSettings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/settingsField" }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "liveFreshnessDays"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "liveFreshnessDays": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "ratePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "delayMs"],
+      "properties": {
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "delayMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "endpointPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "purpose",
+        "origins",
+        "originKind",
+        "credentials",
+        "redirect",
+        "responseType",
+        "maxResponseBytes"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "origins": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "originKind": { "enum": ["fixed", "provider-issued"] },
+        "credentials": { "enum": ["omit", "include"] },
+        "redirect": { "enum": ["error", "follow", "manual"] },
+        "responseType": { "enum": ["json", "text", "bytes", "html"] },
+        "maxResponseBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "dynamicOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpointId",
+        "sourceEndpointId",
+        "allowedOriginPattern",
+        "validator"
+      ],
+      "properties": {
+        "endpointId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "sourceEndpointId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "allowedOriginPattern": {
+          "type": "string",
+          "pattern": "^https://.+/\\*$"
+        },
+        "validator": { "const": "public-https" }
+      }
+    },
+    "sessionRefererRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "requestDomains", "resourceTypes", "referer"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 41000, "maximum": 41999 },
+        "priority": { "type": "integer", "minimum": 1 },
+        "requestDomains": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "resourceTypes": {
+          "type": "array",
+          "items": { "enum": ["xmlhttprequest", "other"] },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "referer": { "type": "string", "format": "uri", "pattern": "^https://" }
+      }
+    },
+    "settingsField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "labelKey", "type", "defaultValue"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "labelKey": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-zA-Z0-9_]*$"
+        },
+        "descriptionKey": {
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9_]*$"
+        },
+        "type": {
+          "enum": ["boolean", "string", "number", "select", "multiselect"]
+        },
+        "defaultValue": {},
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["labelKey", "value"],
+            "properties": {
+              "labelKey": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z][a-zA-Z0-9_]*$"
+              },
+              "value": { "type": "string", "minLength": 1 }
+            }
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

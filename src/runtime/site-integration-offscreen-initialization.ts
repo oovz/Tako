@@ -1,14 +1,10 @@
 import logger from "@/src/runtime/logger"
-import { offscreenSiteAdapters } from "@/src/runtime/generated/site-integration-offscreen-registry"
 import {
   initializeSiteIntegrationEnablement,
-  registerSiteIntegrationRuntime,
   type SiteIntegrationEnablementLoader,
 } from "@/src/runtime/site-integration-initialization"
-import type {
-  GetSiteIntegrationEnablementMessage,
-  GetSiteIntegrationEnablementResponse,
-} from "@/src/types/runtime-command-messages"
+import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 
 let offscreenInitialized = false
 let offscreenInitPromise: Promise<void> | null = null
@@ -27,10 +23,10 @@ let offscreenInitPromise: Promise<void> | null = null
  * the user explicitly disabled.
  */
 const offscreenEnablementLoader: SiteIntegrationEnablementLoader = async () => {
-  const response = await chrome.runtime.sendMessage<
-    GetSiteIntegrationEnablementMessage,
-    GetSiteIntegrationEnablementResponse
-  >({ type: "GET_SITE_INTEGRATION_ENABLEMENT" })
+  const response = await sendRuntimeMessage({
+    target: "background",
+    type: "GET_SITE_INTEGRATION_ENABLEMENT",
+  })
 
   if (!response || !response.success) {
     throw new Error(
@@ -43,6 +39,10 @@ const offscreenEnablementLoader: SiteIntegrationEnablementLoader = async () => {
   return response.enablement
 }
 
+export function loadOffscreenSiteIntegrationEnablement(): Promise<SiteIntegrationEnablementMap> {
+  return offscreenEnablementLoader()
+}
+
 async function registerOffscreenSiteIntegrations(): Promise<void> {
   if (offscreenInitialized) {
     return
@@ -52,10 +52,6 @@ async function registerOffscreenSiteIntegrations(): Promise<void> {
 
   // Offscreen must NOT read chrome.storage directly; route through background.
   await initializeSiteIntegrationEnablement(offscreenEnablementLoader)
-
-  for (const integration of offscreenSiteAdapters) {
-    registerSiteIntegrationRuntime(integration)
-  }
 
   offscreenInitialized = true
   logger.info("✅ Offscreen site integrations initialized")

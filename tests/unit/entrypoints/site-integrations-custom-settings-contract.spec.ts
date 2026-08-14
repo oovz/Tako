@@ -15,18 +15,17 @@ import { SiteIntegrationCard } from "@/entrypoints/options/components/SiteIntegr
 import { SiteIntegrationManagementTab } from "@/entrypoints/options/tabs/SiteIntegrationManagementTab"
 import {
   assertValidSettingsFieldSchema,
-  getSiteIntegrationManifestById,
-  type SettingsFieldSchema,
-} from "@/src/site-integrations/manifest"
-import { siteIntegrationRegistry } from "@/src/runtime/site-integration-registry"
-import { DEFAULT_SETTINGS } from "@/src/storage/default-settings"
+  getDefinition,
+} from "@/src/site-integrations/catalog"
+import type { SiteIntegrationSettingsField as SettingsFieldSchema } from "@/src/site-integrations/definition-types"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
 describe("Site integration custom settings contract", () => {
   it("requires a non-empty, internally consistent option set", () => {
     expect(() =>
       assertValidSettingsFieldSchema({
         id: "languages",
-        label: "Languages",
+        labelKey: "mangadexSetting_chapterLanguageFilterLabel",
         type: "multiselect",
         defaultValue: [],
       } as unknown as SettingsFieldSchema)
@@ -35,29 +34,40 @@ describe("Site integration custom settings contract", () => {
     expect(() =>
       assertValidSettingsFieldSchema({
         id: "quality",
-        label: "Quality",
+        labelKey: "mangadexSetting_imageQualityLabel",
         type: "select",
         defaultValue: "missing",
-        options: [{ label: "Data saver", value: "data-saver" }],
+        options: [
+          {
+            labelKey: "mangadexSetting_imageQualityOption_dataSaver",
+            value: "data-saver",
+          },
+        ],
       })
     ).toThrow(/Invalid value/)
 
     expect(() =>
       assertValidSettingsFieldSchema({
         id: "languages",
-        label: "Languages",
+        labelKey: "mangadexSetting_chapterLanguageFilterLabel",
         type: "multiselect",
         defaultValue: [],
         options: [
-          { label: "English", value: "en" },
-          { label: "English duplicate", value: "en" },
+          {
+            labelKey: "mangadexSetting_chapterLanguageFilterOption_en",
+            value: "en",
+          },
+          {
+            labelKey: "mangadexSetting_chapterLanguageFilterOption_en",
+            value: "en",
+          },
         ],
       })
     ).toThrow(/duplicate option value/)
   })
 
   it("renders dynamic custom setting controls with per-setting enable toggle", () => {
-    const mangadex = getSiteIntegrationManifestById("mangadex")
+    const mangadex = getDefinition("mangadex")
     expect(mangadex).toBeDefined()
 
     const html = renderToStaticMarkup(
@@ -66,7 +76,7 @@ describe("Site integration custom settings contract", () => {
           id: mangadex!.id,
           name: mangadex!.name,
           domains: mangadex!.patterns.domains,
-          customSettings: mangadex!.customSettings,
+          customSettings: [...mangadex!.customSettings],
         },
         isEnabled: true,
         override: undefined,
@@ -91,8 +101,6 @@ describe("Site integration custom settings contract", () => {
   })
 
   it("renders the Site Integrations tab from manifest data before registry initialization", () => {
-    siteIntegrationRegistry.clear()
-
     const html = renderToStaticMarkup(
       React.createElement(SiteIntegrationManagementTab, {
         overrides: {},

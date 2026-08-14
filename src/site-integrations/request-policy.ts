@@ -1,7 +1,6 @@
-import {
-  getSiteIntegrationManifestById,
-  type SiteIntegrationManifest,
-} from "./manifest"
+import { ProviderContractError } from "./provider-contract-error"
+import { siteIntegrationCatalogById } from "@/src/runtime/generated/site-integration-catalog"
+import type { SiteIntegrationEndpointPolicy } from "./definition-types"
 
 function parseIpv4(hostname: string): number[] | null {
   const parts = hostname.split(".")
@@ -93,17 +92,17 @@ export function assertSafePublicHttpsUrl(
   try {
     parsed = new URL(rawUrl)
   } catch {
-    throw new Error(`Blocked malformed ${purpose} URL.`)
+    throw new ProviderContractError(`Blocked malformed ${purpose} URL.`)
   }
 
   if (parsed.protocol !== "https:") {
-    throw new Error(`Blocked non-HTTPS ${purpose} URL.`)
+    throw new ProviderContractError(`Blocked non-HTTPS ${purpose} URL.`)
   }
   if (parsed.username || parsed.password) {
-    throw new Error(`Blocked credentialed ${purpose} URL.`)
+    throw new ProviderContractError(`Blocked credentialed ${purpose} URL.`)
   }
 
-  const hostname = parsed.hostname.toLowerCase()
+  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "")
   if (
     hostname === "localhost" ||
     hostname.endsWith(".localhost") ||
@@ -112,16 +111,16 @@ export function assertSafePublicHttpsUrl(
     hostname === "home.arpa" ||
     hostname.endsWith(".home.arpa")
   ) {
-    throw new Error(`Blocked non-public ${purpose} host.`)
+    throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
   }
 
   const ipv4 = parseIpv4(hostname)
   if (ipv4 && isNonPublicIpv4(ipv4)) {
-    throw new Error(`Blocked non-public ${purpose} host.`)
+    throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
   }
   const ipv6 = parseIpv6(hostname)
   if (ipv6 && isNonPublicIpv6(ipv6)) {
-    throw new Error(`Blocked non-public ${purpose} host.`)
+    throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
   }
 
   return parsed
@@ -130,6 +129,90 @@ export function assertSafePublicHttpsUrl(
 function globPathMatches(pathname: string, glob: string): boolean {
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")
   return new RegExp(`^${escaped}$`).test(pathname)
+}
+
+function matchesEndpointOriginPattern(
+  parsed: URL,
+  policy: SiteIntegrationEndpointPolicy,
+  pattern: string
+): boolean {
+  // A provider-issued endpoint may deliberately receive an origin selected by
+  // the provider. The definition still has to opt into the broad wildcard;
+  // public-HTTPS validation below remains mandatory.
+  if (pattern === "https://*/*" && policy.originKind === "provider-issued") {
+    return parsed.protocol === "https:"
+  }
+  return matchesRequiredOriginPattern(parsed, pattern)
+}
+
+function requireEndpointPolicy(
+  integrationId: string,
+  endpointId: string
+): SiteIntegrationEndpointPolicy {
+  const definition = siteIntegrationCatalogById[integrationId]
+  if (!definition || !definition.shipped) {
+    throw new ProviderContractError(
+      `Unknown or unshipped site integration: ${integrationId}`
+    )
+  }
+  const endpoint = definition.endpointPolicies.find(
+    (candidate) => candidate.id === endpointId
+  )
+  if (!endpoint) {
+    throw new ProviderContractError(
+      `Unknown endpoint "${endpointId}" for site integration "${integrationId}".`
+    )
+  }
+  return endpoint
+}
+
+export function getIntegrationEndpointPolicy(
+  integrationId: string,
+  endpointId: string
+): SiteIntegrationEndpointPolicy {
+  return requireEndpointPolicy(integrationId, endpointId)
+}
+
+export function assertIntegrationEndpointRequestUrl(
+  integrationId: string,
+  endpointId: string,
+  rawUrl: string
+): URL {
+  const endpoint = requireEndpointPolicy(integrationId, endpointId)
+  const parsed = assertSafePublicHttpsUrl(rawUrl, `${endpoint.purpose} request`)
+  if (
+    !endpoint.origins.some((pattern) =>
+      matchesEndpointOriginPattern(parsed, endpoint, pattern)
+    )
+  ) {
+    throw new ProviderContractError(
+      `Blocked untrusted ${endpoint.purpose} request URL.`
+    )
+  }
+  return parsed
+}
+
+export function assertIntegrationEndpointResponseUrl(
+  integrationId: string,
+  endpointId: string,
+  requestUrl: string,
+  responseUrl: string | undefined
+): URL {
+  const endpoint = requireEndpointPolicy(integrationId, endpointId)
+  const parsed = assertSafePublicHttpsUrl(
+    responseUrl?.trim() ? responseUrl : requestUrl,
+    `${endpoint.purpose} response`
+  )
+  if (
+    !endpoint.origins.some((pattern) =>
+      matchesEndpointOriginPattern(parsed, endpoint, pattern)
+    )
+  ) {
+    throw new ProviderContractError(
+      `Blocked untrusted ${endpoint.purpose} response URL.`
+    )
+  }
+  return parsed
 }
 
 export function matchesRequiredOriginPattern(
@@ -158,46 +241,12 @@ export function matchesRequiredOriginPattern(
   )
 }
 
-function requireManifest(integrationId: string): SiteIntegrationManifest {
-  const manifest = getSiteIntegrationManifestById(integrationId)
-  if (!manifest || !manifest.shipped) {
-    throw new Error(`Unknown or unshipped site integration: ${integrationId}`)
-  }
-  return manifest
-}
-
-export function assertIntegrationRequestUrl(
+export function createIntegrationEndpointUrlAssertion(
   integrationId: string,
-  rawUrl: string
-): URL {
-  const manifest = requireManifest(integrationId)
-  const parsed = assertSafePublicHttpsUrl(rawUrl, `${manifest.name} request`)
-  if (
-    !manifest.requiredOrigins.some((pattern) =>
-      matchesRequiredOriginPattern(parsed, pattern)
-    )
-  ) {
-    throw new Error(`Blocked untrusted ${manifest.name} request URL.`)
-  }
-  return parsed
-}
-
-export function assertIntegrationResponseUrl(
-  integrationId: string,
-  requestUrl: string,
-  responseUrl: string | undefined
-): URL {
-  return assertIntegrationRequestUrl(
-    integrationId,
-    responseUrl?.trim() ? responseUrl : requestUrl
-  )
-}
-
-export function createIntegrationUrlAssertion(
-  integrationId: string
+  endpointId: string
 ): (url: string) => void {
   return (url) => {
-    assertIntegrationRequestUrl(integrationId, url)
+    assertIntegrationEndpointRequestUrl(integrationId, endpointId, url)
   }
 }
 
@@ -209,7 +258,9 @@ export function createSameOriginDynamicAssetAssertion(
   return (rawUrl) => {
     const parsed = assertSafePublicHttpsUrl(rawUrl, purpose)
     if (parsed.origin !== initial.origin) {
-      throw new Error(`Blocked cross-origin redirect for ${purpose}.`)
+      throw new ProviderContractError(
+        `Blocked cross-origin redirect for ${purpose}.`
+      )
     }
   }
 }

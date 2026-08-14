@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   getBackgroundSiteAdapterById: vi.fn(),
-  fetchSeriesMetadata: vi.fn(),
-  fetchChapterList: vi.fn(),
+  resolveSeriesData: vi.fn(),
 }))
 
 vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
@@ -11,108 +10,82 @@ vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
 }))
 
 import { resolveSiteIntegrationSeriesData } from "@/src/runtime/resolve-site-integration-series-data"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
+import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
+
+const rateLimitService = {
+  resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
+  scheduleForIntegrationScope: vi.fn(
+    async <T>(_integrationId: string, _scope: string, task: () => Promise<T>) =>
+      task()
+  ),
+  cleanupRateLimiters: vi.fn(),
+} as unknown as RateLimitService
+const siteIntegrationSettingsReader: SiteIntegrationSettingsReader = {
+  getAll: vi.fn(async () => ({})),
+  getForSite: vi.fn(async () => ({})),
+}
 
 describe("resolveSiteIntegrationSeriesData", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getBackgroundSiteAdapterById.mockResolvedValue({
-      background: {
-        series: {
-          fetchSeriesMetadata: mocks.fetchSeriesMetadata,
-          fetchChapterList: mocks.fetchChapterList,
-        },
-      },
+      background: { series: { resolveSeriesData: mocks.resolveSeriesData } },
     })
   })
 
-  it("starts metadata and chapter requests together and emits metadata while chapters are pending", async () => {
-    let resolveMetadata:
-      ((value: { title: string; authors: string[] }) => void) | undefined
-    let resolveChapters:
-      ((value: { chapters: never[]; volumes: never[] }) => void) | undefined
-    mocks.fetchSeriesMetadata.mockReturnValue(
-      new Promise((resolve) => {
-        resolveMetadata = resolve
-      })
-    )
-    mocks.fetchChapterList.mockReturnValue(
-      new Promise((resolve) => {
-        resolveChapters = resolve
-      })
-    )
-    const onPartial = vi.fn(async () => undefined)
-
-    const resolution = resolveSiteIntegrationSeriesData({
-      siteIntegrationId: "generic-site",
-      seriesId: "series-1",
-      onPartial,
-    })
-
-    await vi.waitFor(() => {
-      expect(mocks.fetchSeriesMetadata).toHaveBeenCalledOnce()
-      expect(mocks.fetchChapterList).toHaveBeenCalledOnce()
-    })
-    resolveMetadata?.({ title: "Series", authors: [] })
-    await vi.waitFor(() =>
-      expect(onPartial).toHaveBeenCalledWith({
-        seriesId: "series-1",
-        seriesMetadata: { title: "Series", authors: [] },
-        chaptersLoading: true,
-      })
-    )
-
-    resolveChapters?.({ chapters: [], volumes: [] })
-    await expect(resolution).resolves.toMatchObject({
-      seriesId: "series-1",
-      seriesMetadata: { title: "Series", authors: [] },
-      chapterList: { chapters: [], volumes: [] },
-    })
-  })
-
-  it("returns chapter data when metadata fails", async () => {
-    mocks.fetchSeriesMetadata.mockRejectedValue(new Error("metadata failed"))
-    mocks.fetchChapterList.mockResolvedValue({
-      chapters: [],
-      volumes: [],
-    })
+  it("delegates the canonical resolver with the complete current input", async () => {
+    const controller = new AbortController()
+    const onPartial = vi.fn()
+    const expected = { seriesId: "series-1", chapterList: { chapters: [] } }
+    mocks.resolveSeriesData.mockResolvedValue(expected)
 
     await expect(
       resolveSiteIntegrationSeriesData({
-        siteIntegrationId: "generic-site",
+        siteIntegrationId: "custom-site",
+        seriesUrl: "https://example.test/series/1",
         seriesId: "series-1",
+        language: "en",
+        pageProbeData: { edition: "web" },
+        signal: controller.signal,
+        rateLimitService,
+        siteIntegrationSettingsReader,
+        onPartial,
       })
-    ).resolves.toMatchObject({
+    ).resolves.toEqual(expected)
+
+    expect(mocks.resolveSeriesData).toHaveBeenCalledWith({
+      seriesUrl: "https://example.test/series/1",
       seriesId: "series-1",
-      chapterList: { chapters: [], volumes: [] },
-      metadataError: "metadata failed",
+      language: "en",
+      pageProbeData: { edition: "web" },
+      signal: controller.signal,
+      rateLimitService,
+      siteIntegrationSettingsReader,
+      onPartial,
     })
   })
 
-  it("returns metadata and its partial result when chapters fail", async () => {
-    mocks.fetchSeriesMetadata.mockResolvedValue({
-      title: "Series",
-      authors: [],
-    })
-    let rejectChapters: ((reason: Error) => void) | undefined
-    mocks.fetchChapterList.mockReturnValue(
-      new Promise((_, reject) => {
-        rejectChapters = reject
+  it("rejects when no series URL or ID is supplied", async () => {
+    await expect(
+      resolveSiteIntegrationSeriesData({
+        siteIntegrationId: "custom-site",
+        rateLimitService,
+        siteIntegrationSettingsReader,
       })
-    )
-    const onPartial = vi.fn(async () => undefined)
+    ).rejects.toThrow("requires a seriesUrl or seriesId")
+    expect(mocks.resolveSeriesData).not.toHaveBeenCalled()
+  })
 
-    const resolution = resolveSiteIntegrationSeriesData({
-      siteIntegrationId: "generic-site",
-      seriesId: "series-1",
-      onPartial,
-    })
-    await vi.waitFor(() => expect(onPartial).toHaveBeenCalledOnce())
-    rejectChapters?.(new Error("chapters failed"))
-
-    await expect(resolution).resolves.toMatchObject({
-      seriesId: "series-1",
-      seriesMetadata: { title: "Series", authors: [] },
-      chapterListError: "chapters failed",
-    })
+  it("rejects when the provider has no canonical resolver", async () => {
+    mocks.getBackgroundSiteAdapterById.mockResolvedValue({ background: {} })
+    await expect(
+      resolveSiteIntegrationSeriesData({
+        siteIntegrationId: "custom-site",
+        seriesId: "series-1",
+        rateLimitService,
+        siteIntegrationSettingsReader,
+      })
+    ).rejects.toThrow("does not provide background series loaders")
   })
 })
