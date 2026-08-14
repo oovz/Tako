@@ -1,50 +1,36 @@
-import { isRecord } from "@/src/shared/type-guards"
+import { z } from "zod"
 import type {
   DestinationIssue,
   DestinationIssueKind,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 
-const DESTINATION_ISSUE_KINDS = new Set<DestinationIssueKind>([
+const DESTINATION_ISSUE_KINDS = [
   "fsa_permission_required",
   "fsa_folder_missing",
   "fsa_write_failed",
   "fsa_unsupported",
   "disk_full",
-])
+] as const satisfies readonly DestinationIssueKind[]
 
-export function normalizeDestinationIssues(raw: unknown): DestinationIssue[] {
-  if (!Array.isArray(raw)) return []
+export const DestinationIssueSchema = z.strictObject({
+  id: z.string().min(1),
+  taskId: z.string().min(1),
+  chapterId: z.string().min(1).optional(),
+  kind: z.enum(DESTINATION_ISSUE_KINDS),
+  occurredAt: z.number().finite().nonnegative(),
+  acknowledgedAt: z.number().finite().nonnegative().optional(),
+})
 
-  return raw
-    .map((candidate): DestinationIssue | null => {
-      if (!isRecord(candidate)) return null
-      if (
-        typeof candidate.id !== "string" ||
-        typeof candidate.taskId !== "string" ||
-        typeof candidate.kind !== "string" ||
-        !DESTINATION_ISSUE_KINDS.has(candidate.kind as DestinationIssueKind) ||
-        typeof candidate.occurredAt !== "number"
-      ) {
-        return null
-      }
+export const DestinationIssuesSchema = z.array(DestinationIssueSchema)
 
-      return {
-        id: candidate.id,
-        taskId: candidate.taskId,
-        chapterId:
-          typeof candidate.chapterId === "string"
-            ? candidate.chapterId
-            : undefined,
-        kind: candidate.kind as DestinationIssueKind,
-        occurredAt: candidate.occurredAt,
-        acknowledgedAt:
-          typeof candidate.acknowledgedAt === "number"
-            ? candidate.acknowledgedAt
-            : undefined,
-      }
-    })
-    .filter((issue): issue is DestinationIssue => issue !== null)
-    .sort((left, right) => left.occurredAt - right.occurredAt)
+/**
+ * Parse the current durable destination issue document. An absent key denotes
+ * an empty issue list; a present malformed value is a durable-state failure.
+ */
+export function parseDestinationIssues(raw: unknown): DestinationIssue[] {
+  if (raw === undefined) return []
+  const parsed = DestinationIssuesSchema.parse(raw)
+  return structuredClone(parsed)
 }
 
 export function getDestinationIssueMessageKey(

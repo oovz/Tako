@@ -5,6 +5,8 @@
  * Provides accurate, smooth progress tracking for downloads
  */
 
+import { getDefinition } from "@/src/site-integrations/catalog"
+
 export interface ProgressPhase {
   name: "startup" | "downloading" | "finalizing"
   basePercentage: number
@@ -34,17 +36,13 @@ export interface ProgressCostContext {
   destination: "downloads-api" | "file-system-access"
 }
 
-const TRANSFORM_COST_BY_INTEGRATION: Record<string, number> = {
-  "pixiv-comic": 4_000,
-  shonenjumpplus: 3_000,
-  comicnettai: 3_000,
-}
-
 export function getInitialProgressPhaseCosts(
   context: ProgressCostContext
 ): ProgressPhaseCostProfile {
+  const transform = getDefinition(context.integrationId)?.resolution
+    .imageTransform
   const integratedTransformCost =
-    TRANSFORM_COST_BY_INTEGRATION[context.integrationId] ?? 0
+    transform?.kind === "integrated-descramble" ? transform.estimatedCostMs : 0
   return {
     resolving: 800,
     // Current adapters report an image only after any descrambling has

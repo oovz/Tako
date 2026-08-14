@@ -1,7 +1,7 @@
 import type {
   DownloadTaskState,
   QueueTaskSummary,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 
 export function composeSeriesKey(siteId: string, seriesId: string): string {
   return `${siteId}#${seriesId}`
@@ -29,6 +29,11 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     (task.status === "failed" || task.status === "partial_success"
       ? "unknown"
       : undefined)
+  const hasUnobservableOutput =
+    task.errorCategory === "browser_download_unobservable" ||
+    task.chapters.some(
+      (chapter) => chapter.errorCategory === "browser_download_unobservable"
+    )
 
   return {
     id: task.id,
@@ -38,12 +43,6 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     coverUrl: task.seriesCoverUrl,
     status: task.status,
     activeBlock: task.activeBlock,
-    browserDownloadWait: task.browserDownloadWait
-      ? {
-          ...task.browserDownloadWait,
-          downloadIds: [...task.browserDownloadWait.downloadIds],
-        }
-      : undefined,
     chapters: {
       total: totalChapters,
       completed: completedChapters,
@@ -54,6 +53,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
       completed: task.completed,
     },
     failureCategory,
+    hasUnobservableOutput,
     isRetried: task.isRetried ?? false,
     isRetryTask: task.isRetryTask ?? false,
     lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,

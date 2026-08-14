@@ -27,6 +27,8 @@ export interface VolumeState {
 }
 
 export interface MangaPageState {
+  /** Exact series-page URL that produced this snapshot. */
+  sourceUrl: string
   siteIntegrationId: string
   mangaId: string
   seriesTitle: string

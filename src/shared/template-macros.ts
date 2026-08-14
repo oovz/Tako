@@ -113,67 +113,20 @@ export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
     requiresMangaMetadata: true,
     category: "manga",
   },
-  // Index macros (always available - 1-indexed position in download queue)
-  {
-    name: "CHAPTER_INDEX",
-    description: "1-indexed position in download queue (always available)",
-    example: "1",
-    requiresMangaMetadata: false,
-    category: "manga",
-  },
-  {
-    name: "CHAPTER_INDEX_PAD2",
-    description: "1-indexed position padded to 2 digits (always available)",
-    example: "01",
-    requiresMangaMetadata: false,
-    category: "manga",
-  },
-  {
-    name: "CHAPTER_INDEX_PAD3",
-    description: "1-indexed position padded to 3 digits (always available)",
-    example: "001",
-    requiresMangaMetadata: false,
-    category: "manga",
-  },
-  // Language macro
-  {
-    name: "LANGUAGE",
-    description: "Chapter language (BCP 47 code)",
-    example: "en",
-    requiresMangaMetadata: true,
-    category: "manga",
-  },
 ] as const
 
 export type TemplateMacroName = (typeof TEMPLATE_MACROS)[number]["name"]
 
 /**
- * Macros that are actually implemented in both template-expander.ts and
- * template-resolver.ts. The full TEMPLATE_MACROS registry includes
- * compatibility tokens (CHAPTER_INDEX*, LANGUAGE) that are declared for
- * future implementation but not yet populated in final paths.
- * validateTemplateMacros checks against this set so users get a clear
- * validation error instead of a silent runtime failure.
+ * Macros implemented by both template-expander.ts and template-resolver.ts.
+ * The registry itself is the single source of truth for validation and
+ * preview metadata.
  */
-export const IMPLEMENTED_MACRO_NAMES: readonly string[] = [
-  "YYYY",
-  "MM",
-  "DD",
-  "PUBLISHER",
-  "INTEGRATION_NAME",
-  "SERIES_TITLE",
-  "CHAPTER_TITLE",
-  "CHAPTER_NUMBER",
-  "VOLUME_NUMBER",
-  "CHAPTER_NUMBER_PAD2",
-  "CHAPTER_NUMBER_PAD3",
-  "VOLUME_NUMBER_PAD2",
-  "VOLUME_TITLE",
-] as const
+export const IMPLEMENTED_MACRO_NAMES: readonly string[] = TEMPLATE_MACROS.map(
+  (macro) => macro.name
+)
 
-/**
- * Get all macro names as array (full registry, including unimplemented tokens)
- */
+/** Get all registered macro names as an array. */
 export function getSupportedMacroNames(): TemplateMacroName[] {
   return TEMPLATE_MACROS.map((macro) => macro.name)
 }

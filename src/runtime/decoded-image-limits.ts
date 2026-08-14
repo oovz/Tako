@@ -2,8 +2,9 @@ import {
   MAX_DECODED_IMAGE_PIXELS,
   MAX_IMAGE_DIMENSION_PX,
 } from "@/src/constants/timeouts"
+import { NonRetryableDownloadError } from "@/src/shared/download-contract"
 
-export class DecodedImageResourceLimitError extends Error {
+export class DecodedImageResourceLimitError extends NonRetryableDownloadError {
   constructor(message: string) {
     super(message)
     this.name = "DecodedImageResourceLimitError"
@@ -65,8 +66,10 @@ function readGifDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
   ) {
     return null
   }
-  return { width: readUint16BE(bytes, 6), height: readUint16BE(bytes, 8) }
+  return { width: readUint16LE(bytes, 6), height: readUint16LE(bytes, 8) }
 }
+
+const MAX_JPEG_METADATA_BYTES = 1024 * 1024
 
 function readJpegDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
   if (!hasBytes(bytes, 0, 2) || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
@@ -77,17 +80,33 @@ function readJpegDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
     0xcf,
   ])
   let offset = 2
-  while (hasBytes(bytes, offset, 3)) {
-    if (bytes[offset] !== 0xff) {
+  while (hasBytes(bytes, offset, 1)) {
+    if (offset - 2 >= MAX_JPEG_METADATA_BYTES || bytes[offset] !== 0xff) {
+      return null
+    }
+    while (
+      hasBytes(bytes, offset, 1) &&
+      bytes[offset] === 0xff &&
+      offset - 2 < MAX_JPEG_METADATA_BYTES
+    ) {
       offset += 1
+    }
+    if (!hasBytes(bytes, offset, 1)) return null
+    const marker = bytes[offset++]
+    if (marker === 0xda || marker === 0xd9) return null
+    if (
+      marker === 0xd8 ||
+      marker === 0x01 ||
+      (marker >= 0xd0 && marker <= 0xd7)
+    ) {
       continue
     }
-    while (bytes[offset] === 0xff) offset += 1
-    const marker = bytes[offset++]
-    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01) continue
     if (!hasBytes(bytes, offset, 2)) return null
     const segmentLength = readUint16BE(bytes, offset)
     if (segmentLength < 2 || !hasBytes(bytes, offset, segmentLength)) {
+      return null
+    }
+    if (offset + segmentLength - 2 > MAX_JPEG_METADATA_BYTES) {
       return null
     }
     if (startOfFrameMarkers.has(marker) && segmentLength >= 7) {
@@ -109,8 +128,16 @@ function readWebpDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
   ) {
     return null
   }
+  const maxMetadataOffset = Math.min(bytes.byteLength, 1024 * 1024)
+  const maxChunks = 4096
+  let chunksScanned = 0
   let offset = 12
-  while (hasBytes(bytes, offset, 8)) {
+  while (
+    offset < maxMetadataOffset &&
+    chunksScanned < maxChunks &&
+    hasBytes(bytes, offset, 8)
+  ) {
+    chunksScanned += 1
     const type = String.fromCharCode(...bytes.subarray(offset, offset + 4))
     const size = readUint32LE(bytes, offset + 4)
     const payload = offset + 8
@@ -148,6 +175,7 @@ function readWebpDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
         }
       }
     }
+    if (payload + size > maxMetadataOffset) return null
     offset = payload + size + (size % 2)
   }
   return null
@@ -157,47 +185,25 @@ function readUint16LE(bytes: Uint8Array, offset: number): number {
   return bytes[offset] | (bytes[offset + 1] << 8)
 }
 
-function readAvifDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
-  let largest: EncodedImageDimensions | null = null
-  for (let offset = 4; hasBytes(bytes, offset, 16); offset += 1) {
-    if (String.fromCharCode(...bytes.subarray(offset, offset + 4)) !== "ispe") {
-      continue
-    }
-    const boxStart = offset - 4
-    const boxSize = readUint32BE(bytes, boxStart)
-    if (boxSize < 20 || !hasBytes(bytes, boxStart, boxSize)) continue
-    const candidate = {
-      width: readUint32BE(bytes, offset + 8),
-      height: readUint32BE(bytes, offset + 12),
-    }
-    if (
-      candidate.width > 0 &&
-      candidate.height > 0 &&
-      (!largest ||
-        candidate.width * candidate.height > largest.width * largest.height)
-    ) {
-      largest = candidate
-    }
-  }
-  return largest
-}
-
 export function readEncodedImageDimensions(
   buffer: ArrayBuffer,
   mimeType: string
 ): EncodedImageDimensions {
+  if (mimeType === "image/avif") {
+    throw new DecodedImageResourceLimitError(
+      "AVIF images are not supported by the bounded dimension preflight"
+    )
+  }
   const bytes = new Uint8Array(buffer)
   const dimensions =
     (mimeType === "image/png" ? readPngDimensions(bytes) : null) ??
     (mimeType === "image/gif" ? readGifDimensions(bytes) : null) ??
     (mimeType === "image/jpeg" ? readJpegDimensions(bytes) : null) ??
     (mimeType === "image/webp" ? readWebpDimensions(bytes) : null) ??
-    (mimeType === "image/avif" ? readAvifDimensions(bytes) : null) ??
     readPngDimensions(bytes) ??
     readGifDimensions(bytes) ??
     readJpegDimensions(bytes) ??
-    readWebpDimensions(bytes) ??
-    readAvifDimensions(bytes)
+    readWebpDimensions(bytes)
   if (!dimensions) {
     throw new DecodedImageResourceLimitError(
       `Encoded ${mimeType} image dimensions are unavailable`

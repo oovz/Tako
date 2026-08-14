@@ -8,7 +8,8 @@ import {
 import logger from "@/src/runtime/logger"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { isRecord } from "@/src/shared/type-guards"
-import type { OffscreenJobStage } from "@/src/types/queue-state"
+import type { OffscreenJobStage } from "@/src/domain/queue/state"
+import { getDefinition } from "@/src/site-integrations/catalog"
 
 const EWMA_ALPHA = 0.25
 const MIN_SAMPLE_MS = 50
@@ -33,11 +34,10 @@ function normalizeEstimates(raw: unknown): PersistedProgressTimingEstimates {
 }
 
 function transformType(context: ProgressCostContext): string {
-  return context.integrationId === "pixiv-comic" ||
-    context.integrationId === "shonenjumpplus" ||
-    context.integrationId === "comicnettai"
-    ? "integrated-descramble"
-    : "none"
+  return (
+    getDefinition(context.integrationId)?.resolution.imageTransform.kind ??
+    "none"
+  )
 }
 
 export function progressTimingEstimateKey(

@@ -1,4 +1,5 @@
 import { MAX_METADATA_RESPONSE_BYTES } from "@/src/constants/timeouts"
+import { NonRetryableDownloadError } from "./download-contract"
 
 const DEFAULT_META_SCAN_BYTES = 1024
 
@@ -131,7 +132,7 @@ export function decodeHtmlBytes(
         : undefined
 
   if (!encoding || !source) {
-    throw new Error(
+    throw new NonRetryableDownloadError(
       "Unable to decode HTML response: no supported charset declaration found in BOM, Content-Type, or <meta charset>"
     )
   }
@@ -145,19 +146,29 @@ export function decodeHtmlBytes(
   } catch (error) {
     const reason =
       error instanceof Error ? error.message : "Unknown decode error"
-    throw new Error(
+    throw new NonRetryableDownloadError(
       `Failed to decode HTML response with declared encoding "${encoding}" from ${source}: ${reason}`,
       { cause: error }
     )
   }
 }
 
-function responseBodyLimitError(maxBytes: number, actualBytes?: number): Error {
-  return new Error(
-    actualBytes === undefined
-      ? `Response body exceeds ${maxBytes} byte limit`
-      : `Response body exceeds ${maxBytes} byte limit (got ${actualBytes})`
-  )
+export class ResponseBodyLimitError extends NonRetryableDownloadError {
+  constructor(maxBytes: number, actualBytes?: number) {
+    super(
+      actualBytes === undefined
+        ? `Response body exceeds ${maxBytes} byte limit`
+        : `Response body exceeds ${maxBytes} byte limit (got ${actualBytes})`
+    )
+    this.name = "ResponseBodyLimitError"
+  }
+}
+
+function responseBodyLimitError(
+  maxBytes: number,
+  actualBytes?: number
+): ResponseBodyLimitError {
+  return new ResponseBodyLimitError(maxBytes, actualBytes)
 }
 
 export async function readResponseBytes(
@@ -169,7 +180,9 @@ export async function readResponseBytes(
     response.headers?.get?.("content-length") ?? Number.NaN
   )
   if (Number.isFinite(contentLength) && contentLength > limit) {
-    throw responseBodyLimitError(limit, contentLength)
+    const error = responseBodyLimitError(limit, contentLength)
+    void response.body?.cancel(error).catch(() => undefined)
+    throw error
   }
 
   if (!response.body) {
@@ -223,8 +236,9 @@ export async function readResponseBytes(
       if (!result.value || result.value.byteLength === 0) continue
       totalBytes += result.value.byteLength
       if (totalBytes > limit) {
-        void reader.cancel()
-        throw responseBodyLimitError(limit, totalBytes)
+        const error = responseBodyLimitError(limit, totalBytes)
+        void reader.cancel(error).catch(() => undefined)
+        throw error
       }
       chunks.push(result.value)
     }

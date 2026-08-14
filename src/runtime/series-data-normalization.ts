@@ -1,9 +1,10 @@
 import { isRecord } from "@/src/shared/type-guards"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import type {
-  InitializeTabPayload,
-  InitializeTabReadyPayload,
-} from "@/src/types/state-action-tab-payloads"
+  ResolvedTabContext,
+  ResolvedTabReadyContext,
+} from "@/src/types/resolved-tab-context"
+import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 import type { VolumeState } from "@/src/types/tab-state"
 
 export interface RawSeriesChapter {
@@ -26,7 +27,8 @@ export interface NormalizedSeriesData {
   volumes: RawSeriesVolume[]
 }
 
-export interface ResolveInitializeTabPayloadInput {
+export interface BuildResolvedTabContextInput {
+  sourceUrl: string
   siteIntegrationId: string
   rawMangaId: string | null
   chapters: RawSeriesChapter[]
@@ -35,6 +37,19 @@ export interface ResolveInitializeTabPayloadInput {
   extractionError?: unknown
   chaptersLoading?: boolean
   chapterListNotice?: "adult-consent-required"
+}
+
+type SeriesMetadataSnapshotInput = SeriesMetadataSnapshot &
+  Partial<Pick<SeriesMetadata, "title">>
+
+export function normalizeSeriesMetadataSnapshot(
+  metadata: SeriesMetadataSnapshotInput | undefined
+): SeriesMetadataSnapshot | undefined {
+  if (!metadata) return undefined
+
+  const snapshot = { ...metadata }
+  delete snapshot.title
+  return snapshot
 }
 
 function normalizeRawChapter(value: unknown): RawSeriesChapter | null {
@@ -114,9 +129,9 @@ export function normalizeFetchedSeriesData(
   }
 }
 
-export function resolveInitializeTabPayload(
-  input: ResolveInitializeTabPayloadInput
-): InitializeTabPayload {
+export function buildResolvedTabContext(
+  input: BuildResolvedTabContextInput
+): ResolvedTabContext {
   const rawMangaId =
     typeof input.rawMangaId === "string" && input.rawMangaId.trim()
       ? input.rawMangaId.trim()
@@ -147,13 +162,21 @@ export function resolveInitializeTabPayload(
   }
 
   const chapters = input.chapters as Array<RawSeriesChapter & { id: string }>
-  const payload: InitializeTabReadyPayload = {
+  const chapterIds = chapters.map((chapter) => chapter.id.trim())
+  if (new Set(chapterIds).size !== chapterIds.length) {
+    return {
+      context: "error",
+      error: "Failed to extract unique stable chapter ids",
+    }
+  }
+  const payload: ResolvedTabReadyContext = {
     context: "ready",
+    sourceUrl: input.sourceUrl,
     siteIntegrationId: input.siteIntegrationId,
     mangaId: rawMangaId,
     seriesTitle,
-    chapters: chapters.map((chapter) => ({
-      id: chapter.id,
+    chapters: chapters.map((chapter, index) => ({
+      id: chapterIds[index],
       url: chapter.url,
       title: chapter.title,
       locked: chapter.locked === true,
@@ -165,7 +188,7 @@ export function resolveInitializeTabPayload(
       language: chapter.language,
     })),
     volumes: input.volumes,
-    metadata: input.seriesMetadata,
+    metadata: normalizeSeriesMetadataSnapshot(input.seriesMetadata),
     chaptersLoading: input.chaptersLoading,
     chapterListNotice: input.chapterListNotice,
   }

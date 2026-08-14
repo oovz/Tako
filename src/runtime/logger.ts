@@ -1,6 +1,6 @@
 // Lightweight structured logger for browser contexts
 // Simplified: uses only logLevel (no separate debugMode flag)
-import type { AdvancedSettings } from "@/src/storage/settings-types"
+import type { AdvancedSettings } from "@/src/domain/settings/types"
 
 type LogLevel = "debug" | "info" | "warn" | "error"
 

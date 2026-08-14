@@ -1,17 +1,13 @@
-import type {
-  OpenOptionsMessage,
-  OpenOptionsResponse,
-} from "@/src/types/runtime-command-messages"
+import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 
 export type OptionsPageTarget = NonNullable<
-  OpenOptionsMessage["payload"]
+  RuntimeMessageRequest<"OPEN_OPTIONS">["payload"]
 >["page"]
 
 export async function openOptionsPage(page?: OptionsPageTarget): Promise<void> {
-  const response = await chrome.runtime.sendMessage<
-    OpenOptionsMessage,
-    OpenOptionsResponse
-  >({
+  const response = await sendRuntimeMessage({
+    target: "background",
     type: "OPEN_OPTIONS",
     payload: page ? { page } : {},
   })

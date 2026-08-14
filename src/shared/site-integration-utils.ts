@@ -1,3 +1,5 @@
+import { NonRetryableDownloadError } from "@/src/shared/download-contract"
+
 export function sanitizeLabel(raw: string): string {
   let cleaned = ""
 
@@ -32,31 +34,11 @@ export function parseChapterNumber(label: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-/**
- * Drop entries that cannot be parsed as absolute HTTP(S) URLs.
- *
- * Every site integration's `processImageUrls` hook needs to discard malformed
- * entries before they reach the downloader. Extension download paths fetch
- * remote image assets; non-network schemes such as `data:`, `blob:`, `file:`,
- * and extension URLs must not cross that boundary.
- */
-export function filterValidImageUrls(urls: string[]): string[] {
-  return urls.filter((url) => {
-    try {
-      const parsed = new URL(url)
-      return parsed.protocol === "https:" || parsed.protocol === "http:"
-    } catch {
-      return false
-    }
-  })
-}
-
 const ALLOWED_RASTER_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
-  "image/avif",
 ])
 
 export function normalizeAllowedImageMimeType(
@@ -69,7 +51,9 @@ export function normalizeAllowedImageMimeType(
       .toLowerCase() ?? ""
 
   if (!ALLOWED_RASTER_IMAGE_MIME_TYPES.has(mimeType)) {
-    throw new Error(`Unsupported MIME type: ${mimeType || "missing"}`)
+    throw new NonRetryableDownloadError(
+      `Unsupported MIME type: ${mimeType || "missing"}`
+    )
   }
 
   return mimeType

@@ -8,7 +8,7 @@
  * loopback response with an explicit port.
  */
 export const allowsDeterministicE2eRedirect =
-  typeof __TAKO_E2E_STATE_SEED__ !== "undefined" && __TAKO_E2E_STATE_SEED__
+  typeof __TAKO_E2E_REDIRECTS__ !== "undefined" && __TAKO_E2E_REDIRECTS__
 
 export function isDeterministicE2eMockResponseUrl(rawUrl: string): boolean {
   try {

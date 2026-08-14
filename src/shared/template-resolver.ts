@@ -36,6 +36,12 @@ export interface TemplateResolutionResult {
   error?: string
 }
 
+export interface FilenameResolutionResult {
+  success: boolean
+  resolvedName?: string
+  error?: string
+}
+
 // Canonical token builder (per chapter) – chapters required for new rule-set.
 // Uses local date methods so date macros reflect user's local timezone (for file organization)
 function buildTokens(ctx: TemplateContext): Record<string, string | undefined> {
@@ -131,26 +137,35 @@ export function resolveDownloadDirectory(
 }
 
 /**
- * Resolve a file name (no extension) using a template and the same context macros.
- * If the template is empty, defaults to <CHAPTER_TITLE>.
+ * Resolve a file name (no extension) using a template and the same context
+ * macros. Filename templates are explicit: empty templates, invalid macros,
+ * and expansions that contain no usable characters are errors.
  */
 export function resolveFileName(
   template: string | undefined,
   ctx: TemplateContext
-): string {
-  const tpl = template && template.trim() ? template : "<CHAPTER_TITLE>"
+): FilenameResolutionResult {
+  const tpl = template?.trim() ?? ""
+  if (!tpl) {
+    return { success: false, error: "Filename template is empty" }
+  }
+
   const macroValidation = validateTemplateMacros(tpl)
   if (!macroValidation.isValid) {
-    // Fallback to simple chapter title if invalid
-    return sanitizeFilename(ctx.chapterTitle)
+    return { success: false, error: macroValidation.error }
   }
+
   const tokens = buildTokens(ctx)
-  let out = tpl.replace(
+  const expanded = tpl.replace(
     /<([^>]+)>/g,
     (_match, name: string) => tokens[name] ?? ""
   )
-  out = sanitizeFilename(out.trim() || ctx.chapterTitle)
-  return out
+  const resolvedName = sanitizeFilename(expanded.trim())
+  if (!resolvedName) {
+    return { success: false, error: "Resolved filename is empty" }
+  }
+
+  return { success: true, resolvedName }
 }
 
 /**
@@ -174,31 +189,4 @@ export function buildSampleContext(): TemplateContext {
     chapterNumber: parseInt(macroData["CHAPTER_NUMBER_PAD3"], 10) || undefined,
     volumeNumber: parseInt(macroData["VOLUME_NUMBER_PAD2"], 10) || undefined,
   }
-}
-
-/**
- * Preview function returns an example FINAL file path (directory + auto filename)
- * so existing UI expecting a file-like path keeps working.
- */
-export function previewTemplate(template: string): string {
-  const sampleContext = buildSampleContext()
-  const dirRes = resolveDownloadDirectory(template, sampleContext)
-  if (!dirRes.success || !dirRes.resolvedPath) return template
-  const fileBase = sanitizeFilename(sampleContext.chapterTitle)
-  return `${dirRes.resolvedPath}/${fileBase}.${sampleContext.format}`
-}
-
-/**
- * Check if template has unresolved macros after expansion
- */
-export function hasUnresolvedMacros(expandedPath: string): boolean {
-  return /<[^>]+>/.test(expandedPath)
-}
-
-/**
- * Extract macro names used in a template
- */
-export function extractMacrosFromTemplate(template: string): string[] {
-  const macroPattern = /<([^>]+)>/g
-  return [...template.matchAll(macroPattern)].map((match) => match[1])
 }

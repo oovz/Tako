@@ -14,6 +14,7 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   folder_write_failed: "downloadError_folderWriteFailed",
   disk_full: "downloadError_diskFull",
   browser_download_interrupted: "downloadError_browserDownloadInterrupted",
+  browser_download_unobservable: "downloadError_browserDownloadUnobservable",
   archive_creation_failed: "downloadError_archiveCreationFailed",
   unknown: "downloadError_unknown",
 }
@@ -25,4 +26,32 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
 export function getDownloadErrorMessage(category: unknown): string {
   const normalized = normalizeDownloadErrorCategory(category) ?? "unknown"
   return t(DOWNLOAD_ERROR_MESSAGE_KEYS[normalized])
+}
+
+export interface DownloadCancelPresentation {
+  title: string
+  description: string
+  confirmLabel: string
+}
+
+/** Keep destructive cancellation scope identical across extension surfaces. */
+export function getDownloadCancelPresentation(
+  category: unknown,
+  hasUnobservableOutput = false
+): DownloadCancelPresentation {
+  if (
+    hasUnobservableOutput ||
+    normalizeDownloadErrorCategory(category) === "browser_download_unobservable"
+  ) {
+    return {
+      title: t("sidepanel_forgetUnobservableDownload"),
+      description: t("sidepanel_forgetUnobservableWarning"),
+      confirmLabel: t("sidepanel_forgetDownload"),
+    }
+  }
+  return {
+    title: t("sidepanel_cancelThisDownload"),
+    description: t("sidepanel_cancelProgressWarning"),
+    confirmLabel: t("common_yes"),
+  }
 }

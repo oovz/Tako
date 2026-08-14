@@ -1,22 +1,4 @@
-import { isRecord } from "@/src/shared/type-guards"
-import type { GlobalAppState } from "@/src/types/queue-state"
 import type { ChapterState, MangaPageState } from "@/src/types/tab-state"
-
-export const isMangaPageState = (value: unknown): value is MangaPageState => {
-  if (!isRecord(value)) return false
-  return (
-    typeof value.siteIntegrationId === "string" &&
-    typeof value.mangaId === "string" &&
-    typeof value.seriesTitle === "string" &&
-    Array.isArray(value.chapters) &&
-    Array.isArray(value.volumes)
-  )
-}
-
-export const isGlobalAppState = (value: unknown): value is GlobalAppState => {
-  if (!isRecord(value)) return false
-  return Array.isArray(value.downloadQueue) && isRecord(value.settings)
-}
 
 export function deriveVolumeStates(
   chapters: Array<Pick<ChapterState, "volumeNumber" | "volumeLabel" | "index">>

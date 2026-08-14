@@ -86,29 +86,24 @@ export function normalizeImageFilename(
 }
 
 /**
- * Extracts file extension from MIME type.
- * Defaults to 'jpg' if MIME type is unknown or invalid.
+ * Extracts file extension from one of the image MIME types accepted by the
+ * image transport. Unsupported values are an error; callers must not silently
+ * relabel an unknown payload as JPEG.
  *
  * @param mimeType - MIME type string (e.g., 'image/jpeg', 'image/png')
  * @returns File extension without dot (e.g., 'jpg', 'png', 'webp')
  */
 export function getExtensionFromMimeType(mimeType: string): string {
-  if (!mimeType || typeof mimeType !== "string") {
-    return "jpg" // Default fallback
+  switch (mimeType) {
+    case "image/jpeg":
+      return "jpg"
+    case "image/png":
+      return "png"
+    case "image/webp":
+      return "webp"
+    case "image/gif":
+      return "gif"
+    default:
+      throw new Error(`Unsupported image MIME type: ${mimeType || "missing"}`)
   }
-
-  const lower = mimeType.toLowerCase()
-
-  // Common image MIME types
-  if (lower.includes("jpeg") || lower.includes("jpg")) return "jpg"
-  if (lower.includes("png")) return "png"
-  if (lower.includes("webp")) return "webp"
-  if (lower.includes("gif")) return "gif"
-  if (lower.includes("bmp")) return "bmp"
-  if (lower.includes("svg")) return "svg"
-  if (lower.includes("tiff") || lower.includes("tif")) return "tiff"
-  if (lower.includes("avif")) return "avif"
-
-  // Fallback to jpg for unknown types
-  return "jpg"
 }

@@ -1,16 +1,14 @@
 export const SESSION_STORAGE_KEYS = {
-  globalState: "globalState",
   queueView: "queueView",
   historyView: "historyView",
-  activeTabContext: "activeTabContext",
   activeTabContextByWindow: "activeTabContextByWindow",
   activeTaskProgress: "activeTaskProgress",
   activeTaskProgressRevision: "activeTaskProgressRevision",
   activeTaskProgressGeneration: "activeTaskProgressGeneration",
-  pendingDownloads: "pendingDownloads",
   initFailed: "initFailed",
   initError: "error",
   optionsActionItems: "optionsActionItems",
+  providerNetworkPolicyContinuation: "providerNetworkPolicyContinuation",
 } as const
 
 export const SETTINGS_STORAGE_KEYS = {
@@ -29,7 +27,6 @@ export const LOCAL_STORAGE_KEYS = {
   pendingOutputs: "pendingOutputs",
   pendingUndoActions: "pendingUndoActions",
   progressTimingEstimates: "progressTimingEstimates",
-  commandResults: "commandResults",
 } as const
 
 export const STORAGE_KEYS = {

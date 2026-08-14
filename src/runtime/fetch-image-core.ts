@@ -4,10 +4,16 @@ import {
   MAX_IMAGE_BYTES,
 } from "@/src/constants/timeouts"
 import { normalizeAllowedImageMimeType } from "@/src/shared/site-integration-utils"
+import { NonRetryableDownloadError } from "@/src/shared/download-contract"
 import {
   allowsDeterministicE2eRedirect,
   shouldAcceptDeterministicE2eMockResponse,
 } from "./deterministic-e2e-redirect"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "./offscreen-live-resource-ledger"
+import { fetchSharedResource } from "@/src/site-integrations/http-client"
 
 export interface FetchImageWithStallDetectionCoreOptions {
   signal?: AbortSignal
@@ -19,6 +25,13 @@ export interface FetchImageWithStallDetectionCoreOptions {
   assertUrlAllowed?: (url: string) => void
   onResponse?: (response: Response) => void | Promise<void>
   onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  liveResourceLedger?: OffscreenLiveResourceLedger
+}
+
+export type FetchedImageData = {
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease?: OffscreenLiveResourceLease
 }
 
 /**
@@ -28,7 +41,14 @@ export interface FetchImageWithStallDetectionCoreOptions {
 export async function fetchImageWithStallDetection(
   imageUrl: string,
   options: FetchImageWithStallDetectionCoreOptions = {}
-): Promise<{ data: ArrayBuffer; mimeType: string }> {
+): Promise<FetchedImageData> {
+  let liveResourceLease = options.liveResourceLedger
+    ? await options.liveResourceLedger.acquire(
+        "image fetch chunks and merged buffer",
+        2 * MAX_IMAGE_BYTES,
+        options.signal
+      )
+    : undefined
   const stallTimeoutMs = options.stallTimeoutMs ?? STALL_TIMEOUT_MS
   const hardTimeoutMs = options.hardTimeoutMs ?? HARD_TIMEOUT_MS
 
@@ -46,6 +66,21 @@ export async function fetchImageWithStallDetection(
   }, hardTimeoutMs)
 
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+  let shouldCancelReader = false
+  let readerCancelReason: unknown
+  let response: Response | null = null
+  let bodyFullyConsumed = false
+
+  const retainFetchedBuffer = (
+    data: ArrayBuffer,
+    mimeType: string
+  ): FetchedImageData => {
+    if (!liveResourceLease) return { data, mimeType }
+    liveResourceLease.resize(data.byteLength)
+    const retainedLease = liveResourceLease.transfer("retained encoded image")
+    liveResourceLease = undefined
+    return { data, mimeType, liveResourceLease: retainedLease }
+  }
 
   try {
     options.assertUrlAllowed?.(imageUrl)
@@ -60,11 +95,8 @@ export async function fetchImageWithStallDetection(
       redirect: allowsDeterministicE2eRedirect ? "follow" : "error",
       signal: controller.signal,
     }
-    const fetcher = options.fetcher ?? fetch
-    const response = await withAbortSignal(
-      fetcher(imageUrl, requestInit),
-      controller
-    )
+    const fetcher = options.fetcher ?? fetchSharedResource
+    response = await withAbortSignal(fetcher(imageUrl, requestInit), controller)
     if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
       options.assertUrlAllowed?.(response.url || imageUrl)
     }
@@ -72,7 +104,10 @@ export async function fetchImageWithStallDetection(
     if (!response.ok) {
       throw (
         options.createHttpError?.(response) ??
-        new Error(`HTTP ${response.status}: ${response.statusText}`)
+        Object.assign(
+          new Error(`HTTP ${response.status}: ${response.statusText}`),
+          { status: response.status }
+        )
       )
     }
 
@@ -90,11 +125,14 @@ export async function fetchImageWithStallDetection(
       )
       await options.onBytesReceived?.(data.byteLength)
       if (data.byteLength > MAX_IMAGE_BYTES) {
-        throw new Error(
+        const error = new NonRetryableDownloadError(
           `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${data.byteLength})`
         )
+        controller.abort(error)
+        throw error
       }
-      return { data, mimeType }
+      bodyFullyConsumed = true
+      return retainFetchedBuffer(data, mimeType)
     }
 
     reader = response.body.getReader()
@@ -120,15 +158,18 @@ export async function fetchImageWithStallDetection(
         }
 
         if (readResult.done) {
+          bodyFullyConsumed = true
           break
         }
 
         if (readResult.value && readResult.value.byteLength > 0) {
           const nextTotalBytes = totalBytes + readResult.value.byteLength
           if (nextTotalBytes > MAX_IMAGE_BYTES) {
-            throw new Error(
+            const error = new NonRetryableDownloadError(
               `Image size exceeds ${MAX_IMAGE_BYTES} byte limit (got ${nextTotalBytes})`
             )
+            controller.abort(error)
+            throw error
           }
           try {
             await options.onBytesReceived?.(nextTotalBytes)
@@ -143,6 +184,8 @@ export async function fetchImageWithStallDetection(
         if (stallTimeoutId) {
           clearTimeout(stallTimeoutId)
         }
+        shouldCancelReader = true
+        readerCancelReason = error
         throw error
       }
     }
@@ -154,18 +197,21 @@ export async function fetchImageWithStallDetection(
       offset += chunk.byteLength
     }
 
-    return {
-      data: merged.buffer,
-      mimeType,
-    }
+    return retainFetchedBuffer(merged.buffer, mimeType)
   } finally {
     clearTimeout(hardTimeoutId)
     options.signal?.removeEventListener("abort", onAbort)
+    if (reader && shouldCancelReader) {
+      void reader.cancel(readerCancelReason).catch(() => undefined)
+    } else if (!reader && response?.body && !bodyFullyConsumed) {
+      void response.body.cancel(readerCancelReason).catch(() => undefined)
+    }
     try {
       reader?.releaseLock()
     } catch {
       // no-op
     }
+    liveResourceLease?.release()
   }
 }
 

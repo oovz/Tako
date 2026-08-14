@@ -80,11 +80,47 @@ export const DOWNLOAD_ERROR_CATEGORIES = [
   "folder_write_failed",
   "disk_full",
   "browser_download_interrupted",
+  "browser_download_unobservable",
   "archive_creation_failed",
   "unknown",
 ] as const
 export type DownloadErrorCategory = (typeof DOWNLOAD_ERROR_CATEGORIES)[number]
 export const DownloadErrorCategorySchema = z.enum(DOWNLOAD_ERROR_CATEGORIES)
+
+export class NonRetryableDownloadError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = "NonRetryableDownloadError"
+  }
+}
+
+const NON_RETRYABLE_ERROR_NAMES = new Set([
+  "NonRetryableDownloadError",
+  "ResponseBodyLimitError",
+  "DecodedImageResourceLimitError",
+  "ChapterResourceLimitError",
+  "ProviderContractError",
+])
+
+/**
+ * Retry only failures that may change when the same operation is attempted
+ * again. Resource, format, and provider-contract failures describe the
+ * current payload or provider response and therefore must fail directly.
+ */
+export function isNonRetryableDownloadError(error: unknown): boolean {
+  if (error instanceof NonRetryableDownloadError) return true
+  if (!error || typeof error !== "object") return false
+
+  const namedError = error as { name?: unknown }
+  if (
+    typeof namedError.name === "string" &&
+    NON_RETRYABLE_ERROR_NAMES.has(namedError.name)
+  ) {
+    return true
+  }
+
+  return false
+}
 
 export function normalizeDownloadErrorCategory(
   value: unknown

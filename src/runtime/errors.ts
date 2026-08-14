@@ -1,8 +1,11 @@
-import logger from "@/src/runtime/logger"
-import { isRecord } from "@/src/shared/type-guards"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-
-export type PersistentErrorSeverity = "warning" | "error"
+import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
+import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
+import {
+  PersistentErrorsSchema,
+  type PersistentError,
+  type PersistentErrorSeverity,
+} from "@/src/runtime/persistent-error-schema"
 
 type PersistentErrorInput = {
   code: string
@@ -11,64 +14,40 @@ type PersistentErrorInput = {
   ts?: number
 }
 
-export interface PersistentError {
-  code: string
-  message: string
-  severity: PersistentErrorSeverity
-  ts: number
-}
-
 const PERSISTENT_ERRORS_STORAGE_KEY = LOCAL_STORAGE_KEYS.persistentErrors
+const persistentErrorMutations = new StorageMutationQueue()
 
 async function readPersistentErrors(): Promise<PersistentError[]> {
-  try {
-    const result = await chrome.storage.local.get(PERSISTENT_ERRORS_STORAGE_KEY)
-    const raw: unknown = result[PERSISTENT_ERRORS_STORAGE_KEY]
-    if (!Array.isArray(raw)) return []
-    const errors: PersistentError[] = []
-    for (const item of raw) {
-      if (
-        isRecord(item) &&
-        typeof item.code === "string" &&
-        typeof item.message === "string"
-      ) {
-        errors.push({
-          code: item.code,
-          message: item.message,
-          severity: item.severity === "error" ? "error" : "warning",
-          ts: typeof item.ts === "number" ? item.ts : Date.now(),
-        })
-      }
-    }
-    return errors
-  } catch (error) {
-    logger.error("persistentErrors: failed to read from storage", error)
-    return []
+  const result = await chrome.storage.local.get(PERSISTENT_ERRORS_STORAGE_KEY)
+  if (!(PERSISTENT_ERRORS_STORAGE_KEY in result)) return []
+
+  const parsed = PersistentErrorsSchema.safeParse(
+    result[PERSISTENT_ERRORS_STORAGE_KEY]
+  )
+  if (!parsed.success) {
+    throw new InvalidDurableStateError(
+      "Invalid durable persistent error state",
+      { cause: parsed.error }
+    )
   }
+  return parsed.data
 }
 
 async function writePersistentErrors(errors: PersistentError[]): Promise<void> {
-  try {
-    await chrome.storage.local.set({ [PERSISTENT_ERRORS_STORAGE_KEY]: errors })
-  } catch (error) {
-    logger.error("persistentErrors: failed to write to storage", error)
-  }
+  await chrome.storage.local.set({ [PERSISTENT_ERRORS_STORAGE_KEY]: errors })
 }
 
 async function updatePersistentErrors(
-  update: (existing: PersistentError[]) => PersistentError[],
-  errorContext: string
+  update: (existing: PersistentError[]) => PersistentError[]
 ): Promise<void> {
-  try {
+  await persistentErrorMutations.run(async () => {
     const existing = await readPersistentErrors()
     await writePersistentErrors(update(existing))
-  } catch (error) {
-    logger.error(`persistentErrors: failed to ${errorContext}`, error)
-  }
+  })
 }
 
 export async function getPersistentErrors(): Promise<PersistentError[]> {
-  return readPersistentErrors()
+  return persistentErrorMutations.run(readPersistentErrors)
 }
 
 export async function addPersistentError(
@@ -81,12 +60,11 @@ export async function addPersistentError(
   await updatePersistentErrors((existing) => {
     const filtered = existing.filter((error) => error.code !== code)
     return [...filtered, { code, message, severity, ts }]
-  }, "add error")
+  })
 }
 
 export async function clearPersistentError(code: string): Promise<void> {
-  await updatePersistentErrors(
-    (existing) => existing.filter((error) => error.code !== code),
-    "clear error"
+  await updatePersistentErrors((existing) =>
+    existing.filter((error) => error.code !== code)
   )
 }

@@ -2,7 +2,7 @@ import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
 import type {
   DownloadTaskState,
   QueueTaskSummary,
-} from "@/src/types/queue-state"
+} from "@/src/domain/queue/state"
 
 const MAX_BADGE_COUNT = 999
 
