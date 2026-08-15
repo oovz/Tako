@@ -15,13 +15,13 @@ Tako resolves two templates per chapter:
 Default directory template:
 
 ```text
-<INTEGRATION_NAME>/<SERIES_TITLE>
+TMD/<SERIES_TITLE>
 ```
 
 Result with default filename template and CBZ format:
 
 ```text
-mangadex/Hunter x Hunter/Departure.cbz
+TMD/Hunter x Hunter/Departure.cbz
 ```
 
 ## Macro reference
@@ -54,6 +54,7 @@ Always available. Use the user's local date at download time.
 | Macro                   | Description                                          | Example     | Guaranteed               |
 | ----------------------- | ---------------------------------------------------- | ----------- | ------------------------ |
 | `<CHAPTER_TITLE>`       | Chapter title used for the final file or folder name | `Departure` | Yes for queued downloads |
+| `<CHAPTER_NUMBER>`      | Raw chapter number (may be decimal like `15.5`)      | `15.5`      | No                       |
 | `<CHAPTER_NUMBER_PAD2>` | Numeric chapter number padded to 2 digits            | `01`        | No                       |
 | `<CHAPTER_NUMBER_PAD3>` | Numeric chapter number padded to 3 digits            | `001`       | No                       |
 
@@ -62,13 +63,14 @@ Always available. Use the user's local date at download time.
 | Macro                  | Description                                         | Example  | Guaranteed |
 | ---------------------- | --------------------------------------------------- | -------- | ---------- |
 | `<VOLUME_TITLE>`       | Site-visible volume or category label, if available | `单行本` | No         |
+| `<VOLUME_NUMBER>`      | Raw volume number                                   | `5`      | No         |
 | `<VOLUME_NUMBER_PAD2>` | Numeric volume number padded to 2 digits            | `05`     | No         |
 
 `<VOLUME_TITLE>` comes from the preserved volume/category label (`Volume.title`,
 `Volume.label`, or `Chapter.volumeLabel`), not from `volumeId`. The `volumeId`
 field is an internal grouping key and is not exposed as a template macro. Use
-`<VOLUME_NUMBER_PAD2>` only when the site integration provides parsed numeric
-`volumeNumber` metadata.
+`<VOLUME_NUMBER>` or `<VOLUME_NUMBER_PAD2>` only when the site integration
+provides parsed numeric `volumeNumber` metadata.
 
 ## Missing values
 
@@ -158,6 +160,10 @@ filename.
 and previews. `src/shared/template-resolver.ts` is the production resolver used
 during queue dispatch.
 
-Do not document a macro as user-facing until both files support it. The registry
-currently includes a few compatibility tokens — raw numeric, chapter-index, and
-language macros — that the production resolver does not populate in final paths.
+All macros defined in `TEMPLATE_MACROS` (`YYYY`, `MM`, `DD`, `PUBLISHER`,
+`INTEGRATION_NAME`, `SERIES_TITLE`, `CHAPTER_TITLE`, `CHAPTER_NUMBER`,
+`CHAPTER_NUMBER_PAD2`, `CHAPTER_NUMBER_PAD3`, `VOLUME_TITLE`, `VOLUME_NUMBER`,
+`VOLUME_NUMBER_PAD2`) are fully implemented and supported by both
+`template-expander.ts` and `template-resolver.ts`. Do not add a new macro to
+user documentation without implementing it in both the registry and the
+production resolver.

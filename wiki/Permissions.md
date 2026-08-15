@@ -25,13 +25,26 @@ Known page, API, and CDN origins for the enabled bundled integrations are listed
 explicitly in the manifest/runtime registry. Broad permission is not used as a
 substitute for those narrow application policies.
 
+## `storage`
+
+Grants access to `chrome.storage.local` and `chrome.storage.session`. Tako
+stores the durable queue, download history, dispatch lease, pending output
+identities, destination issues, global settings, and per-site overrides locally
+in the browser profile. No state is uploaded to external telemetry or
+third-party servers. Persisted schema changes use an automatic, versioned,
+one-time migration before the current runtime validators hydrate state.
+
 ## `unlimitedStorage`
 
-Removes the normal quota from `chrome.storage.local`. Tako stores the durable
-queue, history, dispatch lease, pending output identity, destination issues, and
-settings locally in the browser profile. Persisted schema changes use an
-automatic, versioned, one-time migration before the current runtime validators
-hydrate state.
+Removes the default storage quota from `chrome.storage.local`. This ensures that
+large multi-chapter download queues, long-term history records, and per-site
+configurations can grow reliably without quota-exhaustion errors.
+
+## `sidePanel`
+
+Allows Tako to open and render its companion user interface inside Chrome's Side
+Panel. Users can browse manga chapters, select items, and manage the active
+queue directly alongside their reading tab.
 
 ## `offscreen`
 
@@ -57,6 +70,12 @@ The confirmation is task-wide because a job may contain sibling archive or loose
 image outputs. Ordinary task cancellation does not cancel files already handed
 to Chrome.
 
+## `tabs`
+
+Allows Tako to read the active tab's URL and title to detect when the user is
+viewing a supported manga series or episode page. This metadata is used solely
+to resolve the matching site integration and update the Side Panel context.
+
 ## `scripting`
 
 Allows a bundled, read-only one-shot page probe on a supported page when URL,
@@ -69,6 +88,12 @@ listener, and cannot mutate extension storage or the download queue.
 Detects relevant in-page/SPA navigation so Tako can immediately show a loading
 state and rerun active-tab context resolution. It does not itself read page
 contents.
+
+## `notifications`
+
+Allows Tako to display optional desktop notifications when batch downloads
+complete or encounter a terminal failure requiring user attention, without
+requiring the user to keep the Side Panel or Options page in view.
 
 ## `alarms`
 

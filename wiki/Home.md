@@ -21,24 +21,26 @@
 
 ## What is Tako?
 
-Tako turns Chrome's Side Panel into a manga command center. Browse a series,
-pick the chapters you want, queue them, and export ready-to-read files — all
-from one panel next to your reading tab.
+Tako brings a complete manga download workflow directly into Chrome. Browse a
+series, select chapters, queue downloads, and export ready-to-read archives from
+the Side Panel next to your active reading tab. For full history, configuration,
+and destination recovery, the dedicated Options page is always accessible.
 
-No extra tabs. No save-dialog spam. No one-by-one image downloads.
+No save-dialog spam. No one-by-one image downloads. No external downloaders
+needed.
 
 ## Why Tako
 
-- **Browser-native workflow** — everything happens inside Chrome's Side Panel,
-  right next to your reading tab.
+- **Browser-native workflow** — select chapters and track downloads directly
+  from Chrome's Side Panel, with full history and configuration in Options.
 - **Batch queue with retry** — queue dozens of chapters and let Tako handle
   retries automatically.
 - **Clean exports** — CBZ, ZIP, or image folders with custom path and filename
   templates.
 - **Curated site support** — optimized integrations for MangaDex, Pixiv Comic,
   Shonen Jump+, Manhuagui, and Comic Nettai.
-- **ComicInfo.xml** — embeds metadata in CBZ archives for Komga, Kavita, and
-  Calibre compatibility.
+- **ComicInfo.xml** — embeds metadata in CBZ archives for comic library managers
+  like Komga and Kavita, plus general CBZ reader compatibility.
 - **Privacy-first** — no developer analytics or telemetry; provider traffic and
   optional MangaDex@Home reporting are disclosed.
 - **Open source** — MIT license, full source on GitHub.

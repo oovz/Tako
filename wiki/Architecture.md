@@ -161,7 +161,8 @@ pending downloads” action in this state (`FORGET_UNOBSERVABLE_OUTPUTS`); it
 surrenders every waiting output whose Chrome history entry was erased, revokes
 every pending Blob owned by the affected job(s), releases queue accounting
 without claiming Chrome completion or interruption, and lets the queue continue.
-Canceling such a task performs the same surrender so dependencies never leak.
+Canceling such a task performs this surrender as part of its best-effort cleanup
+routine.
 
 A pending native download is a durable wait state, not a liveness failure. Tako
 does not poll known long-running Chrome downloads with the offscreen watchdog,
@@ -169,12 +170,32 @@ and it stops arming the liveness alarm for erased downloads once the task block
 is in place: the durable `native_output_action_required` block is itself the
 recovery marker after a Service Worker restart.
 
-Canceling a task stops future dispatch and uncommitted pipeline work. It does
-not cancel native downloads already accepted by Chrome. For an unobservable
-history entry, the explicit task-wide forget action is the user-directed
-recovery path; it releases Tako's Blob ownership for every pending sibling in
-the affected job and forgets that job rather than asserting a Chrome transfer
-result.
+### Cancellation, cleanup, and restart recovery
+
+Canceling a task durably records its canceled status in storage to prevent
+further chapter dispatch and uncommitted pipeline work. It does not cancel
+native downloads already accepted by Chrome.
+
+Following durable cancellation, resource cleanup proceeds on a best-effort
+basis:
+
+1. **Producer cancellation** — Tako instructs the offscreen document to abort
+   in-flight image fetches and compression. If the producer cannot converge
+   immediately (e.g. during an MV3 messaging boundary transition), the active
+   lease is quarantined and watchdog alarms remain armed so the worker can retry
+   or recover cleanly.
+2. **Native output cleanup** — Tako seals open output manifests, surrenders
+   unobservable erased outputs, and revokes owned Blob URLs. Transient errors
+   during native output cleanup are logged for later reconciliation and do not
+   block the task's terminal cancellation state.
+3. **Restart recovery** — Any residual leases, unrevoked Blobs, or unobservable
+   outputs are safely swept and reconciled during Service Worker startup or
+   subsequent watchdog alarms.
+
+For an unobservable history entry, the explicit task-wide forget action provides
+the user-directed recovery path; it releases Tako's Blob ownership for every
+pending sibling in the affected job and forgets that job rather than asserting a
+Chrome transfer result.
 
 ### File System Access
 

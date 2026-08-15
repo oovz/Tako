@@ -1,8 +1,8 @@
 # Pixiv Comic
 
-Pixiv Comic uses private application endpoints and the browser session. It is
-intentionally migrated last in provider work because its build ID, request
-signing, image keys, and transform contract are volatile.
+Pixiv Comic uses private application endpoints and the browser session. Its
+build ID, request signing, image keys, and transform contract require dedicated
+provider test coverage to safeguard against upstream changes.
 
 ## Runtime contract
 

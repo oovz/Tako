@@ -228,7 +228,9 @@ interface SettingsFieldSchema {
 
 When a persisted custom-setting shape changes, add an automatic, versioned,
 one-time migration before switching the runtime validator to the new shape.
-Remove the legacy decoder after the migration epoch is no longer supported.
+Remove the legacy decoder only after the supported direct-upgrade window (across
+consecutive minor/major release epochs) has retired direct migrations from that
+version.
 
 ## Maturity and promotion
 

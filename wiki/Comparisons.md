@@ -1,41 +1,51 @@
-# Comparisons
+# Comparisons and Tool Selection
 
-Tako is a manga downloader built directly into Chrome's Side Panel. Here's how
-it compares to other tools.
+_Last reviewed: August 2026_
 
-## How Tako differs
-
-Most manga downloaders are desktop apps or self-hosted servers. Tako keeps the
-entire workflow inside Chrome — chapter selection, queue, retry, and export —
-without leaving your reading tab. No separate application to install, no server
-to run.
+Tako is a browser-native manga downloader built directly into Chrome's Side
+Panel. This guide compares Tako to other popular manga downloaders and outlines
+architectural trade-offs to help you choose the right tool for your workflow.
 
 ## Comparison table
 
-| Tool                        | Type                   | Installation               | Site support           | Output formats      | Queue / retry | Browser-native | Open source |
-| --------------------------- | ---------------------- | -------------------------- | ---------------------- | ------------------- | :-----------: | :------------: | :---------: |
-| **Tako**                    | Chrome extension (MV3) | Chrome Web Store or GitHub | 5 sites and growing    | CBZ, ZIP, images    |      ✅       |       ✅       |   ✅ MIT    |
-| HakuNeko                    | Desktop app            | App installer              | Various                | Various             |      ✅       |       ❌       |   ✅ MIT    |
-| Tachidesk / Suwayomi        | Self-hosted server     | Server + client            | Various via extensions | Various             |      ✅       |       ❌       |     ✅      |
-| mangadex-downloader (CLI)   | Python CLI             | pip install                | MangaDex               | CBZ, EPUB, PDF, raw |      ✅       |       ❌       |     ✅      |
-| AllaliAdil Manga Downloader | Chrome extension (MV2) | Deprecated                 | Various                | PDF, ZIP            |      ❌       |       ✅       |     ✅      |
-| Yui007 MangaDex Extension   | Chrome extension       | GitHub                     | MangaDex only          | Multiple            |      ✅       |       ✅       |     ✅      |
+| Tool                                                                                             | Architecture                     | Source / Installation                                                                                                                                        | Site support                                                                 | Output formats               | Queue & retry |    Browser-native    |                               Open source license                               |
+| ------------------------------------------------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ---------------------------- | :-----------: | :------------------: | :-----------------------------------------------------------------------------: |
+| **[Tako](https://github.com/oovz/Tako)**                                                         | Chrome extension (MV3)           | [Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb) / [GitHub](https://github.com/oovz/Tako) | Curated sites (MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai) and more | CBZ, ZIP, loose images       |      ✅       |   ✅ (Side Panel)    |              [MIT](https://github.com/oovz/Tako/blob/main/LICENSE)              |
+| **[HakuNeko](https://github.com/manga-download/hakuneko)**                                       | Desktop application (Electron)   | App installer / [GitHub](https://github.com/manga-download/hakuneko)                                                                                         | Broad scraper connectors                                                     | CBZ, PDF, EPUB, loose images |      ✅       | ❌ (Standalone app)  | [The Unlicense](https://github.com/manga-download/hakuneko/blob/master/LICENSE) |
+| **[Suwayomi Server](https://github.com/Suwayomi/Suwayomi-Server)** _(formerly Tachidesk-Server)_ | Self-hosted server (Java/Kotlin) | Docker, binary / [GitHub](https://github.com/Suwayomi/Suwayomi-Server)                                                                                       | Tachiyomi extension ecosystem                                                | CBZ, loose images            |      ✅       | ❌ (Server + Web UI) | [MPL-2.0](https://github.com/Suwayomi/Suwayomi-Server/blob/master/LICENSE.txt)  |
+| **[mangadex-downloader](https://github.com/mansuf/mangadex-downloader)**                         | CLI tool (Python)                | `pip install` / [GitHub](https://github.com/mansuf/mangadex-downloader)                                                                                      | MangaDex                                                                     | CBZ, PDF, EPUB, raw images   |      ✅       |  ❌ (Terminal CLI)   | [Apache-2.0](https://github.com/mansuf/mangadex-downloader/blob/master/LICENSE) |
 
-## Tako advantages
+## Who Tako is for
 
-- **No separate app or server** — runs entirely inside Chrome as a Side Panel
-  extension.
-- **Modern MV3 architecture** — built on Chrome's latest extension platform, not
-  deprecated MV2.
-- **Privacy-first** — no analytics, no telemetry, no developer-run backend.
-- **ComicInfo.xml support** — embeds metadata in CBZ archives for library
-  managers like Komga and Kavita.
-- **Template system** — customizable path and filename templates with macro
-  support.
-- **File System Access** — write directly to a chosen folder without download
-  shelf spam.
+Tako is designed specifically for readers who want a streamlined, in-browser
+download experience without managing separate desktop runtimes or server
+infrastructure.
 
----
+### Choose Tako if:
 
-Try Tako by
-[installing it from the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
+- **You want an in-browser workflow** — select chapters and monitor downloads
+  directly in Chrome's Side Panel next to your active reading tab.
+- **You want zero server or runtime setup** — no Python, Node.js, Java, or
+  Docker containers required.
+- **You organize reading libraries with Komga or Kavita** — Tako embeds standard
+  `ComicInfo.xml` metadata in CBZ archives, compatible with modern comic and
+  manga server managers.
+- **You want direct folder saving** — write chapters directly to your local
+  library folder via the File System Access API without browser download shelf
+  clutter.
+- **You care about privacy and battery life** — no developer analytics, no
+  background telemetry, and resource-conscious offscreen processing.
+
+## Key architectural features of Tako
+
+- **Modern Manifest V3 architecture** — built with dedicated Service Worker
+  state management and offscreen document processing, engineered for Chrome's
+  current extension platform.
+- **Durable queue with retry & restart recovery** — progress is committed to
+  local storage so downloads resume reliably after browser restarts or worker
+  reloads.
+- **Customizable path and filename templates** — flexible macro placeholders
+  (`<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, `<VOLUME_NUMBER>`, etc.) for automated
+  library organization.
+- **Privacy-first** — all configuration and queue data stay strictly within
+  local browser storage.

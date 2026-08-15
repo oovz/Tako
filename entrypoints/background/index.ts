@@ -361,8 +361,8 @@ export default defineBackground({
   main() {
     logger.info("Background script starting")
 
-    // Event listeners are registered synchronously below. The destructive
-    // reset then runs before any repository hydrates or the kernel starts.
+    // Event listeners are registered synchronously below. Versioned state
+    // migration then runs before any repository hydrates or the kernel starts.
     try {
       chrome.sidePanel
         .setPanelBehavior({ openPanelOnActionClick: true })
