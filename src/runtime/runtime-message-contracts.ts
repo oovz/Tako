@@ -456,7 +456,7 @@ export const runtimeMessageRegistry = {
       z.strictObject({
         success: z.literal(false),
         error: z.string().min(1),
-        code: StartDownloadFailureCodeSchema,
+        code: StartDownloadFailureCodeSchema.optional(),
       }),
     ]),
     target: "background",

@@ -688,6 +688,26 @@ describe("runtime message registry", () => {
       }).success
     ).toBe(true)
     expect(
+      runtimeMessageRegistry.START_DOWNLOAD.response.safeParse({
+        success: false,
+        error: "Series context is stale",
+        code: "stale_series_context",
+      }).success
+    ).toBe(true)
+    expect(
+      runtimeMessageRegistry.START_DOWNLOAD.response.safeParse({
+        success: false,
+        error: "START_DOWNLOAD is not authorized for unknown",
+      }).success
+    ).toBe(true)
+    expect(
+      runtimeMessageRegistry.START_DOWNLOAD.response.safeParse({
+        success: false,
+        error: "Some error",
+        code: "invalid_code_not_in_enum",
+      }).success
+    ).toBe(false)
+    expect(
       runtimeMessageRegistry.REMOVE_TASK.response.safeParse({
         success: true,
         data: {
