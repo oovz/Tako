@@ -1,9 +1,25 @@
 import type { RuntimeMessagePrincipal } from "@/src/runtime/runtime-message-contracts"
 
-const OFFSCREEN_PATH = "/offscreen.html"
-const OPTIONS_PATH = "/options.html"
-const SIDEPANEL_PATH = "/sidepanel.html"
-const BACKGROUND_PATHS = new Set(["/background.js", "/background"])
+const OFFSCREEN_PATHS: Record<string, true> = {
+  "/offscreen.html": true,
+  "/offscreen/index.html": true,
+  "/offscreen": true,
+}
+const OPTIONS_PATHS: Record<string, true> = {
+  "/options.html": true,
+  "/options/index.html": true,
+  "/options": true,
+}
+const SIDEPANEL_PATHS: Record<string, true> = {
+  "/sidepanel.html": true,
+  "/sidepanel/index.html": true,
+  "/sidepanel": true,
+}
+const BACKGROUND_PATHS: Record<string, true> = {
+  "/background.js": true,
+  "/background": true,
+  "/_generated_background_page.html": true,
+}
 
 function parseOwnExtensionUrl(
   value: string | undefined,
@@ -28,20 +44,23 @@ export function classifyRuntimeMessagePrincipal(
   if (!extensionId || sender.id !== extensionId) return "unknown"
 
   const url = parseOwnExtensionUrl(sender.url, extensionId)
-  const hasDocumentIdentity =
-    typeof sender.documentId === "string" && sender.documentId.length > 0
-  if (url?.pathname === SIDEPANEL_PATH && hasDocumentIdentity) {
+  if (url !== null && SIDEPANEL_PATHS[url.pathname]) {
     return "sidepanel"
   }
-  if (url?.pathname === OPTIONS_PATH && hasDocumentIdentity) return "options"
-  if (url?.pathname === OFFSCREEN_PATH && sender.tab === undefined) {
+  if (url !== null && OPTIONS_PATHS[url.pathname]) {
+    return "options"
+  }
+  if (
+    url !== null &&
+    OFFSCREEN_PATHS[url.pathname] &&
+    sender.tab === undefined
+  ) {
     return "offscreen"
   }
   if (
     sender.tab === undefined &&
-    sender.documentId === undefined &&
     (sender.url === undefined ||
-      (url !== null && BACKGROUND_PATHS.has(url.pathname)))
+      (url !== null && BACKGROUND_PATHS[url.pathname]))
   ) {
     return "background"
   }
