@@ -67,29 +67,6 @@ export function useInlineSelectionState() {
     }
   }, [closeInlineSelection])
 
-  useEffect(() => {
-    if (!isInlineSelectionOpen) return
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (
-        target instanceof Element &&
-        target.closest(
-          '[data-sidepanel-selection-region], [aria-controls="inline-selection-panel"]'
-        )
-      ) {
-        return
-      }
-
-      closeInlineSelection()
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown, true)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true)
-    }
-  }, [closeInlineSelection, isInlineSelectionOpen])
-
   return {
     chapterSelectionsBySeries,
     setChapterSelectionsBySeries,

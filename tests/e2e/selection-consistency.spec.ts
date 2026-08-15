@@ -179,6 +179,73 @@ test.describe("chapter selection flow", () => {
       sp.getByRole("button", { name: /Close Selection/i })
     ).toHaveCount(0)
   })
+  test("maintains open chapter selection when clicking outside the selection region in sidepanel", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    await page.goto(SERIES_URL, { waitUntil: "domcontentloaded" })
+
+    const baseChapters = [
+      { id: "chapter-1", url: buildExampleUrl("/ch1"), title: "Chapter 1" },
+      { id: "chapter-2", url: buildExampleUrl("/ch2"), title: "Chapter 2" },
+      { id: "chapter-3", url: buildExampleUrl("/ch3"), title: "Chapter 3" },
+    ]
+
+    const tabId = await seedTabContext(
+      page,
+      context,
+      {
+        siteIntegrationId: "mangadex",
+        mangaId: "106937",
+        seriesTitle: "Hunter x Hunter",
+        chapters: baseChapters,
+      },
+      SERIES_URL
+    )
+    await waitForTabStateById(page, context, tabId, (state) => {
+      return (
+        state.mangaId === "106937" &&
+        state.seriesTitle === "Hunter x Hunter" &&
+        state.chapters?.length === baseChapters.length
+      )
+    })
+
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await waitForActiveSeriesContextRevision(context, tabId)
+    await expect(sp.locator("#root")).toBeVisible()
+    await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
+      timeout: 15000,
+    })
+
+    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    await expect(toggleButton).toBeVisible()
+    await toggleButton.click()
+
+    await expect(
+      sp.getByRole("button", { name: /Close Selection/i })
+    ).toBeVisible()
+
+    // Click outside selection region: click on the sidepanel series title
+    await sp.getByText("Hunter x Hunter").click()
+
+    // Selection should remain open
+    await expect(
+      sp.getByRole("button", { name: /Close Selection/i })
+    ).toBeVisible()
+    await expect(sp.getByText("Chapter 1")).toBeVisible()
+
+    // Clicking the toggle button again closes selection
+    const closeButton = sp.getByRole("button", { name: /Close Selection/i })
+    await closeButton.click()
+
+    await expect(
+      sp.getByRole("button", { name: /Select Chapters/i })
+    ).toBeVisible()
+    await expect(
+      sp.getByRole("button", { name: /Close Selection/i })
+    ).toHaveCount(0)
+  })
 
   test("does not persist chapter selections after closing and reopening the side panel", async ({
     context,
