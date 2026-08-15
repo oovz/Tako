@@ -271,6 +271,36 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
     )
     await sp.close()
   })
+  test("clicking settings gear opens the options page tab", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
+    await getTabId(page, context)
+
+    const sp = await openSidepanelHarness(context, extensionId, page)
+    await expect(sp.locator("#root")).toBeVisible()
+
+    const optionsPagePromise = context.waitForEvent("page", {
+      predicate: (targetPage) =>
+        targetPage
+          .url()
+          .startsWith(`chrome-extension://${extensionId}/options.html`),
+      timeout: 10000,
+    })
+
+    const settingsButton = sp.getByRole("button", { name: /Open Options/i })
+    await expect(settingsButton).toBeVisible()
+    await settingsButton.click()
+
+    const optionsPage = await optionsPagePromise
+    await expect(optionsPage.locator("#root")).toBeVisible({ timeout: 10000 })
+    await expect(optionsPage.getByText("Tako Settings")).toBeVisible()
+
+    await sp.close()
+    await optionsPage.close()
+  })
 
   test("uses sidepanel.html as single entrypoint for supported and unsupported tabs", async ({
     context,
