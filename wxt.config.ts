@@ -142,4 +142,13 @@ export default defineConfig({
       port: 51730,
     },
   },
+  hooks: {
+    "prepare:tsconfig": (_, { tsconfig }) => {
+      if (tsconfig.compilerOptions) {
+        tsconfig.compilerOptions.noUncheckedIndexedAccess = false
+        tsconfig.compilerOptions.noImplicitOverride = false
+        tsconfig.compilerOptions.verbatimModuleSyntax = false
+      }
+    },
+  },
 })

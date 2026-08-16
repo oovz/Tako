@@ -4,7 +4,7 @@
   "description": "Batch-download manga chapters from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP files from Chrome's Side Panel.",
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "wxt",
@@ -62,7 +62,8 @@
     "vite": "8.1.2",
     "vite-plugin-istanbul": "^9.0.1",
     "vitest": "4.1.10",
-    "wxt": "^0.20.27"
+    "web-ext": "^10.6.0",
+    "wxt": "0.21.4"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
