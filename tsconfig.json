@@ -4,6 +4,9 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "types": ["chrome"],
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": false,
+    "verbatimModuleSyntax": false,
     "paths": {
       "@": ["."],
       "@/*": ["./*"]
