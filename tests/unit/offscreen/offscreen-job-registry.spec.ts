@@ -17,7 +17,8 @@ import {
   OffscreenLiveResourceLedger,
   type OffscreenLiveResourceLease,
 } from "@/src/runtime/offscreen-live-resource-ledger"
-
+import { OffscreenSeriesResolver } from "@/entrypoints/offscreen/series-resolver"
+import type { RateLimitService } from "@/src/runtime/rate-limit"
 type OffscreenDownloadChapterPayload =
   RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]
 
@@ -334,22 +335,19 @@ describe("offscreen job registry", () => {
   })
 
   it("keeps a canceled series resolution active until its parser settles", () => {
-    const worker = new OffscreenWorker()
+    const resolver = new OffscreenSeriesResolver(
+      () => ({}) as unknown as RateLimitService
+    )
     const controller = new AbortController()
-    const seriesResolutionControllers = (
-      worker as unknown as {
-        seriesResolutionControllers: Map<string, AbortController>
-      }
-    ).seriesResolutionControllers
-    seriesResolutionControllers.set("request-1", controller)
+    resolver.seriesResolutionControllers.set("request-1", controller)
 
-    expect(worker.getActiveSeriesResolutionCount()).toBe(1)
-    expect(worker.cancelSeriesHtml("request-1")).toBe(true)
+    expect(resolver.getActiveCount()).toBe(1)
+    expect(resolver.cancelSeriesHtml("request-1")).toBe(true)
     expect(controller.signal.aborted).toBe(true)
-    expect(worker.getActiveSeriesResolutionCount()).toBe(1)
+    expect(resolver.getActiveCount()).toBe(1)
 
-    seriesResolutionControllers.delete("request-1")
-    expect(worker.getActiveSeriesResolutionCount()).toBe(0)
+    resolver.seriesResolutionControllers.delete("request-1")
+    expect(resolver.getActiveCount()).toBe(0)
   })
 
   it("rejects a replacement while the lower attempt is still active", async () => {
