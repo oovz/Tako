@@ -85,6 +85,9 @@ pnpm test:e2e
   registries under `src/runtime/generated/`. Resolve page context from URLs,
   provider APIs, or fetched HTML first; use the bundled one-shot page probe only
   when an integration genuinely requires live page state.
+- To scaffold a new site integration, run `pnpm new:site-integration <id>` and
+  follow the
+  [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
 - Pass integration-specific data through the generic `integrationContext` field;
   do not add site-named shared message fields.
 - All async message handlers must return `true` and resolve `sendResponse` with

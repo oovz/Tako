@@ -3,6 +3,13 @@
 This guide covers adding or maintaining a manga/comic/manhwa/manhua integration
 for Tako's WXT Manifest V3 architecture.
 
+> **Important (Chrome Web Store Remote-Code Policy):** Runtime-loaded
+> integration scripts, remote code execution, dynamic plugins, or user-supplied
+> code evaluation (`eval()`) are strictly prohibited under Chrome Web Store
+> Manifest V3 policies. All site integrations must be written in TypeScript,
+> compiled statically into the extension bundle, and verified through repository
+> build and test gates.
+
 ## What an integration owns
 
 An integration owns:
@@ -18,258 +25,330 @@ Use the term **site integration** and the field `siteIntegrationId`
 consistently. Provider-specific fields must not leak into shared queue/message
 contracts.
 
-## Definition first
+## Contribution lifecycle
 
-`src/site-integrations/*/definition.json` is the source of truth for provider
-identity, maturity, URL patterns, origins, request policies, runtime surfaces,
-resolution strategies, page-probe mode, custom settings, and fixture paths.
-Every definition is validated against
-`src/site-integrations/definition.schema.json`; the generator then emits the
-typed catalog, context-specific runtime registries, page-probe registry, and
-permission inventory.
+Tako uses a **contribution model, not an ownership model**:
 
-The current `definition.json` fields include `maturity`, `shipped`,
-`enabledByDefault`, `implementationType`, `volatility`, `authentication`,
-`patterns`, `requiredOrigins`, `optionalOrigins`, `policyDefaults`,
-`retryOwner`, `pageProbe` (`none`, `optional`, or `required`), `runtimes`,
-`resolution`, `endpointPolicies`, `dynamicOrigins`, `sessionRefererRules`,
-`customSettings`, and `fixtures`. Do not recreate a separate manifest or infer
-provider policy from generated output.
+- **Responsibility ends at merge:** A contributor's obligation is completed once
+  their pull request is reviewed, tested, and merged. Contributors are not
+  obligated to maintain integrations indefinitely.
+- **Courtesy notifications:** Past authors may be tagged or pinged as a courtesy
+  when an upstream site changes, but active fixes are voluntary.
+- **Automated gates as maintainer safety net:** Strict schema validation,
+  deterministic contract fixtures, unit tests, and live smoke tests protect the
+  extension over time when contributors move on.
 
-`enabledByDefault` is the only fresh-profile default. A missing user override
-resolves from it everywhere: Options, active-tab detection, background dispatch,
-generated registries, and tests. Do not duplicate a different fallback.
+### Promotion and demotion
 
-Set a runtime flag to `true` only when that context has a real, bundled
-implementation. The generator must not create placeholder adapters just to
-satisfy a definition shape.
+| Lifecycle stage   | `shipped` | `maturity`       | Description                                                           |
+| ----------------- | --------- | ---------------- | --------------------------------------------------------------------- |
+| In-development    | `false`   | `"experimental"` | Scaffolding default; excluded from generated runtime bundles.         |
+| Active PR / Beta  | `true`    | `"experimental"` | Bundled; passes deterministic fixtures; undergoing live validation.   |
+| Production Ready  | `true`    | `"stable"`       | Passes all fixtures, live smoke, covers locked/error states cleanly.  |
+| Degraded / Broken | `true`    | `"experimental"` | Upstream site changes detected; demoted while awaiting a fix.         |
+| Inactive / Dead   | `false`   | `"experimental"` | Unbundled safely without code deletion until an active fix is merged. |
 
-MangaDex is the current example of a provider with optional `https://*/*`
-access. It is disabled by default; its Options enable gesture requests that
-optional origin. A denied/revoked permission leaves it unavailable. Broad
-browser permission never broadens the integration's runtime URL policy. Each
-`endpointPolicies` entry declares credentials, redirects, response type, and
-response-size bounds; the owning provider code remains the runtime request-role
-factory. `originKind: "provider-issued"` means a provider-issued dynamic origin
-(for example, a MangaDex At-Home host) validated by the owning provider's
-runtime policy, not arbitrary HTTPS access; the generated required-origin
-inventory is not necessarily exhaustive for that dynamic host set. The shared
-policy consumer is live today: `src/site-integrations/request-policy.ts` builds
-the endpoint policy and `src/site-integrations/http-client.ts` enforces origin,
-credential mode, redirect, response-type, and size limits for every provider
-request. New provider code must route all requests through
-`integrationHttpClient`; raw `fetch()` is prohibited.
+Integrations define a re-verification cadence via `fixtures.liveFreshnessDays`
+(typically 14–30 days). When a live smoke check fails and no contributor fix is
+available, maintainers can safely demote the integration
+(`maturity: "experimental"` or `"shipped": false`).
 
-## Context-resolution hierarchy
+## Fast track: Minimum Viable Integration (MVI)
 
-Use the least page-coupled strategy that produces correct data:
+To add a new site integration, start with the lightest sufficient
+implementation: URL parsing (or simple API/HTML fetch) in the background and
+chapter/image download in offscreen.
 
-1. Parse the active tab URL.
-2. Call a provider API.
-3. Fetch and structurally parse provider HTML in extension/offscreen context.
-4. Use a bundled one-shot page probe only when live DOM or page-owned storage is
-   genuinely required.
+### 1. Scaffold the integration
 
-There is no resident content script by default. Do not add a static WXT content
-entrypoint merely for URL parsing or data that fetched HTML already contains.
+Run the scaffolding tool:
 
-### One-shot probe rules
+```powershell
+pnpm new:site-integration <id> --name "Site Name"
+```
 
-A probe runs through `chrome.scripting.executeScript` and must:
+This creates `src/site-integrations/<id>/` with safe defaults:
 
-- use the isolated world by default;
-- be bundled with the extension;
-- be read-only and return schema-validated plain data;
-- accept no selector, code, or executable configuration from provider responses;
-- install no persistent listener, history patch, interval, or unbounded
-  observer;
-- clean up any bounded readiness observer before returning;
-- never write extension storage or operate the queue/download pipeline;
-- use `world: 'MAIN'` only with a documented integration-specific reason.
+- `definition.json` (`shipped: false`, `maturity: "experimental"`)
+- `background-runtime.ts` (typed adapter stub)
+- `offscreen-runtime.ts` (typed adapter stub)
+- `contracts/index.ts` (contract definitions)
+- `fixtures/contract.json` (deterministic fixture seed)
+- `README.md` (Approach, Endpoints, States covered, Live smoke)
 
-SPA navigation restarts loading-first resolution. A resident observer is allowed
-only after an integration test proves URL/navigation events plus one-shot
-resolution cannot represent the visible page correctly.
+Because `shipped: false` is set by default, the scaffold passes all generator
+checks immediately without injecting unfinished stubs into the build bundle.
 
-## Runtime boundaries
+### 2. Configure `definition.json`
 
-### Service Worker runtime
+Update URL patterns, required origins, endpoint policies, and rate limits:
 
-Use it for URL routing, provider series API/HTML loading that is Service Worker
-safe, permission checks, and preparing small non-secret dispatch context. It
-must not perform long-running timers or DOM/canvas work.
-
-### Offscreen runtime
-
-Use it for provider request scheduling, chapter HTML parsing, image resolution,
-image validation/download, descrambling, archive creation, FSA writes, and Blob
-URL ownership. It communicates through `chrome.runtime`; storage/downloads/
-permissions/alarms remain Service Worker responsibilities.
-
-The component making requests owns the rate limiter, Retry-After handling,
-backoff, and `nextChapterDispatchAt` deadline. Series resolvers receive an
-AbortSignal; the owning provider passes it to network requests and offscreen
-pagination so a deadline or superseded navigation stops the underlying work.
-Service Worker suspension must not erase a provider delay.
-
-MangaDex chapter downloads use the typed `resolveImageUrls` At-Home resolver in
-both bundled runtimes. The generic HTML parser fallback is for integrations that
-do not provide a resolver and is not registered for MangaDex; keep the
-provider's At-Home request and quality policy in that single resolver.
-
-### Dispatch context
-
-Provider-specific dispatch data uses a versioned envelope:
-
-```typescript
-interface IntegrationContextEnvelope<T = unknown> {
-  integrationId: string
-  schemaVersion: number
-  createdAt: number
-  data: T
+```json
+{
+  "schemaVersion": 1,
+  "id": "mysite",
+  "name": "My Site",
+  "author": "YourName",
+  "version": "1.0.0",
+  "maturity": "experimental",
+  "shipped": false,
+  "enabledByDefault": false,
+  "implementationType": "dom-scraping",
+  "volatility": "low",
+  "authentication": "anonymous",
+  "regions": ["global"],
+  "accountConstraints": [],
+  "patterns": {
+    "domains": ["mysite.example.com"],
+    "seriesMatches": ["/series/*"]
+  },
+  "requiredOrigins": ["https://mysite.example.com/*"],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 500 },
+    "chapter": { "concurrency": 1, "delayMs": 1000 }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "none" }
+  },
+  "imageTransform": {
+    "kind": "none",
+    "estimatedCostMs": 0
+  },
+  "endpointPolicies": [
+    {
+      "id": "mysite-series-page",
+      "purpose": "My Site series HTML and catalog",
+      "origins": ["https://mysite.example.com/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    }
+  ],
+  "dynamicOrigins": [],
+  "sessionRefererRules": [],
+  "customSettings": [],
+  "fixtures": {
+    "paths": ["src/site-integrations/mysite/fixtures/contract.json"],
+    "liveFreshnessDays": 30
+  }
 }
 ```
 
-Only the owning integration decodes `data` with a runtime schema. Reject unknown
-future versions with a mapped compatibility error. Do not put cookies, bearer
-tokens, signed URLs intended for logs, or constructed `Cookie` headers into this
-envelope. Normal browser-managed credentials are declared per request origin.
+### 3. Implement Background Series Resolution
+
+Implement `resolveSeriesData` in `background-runtime.ts`. Use
+`integrationHttpClient` for network requests (raw `fetch()` is prohibited):
+
+```typescript
+import type {
+  BackgroundSiteAdapter,
+  SeriesDataResolutionInput,
+  SeriesDataResolutionResult,
+  ServiceWorkerIntegration,
+} from "@/src/types/site-integrations"
+
+async function resolveSeriesData(
+  input: SeriesDataResolutionInput
+): Promise<SeriesDataResolutionResult> {
+  // Parse series URL or fetch HTML/API metadata
+  return {
+    seriesId: "123",
+    seriesMetadata: {
+      title: "Sample Manga",
+      description: "...",
+      author: "Author Name",
+    },
+    chapterList: [
+      {
+        id: "ch-1",
+        url: "https://mysite.example.com/chapter/1",
+        title: "Chapter 1",
+        chapterNumber: 1,
+        chapterLabel: "1",
+        locked: false,
+        comicInfo: {
+          Title: "Chapter 1",
+        },
+      },
+    ],
+  }
+}
+
+const background: ServiceWorkerIntegration = {
+  name: "My Site Background",
+  series: { resolveSeriesData },
+}
+
+export const backgroundSiteAdapter: BackgroundSiteAdapter = {
+  id: "mysite",
+  background,
+}
+```
+
+### 4. Implement Offscreen Chapter & Image Resolution
+
+In `offscreen-runtime.ts`, implement `resolveChapterPlan` and `downloadImage`:
+
+```typescript
+import type {
+  OffscreenIntegration,
+  OffscreenSiteAdapter,
+} from "@/src/types/site-integrations"
+import { ChapterImagePlanSchema } from "../chapter-plan"
+import { integrationHttpClient } from "../http-client"
+
+const offscreen: OffscreenIntegration = {
+  name: "My Site Offscreen",
+  chapter: {
+    async resolveChapterPlan(chapter, input) {
+      // Resolve image URLs for the chapter
+      const urls = ["https://mysite.example.com/images/1.jpg"]
+      return ChapterImagePlanSchema.parse({ imageUrls: urls })
+    },
+    async downloadImage(imageUrl, opts) {
+      // Fetch image bytes via the hardened integration HTTP client
+      const response = await integrationHttpClient.request({
+        integrationId: "mysite",
+        endpointId: "mysite-series-page",
+        url: imageUrl,
+        scope: "image",
+        rateLimitService: opts.runtime.rateLimitService,
+        init: { credentials: "omit", signal: opts.signal },
+        skipRateLimit: opts.skipRateLimit,
+      })
+      const data = await response.arrayBuffer()
+      return {
+        data,
+        filename: "001.jpg",
+        mimeType: response.headers.get("content-type") ?? "image/jpeg",
+      }
+    },
+  },
+}
+
+export const offscreenSiteAdapter: OffscreenSiteAdapter = {
+  id: "mysite",
+  offscreen,
+}
+```
+
+### 5. Document in `README.md`
+
+Fill out the per-site prose in `src/site-integrations/<id>/README.md`:
+
+- **Approach:** How the site is handled (API vs DOM parsing, session
+  requirements).
+- **Endpoints:** All endpoint IDs and their purpose.
+- **States covered:** Free chapters, locked/paywalled chapters, deleted series
+  handling.
+- **Live smoke:** Live verification notes and URL samples.
+
+### 6. Verify and Ship
+
+1. Run initial verification while developing:
+   `pnpm check:site-integrations && pnpm type-check && pnpm test:unit`.
+2. When your resolvers and fixtures are complete, set `"shipped": true` in
+   `src/site-integrations/<id>/definition.json`.
+3. Re-run code generation to compile your adapter into the runtime bundle
+   registries:
+   ```powershell
+   pnpm generate:site-integrations
+   ```
+4. Re-run the full verification suite to ensure all registries, types, and tests
+   pass with the new integration bundled:
+   ```powershell
+   pnpm check:site-integrations
+   pnpm type-check
+   pnpm test:unit
+   ```
+
+---
+
+## Advanced capabilities (opt-in)
+
+### 1. One-shot page probes
+
+Set `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Probes run
+via `chrome.scripting.executeScript`:
+
+- Must be read-only and return plain, schema-validated JSON data.
+- Must not install persistent listeners, timers, or unbounded DOM observers.
+- Run in isolated world by default (`world: 'MAIN'` only with documented need).
+- Example: MangaDex uses an optional probe to import reader preferences from
+  local storage.
+
+### 2. Declarative Net Request (DNR) session rules
+
+When a site requires custom referer headers for images or viewer sessions,
+declare `sessionRefererRules` in `definition.json`:
+
+- IDs must be in the extension-managed range `41000`–`41999`.
+- Domains and referers must match declared site patterns and required origins.
+
+### 3. Image transformations and descramblers
+
+When chapter pages are scrambled or split into tiles:
+
+- Set
+  `imageTransform: { "kind": "integrated-descramble", "estimatedCostMs": 3000 }`.
+- Implement canvas descrambling in offscreen runtime.
+- Add deterministic pixel-tested fixtures covering tile reconstruction.
+
+### 4. Dynamic origins (provider-issued hosts)
+
+When image CDNs or storage nodes are issued dynamically (e.g. MangaDex At-Home
+nodes):
+
+- Declare `dynamicOrigins` with target endpoint ID and
+  `validator: "public-https"`.
+- Declare target origins as `optionalOrigins`.
+
+### 5. Custom settings and i18n localization
+
+When an integration exposes user-configurable settings in Options:
+
+- Add typed fields to `customSettings` in `definition.json`.
+- Every field's `labelKey` (and optional `descriptionKey` or option `labelKey`)
+  **must exist in all four locale catalogs**: `en`, `ja`, `zh_CN`, `zh_TW` under
+  `public/_locales/*/messages.json`.
+- `generate:site-integrations` enforces complete localization and hard-fails if
+  any key is missing.
+
+---
 
 ## Shared request security
 
-Provider request paths use the shared hardened layer when their integration
-delegates to it; provider-specific request roles remain explicit in the owning
-integration. The common layer enforces:
+Provider request paths use the shared hardened layer (`integrationHttpClient`).
+The shared layer enforces:
 
-- HTTPS unless an origin is explicitly approved;
+- HTTPS by default;
 - integration-specific origin allowlists;
 - redirect rejection before follow (current limit: zero), plus defensive
   final-URL validation;
-- private, link-local, and loopback rejection unless explicitly required;
-- the credential mode supplied by the provider request role;
+- private, link-local, and loopback rejection;
+- credential modes declared per endpoint (`omit` or `include`);
 - response-size limits and AbortSignal cancellation;
 - metadata/HTML response bodies capped at 10 MiB before parsing;
-- raw image fetches validate the response `Content-Type` MIME and byte size;
-- image transformation paths validate encoded signatures and dimensions before
-  canvas allocation, with a post-decode consistency check;
-- AVIF is rejected by the shared transformation preflight until bounded support
-  exists;
+- raw image response `Content-Type` MIME and byte size validation;
 - sanitized filenames;
-- structured retry/error categories;
 - redacted logging of query values, credentials, headers, and bodies.
-
-HTML response decoding is intentionally strict rather than browser-equivalent:
-the response must provide a BOM, HTTP charset, or supported meta charset, and
-malformed bytes fail through the fatal decoder. Providers that consume HTML must
-satisfy that metadata contract. `handlesOwnRetries` changes retry
-classification/backoff only; it never bypasses proactive rate limiting.
-Providers needing richer control set `retryOwner: "provider"` and implement it
-in-adapter; schema extensions require a `schemaVersion` bump.
-
-## Chapter and volume data
-
-Preserve explicit site categories such as volumes, arcs, books, single issues,
-extras, or localized section headings.
-
-| Field                    | Responsibility                                              |
-| ------------------------ | ----------------------------------------------------------- |
-| `Volume.id`              | Opaque deterministic group identity scoped to the series    |
-| `Volume.title` / `label` | User-visible source label                                   |
-| `Chapter.volumeId`       | Explicit reference to `Volume.id`                           |
-| `Chapter.volumeLabel`    | Source label retained for fallback/templates/metadata       |
-| `Chapter.volumeNumber`   | Parsed numeric metadata, not grouping identity              |
-| `Chapter.listPosition`   | Stable 1-based source-list position preserved through retry |
-
-Use shared sanitization and chapter/volume parsing helpers. Integrations should
-provide numeric metadata when reliable; the enqueue path preserves rather than
-reinterprets it.
-
-## Image and output rules
-
-- Resolve ordered image candidates deterministically.
-- Validate final response MIME and size at the raw fetch boundary; transformed
-  images additionally validate encoded signatures and dimensions.
-- Derive exactly one output extension from the validated MIME; never duplicate a
-  source suffix.
-- Keep descramblers deterministic and pixel-tested against representative
-  fixtures.
-- Never report chapter/task completion when offscreen merely prepared a Blob.
-  Chrome Downloads commit at `downloads.onChanged: complete`; FSA commits after
-  writable-stream `close()` succeeds.
-- For loose images, record requested, committed, and failed output counts so a
-  partial image result produces task `partial_success` rather than false
-  failure.
-
-### Cover images
-
-An integration may provide `offscreen.cover.downloadImage` when a cover uses a
-different origin, credential mode, or response policy from chapter images. The
-generic chapter `downloadImage` hook is used only when those policies are the
-same. Cover prefetch is optional and nonfatal, but the hook remains abortable,
-uses the provider URL/credential policy, and must not bypass the shared rate
-admission owned by the caller.
-
-## Settings schema
-
-Custom settings use a typed, checked schema. `select` and `multiselect` fields
-must declare a nonempty `options` list; a malformed schema fails at startup
-instead of producing an unbounded text input in Options.
-
-```typescript
-interface SettingsFieldSchema {
-  id: string
-  type: "boolean" | "select" | "multiselect" | "string" | "number"
-  label: string
-  description?: string
-  defaultValue: unknown
-  options?: Array<{ value: string; label: string }>
-}
-```
-
-When a persisted custom-setting shape changes, add an automatic, versioned,
-one-time migration before switching the runtime validator to the new shape.
-Remove the legacy decoder only after the supported direct-upgrade window (across
-consecutive minor/major release epochs) has retired direct migrations from that
-version.
-
-## Maturity and promotion
-
-New integrations begin `experimental`. They normally become `stable` after:
-
-- deterministic parser/image/descrambler fixtures pass;
-- live smoke tests pass over several days;
-- representative readable, unavailable, and locked states are covered;
-- unknown provider changes fail closed with a mapped message;
-- no known archive corruption or systematic extraction failure remains.
-
-Unofficial APIs, HTML parsing, DOM scraping, and descrambling may all be Stable.
-Maturity describes the supported current implementation, not the likelihood that
-an upstream site will remain unchanged.
-
-## Recommended implementation flow
-
-1. Add or update the provider `definition.json` and runtime schemas.
-2. Implement URL/API/fetched-HTML series resolution.
-3. Add a one-shot probe only if a fixture proves it is necessary.
-4. Implement offscreen chapter/image behavior through the shared request layer.
-5. Add deterministic unit fixtures, including locked/unavailable cases.
-6. Add mocked Side Panel/download E2E coverage.
-7. Add live smoke coverage when publicly testable.
-8. Run `pnpm generate:site-integrations` (or `pnpm check:site-integrations` to
-   verify generated output); never edit generated files manually.
-9. Inspect the built Chrome manifest and verify required versus optional
-   origins.
 
 ## Validation commands
 
 ```powershell
-pnpm generate:site-integrations
-pnpm check:site-integrations
+pnpm generate:site-integrations  # Regenerates catalogs and registries
+pnpm check:site-integrations     # Verifies generated files are in sync
+pnpm type-check                  # Verifies TypeScript types
+pnpm lint                        # Lints TypeScript and architectural boundaries
+pnpm test:unit                   # Runs full unit test suite
 ```
-
-Run site-specific live tests manually where access and automation policy permit.
-A Stable integration must test production parsing/descrambling code, not only a
-parallel test implementation.
 
 ## Current integration notes
 
