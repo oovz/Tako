@@ -17,6 +17,7 @@ Options:
   --id <id>           Unique lowercase identifier (alternative to positional argument)
   --name <name>       Human-readable site name (e.g. "Example Manga")
   --author <author>   Author name (defaults to git user.name or current user)
+  --out-dir <dir>     Target output directory (defaults to src/site-integrations/<id>)
   --help, -h          Show this help message
 `)
 }
@@ -25,6 +26,7 @@ function parseArgs(args) {
   let id = null
   let name = null
   let author = null
+  let outDir = null
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -55,6 +57,14 @@ function parseArgs(args) {
       author = args[++i]
     } else if (arg.startsWith("--author=")) {
       author = arg.slice(9)
+    } else if (arg === "--out-dir") {
+      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+        console.error("Error: Missing value for --out-dir option.")
+        process.exit(1)
+      }
+      outDir = args[++i]
+    } else if (arg.startsWith("--out-dir=")) {
+      outDir = arg.slice(10)
     } else if (arg.startsWith("-")) {
       console.error(`Error: Unknown option "${arg}".`)
       printUsage()
@@ -69,7 +79,7 @@ function parseArgs(args) {
     }
   }
 
-  return { id, name, author }
+  return { id, name, author, outDir }
 }
 
 function getGitUser() {
@@ -106,7 +116,12 @@ function main() {
     process.exit(1)
   }
 
-  const { id, name: customName, author: customAuthor } = parseArgs(rawArgs)
+  const {
+    id,
+    name: customName,
+    author: customAuthor,
+    outDir,
+  } = parseArgs(rawArgs)
 
   if (!id) {
     console.error("Error: Missing required site integration <id>.")
@@ -122,10 +137,12 @@ function main() {
     process.exit(1)
   }
 
-  const targetDir = path.join(integrationsDir, id)
+  const targetDir = outDir
+    ? path.resolve(root, outDir)
+    : path.join(integrationsDir, id)
   if (fs.existsSync(targetDir)) {
     console.error(
-      `Error: Site integration directory already exists: src/site-integrations/${id}`
+      `Error: Target directory already exists: ${path.relative(root, targetDir)}`
     )
     process.exit(1)
   }
@@ -315,25 +332,26 @@ export type ${pascalId}Contract = Record<string, unknown>
   )
   fs.writeFileSync(path.join(targetDir, "README.md"), readmeMd)
 
+  const displayTarget = path.relative(root, targetDir).replaceAll(path.sep, "/")
   console.log(
-    `Successfully created site integration scaffold at src/site-integrations/${id}/`
+    `Successfully created site integration scaffold at ${displayTarget}/`
   )
   console.log(`
 Created files:
-  - src/site-integrations/${id}/definition.json
-  - src/site-integrations/${id}/background-runtime.ts
-  - src/site-integrations/${id}/offscreen-runtime.ts
-  - src/site-integrations/${id}/contracts/index.ts
-  - src/site-integrations/${id}/fixtures/contract.json
-  - src/site-integrations/${id}/README.md
+  - ${displayTarget}/definition.json
+  - ${displayTarget}/background-runtime.ts
+  - ${displayTarget}/offscreen-runtime.ts
+  - ${displayTarget}/contracts/index.ts
+  - ${displayTarget}/fixtures/contract.json
+  - ${displayTarget}/README.md
 
 Next steps:
-  1. Configure patterns, origins, and endpoint policies in src/site-integrations/${id}/definition.json
-  2. Implement series resolution in src/site-integrations/${id}/background-runtime.ts
-  3. Implement chapter planning and image downloading in src/site-integrations/${id}/offscreen-runtime.ts
-  4. Record deterministic test fixtures in src/site-integrations/${id}/fixtures/contract.json
+  1. Configure patterns, origins, and endpoint policies in ${displayTarget}/definition.json
+  2. Implement series resolution in ${displayTarget}/background-runtime.ts
+  3. Implement chapter planning and image downloading in ${displayTarget}/offscreen-runtime.ts
+  4. Record deterministic test fixtures in ${displayTarget}/fixtures/contract.json
   5. Fill in the README.md sections (Approach, Endpoints, States covered, Live smoke)
-  6. When implementation and fixtures are complete, set "shipped": true in src/site-integrations/${id}/definition.json
+  6. When implementation and fixtures are complete, set "shipped": true in ${displayTarget}/definition.json
   7. Re-run "pnpm generate:site-integrations && pnpm test:unit" to compile the new integration into runtime registries and verify all tests pass
 `)
 }
