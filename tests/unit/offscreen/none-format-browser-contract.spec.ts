@@ -167,7 +167,7 @@ describe("NONE format + browser downloads contract (behavior-based)", () => {
       offscreen: mockOffscreenIntegration,
     }
     getDefinitionMock.mockReturnValue({
-      resolution: { imageTransform: { kind: "none", estimatedCostMs: 0 } },
+      imageTransform: { kind: "none", estimatedCostMs: 0 },
       retryOwner: "platform",
       runtimes: {
         dispatchContext: { mode: "optional", schemaVersion: 1 },

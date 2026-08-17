@@ -111,13 +111,6 @@ export interface SiteIntegrationImageTransform {
   estimatedCostMs: number
 }
 
-export interface SiteIntegrationResolution {
-  seriesStrategies: string[]
-  chapterStrategies: string[]
-  imageStrategies: string[]
-  imageTransform: SiteIntegrationImageTransform
-}
-
 export interface SiteIntegrationFixtures {
   paths: string[]
   liveFreshnessDays: number
@@ -147,7 +140,7 @@ export interface SiteIntegrationDefinition {
   retryOwner: SiteIntegrationRetryOwner
   pageProbe: SiteIntegrationPageProbe
   runtimes: SiteIntegrationRuntimeSurface
-  resolution: SiteIntegrationResolution
+  imageTransform: SiteIntegrationImageTransform
   endpointPolicies: SiteIntegrationEndpointPolicy[]
   dynamicOrigins: SiteIntegrationDynamicOrigin[]
   sessionRefererRules: SiteIntegrationSessionRefererRule[]

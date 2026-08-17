@@ -33,14 +33,9 @@
     "offscreen": true,
     "dispatchContext": { "mode": "none" }
   },
-  "resolution": {
-    "seriesStrategies": ["viewer-html"],
-    "chapterStrategies": ["publus"],
-    "imageStrategies": ["publus"],
-    "imageTransform": {
-      "kind": "integrated-descramble",
-      "estimatedCostMs": 3000
-    }
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 3000
   },
   "endpointPolicies": [
     {

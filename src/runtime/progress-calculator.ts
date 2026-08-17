@@ -39,8 +39,7 @@ export interface ProgressCostContext {
 export function getInitialProgressPhaseCosts(
   context: ProgressCostContext
 ): ProgressPhaseCostProfile {
-  const transform = getDefinition(context.integrationId)?.resolution
-    .imageTransform
+  const transform = getDefinition(context.integrationId)?.imageTransform
   const integratedTransformCost =
     transform?.kind === "integrated-descramble" ? transform.estimatedCostMs : 0
   return {

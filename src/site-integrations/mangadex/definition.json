@@ -36,12 +36,7 @@
     "offscreen": true,
     "dispatchContext": { "mode": "optional", "schemaVersion": 1 }
   },
-  "resolution": {
-    "seriesStrategies": ["official-api"],
-    "chapterStrategies": ["official-api"],
-    "imageStrategies": ["at-home-api"],
-    "imageTransform": { "kind": "none", "estimatedCostMs": 0 }
-  },
+  "imageTransform": { "kind": "none", "estimatedCostMs": 0 },
   "endpointPolicies": [
     {
       "id": "mangadex-api",

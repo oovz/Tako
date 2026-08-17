@@ -34,10 +34,7 @@ function normalizeEstimates(raw: unknown): PersistedProgressTimingEstimates {
 }
 
 function transformType(context: ProgressCostContext): string {
-  return (
-    getDefinition(context.integrationId)?.resolution.imageTransform.kind ??
-    "none"
-  )
+  return getDefinition(context.integrationId)?.imageTransform.kind ?? "none"
 }
 
 export function progressTimingEstimateKey(

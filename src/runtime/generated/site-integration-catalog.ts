@@ -56,20 +56,9 @@ export const siteIntegrationCatalog = [
         "mode": "none"
       }
     },
-    "resolution": {
-      "seriesStrategies": [
-        "viewer-html"
-      ],
-      "chapterStrategies": [
-        "publus"
-      ],
-      "imageStrategies": [
-        "publus"
-      ],
-      "imageTransform": {
-        "kind": "integrated-descramble",
-        "estimatedCostMs": 3000
-      }
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 3000
     },
     "endpointPolicies": [
       {
@@ -190,20 +179,9 @@ export const siteIntegrationCatalog = [
         "schemaVersion": 1
       }
     },
-    "resolution": {
-      "seriesStrategies": [
-        "official-api"
-      ],
-      "chapterStrategies": [
-        "official-api"
-      ],
-      "imageStrategies": [
-        "at-home-api"
-      ],
-      "imageTransform": {
-        "kind": "none",
-        "estimatedCostMs": 0
-      }
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
     },
     "endpointPolicies": [
       {
@@ -367,20 +345,9 @@ export const siteIntegrationCatalog = [
         "mode": "none"
       }
     },
-    "resolution": {
-      "seriesStrategies": [
-        "fetched-html"
-      ],
-      "chapterStrategies": [
-        "packed-reader"
-      ],
-      "imageStrategies": [
-        "packed-reader"
-      ],
-      "imageTransform": {
-        "kind": "none",
-        "estimatedCostMs": 0
-      }
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
     },
     "endpointPolicies": [
       {
@@ -505,20 +472,9 @@ export const siteIntegrationCatalog = [
         "schemaVersion": 1
       }
     },
-    "resolution": {
-      "seriesStrategies": [
-        "private-api"
-      ],
-      "chapterStrategies": [
-        "private-api"
-      ],
-      "imageStrategies": [
-        "private-api"
-      ],
-      "imageTransform": {
-        "kind": "integrated-descramble",
-        "estimatedCostMs": 4000
-      }
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 4000
     },
     "endpointPolicies": [
       {
@@ -645,21 +601,9 @@ export const siteIntegrationCatalog = [
         "mode": "none"
       }
     },
-    "resolution": {
-      "seriesStrategies": [
-        "public-html",
-        "viewer-api"
-      ],
-      "chapterStrategies": [
-        "viewer-api"
-      ],
-      "imageStrategies": [
-        "gigaviewer"
-      ],
-      "imageTransform": {
-        "kind": "integrated-descramble",
-        "estimatedCostMs": 3000
-      }
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 3000
     },
     "endpointPolicies": [
       {
