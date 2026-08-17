@@ -110,7 +110,7 @@ jobs:
             throw "Release tag must match package.json exactly. Expected: $expectedTag; got: $env:RELEASE_TAG"
           }
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
       - name: Build release bundle
         run: pnpm zip
         env:
