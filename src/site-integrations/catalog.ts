@@ -58,8 +58,9 @@ export function getAllSupportedDomains(): string[] {
  * Sets the module-scoped in-memory site integration enablement map.
  *
  * Production call sites are restricted by architecture boundaries to the
- * background kernel initialization phase, the storage change listener, and the
- * offscreen initialization loader (plus the compile-time-gated E2E seed).
+ * background kernel initialization phase, the storage change listener and
+ * initialization loader (`src/runtime/site-integration-initialization.ts`),
+ * and the compile-time-gated E2E state seed.
  *
  * Callers that query {@link isEnabled} before this map is hydrated will
  * safely fall back to each definition's `enabledByDefault` configuration.
