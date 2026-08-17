@@ -10,6 +10,7 @@
     "dev": "wxt",
     "generate:site-integrations": "node scripts/generate-site-integration-registries.mjs",
     "check:site-integrations": "node scripts/generate-site-integration-registries.mjs --check",
+    "new:site-integration": "node scripts/new-site-integration.mjs",
     "check:architecture": "node scripts/check-architecture-boundaries.mjs",
     "build": "pnpm generate:site-integrations && wxt build",
     "zip": "pnpm generate:site-integrations && wxt zip",
