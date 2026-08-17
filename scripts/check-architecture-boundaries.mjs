@@ -17,6 +17,11 @@ const constructorOwners = new Set([
   "RateLimitService",
 ])
 const projectionFunctions = new Set(["projectToQueueView", "updateActionBadge"])
+const allowedSetEnablementMapFiles = new Set([
+  "entrypoints/background/background-runtime-kernel.ts",
+  "src/runtime/site-integration-initialization.ts",
+  "entrypoints/background/e2e-state-seed.ts",
+])
 const domainAmbientNames = new Set([
   "browser",
   "chrome",
@@ -385,6 +390,16 @@ function inspectSourceFile(metadata) {
           metadata,
           node,
           `${calledName} calls belong only in ${allowedProjectionFile}.`
+        )
+      }
+      if (
+        calledName === "setEnablementMap" &&
+        !allowedSetEnablementMapFiles.has(relativePath)
+      ) {
+        report(
+          metadata,
+          node,
+          "setEnablementMap() calls belong only in runtime initialization modules (entrypoints/background/background-runtime-kernel.ts, src/runtime/site-integration-initialization.ts) and E2E state seed (entrypoints/background/e2e-state-seed.ts)."
         )
       }
     }
