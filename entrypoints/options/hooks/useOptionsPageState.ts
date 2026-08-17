@@ -2,10 +2,6 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import logger from "@/src/runtime/logger"
-import {
-  DOWNLOAD_ROOT_HANDLE_ID,
-  type DirHandle,
-} from "@/src/storage/fs-access"
 import { validateSettingsDestination } from "@/src/storage/settings-destination-validation"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import type {
@@ -26,21 +22,16 @@ import { OptionsExternalChangeController } from "../controllers/options-external
 import { OptionsFsaController } from "../controllers/options-fsa-controller"
 import { OptionsHistoryController } from "../controllers/options-history-controller"
 import { OptionsHostPermissionController } from "../controllers/options-host-permission-controller"
+import {
+  useOptionsHistory,
+  type SeriesHistory,
+  type HistoryStats,
+} from "./useOptionsHistory"
+import { useOptionsFolderManagement } from "./useOptionsFolderManagement"
 
-export interface SeriesHistory {
-  siteIntegrationId: string
-  seriesId: string
-  seriesTitle: string
-  chapterCount: number
-}
-
-export interface HistoryStats {
-  totalChapters: number
-  totalSeries: number
-}
+export type { SeriesHistory, HistoryStats }
 
 type CustomSettingValue = SiteIntegrationSettingsMap[string][string]
-
 export function useOptionsPageState() {
   const [configuration, dispatchConfiguration] = useReducer(
     optionsConfigurationReducer,
@@ -66,29 +57,33 @@ export function useOptionsPageState() {
   const siteIntegrationEnablement = configuration.draft?.enablement ?? {}
   const siteIntegrationSettingsByIntegration =
     configuration.draft?.integrationSettings ?? {}
-  const [historyStats, setHistoryStats] = useState<HistoryStats | null>(null)
-  const [historySeries, setHistorySeries] = useState<SeriesHistory[]>([])
-  const [savedFolderHandle, setSavedFolderHandle] = useState<DirHandle | null>(
-    null
-  )
-  const [pendingFolderHandle, setPendingFolderHandle] =
-    useState<DirHandle | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
-  const [isClearing, setIsClearing] = useState(false)
-  const [isPickingFolder, setIsPickingFolder] = useState(false)
   const [isResolvingExternalChanges, setIsResolvingExternalChanges] =
     useState(false)
   const externalChangeKeys = configuration.externalChangeKeys
   const isLoading = configuration.hydration.status === "loading"
   const loadFailed = configuration.hydration.status === "error"
   const draftRevisionRef = useRef(0)
-  const folderDraftRevisionRef = useRef(0)
   const draftDirtyRef = useRef(false)
   const isSavingRef = useRef(false)
-  const isPickingFolderRef = useRef(false)
   const savedEnablementRef = useRef<SiteIntegrationEnablementMap>({})
   const hasLoadedEnablementRef = useRef(false)
+  const history = useOptionsHistory(historyController)
+  const folder = useOptionsFolderManagement({
+    fsaController,
+    isSavingRef,
+    settingsBuffer,
+    onSettingsChange: (updates) => {
+      dispatchConfiguration({ type: "edit-settings", updates })
+    },
+  })
+  const { setHistoryStats, setHistorySeries } = history
+  const {
+    setSavedFolderHandle,
+    setPendingFolderHandle,
+    getFolderDraftRevision,
+  } = folder
   const externalChangeController = useMemo(
     () => new OptionsExternalChangeController(configurationClient),
     [configurationClient]
@@ -103,32 +98,18 @@ export function useOptionsPageState() {
     configuration.draftRevision,
     configuration.saved,
   ])
-  const selectedFolderName =
-    pendingFolderHandle?.name ?? savedFolderHandle?.name ?? null
+  const selectedFolderName = folder.selectedFolderName
   const hasUnsavedChanges =
     configuration.saved !== null &&
     configuration.draft !== null &&
-    (pendingFolderHandle !== null ||
+    (folder.pendingFolderHandle !== null ||
       !optionsConfigurationSnapshotsEqual(
         configuration.saved,
         configuration.draft
       ))
-
-  function beginFolderAction(): boolean {
-    if (isSavingRef.current || isPickingFolderRef.current) return false
-    isPickingFolderRef.current = true
-    setIsPickingFolder(true)
-    return true
-  }
-
-  function endFolderAction(): void {
-    isPickingFolderRef.current = false
-    setIsPickingFolder(false)
-  }
-
   useEffect(() => {
     let canceled = false
-    const folderRevisionAtStart = folderDraftRevisionRef.current
+    const folderRevisionAtStart = getFolderDraftRevision()
     const draftRevisionAtStart = draftRevisionRef.current
     const fsaRevisionAtStart = fsaController.revision
 
@@ -173,14 +154,14 @@ export function useOptionsPageState() {
         if (canceled) return
         if (fsaController.revision !== fsaRevisionAtStart) return
         setSavedFolderHandle(handle ?? null)
-        if (folderDraftRevisionRef.current === folderRevisionAtStart) {
+        if (getFolderDraftRevision() === folderRevisionAtStart) {
           setPendingFolderHandle(null)
         }
       })
       .catch((error) => {
         if (canceled) return
         setSavedFolderHandle(null)
-        if (folderDraftRevisionRef.current === folderRevisionAtStart) {
+        if (getFolderDraftRevision() === folderRevisionAtStart) {
           setPendingFolderHandle(null)
         }
         logger.error("[OPTIONS] Failed to load custom folder handle:", error)
@@ -193,8 +174,13 @@ export function useOptionsPageState() {
     configurationClient,
     externalChangeController,
     fsaController,
+    getFolderDraftRevision,
     hostPermissionController,
     loadAttempt,
+    setHistorySeries,
+    setHistoryStats,
+    setPendingFolderHandle,
+    setSavedFolderHandle,
   ])
 
   useEffect(() => {
@@ -239,7 +225,12 @@ export function useOptionsPageState() {
         dispatchConfiguration({ type: "record-external-conflict", keys })
       },
     })
-  }, [externalChangeController, hasUnsavedChanges])
+  }, [
+    externalChangeController,
+    hasUnsavedChanges,
+    setHistorySeries,
+    setHistoryStats,
+  ])
 
   async function saveConfiguration() {
     if (
@@ -247,7 +238,7 @@ export function useOptionsPageState() {
       !settings ||
       isSaving ||
       isSavingRef.current ||
-      isPickingFolderRef.current
+      folder.isPickingFolderRef.current
     )
       return
     if (externalChangeKeys.length > 0 || isResolvingExternalChanges) {
@@ -295,7 +286,7 @@ export function useOptionsPageState() {
       const wantsCustomFolder =
         submittedSettings.downloads.destination === "file-system-access"
       const handleToPersist = wantsCustomFolder
-        ? (pendingFolderHandle ?? savedFolderHandle)
+        ? (folder.pendingFolderHandle ?? folder.savedFolderHandle)
         : null
 
       if (wantsCustomFolder && handleToPersist) {
@@ -307,7 +298,10 @@ export function useOptionsPageState() {
         }
       }
 
-      if (!wantsCustomFolder && (savedFolderHandle || pendingFolderHandle)) {
+      if (
+        !wantsCustomFolder &&
+        (folder.savedFolderHandle || folder.pendingFolderHandle)
+      ) {
         try {
           fsaMutationRevision = await fsaController.clear()
         } catch (error) {
@@ -343,16 +337,19 @@ export function useOptionsPageState() {
         submittedRevision,
         persisted: response,
       })
-      setSavedFolderHandle(handleToPersist)
+      folder.setSavedFolderHandle(handleToPersist)
       if (clearTransientDraft) {
-        setPendingFolderHandle(null)
+        folder.setPendingFolderHandle(null)
       }
       saveSucceeded = true
       toast.success(t("options_toastSavedSuccessfully"))
     } catch (error) {
       if (fsaMutationRevision !== null) {
         try {
-          await fsaController.restore(savedFolderHandle, fsaMutationRevision)
+          await fsaController.restore(
+            folder.savedFolderHandle,
+            fsaMutationRevision
+          )
         } catch (rollbackError) {
           logger.error(
             "[OPTIONS] Failed to restore saved folder handle after save error:",
@@ -369,13 +366,6 @@ export function useOptionsPageState() {
       isSavingRef.current = false
       setIsSaving(false)
     }
-  }
-
-  async function handleRefreshHistory() {
-    const loaded = await historyController.refresh()
-    setHistoryStats(loaded.historyStats)
-    setHistorySeries(loaded.historySeries)
-    return loaded.historySeries
   }
 
   function handleSettingsChange(updates: Partial<ExtensionSettings>) {
@@ -449,141 +439,12 @@ export function useOptionsPageState() {
     })
   }
 
-  async function pickDownloadFolder() {
-    if (!beginFolderAction()) return
-    try {
-      const result = await fsaController.requestFromUser()
-      if (result.status === "unsupported") {
-        toast.error(t("options_toastFsaNotSupported"))
-        return
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return
-      }
-      if (result.status === "aborted") return
-      if (result.status !== "granted") return
-      const handle = result.handle
-
-      folderDraftRevisionRef.current++
-      setPendingFolderHandle(handle)
-
-      if (settingsBuffer) {
-        handleSettingsChange({
-          downloads: {
-            ...settingsBuffer.downloads,
-            destination: "file-system-access",
-            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
-          },
-        })
-      }
-
-      toast.success(t("options_toastCustomFolderSet", [handle.name]))
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        toast.error(t("options_toastSetFolderFailed"))
-      }
-    } finally {
-      endFolderAction()
-    }
-  }
-
-  async function repairDownloadFolder(): Promise<boolean> {
-    if (!beginFolderAction()) return false
-    try {
-      const result = await fsaController.requestFromUser()
-      if (result.status === "unsupported") {
-        toast.error(t("options_toastFsaNotSupported"))
-        return false
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return false
-      }
-      if (result.status === "aborted") return false
-      if (result.status !== "granted") return false
-      const handle = result.handle
-
-      await fsaController.save(handle)
-      folderDraftRevisionRef.current++
-      setSavedFolderHandle(handle)
-      setPendingFolderHandle(null)
-      toast.success(t("options_toastCustomFolderSet", [handle.name]))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to repair custom folder:", error)
-      toast.error(t("options_toastSetFolderFailed"))
-      return false
-    } finally {
-      endFolderAction()
-    }
-  }
-
-  async function grantDownloadFolderAccess(): Promise<boolean> {
-    if (!beginFolderAction()) return false
-    try {
-      const result = await fsaController.grantSavedAccess()
-      if (result.status === "missing") {
-        toast.error(t("settings_customFolderRequired"))
-        return false
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return false
-      }
-      const handle = result.handle
-      setSavedFolderHandle(handle)
-      toast.success(t("destinationIssue_accessGranted"))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to grant custom-folder access:", error)
-      toast.error(t("options_toastPermissionDenied"))
-      return false
-    } finally {
-      endFolderAction()
-    }
-  }
-
-  async function clearAllHistory(): Promise<boolean> {
-    try {
-      setIsClearing(true)
-      const loaded = await historyController.clear({ scope: "all" })
-      setHistoryStats(loaded.historyStats)
-      setHistorySeries(loaded.historySeries)
-      toast.success(t("options_toastAllHistoryCleared"))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to clear history:", error)
-      toast.error(t("options_toastClearHistoryFailed"))
-      return false
-    } finally {
-      setIsClearing(false)
-    }
-  }
-
-  async function clearSeriesHistory(
-    siteIntegrationId: string,
-    seriesId: string
-  ): Promise<boolean> {
-    try {
-      setIsClearing(true)
-      const loaded = await historyController.clear({
-        scope: "series",
-        siteIntegrationId,
-        seriesId,
-      })
-      setHistoryStats(loaded.historyStats)
-      setHistorySeries(loaded.historySeries)
-      toast.success(t("options_toastSeriesHistoryCleared"))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to clear series history:", error)
-      toast.error(t("options_toastClearSeriesFailed"))
-      return false
-    } finally {
-      setIsClearing(false)
-    }
-  }
+  const {
+    pickDownloadFolder,
+    repairDownloadFolder,
+    grantDownloadFolderAccess,
+  } = folder
+  const { clearAllHistory, clearSeriesHistory, handleRefreshHistory } = history
 
   async function resolveExternalChanges(
     strategy: "reload" | "keep-mine"
@@ -594,7 +455,7 @@ export function useOptionsPageState() {
       isResolvingExternalChanges ||
       isSaving ||
       isSavingRef.current ||
-      isPickingFolderRef.current
+      folder.isPickingFolderRef.current
     ) {
       return false
     }
@@ -619,12 +480,11 @@ export function useOptionsPageState() {
           ? { type: "merge-latest-keeping-local", latest: latest.configuration }
           : { type: "replace-from-external", latest: latest.configuration }
       )
-      setHistoryStats(latest.historyStats)
-      setHistorySeries(latest.historySeries)
+      history.setHistoryStats(latest.historyStats)
+      history.setHistorySeries(latest.historySeries)
 
       if (strategy === "reload") {
-        folderDraftRevisionRef.current++
-        setPendingFolderHandle(null)
+        folder.clearPendingFolder()
         void hostPermissionController
           .removeUnused(latest.configuration.enablement)
           .catch((error) => {
@@ -653,7 +513,7 @@ export function useOptionsPageState() {
   }
 
   async function discardChanges(): Promise<boolean> {
-    if (isSavingRef.current || isPickingFolderRef.current) return false
+    if (isSavingRef.current || folder.isPickingFolderRef.current) return false
     if (externalChangeKeys.length > 0) {
       const reloaded = await resolveExternalChanges("reload")
       if (reloaded) toast.info(t("options_toastChangesDiscarded"))
@@ -669,9 +529,8 @@ export function useOptionsPageState() {
         )
       })
 
-    folderDraftRevisionRef.current++
+    folder.clearPendingFolder()
     dispatchConfiguration({ type: "discard-to-saved" })
-    setPendingFolderHandle(null)
     toast.info(t("options_toastChangesDiscarded"))
     return true
   }
@@ -687,14 +546,14 @@ export function useOptionsPageState() {
     overrides,
     siteIntegrationEnablement,
     siteIntegrationSettingsByIntegration,
-    historyStats,
-    historySeries,
+    historyStats: history.historyStats,
+    historySeries: history.historySeries,
     selectedFolderName,
     isLoading,
     loadFailed,
     isSaving,
-    isClearing,
-    isPickingFolder,
+    isClearing: history.isClearing,
+    isPickingFolder: folder.isPickingFolder,
     hasUnsavedChanges,
     hasExternalChanges: externalChangeKeys.length > 0,
     isResolvingExternalChanges,
