@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import {
   siteIntegrationCatalog,
@@ -10,6 +10,10 @@ import {
 } from "@/src/site-integrations/catalog"
 
 describe("site integration registry", () => {
+  afterEach(() => {
+    setEnablementMap({})
+  })
+
   it("returns undefined when definition is missing", () => {
     expect(getDefinition("__unknown__")).toBeUndefined()
   })
@@ -124,8 +128,5 @@ describe("site integration registry", () => {
     })
     expect(isEnabled(enabledDef.id)).toBe(false)
     expect(isEnabled(disabledDef.id)).toBe(true)
-
-    // Clean up
-    setEnablementMap({})
   })
 })
