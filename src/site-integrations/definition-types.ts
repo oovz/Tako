@@ -6,6 +6,12 @@ export type SiteIntegrationMaturity = "experimental" | "stable"
 export type SiteIntegrationImplementationType =
   "official-api" | "unofficial-api" | "dom-scraping" | "hybrid"
 export type SiteIntegrationPageProbe = "none" | "optional" | "required"
+/**
+ * Determines whether retry classification and backoff are managed by the
+ * platform or owned by the provider adapter. Providers needing richer control
+ * set `retryOwner: "provider"` and implement it in-adapter; schema extensions
+ * require a `schemaVersion` bump.
+ */
 export type SiteIntegrationRetryOwner = "platform" | "provider"
 export type SiteIntegrationRedirectMode = "error" | "follow" | "manual"
 export type SiteIntegrationResponseType = "json" | "text" | "bytes" | "html"

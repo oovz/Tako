@@ -5,6 +5,8 @@ import {
   getDefinition,
   isEnabled,
   requiresBroadHttpsPermission,
+  setEnablementMap,
+  getEnablementMap,
 } from "@/src/site-integrations/catalog"
 
 describe("site integration registry", () => {
@@ -92,5 +94,38 @@ describe("site integration registry", () => {
 
     expect(isEnabled(definition.id, { [definition.id]: false })).toBe(false)
     expect(isEnabled(definition.id, { [definition.id]: true })).toBe(true)
+  })
+
+  it("hydrates and projects module-scope enablement map with fallback to defaults", () => {
+    const enabledDef = siteIntegrationCatalog.find(
+      (item) => item.enabledByDefault === true && item.shipped
+    )
+    const disabledDef = siteIntegrationCatalog.find(
+      (item) => item.enabledByDefault === false && item.shipped
+    )
+    expect(enabledDef).toBeDefined()
+    expect(disabledDef).toBeDefined()
+    if (!enabledDef || !disabledDef) return
+
+    // Reset to empty map (simulating unhydrated/default state)
+    setEnablementMap({})
+    expect(getEnablementMap()).toEqual({})
+    expect(isEnabled(enabledDef.id)).toBe(true)
+    expect(isEnabled(disabledDef.id)).toBe(false)
+
+    // Set explicit enablement map
+    setEnablementMap({
+      [enabledDef.id]: false,
+      [disabledDef.id]: true,
+    })
+    expect(getEnablementMap()).toEqual({
+      [enabledDef.id]: false,
+      [disabledDef.id]: true,
+    })
+    expect(isEnabled(enabledDef.id)).toBe(false)
+    expect(isEnabled(disabledDef.id)).toBe(true)
+
+    // Clean up
+    setEnablementMap({})
   })
 })

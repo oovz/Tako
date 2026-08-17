@@ -161,10 +161,10 @@ integration. The common layer enforces:
 HTML response decoding is intentionally strict rather than browser-equivalent:
 the response must provide a BOM, HTTP charset, or supported meta charset, and
 malformed bytes fail through the fatal decoder. Providers that consume HTML must
-satisfy that metadata contract.
-
-`handlesOwnRetries` changes retry classification/backoff only; it never bypasses
-proactive rate limiting.
+satisfy that metadata contract. `handlesOwnRetries` changes retry
+classification/backoff only; it never bypasses proactive rate limiting.
+Providers needing richer control set `retryOwner: "provider"` and implement it
+in-adapter; schema extensions require a `schemaVersion` bump.
 
 ## Chapter and volume data
 
