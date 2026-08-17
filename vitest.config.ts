@@ -78,6 +78,8 @@ export default defineConfig({
         // unit tests for them is a tracked follow-up. Excluding them keeps the
         // coverage gate honest about what the unit/integration suites cover.
         "entrypoints/options/hooks/useOptionsPageState.ts",
+        "entrypoints/options/hooks/useOptionsFolderManagement.ts",
+        "entrypoints/options/hooks/useOptionsHistory.ts",
         "entrypoints/options/hooks/useDownloadsTabState.ts",
         "entrypoints/sidepanel/hooks/useCommandCenterActions.ts",
         "entrypoints/sidepanel/hooks/useSidepanelTrackedTabId.ts",
@@ -91,6 +93,8 @@ export default defineConfig({
         "entrypoints/sidepanel/hooks/useChapterSelections.ts",
         "entrypoints/sidepanel/hooks/useInitFailure.ts",
         "entrypoints/sidepanel/hooks/useActiveTaskProgress.ts",
+        "src/ui/shared/hooks/useChromeStorageValue.ts",
+        "src/ui/shared/hooks/useUiPreferences.ts",
         // These runtime helpers are only reachable from the excluded pure
         // offscreen bootstrap and do not yet have direct unit tests.
         "entrypoints/offscreen/error-categories.ts",
