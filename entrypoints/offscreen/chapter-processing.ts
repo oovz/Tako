@@ -1,10 +1,5 @@
-import type { Chapter } from "@/src/types/chapter"
 import logger from "@/src/runtime/logger"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
-import {
-  writeBlobToPath,
-  type WriteBlobToPathResult,
-} from "@/src/storage/fs-access"
 import createZipArchiveWorker from "./archive-worker-factory"
 import { ArchiveWorkerSession } from "./archive-worker-session"
 import {
@@ -19,24 +14,33 @@ import {
 } from "./chapter-processing-helpers"
 import {
   MAX_ARCHIVE_BYTES,
-  MAX_CHAPTER_IMAGES,
   MAX_METADATA_RESPONSE_BYTES,
 } from "@/src/constants/timeouts"
-import type {
-  OffscreenLiveResourceLedger,
-  OffscreenLiveResourceLease,
-} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { OffscreenLiveResourceLease } from "@/src/runtime/offscreen-live-resource-ledger"
 import type {
   ArchiveNormalizationSettings,
-  BrowserBlobDownloadResponse,
   ChapterDownloadImageFn,
   ChapterOutcome,
   ChapterProcessingRuntime,
   ProcessChapterStreamingOptions,
 } from "./chapter-processing-types"
-import type { SeriesMetadataInput } from "./helpers"
 import { FsaWriteError, toFsaWriteError } from "./error-categories"
-
+import {
+  requireNativeOutputDisposition,
+  createNoneFormatChapterOutcome,
+  createFsaDestinationFailureOutcome,
+} from "./chapter-processing-outcomes"
+import {
+  getConflictPolicy,
+  writeFsaOutput,
+  resolveChapterWritableRoot,
+} from "./chapter-processing-fsa"
+import {
+  assertChapterImageCount,
+  initializeArchiveWorker,
+  addComicInfoToArchiveWorker,
+  addCoverToArchiveWorker,
+} from "./chapter-archive-worker-helpers"
 export type {
   ArchiveNormalizationSettings,
   BrowserBlobDownloadResponse,
@@ -51,230 +55,6 @@ export type {
   WorkerZipProgress,
   WorkerZipResult,
 } from "./chapter-processing-types"
-
-function requireNativeOutputDisposition(
-  response: BrowserBlobDownloadResponse
-): Extract<NonNullable<BrowserBlobDownloadResponse>, { success: true }> {
-  if (!response) {
-    throw new Error("Native output ownership response was not delivered")
-  }
-  if (response.success !== true) {
-    throw new Error(response.error)
-  }
-  return response
-}
-
-function initializeArchiveWorker(input: {
-  session: ArchiveWorkerSession
-  chapter: Chapter
-  format: "cbz" | "zip"
-  normalizeSettings: ArchiveNormalizationSettings
-  totalImages: number
-}): void {
-  const { session, chapter, format, normalizeSettings, totalImages } = input
-  session.post({
-    type: "init",
-    chapterTitle: sanitizeFilename(chapter.title),
-    extension: format,
-    normalizeImageFilenames: normalizeSettings.normalizeImageFilenames,
-    imagePaddingDigits: normalizeSettings.imagePaddingDigits,
-    totalImages,
-    maxArchiveBytes: MAX_ARCHIVE_BYTES,
-  })
-}
-
-function assertChapterImageCount(imageCount: number): void {
-  if (imageCount > MAX_CHAPTER_IMAGES) {
-    throw new ChapterResourceLimitError(
-      `Chapter image count exceeds ${MAX_CHAPTER_IMAGES} image limit (got ${imageCount})`
-    )
-  }
-}
-
-function addComicInfoToArchiveWorker(input: {
-  session: ArchiveWorkerSession
-  includeComicInfo: boolean | undefined
-  chapter: Chapter
-  seriesTitle: string
-  seriesMetadata?: SeriesMetadataInput
-  pageCount: number
-  comicInfoVersion: "2.0"
-  hasCoverImage: boolean
-}): void {
-  const {
-    session,
-    includeComicInfo,
-    chapter,
-    seriesTitle,
-    seriesMetadata,
-    pageCount,
-    comicInfoVersion,
-    hasCoverImage,
-  } = input
-  const xml = buildOptionalComicInfoXml({
-    includeComicInfo,
-    chapter,
-    seriesTitle,
-    seriesMetadata,
-    pageCount,
-    comicInfoVersion,
-    hasCoverImage,
-  })
-  if (!xml) {
-    return
-  }
-
-  session.post({ type: "addComicInfo", xml })
-  logger.debug(
-    `📋 Added ComicInfo.xml as first entry (${pageCount} pages estimated)`
-  )
-}
-
-function addCoverToArchiveWorker(
-  session: ArchiveWorkerSession,
-  liveResourceLedger: OffscreenLiveResourceLedger,
-  inputId: string,
-  coverImage?: {
-    data: ArrayBuffer
-    mimeType: string
-    liveResourceLease?: OffscreenLiveResourceLease
-  }
-): void {
-  if (!coverImage) {
-    return
-  }
-
-  const coverBuffer = coverImage.data
-  const inputLease =
-    coverImage.liveResourceLease ??
-    liveResourceLedger.reserve(
-      coverBuffer.byteLength,
-      "untracked archive cover input"
-    )
-  session.post(
-    {
-      type: "addImage",
-      inputId,
-      filename: buildCoverOutputFilename(coverImage.mimeType),
-      buffer: coverBuffer,
-      index: 0,
-      mimeType: coverImage.mimeType,
-    },
-    [coverBuffer],
-    inputLease
-  )
-}
-
-function createNoneFormatChapterOutcome(input: {
-  downloadMode: "browser" | "custom"
-  totalImages: number
-  failedImages: number
-  totalAdditionalOutputs?: number
-  failedAdditionalOutputs?: number
-}): ChapterOutcome {
-  const {
-    downloadMode,
-    totalImages,
-    failedImages,
-    totalAdditionalOutputs = 0,
-    failedAdditionalOutputs = 0,
-  } = input
-  const totalOutputs = totalImages + totalAdditionalOutputs
-  const failedOutputs = failedImages + failedAdditionalOutputs
-
-  if (failedOutputs > 0) {
-    const succeededOutputs = totalOutputs - failedOutputs
-    if (succeededOutputs > 0) {
-      logger.warn(
-        `Partial success (${downloadMode}): ${succeededOutputs} succeeded, ${failedOutputs} failed`
-      )
-      return {
-        status: "partial_success",
-        errorMessage:
-          totalAdditionalOutputs > 0
-            ? `${failedOutputs}/${totalOutputs} output files failed`
-            : `${failedImages}/${totalImages} images failed`,
-        imagesFailed: failedImages || undefined,
-        outputsRequested: totalOutputs,
-        outputsFailedBeforeHandoff:
-          downloadMode === "browser" ? failedOutputs : 0,
-        outputsCommitted: downloadMode === "custom" ? succeededOutputs : 0,
-      }
-    }
-
-    return {
-      status: "failed",
-      errorMessage:
-        totalAdditionalOutputs > 0
-          ? `All output files failed (${failedOutputs}/${totalOutputs})`
-          : `All images failed (${failedImages}/${totalImages})`,
-      imagesFailed: failedImages || undefined,
-      outputsRequested: totalOutputs,
-      outputsFailedBeforeHandoff:
-        downloadMode === "browser" ? failedOutputs : 0,
-      outputsCommitted: 0,
-    }
-  }
-
-  return {
-    status: "completed",
-    outputsRequested: totalOutputs,
-    outputsFailedBeforeHandoff: 0,
-    outputsCommitted: downloadMode === "custom" ? totalOutputs : 0,
-  }
-}
-
-function createFsaDestinationFailureOutcome(input: {
-  error: FsaWriteError
-  outputsRequested: number
-  outputsCommitted: number
-  totalImages: number
-  committedImages: number
-}): ChapterOutcome {
-  const imagesFailed = Math.max(0, input.totalImages - input.committedImages)
-  return {
-    status: input.outputsCommitted > 0 ? "partial_success" : "failed",
-    errorMessage: input.error.message,
-    errorCategory: input.error.category,
-    imagesFailed: imagesFailed || undefined,
-    outputsRequested: input.outputsRequested,
-    outputsFailedBeforeHandoff: 0,
-    outputsCommitted: input.outputsCommitted,
-  }
-}
-
-type ConflictPolicy = "uniquify" | "overwrite"
-
-function getConflictPolicy(
-  opts: ProcessChapterStreamingOptions
-): ConflictPolicy {
-  return opts.settingsSnapshot.conflictPolicy
-}
-
-async function writeFsaOutput(input: {
-  dir: FileSystemDirectoryHandle
-  path: string
-  blob: Blob
-  collisionPolicy: ConflictPolicy
-  signal?: AbortSignal
-  onBytesWritten?: (bytesWritten: number) => void | Promise<void>
-}): Promise<WriteBlobToPathResult> {
-  try {
-    return await writeBlobToPath(
-      input.dir,
-      input.path,
-      input.blob,
-      input.collisionPolicy,
-      {
-        signal: input.signal,
-        onBytesWritten: input.onBytesWritten,
-      }
-    )
-  } catch (error) {
-    if (input.signal?.aborted) throw error
-    throw toFsaWriteError(error)
-  }
-}
 
 export async function processNoneFormatChapter(
   runtime: ChapterProcessingRuntime,
@@ -325,18 +105,12 @@ export async function processNoneFormatChapter(
   let fsaWriteFailure: FsaWriteError | null = null
 
   if (downloadMode === "custom") {
-    try {
-      writableRoot = await runtime.resolveWritableDownloadRoot({
-        taskId,
-        chapter,
-        totalImages: total,
-      })
-    } catch (error) {
-      if (abortSignal?.aborted) {
-        throw new Error("job-cancelled", { cause: error })
-      }
-      throw error
-    }
+    writableRoot = await resolveChapterWritableRoot(runtime, {
+      taskId,
+      chapter,
+      totalImages: total,
+      abortSignal,
+    })
   }
 
   if (abortSignal?.aborted) throw new Error("job-cancelled")
@@ -623,18 +397,12 @@ export async function processArchiveFormatChapter(
     chapter.resolvedPath || `${sanitizeFilename(chapter.title)}.${format}`
   let writableRoot: FileSystemDirectoryHandle | null = null
   if (downloadMode === "custom") {
-    try {
-      writableRoot = await runtime.resolveWritableDownloadRoot({
-        taskId,
-        chapter,
-        totalImages: urls.length,
-      })
-    } catch (error) {
-      if (abortSignal?.aborted) {
-        throw new Error("job-cancelled", { cause: error })
-      }
-      throw error
-    }
+    writableRoot = await resolveChapterWritableRoot(runtime, {
+      taskId,
+      chapter,
+      totalImages: urls.length,
+      abortSignal,
+    })
   }
 
   const archiveAllowance = runtime.liveResourceLedger.reserve(
