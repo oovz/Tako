@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react"
+import { useCallback, useRef, useState, type RefObject } from "react"
 import { toast } from "sonner"
 import logger from "@/src/runtime/logger"
 import { t } from "@/src/runtime/i18n"
@@ -33,32 +33,32 @@ export function useOptionsFolderManagement(
   const selectedFolderName =
     pendingFolderHandle?.name ?? savedFolderHandle?.name ?? null
 
-  function getFolderDraftRevision(): number {
+  const getFolderDraftRevision = useCallback((): number => {
     return folderDraftRevisionRef.current
-  }
+  }, [])
 
-  function bumpFolderDraftRevision(): void {
+  const bumpFolderDraftRevision = useCallback((): void => {
     folderDraftRevisionRef.current++
-  }
+  }, [])
 
-  function clearPendingFolder(): void {
+  const clearPendingFolder = useCallback((): void => {
     folderDraftRevisionRef.current++
     setPendingFolderHandle(null)
-  }
+  }, [])
 
-  function beginFolderAction(): boolean {
+  const beginFolderAction = useCallback((): boolean => {
     if (isSavingRef.current || isPickingFolderRef.current) return false
     isPickingFolderRef.current = true
     setIsPickingFolder(true)
     return true
-  }
+  }, [isSavingRef])
 
-  function endFolderAction(): void {
+  const endFolderAction = useCallback((): void => {
     isPickingFolderRef.current = false
     setIsPickingFolder(false)
-  }
+  }, [])
 
-  async function pickDownloadFolder(): Promise<void> {
+  const pickDownloadFolder = useCallback(async (): Promise<void> => {
     if (!beginFolderAction()) return
     try {
       const result = await fsaController.requestFromUser()
@@ -95,9 +95,15 @@ export function useOptionsFolderManagement(
     } finally {
       endFolderAction()
     }
-  }
+  }, [
+    beginFolderAction,
+    endFolderAction,
+    fsaController,
+    onSettingsChange,
+    settingsBuffer,
+  ])
 
-  async function repairDownloadFolder(): Promise<boolean> {
+  const repairDownloadFolder = useCallback(async (): Promise<boolean> => {
     if (!beginFolderAction()) return false
     try {
       const result = await fsaController.requestFromUser()
@@ -126,9 +132,9 @@ export function useOptionsFolderManagement(
     } finally {
       endFolderAction()
     }
-  }
+  }, [beginFolderAction, endFolderAction, fsaController])
 
-  async function grantDownloadFolderAccess(): Promise<boolean> {
+  const grantDownloadFolderAccess = useCallback(async (): Promise<boolean> => {
     if (!beginFolderAction()) return false
     try {
       const result = await fsaController.grantSavedAccess()
@@ -151,7 +157,7 @@ export function useOptionsFolderManagement(
     } finally {
       endFolderAction()
     }
-  }
+  }, [beginFolderAction, endFolderAction, fsaController])
 
   return {
     savedFolderHandle,
