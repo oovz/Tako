@@ -1,6 +1,5 @@
 import { defineConfig } from "wxt"
 import tailwindcss from "@tailwindcss/vite"
-import path from "path"
 import istanbul from "vite-plugin-istanbul"
 import { siteIntegrationWxtPermissions } from "./src/runtime/generated/site-integration-wxt-permissions"
 
@@ -48,11 +47,6 @@ export default defineConfig({
       // Vite's modulepreload helper touches document/window. Extension service
       // workers have neither, and background runtimes are lazy-loaded there.
       modulePreload: false,
-    },
-    resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./"),
-      },
     },
   }),
 
