@@ -202,7 +202,7 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
       offscreen: mockOffscreenIntegration,
     }
     getDefinitionMock.mockReturnValue({
-      resolution: { imageTransform: { kind: "none", estimatedCostMs: 0 } },
+      imageTransform: { kind: "none", estimatedCostMs: 0 },
       retryOwner: "platform",
       runtimes: {
         dispatchContext: { mode: "optional", schemaVersion: 1 },
@@ -720,7 +720,7 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
       },
     }
     getDefinitionMock.mockReturnValue({
-      resolution: { imageTransform: { kind: "none", estimatedCostMs: 0 } },
+      imageTransform: { kind: "none", estimatedCostMs: 0 },
       retryOwner: "provider",
       runtimes: {
         dispatchContext: { mode: "optional", schemaVersion: 1 },

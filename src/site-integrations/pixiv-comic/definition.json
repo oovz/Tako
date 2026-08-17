@@ -31,14 +31,9 @@
     "offscreen": true,
     "dispatchContext": { "mode": "optional", "schemaVersion": 1 }
   },
-  "resolution": {
-    "seriesStrategies": ["private-api"],
-    "chapterStrategies": ["private-api"],
-    "imageStrategies": ["private-api"],
-    "imageTransform": {
-      "kind": "integrated-descramble",
-      "estimatedCostMs": 4000
-    }
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 4000
   },
   "endpointPolicies": [
     {

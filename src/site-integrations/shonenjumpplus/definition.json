@@ -33,14 +33,9 @@
     "offscreen": true,
     "dispatchContext": { "mode": "none" }
   },
-  "resolution": {
-    "seriesStrategies": ["public-html", "viewer-api"],
-    "chapterStrategies": ["viewer-api"],
-    "imageStrategies": ["gigaviewer"],
-    "imageTransform": {
-      "kind": "integrated-descramble",
-      "estimatedCostMs": 3000
-    }
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 3000
   },
   "endpointPolicies": [
     {

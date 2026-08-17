@@ -183,16 +183,6 @@ function assertDefinition(id, definition, definitionPath) {
     definition.patterns.domains.length > 0,
     `${id} must declare patterns.domains`
   )
-  for (const strategy of [
-    ...definition.resolution.seriesStrategies,
-    ...definition.resolution.chapterStrategies,
-    ...definition.resolution.imageStrategies,
-  ]) {
-    assert(
-      !/(?:fallback|legacy)/i.test(strategy),
-      `${id} declares an obsolete compatibility strategy: ${strategy}`
-    )
-  }
   for (const domain of definition.patterns.domains) {
     assert(
       definition.requiredOrigins.some((origin) =>
@@ -213,7 +203,7 @@ function assertDefinition(id, definition, definitionPath) {
       `${id} dispatchContext requires a positive schemaVersion`
     )
   }
-  const imageTransform = definition.resolution.imageTransform
+  const imageTransform = definition.imageTransform
   assert(
     imageTransform.kind === "none"
       ? imageTransform.estimatedCostMs === 0

@@ -36,12 +36,7 @@
     "offscreen": true,
     "dispatchContext": { "mode": "none" }
   },
-  "resolution": {
-    "seriesStrategies": ["fetched-html"],
-    "chapterStrategies": ["packed-reader"],
-    "imageStrategies": ["packed-reader"],
-    "imageTransform": { "kind": "none", "estimatedCostMs": 0 }
-  },
+  "imageTransform": { "kind": "none", "estimatedCostMs": 0 },
   "endpointPolicies": [
     {
       "id": "manhuagui-series-html",
