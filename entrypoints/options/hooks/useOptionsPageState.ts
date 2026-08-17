@@ -70,13 +70,17 @@ export function useOptionsPageState() {
   const savedEnablementRef = useRef<SiteIntegrationEnablementMap>({})
   const hasLoadedEnablementRef = useRef(false)
   const history = useOptionsHistory(historyController)
+  const handleFolderSettingsChange = useCallback(
+    (updates: Partial<ExtensionSettings>) => {
+      dispatchConfiguration({ type: "edit-settings", updates })
+    },
+    []
+  )
   const folder = useOptionsFolderManagement({
     fsaController,
     isSavingRef,
     settingsBuffer,
-    onSettingsChange: (updates) => {
-      dispatchConfiguration({ type: "edit-settings", updates })
-    },
+    onSettingsChange: handleFolderSettingsChange,
   })
   const { setHistoryStats, setHistorySeries } = history
   const {
