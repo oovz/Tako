@@ -1,8 +1,4 @@
 import logger from "@/src/runtime/logger"
-import type {
-  RuntimeMessageRequest,
-  RuntimeMessageResponse,
-} from "@/src/runtime/runtime-message-contracts"
 import {
   isNativeOutputAcceptanceProvenAbsent,
   isNativeOutputLive,
@@ -10,7 +6,6 @@ import {
   isNativeOutputUnobservable,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
-  type NativeOutputIdentity,
   type NativeOutputJobIdentity,
   type NativeOutputManifest,
   type NativeOutputRecord,
@@ -21,9 +16,18 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 
-type OutputReadyPayload =
-  RuntimeMessageRequest<"OFFSCREEN_OUTPUT_READY">["payload"]
-type OutputReadyResponse = RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY">
+import {
+  toIdentity,
+  trackedResponse,
+  notPersistedResponse,
+  errorMessage,
+  isValidDownloadId,
+  manifestTrackedOutputIds,
+  calculateNativeOutputSettlementStats,
+  classifyProducerStoppedError,
+  type OutputReadyPayload,
+  type OutputReadyResponse,
+} from "./native-output-coordinator-helpers"
 
 export interface NativeOutputCoordinatorDependencies {
   settingsRepository: Pick<SettingsRepository, "getSettings">
@@ -48,53 +52,6 @@ export interface NativeOutputCoordinatorDependencies {
   ensureLivenessAlarm: () => Promise<void>
   onQueueSettlement: (taskId: string) => Promise<void>
   activateQueue: () => Promise<void>
-}
-
-function toIdentity(payload: OutputReadyPayload): NativeOutputIdentity {
-  return {
-    jobId: payload.jobId,
-    attempt: payload.attempt,
-    taskId: payload.taskId,
-    chapterId: payload.chapterId,
-    fingerprint: payload.fingerprint,
-    documentInstanceId: payload.documentInstanceId,
-    outputId: payload.outputId,
-    outputIndex: payload.outputIndex,
-    outputCount: payload.outputCount,
-    blobUrl: payload.fileUrl,
-    filename: payload.filename,
-    outputKind: payload.outputKind,
-  }
-}
-
-function trackedResponse(record: NativeOutputRecord): OutputReadyResponse {
-  if (record.phase === "complete" || record.phase === "interrupted") {
-    return {
-      success: true,
-      disposition: "tracked",
-      phase: record.phase,
-      terminalOutcome: record.phase,
-    }
-  }
-  return { success: true, disposition: "tracked", phase: record.phase }
-}
-
-function notPersistedResponse(reason: string): OutputReadyResponse {
-  return { success: true, disposition: "not_persisted", reason }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function isPositiveDownloadId(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0
-}
-
-function manifestTrackedOutputIds(manifest: NativeOutputManifest): string[] {
-  return manifest.slots.flatMap((slot) =>
-    slot?.disposition === "tracked" ? [slot.outputId] : []
-  )
 }
 
 /**
@@ -331,7 +288,7 @@ export class NativeOutputCoordinator {
           conflictAction: task.settingsSnapshot.conflictPolicy,
           saveAs: settings.downloads.suppressSaveAsDialog === false,
         })
-        if (!isPositiveDownloadId(acceptedId)) {
+        if (!isValidDownloadId(acceptedId)) {
           throw new Error("downloads.download returned no download id")
         }
       } catch (error) {
@@ -732,12 +689,7 @@ export class NativeOutputCoordinator {
       }
       if (observedJob?.status === "active") continue
 
-      const error =
-        observedJob?.status === "canceled"
-          ? "Offscreen producer was canceled before every output was handed off"
-          : observedJob?.status === "terminal"
-            ? "Offscreen producer stopped before every output was handed off"
-            : "Offscreen producer was absent during native output reconciliation"
+      const error = classifyProducerStoppedError(observedJob?.status)
       try {
         await this.sealStoppedOpenManifestLocked({
           identity,
@@ -777,7 +729,7 @@ export class NativeOutputCoordinator {
       )
       const exactUnclaimed = matches.filter(
         (item) =>
-          isPositiveDownloadId(item.id) &&
+          isValidDownloadId(item.id) &&
           item.url === current.blobUrl &&
           !claimedIds.has(item.id)
       )
@@ -881,22 +833,9 @@ export class NativeOutputCoordinator {
           isNativeOutputTerminal(record) || record.phase === "surrendered"
       )
     ) {
-      const completed = records.filter(
-        (record) => record.phase === "complete"
-      ).length
-      const surrendered = records.filter(
-        (record) => record.phase === "surrendered"
-      ).length
-      const interrupted = manifest.outputsRequested - completed - surrendered
-      const lastSuccessfulDownloadId = records.reduce<number | undefined>(
-        (latest, record) =>
-          record.phase === "complete" &&
-          record.downloadId !== undefined &&
-          (latest === undefined || record.downloadId > latest)
-            ? record.downloadId
-            : latest,
-        undefined
-      )
+      const stats = calculateNativeOutputSettlementStats(manifest, records)
+      const { completed, surrendered, interrupted, lastSuccessfulDownloadId } =
+        stats
       const settlement =
         await this.deps.queueRepository.applyNativeOutputSettlement({
           jobId: manifest.jobId,
