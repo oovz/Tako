@@ -29,7 +29,7 @@ export * as PixivComic from "./site-integrations/pixiv-comic"
 export * as ShonenJumpPlus from "./site-integrations/shonenjumpplus"
 export * as Manhuagui from "./site-integrations/manhuagui"
 export * as ComicNettai from "./site-integrations/comicnettai"
-
+export * as MangaMillion from "./site-integrations/mangamillion"
 // ============================================================================
 // Shared mock data utilities and types
 // Shared settings fixtures live under ./shared; download task state is built

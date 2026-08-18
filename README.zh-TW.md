@@ -43,13 +43,14 @@
 
 ## 支援的網站
 
-| 網站                                        |                狀態                 |
-| ------------------------------------------- | :---------------------------------: |
-| [MangaDex](https://mangadex.org)            | ✅（預設關閉；需要可選 HTTPS 權限） |
-| [Pixiv Comic](https://comic.pixiv.net)      |                 ✅                  |
-| [Shonen Jump+](https://shonenjumpplus.com)  |                 ✅                  |
-| [Manhuagui](https://www.manhuagui.com)      |                 ✅                  |
-| [Comic Nettai](https://www.comicnettai.com) |                 ✅                  |
+| 網站                                                |                狀態                 |
+| --------------------------------------------------- | :---------------------------------: |
+| [MangaDex](https://mangadex.org)                    | ✅（預設關閉；需要可選 HTTPS 權限） |
+| [Pixiv Comic](https://comic.pixiv.net)              |                 ✅                  |
+| [Shonen Jump+](https://shonenjumpplus.com)          |                 ✅                  |
+| [Manhuagui](https://www.manhuagui.com)              |                 ✅                  |
+| [Comic Nettai](https://www.comicnettai.com)         |                 ✅                  |
+| [MangaMillion](https://mangamillion.shueisha.co.jp) |                 ✅                  |
 
 Shonen Jump+ 需從包含數字 ID 的 `/episode/{id}` 頁面使用；首頁和 `/series`
 目錄路由刻意不受支援。

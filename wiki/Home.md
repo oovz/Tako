@@ -38,7 +38,7 @@ needed.
 - **Clean exports** — CBZ, ZIP, or image folders with custom path and filename
   templates.
 - **Curated site support** — optimized integrations for MangaDex, Pixiv Comic,
-  Shonen Jump+, Manhuagui, and Comic Nettai.
+  Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion.
 - **ComicInfo.xml** — embeds metadata in CBZ archives for comic library managers
   like Komga and Kavita, plus general CBZ reader compatibility.
 - **Privacy-first** — no developer analytics or telemetry; provider traffic and

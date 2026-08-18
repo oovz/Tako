@@ -6,11 +6,13 @@ import {
   focusTab,
   getSessionState,
   getTabId,
+  openSidepanelHarness,
   waitForActiveSeriesContextRevision,
 } from "../e2e/fixtures/state-helpers"
 import {
   LIVE_COMICNETTAI_REFERENCE_URL,
   LIVE_MANGADEX_REFERENCE_URL,
+  LIVE_MANGAMILLION_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_SHONENJUMPPLUS_REFERENCE_URL,
@@ -23,7 +25,6 @@ import {
   LOCAL_STORAGE_KEYS,
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
-import { HARD_TIMEOUT_MS } from "@/src/constants/timeouts"
 
 type LiveChapter = {
   id: string
@@ -100,10 +101,16 @@ const browserWorkflowCases: BrowserWorkflowCase[] = [
     expectedMangaId: "9",
     expectedSeriesTitle: "煙たい話",
   },
+  {
+    name: "mangamillion one-piece",
+    integrationId: "mangamillion",
+    url: LIVE_MANGAMILLION_REFERENCE_URL,
+    expectedMangaId: "1",
+    expectedSeriesTitle: "One Piece",
+  },
 ]
 
-const LIVE_TASK_TERMINAL_TIMEOUT_MS = HARD_TIMEOUT_MS + 30_000
-
+const LIVE_TASK_TERMINAL_TIMEOUT_MS = 180_000
 function isLiveDownloadState(
   value: unknown,
   integrationId: string
@@ -331,48 +338,85 @@ async function startSingleChapterDownload(
       `No downloadable chapter found for ${state.siteIntegrationId}:${state.mangaId}`
     )
   }
-
-  await focusTab(optionsPage.context(), tabId)
-  const seriesRevision = await waitForActiveSeriesContextRevision(
+  const extensionId = optionsPage.url().split("/")[2]
+  const sidepanelPage = await openSidepanelHarness(
     optionsPage.context(),
-    tabId
+    extensionId,
+    optionsPage
   )
+  try {
+    await focusTab(optionsPage.context(), tabId)
+    const seriesRevision = await waitForActiveSeriesContextRevision(
+      optionsPage.context(),
+      tabId
+    )
 
-  const response = await optionsPage.evaluate(
-    async ({
-      sourceTabId,
-      selectedChapter,
-      revision,
-    }: {
-      sourceTabId: number
-      selectedChapter: LiveChapter
-      revision: number
-    }) => {
-      const issuedAt = Date.now()
-      return (await chrome.runtime.sendMessage({
-        type: "START_DOWNLOAD",
-        commandId: crypto.randomUUID(),
-        issuedAt,
-        payload: {
+    const snapshotIdentity = await optionsPage.evaluate(
+      async ({ sourceTabId, seriesRevision }) => {
+        const tab = await chrome.tabs.get(sourceTabId)
+        const stored = await chrome.storage.session.get(
+          "activeTabContextByWindow"
+        )
+        const projection = (
+          stored.activeTabContextByWindow as Record<
+            string,
+            {
+              revision?: number
+              context?: {
+                sourceUrl?: string
+                siteIntegrationId?: string
+                mangaId?: string
+              }
+            }
+          >
+        )?.[String(tab.windowId)]
+        if (
+          projection?.revision !== seriesRevision ||
+          typeof projection.context?.sourceUrl !== "string" ||
+          typeof projection.context.siteIntegrationId !== "string" ||
+          typeof projection.context.mangaId !== "string"
+        ) {
+          throw new Error("Active series snapshot changed before dispatch")
+        }
+        return {
+          sourceWindowId: tab.windowId,
           sourceTabId,
-          seriesRevision: revision,
-          selectedChapterIds: [selectedChapter.id],
-        },
-      })) as { success?: boolean; taskId?: string; error?: string }
-    },
-    {
-      sourceTabId: tabId,
-      selectedChapter: chapter,
-      revision: seriesRevision,
+          sourceUrl: projection.context.sourceUrl,
+          siteIntegrationId: projection.context.siteIntegrationId,
+          seriesId: projection.context.mangaId,
+          seriesRevision,
+        }
+      },
+      { sourceTabId: tabId, seriesRevision }
+    )
+    const response = await sidepanelPage.evaluate(
+      async (payload) => {
+        const issuedAt = Date.now()
+        return (await chrome.runtime.sendMessage({
+          target: "background",
+          type: "START_DOWNLOAD",
+          commandId: crypto.randomUUID(),
+          issuedAt,
+          payload: {
+            ...payload.snapshotIdentity,
+            selectedChapterIds: [payload.selectedChapter.id],
+          },
+        })) as { success?: boolean; taskId?: string; error?: string }
+      },
+      { selectedChapter: chapter, snapshotIdentity }
+    )
+
+    expect(response?.success, response?.error ?? JSON.stringify(response)).toBe(
+      true
+    )
+    expect(typeof response?.taskId).toBe("string")
+
+    return {
+      taskId: response.taskId as string,
+      chapter,
     }
-  )
-
-  expect(response?.success).toBe(true)
-  expect(typeof response?.taskId).toBe("string")
-
-  return {
-    taskId: response.taskId as string,
-    chapter,
+  } finally {
+    await sidepanelPage.close()
   }
 }
 

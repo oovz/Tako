@@ -3,6 +3,7 @@ import { getTabId, getSessionState } from "../e2e/fixtures/state-helpers"
 import {
   LIVE_COMICNETTAI_REFERENCE_URL,
   LIVE_MANGADEX_REFERENCE_URL,
+  LIVE_MANGAMILLION_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   LIVE_PIXIV_COMIC_REFERENCE_URL,
   LIVE_PIXIV_COMIC_DUPLICATE_TITLE_URL,
@@ -459,6 +460,39 @@ test.describe("Live numeric metadata extraction", () => {
     expect(expiredChapter?.url).toContain(
       "https://www.comicnettai.com/book/9#book-content-829"
     )
+    await page.close()
+  })
+
+  test("extracts live MangaMillion One Piece chapter metadata and numbers", async ({
+    context,
+    extensionId,
+  }) => {
+    const page = await context.newPage()
+    await page.goto(LIVE_MANGAMILLION_REFERENCE_URL, {
+      waitUntil: "domcontentloaded",
+    })
+
+    const state = await loadLiveTabState(
+      context,
+      extensionId,
+      page,
+      "mangamillion"
+    )
+    expect(state.siteIntegrationId).toBe("mangamillion")
+    expect(state.mangaId).toBe("1")
+    expect(state.seriesTitle).toBe("One Piece")
+    expect(Array.isArray(state.chapters)).toBe(true)
+    expect(state.chapters?.length).toBeGreaterThan(0)
+
+    const firstChapter = (state.chapters ?? []).find(
+      (chapter) => chapter.id === "6736"
+    )
+    expect(firstChapter).toMatchObject({
+      title: "Chapter 1:Romance Dawn",
+      chapterLabel: "#001",
+      chapterNumber: 1,
+      locked: false,
+    })
 
     await page.close()
   })

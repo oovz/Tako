@@ -3,6 +3,7 @@
 import type { OffscreenSiteAdapter } from '@/src/types/site-integrations'
 import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
 import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-integrations/mangadex/offscreen-runtime'
+import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site-integrations/mangamillion/offscreen-runtime'
 import { offscreenSiteAdapter as manhuaguiOffscreenAdapter } from '@/src/site-integrations/manhuagui/offscreen-runtime'
 import { offscreenSiteAdapter as pixiv_comicOffscreenAdapter } from '@/src/site-integrations/pixiv-comic/offscreen-runtime'
 import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/site-integrations/shonenjumpplus/offscreen-runtime'
@@ -10,6 +11,7 @@ import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/si
 export const offscreenSiteAdapters = [
   comicnettaiOffscreenAdapter,
   mangadexOffscreenAdapter,
+  mangamillionOffscreenAdapter,
   manhuaguiOffscreenAdapter,
   pixiv_comicOffscreenAdapter,
   shonenjumpplusOffscreenAdapter,

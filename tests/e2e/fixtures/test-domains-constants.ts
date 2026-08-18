@@ -72,6 +72,13 @@ export const COMICNETTAI_BASE_URL = `https://${COMICNETTAI_TEST_DOMAIN}`
 export const LIVE_COMICNETTAI_REFERENCE_URL =
   "https://www.comicnettai.com/book/9"
 
+export const MANGAMILLION_TEST_DOMAIN = "mangamillion.shueisha.co.jp"
+export const MANGAMILLION_BASE_URL = `https://${MANGAMILLION_TEST_DOMAIN}`
+export const LIVE_MANGAMILLION_REFERENCE_URL =
+  "https://mangamillion.shueisha.co.jp/en/title/1"
+export const LIVE_MANGAMILLION_CHAPTER_URL =
+  "https://mangamillion.shueisha.co.jp/en/title/1/chapter/6736"
+
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return new URL(normalized, MANGADEX_BASE_URL).toString()
@@ -100,4 +107,9 @@ export function buildManhuaguiUrl(path: string): string {
 export function buildComicNettaiUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return new URL(normalized, COMICNETTAI_BASE_URL).toString()
+}
+
+export function buildMangaMillionTestUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`
+  return new URL(normalized, MANGAMILLION_BASE_URL).toString()
 }

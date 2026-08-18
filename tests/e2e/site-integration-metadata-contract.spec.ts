@@ -6,12 +6,14 @@ import {
 } from "./fixtures/state-helpers"
 import {
   MANGADEX_BASE_URL,
+  MANGAMILLION_BASE_URL,
   MANHUAGUI_BASE_URL,
   PIXIV_COMIC_BASE_URL,
   SHONENJUMPPLUS_BASE_URL,
 } from "./fixtures/test-domains-constants"
 import {
   Mangadex,
+  MangaMillion,
   Manhuagui,
   PixivComic,
   ShonenJumpPlus,
@@ -179,5 +181,34 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
         volumeNumber: undefined,
       },
     ])
+  })
+
+  test("MangaMillion extracts chapter titles, labels, and numbers correctly", async ({
+    context,
+    page,
+  }) => {
+    const series = MangaMillion.BASIC_SERIES.series
+    await page.goto(`${MANGAMILLION_BASE_URL}/en/title/${series.seriesId}`, {
+      waitUntil: "domcontentloaded",
+    })
+    const tabId = await getTabId(page, context)
+
+    await waitForTabSeriesTitle(context, tabId, series.seriesTitle)
+    const state = await waitForTabStateById(
+      page,
+      context,
+      tabId,
+      (candidate) =>
+        Array.isArray(candidate.chapters) && candidate.chapters.length > 0
+    )
+
+    expect(state.seriesTitle).toBe("One Piece")
+    expect(state.chapters[0]).toMatchObject({
+      id: "6736",
+      title: "Chapter 1:Romance Dawn",
+      chapterLabel: "#001",
+      chapterNumber: 1,
+      locked: false,
+    })
   })
 })

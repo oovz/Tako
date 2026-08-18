@@ -43,13 +43,14 @@
 
 ## 対応サイト
 
-| サイト                                      |                      状態                      |
-| ------------------------------------------- | :--------------------------------------------: |
-| [MangaDex](https://mangadex.org)            | ✅（初期状態では無効。HTTPS の任意権限が必要） |
-| [Pixiv Comic](https://comic.pixiv.net)      |                       ✅                       |
-| [Shonen Jump+](https://shonenjumpplus.com)  |                       ✅                       |
-| [Manhuagui](https://www.manhuagui.com)      |                       ✅                       |
-| [Comic Nettai](https://www.comicnettai.com) |                       ✅                       |
+| サイト                                              |                      状態                      |
+| --------------------------------------------------- | :--------------------------------------------: |
+| [MangaDex](https://mangadex.org)                    | ✅（初期状態では無効。HTTPS の任意権限が必要） |
+| [Pixiv Comic](https://comic.pixiv.net)              |                       ✅                       |
+| [Shonen Jump+](https://shonenjumpplus.com)          |                       ✅                       |
+| [Manhuagui](https://www.manhuagui.com)              |                       ✅                       |
+| [Comic Nettai](https://www.comicnettai.com)         |                       ✅                       |
+| [MangaMillion](https://mangamillion.shueisha.co.jp) |                       ✅                       |
 
 Shonen Jump+ は数値 ID を含む `/episode/{id}`
 ページで利用できます。ホームページと `/series`

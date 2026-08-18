@@ -81,8 +81,9 @@ function assertResponseType(
             contentType === "application/javascript" ||
             contentType === "application/x-javascript"
           : contentType.startsWith("image/") ||
-            contentType === "application/octet-stream"
-
+            contentType === "application/octet-stream" ||
+            contentType === "application/protobuf" ||
+            contentType === "application/x-protobuf"
   if (!accepted) {
     throw new Error(
       `Response Content-Type ${contentType || "<missing>"} does not match declared ${expectedType} endpoint.`
