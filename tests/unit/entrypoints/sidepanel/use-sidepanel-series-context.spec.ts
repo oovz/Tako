@@ -91,7 +91,7 @@ describe("sidepanel active-tab helpers", () => {
 
   it("tracks the active tab id when the active surface is an extension page", () => {
     expect(
-      resolveTrackedTabId(42, {
+      resolveTrackedTabId({
         id: 100,
         url: "chrome-extension://aglomhfnbpoilggpgljgcfhicfpdhhfj/options.html",
       })
@@ -100,7 +100,7 @@ describe("sidepanel active-tab helpers", () => {
 
   it("switches tracked tab ids when a real browser tab becomes active", () => {
     expect(
-      resolveTrackedTabId(42, {
+      resolveTrackedTabId({
         id: 77,
         url: "https://mangadex.org/title/abc123/series",
       })

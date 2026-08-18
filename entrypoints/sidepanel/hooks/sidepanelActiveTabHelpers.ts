@@ -7,7 +7,6 @@ import {
 export { isExtensionUrl, isInternalUrl, resolveTabUrlForSupportCheck }
 
 export function resolveTrackedTabId(
-  previousTrackedTabId: number | undefined,
   activeTab: Pick<chrome.tabs.Tab, "id" | "url" | "pendingUrl"> | undefined
 ): number | undefined {
   return typeof activeTab?.id === "number" ? activeTab.id : undefined

@@ -41,7 +41,6 @@ describe("tracked-tab refresh coordinator", () => {
     const commit = vi.fn()
     const coordinator = createTrackedTabRefreshCoordinator({
       queryActiveTab,
-      getCurrentTabId: () => undefined,
       commit,
     })
 
@@ -65,7 +64,6 @@ describe("tracked-tab refresh coordinator", () => {
         .fn()
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(second.promise),
-      getCurrentTabId: () => undefined,
       commit,
     })
 
@@ -85,7 +83,6 @@ describe("tracked-tab refresh coordinator", () => {
     const commit = vi.fn()
     const coordinator = createTrackedTabRefreshCoordinator({
       queryActiveTab: () => pending.promise,
-      getCurrentTabId: () => undefined,
       commit,
     })
 

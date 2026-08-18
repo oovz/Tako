@@ -8,7 +8,6 @@ import logger from "@/src/runtime/logger"
 
 export function createTrackedTabRefreshCoordinator(input: {
   queryActiveTab: () => Promise<chrome.tabs.Tab[]>
-  getCurrentTabId: () => number | undefined
   commit: (tabId: number | undefined, activeUrl: string | undefined) => void
 }) {
   let latestRequestId = 0
@@ -22,10 +21,7 @@ export function createTrackedTabRefreshCoordinator(input: {
         if (disposed || requestId !== latestRequestId) return
 
         const activeUrl = resolveTabUrlForSupportCheck(activeTab)
-        const nextTrackedTabId = resolveTrackedTabId(
-          input.getCurrentTabId(),
-          activeTab
-        )
+        const nextTrackedTabId = resolveTrackedTabId(activeTab)
         logger.debug("[sidepanel] Refreshed tracked active tab candidate", {
           activeTabId: activeTab?.id,
           activeUrl,
@@ -83,7 +79,6 @@ export function useSidepanelTrackedTabId(): {
     const coordinator = createTrackedTabRefreshCoordinator({
       queryActiveTab: () =>
         chrome.tabs.query({ currentWindow: true, active: true }),
-      getCurrentTabId: () => tabIdRef.current,
       commit: commitTrackedTab,
     })
     const handleActivated = (activeInfo: {
