@@ -29,7 +29,6 @@ import type { ExtensionSettings } from "@/src/domain/settings/types"
 import {
   focusTab,
   type QueueTestState,
-  waitForActiveSeriesContextRevision,
   waitForGlobalState,
 } from "./state-helpers"
 
@@ -400,48 +399,77 @@ export async function startSingleChapterDownload(
       .toBe(true)
 
     await focusTab(optionsPage.context(), input.sourceTabId)
-    const seriesRevision = await waitForActiveSeriesContextRevision(
-      optionsPage.context(),
-      input.sourceTabId
-    )
-    const snapshotIdentity = await optionsPage.evaluate(
-      async ({ sourceTabId, seriesRevision }) => {
-        const tab = await chrome.tabs.get(sourceTabId)
-        const stored = await chrome.storage.session.get(
-          "activeTabContextByWindow"
-        )
-        const projection = (
-          stored.activeTabContextByWindow as Record<
-            string,
-            {
-              revision?: number
-              context?: {
-                sourceUrl?: string
-                siteIntegrationId?: string
-                mangaId?: string
-              }
+
+    // Wait for the source tab to own the window projection AND capture the
+    // dispatch snapshot in the same read. Validating and capturing in one
+    // tick removes the wait-then-reread window where a late background write
+    // (e.g. the Side Panel projection resolving after source activation)
+    // could bump the revision between the wait and the snapshot read. A
+    // write that still lands after this tick is rejected by the background's
+    // own stale_series_context validation when START_DOWNLOAD is applied.
+    let snapshotIdentity:
+      | {
+          sourceWindowId: number
+          sourceTabId: number
+          sourceUrl: string
+          siteIntegrationId: string
+          seriesId: string
+          seriesRevision: number
+        }
+      | undefined
+    await expect
+      .poll(
+        () =>
+          optionsPage.evaluate(async (sourceTabId) => {
+            const tab = await chrome.tabs.get(sourceTabId)
+            const stored = await chrome.storage.session.get(
+              "activeTabContextByWindow"
+            )
+            const projection = (
+              stored.activeTabContextByWindow as
+                | Record<
+                    string,
+                    {
+                      activeTabId?: number
+                      revision?: number
+                      context?: {
+                        sourceUrl?: string
+                        siteIntegrationId?: string
+                        mangaId?: string
+                        chaptersLoading?: boolean
+                      }
+                    }
+                  >
+                | undefined
+            )?.[String(tab.windowId)]
+            if (
+              tab.active !== true ||
+              projection?.activeTabId !== sourceTabId ||
+              typeof projection.revision !== "number" ||
+              typeof projection.context?.sourceUrl !== "string" ||
+              typeof projection.context.siteIntegrationId !== "string" ||
+              typeof projection.context.mangaId !== "string" ||
+              projection.context.chaptersLoading === true
+            ) {
+              return null
             }
-          >
-        )?.[String(tab.windowId)]
-        if (
-          projection?.revision !== seriesRevision ||
-          typeof projection.context?.sourceUrl !== "string" ||
-          typeof projection.context.siteIntegrationId !== "string" ||
-          typeof projection.context.mangaId !== "string"
-        ) {
-          throw new Error("Active series snapshot changed before dispatch")
-        }
-        return {
-          sourceWindowId: tab.windowId,
-          sourceTabId,
-          sourceUrl: projection.context.sourceUrl,
-          siteIntegrationId: projection.context.siteIntegrationId,
-          seriesId: projection.context.mangaId,
-          seriesRevision,
-        }
-      },
-      { sourceTabId: input.sourceTabId, seriesRevision }
-    )
+            return {
+              sourceWindowId: tab.windowId,
+              sourceTabId,
+              sourceUrl: projection.context.sourceUrl,
+              siteIntegrationId: projection.context.siteIntegrationId,
+              seriesId: projection.context.mangaId,
+              seriesRevision: projection.revision,
+            }
+          }, input.sourceTabId),
+        { timeout: 15_000, intervals: [100] }
+      )
+      .toBeTruthy()
+    if (!snapshotIdentity) {
+      throw new Error(
+        `No current series context snapshot for tab ${input.sourceTabId}`
+      )
+    }
     const response = await sidepanelPage.evaluate(
       async (payload) => {
         const issuedAt = Date.now()
