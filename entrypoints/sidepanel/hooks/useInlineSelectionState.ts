@@ -2,10 +2,6 @@ import { useCallback, useEffect, useState } from "react"
 
 import type { ChapterSelectionsBySeries } from "@/entrypoints/sidepanel/hooks/useChapterSelections"
 import type { InlineSelectionPresentationBySeries } from "@/entrypoints/sidepanel/types"
-import {
-  isExtensionUrl,
-  resolveTabUrlForSupportCheck,
-} from "@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers"
 import logger from "@/src/runtime/logger"
 
 export function useInlineSelectionState() {
@@ -24,32 +20,18 @@ export function useInlineSelectionState() {
   }, [])
 
   useEffect(() => {
-    const handleActivated = (activeInfo: chrome.tabs.OnActivatedInfo) => {
-      void (async () => {
-        try {
-          const activeTab = await chrome.tabs.get(activeInfo.tabId)
-          if (isExtensionUrl(resolveTabUrlForSupportCheck(activeTab))) {
-            return
-          }
-        } catch {
-          // Fall through and close the selector when tab metadata cannot be read.
-        }
-
-        closeInlineSelection()
-      })()
+    const handleActivated = () => {
+      closeInlineSelection()
     }
 
     const handleUpdated = (
       _tabId: number,
-      changeInfo: chrome.tabs.OnUpdatedInfo,
-      tab: chrome.tabs.Tab
+      changeInfo: chrome.tabs.OnUpdatedInfo
     ) => {
-      const nextUrl = changeInfo.url ?? resolveTabUrlForSupportCheck(tab)
-      if (!changeInfo.url || isExtensionUrl(nextUrl)) return
+      if (!changeInfo.url) return
 
       closeInlineSelection()
     }
-
     try {
       chrome.tabs.onActivated.addListener(handleActivated)
       chrome.tabs.onUpdated.addListener(handleUpdated)
