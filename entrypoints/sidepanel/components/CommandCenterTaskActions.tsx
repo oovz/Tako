@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/src/shared/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -144,10 +145,15 @@ export function CommandCenterTaskActions({
     }
   }
 
-  const renderPrimary = (action: CommandCenterTaskActionId) => {
+  const renderInlineAction = (action: CommandCenterTaskActionId) => {
     const pending = isPending(action)
+    const isDestructive =
+      action === "cancel" ||
+      action === "forget-unobservable" ||
+      action === "remove"
+
     return (
-      <Tooltip>
+      <Tooltip key={action}>
         <TooltipTrigger asChild>
           <Button
             aria-label={
@@ -157,11 +163,12 @@ export function CommandCenterTaskActions({
             }
             variant="ghost"
             size="icon"
-            className={
-              action === "cancel"
-                ? "size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                : "size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
-            }
+            className={cn(
+              "size-6 rounded transition-all duration-150 active:scale-90",
+              isDestructive
+                ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
             onClick={() => invoke(action)}
             disabled={pending}
           >
@@ -169,7 +176,7 @@ export function CommandCenterTaskActions({
               <Loader2
                 aria-hidden="true"
                 data-icon="inline-start"
-                className="animate-spin"
+                className="size-3.5 animate-spin"
               />
             ) : (
               actionIcon(action)
@@ -184,8 +191,8 @@ export function CommandCenterTaskActions({
   }
 
   return (
-    <div className="flex items-center gap-0.5">
-      {plan.primary ? renderPrimary(plan.primary) : null}
+    <div className="flex items-center gap-0.5 shrink-0">
+      {plan.inline.map(renderInlineAction)}
       {plan.overflow.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -193,9 +200,13 @@ export function CommandCenterTaskActions({
               aria-label={t("sidepanel_moreActions")}
               variant="ghost"
               size="icon"
-              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 active:scale-90"
             >
-              <MoreHorizontal aria-hidden="true" data-icon="inline-start" />
+              <MoreHorizontal
+                aria-hidden="true"
+                data-icon="inline-start"
+                className="size-3.5"
+              />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

@@ -30,7 +30,7 @@ describe("CommandCenterTaskActions accessibility", () => {
     expect(html).toContain('disabled=""')
   })
 
-  it("renders one primary action and moves secondary actions into overflow", () => {
+  it("renders inline retry and remove with restart in overflow for partial_success", () => {
     const html = renderToStaticMarkup(
       React.createElement(
         TooltipProvider,
@@ -59,6 +59,65 @@ describe("CommandCenterTaskActions accessibility", () => {
     expect(html.match(/disabled=""/g)).toHaveLength(1)
     expect(html.match(/animate-spin/g)).toHaveLength(1)
     expect(html).toContain('aria-label="More actions"')
+    expect(html.match(/<button/g)).toHaveLength(3)
+  })
+
+  it("renders inline remove button directly for completed history tasks", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(
+        TooltipProvider,
+        null,
+        React.createElement(CommandCenterTaskActions, {
+          taskId: "task-1",
+          status: "completed",
+          isCanceling: false,
+          isRetrying: false,
+          isRestarting: false,
+          isRemoving: false,
+          canCancel: false,
+          canForgetUnobservable: false,
+          canRetryFailed: false,
+          canRestart: false,
+          canMoveToTop: false,
+          canRemove: true,
+          onBeginCancel: vi.fn(),
+          onRemoveTask: vi.fn(),
+        })
+      )
+    )
+
+    expect(html).toContain('aria-label="Remove"')
+    expect(html).not.toContain('aria-label="More actions"')
+    expect(html.match(/<button/g)).toHaveLength(1)
+  })
+
+  it("renders inline move-to-top and cancel buttons for queued tasks", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(
+        TooltipProvider,
+        null,
+        React.createElement(CommandCenterTaskActions, {
+          taskId: "task-1",
+          status: "queued",
+          isCanceling: false,
+          isRetrying: false,
+          isRestarting: false,
+          isRemoving: false,
+          canCancel: true,
+          canForgetUnobservable: false,
+          canRetryFailed: false,
+          canRestart: false,
+          canMoveToTop: true,
+          canRemove: false,
+          onBeginCancel: vi.fn(),
+          onMoveTaskToTop: vi.fn(),
+        })
+      )
+    )
+
+    expect(html).toContain('aria-label="Move task to top"')
+    expect(html).toContain('aria-label="Cancel download"')
+    expect(html).not.toContain('aria-label="More actions"')
     expect(html.match(/<button/g)).toHaveLength(2)
   })
 })

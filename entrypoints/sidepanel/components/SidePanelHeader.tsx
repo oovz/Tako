@@ -35,7 +35,7 @@ export function SidePanelHeader({
       <div className="flex items-center gap-2">
         <Badge
           variant={activeCount > 0 ? "default" : "secondary"}
-          className="h-6 px-2.5 text-xs font-semibold gap-1"
+          className="h-6 px-2.5 text-xs font-semibold gap-1 transition-all duration-200 ease-out"
         >
           <span className="tabular-nums">
             {formatSidePanelCount(activeCount)}
@@ -44,7 +44,7 @@ export function SidePanelHeader({
         </Badge>
         <Badge
           variant="secondary"
-          className="h-6 px-2.5 text-xs font-semibold gap-1"
+          className="h-6 px-2.5 text-xs font-semibold gap-1 transition-all duration-200 ease-out"
         >
           <span className="tabular-nums">
             {formatSidePanelCount(queuedCount)}
@@ -57,17 +57,23 @@ export function SidePanelHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="relative size-9"
+            className="group relative size-9 transition-all duration-150 active:scale-95"
             onClick={onOpenSettings}
             aria-label={settingsLabel}
           >
-            <Settings className="size-5" />
+            <Settings className="size-5 transition-transform duration-300 ease-out group-hover:rotate-45" />
             {hasOptionsActionItems && (
-              <span
-                aria-hidden="true"
-                data-testid="options-action-indicator"
-                className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
-              />
+              <>
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive animate-ping opacity-75"
+                />
+                <span
+                  aria-hidden="true"
+                  data-testid="options-action-indicator"
+                  className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
+                />
+              </>
             )}
           </Button>
         </TooltipTrigger>

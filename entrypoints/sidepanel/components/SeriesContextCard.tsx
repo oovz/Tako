@@ -156,7 +156,7 @@ export function SeriesContextCard({
   const isChaptersLoading = data.isChaptersLoading
 
   return (
-    <div className="flex gap-4">
+    <div className="group flex gap-4 transition-all duration-200">
       {/* Cover image - enlarged for better visibility */}
       <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted">
         {coverSrc && (
@@ -164,7 +164,7 @@ export function SeriesContextCard({
             src={coverSrc}
             alt={data.mangaTitle}
             className={cn(
-              "h-full w-full object-contain transition-opacity duration-300",
+              "h-full w-full object-contain transition-all duration-300 group-hover:scale-105",
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
             onLoad={() => setImageLoaded(true)}
@@ -175,7 +175,6 @@ export function SeriesContextCard({
           <div className="absolute inset-0 bg-muted animate-pulse" />
         )}
       </div>
-
       {/* Content */}
       <div className="flex flex-1 flex-col justify-between min-w-0">
         <div>
@@ -243,7 +242,7 @@ export function SeriesContextCard({
             size="sm"
             variant={isExpanded ? "secondary" : "default"}
             className={cn(
-              "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
+              "w-full gap-2 mt-3 h-9 text-sm shadow-sm transition-all duration-150 active:scale-[0.98]",
               isExpanded && "ring-1 ring-border"
             )}
             disabled={

@@ -5,6 +5,7 @@ import { AlertTriangle, Folder } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { getDestinationIssueMessageKey } from "@/src/runtime/destination-issue-state"
+import { cn } from "@/src/shared/utils"
 import { t } from "@/src/runtime/i18n"
 import logger from "@/src/runtime/logger"
 import { openOptionsPage } from "@/src/runtime/open-options"
@@ -101,7 +102,13 @@ export function FsaBanner({ className }: FsaBannerProps) {
   if (!issue) return null
 
   return (
-    <Alert variant="destructive" className={className}>
+    <Alert
+      variant="destructive"
+      className={cn(
+        "animate-in fade-in slide-in-from-top-2 duration-200 ease-out",
+        className
+      )}
+    >
       <AlertTriangle className="size-4" />
       <AlertTitle>{t("destinationIssue_title")}</AlertTitle>
       <AlertDescription className="flex flex-col gap-3">
