@@ -419,8 +419,8 @@ export async function startSingleChapterDownload(
       | undefined
     await expect
       .poll(
-        () =>
-          optionsPage.evaluate(async (sourceTabId) => {
+        async () => {
+          const snapshot = await optionsPage.evaluate(async (sourceTabId) => {
             const tab = await chrome.tabs.get(sourceTabId)
             const stored = await chrome.storage.session.get(
               "activeTabContextByWindow"
@@ -461,10 +461,16 @@ export async function startSingleChapterDownload(
               seriesId: projection.context.mangaId,
               seriesRevision: projection.revision,
             }
-          }, input.sourceTabId),
+          }, input.sourceTabId)
+          if (snapshot) {
+            snapshotIdentity = snapshot
+            return true
+          }
+          return false
+        },
         { timeout: 15_000, intervals: [100] }
       )
-      .toBeTruthy()
+      .toBe(true)
     if (!snapshotIdentity) {
       throw new Error(
         `No current series context snapshot for tab ${input.sourceTabId}`
