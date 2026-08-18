@@ -14,7 +14,7 @@ const exampleRootUrl = buildExampleUrl("/")
 test.describe("Queue cancel and restart behavior", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("per-task Cancel and overflow Remove actions update global queue state", async ({
+  test("per-task Cancel and inline Remove actions update global queue state", async ({
     context,
     extensionId,
     page,
@@ -58,13 +58,10 @@ test.describe("Queue cancel and restart behavior", () => {
       return !!t && t.status === "canceled"
     })
 
-    // Terminal actions are deliberately secondary, so Remove lives in the
-    // completed task's More actions menu.
     const completedTaskRow = sp
       .getByRole("heading", { name: "Completed Series" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='More actions']][1]")
-    await completedTaskRow.getByRole("button", { name: "More actions" }).click()
-    await sp.getByRole("menuitem", { name: "Remove" }).click()
+      .locator("xpath=ancestor::div[.//button[@aria-label='Remove']][1]")
+    await completedTaskRow.getByRole("button", { name: "Remove" }).click()
 
     await waitForGlobalState(
       context,

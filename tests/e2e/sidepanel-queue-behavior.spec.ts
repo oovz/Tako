@@ -51,14 +51,10 @@ test.describe("Side panel queue behavior", () => {
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Queued Task Spec")).toBeVisible()
 
-    // Queued cancellation is reversible, so it is a secondary action that
-    // takes effect immediately and exposes Undo rather than a confirmation.
     const queuedTaskRow = sp
       .getByRole("heading", { name: "Queued Task Spec" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='More actions']][1]")
-    await queuedTaskRow.getByRole("button", { name: "More actions" }).click()
-    await sp.getByRole("menuitem", { name: "Cancel" }).click()
-    await expect(sp.getByText("Cancel this download?")).toHaveCount(0)
+      .locator("xpath=ancestor::div[.//button[@aria-label='Cancel download']][1]")
+    await queuedTaskRow.getByRole("button", { name: "Cancel download" }).click()
 
     await waitForGlobalState(context, (state) => {
       const activeTask = state.downloadQueue.find(
@@ -225,11 +221,8 @@ test.describe("Side panel queue behavior", () => {
 
     const firstHistoryTaskRow = sp
       .getByRole("heading", { name: "History Task 1" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='More actions']][1]")
-    await firstHistoryTaskRow
-      .getByRole("button", { name: "More actions" })
-      .click()
-    await sp.getByRole("menuitem", { name: "Remove" }).click()
+      .locator("xpath=ancestor::div[.//button[@aria-label='Remove']][1]")
+    await firstHistoryTaskRow.getByRole("button", { name: "Remove" }).click()
 
     await waitForGlobalState(
       context,
