@@ -1,16 +1,13 @@
 # Template Macros
 
-Macros are placeholders in directory and filename templates, written in angle
-brackets like `<SERIES_TITLE>`. Tako resolves them at download time to build the
-output path for each chapter.
+Macros are placeholders in directory and filename templates, written in angle brackets like `<SERIES_TITLE>`. Tako resolves them at download time to build the output path for each chapter.
 
 ## How templates work
 
 Tako resolves two templates per chapter:
 
-- **Directory template** (`pathTemplate`) — resolves to a folder path.
-- **Filename template** (`fileNameTemplate`) — resolves to the chapter archive
-  name, or the loose-image chapter folder name when the format is `none`.
+- **Directory template** (`pathTemplate`) — Resolves to a folder path.
+- **Filename template** (`fileNameTemplate`) — Resolves to the chapter archive name, or the loose-image chapter folder name when the format is `none`.
 
 Default directory template:
 
@@ -28,7 +25,7 @@ TMD/Hunter x Hunter/Departure.cbz
 
 ### Date macros
 
-Always available. Use the user's local date at download time.
+Always available. Uses the user's local date at download time.
 
 | Macro    | Description                | Example | Guaranteed |
 | -------- | -------------------------- | ------- | ---------- |
@@ -60,22 +57,17 @@ Always available. Use the user's local date at download time.
 
 ### Volume macros
 
-| Macro                  | Description                                         | Example  | Guaranteed |
-| ---------------------- | --------------------------------------------------- | -------- | ---------- |
-| `<VOLUME_TITLE>`       | Site-visible volume or category label, if available | `单行本` | No         |
-| `<VOLUME_NUMBER>`      | Raw volume number                                   | `5`      | No         |
-| `<VOLUME_NUMBER_PAD2>` | Numeric volume number padded to 2 digits            | `05`     | No         |
+| Macro                  | Description                                         | Example    | Guaranteed |
+| ---------------------- | --------------------------------------------------- | ---------- | ---------- |
+| `<VOLUME_TITLE>`       | Site-visible volume or category label, if available | `Volume 1` | No         |
+| `<VOLUME_NUMBER>`      | Raw volume number                                   | `5`        | No         |
+| `<VOLUME_NUMBER_PAD2>` | Numeric volume number padded to 2 digits            | `05`       | No         |
 
-`<VOLUME_TITLE>` comes from the preserved volume/category label (`Volume.title`,
-`Volume.label`, or `Chapter.volumeLabel`), not from `volumeId`. The `volumeId`
-field is an internal grouping key and is not exposed as a template macro. Use
-`<VOLUME_NUMBER>` or `<VOLUME_NUMBER_PAD2>` only when the site integration
-provides parsed numeric `volumeNumber` metadata.
+`<VOLUME_TITLE>` comes from the preserved volume or category label (`Volume.title`, `Volume.label`, or `Chapter.volumeLabel`). Use `<VOLUME_NUMBER>` or `<VOLUME_NUMBER_PAD2>` when the site integration provides parsed numeric `volumeNumber` metadata.
 
 ## Missing values
 
-When an optional macro is unavailable, it resolves to an empty string. Empty
-directory segments are discarded, but empty pieces inside a filename remain.
+When an optional macro is unavailable, it resolves to an empty string. Empty directory segments are discarded, but empty pieces inside a filename remain.
 
 Example filename template:
 
@@ -83,11 +75,9 @@ Example filename template:
 Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
 ```
 
-If the site does not provide a numeric chapter number, the filename starts with
-`Ch. - ...`.
+If the site does not provide a numeric chapter number, the filename begins with `Ch. - ...`.
 
-Use numeric macros only for integrations and page types known to provide numeric
-chapter or volume metadata.
+Use numeric macros only for integrations and page types known to provide numeric chapter or volume metadata.
 
 ## Recommended patterns
 
@@ -123,25 +113,19 @@ Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
 
 ## Directory vs filename semantics
 
-`pathTemplate` is directory-only. If a directory template contains an
-extension-like suffix such as `.cbz`, Tako treats it as part of the folder name,
-not the final archive filename.
+`pathTemplate` is directory-only. If a directory template contains an extension-like suffix such as `.cbz`, Tako treats it as part of the folder name, not the final archive filename.
 
-Use `fileNameTemplate` for the final chapter name. Tako appends `.cbz` or `.zip`
-for archive formats. For `none`, the filename template becomes the chapter
-folder under the resolved directory.
+Use `fileNameTemplate` for the final chapter name. Tako appends `.cbz` or `.zip` for archive formats. For `none`, the filename template becomes the chapter folder under the resolved directory.
 
 ## Invalid characters
 
-Tako sanitizes path components for cross-platform filesystem compatibility. The
-following characters are replaced with underscores:
+Tako automatically sanitizes path components for cross-platform filesystem compatibility. The following characters are replaced with underscores:
 
 ```text
 < > : " / \ | ? *
 ```
 
-Control characters, Windows reserved names, and trailing Windows-incompatible
-dots or spaces are also sanitized.
+Control characters, Windows reserved names, and trailing Windows-incompatible dots or spaces are also sanitized.
 
 ## Validation
 
@@ -151,19 +135,4 @@ The extension validates templates before saving:
 - Empty templates are not allowed.
 - Resolved paths must be valid relative filesystem paths.
 
-The Options page preview uses sample data to show the resolved directory and
-filename.
-
-## Developer notes
-
-`src/shared/template-macros.ts` contains registry metadata used for validation
-and previews. `src/shared/template-resolver.ts` is the production resolver used
-during queue dispatch.
-
-All macros defined in `TEMPLATE_MACROS` (`YYYY`, `MM`, `DD`, `PUBLISHER`,
-`INTEGRATION_NAME`, `SERIES_TITLE`, `CHAPTER_TITLE`, `CHAPTER_NUMBER`,
-`CHAPTER_NUMBER_PAD2`, `CHAPTER_NUMBER_PAD3`, `VOLUME_TITLE`, `VOLUME_NUMBER`,
-`VOLUME_NUMBER_PAD2`) are fully implemented and supported by both
-`template-expander.ts` and `template-resolver.ts`. Do not add a new macro to
-user documentation without implementing it in both the registry and the
-production resolver.
+The Options page preview uses sample data to display the resolved directory and filename.

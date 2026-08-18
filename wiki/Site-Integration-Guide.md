@@ -1,14 +1,8 @@
 # Contributing a Site Integration
 
-This guide covers adding or maintaining a manga/comic/manhwa/manhua integration
-for Tako's WXT Manifest V3 architecture.
+This guide covers adding or maintaining a manga, comic, manhwa, or manhua integration for Tako's WXT Manifest V3 architecture.
 
-> **Important (Chrome Web Store Remote-Code Policy):** Runtime-loaded
-> integration scripts, remote code execution, dynamic plugins, or user-supplied
-> code evaluation (`eval()`) are strictly prohibited under Chrome Web Store
-> Manifest V3 policies. All site integrations must be written in TypeScript,
-> compiled statically into the extension bundle, and verified through repository
-> build and test gates.
+> **Important (Chrome Web Store Remote-Code Policy):** Runtime-loaded integration scripts, remote code execution, dynamic plugins, or user-supplied code evaluation (`eval()`) are strictly prohibited under Chrome Web Store Manifest V3 policies. All site integrations must be written in TypeScript, compiled statically into the extension bundle, and verified through repository build and test gates.
 
 ## What an integration owns
 
@@ -16,45 +10,15 @@ An integration owns:
 
 1. URL matching and required provider/asset origins.
 2. Series/chapter context resolution.
-3. Chapter image resolution, validation, download behavior, and any
-   descrambling.
+3. Chapter image resolution, validation, download behavior, and any descrambling.
 4. Provider rate/timeout policy and optional localized settings.
 5. Deterministic fixtures plus live smoke evidence.
 
-Use the term **site integration** and the field `siteIntegrationId`
-consistently. Provider-specific fields must not leak into shared queue/message
-contracts.
-
-## Contribution lifecycle
-
-Tako uses a **contribution model, not an ownership model**:
-
-- **Responsibility ends at merge:** A contributor's obligation is completed once
-  their pull request is reviewed, tested, and merged. Contributors are not
-  obligated to maintain integrations indefinitely.
-- **Courtesy notifications:** Past authors may be tagged or pinged as a courtesy
-  when an upstream site changes, but active fixes are voluntary.
-- **Automated gates as maintainer safety net:** Strict schema validation,
-  deterministic contract fixtures, unit tests, and live smoke tests protect the
-  extension over time when contributors move on.
-
-### Lifecycle and Shippability
-
-| Lifecycle stage   | `shipped` | Description                                                         |
-| ----------------- | --------- | ------------------------------------------------------------------- |
-| In-development    | `false`   | Scaffolding default; excluded from generated runtime bundles.       |
-| Active / Shipped  | `true`    | Bundled; passes deterministic fixtures, unit tests, and live smoke. |
-| Degraded / Broken | `false`   | Upstream site changes detected; unbundled safely pending a fix.     |
-
-Integrations define a re-verification cadence via `fixtures.liveFreshnessDays`
-(typically 14–30 days). When a live smoke check fails and no contributor fix is
-available, maintainers can safely demote the integration (`"shipped": false`).
+Use the term **site integration** and the field `siteIntegrationId` consistently. Provider-specific fields must not leak into shared queue/message contracts.
 
 ## Fast track: Minimum Viable Integration (MVI)
 
-To add a new site integration, start with the lightest sufficient
-implementation: URL parsing (or simple API/HTML fetch) in the background and
-chapter/image download in offscreen.
+To add a new site integration, start with the lightest sufficient implementation: URL parsing (or simple API/HTML fetch) in the background and chapter/image download in offscreen.
 
 ### 1. Scaffold the integration
 
@@ -72,8 +36,7 @@ This creates `src/site-integrations/<id>/` with safe defaults:
 - `fixtures/contract.json` (deterministic fixture seed)
 - `README.md` (Approach, Endpoints, States covered, Live smoke)
 
-Because `shipped: false` is set by default, the scaffold passes all generator
-checks immediately without injecting unfinished stubs into the build bundle.
+Because `shipped: false` is set by default, the scaffold passes all generator checks immediately without injecting unfinished stubs into the build bundle.
 
 ### 2. Configure `definition.json`
 
@@ -133,8 +96,7 @@ Update URL patterns, required origins, endpoint policies, and rate limits:
 
 ### 3. Implement Background Series Resolution
 
-Implement `resolveSeriesData` in `background-runtime.ts`. Use
-`integrationHttpClient` for network requests (raw `fetch()` is prohibited):
+Implement `resolveSeriesData` in `background-runtime.ts`. Use `integrationHttpClient` for network requests (raw `fetch()` is prohibited):
 
 ```typescript
 import type {
@@ -231,28 +193,23 @@ export const offscreenSiteAdapter: OffscreenSiteAdapter = {
 
 ### 5. Document in `README.md`
 
-Fill out the per-site prose in `src/site-integrations/<id>/README.md`:
+Fill out the per-site documentation in `src/site-integrations/<id>/README.md`:
 
-- **Approach:** How the site is handled (API vs DOM parsing, session
-  requirements).
+- **Approach:** How the site is handled (API vs DOM parsing, session requirements).
 - **Endpoints:** All endpoint IDs and their purpose.
-- **States covered:** Free chapters, locked/paywalled chapters, deleted series
-  handling.
-- **Live smoke:** Live verification notes and URL samples.
+- **States covered:** Free chapters, locked/paywalled chapters, deleted series handling.
+- **Live smoke:** Live verification notes and sample URLs.
 
 ### 6. Verify and Ship
 
 1. Run initial verification while developing:
    `pnpm check:site-integrations && pnpm type-check && pnpm test:unit`.
-2. When your resolvers and fixtures are complete, set `"shipped": true` in
-   `src/site-integrations/<id>/definition.json`.
-3. Re-run code generation to compile your adapter into the runtime bundle
-   registries:
+2. When your resolvers and fixtures are complete, set `"shipped": true` in `src/site-integrations/<id>/definition.json`.
+3. Re-run code generation to compile your adapter into the runtime bundle registries:
    ```powershell
    pnpm generate:site-integrations
    ```
-4. Re-run the full verification suite to ensure all registries, types, and tests
-   pass with the new integration bundled:
+4. Re-run the full verification suite:
    ```powershell
    pnpm check:site-integrations
    pnpm type-check
@@ -265,19 +222,15 @@ Fill out the per-site prose in `src/site-integrations/<id>/README.md`:
 
 ### 1. One-shot page probes
 
-Set `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Probes run
-via `chrome.scripting.executeScript`:
+Set `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Probes run via `chrome.scripting.executeScript`:
 
 - Must be read-only and return plain, schema-validated JSON data.
 - Must not install persistent listeners, timers, or unbounded DOM observers.
 - Run in isolated world by default (`world: 'MAIN'` only with documented need).
-- Example: MangaDex uses an optional probe to import reader preferences from
-  local storage.
 
 ### 2. Declarative Net Request (DNR) session rules
 
-When a site requires custom referer headers for images or viewer sessions,
-declare `sessionRefererRules` in `definition.json`:
+When a site requires custom referer headers for images or viewer sessions, declare `sessionRefererRules` in `definition.json`:
 
 - IDs must be in the extension-managed range `41000`–`41999`.
 - Domains and referers must match declared site patterns and required origins.
@@ -286,18 +239,15 @@ declare `sessionRefererRules` in `definition.json`:
 
 When chapter pages are scrambled or split into tiles:
 
-- Set
-  `imageTransform: { "kind": "integrated-descramble", "estimatedCostMs": 3000 }`.
+- Set `imageTransform: { "kind": "integrated-descramble", "estimatedCostMs": 3000 }`.
 - Implement canvas descrambling in offscreen runtime.
 - Add deterministic pixel-tested fixtures covering tile reconstruction.
 
 ### 4. Dynamic origins (provider-issued hosts)
 
-When image CDNs or storage nodes are issued dynamically (e.g. MangaDex At-Home
-nodes):
+When image CDNs or storage nodes are issued dynamically (e.g. MangaDex At-Home nodes):
 
-- Declare `dynamicOrigins` with target endpoint ID and
-  `validator: "public-https"`.
+- Declare `dynamicOrigins` with target endpoint ID and `validator: "public-https"`.
 - Declare target origins as `optionalOrigins`.
 
 ### 5. Custom settings and i18n localization
@@ -305,23 +255,18 @@ nodes):
 When an integration exposes user-configurable settings in Options:
 
 - Add typed fields to `customSettings` in `definition.json`.
-- Every field's `labelKey` (and optional `descriptionKey` or option `labelKey`)
-  **must exist in all four locale catalogs**: `en`, `ja`, `zh_CN`, `zh_TW` under
-  `public/_locales/*/messages.json`.
-- `generate:site-integrations` enforces complete localization and hard-fails if
-  any key is missing.
+- Every field's `labelKey` (and optional `descriptionKey` or option `labelKey`) **must exist in all four locale catalogs**: `en`, `ja`, `zh_CN`, `zh_TW` under `public/_locales/*/messages.json`.
+- `generate:site-integrations` enforces complete localization and fails if any key is missing.
 
 ---
 
 ## Shared request security
 
-Provider request paths use the shared hardened layer (`integrationHttpClient`).
-The shared layer enforces:
+Provider request paths use the shared hardened layer (`integrationHttpClient`). The shared layer enforces:
 
 - HTTPS by default;
 - integration-specific origin allowlists;
-- redirect rejection before follow (current limit: zero), plus defensive
-  final-URL validation;
+- redirect rejection before follow (current limit: zero), plus defensive final-URL validation;
 - private, link-local, and loopback rejection;
 - credential modes declared per endpoint (`omit` or `include`);
 - response-size limits and AbortSignal cancellation;
@@ -333,23 +278,11 @@ The shared layer enforces:
 ## Validation commands
 
 ```powershell
-pnpm generate:site-integrations  # Regenerates catalogs and registries
-pnpm check:site-integrations     # Verifies generated files are in sync
-pnpm type-check                  # Verifies TypeScript types
-pnpm lint                        # Lints TypeScript and architectural boundaries
-pnpm test:unit                   # Runs full unit test suite
+pnpm generate:site-integrations # Regenerates catalogs and registries
+pnpm check:site-integrations # Verifies generated files are in sync
+pnpm type-check # Verifies TypeScript types
+pnpm lint # Lints TypeScript and architectural boundaries
+pnpm test:unit # Runs full unit test suite
 ```
 
-## Current integration notes
-
-| Integration                                 | Useful patterns                                                                                                                                                           |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MangaDex                                    | Official API, At-Home reporting, optional broad permission, optional one-shot page-preference import                                                                      |
-| Pixiv Comic                                 | Internal API/build data and image reconstruction                                                                                                                          |
-| Shonen Jump+                                | Numeric `/episode/{id}` pages only; fetched SSR `readableProduct`, viewer API, tile reconstruction. Homepage and `/series*` catalog routes are intentionally unsupported. |
-| Manhuagui                                   | SSR grouping, packed reader payload, explicit adult gate, referrer-sensitive images                                                                                       |
-| [Comic Nettai](https://www.comicnettai.com) | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access; PUBLUS images are limited to JPEG/PNG/WebP/GIF and reject AVIF before fetching  |
-| MangaMillion                                | Official Protobuf API, anonymous device token registration, AES-256-CBC page decryption with SubtleCrypto, multi-language chapter catalog                                 |
-
-Related: [Architecture](Architecture), [Permissions](Permissions), and
-[Template Macros](Template-Macros).
+Related: [Architecture](Architecture), [Permissions](Permissions), and [Template Macros](Template-Macros).
