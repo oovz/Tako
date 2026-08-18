@@ -62,12 +62,19 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
+      # Browser binaries are pinned to the resolved @playwright/test version,
+      # so key the cache on that instead of the whole lockfile. Keying on the
+      # lockfile busts the cache (and forces a full tip-of-tree re-download)
+      # whenever any unrelated dependency changes.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
       - name: Install Playwright system dependencies
         run: pnpm exec playwright install-deps chromium-tip-of-tree
       - name: Install Playwright Chromium
