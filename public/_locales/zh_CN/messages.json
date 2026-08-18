@@ -1065,6 +1065,22 @@
   "options_noIntegrationsAvailable": {
     "message": "无可用集成"
   },
+  "options_contributors": {
+    "message": "贡献者：$CONTRIBUTORS$",
+    "placeholders": {
+      "contributors": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_contributor": {
+    "message": "贡献者：$CONTRIBUTOR$",
+    "placeholders": {
+      "contributor": {
+        "content": "$1"
+      }
+    }
+  },
   "options_downloadSettings": {
     "message": "下载设置"
   },

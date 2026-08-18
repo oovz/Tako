@@ -64,6 +64,7 @@ export function SiteIntegrationManagementTab({
       .map((manifest) => ({
         id: manifest.id,
         name: manifest.name,
+        contributors: manifest.contributors,
         domains: manifest.patterns.domains,
         customSettings: manifest.customSettings,
         policyDefaults: manifest.policyDefaults,
@@ -79,7 +80,8 @@ export function SiteIntegrationManagementTab({
 
       return (
         integration.name.toLowerCase().includes(query) ||
-        integration.domains.some((d) => d.toLowerCase().includes(query))
+        integration.domains.some((d) => d.toLowerCase().includes(query)) ||
+        integration.contributors?.some((c) => c.toLowerCase().includes(query))
       )
     })
   }, [integrations, search])

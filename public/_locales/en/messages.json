@@ -1065,6 +1065,22 @@
   "options_noIntegrationsAvailable": {
     "message": "No integrations available"
   },
+  "options_contributors": {
+    "message": "Contributors: $CONTRIBUTORS$",
+    "placeholders": {
+      "contributors": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_contributor": {
+    "message": "Contributor: $CONTRIBUTOR$",
+    "placeholders": {
+      "contributor": {
+        "content": "$1"
+      }
+    }
+  },
   "options_downloadSettings": {
     "message": "Download Settings"
   },

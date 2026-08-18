@@ -48,6 +48,7 @@ type CustomSettingValue = SiteIntegrationSettingValue
 interface SiteIntegrationInfo {
   id: string
   name: string
+  contributors?: readonly string[] | string[]
   domains: string[]
   customSettings?: SettingsFieldSchema[]
   requiresBroadHttpsPermission?: boolean
@@ -200,6 +201,18 @@ export function SiteIntegrationCard({
               <CardDescription className="text-xs text-muted-foreground">
                 {siteIntegration.domains.join(", ")}
               </CardDescription>
+              {siteIntegration.contributors &&
+                siteIntegration.contributors.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {siteIntegration.contributors.length === 1
+                      ? t("options_contributor", [
+                          siteIntegration.contributors[0],
+                        ])
+                      : t("options_contributors", [
+                          siteIntegration.contributors.join(", "),
+                        ])}
+                  </p>
+                )}
               {siteIntegration.requiresBroadHttpsPermission && !isEnabled && (
                 <p className="max-w-xl text-xs text-muted-foreground">
                   {t("options_broadHostPermissionDescription", [

@@ -117,4 +117,64 @@ describe("Site integration custom settings contract", () => {
     expect(html).toContain('data-testid="site-integration-card-manhuagui"')
     expect(html).not.toContain("v1.0.0")
   })
+
+  it("renders a single contributor name in SiteIntegrationCard", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SiteIntegrationCard, {
+        siteIntegration: {
+          id: "test-site",
+          name: "Test Site",
+          contributors: ["Solo Contributor"],
+          domains: ["test.example.com"],
+        },
+        isEnabled: true,
+        globalDefaults: {
+          outputFormat: "cbz",
+          imagePolicy: { concurrency: 2, delayMs: 500 },
+          chapterPolicy: { concurrency: 1, delayMs: 500 },
+        },
+        onChange: vi.fn(),
+      })
+    )
+
+    expect(html).toContain("Contributor: Solo Contributor")
+  })
+
+  it("renders multiple contributor names in SiteIntegrationCard", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SiteIntegrationCard, {
+        siteIntegration: {
+          id: "multi-author-site",
+          name: "Multi Author Site",
+          contributors: ["Alice", "Bob", "Charlie"],
+          domains: ["multi.example.com"],
+        },
+        isEnabled: true,
+        globalDefaults: {
+          outputFormat: "cbz",
+          imagePolicy: { concurrency: 2, delayMs: 500 },
+          chapterPolicy: { concurrency: 1, delayMs: 500 },
+        },
+        onChange: vi.fn(),
+      })
+    )
+
+    expect(html).toContain("Contributors: Alice, Bob, Charlie")
+  })
+
+  it("renders contributors from manifest when rendering SiteIntegrationManagementTab", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(SiteIntegrationManagementTab, {
+        overrides: {},
+        siteIntegrationEnablement: {},
+        globalSettings: DEFAULT_SETTINGS,
+        siteIntegrationSettingsByIntegration: {},
+        onSiteIntegrationSettingsChange: vi.fn(),
+        onSiteIntegrationEnablementChange: vi.fn(),
+        onChange: vi.fn(),
+      })
+    )
+
+    expect(html).toContain("Contributor: TMD Team")
+  })
 })

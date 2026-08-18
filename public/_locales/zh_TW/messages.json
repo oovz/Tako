@@ -1065,6 +1065,22 @@
   "options_noIntegrationsAvailable": {
     "message": "無可用整合"
   },
+  "options_contributors": {
+    "message": "貢獻者：$CONTRIBUTORS$",
+    "placeholders": {
+      "contributors": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_contributor": {
+    "message": "貢獻者：$CONTRIBUTOR$",
+    "placeholders": {
+      "contributor": {
+        "content": "$1"
+      }
+    }
+  },
   "options_downloadSettings": {
     "message": "下載設定"
   },

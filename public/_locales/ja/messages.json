@@ -1065,6 +1065,22 @@
   "options_noIntegrationsAvailable": {
     "message": "利用可能な統合がありません"
   },
+  "options_contributors": {
+    "message": "貢献者: $CONTRIBUTORS$",
+    "placeholders": {
+      "contributors": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_contributor": {
+    "message": "貢献者: $CONTRIBUTOR$",
+    "placeholders": {
+      "contributor": {
+        "content": "$1"
+      }
+    }
+  },
   "options_downloadSettings": {
     "message": "ダウンロード設定"
   },
