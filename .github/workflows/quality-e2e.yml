@@ -75,8 +75,22 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
+      # The ubuntu-24.04 runner image routes apt through /etc/apt/apt-mirrors.txt,
+      # whose azure.archive.ubuntu.com endpoint intermittently becomes
+      # unreachable, leaving apt-get update (inside install-deps) hung with no
+      # output for 20+ minutes. Pin the mirror to the reliable
+      # archive.ubuntu.com and bound the step with a retry loop.
+      - name: Pin apt mirror to archive.ubuntu.com
+        run: sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/apt-mirrors.txt
       - name: Install Playwright system dependencies
-        run: pnpm exec playwright install-deps chromium-tip-of-tree
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 420 pnpm exec playwright install-deps chromium-tip-of-tree; then
+              exit 0
+            fi
+            echo "install-deps attempt $attempt timed out or failed; retrying"
+          done
+          exit 1
       - name: Install Playwright Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install chromium-tip-of-tree
