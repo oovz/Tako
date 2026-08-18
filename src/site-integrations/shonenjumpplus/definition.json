@@ -2,16 +2,10 @@
   "schemaVersion": 1,
   "id": "shonenjumpplus",
   "name": "Shonen Jump+",
-  "author": "TMD Team",
+  "contributors": ["TMD Team"],
   "version": "1.1.0",
-  "maturity": "stable",
   "shipped": true,
   "enabledByDefault": true,
-  "implementationType": "hybrid",
-  "volatility": "medium",
-  "authentication": "anonymous",
-  "regions": ["global"],
-  "accountConstraints": ["guest-access"],
   "patterns": {
     "domains": ["shonenjumpplus.com"],
     "seriesMatches": ["/episode/*"]

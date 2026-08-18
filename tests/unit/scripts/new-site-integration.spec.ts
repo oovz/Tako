@@ -32,7 +32,7 @@ describe("new-site-integration script", () => {
       cleanupTestIntegration()
 
       const output = execSync(
-        `node scripts/new-site-integration.mjs ${testIntegrationId} --name "Scaffold Test Site" --author "Tester" --out-dir "${testIntegrationDir}"`,
+        `node scripts/new-site-integration.mjs ${testIntegrationId} --name "Scaffold Test Site" --contributor "Tester" --out-dir "${testIntegrationDir}"`,
         { encoding: "utf8", cwd: root }
       )
 
@@ -71,10 +71,9 @@ describe("new-site-integration script", () => {
       expect(() => definitionSchema.parse(definition)).not.toThrow()
       expect(definition.id).toBe(testIntegrationId)
       expect(definition.name).toBe("Scaffold Test Site")
-      expect(definition.author).toBe("Tester")
+      expect(definition.contributors).toEqual(["Tester"])
       expect(definition.shipped).toBe(false)
       expect(definition.enabledByDefault).toBe(false)
-      expect(definition.maturity).toBe("experimental")
       expect(definition.imageTransform).toEqual({
         kind: "none",
         estimatedCostMs: 0,

@@ -38,20 +38,17 @@ Tako uses a **contribution model, not an ownership model**:
   deterministic contract fixtures, unit tests, and live smoke tests protect the
   extension over time when contributors move on.
 
-### Promotion and demotion
+### Lifecycle and Shippability
 
-| Lifecycle stage   | `shipped` | `maturity`       | Description                                                           |
-| ----------------- | --------- | ---------------- | --------------------------------------------------------------------- |
-| In-development    | `false`   | `"experimental"` | Scaffolding default; excluded from generated runtime bundles.         |
-| Active PR / Beta  | `true`    | `"experimental"` | Bundled; passes deterministic fixtures; undergoing live validation.   |
-| Production Ready  | `true`    | `"stable"`       | Passes all fixtures, live smoke, covers locked/error states cleanly.  |
-| Degraded / Broken | `true`    | `"experimental"` | Upstream site changes detected; demoted while awaiting a fix.         |
-| Inactive / Dead   | `false`   | `"experimental"` | Unbundled safely without code deletion until an active fix is merged. |
+| Lifecycle stage   | `shipped` | Description                                                         |
+| ----------------- | --------- | ------------------------------------------------------------------- |
+| In-development    | `false`   | Scaffolding default; excluded from generated runtime bundles.       |
+| Active / Shipped  | `true`    | Bundled; passes deterministic fixtures, unit tests, and live smoke. |
+| Degraded / Broken | `false`   | Upstream site changes detected; unbundled safely pending a fix.     |
 
 Integrations define a re-verification cadence via `fixtures.liveFreshnessDays`
 (typically 14–30 days). When a live smoke check fails and no contributor fix is
-available, maintainers can safely demote the integration
-(`maturity: "experimental"` or `"shipped": false`).
+available, maintainers can safely demote the integration (`"shipped": false`).
 
 ## Fast track: Minimum Viable Integration (MVI)
 
@@ -69,8 +66,7 @@ pnpm new:site-integration <id> --name "Site Name"
 
 This creates `src/site-integrations/<id>/` with safe defaults:
 
-- `definition.json` (`shipped: false`, `maturity: "experimental"`)
-- `background-runtime.ts` (typed adapter stub)
+- `definition.json` (`shipped: false`)
 - `offscreen-runtime.ts` (typed adapter stub)
 - `contracts/index.ts` (contract definitions)
 - `fixtures/contract.json` (deterministic fixture seed)
@@ -88,16 +84,10 @@ Update URL patterns, required origins, endpoint policies, and rate limits:
   "schemaVersion": 1,
   "id": "mysite",
   "name": "My Site",
-  "author": "YourName",
+  "contributors": ["YourName"],
   "version": "1.0.0",
-  "maturity": "experimental",
   "shipped": false,
   "enabledByDefault": false,
-  "implementationType": "dom-scraping",
-  "volatility": "low",
-  "authentication": "anonymous",
-  "regions": ["global"],
-  "accountConstraints": [],
   "patterns": {
     "domains": ["mysite.example.com"],
     "seriesMatches": ["/series/*"]

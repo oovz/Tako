@@ -14,18 +14,18 @@ Arguments:
   <id>                Unique lowercase identifier (e.g. mangadex, pixiv-comic)
 
 Options:
-  --id <id>           Unique lowercase identifier (alternative to positional argument)
-  --name <name>       Human-readable site name (e.g. "Example Manga")
-  --author <author>   Author name (defaults to git user.name or current user)
-  --out-dir <dir>     Target output directory (defaults to src/site-integrations/<id>)
-  --help, -h          Show this help message
+  --id <id>                   Unique lowercase identifier (alternative to positional argument)
+  --name <name>               Human-readable site name (e.g. "Example Manga")
+  --contributor <name>        Contributor name (defaults to git user.name or current user)
+  --out-dir <dir>             Target output directory (defaults to src/site-integrations/<id>)
+  --help, -h                  Show this help message
 `)
 }
 
 function parseArgs(args) {
   let id = null
   let name = null
-  let author = null
+  let contributor = null
   let outDir = null
 
   for (let i = 0; i < args.length; i++) {
@@ -49,14 +49,17 @@ function parseArgs(args) {
       name = args[++i]
     } else if (arg.startsWith("--name=")) {
       name = arg.slice(7)
-    } else if (arg === "--author") {
+    } else if (arg === "--contributor" || arg === "--contributors") {
       if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --author option.")
+        console.error("Error: Missing value for --contributor option.")
         process.exit(1)
       }
-      author = args[++i]
-    } else if (arg.startsWith("--author=")) {
-      author = arg.slice(9)
+      contributor = args[++i]
+    } else if (
+      arg.startsWith("--contributor=") ||
+      arg.startsWith("--contributors=")
+    ) {
+      contributor = arg.split("=")[1]
     } else if (arg === "--out-dir") {
       if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
         console.error("Error: Missing value for --out-dir option.")
@@ -79,7 +82,7 @@ function parseArgs(args) {
     }
   }
 
-  return { id, name, author, outDir }
+  return { id, name, contributor, outDir }
 }
 
 function getGitUser() {
@@ -119,7 +122,7 @@ function main() {
   const {
     id,
     name: customName,
-    author: customAuthor,
+    contributor: customContributor,
     outDir,
   } = parseArgs(rawArgs)
 
@@ -148,23 +151,17 @@ function main() {
   }
 
   const siteName = customName || toTitleCase(id)
-  const authorName = customAuthor || getGitUser()
+  const contributorName = customContributor || getGitUser()
   const pascalId = toPascalCase(id)
 
   const definitionJson = {
     schemaVersion: 1,
     id,
     name: siteName,
-    author: authorName,
+    contributors: [contributorName],
     version: "0.1.0",
-    maturity: "experimental",
     shipped: false,
     enabledByDefault: false,
-    implementationType: "dom-scraping",
-    volatility: "medium",
-    authentication: "anonymous",
-    regions: ["global"],
-    accountConstraints: [],
     patterns: {
       domains: [`${id}.example.com`],
       seriesMatches: ["/series/*"],
