@@ -584,4 +584,99 @@ describe("background navigation listeners", () => {
       )
     )
   })
+
+  it("handles unsupported URL loading-to-complete transitions without duplicate state clears or redundant resolution", async () => {
+    const deps = createDependencies()
+    let cachedContextValue: unknown = undefined
+    deps.tabContextCache.setCachedContext.mockImplementation(
+      (_tabId: number, value: null) => {
+        cachedContextValue = value
+      }
+    )
+    deps.tabContextCache.getCachedContext.mockImplementation(
+      () => cachedContextValue
+    )
+
+    registerBackgroundNavigationListeners(deps)
+    const listener = onUpdated.mock.calls[0][0] as (
+      tabId: number,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
+    ) => void
+    const tab = {
+      id: 776,
+      active: true,
+      windowId: 2,
+      url: "https://example.com/unsupported",
+    } as chrome.tabs.Tab
+
+    // 1. Loading event
+    listener(776, { status: "loading" }, tab)
+    await vi.waitFor(() =>
+      expect(deps.clearTabState).toHaveBeenCalledWith(776, {
+        windowId: 2,
+        expectedUrl: "https://example.com/unsupported",
+        supersedeInFlight: true,
+      })
+    )
+    expect(deps.tabContextCache.setCachedContext).toHaveBeenCalledWith(
+      776,
+      null
+    )
+    expect(deps.clearTabState).toHaveBeenCalledTimes(1)
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("onUpdated unsupported URL detected")
+    )
+
+    // 2. Complete event
+    listener(776, { status: "complete" }, tab)
+    await vi.waitFor(() =>
+      expect(deps.tabUiCoordinator.updateSidePanelForTab).toHaveBeenCalledWith(
+        776
+      )
+    )
+    // clearTabState should NOT be called a second time
+    expect(deps.clearTabState).toHaveBeenCalledTimes(1)
+    // tabContextResolver.resolveTabContext should NOT be called because getCachedContext returns null
+    expect(deps.tabContextResolver.resolveTabContext).not.toHaveBeenCalled()
+    // logger.info should not log redundant message
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("onUpdated unsupported URL detected")
+    )
+  })
+
+  it("clears state once and logs on a complete update for an unsupported URL when no prior invalidation occurred", async () => {
+    const deps = createDependencies()
+    deps.tabContextCache.getCachedContext.mockReturnValue(undefined)
+
+    registerBackgroundNavigationListeners(deps)
+    const listener = onUpdated.mock.calls[0][0] as (
+      tabId: number,
+      changeInfo: chrome.tabs.OnUpdatedInfo,
+      tab: chrome.tabs.Tab
+    ) => void
+    const tab = {
+      id: 776,
+      active: true,
+      windowId: 2,
+      url: "https://example.com/unsupported",
+    } as chrome.tabs.Tab
+
+    listener(776, { status: "complete" }, tab)
+    await vi.waitFor(() =>
+      expect(deps.clearTabState).toHaveBeenCalledWith(776, {
+        windowId: 2,
+        expectedUrl: "https://example.com/unsupported",
+        supersedeInFlight: true,
+      })
+    )
+    expect(deps.tabContextCache.setCachedContext).toHaveBeenCalledWith(
+      776,
+      null
+    )
+    expect(deps.clearTabState).toHaveBeenCalledTimes(1)
+    expect(logger.info).toHaveBeenCalledWith(
+      "background: onUpdated unsupported URL detected, clearing tab state for tab 776"
+    )
+  })
 })

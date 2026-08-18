@@ -27,7 +27,7 @@ interface NavigationListenerTabContextCache {
     windowId?: number
   ) => Promise<void>
   setCachedContext: (tabId: number, value: null) => void
-  deleteCachedContext: (tabId: number) => void
+  deleteCachedContext?: (tabId: number) => void
   getCachedContext?: (tabId: number) => unknown
   syncActiveTabContext: () => Promise<unknown>
   projectLoadingForTab: (
@@ -118,24 +118,26 @@ export function registerBackgroundNavigationListeners(
 
           if (url && !isInternalUrl(url) && !matchUrl(url)) {
             try {
-              // The durable state was cleared above for URL/loading updates.
-              // A completion-only unsupported update still needs the service
-              // owner to perform that clear; the cache only drops projection.
               if (!invalidatesContext) {
-                const applied = await deps
-                  .getTabContextStateService()
-                  .clearTabState(tabId, {
-                    windowId: tab.windowId,
-                    expectedUrl: url,
-                    supersedeInFlight: true,
-                  })
-                if (!applied) return
+                const cachedContext =
+                  deps.tabContextCache.getCachedContext?.(tabId)
+                if (cachedContext === undefined) {
+                  const applied = await deps
+                    .getTabContextStateService()
+                    .clearTabState(tabId, {
+                      windowId: tab.windowId,
+                      expectedUrl: url,
+                      supersedeInFlight: true,
+                    })
+                  if (!applied) return
+                  deps.tabContextCache.setCachedContext(tabId, null)
+                  logger.info(
+                    `background: onUpdated unsupported URL detected, clearing tab state for tab ${tabId}`
+                  )
+                }
+              } else {
+                deps.tabContextCache.setCachedContext(tabId, null)
               }
-              deps.tabContextCache.setCachedContext(tabId, null)
-              deps.tabContextCache.deleteCachedContext(tabId)
-              logger.info(
-                `background: onUpdated unsupported URL detected, clearing tab state for tab ${tabId}`
-              )
             } catch (error) {
               logger.debug(
                 "onUpdated navigation state cleanup failed (non-fatal):",
@@ -220,7 +222,6 @@ export function registerBackgroundNavigationListeners(
                 })
               if (!applied) return
               deps.tabContextCache.setCachedContext(details.tabId, null)
-              deps.tabContextCache.deleteCachedContext(details.tabId)
             } catch (error) {
               logger.debug(
                 "Navigation state cleanup failed (non-fatal):",
@@ -267,7 +268,6 @@ export function registerBackgroundNavigationListeners(
               })
             if (!applied) return
             deps.tabContextCache.setCachedContext(details.tabId, null)
-            deps.tabContextCache.deleteCachedContext(details.tabId)
             await deps.tabContextCache.handleTabUpdated(details.tabId, { url })
 
             const tab = await chrome.tabs.get(details.tabId)

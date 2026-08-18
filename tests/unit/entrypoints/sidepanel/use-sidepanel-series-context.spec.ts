@@ -89,13 +89,13 @@ describe("sidepanel active-tab helpers", () => {
     expect(isExtensionUrl(undefined)).toBe(false)
   })
 
-  it("preserves the previously tracked browser tab when the active surface is an extension page", () => {
+  it("tracks the active tab id when the active surface is an extension page", () => {
     expect(
       resolveTrackedTabId(42, {
         id: 100,
-        url: "chrome-extension://test/sidepanel.html",
+        url: "chrome-extension://aglomhfnbpoilggpgljgcfhicfpdhhfj/options.html",
       })
-    ).toBe(42)
+    ).toBe(100)
   })
 
   it("switches tracked tab ids when a real browser tab becomes active", () => {
@@ -367,5 +367,27 @@ describe("activeTabContext mapping", () => {
         "https://mangadex.org/title/new/series"
       )
     ).toEqual({ kind: "loading" })
+  })
+
+  it("normalizes unsupported/null context for an extension options page to unsupported and not detected", () => {
+    const normalized = normalizeStoredSeriesContext(
+      {
+        2: {
+          windowId: 2,
+          activeTabId: 100,
+          revision: 1,
+          timestamp: 1,
+          context: null,
+        },
+      },
+      100,
+      2,
+      "chrome-extension://aglomhfnbpoilggpgljgcfhicfpdhhfj/options.html"
+    )
+    expect(normalized).toEqual({ kind: "unsupported" })
+
+    const derived = deriveSeriesContextFromActiveTabContext(normalized)
+    expect(derived.isLoading).toBe(false)
+    expect(derived.blockingMessage).toBe(TAB_NOT_SUPPORTED_MSG)
   })
 })
