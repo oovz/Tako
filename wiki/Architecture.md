@@ -269,20 +269,18 @@ Large Blobs are never stored in Chrome storage.
 
 ## Site integrations
 
-Each provider `definition.json` declares identity, maturity, shipped/default
-state, implementation type, match patterns, required/optional origins,
-page-probe mode, capabilities, rate/timeout policies, endpoint policies, and
-custom settings. The JSON is validated against `definition.schema.json` and
-emitted into generated catalogs and context-specific registries.
+Each provider `definition.json` declares identity, contributors, version,
+shipped/default state, match patterns, required/optional origins, page-probe
+mode, capabilities, rate/timeout policies, endpoint policies, dynamic origins,
+DNR session referer rules, fixtures, and custom settings. The JSON is validated
+against `definition.schema.json` and emitted into generated catalogs and
+context-specific registries.
 
 The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+,
-Manhuagui, Comic Nettai, and MangaMillion, and all are Stable. Stability
-describes the supported current implementation, not API officiality or immunity
-from upstream site changes.
-
-MangaDex is disabled by default. Enabling it from Options requests optional
-`https://*/*` access for dynamic MangaDex@Home nodes. Runtime URL policy remains
-narrow even after Chrome grants that broad permission.
+Manhuagui, Comic Nettai, and MangaMillion. MangaDex is disabled by default.
+Enabling it from Options requests optional `https://*/*` access for dynamic
+MangaDex@Home nodes. Runtime URL policy remains narrow even after Chrome grants
+that broad permission.
 
 Provider request paths use the shared hardened layer when they delegate to it;
 provider-owned request roles retain their own explicit credential, origin, and

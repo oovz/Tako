@@ -8,16 +8,10 @@
     "schemaVersion",
     "id",
     "name",
-    "author",
+    "contributors",
     "version",
-    "maturity",
     "shipped",
     "enabledByDefault",
-    "implementationType",
-    "volatility",
-    "authentication",
-    "regions",
-    "accountConstraints",
     "patterns",
     "requiredOrigins",
     "optionalOrigins",
@@ -33,49 +27,64 @@
     "fixtures"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "name": { "type": "string", "minLength": 1 },
-    "author": { "type": "string", "minLength": 1 },
-    "version": { "type": "string", "minLength": 1 },
-    "maturity": { "enum": ["experimental", "stable"] },
-    "shipped": { "type": "boolean" },
-    "enabledByDefault": { "type": "boolean" },
-    "implementationType": {
-      "enum": ["official-api", "unofficial-api", "dom-scraping", "hybrid"]
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Fixed schema version number (currently 1) for the site integration definition specification."
     },
-    "volatility": { "enum": ["low", "medium", "high"] },
-    "authentication": { "enum": ["anonymous", "browser-session"] },
-    "regions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Unique kebab-case provider identifier matching the integration directory name (e.g. 'mangadex')."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable display name for the manga site (e.g. 'MangaDex')."
+    },
+    "contributors": {
       "type": "array",
+      "description": "List of contributor names or handles who authored or maintain this site integration.",
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1,
       "uniqueItems": true
     },
-    "accountConstraints": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semantic version string for the provider implementation (e.g. '1.0.0')."
+    },
+    "shipped": {
+      "type": "boolean",
+      "description": "Whether this integration is bundled and active in runtime builds. Set to false for in-development scaffolds."
+    },
+    "enabledByDefault": {
+      "type": "boolean",
+      "description": "Default enablement state when the user has not explicitly configured this integration in Options."
     },
     "patterns": {
       "type": "object",
       "additionalProperties": false,
+      "description": "URL matching rules for recognizing manga series and chapter pages supported by this integration.",
       "required": ["domains", "seriesMatches"],
       "properties": {
         "domains": {
           "type": "array",
+          "description": "Hostnames supported by this integration (e.g. ['mangadex.org']).",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
           "uniqueItems": true
         },
         "seriesMatches": {
           "type": "array",
+          "description": "URL pathname patterns for series pages (e.g. ['/title/*']).",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
           "uniqueItems": true
         },
         "excludeMatches": {
           "type": "array",
+          "description": "URL pathname patterns explicitly excluded from series matching.",
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         }
@@ -83,40 +92,70 @@
     },
     "requiredOrigins": {
       "type": "array",
+      "description": "List of declarative URL pattern origins required for core site functionality.",
       "items": { "type": "string", "pattern": "^https://.+/\\*$" },
       "minItems": 1,
       "uniqueItems": true
     },
     "optionalOrigins": {
       "type": "array",
+      "description": "List of optional URL pattern origins requested dynamically on demand (e.g. wildcard CDN or mirror domains).",
       "items": { "type": "string", "pattern": "^https://.+/\\*$" },
       "uniqueItems": true
     },
     "policyDefaults": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Default concurrency and rate-limiting delays for image downloads and chapter metadata requests.",
       "required": ["image", "chapter"],
       "properties": {
-        "image": { "$ref": "#/$defs/ratePolicy" },
-        "chapter": { "$ref": "#/$defs/ratePolicy" }
+        "image": {
+          "$ref": "#/$defs/ratePolicy",
+          "description": "Rate limiting policy for chapter image downloads."
+        },
+        "chapter": {
+          "$ref": "#/$defs/ratePolicy",
+          "description": "Rate limiting policy for series/chapter metadata requests."
+        }
       }
     },
-    "retryOwner": { "enum": ["platform", "provider"] },
-    "pageProbe": { "enum": ["none", "optional", "required"] },
+    "retryOwner": {
+      "enum": ["platform", "provider"],
+      "description": "Determines whether retry classification and backoff are managed by the platform or owned by the provider adapter."
+    },
+    "pageProbe": {
+      "enum": ["none", "optional", "required"],
+      "description": "Whether this integration requires an active tab content-script probe to resolve reader/chapter state."
+    },
     "runtimes": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Surface flags declaring which runtime contexts (background, offscreen) are implemented by this integration.",
       "required": ["background", "offscreen", "dispatchContext"],
       "properties": {
-        "background": { "type": "boolean" },
-        "offscreen": { "type": "boolean" },
+        "background": {
+          "type": "boolean",
+          "description": "Whether the background runtime adapter is implemented."
+        },
+        "offscreen": {
+          "type": "boolean",
+          "description": "Whether the offscreen runtime adapter is implemented."
+        },
         "dispatchContext": {
           "type": "object",
           "additionalProperties": false,
+          "description": "Configuration for passing parsed context from active page to offscreen worker.",
           "required": ["mode"],
           "properties": {
-            "mode": { "enum": ["none", "optional", "required"] },
-            "schemaVersion": { "type": "integer", "minimum": 1 }
+            "mode": {
+              "enum": ["none", "optional", "required"],
+              "description": "Dispatch context requirement mode."
+            },
+            "schemaVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Schema version for the dispatch context payload."
+            }
           }
         }
       }
@@ -124,41 +163,59 @@
     "imageTransform": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Image transformation requirements, such as canvas descrambling and estimated compute cost in milliseconds.",
       "required": ["kind", "estimatedCostMs"],
       "properties": {
-        "kind": { "enum": ["none", "integrated-descramble"] },
-        "estimatedCostMs": { "type": "number", "minimum": 0 }
+        "kind": {
+          "enum": ["none", "integrated-descramble"],
+          "description": "Type of image transformation algorithm."
+        },
+        "estimatedCostMs": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated CPU time in milliseconds per image transform."
+        }
       }
     },
     "endpointPolicies": {
       "type": "array",
       "minItems": 1,
+      "description": "Hardened network endpoint policies declaring allowed origins, credentials, response types, and byte limits.",
       "items": { "$ref": "#/$defs/endpointPolicy" }
     },
     "dynamicOrigins": {
       "type": "array",
+      "description": "Dynamic origin bindings linking API endpoints that return dynamic media hosts.",
       "items": { "$ref": "#/$defs/dynamicOrigin" }
     },
     "sessionRefererRules": {
       "type": "array",
+      "description": "Declarative Net Request (DNR) session rules managed by the extension to attach required HTTP Referer headers.",
       "items": { "$ref": "#/$defs/sessionRefererRule" }
     },
     "customSettings": {
       "type": "array",
+      "description": "Custom user-configurable settings rendered in the Options UI for this integration.",
       "items": { "$ref": "#/$defs/settingsField" }
     },
     "fixtures": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Deterministic test fixture file paths and freshness validation policy.",
       "required": ["paths", "liveFreshnessDays"],
       "properties": {
         "paths": {
           "type": "array",
+          "description": "Repository-relative file paths to deterministic fixture JSON files.",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
           "uniqueItems": true
         },
-        "liveFreshnessDays": { "type": "integer", "minimum": 0 }
+        "liveFreshnessDays": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum days before live smoke re-verification is advised."
+        }
       }
     }
   },
@@ -166,15 +223,25 @@
     "ratePolicy": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Rate limiting concurrency and delay parameters.",
       "required": ["concurrency", "delayMs"],
       "properties": {
-        "concurrency": { "type": "integer", "minimum": 1 },
-        "delayMs": { "type": "integer", "minimum": 0 }
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum concurrent requests allowed for this scope."
+        },
+        "delayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Delay in milliseconds between consecutive request dispatches."
+        }
       }
     },
     "endpointPolicy": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Hardened network endpoint policy.",
       "required": [
         "id",
         "purpose",
@@ -186,24 +253,50 @@
         "maxResponseBytes"
       ],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-        "purpose": { "type": "string", "minLength": 1 },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Unique kebab-case endpoint identifier."
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable explanation of why this endpoint is accessed."
+        },
         "origins": {
           "type": "array",
+          "description": "Allowed URL origin patterns for this endpoint.",
           "items": { "type": "string", "pattern": "^https://.+/\\*$" },
           "minItems": 1,
           "uniqueItems": true
         },
-        "originKind": { "enum": ["fixed", "provider-issued"] },
-        "credentials": { "enum": ["omit", "include"] },
-        "redirect": { "enum": ["error", "follow", "manual"] },
-        "responseType": { "enum": ["json", "text", "bytes", "html"] },
-        "maxResponseBytes": { "type": "integer", "minimum": 1 }
+        "originKind": {
+          "enum": ["fixed", "provider-issued"],
+          "description": "Whether origins are static/fixed or dynamically issued by the provider."
+        },
+        "credentials": {
+          "enum": ["omit", "include"],
+          "description": "Credential transmission policy (cookies / auth headers) for requests to this endpoint."
+        },
+        "redirect": {
+          "enum": ["error", "follow", "manual"],
+          "description": "HTTP redirect handling mode for requests to this endpoint."
+        },
+        "responseType": {
+          "enum": ["json", "text", "bytes", "html"],
+          "description": "Expected response content type."
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum allowed response payload size in bytes."
+        }
       }
     },
     "dynamicOrigin": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Dynamic origin binding definition.",
       "required": [
         "endpointId",
         "sourceEndpointId",
@@ -213,62 +306,96 @@
       "properties": {
         "endpointId": {
           "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9-]*$"
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Target media endpoint id receiving dynamic origins."
         },
         "sourceEndpointId": {
           "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9-]*$"
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Source API endpoint id returning media host URLs."
         },
         "allowedOriginPattern": {
           "type": "string",
-          "pattern": "^https://.+/\\*$"
+          "pattern": "^https://.+/\\*$",
+          "description": "Origin pattern template permitted for dynamic registration."
         },
-        "validator": { "const": "public-https" }
+        "validator": {
+          "const": "public-https",
+          "description": "Validation rule applied to issued dynamic URLs."
+        }
       }
     },
     "sessionRefererRule": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Declarative Net Request session rule definition for Referer header modification.",
       "required": ["id", "requestDomains", "resourceTypes", "referer"],
       "properties": {
-        "id": { "type": "integer", "minimum": 41000, "maximum": 41999 },
-        "priority": { "type": "integer", "minimum": 1 },
+        "id": {
+          "type": "integer",
+          "minimum": 41000,
+          "maximum": 41999,
+          "description": "Managed rule id within the 41000-41999 range."
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional rule evaluation priority."
+        },
         "requestDomains": {
           "type": "array",
+          "description": "Target request domain names where Referer headers will be injected.",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1,
           "uniqueItems": true
         },
         "resourceTypes": {
           "type": "array",
+          "description": "Web request resource types affected by this rule.",
           "items": { "enum": ["xmlhttprequest", "other"] },
           "minItems": 1,
           "uniqueItems": true
         },
-        "referer": { "type": "string", "format": "uri", "pattern": "^https://" }
+        "referer": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "description": "Absolute HTTPS Referer header value to attach."
+        }
       }
     },
     "settingsField": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Custom setting field definition rendered in Options UI.",
       "required": ["id", "labelKey", "type", "defaultValue"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique settings field key."
+        },
         "labelKey": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[a-z][a-zA-Z0-9_]*$"
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "i18n message key for field label."
         },
         "descriptionKey": {
           "type": "string",
-          "pattern": "^[a-z][a-zA-Z0-9_]*$"
+          "pattern": "^[a-z][a-zA-Z0-9_]*$",
+          "description": "Optional i18n message key for field description."
         },
         "type": {
-          "enum": ["boolean", "string", "number", "select", "multiselect"]
+          "enum": ["boolean", "string", "number", "select", "multiselect"],
+          "description": "Data type and UI widget type for the setting field."
         },
-        "defaultValue": {},
+        "defaultValue": {
+          "description": "Default value matching the field type."
+        },
         "options": {
           "type": "array",
+          "description": "Selectable options for select and multiselect fields.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -277,9 +404,14 @@
               "labelKey": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^[a-z][a-zA-Z0-9_]*$"
+                "pattern": "^[a-z][a-zA-Z0-9_]*$",
+                "description": "i18n message key for the option label."
               },
-              "value": { "type": "string", "minLength": 1 }
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Option value."
+              }
             }
           },
           "minItems": 1,

@@ -7,20 +7,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "comicnettai",
     "name": "Comic Nettai",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.1.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": true,
-    "implementationType": "hybrid",
-    "volatility": "high",
-    "authentication": "browser-session",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "viewer-session-cookie"
-    ],
     "patterns": {
       "domains": [
         "www.comicnettai.com"
@@ -124,20 +116,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "mangadex",
     "name": "MangaDex API",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.1.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": false,
-    "implementationType": "official-api",
-    "volatility": "low",
-    "authentication": "anonymous",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "free-api-access"
-    ],
     "patterns": {
       "domains": [
         "mangadex.org"
@@ -292,20 +276,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "mangamillion",
     "name": "MangaMillion",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.0.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": true,
-    "implementationType": "official-api",
-    "volatility": "medium",
-    "authentication": "anonymous",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "guest-access"
-    ],
     "patterns": {
       "domains": [
         "mangamillion.shueisha.co.jp"
@@ -385,20 +361,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "manhuagui",
     "name": "Manhuagui",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.1.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": true,
-    "implementationType": "dom-scraping",
-    "volatility": "medium",
-    "authentication": "browser-session",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "browser-session-cookie"
-    ],
     "patterns": {
       "domains": [
         "www.manhuagui.com",
@@ -516,20 +484,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "pixiv-comic",
     "name": "Pixiv Comic",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.1.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": true,
-    "implementationType": "unofficial-api",
-    "volatility": "high",
-    "authentication": "browser-session",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "browser-session-cookie"
-    ],
     "patterns": {
       "domains": [
         "comic.pixiv.net"
@@ -647,20 +607,12 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "shonenjumpplus",
     "name": "Shonen Jump+",
-    "author": "TMD Team",
+    "contributors": [
+      "TMD Team"
+    ],
     "version": "1.1.0",
-    "maturity": "stable",
     "shipped": true,
     "enabledByDefault": true,
-    "implementationType": "hybrid",
-    "volatility": "medium",
-    "authentication": "anonymous",
-    "regions": [
-      "global"
-    ],
-    "accountConstraints": [
-      "guest-access"
-    ],
     "patterns": {
       "domains": [
         "shonenjumpplus.com"

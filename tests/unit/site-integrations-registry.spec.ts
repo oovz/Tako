@@ -27,20 +27,20 @@ describe("site integration registry", () => {
     expect(getDefinition(definition.id)?.id).toBe(definition.id)
   })
 
-  it("exposes registry maturity and resolution metadata", () => {
+  it("exposes valid registry definitions and resolution metadata", () => {
     const ids = siteIntegrationCatalog.map((definition) => definition.id)
     expect(new Set(ids).size).toBe(ids.length)
 
     for (const definition of siteIntegrationCatalog) {
       expect(definition.version).toBeTypeOf("string")
-      expect(["experimental", "stable"]).toContain(definition.maturity)
+      expect(Array.isArray(definition.contributors)).toBe(true)
+      expect(definition.contributors.length).toBeGreaterThan(0)
+      expect(
+        definition.contributors.every(
+          (c) => typeof c === "string" && c.length > 0
+        )
+      ).toBe(true)
       expect(definition.shipped).toBe(true)
-      expect([
-        "official-api",
-        "unofficial-api",
-        "dom-scraping",
-        "hybrid",
-      ]).toContain(definition.implementationType)
       expect(definition.requiredOrigins.length).toBeGreaterThan(0)
       expect(
         definition.requiredOrigins.every((origin) =>
