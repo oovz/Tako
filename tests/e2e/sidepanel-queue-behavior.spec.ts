@@ -53,7 +53,9 @@ test.describe("Side panel queue behavior", () => {
 
     const queuedTaskRow = sp
       .getByRole("heading", { name: "Queued Task Spec" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='Cancel download']][1]")
+      .locator(
+        "xpath=ancestor::div[.//button[@aria-label='Cancel download']][1]"
+      )
     await queuedTaskRow.getByRole("button", { name: "Cancel download" }).click()
 
     await waitForGlobalState(context, (state) => {
