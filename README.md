@@ -4,155 +4,123 @@
 
 # Tako Manga Downloader
 
-Download chapters from supported manga sites through Chrome's Side Panel and
-save them as CBZ, ZIP, or image files.
+**Batch-download manga chapters from Chrome's Side Panel. Queue, retry, and export CBZ or ZIP files — without leaving your reading tab.**
 
 [![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/tbyBjqi7Zu733AAKA5n4.png)](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 
-[Get started](#get-started) · [Supported sites](#supported-sites) ·
-[Development](#development) · [Wiki](https://github.com/oovz/Tako/wiki) ·
-[Privacy](#privacy)
+[Get Started](#get-started) · [Features](#features) · [Supported Sites](#supported-sites) · [Wiki](https://github.com/oovz/Tako/wiki) · [Privacy](#privacy)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
-· [日本語](README.ja.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md)
 
 </div>
 
 ---
 
-## What Tako does
+## Features
 
-- Lists chapters from the current series page in Chrome's Side Panel.
-- Runs one download task at a time and keeps the remaining tasks in a durable
-  queue.
-- Retries failed chapter work and records completed, partial, failed, and
-  canceled tasks.
-- Saves through Chrome Downloads by default. A selected local folder is also
-  supported through the File System Access API.
-- Generates CBZ or ZIP archives, loose image output, and optional
-  `ComicInfo.xml` metadata.
-- Supports global settings and per-site overrides for paths, filenames, rate
-  limits, retries, and output format.
+- **Side Panel Command Center** — Select chapters, monitor queue status, and track download progress right in Chrome's Side Panel next to your reading tab. Complete history and settings are easily managed from the Options page.
+- **Reliable Queue & Auto-Retry** — Queue dozens of chapters with confidence. Track per-image progress and automatically or manually retry failed downloads while maintaining browser stability.
+- **Clean, Flexible Exports** — Save chapters as CBZ or ZIP archives, or as loose image folders. Save directly through Chrome Downloads or to a custom local library folder using the File System Access API.
+- **ComicInfo.xml Metadata** — Automatically embeds series metadata, chapter numbers, and titles into CBZ archives, ensuring out-of-the-box compatibility with Komga, Kavita, and modern manga readers.
+- **Customizable Path & Filename Templates** — Organize your manga collection automatically using customizable template macros such as `<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, and `<VOLUME_NUMBER>`.
+- **Optimized Site Integrations** — Purpose-built adapters handle page structures, image delivery, and metadata accurately for each supported platform.
+- **Unified Settings** — Configure global defaults and per-site overrides for download formats, path templates, concurrency, and rate limits.
+- **Privacy-First** — Zero developer analytics, tracking, or telemetry. Settings, queue state, and download history stay strictly inside your local browser.
 
-Tako does not provide access to content that the current browser session cannot
-already read. It is not intended to bypass paywalls, login restrictions, DRM, or
-copyright controls.
+## Supported Sites
 
-## Supported sites
+| Site                                                | Status |
+| --------------------------------------------------- | :----: |
+| [MangaDex](https://mangadex.org)*                   |   ✅   |
+| [Pixiv Comic](https://comic.pixiv.net)              |   ✅   |
+| [Shonen Jump+](https://shonenjumpplus.com)          |   ✅   |
+| [Manhuagui](https://www.manhuagui.com)              |   ✅   |
+| [Comic Nettai](https://www.comicnettai.com)         |   ✅   |
+| [MangaMillion](https://mangamillion.shueisha.co.jp) |   ✅   |
 
-| Site                                                | Maturity | Notes                                               |
-| --------------------------------------------------- | -------- | --------------------------------------------------- |
-| [MangaDex](https://mangadex.org)                    | Stable   | Disabled by default; requests optional HTTPS access |
-| [Pixiv Comic](https://comic.pixiv.net)              | Stable   | Browser-session provider                            |
-| [Shonen Jump+](https://shonenjumpplus.com)          | Stable   | Start from a numeric `/episode/{id}` page           |
-| [Manhuagui](https://www.manhuagui.com)              | Stable   | Browser-session provider                            |
-| [Comic Nettai](https://www.comicnettai.com)         | Stable   | Browser-session provider                            |
-| [MangaMillion](https://mangamillion.shueisha.co.jp) | Stable   | Official API provider                               |
+- Disabled by default; requests optional HTTPS permission when enabled in Options.
+  Want a new site supported? [Open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md) or contribute an integration — see the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
 
-The Shonen Jump+ homepage and `/series` catalog routes are not downloadable
-series contexts. For integration details or a new-site request, see the
-[Supported Sites](https://github.com/oovz/Tako/wiki/Supported-Sites) page and
-[Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
+## Rights & Site Access
 
-## Get started
+Tako is designed exclusively for manga and comic pages that are already accessible within your own browser session.
 
-1. Install Tako from the
-   [Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
-2. Open a supported series page.
-3. Click the Tako icon to open the Side Panel.
-4. Select chapters and click **Download**.
-5. Follow the task in the queue. The Options page contains full history and
-   destination recovery actions.
+- It is **not** a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
+- It **does not** grant access to content you do not already have permission to view.
 
-The [Quick Start guide](https://github.com/oovz/Tako/wiki/Quick-Start) covers
-output formats, custom folders, and retry controls.
+## Get Started
 
-### Install an unpacked build
+1. Install Tako from the [Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
+2. Navigate to a supported manga series or chapter page.
+3. Click the Tako extension icon to open the Side Panel.
+4. Select the chapters you want and click **Download**.
 
-Tako currently targets Chrome 150 or newer. Local builds require Node.js 20.19
-or newer (or Node.js 22.12 or newer) and pnpm 10.32.1.
+For detailed steps, check the [Quick Start Guide](https://github.com/oovz/Tako/wiki/Quick-Start).
+
+<details>
+<summary><b>Install from Source</b></summary>
+
+### From GitHub Releases
+
+1. Go to the repository **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip`.
+2. Extract the archive to a local folder.
+3. Open `chrome://extensions` in Chrome.
+4. Enable **Developer mode** in the top right.
+5. Click **Load unpacked** and select the extracted folder.
+
+### Local Build
+
+Tako targets Chrome 150 or newer. Building locally requires Node.js 20.19+ (or Node.js 22.12+) and pnpm 10.32.1.
 
 ```powershell
 pnpm install
 pnpm build
 ```
 
-Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**,
-and select `.output\chrome-mv3`.
+Then open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `.output\chrome-mv3`.
 
-Release archives are available from the repository's Releases page. Extract a
-Chrome archive before selecting it with **Load unpacked**.
+</details>
 
-## Development
-
-Common commands:
+<details>
+<summary><b>Development</b></summary>
 
 ```powershell
-pnpm dev
-pnpm lint
-pnpm type-check
-pnpm format:check
-pnpm test:unit
-pnpm test:integration
-pnpm test:e2e
-pnpm check:site-integrations
+pnpm dev # WXT development server (hot reload)
+pnpm test:unit # Unit tests (Vitest)
+pnpm test:e2e # E2E tests (Playwright)
+pnpm lint # ESLint & architecture checks
+pnpm type-check # TypeScript strict checks
 ```
 
-Build and test artifacts are separated by mode:
+For the complete development workflow, code conventions, and pull request guidelines, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-| Mode              | Command          | Output                         |
-| ----------------- | ---------------- | ------------------------------ |
-| Production        | `pnpm build`     | `.output\chrome-mv3`           |
-| Deterministic E2E | `pnpm test:e2e`  | `.output\chrome-mv3-e2e-test`  |
-| Live E2E          | `pnpm test:live` | `.output\chrome-mv3-live-test` |
-
-Only the production build is suitable for release. Test builds contain
-mode-specific state seeding or request routing and must not be distributed.
-
-## Runtime outline
-
-The Manifest V3 Service Worker owns durable state and privileged Chrome APIs.
-The Side Panel and Options page send validated commands and render stored
-projections. An offscreen document handles provider data, image processing,
-archive creation, File System Access writes, and Blob-backed handoff to Chrome
-Downloads. Provider definitions are validated from `definition.json` against
-`src/site-integrations/definition.schema.json`; generated registries connect the
-packaged provider runtimes to each browser context.
-
-See [Architecture](https://github.com/oovz/Tako/wiki/Architecture) for the job,
-restart, and native-output protocols.
-
-## Troubleshooting
-
-- **MangaDex is unavailable:** enable MangaDex in Options and approve the
-  optional HTTPS permission when Chrome asks. Disabling it removes that access.
-- **A custom folder needs attention:** open **Options → Downloads** and grant
-  access again, select another folder, continue that task through Chrome
-  Downloads, or cancel it. Tako does not switch destinations silently.
-- **Chrome download history was erased before Tako saw completion:** the task
-  reports an unobservable browser download. Use the task-wide forget action only
-  when Chrome no longer needs any pending output from that task.
-- **An unpacked build does not load:** verify Chrome 150+, rebuild with the
-  supported Node and pnpm versions, and select `.output\chrome-mv3` rather than
-  the repository root or an E2E artifact.
+</details>
 
 ## Documentation
 
-- [Quick Start](https://github.com/oovz/Tako/wiki/Quick-Start)
-- [Supported Sites](https://github.com/oovz/Tako/wiki/Supported-Sites)
-- [Template Macros](https://github.com/oovz/Tako/wiki/Template-Macros)
-- [Architecture](https://github.com/oovz/Tako/wiki/Architecture)
-- [Permissions](https://github.com/oovz/Tako/wiki/Permissions)
-- [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)
+| Wiki Page                                                                          | Description                                      |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [Quick Start](https://github.com/oovz/Tako/wiki/Quick-Start)                       | Installation and first download guide            |
+| [Supported Sites](https://github.com/oovz/Tako/wiki/Supported-Sites)               | Current site integrations and status             |
+| [Comparisons](https://github.com/oovz/Tako/wiki/Comparisons)                       | How Tako compares to other downloaders           |
+| [Template Macros](https://github.com/oovz/Tako/wiki/Template-Macros)               | Path and filename template macro reference       |
+| [Architecture](https://github.com/oovz/Tako/wiki/Architecture)                     | Core runtime, storage, messaging, and state flow |
+| [Permissions](https://github.com/oovz/Tako/wiki/Permissions)                       | Explanations for each requested permission       |
+| [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) | Creating and maintaining site integrations       |
 
 ## Privacy
 
-Settings, queue state, and history stay in browser storage. Tako has no
-developer-operated analytics or telemetry service. Requests go to the enabled
-site integrations and their required infrastructure. When MangaDex is enabled,
-its MangaDex@Home delivery report is sent directly to MangaDex.
+Tako stores settings, queue state, and download history locally in your browser. Network requests are made directly to supported sites and the infrastructure needed to perform downloads. There are no developer-operated analytics or telemetry services. When MangaDex is enabled, required MangaDex@Home delivery reports are sent directly to MangaDex.
 
-See [PRIVACY.md](PRIVACY.md) for the complete policy.
+For the full privacy policy, see [`PRIVACY.md`](PRIVACY.md).
+
+## Contributing
+
+Contributions are welcome! Please read the [`Contributing Guidelines`](CONTRIBUTING.md) before submitting a pull request.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE) for details.

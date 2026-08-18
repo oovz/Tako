@@ -2,9 +2,7 @@
 
 _Last reviewed: August 2026_
 
-Tako is a browser-native manga downloader built directly into Chrome's Side
-Panel. This guide compares Tako to other popular manga downloaders and outlines
-architectural trade-offs to help you choose the right tool for your workflow.
+Tako is a browser-native manga downloader built directly into Chrome's Side Panel. This guide compares Tako to other popular manga downloaders and outlines architectural trade-offs to help you choose the right tool for your workflow.
 
 ## Comparison table
 
@@ -17,35 +15,19 @@ architectural trade-offs to help you choose the right tool for your workflow.
 
 ## Who Tako is for
 
-Tako is designed specifically for readers who want a streamlined, in-browser
-download experience without managing separate desktop runtimes or server
-infrastructure.
+Tako is designed specifically for readers who want a streamlined, in-browser download experience without managing separate desktop runtimes or server infrastructure.
 
 ### Choose Tako if:
 
-- **You want an in-browser workflow** — select chapters and monitor downloads
-  directly in Chrome's Side Panel next to your active reading tab.
-- **You want zero server or runtime setup** — no Python, Node.js, Java, or
-  Docker containers required.
-- **You organize reading libraries with Komga or Kavita** — Tako embeds standard
-  `ComicInfo.xml` metadata in CBZ archives, compatible with modern comic and
-  manga server managers.
-- **You want direct folder saving** — write chapters directly to your local
-  library folder via the File System Access API without browser download shelf
-  clutter.
-- **You care about privacy and battery life** — no developer analytics, no
-  background telemetry, and resource-conscious offscreen processing.
+- **You want an in-browser workflow** — Select chapters and monitor downloads directly in Chrome's Side Panel next to your active reading tab.
+- **You want zero server or runtime setup** — No Python, Node.js, Java, or Docker containers required.
+- **You organize reading libraries with Komga or Kavita** — Tako embeds standard `ComicInfo.xml` metadata in CBZ archives, compatible with modern comic and manga server managers.
+- **You want direct folder saving** — Write chapters directly to your local library folder via the File System Access API without browser download shelf clutter.
+- **You care about privacy and efficiency** — No developer analytics, no background telemetry, and resource-conscious offscreen processing.
 
-## Key architectural features of Tako
+## Key features of Tako
 
-- **Modern Manifest V3 architecture** — built with dedicated Service Worker
-  state management and offscreen document processing, engineered for Chrome's
-  current extension platform.
-- **Durable queue with retry & restart recovery** — progress is committed to
-  local storage so downloads resume reliably after browser restarts or worker
-  reloads.
-- **Customizable path and filename templates** — flexible macro placeholders
-  (`<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, `<VOLUME_NUMBER>`, etc.) for automated
-  library organization.
-- **Privacy-first** — all configuration and queue data stay strictly within
-  local browser storage.
+- **Modern Manifest V3 architecture** — Built with dedicated Service Worker state management and offscreen document processing, engineered for Chrome's current extension platform.
+- **Durable queue with retry & recovery** — Progress is committed to local storage so downloads resume reliably after browser restarts.
+- **Customizable path and filename templates** — Flexible macro placeholders (`<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, `<VOLUME_NUMBER>`, etc.) for automated library organization.
+- **Privacy-first** — All configuration and queue data stay strictly within local browser storage.
