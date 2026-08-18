@@ -352,13 +352,14 @@ pnpm test:unit                   # Runs full unit test suite
 
 ## Current integration notes
 
-| Integration  | Useful patterns                                                                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MangaDex     | Official API, At-Home reporting, optional broad permission, optional one-shot page-preference import                                                                      |
-| Pixiv Comic  | Internal API/build data and image reconstruction                                                                                                                          |
-| Shonen Jump+ | Numeric `/episode/{id}` pages only; fetched SSR `readableProduct`, viewer API, tile reconstruction. Homepage and `/series*` catalog routes are intentionally unsupported. |
-| Manhuagui    | SSR grouping, packed reader payload, explicit adult gate, referrer-sensitive images                                                                                       |
-| Comic Nettai | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access; PUBLUS images are limited to JPEG/PNG/WebP/GIF and reject AVIF before fetching  |
+| Integration                                 | Useful patterns                                                                                                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MangaDex                                    | Official API, At-Home reporting, optional broad permission, optional one-shot page-preference import                                                                      |
+| Pixiv Comic                                 | Internal API/build data and image reconstruction                                                                                                                          |
+| Shonen Jump+                                | Numeric `/episode/{id}` pages only; fetched SSR `readableProduct`, viewer API, tile reconstruction. Homepage and `/series*` catalog routes are intentionally unsupported. |
+| Manhuagui                                   | SSR grouping, packed reader payload, explicit adult gate, referrer-sensitive images                                                                                       |
+| [Comic Nettai](https://www.comicnettai.com) | SSR open/expired state, PUBLUS viewer, normal-navigation/session-sensitive viewer access; PUBLUS images are limited to JPEG/PNG/WebP/GIF and reject AVIF before fetching  |
+| MangaMillion                                | Official Protobuf API, anonymous device token registration, AES-256-CBC page decryption with SubtleCrypto, multi-language chapter catalog                                 |
 
 Related: [Architecture](Architecture), [Permissions](Permissions), and
 [Template Macros](Template-Macros).

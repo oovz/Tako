@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangamillion",
+  "data": {
+    "titleDetail": {
+      "serviceTitle": {
+        "serviceTitleName": "One Piece",
+        "authorName": "Eiichiro Oda",
+        "coverUrl": "https://img.mangamillion.shueisha.co.jp/jpn/image/original_title_cover/1.avif?h=fixture&e=1786987800",
+        "description": "MangaMillion fixture description"
+      }
+    },
+    "chapterList": {
+      "totalChapters": 1,
+      "chapterGroups": [
+        {
+          "groupType": 0,
+          "chapters": [
+            {
+              "number": "#001",
+              "name": "Chapter 1: Romance Dawn",
+              "translatedChapterId": 6736,
+              "thumbnailUrl": "https://img.mangamillion.shueisha.co.jp/en/image/service_chapter_thumbnail/1.avif?h=fixture&e=1786987800"
+            }
+          ]
+        }
+      ]
+    },
+    "viewer": {
+      "aesKey": "8c12434255319a2a5fb903fc39994f409eb27979d1d78f1009f1a015f69db321",
+      "aesIv": "4af66d450c1244868dc4a5cff035898c",
+      "pages": [
+        {
+          "imageUrl": "https://img.mangamillion.shueisha.co.jp/en/translated_chapter_page/6736/1.avif.enc?h=fixture&e=1786987800",
+          "widthPx": 1080,
+          "heightPx": 1620,
+          "pageType": 0
+        }
+      ]
+    }
+  }
+}

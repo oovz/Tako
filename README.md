@@ -43,13 +43,14 @@ copyright controls.
 
 ## Supported sites
 
-| Site                                        | Maturity | Notes                                               |
-| ------------------------------------------- | -------- | --------------------------------------------------- |
-| [MangaDex](https://mangadex.org)            | Stable   | Disabled by default; requests optional HTTPS access |
-| [Pixiv Comic](https://comic.pixiv.net)      | Stable   | Browser-session provider                            |
-| [Shonen Jump+](https://shonenjumpplus.com)  | Stable   | Start from a numeric `/episode/{id}` page           |
-| [Manhuagui](https://www.manhuagui.com)      | Stable   | Browser-session provider                            |
-| [Comic Nettai](https://www.comicnettai.com) | Stable   | Browser-session provider                            |
+| Site                                                | Maturity | Notes                                               |
+| --------------------------------------------------- | -------- | --------------------------------------------------- |
+| [MangaDex](https://mangadex.org)                    | Stable   | Disabled by default; requests optional HTTPS access |
+| [Pixiv Comic](https://comic.pixiv.net)              | Stable   | Browser-session provider                            |
+| [Shonen Jump+](https://shonenjumpplus.com)          | Stable   | Start from a numeric `/episode/{id}` page           |
+| [Manhuagui](https://www.manhuagui.com)              | Stable   | Browser-session provider                            |
+| [Comic Nettai](https://www.comicnettai.com)         | Stable   | Browser-session provider                            |
+| [MangaMillion](https://mangamillion.shueisha.co.jp) | Stable   | Official API provider                               |
 
 The Shonen Jump+ homepage and `/series` catalog routes are not downloadable
 series contexts. For integration details or a new-site request, see the

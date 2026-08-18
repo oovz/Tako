@@ -26,6 +26,7 @@ import { registerManhuaguiRoutes } from "./mock-data/site-integrations/manhuagui
 import { registerPixivComicRoutes } from "./mock-data/site-integrations/pixiv-comic"
 import { registerShonenJumpPlusRoutes } from "./mock-data/site-integrations/shonenjumpplus"
 import { registerComicNettaiRoutes } from "./mock-data/site-integrations/comicnettai"
+import { registerMangaMillionRoutes } from "./mock-data/site-integrations/mangamillion"
 import { EXAMPLE_TEST_DOMAIN } from "./test-domains-constants"
 
 const DEFAULT_HTML =
@@ -37,6 +38,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerPixivComicRoutes,
   registerShonenJumpPlusRoutes,
   registerComicNettaiRoutes,
+  registerMangaMillionRoutes,
 ]
 
 export function shouldBlockUnmatchedRequest(

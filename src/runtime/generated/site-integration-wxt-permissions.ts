@@ -9,6 +9,7 @@ export const siteIntegrationWxtPermissions = {
   "requiredOrigins": [
     "https://*.hamreus.com/*",
     "https://*.pximg.net/*",
+    "https://api.mangamillion.shueisha.co.jp/*",
     "https://cdn-ak-img.shonenjumpplus.com/*",
     "https://cdn-ak.shonenjumpplus.com/*",
     "https://cdn.comicnettai.com/*",
@@ -16,6 +17,8 @@ export const siteIntegrationWxtPermissions = {
     "https://comic.pixiv.net/*",
     "https://hamreus.com/*",
     "https://img-comic.pximg.net/*",
+    "https://img.mangamillion.shueisha.co.jp/*",
+    "https://mangamillion.shueisha.co.jp/*",
     "https://manhuagui.com/*",
     "https://pximg.net/*",
     "https://shonenjumpplus.com/*",

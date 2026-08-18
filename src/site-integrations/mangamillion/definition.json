@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "mangamillion",
+  "name": "MangaMillion",
+  "author": "TMD Team",
+  "version": "1.0.0",
+  "maturity": "stable",
+  "shipped": true,
+  "enabledByDefault": true,
+  "implementationType": "official-api",
+  "volatility": "medium",
+  "authentication": "anonymous",
+  "regions": ["global"],
+  "accountConstraints": ["guest-access"],
+  "patterns": {
+    "domains": ["mangamillion.shueisha.co.jp"],
+    "seriesMatches": ["/title/*", "/*/title/*"],
+    "excludeMatches": []
+  },
+  "requiredOrigins": [
+    "https://mangamillion.shueisha.co.jp/*",
+    "https://api.mangamillion.shueisha.co.jp/*",
+    "https://img.mangamillion.shueisha.co.jp/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": { "concurrency": 2, "delayMs": 500 },
+    "chapter": { "concurrency": 1, "delayMs": 500 }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": { "mode": "none" }
+  },
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 1000
+  },
+  "endpointPolicies": [
+    {
+      "id": "mangamillion-api",
+      "purpose": "MangaMillion official API",
+      "origins": ["https://api.mangamillion.shueisha.co.jp/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 15000000
+    },
+    {
+      "id": "mangamillion-image",
+      "purpose": "MangaMillion image CDN",
+      "origins": ["https://img.mangamillion.shueisha.co.jp/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "dynamicOrigins": [],
+  "sessionRefererRules": [],
+  "customSettings": [],
+  "fixtures": {
+    "paths": ["src/site-integrations/mangamillion/fixtures/contract.json"],
+    "liveFreshnessDays": 30
+  }
+}

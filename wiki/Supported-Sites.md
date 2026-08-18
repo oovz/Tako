@@ -5,13 +5,14 @@ integrations.
 
 ## Live integrations
 
-| Site                                        | Maturity | Fresh-install default                            | Context strategy                                             |
-| ------------------------------------------- | -------- | ------------------------------------------------ | ------------------------------------------------------------ |
-| [MangaDex](https://mangadex.org)            | Stable   | Off; asks for optional HTTPS access when enabled | URL + official API                                           |
-| [Pixiv Comic](https://comic.pixiv.net)      | Stable   | On                                               | URL + internal API/descrambler                               |
-| [Shonen Jump+](https://shonenjumpplus.com)  | Stable   | On                                               | Numeric `/episode/{id}` pages; fetched SSR HTML + viewer API |
-| [Manhuagui](https://www.manhuagui.com)      | Stable   | On                                               | Fetched SSR HTML + packed chapter data                       |
-| [Comic Nettai](https://www.comicnettai.com) | Stable   | On                                               | Fetched SSR HTML + PUBLUS viewer                             |
+| Site                                                | Maturity | Fresh-install default                            | Context strategy                                             |
+| --------------------------------------------------- | -------- | ------------------------------------------------ | ------------------------------------------------------------ |
+| [MangaDex](https://mangadex.org)                    | Stable   | Off; asks for optional HTTPS access when enabled | URL + official API                                           |
+| [Pixiv Comic](https://comic.pixiv.net)              | Stable   | On                                               | URL + internal API/descrambler                               |
+| [Shonen Jump+](https://shonenjumpplus.com)          | Stable   | On                                               | Numeric `/episode/{id}` pages; fetched SSR HTML + viewer API |
+| [Manhuagui](https://www.manhuagui.com)              | Stable   | On                                               | Fetched SSR HTML + packed chapter data                       |
+| [Comic Nettai](https://www.comicnettai.com)         | Stable   | On                                               | Fetched SSR HTML + PUBLUS viewer                             |
+| [MangaMillion](https://mangamillion.shueisha.co.jp) | Stable   | On                                               | URL + official Protobuf API/AES descrambler                  |
 
 All bundled integrations are Stable. Maturity describes the supported behavior
 of the current implementation; it is independent of whether an integration uses
