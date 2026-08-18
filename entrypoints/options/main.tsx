@@ -270,7 +270,7 @@ function OptionsPage() {
 
       {/* Main Content - following shadcn/ui dashboard patterns */}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col p-4 pb-24 sm:p-6 sm:pb-24 md:p-8 md:pb-24">
+        <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col p-4 pb-24 sm:p-6 sm:pb-24 md:p-8 md:pb-24">
           {hasExternalChanges && (
             <ExternalSettingsConflictBanner
               isResolving={isResolvingExternalChanges}

@@ -282,18 +282,18 @@ export function SeriesInlineSelection({
         <div className="h-[64px] px-3 py-2.5">
           <Button
             type="button"
-            className="h-10 w-full gap-2 text-sm font-semibold transition-colors duration-150"
+            className="group h-10 w-full gap-2 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
             onClick={handleStart}
             disabled={download.isEnqueuing}
           >
             {download.showSuccess ? (
               <>
-                <Check className="size-4" />
+                <Check className="size-4 animate-in zoom-in-75 duration-200 text-primary-foreground" />
                 {t("sidepanel_addedToQueue")}
               </>
             ) : (
               <>
-                <Download className="size-4" />
+                <Download className="size-4 transition-transform duration-150 group-hover:translate-y-0.5" />
                 {t("sidepanel_downloadCount", [String(selectedCount)])}
               </>
             )}

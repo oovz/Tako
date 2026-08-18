@@ -24,7 +24,7 @@ export function ErrorBanner() {
   if (!initFailed && visibleErrors.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-2 p-4 bg-background/95 backdrop-blur border-b">
+    <div className="flex flex-col gap-2 p-4 bg-background/95 backdrop-blur border-b animate-in fade-in slide-in-from-top-2 duration-200 ease-out">
       {initFailed && (
         <Alert variant="destructive">
           <AlertCircle className="size-4" />

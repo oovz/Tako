@@ -26,7 +26,7 @@ export type CommandCenterTaskActionId =
   | "remove"
 
 export interface CommandCenterTaskActionPlan {
-  primary: CommandCenterTaskActionId | null
+  inline: CommandCenterTaskActionId[]
   overflow: CommandCenterTaskActionId[]
 }
 
@@ -186,7 +186,7 @@ export function getTaskActionPlan(
 ): CommandCenterTaskActionPlan {
   if (status === "downloading") {
     return {
-      primary: availability.canCancel ? "cancel" : null,
+      inline: availability.canCancel ? ["cancel"] : [],
       overflow: [],
     }
   }
@@ -194,42 +194,55 @@ export function getTaskActionPlan(
   if (status === "queued") {
     if (availability.canForgetUnobservable) {
       return {
-        primary: "forget-unobservable",
-        overflow: availability.canCancel ? ["cancel"] : [],
+        inline: [
+          "forget-unobservable",
+          ...(availability.canCancel ? (["cancel"] as const) : []),
+        ],
+        overflow: [],
       }
     }
     return {
-      primary: availability.canMoveToTop ? "move-to-top" : null,
-      overflow: availability.canCancel ? ["cancel"] : [],
+      inline: [
+        ...(availability.canMoveToTop ? (["move-to-top"] as const) : []),
+        ...(availability.canCancel ? (["cancel"] as const) : []),
+      ],
+      overflow: [],
     }
   }
 
   if (status === "partial_success") {
-    return {
-      primary: availability.canRetryFailed
-        ? "retry-failed"
-        : availability.canRestart
-          ? "restart"
-          : null,
-      overflow: [
-        ...(availability.canRetryFailed && availability.canRestart
-          ? (["restart"] as const)
-          : []),
-        ...(availability.canRemove ? (["remove"] as const) : []),
-      ],
+    const inline: CommandCenterTaskActionId[] = []
+    const overflow: CommandCenterTaskActionId[] = []
+
+    if (availability.canRetryFailed) {
+      inline.push("retry-failed")
+      if (availability.canRestart) {
+        overflow.push("restart")
+      }
+    } else if (availability.canRestart) {
+      inline.push("restart")
     }
+
+    if (availability.canRemove) {
+      inline.push("remove")
+    }
+
+    return { inline, overflow }
   }
 
   if (status === "failed" || status === "canceled") {
     return {
-      primary: availability.canRestart ? "restart" : null,
-      overflow: availability.canRemove ? ["remove"] : [],
+      inline: [
+        ...(availability.canRestart ? (["restart"] as const) : []),
+        ...(availability.canRemove ? (["remove"] as const) : []),
+      ],
+      overflow: [],
     }
   }
 
   return {
-    primary: null,
-    overflow: availability.canRemove ? ["remove"] : [],
+    inline: availability.canRemove ? ["remove"] : [],
+    overflow: [],
   }
 }
 

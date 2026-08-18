@@ -84,7 +84,7 @@ describe("CommandCenterQueue action hierarchy", () => {
     ).toBe(true)
   })
 
-  it("keeps active cancel visible as the only action", () => {
+  it("keeps active cancel visible as the only inline action", () => {
     const availability = getTaskActionAvailability(
       makeTask({ status: "downloading" }),
       handlers
@@ -94,10 +94,10 @@ describe("CommandCenterQueue action hierarchy", () => {
         ...availability,
         canRetryFailed: false,
       })
-    ).toEqual({ primary: "cancel", overflow: [] })
+    ).toEqual({ inline: ["cancel"], overflow: [] })
   })
 
-  it("hides meaningless Move to top for the first queued task", () => {
+  it("hides meaningless Move to top for the first queued task while keeping inline cancel", () => {
     const first = getTaskActionAvailability(makeTask({ status: "queued" }), {
       ...handlers,
       isFirstQueuedTask: true,
@@ -109,13 +109,13 @@ describe("CommandCenterQueue action hierarchy", () => {
 
     expect(
       getTaskActionPlan("queued", { ...first, canRetryFailed: false })
-    ).toEqual({ primary: null, overflow: ["cancel"] })
+    ).toEqual({ inline: ["cancel"], overflow: [] })
     expect(
       getTaskActionPlan("queued", { ...later, canRetryFailed: false })
-    ).toEqual({ primary: "move-to-top", overflow: ["cancel"] })
+    ).toEqual({ inline: ["move-to-top", "cancel"], overflow: [] })
   })
 
-  it("uses Retry as the partial-success primary and keeps Restart/Remove secondary", () => {
+  it("uses Retry and Remove as partial-success inline actions and keeps Restart in overflow", () => {
     const availability = getTaskActionAvailability(
       makeTask({ status: "partial_success" }),
       handlers
@@ -126,12 +126,12 @@ describe("CommandCenterQueue action hierarchy", () => {
         canRetryFailed: true,
       })
     ).toEqual({
-      primary: "retry-failed",
-      overflow: ["restart", "remove"],
+      inline: ["retry-failed", "remove"],
+      overflow: ["restart"],
     })
   })
 
-  it("uses Restart for failed/canceled tasks and only overflow for completed tasks", () => {
+  it("uses inline Restart and Remove for failed/canceled tasks and inline Remove for completed tasks", () => {
     for (const status of ["failed", "canceled"] as const) {
       const availability = getTaskActionAvailability(
         makeTask({ status }),
@@ -142,7 +142,7 @@ describe("CommandCenterQueue action hierarchy", () => {
           ...availability,
           canRetryFailed: false,
         })
-      ).toEqual({ primary: "restart", overflow: ["remove"] })
+      ).toEqual({ inline: ["restart", "remove"], overflow: [] })
     }
 
     const completed = getTaskActionAvailability(
@@ -154,6 +154,6 @@ describe("CommandCenterQueue action hierarchy", () => {
         ...completed,
         canRetryFailed: false,
       })
-    ).toEqual({ primary: null, overflow: ["remove"] })
+    ).toEqual({ inline: ["remove"], overflow: [] })
   })
 })

@@ -158,9 +158,11 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
       <div
         className={cn(
           "group relative flex items-center gap-2.5 px-3 py-2 border-b border-border/50",
-          "transition-colors duration-100",
+          "transition-all duration-200 ease-out",
           "hover:bg-muted/30",
-          isActive && "bg-muted/40 border-l-2 border-l-primary"
+          isActive && "bg-muted/40 border-l-2 border-l-primary",
+          (isRemoving || isCanceling) &&
+            "opacity-0 -translate-x-2 scale-[0.98] pointer-events-none"
         )}
       >
         {isConfirmingCancel && (
@@ -196,7 +198,7 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
         )}
 
         {/* Thumbnail */}
-        <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50">
+        <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50 transition-transform duration-200 group-hover:scale-105">
           <img
             src={coverSrc}
             alt=""

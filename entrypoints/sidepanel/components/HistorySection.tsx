@@ -47,7 +47,7 @@ export function HistorySection({
           <button
             type="button"
             onClick={onViewFullHistory}
-            className="text-[10px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
           >
             {t("sidepanel_viewFullHistory")}
           </button>

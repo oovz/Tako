@@ -208,7 +208,7 @@ export function ChapterSelector({
             {row.chapter.downloaded === true && (
               <span
                 data-downloaded-marker
-                className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400"
+                className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
                 title={t("status_completed")}
               >
                 <CheckCircle2 className="size-4" aria-hidden="true" />
