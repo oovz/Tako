@@ -13,7 +13,6 @@ const testIntegrationDir = path.join(
   root,
   "tests/unit/scripts/scaffold-test-site"
 )
-
 function cleanupTestIntegration() {
   if (fs.existsSync(testIntegrationDir)) {
     fs.rmSync(testIntegrationDir, { recursive: true, force: true })
@@ -97,7 +96,7 @@ describe("new-site-integration script", () => {
       // The generated TypeScript stubs must lint cleanly
       expect(() => {
         execSync(
-          `pnpm exec eslint ${testIntegrationDir} --ext .ts --config eslint.config.mjs --max-warnings=0`,
+          `pnpm exec eslint tests/unit/scripts/scaffold-test-site --config eslint.config.mjs --max-warnings=0`,
           {
             encoding: "utf8",
             cwd: root,

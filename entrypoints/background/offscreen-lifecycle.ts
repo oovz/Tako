@@ -346,8 +346,7 @@ export async function recoverFromLivenessTimeout(
     lease &&
     nativeOutputPhase === "open" &&
     jobQuerySucceeded &&
-    (queriedJob === null ||
-      (exactQueriedJob !== null && exactQueriedJob.status !== "active"))
+    (queriedJob === null || exactQueriedJob?.status !== "active")
   ) {
     await nativeOutputCoordinator.reconcileStartupOpenManifests({
       offscreenJob: queriedJob,

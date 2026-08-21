@@ -30,7 +30,7 @@ const offscreenEnablementLoader: SiteIntegrationEnablementLoader = async () => {
 
   if (!response || !response.success) {
     throw new Error(
-      response && !response.success
+      response
         ? `Failed to load site integration enablement: ${response.error}`
         : "Failed to load site integration enablement: no response"
     )

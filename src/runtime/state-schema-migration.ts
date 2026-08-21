@@ -154,19 +154,14 @@ function canonicalizeSettings(raw: unknown): ExtensionSettings | undefined {
     typeof downloads.customDirectoryHandleId === "string" &&
     downloads.customDirectoryHandleId.length > 0
       ? downloads.customDirectoryHandleId
-      : downloads.customDirectoryHandleId === null
-        ? null
-        : destination === "file-system-access"
-          ? DOWNLOAD_ROOT_HANDLE_ID
-          : defaults.downloads.customDirectoryHandleId
+      : destination === "file-system-access"
+        ? DOWNLOAD_ROOT_HANDLE_ID
+        : defaults.downloads.customDirectoryHandleId
 
   const settings: ExtensionSettings = {
     downloads: {
       destination,
-      customDirectoryHandleId:
-        destination === "file-system-access" && handleId === null
-          ? DOWNLOAD_ROOT_HANDLE_ID
-          : handleId,
+      customDirectoryHandleId: handleId,
       pathTemplate: nonemptyString(
         downloads.pathTemplate,
         defaults.downloads.pathTemplate

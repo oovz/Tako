@@ -132,10 +132,10 @@ export class ProgressTimingEstimator {
     const now = input.now ?? Date.now()
     const phase = toPipelineProgressPhase(input.stage)
     const previous = this.activeSamples.get(input.jobId)
-    if (previous && previous.phase !== phase) {
-      await this.recordSample(previous, now)
-    }
-    if (!previous || previous.phase !== phase) {
+    if (previous?.phase !== phase) {
+      if (previous) {
+        await this.recordSample(previous, now)
+      }
       this.activeSamples.set(input.jobId, {
         phase,
         startedAt: now,

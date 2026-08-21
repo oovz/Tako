@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest"
 
 import {
   CURRENT_STATE_SCHEMA_EPOCH,
@@ -44,7 +44,7 @@ function legacyTask(id = "task-1") {
 describe("migrateDurableStateForCurrentSchema", () => {
   let local: Record<string, unknown>
   let operationOrder: string[]
-  let deleteDatabase: ReturnType<typeof vi.fn>
+  let deleteDatabase: Mock
 
   beforeEach(() => {
     local = {}

@@ -196,14 +196,10 @@ export function readEncodedImageDimensions(
   }
   const bytes = new Uint8Array(buffer)
   const dimensions =
-    (mimeType === "image/png" ? readPngDimensions(bytes) : null) ??
-    (mimeType === "image/gif" ? readGifDimensions(bytes) : null) ??
-    (mimeType === "image/jpeg" ? readJpegDimensions(bytes) : null) ??
-    (mimeType === "image/webp" ? readWebpDimensions(bytes) : null) ??
     readPngDimensions(bytes) ??
-    readGifDimensions(bytes) ??
     readJpegDimensions(bytes) ??
-    readWebpDimensions(bytes)
+    readWebpDimensions(bytes) ??
+    readGifDimensions(bytes)
   if (!dimensions) {
     throw new DecodedImageResourceLimitError(
       `Encoded ${mimeType} image dimensions are unavailable`
