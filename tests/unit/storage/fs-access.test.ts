@@ -12,7 +12,10 @@ import {
 
 type FileLookup = (name: string) => Promise<unknown>
 
-type DirectoryHandleOptions = Partial<FileSystemDirectoryHandle> & {
+type DirectoryHandleOptions = Partial<
+  Omit<FileSystemDirectoryHandle, "entries">
+> & {
+  entries?: unknown
   queryPermission?: (descriptor: {
     mode: "read" | "readwrite"
   }) => Promise<PermissionState>
@@ -20,7 +23,6 @@ type DirectoryHandleOptions = Partial<FileSystemDirectoryHandle> & {
     mode: "read" | "readwrite"
   }) => Promise<PermissionState>
 }
-
 function createDirectoryHandle(
   getFileHandle: FileLookup = async () => {
     throw createNamedError("NotFoundError")
@@ -76,6 +78,17 @@ describe("File System Access helpers", () => {
       const dir = createDirectoryHandle(undefined, {
         queryPermission: async () => {
           throw createNamedError("NotAllowedError")
+        },
+      })
+
+      await expect(verifyPermission(dir)).resolves.toBe(false)
+    })
+
+    it("returns false when the directory handle points to a deleted folder", async () => {
+      const dir = createDirectoryHandle(undefined, {
+        queryPermission: async () => "granted",
+        entries: async function* () {
+          yield await Promise.reject(createNamedError("NotFoundError"))
         },
       })
 

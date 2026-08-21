@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import logger from "@/src/runtime/logger"
+import { ExtensionSettingsSchema } from "@/src/domain/settings/schema"
 import { validateSettingsDestination } from "@/src/storage/settings-destination-validation"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import type {
@@ -260,6 +261,26 @@ export function useOptionsPageState() {
       toast.error(t("options_invalidTemplate"))
       return
     }
+    const schemaValidation = ExtensionSettingsSchema.safeParse(settingsBuffer)
+    if (!schemaValidation.success) {
+      toast.error(t("options_toastSaveFailed"), {
+        description:
+          schemaValidation.error.issues[0]?.message ??
+          t("options_toastUnknownError"),
+      })
+      return
+    }
+
+    if (
+      settingsBuffer.downloads.destination === "file-system-access" &&
+      !folder.pendingFolderHandle &&
+      !folder.savedFolderHandle
+    ) {
+      toast.error(t("options_toastSaveFailed"), {
+        description: t("settings_customFolderRequired"),
+      })
+      return
+    }
 
     let fsaMutationRevision: number | null = null
     let saveSucceeded = false
@@ -292,6 +313,15 @@ export function useOptionsPageState() {
       const handleToPersist = wantsCustomFolder
         ? (folder.pendingFolderHandle ?? folder.savedFolderHandle)
         : null
+      const destinationValidation = await validateSettingsDestination(
+        submittedSettings.downloads.destination,
+        handleToPersist
+      )
+      if (!destinationValidation.isValid) {
+        throw new Error(
+          destinationValidation.error ?? t("options_toastSaveFailed")
+        )
+      }
 
       if (wantsCustomFolder && handleToPersist) {
         try {
@@ -313,16 +343,6 @@ export function useOptionsPageState() {
           throw error
         }
       }
-
-      const destinationValidation = await validateSettingsDestination(
-        submittedSettings.downloads.destination
-      )
-      if (!destinationValidation.isValid) {
-        throw new Error(
-          destinationValidation.error ?? t("options_toastSaveFailed")
-        )
-      }
-
       const response = await configurationClient.save({
         ...submittedConfiguration,
       })
@@ -362,8 +382,12 @@ export function useOptionsPageState() {
         }
       }
       logger.error("[OPTIONS] Failed to save settings:", error)
+      const description =
+        error instanceof Error && error.message
+          ? error.message
+          : t("options_toastUnknownError")
       toast.error(t("options_toastSaveFailed"), {
-        description: t("options_toastUnknownError"),
+        description,
       })
     } finally {
       externalChangeController.completeSave(saveToken, saveSucceeded)

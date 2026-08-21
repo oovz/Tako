@@ -719,6 +719,12 @@
   "options_fsaUnsupported": {
     "message": "このブラウザーではカスタムフォルダーを利用できません。ブラウザーのダウンロードは引き続き利用できます。"
   },
+  "options_fsaNoFolderSelectedTitle": {
+    "message": "ダウンロードフォルダーが選択されていません"
+  },
+  "options_fsaNoFolderSelectedDesc": {
+    "message": "File System Access ダウンロードモードを使用するにはフォルダーを選択してください。フォルダーを選択するまで変更を保存できません。"
+  },
   "options_conflictPolicy": {
     "message": "既存ファイル"
   },
@@ -741,6 +747,9 @@
   },
   "options_noCustomFolder": {
     "message": "カスタムフォルダ未選択。デフォルトのブラウザダウンロードを使用。"
+  },
+  "options_noFolderSelected": {
+    "message": "フォルダー未選択。"
   },
   "options_customFolderOverwrite": {
     "message": "カスタムフォルダモードは常に同名ファイルを上書きします。"
@@ -1743,6 +1752,9 @@
   },
   "settings_customFolderPermissionDenied": {
     "message": "選択したフォルダーへのアクセスが拒否されました。別のフォルダーを選択するか、アクセスを許可してください。"
+  },
+  "settings_customFolderNotFound": {
+    "message": "選択したダウンロードフォルダーが存在しないか、削除されました。有効なフォルダーを選択してください。"
   },
   "settings_validateCustomFolderFailed": {
     "message": "カスタムフォルダーを確認できませんでした：$DETAIL$",

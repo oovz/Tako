@@ -719,6 +719,12 @@
   "options_fsaUnsupported": {
     "message": "此浏览器不支持自定义文件夹。仍可使用浏览器下载。"
   },
+  "options_fsaNoFolderSelectedTitle": {
+    "message": "未选择下载文件夹"
+  },
+  "options_fsaNoFolderSelectedDesc": {
+    "message": "使用文件系统访问（File System Access）下载模式需要选择文件夹。在选择文件夹之前无法保存更改。"
+  },
   "options_conflictPolicy": {
     "message": "现有文件"
   },
@@ -741,6 +747,9 @@
   },
   "options_noCustomFolder": {
     "message": "未选择自定义文件夹。使用默认浏览器下载。"
+  },
+  "options_noFolderSelected": {
+    "message": "未选择文件夹。"
   },
   "options_customFolderOverwrite": {
     "message": "自定义文件夹模式始终覆盖同名文件。"
@@ -1743,6 +1752,9 @@
   },
   "settings_customFolderPermissionDenied": {
     "message": "所选文件夹的访问权限被拒绝。请选择其他文件夹或授予权限。"
+  },
+  "settings_customFolderNotFound": {
+    "message": "所选的下载文件夹不存在或已被删除。请选择有效文件夹。"
   },
   "settings_validateCustomFolderFailed": {
     "message": "无法验证自定义文件夹：$DETAIL$",

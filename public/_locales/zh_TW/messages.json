@@ -719,6 +719,12 @@
   "options_fsaUnsupported": {
     "message": "此瀏覽器不支援自訂資料夾。仍可使用瀏覽器下載。"
   },
+  "options_fsaNoFolderSelectedTitle": {
+    "message": "未選擇下載資料夾"
+  },
+  "options_fsaNoFolderSelectedDesc": {
+    "message": "使用檔案系統存取（File System Access）下載模式需要選擇資料夾。在選擇資料夾之前無法儲存變更。"
+  },
   "options_conflictPolicy": {
     "message": "現有檔案"
   },
@@ -741,6 +747,9 @@
   },
   "options_noCustomFolder": {
     "message": "未選擇自訂資料夾。使用預設瀏覽器下載。"
+  },
+  "options_noFolderSelected": {
+    "message": "未選擇資料夾。"
   },
   "options_customFolderOverwrite": {
     "message": "自訂資料夾模式始終覆蓋同名檔案。"
@@ -1743,6 +1752,9 @@
   },
   "settings_customFolderPermissionDenied": {
     "message": "所選資料夾的存取權限遭拒。請選擇其他資料夾或授予權限。"
+  },
+  "settings_customFolderNotFound": {
+    "message": "所選的下載資料夾不存在或已被刪除。請選擇有效資料夾。"
   },
   "settings_validateCustomFolderFailed": {
     "message": "無法驗證自訂資料夾：$DETAIL$",

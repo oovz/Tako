@@ -1,4 +1,4 @@
-import { Folder } from "lucide-react"
+import { AlertTriangle, Folder } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,7 +56,9 @@ export function DownloadDestinationSection({
             <p className="text-xs text-muted-foreground">
               {selectedFolderName
                 ? t("options_currentFolder", [selectedFolderName])
-                : t("options_noCustomFolder")}
+                : downloads.destination === "file-system-access"
+                  ? t("options_noFolderSelected")
+                  : t("options_noCustomFolder")}
             </p>
           </div>
           <Switch
@@ -108,6 +110,22 @@ export function DownloadDestinationSection({
             </Button>
           )}
         </div>
+        {downloads.destination === "file-system-access" &&
+          !selectedFolderName && (
+            <div className="rounded-md border border-border bg-muted/40 p-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="mt-0.5 size-4 text-muted-foreground shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-xs font-medium text-foreground">
+                    {t("options_fsaNoFolderSelectedTitle")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("options_fsaNoFolderSelectedDesc")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
         {!fsaSupported && (
           <p className="text-xs text-muted-foreground">

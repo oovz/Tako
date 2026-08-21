@@ -719,6 +719,12 @@
   "options_fsaUnsupported": {
     "message": "Custom folders are unavailable in this browser. Browser Downloads remain available."
   },
+  "options_fsaNoFolderSelectedTitle": {
+    "message": "No download folder selected"
+  },
+  "options_fsaNoFolderSelectedDesc": {
+    "message": "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
+  },
   "options_conflictPolicy": {
     "message": "Existing files"
   },
@@ -741,6 +747,9 @@
   },
   "options_noCustomFolder": {
     "message": "No custom folder selected. Uses default browser downloads."
+  },
+  "options_noFolderSelected": {
+    "message": "No folder selected."
   },
   "options_customFolderOverwrite": {
     "message": "Custom folder mode always overwrites existing files with the same name."
@@ -1743,6 +1752,9 @@
   },
   "settings_customFolderPermissionDenied": {
     "message": "Permission was denied for the selected folder. Choose another folder or grant access."
+  },
+  "settings_customFolderNotFound": {
+    "message": "The selected download folder does not exist or was deleted. Please select a valid folder."
   },
   "settings_validateCustomFolderFailed": {
     "message": "Failed to validate custom folder: $DETAIL$",

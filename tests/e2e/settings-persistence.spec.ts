@@ -341,6 +341,148 @@ test.describe("Settings Persistence and Usage", () => {
         .poll(() => readPersistedDirectoryName(optionsPage))
         .toBeNull()
     })
+    test("toggling custom folder on without choosing a folder displays note and blocks saving with clear error message", async () => {
+      await options.navigate()
+      await options.ensureInitialized()
+      await options.switchToSection("Downloads")
+
+      const switchLocator = optionsPage.locator("#custom-folder-switch")
+      await expect(switchLocator).toHaveAttribute("aria-checked", "false")
+      await expect(
+        optionsPage.getByText(
+          "No custom folder selected. Uses default browser downloads."
+        )
+      ).toBeVisible()
+      await expect(
+        optionsPage.getByText("No download folder selected")
+      ).toHaveCount(0)
+
+      // Toggle custom folder switch ON without picking a folder
+      await switchLocator.click()
+      await expect(switchLocator).toHaveAttribute("aria-checked", "true")
+      await expect(optionsPage.getByText("No folder selected.")).toBeVisible()
+      await expect(
+        optionsPage.getByText("No download folder selected")
+      ).toBeVisible()
+      await expect(
+        optionsPage.getByText(
+          "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
+        )
+      ).toBeVisible()
+
+      // Attempt to save changes
+      const saveButton = optionsPage.getByRole("button", {
+        name: "Save Changes",
+      })
+      await expect(saveButton).toBeVisible()
+      await saveButton.click()
+
+      // Assert clear error toast is displayed (not unknown error)
+      await expect(
+        optionsPage.getByText("Failed to save settings")
+      ).toBeVisible()
+      await expect(
+        optionsPage.getByText(
+          "Custom download mode requires a folder. Please select one first."
+        )
+      ).toBeVisible()
+
+      // Destination in storage must NOT have been saved as file-system-access
+      const storedSettings = await optionsPage.evaluate(async (storageKey) => {
+        const res = (await chrome.storage.local.get(storageKey)) as Record<
+          string,
+          { downloads?: { destination?: string } }
+        >
+        return res[storageKey]?.downloads?.destination ?? null
+      }, SETTINGS_STORAGE_KEY)
+      expect(storedSettings).not.toBe("file-system-access")
+    })
+
+    test("custom folder mode with valid stored handle displays folder name without warning note", async () => {
+      await options.navigate()
+      await options.ensureInitialized()
+
+      const directoryName = await seedCustomDirectoryHandle(optionsPage)
+      await optionsPage.evaluate(
+        async ({ storageKey, settings }) => {
+          await chrome.storage.local.set({ [storageKey]: settings })
+        },
+        {
+          storageKey: SETTINGS_STORAGE_KEY,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            downloads: {
+              ...DEFAULT_SETTINGS.downloads,
+              destination: "file-system-access",
+              customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+            },
+          },
+        }
+      )
+
+      await options.navigate()
+      await options.ensureInitialized()
+      await options.switchToSection("Downloads")
+
+      const switchLocator = optionsPage.locator("#custom-folder-switch")
+      await expect(switchLocator).toHaveAttribute("aria-checked", "true")
+      await expect(
+        optionsPage.getByText(`Current folder: ${directoryName}`)
+      ).toBeVisible()
+      await expect(
+        optionsPage.getByText("No download folder selected")
+      ).toHaveCount(0)
+    })
+
+    test("saving custom folder destination when the underlying folder was deleted fails with folder deleted error", async () => {
+      await options.navigate()
+      await options.ensureInitialized()
+
+      const directoryName = await seedCustomDirectoryHandle(optionsPage)
+      await optionsPage.evaluate(
+        async ({ storageKey, settings }) => {
+          await chrome.storage.local.set({ [storageKey]: settings })
+        },
+        {
+          storageKey: SETTINGS_STORAGE_KEY,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            downloads: {
+              ...DEFAULT_SETTINGS.downloads,
+              destination: "file-system-access",
+              customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+            },
+          },
+        }
+      )
+
+      // Delete the underlying directory from OPFS while keeping the handle in IndexedDB
+      await optionsPage.evaluate(async (dirName) => {
+        const opfsRoot = await navigator.storage.getDirectory()
+        await opfsRoot.removeEntry(dirName, { recursive: true })
+      }, directoryName)
+
+      await options.navigate()
+      await options.ensureInitialized()
+
+      // Modify another setting to trigger unsaved changes and attempt to save
+      await options.setFileNameTemplate("DeletedFolderTestTemplate")
+      const saveButton = optionsPage.getByRole("button", {
+        name: "Save Changes",
+      })
+      await expect(saveButton).toBeVisible()
+      await saveButton.click()
+
+      // Assert save fails with the specific deleted folder error
+      await expect(
+        optionsPage.getByText("Failed to save settings")
+      ).toBeVisible()
+      await expect(
+        optionsPage.getByText(
+          "The selected download folder does not exist or was deleted. Please select a valid folder."
+        )
+      ).toBeVisible()
+    })
   })
 
   test.describe("Filename Template Settings", () => {

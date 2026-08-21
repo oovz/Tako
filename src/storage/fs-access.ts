@@ -205,17 +205,28 @@ export async function verifyPermission(
     }
 
     const dirWithPerms = dir as DirHandleWithPermissions
-    const perm = await dirWithPerms.queryPermission?.({
+    let perm = await dirWithPerms.queryPermission?.({
       mode: writable ? "readwrite" : "read",
     })
-    if (perm === "granted") return true
-    const req = await dirWithPerms.requestPermission?.({
-      mode: writable ? "readwrite" : "read",
-    })
-    return req === "granted"
+    if (perm !== "granted") {
+      perm = await dirWithPerms.requestPermission?.({
+        mode: writable ? "readwrite" : "read",
+      })
+    }
+    if (perm !== "granted") return false
+
+    if (typeof dir.entries === "function") {
+      const entries = dir.entries()
+      await entries.next()
+    } else if (typeof dir.values === "function") {
+      const values = dir.values()
+      await values.next()
+    }
+
+    return true
   } catch (error) {
     // Permission API unavailable or threw (e.g. iframe sandbox, user gesture
-    // required). Treat as "no permission" but log so FSA failures are
+    // required, or deleted folder). Treat as "no permission" but log so FSA failures are
     // debuggable instead of silently degrading to Downloads API.
     logger.debug("[fs-access] verifyPermission failed:", error)
     return false
