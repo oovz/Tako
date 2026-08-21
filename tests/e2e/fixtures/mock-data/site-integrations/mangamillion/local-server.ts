@@ -75,10 +75,81 @@ const mangaMillionApiHandler: MockRouteHandler = (req) => {
   }
 
   if (pathname.startsWith("/api/title_detail")) {
-    return protoResponse(buildMangaMillionTitleDetailResponse())
+    const titleId = req.url.searchParams.get("original_title_id") ?? "1"
+    const lang = req.url.searchParams.get("service_language") ?? "en"
+
+    if (titleId === "10") {
+      return protoResponse(
+        buildMangaMillionTitleDetailResponse({
+          title: lang === "zh-CN" ? "胆大党" : "Dandadan",
+          author: lang === "zh-CN" ? "龙幸伸" : "Yukinobu Tatsu",
+          description:
+            lang === "zh-CN"
+              ? "桃同学与厄卡伦的灵异恋爱冒险。"
+              : "Momo Ayase strikes up an unusual friendship with her school’s UFO fanatic.",
+        })
+      )
+    }
+
+    return protoResponse(
+      buildMangaMillionTitleDetailResponse({
+        title: lang === "zh-CN" ? "航海王" : "One Piece",
+        author: lang === "zh-CN" ? "尾田荣一郎" : "Eiichiro Oda",
+      })
+    )
   }
 
   if (pathname.startsWith("/api/chapter_list")) {
+    const titleId = req.url.searchParams.get("original_title_id") ?? "1"
+    const lang = req.url.searchParams.get("service_language") ?? "en"
+
+    if (titleId === "10") {
+      return protoResponse(
+        buildMangaMillionChapterListResponse([
+          {
+            groupType: 0,
+            chapters: [
+              {
+                number: "#001",
+                name:
+                  lang === "zh-CN"
+                    ? "第1话 冒险的序幕"
+                    : "1:That's How Love Starts, Ya Know!",
+                translatedChapterId: 1996,
+              },
+              {
+                number: "#002",
+                name:
+                  lang === "zh-CN"
+                    ? "第2话 太空人不是吗？！"
+                    : "2:That's a Space Alien, Ain't It?!",
+                translatedChapterId: 1999,
+              },
+            ],
+          },
+          {
+            groupType: 1,
+            chapters: [
+              {
+                number: "#024",
+                name:
+                  lang === "zh-CN"
+                    ? "第24话 合体！塞尔波多佛恶魔水怪！"
+                    : "24:Merge! Serpo Dover Demon Nessie!",
+              },
+              {
+                number: "#025",
+                name:
+                  lang === "zh-CN"
+                    ? "第25话 心跳加速，不是吗？！"
+                    : "25:It Makes Your Heart Race, Don't It?!",
+              },
+            ],
+          },
+        ])
+      )
+    }
+
     return protoResponse(buildMangaMillionChapterListResponse())
   }
 

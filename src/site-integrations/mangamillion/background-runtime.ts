@@ -9,7 +9,11 @@ import type { SeriesMetadata } from "@/src/types/series-metadata"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
 import type { MangaMillionChapterList } from "./proto"
 import { fetchChapterList, fetchTitleDetail } from "./api"
-import { buildMangaMillionChapterUrl, parseMangaMillionSeriesUrl } from "./urls"
+import {
+  MANGAMILLION_ORIGIN,
+  buildMangaMillionChapterUrl,
+  parseMangaMillionSeriesUrl,
+} from "./urls"
 
 function parseNumericChapterNumber(
   chapterNumberStr?: string
@@ -72,20 +76,40 @@ async function resolveMangaMillionSeriesData(
 
   const chapters: Chapter[] = []
   const groups = chapterListData.chapterGroups ?? []
+  const seenIds = new Set<string>()
+  let chapterIndex = 0
 
   for (const group of groups) {
     const isGroupUnavailable = group.groupType === 1 || group.groupType === 3
     const groupChapters = group.chapters ?? []
 
     for (const ch of groupChapters) {
-      const chapterId = ch.translatedChapterId ?? 0
-      const isLocked = isGroupUnavailable || chapterId === 0
+      chapterIndex++
+      const translatedChapterId = ch.translatedChapterId ?? 0
+      const isLocked = isGroupUnavailable || translatedChapterId === 0
       const rawNumber = ch.number ?? ""
       const cleanNumber = rawNumber.replace(/^#/, "")
 
+      let id =
+        translatedChapterId > 0
+          ? String(translatedChapterId)
+          : cleanNumber
+            ? `locked-${cleanNumber}`
+            : `locked-${chapterIndex}`
+
+      if (seenIds.has(id)) {
+        id = `${id}-${chapterIndex}`
+      }
+      seenIds.add(id)
+
+      const url =
+        translatedChapterId > 0
+          ? buildMangaMillionChapterUrl(titleId, translatedChapterId, language)
+          : `${MANGAMILLION_ORIGIN}/${language}/title/${titleId}#chapter-${cleanNumber || chapterIndex}`
+
       chapters.push({
-        id: String(chapterId),
-        url: buildMangaMillionChapterUrl(titleId, chapterId, language),
+        id,
+        url,
         title: ch.name || ch.number || "Chapter",
         chapterNumber: parseNumericChapterNumber(ch.number),
         chapterLabel: ch.number || undefined,

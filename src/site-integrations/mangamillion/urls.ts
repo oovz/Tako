@@ -13,7 +13,7 @@ export interface ParsedMangaMillionUrl {
 }
 
 const TITLE_URL_REGEX =
-  /^(?:\/([a-zA-Z]{2}(?:-[a-zA-Z]{2,4})?))?\/title\/(\d+)(?:\/chapter\/(\d+))?\/?$/
+  /^(?:\/([a-zA-Z0-9_-]+))?\/title\/(\d+)(?:\/chapter\/(\d+))?\/?$/
 
 export function parseMangaMillionSeriesUrl(
   input: string
@@ -39,7 +39,8 @@ export function parseMangaMillionSeriesUrl(
     return null
   }
 
-  const language = match[1] || "en"
+  const queryLang = parsed.searchParams.get("lang")?.trim()
+  const language = queryLang || match[1] || "en"
   const titleId = Number.parseInt(match[2], 10)
   const chapterId = match[3] ? Number.parseInt(match[3], 10) : undefined
 

@@ -82,11 +82,16 @@ export function buildMangaMillionTitleDetailResponse(
 export interface MockChapterItem {
   number: string
   name: string
-  translatedChapterId: number
+  translatedChapterId?: number
+}
+
+export interface MockChapterGroupItem {
+  groupType?: number
+  chapters: MockChapterItem[]
 }
 
 export function buildMangaMillionChapterListResponse(
-  chapters: MockChapterItem[] = [
+  input: MockChapterItem[] | MockChapterGroupItem[] = [
     {
       number: "#001",
       name: "Chapter 1:Romance Dawn",
@@ -104,26 +109,39 @@ export function buildMangaMillionChapterListResponse(
     },
   ]
 ): Buffer {
-  const groupChaptersBytes: number[] = []
+  const isGroupList =
+    input.length > 0 &&
+    "chapters" in input[0] &&
+    Array.isArray((input[0] as MockChapterGroupItem).chapters)
+  const groups: MockChapterGroupItem[] = isGroupList
+    ? (input as MockChapterGroupItem[])
+    : [{ groupType: 0, chapters: input as MockChapterItem[] }]
 
-  for (const ch of chapters) {
-    const chInfoBytes = [
-      ...encodeString(1, ch.number),
-      ...encodeString(2, ch.name),
-      ...encodeInt32(3, ch.translatedChapterId),
+  const allGroupsBytes: number[] = []
+  let totalChapters = 0
+
+  for (const group of groups) {
+    const groupChaptersBytes: number[] = []
+    for (const ch of group.chapters) {
+      totalChapters++
+      const chInfoBytes = [
+        ...encodeString(1, ch.number),
+        ...encodeString(2, ch.name),
+        ...(ch.translatedChapterId !== undefined
+          ? encodeInt32(3, ch.translatedChapterId)
+          : []),
+      ]
+      groupChaptersBytes.push(...encodeMessage(2, chInfoBytes))
+    }
+
+    const groupBytes = [
+      ...encodeInt32(1, group.groupType ?? 0),
+      ...groupChaptersBytes,
     ]
-    groupChaptersBytes.push(...encodeMessage(2, chInfoBytes))
+    allGroupsBytes.push(...encodeMessage(2, groupBytes))
   }
 
-  const groupBytes = [
-    ...encodeInt32(1, 0), // groupType = 0 (FREE)
-    ...groupChaptersBytes,
-  ]
-
-  const chapterListBytes = [
-    ...encodeInt32(1, chapters.length), // totalChapters
-    ...encodeMessage(2, groupBytes), // chapterGroups
-  ]
+  const chapterListBytes = [...encodeInt32(1, totalChapters), ...allGroupsBytes]
 
   const bytes = [
     ...encodeInt32(1, 0), // status = 0 (OK)

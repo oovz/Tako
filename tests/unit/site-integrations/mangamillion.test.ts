@@ -22,6 +22,10 @@ import { offscreenSiteAdapter } from "@/src/site-integrations/mangamillion/offsc
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import type { Chapter } from "@/src/types/chapter"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import {
+  buildResolvedTabContext,
+  normalizeFetchedSeriesData,
+} from "@/src/runtime/series-data-normalization"
 
 const mockRateLimitService = {
   resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
@@ -116,6 +120,79 @@ describe("MangaMillion site integration", () => {
         titleId: 123,
         language: "zh-CN",
         chapterId: 456,
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/en/title/10?lang=zh-CN"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "zh-CN",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/title/10?lang=zh-CN"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "zh-CN",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/es-419/title/10"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "es-419",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/fil/title/10"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "fil",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/en/title/10/"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "en",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/en/title/10/?lang=zh-CN"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "zh-CN",
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/en/title/10/chapter/6736?lang=zh-CN"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "zh-CN",
+        chapterId: 6736,
+      })
+
+      expect(
+        parseMangaMillionSeriesUrl(
+          "https://mangamillion.shueisha.co.jp/en/title/10?tab=chapters&lang=zh-CN#comment"
+        )
+      ).toEqual({
+        titleId: 10,
+        language: "zh-CN",
       })
     })
 
@@ -402,6 +479,202 @@ describe("MangaMillion site integration", () => {
       expect(chapters[0].chapterLabel).toBe("#001")
       expect(chapters[0].locked).toBe(false)
       expect(chapters[0].comicInfo.Series).toBe("One Piece")
+    })
+    it("resolves series data with query lang parameter override", async () => {
+      setCachedDeviceTokenForTesting("test-token")
+
+      const serviceTitleBytes = [
+        ...encodeString(2, "航海王"),
+        ...encodeString(3, "尾田荣一郎"),
+      ]
+      const titleDetailBytes = [...encodeMessage(1, serviceTitleBytes)]
+      const titleDetailBuf = new Uint8Array([
+        ...encodeInt32(1, 0),
+        ...encodeMessage(50, titleDetailBytes),
+      ])
+
+      const chInfoBytes = [
+        ...encodeString(1, "#001"),
+        ...encodeString(2, "第1话 冒险的序幕"),
+        ...encodeInt32(3, 6736),
+      ]
+      const groupBytes = [
+        ...encodeInt32(1, 0),
+        ...encodeMessage(2, chInfoBytes),
+      ]
+      const chapterListBytes = [...encodeMessage(2, groupBytes)]
+      const chapterListBuf = new Uint8Array([
+        ...encodeInt32(1, 0),
+        ...encodeMessage(60, chapterListBytes),
+      ])
+
+      const requestUrls: string[] = []
+      vi.spyOn(integrationHttpClient, "request").mockImplementation(
+        async (opts) => {
+          requestUrls.push(opts.url)
+          if (opts.url.includes("/api/title_detail")) {
+            return {
+              ok: true,
+              status: 200,
+              arrayBuffer: async () => titleDetailBuf.buffer,
+            } as unknown as Response
+          }
+          if (opts.url.includes("/api/chapter_list")) {
+            return {
+              ok: true,
+              status: 200,
+              arrayBuffer: async () => chapterListBuf.buffer,
+            } as unknown as Response
+          }
+          throw new Error(`Unexpected request: ${opts.url}`)
+        }
+      )
+
+      const result =
+        await backgroundSiteAdapter.background.series!.resolveSeriesData({
+          seriesUrl:
+            "https://mangamillion.shueisha.co.jp/en/title/10?lang=zh-CN",
+          rateLimitService: mockRateLimitService,
+          siteIntegrationSettingsReader: {
+            getAll: async () => ({}),
+            getForSite: async () => ({}),
+          },
+        })
+
+      expect(result.seriesId).toBe("10")
+      expect(result.seriesMetadata?.title).toBe("航海王")
+      expect(result.seriesMetadata?.author).toBe("尾田荣一郎")
+      expect(result.seriesMetadata?.language).toBe("zh-CN")
+
+      const chapters = result.chapterList as Chapter[]
+      expect(chapters).toHaveLength(1)
+      expect(chapters[0].id).toBe("6736")
+      expect(chapters[0].language).toBe("zh-CN")
+      expect(chapters[0].url).toBe(
+        "https://mangamillion.shueisha.co.jp/zh-CN/title/10/chapter/6736"
+      )
+      expect(chapters[0].comicInfo.LanguageISO).toBe("zh-CN")
+
+      expect(
+        requestUrls.some((u) => u.includes("service_language=zh-CN"))
+      ).toBe(true)
+      expect(
+        requestUrls.some((u) => u.includes("translated_language=zh-CN"))
+      ).toBe(true)
+    })
+    it("handles series with multiple locked chapters without colliding ids", async () => {
+      setCachedDeviceTokenForTesting("test-token")
+
+      const serviceTitleBytes = [
+        ...encodeString(2, "Dandadan"),
+        ...encodeString(3, "Yukinobu Tatsu"),
+      ]
+      const titleDetailBytes = [...encodeMessage(1, serviceTitleBytes)]
+      const titleDetailBuf = new Uint8Array([
+        ...encodeInt32(1, 0),
+        ...encodeMessage(50, titleDetailBytes),
+      ])
+
+      // Group 0: free chapter
+      const ch1Bytes = [
+        ...encodeString(1, "#001"),
+        ...encodeString(2, "1:That's How Love Starts"),
+        ...encodeInt32(3, 1996),
+      ]
+      const group0Bytes = [...encodeInt32(1, 0), ...encodeMessage(2, ch1Bytes)]
+
+      // Group 1: locked chapters without translatedChapterId
+      const ch24Bytes = [
+        ...encodeString(1, "#024"),
+        ...encodeString(2, "24:Merge! Serpo Dover Demon Nessie!"),
+      ]
+      const ch25Bytes = [
+        ...encodeString(1, "#025"),
+        ...encodeString(2, "25:It Makes Your Heart Race"),
+      ]
+      const group1Bytes = [
+        ...encodeInt32(1, 1),
+        ...encodeMessage(2, ch24Bytes),
+        ...encodeMessage(2, ch25Bytes),
+      ]
+
+      const chapterListBytes = [
+        ...encodeMessage(2, group0Bytes),
+        ...encodeMessage(2, group1Bytes),
+      ]
+      const chapterListBuf = new Uint8Array([
+        ...encodeInt32(1, 0),
+        ...encodeMessage(60, chapterListBytes),
+      ])
+
+      vi.spyOn(integrationHttpClient, "request").mockImplementation(
+        async (opts) => {
+          if (opts.url.includes("/api/title_detail")) {
+            return {
+              ok: true,
+              status: 200,
+              arrayBuffer: async () => titleDetailBuf.buffer,
+            } as unknown as Response
+          }
+          if (opts.url.includes("/api/chapter_list")) {
+            return {
+              ok: true,
+              status: 200,
+              arrayBuffer: async () => chapterListBuf.buffer,
+            } as unknown as Response
+          }
+          throw new Error(`Unexpected request: ${opts.url}`)
+        }
+      )
+
+      const result =
+        await backgroundSiteAdapter.background.series!.resolveSeriesData({
+          seriesUrl: "https://mangamillion.shueisha.co.jp/en/title/10",
+          rateLimitService: mockRateLimitService,
+          siteIntegrationSettingsReader: {
+            getAll: async () => ({}),
+            getForSite: async () => ({}),
+          },
+        })
+
+      expect(result.seriesId).toBe("10")
+      const chapters = result.chapterList as Chapter[]
+      expect(chapters).toHaveLength(3)
+
+      expect(chapters[0].id).toBe("1996")
+      expect(chapters[0].locked).toBe(false)
+      expect(chapters[0].url).toBe(
+        "https://mangamillion.shueisha.co.jp/en/title/10/chapter/1996"
+      )
+
+      expect(chapters[1].id).toBe("locked-024")
+      expect(chapters[1].locked).toBe(true)
+      expect(chapters[1].url).toBe(
+        "https://mangamillion.shueisha.co.jp/en/title/10#chapter-024"
+      )
+
+      expect(chapters[2].id).toBe("locked-025")
+      expect(chapters[2].locked).toBe(true)
+      expect(chapters[2].url).toBe(
+        "https://mangamillion.shueisha.co.jp/en/title/10#chapter-025"
+      )
+
+      // Ensure normalization succeeds without duplicate ID error
+      const normalized = normalizeFetchedSeriesData(result.chapterList)
+      const resolvedContext = buildResolvedTabContext({
+        sourceUrl: "https://mangamillion.shueisha.co.jp/en/title/10",
+        siteIntegrationId: "mangamillion",
+        rawMangaId: result.seriesId ?? null,
+        chapters: normalized.chapters,
+        volumes: normalized.volumes,
+        seriesMetadata: result.seriesMetadata,
+      })
+
+      expect(resolvedContext.context).toBe("ready")
+      if (resolvedContext.context === "ready") {
+        expect(resolvedContext.seriesTitle).toBe("Dandadan")
+        expect(resolvedContext.chapters).toHaveLength(3)
+      }
     })
   })
 

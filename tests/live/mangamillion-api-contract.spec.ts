@@ -301,4 +301,270 @@ test.describe("MangaMillion API contract (live)", () => {
       await page.close()
     }
   })
+  test("title 10 (Dandadan) resolution with multi-language and unique locked chapter IDs", async ({
+    context,
+  }) => {
+    const page = await context.newPage()
+    try {
+      await page.goto("https://mangamillion.shueisha.co.jp/en", {
+        waitUntil: "domcontentloaded",
+        timeout: 15_000,
+      })
+
+      const result = await page.evaluate(async () => {
+        class ProtoReader {
+          public pos = 0
+          public readonly len: number
+          public readonly buf: Uint8Array
+          public readonly decoder = new TextDecoder()
+
+          constructor(buf: ArrayBuffer | Uint8Array) {
+            this.buf = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
+            this.len = this.buf.length
+          }
+          uint32(): number {
+            let b = this.buf[this.pos++]
+            let res = b & 0x7f
+            if (!(b & 0x80)) return res >>> 0
+            b = this.buf[this.pos++]
+            res |= (b & 0x7f) << 7
+            if (!(b & 0x80)) return res >>> 0
+            b = this.buf[this.pos++]
+            res |= (b & 0x7f) << 14
+            if (!(b & 0x80)) return res >>> 0
+            b = this.buf[this.pos++]
+            res |= (b & 0x7f) << 21
+            if (!(b & 0x80)) return res >>> 0
+            b = this.buf[this.pos++]
+            res |= (b & 0x0f) << 28
+            if (!(b & 0x80)) return res >>> 0
+            while (this.buf[this.pos++] & 0x80) {
+              continue
+            }
+            return res >>> 0
+          }
+          int32(): number {
+            return this.uint32() | 0
+          }
+          bool(): boolean {
+            return this.uint32() !== 0
+          }
+          string(): string {
+            const len = this.uint32()
+            const str = this.decoder.decode(
+              this.buf.subarray(this.pos, this.pos + len)
+            )
+            this.pos += len
+            return str
+          }
+          skipType(wireType: number): void {
+            switch (wireType) {
+              case 0:
+                while (this.buf[this.pos++] & 0x80) {
+                  continue
+                }
+                break
+              case 1:
+                this.pos += 8
+                break
+              case 2: {
+                const len = this.uint32()
+                this.pos += len
+                break
+              }
+              case 5:
+                this.pos += 4
+                break
+              default:
+                throw new Error("Unsupported wire type: " + wireType)
+            }
+          }
+        }
+
+        // 1. Device Registration
+        const regRes = await fetch(
+          "https://api.mangamillion.shueisha.co.jp/api/register",
+          {
+            method: "POST",
+            credentials: "omit",
+          }
+        )
+        if (!regRes.ok)
+          throw new Error(`Register failed: HTTP ${regRes.status}`)
+        const regBuf = await regRes.arrayBuffer()
+        const regR = new ProtoReader(regBuf)
+        let token = ""
+        while (regR.pos < regR.len) {
+          const tag = regR.uint32()
+          if (tag >>> 3 === 170) {
+            const end = regR.pos + regR.uint32()
+            while (regR.pos < end) {
+              const subTag = regR.uint32()
+              if (subTag >>> 3 === 1) token = regR.string()
+              else regR.skipType(subTag & 7)
+            }
+          } else {
+            regR.skipType(tag & 7)
+          }
+        }
+
+        // 2. Title Detail (English)
+        const titleRes = await fetch(
+          "https://api.mangamillion.shueisha.co.jp/api/title_detail?original_title_id=10&service_language=en&avif_enable=false",
+          { headers: { "Access-Token": token }, credentials: "omit" }
+        )
+        if (!titleRes.ok)
+          throw new Error(`Title detail failed: HTTP ${titleRes.status}`)
+        const titleBuf = await titleRes.arrayBuffer()
+        const titleR = new ProtoReader(titleBuf)
+        let seriesTitle = ""
+        let authorName = ""
+        while (titleR.pos < titleR.len) {
+          const tag = titleR.uint32()
+          if (tag >>> 3 === 50) {
+            const end = titleR.pos + titleR.uint32()
+            while (titleR.pos < end) {
+              const subTag = titleR.uint32()
+              if (subTag >>> 3 === 1) {
+                const sEnd = titleR.pos + titleR.uint32()
+                while (titleR.pos < sEnd) {
+                  const sTag = titleR.uint32()
+                  if (sTag >>> 3 === 2) seriesTitle = titleR.string()
+                  else if (sTag >>> 3 === 3) authorName = titleR.string()
+                  else titleR.skipType(sTag & 7)
+                }
+              } else {
+                titleR.skipType(subTag & 7)
+              }
+            }
+          } else {
+            titleR.skipType(tag & 7)
+          }
+        }
+
+        // 3. Chapter List (English)
+        const chapterRes = await fetch(
+          "https://api.mangamillion.shueisha.co.jp/api/chapter_list?original_title_id=10&translated_language=en&service_language=en&avif_enable=false",
+          { headers: { "Access-Token": token }, credentials: "omit" }
+        )
+        if (!chapterRes.ok)
+          throw new Error(`Chapter list failed: HTTP ${chapterRes.status}`)
+        const chapterBuf = await chapterRes.arrayBuffer()
+        const chR = new ProtoReader(chapterBuf)
+
+        interface RawCh {
+          number?: string
+          name?: string
+          translatedChapterId?: number
+        }
+        interface RawGroup {
+          groupType?: number
+          chapters: RawCh[]
+        }
+
+        const groups: RawGroup[] = []
+        while (chR.pos < chR.len) {
+          const tag = chR.uint32()
+          if (tag >>> 3 === 60) {
+            const end = chR.pos + chR.uint32()
+            while (chR.pos < end) {
+              const subTag = chR.uint32()
+              if (subTag >>> 3 === 2) {
+                const gEnd = chR.pos + chR.uint32()
+                const grp: RawGroup = { chapters: [] }
+                while (chR.pos < gEnd) {
+                  const gTag = chR.uint32()
+                  if (gTag >>> 3 === 1) {
+                    grp.groupType = chR.int32()
+                  } else if (gTag >>> 3 === 2) {
+                    const cEnd = chR.pos + chR.uint32()
+                    const chItem: RawCh = {}
+                    while (chR.pos < cEnd) {
+                      const cTag = chR.uint32()
+                      if (cTag >>> 3 === 1) chItem.number = chR.string()
+                      else if (cTag >>> 3 === 2) chItem.name = chR.string()
+                      else if (cTag >>> 3 === 3)
+                        chItem.translatedChapterId = chR.uint32()
+                      else chR.skipType(cTag & 7)
+                    }
+                    grp.chapters.push(chItem)
+                  } else {
+                    chR.skipType(gTag & 7)
+                  }
+                }
+                groups.push(grp)
+              } else {
+                chR.skipType(subTag & 7)
+              }
+            }
+          } else {
+            chR.skipType(tag & 7)
+          }
+        }
+
+        // Simulate the background-runtime ID generation
+        const constructedIds: string[] = []
+        const seenIds = new Set<string>()
+        let chapterIndex = 0
+        let lockedCount = 0
+        let freeCount = 0
+
+        for (const group of groups) {
+          const isGroupUnavailable =
+            group.groupType === 1 || group.groupType === 3
+          for (const ch of group.chapters) {
+            chapterIndex++
+            const translatedChapterId = ch.translatedChapterId ?? 0
+            const isLocked = isGroupUnavailable || translatedChapterId === 0
+            if (isLocked) lockedCount++
+            else freeCount++
+
+            const rawNumber = ch.number ?? ""
+            const cleanNumber = rawNumber.replace(/^#/, "")
+            let id =
+              translatedChapterId > 0
+                ? String(translatedChapterId)
+                : cleanNumber
+                  ? `locked-${cleanNumber}`
+                  : `locked-${chapterIndex}`
+            if (seenIds.has(id)) {
+              id = `${id}-${chapterIndex}`
+            }
+            seenIds.add(id)
+            constructedIds.push(id)
+          }
+        }
+
+        // 4. Title Detail (Simplified Chinese)
+        const zhTitleRes = await fetch(
+          "https://api.mangamillion.shueisha.co.jp/api/title_detail?original_title_id=10&service_language=zh-CN&avif_enable=false",
+          { headers: { "Access-Token": token }, credentials: "omit" }
+        )
+        const zhTitleOk = zhTitleRes.ok
+
+        return {
+          seriesTitle,
+          authorName,
+          groupCount: groups.length,
+          totalChapters: constructedIds.length,
+          uniqueIdCount: new Set(constructedIds).size,
+          freeCount,
+          lockedCount,
+          zhTitleOk,
+        }
+      })
+
+      expect(result.seriesTitle).toBe("Dandadan")
+      expect(result.authorName).toBe("Yukinobu Tatsu")
+      expect(result.groupCount).toBeGreaterThanOrEqual(2)
+      expect(result.totalChapters).toBeGreaterThanOrEqual(30)
+      expect(result.freeCount).toBeGreaterThan(0)
+      expect(result.lockedCount).toBeGreaterThan(0)
+      // Critical check: every single chapter ID is unique and non-empty
+      expect(result.uniqueIdCount).toBe(result.totalChapters)
+      expect(result.zhTitleOk).toBe(true)
+    } finally {
+      await page.close()
+    }
+  })
 })

@@ -104,6 +104,34 @@ describe("URL Pattern Matching", () => {
         role: "series",
       })
     })
+    it("matches mangamillion series pages with and without language prefix or query", () => {
+      expectMatchedUrl(
+        "https://mangamillion.shueisha.co.jp/en/title/10?lang=zh-CN",
+        {
+          integrationId: "mangamillion",
+          role: "series",
+        }
+      )
+      expectMatchedUrl(
+        "https://mangamillion.shueisha.co.jp/title/10?lang=zh-CN",
+        {
+          integrationId: "mangamillion",
+          role: "series",
+        }
+      )
+      expectMatchedUrl("https://mangamillion.shueisha.co.jp/en/title/1", {
+        integrationId: "mangamillion",
+        role: "series",
+      })
+      expectMatchedUrl("https://mangamillion.shueisha.co.jp/title/42", {
+        integrationId: "mangamillion",
+        role: "series",
+      })
+      expectMatchedUrl("https://mangamillion.shueisha.co.jp/zh-CN/title/10", {
+        integrationId: "mangamillion",
+        role: "series",
+      })
+    })
 
     it("does not match a user-disabled integration", () => {
       setUserSiteIntegrationEnablement({ mangadex: false })
