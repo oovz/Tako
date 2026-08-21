@@ -42,7 +42,8 @@
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |  ✅  |
 
 - 默认关闭；在选项页面中启用时需要可选 HTTPS 权限。
-  想要支持新网站？欢迎[提交功能请求](https://github.com/oovz/Tako/issues/new?template=feature_request.md)或贡献集成 — 参见[站点集成指南](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)。
+
+想要支持新网站？欢迎[提交功能请求](https://github.com/oovz/Tako/issues/new?template=feature_request.md)或贡献集成 — 参见[站点集成指南](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)。
 
 ## 权利与网站访问
 
@@ -113,7 +114,8 @@ pnpm type-check # TypeScript 严格检查
 
 ## 隐私
 
-Tako 将设置、队列状态和历史记录保存在本地浏览器中。网络请求直接发送到受支持的网站及下载所需的相关基础设施，不包含由开发者运营的分析或遥测服务。启用 MangaDex 时，所需的 MangaDex@Home 报告会直接发送给 MangaDex。
+Tako 将设置、队列状态和历史记录保存在本地浏览器中。网络请求直接发送到受支持的网站及下载所需的相关基础设施，不包含由开发者运营的分析或遥测服务。
+启用 MangaDex 时，所需的 MangaDex@Home 报告会直接发送给 MangaDex。
 
 完整隐私政策请参见 [`PRIVACY.md`](PRIVACY.md)。
 

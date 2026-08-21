@@ -42,7 +42,8 @@
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |  ✅  |
 
 - 初期状態では無効。オプション画面で有効化時に任意の HTTPS 権限を要求します。
-  新しいサイトの対応をご希望ですか？[機能リクエストを送信](https://github.com/oovz/Tako/issues/new?template=feature_request.md)するか、統合機能の開発にご参加ください — 詳細は[サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)をご覧ください。
+
+新しいサイトの対応をご希望ですか？[機能リクエストを送信](https://github.com/oovz/Tako/issues/new?template=feature_request.md)するか、統合機能の開発にご参加ください — 詳細は[サイト統合ガイド](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)をご覧ください。
 
 ## 権利とサイトアクセス
 
@@ -113,7 +114,8 @@ pnpm type-check # TypeScript 厳格チェック
 
 ## プライバシー
 
-Tako は設定、キューの状態、ダウンロード履歴をすべてローカルブラウザ内に保存します。ネットワークリクエストは対応サイトおよびダウンロードに必要なインフラに対して直接送信され、開発者が運用する分析・テレメトリサービスはありません。MangaDex を有効にした場合、必要な MangaDex@Home 報告は MangaDex に直接送信されます。
+Tako は設定、キューの状態、ダウンロード履歴をすべてローカルブラウザ内に保存します。ネットワークリクエストは対応サイトおよびダウンロードに必要なインフラに対して直接送信され、開発者が運用する分析・テレメトリサービスはありません。
+MangaDex を有効にした場合、必要な MangaDex@Home 報告は MangaDex に直接送信されます。
 
 完全なプライバシーポリシーは [`PRIVACY.md`](PRIVACY.md) をご覧ください。
 

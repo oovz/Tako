@@ -42,7 +42,8 @@
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |   ✅   |
 
 - Disabled by default; requests optional HTTPS permission when enabled in Options.
-  Want a new site supported? [Open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md) or contribute an integration — see the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
+
+Want a new site supported? [Open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md) or contribute an integration — see the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
 
 ## Rights & Site Access
 
@@ -113,7 +114,8 @@ For the complete development workflow, code conventions, and pull request guidel
 
 ## Privacy
 
-Tako stores settings, queue state, and download history locally in your browser. Network requests are made directly to supported sites and the infrastructure needed to perform downloads. There are no developer-operated analytics or telemetry services. When MangaDex is enabled, required MangaDex@Home delivery reports are sent directly to MangaDex.
+Tako stores settings, queue state, and download history locally in your browser. Network requests are made directly to supported sites and the infrastructure needed to perform downloads. There are no developer-operated analytics or telemetry services.
+When MangaDex is enabled, required MangaDex@Home delivery reports are sent directly to MangaDex.
 
 For the full privacy policy, see [`PRIVACY.md`](PRIVACY.md).
 
