@@ -554,12 +554,6 @@
   "options_normalizeFilenamesDesc": {
     "message": "将图片重命名为 001.jpg, 002.jpg..."
   },
-  "options_overwriteExisting": {
-    "message": "覆盖已有文件"
-  },
-  "options_overwriteExistingDesc": {
-    "message": "如果文件已存在则替换"
-  },
   "options_suppressSaveAs": {
     "message": "禁止另存为对话框"
   },
@@ -757,9 +751,6 @@
   "options_noFolderSelected": {
     "message": "未选择文件夹。"
   },
-  "options_customFolderOverwrite": {
-    "message": "自定义文件夹模式始终覆盖同名文件。"
-  },
   "options_changeFolder": {
     "message": "更改文件夹"
   },
@@ -768,9 +759,6 @@
   },
   "options_useBrowserDownloads": {
     "message": "使用浏览器下载"
-  },
-  "options_customFolderIgnoresOverwrite": {
-    "message": "自定义文件夹模式忽略覆盖设置，始终替换所选文件夹中的同名文件。"
   },
   "options_historyStorageUsage": {
     "message": "历史记录存储用量约：$SIZE$",

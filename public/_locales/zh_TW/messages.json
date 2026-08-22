@@ -554,12 +554,6 @@
   "options_normalizeFilenamesDesc": {
     "message": "將圖片重新命名為 001.jpg, 002.jpg..."
   },
-  "options_overwriteExisting": {
-    "message": "覆蓋已有檔案"
-  },
-  "options_overwriteExistingDesc": {
-    "message": "如果檔案已存在則替換"
-  },
   "options_suppressSaveAs": {
     "message": "禁止另存新檔對話框"
   },
@@ -757,9 +751,6 @@
   "options_noFolderSelected": {
     "message": "未選擇資料夾。"
   },
-  "options_customFolderOverwrite": {
-    "message": "自訂資料夾模式始終覆蓋同名檔案。"
-  },
   "options_changeFolder": {
     "message": "變更資料夾"
   },
@@ -768,9 +759,6 @@
   },
   "options_useBrowserDownloads": {
     "message": "使用瀏覽器下載"
-  },
-  "options_customFolderIgnoresOverwrite": {
-    "message": "自訂資料夾模式忽略覆蓋設定，始終替換所選資料夾中的同名檔案。"
   },
   "options_historyStorageUsage": {
     "message": "歷史記錄儲存用量約：$SIZE$",

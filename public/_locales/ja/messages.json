@@ -554,12 +554,6 @@
   "options_normalizeFilenamesDesc": {
     "message": "画像を 001.jpg, 002.jpg... にリネーム"
   },
-  "options_overwriteExisting": {
-    "message": "既存ファイルを上書き"
-  },
-  "options_overwriteExistingDesc": {
-    "message": "同名ファイルが存在する場合は置換"
-  },
   "options_suppressSaveAs": {
     "message": "名前を付けて保存ダイアログを抑制"
   },
@@ -757,9 +751,6 @@
   "options_noFolderSelected": {
     "message": "フォルダー未選択。"
   },
-  "options_customFolderOverwrite": {
-    "message": "カスタムフォルダモードは常に同名ファイルを上書きします。"
-  },
   "options_changeFolder": {
     "message": "フォルダを変更"
   },
@@ -768,9 +759,6 @@
   },
   "options_useBrowserDownloads": {
     "message": "ブラウザダウンロードを使用"
-  },
-  "options_customFolderIgnoresOverwrite": {
-    "message": "カスタムフォルダモードは上書き設定を無視し、選択したフォルダ内の同名ファイルを常に置換します。"
   },
   "options_historyStorageUsage": {
     "message": "履歴ストレージ使用量（概算）：$SIZE$",

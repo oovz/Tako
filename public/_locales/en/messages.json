@@ -554,12 +554,6 @@
   "options_normalizeFilenamesDesc": {
     "message": "Rename images to 001.jpg, 002.jpg..."
   },
-  "options_overwriteExisting": {
-    "message": "Overwrite Existing"
-  },
-  "options_overwriteExistingDesc": {
-    "message": "Replace files if they already exist"
-  },
   "options_suppressSaveAs": {
     "message": "Suppress Save As Dialog"
   },
@@ -757,9 +751,6 @@
   "options_noFolderSelected": {
     "message": "No folder selected."
   },
-  "options_customFolderOverwrite": {
-    "message": "Custom folder mode always overwrites existing files with the same name."
-  },
   "options_changeFolder": {
     "message": "Change folder"
   },
@@ -768,9 +759,6 @@
   },
   "options_useBrowserDownloads": {
     "message": "Use browser downloads"
-  },
-  "options_customFolderIgnoresOverwrite": {
-    "message": "Custom folder mode ignores the overwrite setting and always replaces same-name files in the selected folder."
   },
   "options_historyStorageUsage": {
     "message": "Approximate history storage usage: $SIZE$",
