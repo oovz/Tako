@@ -341,6 +341,77 @@ describe("migrateDurableStateForCurrentSchema", () => {
     ])
   })
 
+  it("correctly migrates v1.5.5.0 vintage settings and tasks with skip and overwriteExisting fallbacks", async () => {
+    local = {
+      [SETTINGS_KEY]: {
+        downloads: {
+          downloadMode: "custom",
+          customDirectoryHandleId: "legacy-root",
+          fsaCollisionPolicy: "skip",
+          overwriteExisting: false,
+          pathTemplate: "Manga/<SERIES_TITLE>",
+          defaultFormat: "cbz",
+          fileNameTemplate: "<CHAPTER_TITLE>",
+          suppressSaveAsDialog: true,
+          includeComicInfo: true,
+          includeCoverImage: true,
+        },
+        globalPolicy: {
+          image: { concurrency: 2, delayMs: 100 },
+          chapter: { concurrency: 1, delayMs: 500 },
+        },
+        globalRetries: { image: 3, chapter: 1 },
+      },
+      downloadQueue: [
+        {
+          id: "task-v155",
+          siteIntegrationId: "mangadex",
+          mangaId: "series-155",
+          seriesTitle: "Series 155",
+          chapters: [
+            {
+              id: "chapter-155",
+              url: "https://mangadex.org/chapter/c-155",
+              title: "Chapter 155",
+              index: 0,
+              status: "queued",
+              lastUpdated: 100,
+            },
+          ],
+          status: "queued",
+          created: 50,
+          taskSettingsSnapshot: {
+            archiveFormat: "zip",
+            destination: "file-system-access",
+            fsaCollisionPolicy: "skip",
+            pathTemplate: "Manga/<SERIES_TITLE>",
+          },
+        },
+      ],
+    }
+
+    await migrateDurableStateForCurrentSchema()
+
+    expect(local[SETTINGS_KEY]).toMatchObject({
+      downloads: {
+        destination: "file-system-access",
+        customDirectoryHandleId: "legacy-root",
+        conflictPolicy: "uniquify",
+      },
+    })
+
+    expect(local.downloadQueue).toEqual([
+      expect.objectContaining({
+        id: "task-v155",
+        settingsSnapshot: expect.objectContaining({
+          destination: "file-system-access",
+          conflictPolicy: "uniquify",
+          archiveFormat: "zip",
+        }),
+      }),
+    ])
+  })
+
   it("does not mark malformed released queue data as migrated", async () => {
     local = { downloadQueue: { malformed: true } }
 

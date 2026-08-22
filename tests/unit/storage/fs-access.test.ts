@@ -282,5 +282,165 @@ describe("File System Access helpers", () => {
       expect(closed).toEqual(["Chapter 001.cbz"])
       expect(aborted).toEqual([])
     })
+
+    it("uniquifies an existing filename while preserving its extension", async () => {
+      const write = vi.fn(async () => undefined)
+      const close = vi.fn(async () => undefined)
+      const createWritable = vi.fn(async () => ({ write, close }))
+      const getFileHandle = vi.fn(
+        async (name: string, options?: { create?: boolean }) => {
+          if (!options?.create && name === "Chapter 001 (2).cbz") {
+            throw createNamedError("NotFoundError")
+          }
+          return { createWritable }
+        }
+      )
+      const dir = createDirectoryHandle(getFileHandle)
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "Chapter 001.cbz",
+          new Blob(["chapter"]),
+          "uniquify"
+        )
+      ).resolves.toEqual({ status: "written" })
+
+      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001 (1).cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 001 (2).cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(4, "Chapter 001 (2).cbz", {
+        create: true,
+      })
+      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+    })
+
+    it("writes the original filename when uniquify finds no existing file", async () => {
+      const write = vi.fn(async () => undefined)
+      const close = vi.fn(async () => undefined)
+      const createWritable = vi.fn(async () => ({ write, close }))
+      const getFileHandle = vi.fn(
+        async (_name: string, options?: { create?: boolean }) => {
+          if (!options?.create) {
+            throw createNamedError("NotFoundError")
+          }
+          return { createWritable }
+        }
+      )
+      const dir = createDirectoryHandle(getFileHandle)
+      const blob = new Blob(["chapter"])
+
+      await expect(
+        writeBlobToPath(dir, "Chapter 001.cbz", blob, "uniquify")
+      ).resolves.toEqual({ status: "written" })
+
+      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001.cbz", {
+        create: true,
+      })
+      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+    })
+
+    it("uniquifies files without extension or dotfiles correctly", async () => {
+      const write = vi.fn(async () => undefined)
+      const close = vi.fn(async () => undefined)
+      const createWritable = vi.fn(async () => ({ write, close }))
+      const getFileHandle = vi.fn(
+        async (name: string, options?: { create?: boolean }) => {
+          if (
+            !options?.create &&
+            (name === "README (1)" || name === ".nomedia (1)")
+          ) {
+            throw createNamedError("NotFoundError")
+          }
+          return { createWritable }
+        }
+      )
+      const dir = createDirectoryHandle(getFileHandle)
+
+      await expect(
+        writeBlobToPath(dir, "README", new Blob(["text"]), "uniquify")
+      ).resolves.toEqual({ status: "written" })
+      expect(getFileHandle).toHaveBeenNthCalledWith(1, "README")
+      expect(getFileHandle).toHaveBeenNthCalledWith(2, "README (1)")
+      expect(getFileHandle).toHaveBeenNthCalledWith(3, "README (1)", {
+        create: true,
+      })
+
+      getFileHandle.mockClear()
+      await expect(
+        writeBlobToPath(dir, ".nomedia", new Blob([""]), "uniquify")
+      ).resolves.toEqual({ status: "written" })
+      expect(getFileHandle).toHaveBeenNthCalledWith(1, ".nomedia")
+      expect(getFileHandle).toHaveBeenNthCalledWith(2, ".nomedia (1)")
+      expect(getFileHandle).toHaveBeenNthCalledWith(3, ".nomedia (1)", {
+        create: true,
+      })
+    })
+
+    it("uniquifies filenames with multiple dots by matching final extension", async () => {
+      const write = vi.fn(async () => undefined)
+      const close = vi.fn(async () => undefined)
+      const createWritable = vi.fn(async () => ({ write, close }))
+      const getFileHandle = vi.fn(
+        async (name: string, options?: { create?: boolean }) => {
+          if (!options?.create && name === "Chapter 01.5 (1).cbz") {
+            throw createNamedError("NotFoundError")
+          }
+          return { createWritable }
+        }
+      )
+      const dir = createDirectoryHandle(getFileHandle)
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "Chapter 01.5.cbz",
+          new Blob(["chapter"]),
+          "uniquify"
+        )
+      ).resolves.toEqual({ status: "written" })
+      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 01.5.cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 01.5 (1).cbz")
+      expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 01.5 (1).cbz", {
+        create: true,
+      })
+    })
+
+    it("overwrites existing file without existence probe", async () => {
+      const write = vi.fn(async () => undefined)
+      const close = vi.fn(async () => undefined)
+      const createWritable = vi.fn(async () => ({ write, close }))
+      const getFileHandle = vi.fn(async () => ({ createWritable }))
+      const dir = createDirectoryHandle(getFileHandle)
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "Chapter 001.cbz",
+          new Blob(["content"]),
+          "overwrite"
+        )
+      ).resolves.toEqual({ status: "written" })
+      expect(getFileHandle).toHaveBeenCalledOnce()
+      expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz", {
+        create: true,
+      })
+    })
+
+    it("propagates non-missing lookup errors during uniquify preflight", async () => {
+      const dir = createDirectoryHandle(async () => {
+        throw createNamedError("NotAllowedError")
+      })
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "Chapter 001.cbz",
+          new Blob(["chapter"]),
+          "uniquify"
+        )
+      ).rejects.toMatchObject({ name: "NotAllowedError" })
+    })
   })
 })
