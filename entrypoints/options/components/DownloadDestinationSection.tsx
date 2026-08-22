@@ -1,4 +1,10 @@
-import { AlertTriangle, Folder, FolderCheck, HardDrive } from "lucide-react"
+import {
+  AlertTriangle,
+  FileDigit,
+  Folder,
+  FolderCheck,
+  HardDrive,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
@@ -133,6 +139,24 @@ export function DownloadDestinationSection({
                   : null,
               })
             }}
+          />
+        }
+      />
+      {/* Suppress Save As Dialog Row (Browser Downloads only) */}
+      <SettingsRow
+        icon={FileDigit}
+        title={t("options_suppressSaveAs")}
+        description={t("options_suppressSaveAsDesc")}
+        htmlFor="suppress-save-as"
+        control={
+          <Switch
+            id="suppress-save-as"
+            data-testid="suppress-save-as-switch"
+            checked={downloads.suppressSaveAsDialog}
+            disabled={isSaving || isFsaActive}
+            onCheckedChange={(checked) =>
+              onDownloadsChange({ suppressSaveAsDialog: checked })
+            }
           />
         }
       />

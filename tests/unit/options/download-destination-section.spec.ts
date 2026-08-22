@@ -80,4 +80,48 @@ describe("DownloadDestinationSection", () => {
       "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
     )
   })
+
+  it("renders suppress save as dialog switch enabled for browser downloads and disabled for FSA", () => {
+    const browserMarkup = renderToStaticMarkup(
+      createElement(DownloadDestinationSection, {
+        downloads: {
+          ...DEFAULT_SETTINGS.downloads,
+          destination: "downloads-api",
+          suppressSaveAsDialog: true,
+        },
+        selectedFolderName: null,
+        isPickingFolder: false,
+        isSaving: false,
+        onDownloadsChange: vi.fn(),
+        onPickFolder: vi.fn(),
+      })
+    )
+    expect(browserMarkup).toContain('id="suppress-save-as"')
+    expect(browserMarkup).toContain('data-testid="suppress-save-as-switch"')
+    const browserButton = browserMarkup.match(
+      /<button[^>]*id="suppress-save-as"[^>]*>/
+    )?.[0]
+    expect(browserButton).toBeDefined()
+    expect(browserButton).not.toMatch(/\sdisabled(?:="[^"]*"|(?=[>\s]))/)
+
+    const fsaMarkup = renderToStaticMarkup(
+      createElement(DownloadDestinationSection, {
+        downloads: {
+          ...DEFAULT_SETTINGS.downloads,
+          destination: "file-system-access",
+          suppressSaveAsDialog: true,
+        },
+        selectedFolderName: "MangaFolder",
+        isPickingFolder: false,
+        isSaving: false,
+        onDownloadsChange: vi.fn(),
+        onPickFolder: vi.fn(),
+      })
+    )
+    const fsaButton = fsaMarkup.match(
+      /<button[^>]*id="suppress-save-as"[^>]*>/
+    )?.[0]
+    expect(fsaButton).toBeDefined()
+    expect(fsaButton).toMatch(/\sdisabled(?:="[^"]*"|(?=[>\s]))/)
+  })
 })

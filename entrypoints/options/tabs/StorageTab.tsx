@@ -1,11 +1,5 @@
 import React, { useCallback } from "react"
-import {
-  BookOpen,
-  FileCheck,
-  FileDigit,
-  Hash,
-  Image as ImageIcon,
-} from "lucide-react"
+import { BookOpen, FileCheck, Hash, Image as ImageIcon } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -256,23 +250,6 @@ export function StorageTab({
               checked={settings.downloads.normalizeImageFilenames}
               onCheckedChange={(checked) =>
                 updateDownloads({ normalizeImageFilenames: checked })
-              }
-            />
-          }
-        />
-
-        <SettingsRow
-          icon={FileDigit}
-          title={t("options_suppressSaveAs")}
-          description={t("options_suppressSaveAsDesc")}
-          htmlFor="suppress-save-as"
-          control={
-            <Switch
-              id="suppress-save-as"
-              data-testid="suppress-save-as-switch"
-              checked={settings.downloads.suppressSaveAsDialog}
-              onCheckedChange={(checked) =>
-                updateDownloads({ suppressSaveAsDialog: checked })
               }
             />
           }
