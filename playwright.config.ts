@@ -12,10 +12,10 @@ process.env.TMD_TEST_E2E_ALLOW_NETWORK = "false"
 export default defineConfig({
   testDir: path.resolve(__dirname, "tests/e2e"),
   testMatch: ["**/*.spec.ts"],
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 2 : 8,
   reporter: [["list"]],
   timeout: 90_000,
   expect: { timeout: 10_000 },

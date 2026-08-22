@@ -1,4 +1,4 @@
-import { test, expect } from "../e2e/fixtures/extension"
+import { test, expect } from "../../e2e/fixtures/extension"
 
 const TITLE_ID = "1"
 const CANARY_CHAPTER_ID = "6736"
@@ -502,7 +502,6 @@ test.describe("MangaMillion API contract (live)", () => {
           }
         }
 
-        // Simulate the background-runtime ID generation
         const constructedIds: string[] = []
         const seenIds = new Set<string>()
         let chapterIndex = 0
@@ -560,7 +559,6 @@ test.describe("MangaMillion API contract (live)", () => {
       expect(result.totalChapters).toBeGreaterThanOrEqual(30)
       expect(result.freeCount).toBeGreaterThan(0)
       expect(result.lockedCount).toBeGreaterThan(0)
-      // Critical check: every single chapter ID is unique and non-empty
       expect(result.uniqueIdCount).toBe(result.totalChapters)
       expect(result.zhTitleOk).toBe(true)
     } finally {

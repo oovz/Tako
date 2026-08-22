@@ -1,13 +1,12 @@
 import type { BrowserContext, Page } from "@playwright/test"
-
-import { test, expect } from "../e2e/fixtures/extension"
-import { getSessionState, getTabId } from "../e2e/fixtures/state-helpers"
+import { test, expect } from "../../e2e/fixtures/extension"
+import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import {
   LIVE_MANHUAGUI_ADULT_REFERENCE_URL,
   LIVE_MANHUAGUI_REFERENCE_URL,
   MANHUAGUI_BASE_URL,
-} from "../e2e/fixtures/test-domains-constants"
-import { resolveCandidateTabIds } from "./fixtures/download-workflow-helpers"
+} from "../../e2e/fixtures/test-domains-constants"
+import { resolveCandidateTabIds } from "../fixtures/download-workflow-helpers"
 
 type ManhuaguiLiveState = {
   siteIntegrationId?: string
@@ -28,52 +27,49 @@ async function loadManhuaguiState(
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, {
       waitUntil: "domcontentloaded",
     })
+
     const preferredTabId = await getTabId(page, context)
     const candidateTabIds = await resolveCandidateTabIds(
       optionsPage,
       preferredTabId,
       page.url()
     )
+    expect(candidateTabIds.length).toBeGreaterThan(0)
 
-    let result: ManhuaguiLiveState | undefined
-    await expect
-      .poll(
-        async () => {
-          for (const tabId of candidateTabIds) {
-            const state = await getSessionState<ManhuaguiLiveState>(
-              context,
-              `tab_${tabId}`
-            )
-            if (
-              state?.siteIntegrationId !== "manhuagui" ||
-              state.mangaId !== expectedMangaId ||
-              !Array.isArray(state.chapters)
-            ) {
-              continue
-            }
+    const timeoutMs = 30_000
+    const pollMs = 500
+    const start = Date.now()
 
-            const hasExpectedChapters =
-              expectedChapterAvailability === "empty"
-                ? state.chapters.length === 0
-                : state.chapters.length > 0
-            if (hasExpectedChapters) {
-              result = state
-              return true
-            }
-          }
-          return false
-        },
-        {
-          message: `waiting for Manhuagui ${expectedMangaId} ${expectedChapterAvailability} chapter state`,
-          timeout: 30_000,
+    while (Date.now() - start < timeoutMs) {
+      for (const tabId of candidateTabIds) {
+        const state = await getSessionState<ManhuaguiLiveState>(
+          context,
+          `tab_${tabId}`
+        )
+        if (
+          state &&
+          state.siteIntegrationId === "manhuagui" &&
+          state.mangaId === expectedMangaId &&
+          Array.isArray(state.chapters) &&
+          (expectedChapterAvailability === "empty"
+            ? state.chapters.length === 0
+            : state.chapters.length > 0)
+        ) {
+          return state
         }
-      )
-      .toBe(true)
+      }
 
-    if (!result) {
-      throw new Error(`Missing Manhuagui state for ${expectedMangaId}`)
+      await page.waitForTimeout(pollMs)
     }
-    return result
+
+    const session = await optionsPage.evaluate(() =>
+      chrome.storage.session.get(null)
+    )
+    throw new Error(
+      `Timed out waiting for live manhuagui state (${expectedChapterAvailability}) ` +
+        `for manga ${expectedMangaId} from ${page.url()}. ` +
+        `Session keys: ${Object.keys(session).join(", ")}`
+    )
   } finally {
     await optionsPage.close()
   }

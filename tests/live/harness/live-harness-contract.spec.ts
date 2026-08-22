@@ -1,5 +1,5 @@
-import { test, expect } from "../e2e/fixtures/extension"
-import { siteIntegrationCatalog } from "../../src/runtime/generated/site-integration-catalog"
+import { test, expect } from "../../e2e/fixtures/extension"
+import { siteIntegrationCatalog } from "../../../src/runtime/generated/site-integration-catalog"
 
 test("live profile pre-grants broad HTTPS access and enables every shipped integration", async ({
   context,
