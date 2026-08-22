@@ -1,8 +1,6 @@
-import { AlertTriangle, Folder } from "lucide-react"
+import { AlertTriangle, Folder, FolderCheck, HardDrive } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -14,6 +12,8 @@ import {
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 import { detectFsaCapabilities } from "@/src/storage/fs-access"
+import { SettingsGroup } from "./primitives/SettingsGroup"
+import { SettingsRow } from "./primitives/SettingsRow"
 
 interface DownloadDestinationSectionProps {
   downloads: ExtensionSettings["downloads"]
@@ -40,110 +40,116 @@ export function DownloadDestinationSection({
     fsaCapabilities.handlePermissionRequest &&
     fsaCapabilities.writableFile
 
+  const isFsaActive = downloads.destination === "file-system-access"
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle role="heading" aria-level={2} className="text-base">
-          {t("options_downloadDestination")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center justify-between rounded-md border p-3">
-          <div className="flex flex-col gap-1 pr-4">
-            <Label htmlFor="custom-folder-switch">
-              {t("options_useCustomFolder")}
-            </Label>
+    <SettingsGroup
+      title={t("options_downloadDestination")}
+      description={t("options_conflictPolicyHelp")}
+    >
+      {/* Destination Switch Row */}
+      <SettingsRow
+        icon={isFsaActive ? FolderCheck : HardDrive}
+        title={t("options_useCustomFolder")}
+        description={
+          <div className="flex flex-col gap-2 mt-1">
             <p className="text-xs text-muted-foreground">
               {selectedFolderName
                 ? t("options_currentFolder", [selectedFolderName])
-                : downloads.destination === "file-system-access"
+                : isFsaActive
                   ? t("options_noFolderSelected")
                   : t("options_noCustomFolder")}
             </p>
+
+            {/* Folder Actions when FSA is enabled or folder is present */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onPickFolder}
+                disabled={isSaving || isPickingFolder || !fsaSupported}
+                className="h-8 text-xs gap-1.5"
+              >
+                <Folder data-icon="inline-start" className="size-3.5" />
+                {selectedFolderName
+                  ? t("options_changeFolder")
+                  : t("options_selectFolder")}
+              </Button>
+              {selectedFolderName && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    onDownloadsChange({
+                      destination: "downloads-api",
+                      customDirectoryHandleId: null,
+                    })
+                  }}
+                  disabled={isSaving}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {t("options_useBrowserDownloads")}
+                </Button>
+              )}
+            </div>
+
+            {/* FSA Unsupported Warning */}
+            {!fsaSupported && (
+              <p className="text-xs text-destructive">
+                {t("options_fsaUnsupported")}
+              </p>
+            )}
+
+            {/* FSA Active but No Folder Warning */}
+            {isFsaActive && !selectedFolderName && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-xs font-semibold">
+                    {t("options_fsaNoFolderSelectedTitle")}
+                  </p>
+                  <p className="text-xs opacity-90">
+                    {t("options_fsaNoFolderSelectedDesc")}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
+        }
+        htmlFor="custom-folder-switch"
+        align="start"
+        control={
           <Switch
             id="custom-folder-switch"
-            checked={downloads.destination === "file-system-access"}
-            disabled={
-              isSaving ||
-              (!fsaSupported && downloads.destination !== "file-system-access")
-            }
+            checked={isFsaActive}
+            disabled={isSaving || (!fsaSupported && !isFsaActive)}
             onCheckedChange={(checked) => {
               onDownloadsChange({
                 destination: checked ? "file-system-access" : "downloads-api",
-                // Browser Downloads must not retain a directory-handle id in
-                // the settings document. The save flow uses this as the
-                // durable intent to remove the corresponding IndexedDB handle.
                 customDirectoryHandleId: checked
                   ? downloads.customDirectoryHandleId
                   : null,
               })
             }}
           />
-        </div>
+        }
+      />
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onPickFolder}
-            disabled={isSaving || isPickingFolder || !fsaSupported}
-          >
-            <Folder data-icon="inline-start" className="size-3.5" />
-            {selectedFolderName
-              ? t("options_changeFolder")
-              : t("options_selectFolder")}
-          </Button>
-          {selectedFolderName && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onDownloadsChange({
-                  destination: "downloads-api",
-                  customDirectoryHandleId: null,
-                })
-              }}
-              disabled={isSaving}
-            >
-              {t("options_useBrowserDownloads")}
-            </Button>
-          )}
-        </div>
-        {downloads.destination === "file-system-access" &&
-          !selectedFolderName && (
-            <div className="rounded-md border border-border bg-muted/40 p-3">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="mt-0.5 size-4 text-muted-foreground shrink-0" />
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-xs font-medium text-foreground">
-                    {t("options_fsaNoFolderSelectedTitle")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("options_fsaNoFolderSelectedDesc")}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-        {!fsaSupported && (
-          <p className="text-xs text-muted-foreground">
-            {t("options_fsaUnsupported")}
-          </p>
-        )}
-
-        <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
-          <Label htmlFor="collision-policy">
-            {t("options_conflictPolicy")}
-          </Label>
+      {/* Conflict Policy Row */}
+      <SettingsRow
+        title={t("options_conflictPolicy")}
+        description={t("options_conflictPolicyHelp")}
+        htmlFor="collision-policy"
+        control={
           <Select
             value={downloads.conflictPolicy}
             onValueChange={(value: "overwrite" | "uniquify") =>
               onDownloadsChange({ conflictPolicy: value })
             }
           >
-            <SelectTrigger id="collision-policy">
+            <SelectTrigger id="collision-policy" className="w-56">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -155,11 +161,8 @@ export function DownloadDestinationSection({
               </SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            {t("options_conflictPolicyHelp")}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+        }
+      />
+    </SettingsGroup>
   )
 }

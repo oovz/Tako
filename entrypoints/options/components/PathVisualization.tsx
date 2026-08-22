@@ -71,22 +71,22 @@ export function PathVisualization({
       id="template-validation-status"
       role={hasErrors ? "alert" : "status"}
       aria-live="polite"
-      className="rounded-md border border-border/50 bg-muted/20 p-3 flex flex-col gap-2"
+      className="rounded-lg border border-border bg-muted/40 p-3.5 flex flex-col gap-2"
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2.5">
         {hasErrors ? (
-          <AlertCircle className="size-4 text-destructive mt-0.5 flex-shrink-0" />
+          <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
         ) : (
-          <CheckCircle2 className="size-4 text-primary mt-0.5 flex-shrink-0" />
+          <CheckCircle2 className="size-4 text-primary mt-0.5 shrink-0" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium mb-1">
+          <p className="text-xs font-semibold text-foreground mb-1">
             {hasErrors
               ? t("options_invalidTemplate")
               : t("options_previewOutput")}
           </p>
           {fullPath ? (
-            <p className="text-xs font-mono text-muted-foreground break-all">
+            <p className="text-xs font-mono text-muted-foreground break-all bg-background/80 px-2 py-1 rounded border border-border/40">
               {fullPath}
             </p>
           ) : (
@@ -95,8 +95,7 @@ export function PathVisualization({
             </p>
           )}
           {hasWarnings && (
-            <p className="text-xs text-muted-foreground mt-1">
-              ⚠️{" "}
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
               {pathResult.warnings.concat(filenameResult.warnings).join("; ")}
             </p>
           )}

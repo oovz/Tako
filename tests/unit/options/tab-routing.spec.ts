@@ -10,19 +10,20 @@ describe("options section URL routing", () => {
     expect(
       getOptionsSectionUrl(
         "chrome-extension://example/options.html?source=sidepanel",
-        "downloads"
+        "storage"
       )
     ).toBe(
-      "chrome-extension://example/options.html?source=sidepanel&tab=downloads"
+      "chrome-extension://example/options.html?source=sidepanel&tab=storage"
     )
   })
 
   it("round-trips every supported section", () => {
     for (const section of [
-      "global",
+      "general",
+      "storage",
+      "network",
       "integrations",
-      "downloads",
-      "debug",
+      "activity",
     ] as const) {
       const url = getOptionsSectionUrl(
         "chrome-extension://example/options.html",

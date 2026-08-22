@@ -14,7 +14,9 @@ test.describe("Options Page", () => {
   })
 
   test("displays download format selector", async ({ page, extensionId }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=storage`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     // Wait for page content to load
@@ -34,7 +36,9 @@ test.describe("Options Page", () => {
     page,
     extensionId,
   }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=storage`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
@@ -47,13 +51,10 @@ test.describe("Options Page", () => {
       )
     ).toBeVisible()
 
-    // Persist the format change so the unsaved-changes guard doesn't block
-    // tab navigation. The warning's tab-specificity is what we're verifying,
-    // not the unsaved-changes dialog behavior.
     await page.getByRole("button", { name: "Save Changes" }).click()
     await expect(page.getByText("Unsaved changes")).toHaveCount(0)
 
-    await page.getByRole("button", { name: "Downloads" }).click()
+    await page.getByRole("button", { name: /Activity/i }).click()
     await expect(
       page.getByText(
         "No archive + default downloads can clutter the download shelf"
@@ -65,7 +66,9 @@ test.describe("Options Page", () => {
     page,
     extensionId,
   }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=network`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
@@ -102,17 +105,19 @@ test.describe("Options Page", () => {
     expect(settings.globalPolicy.chapter.concurrency).toBe(1)
   })
 
-  test("keeps download destination controls in Downloads instead of General", async ({
+  test("keeps download destination controls in Storage instead of General", async ({
     page,
     extensionId,
   }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=general`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
     await expect(page.getByText("Download Location")).toHaveCount(0)
 
-    await page.getByRole("button", { name: "Downloads" }).click()
+    await page.getByRole("button", { name: /Storage/i }).click()
     await expect(
       page.getByText("Download destination", { exact: true })
     ).toBeVisible()
@@ -159,27 +164,29 @@ test.describe("Options Page", () => {
     expect(overflow.main).toBe("auto")
   })
 
-  test("does not show stale new-indicator history copy in About / Debug", async ({
+  test("does not show stale new-indicator history copy in General", async ({
     page,
     extensionId,
   }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html?tab=debug`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=general`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
-    await expect(
-      page.getByRole("button", { name: "About & Debug" })
-    ).toBeVisible()
+    await expect(page.getByRole("button", { name: "General" })).toBeVisible()
     await expect(
       page.getByText(/Clearing history will reset "New" chapter indicators\./i)
     ).toHaveCount(0)
   })
 
-  test("shows Chrome Web Store update controls in About / Debug", async ({
+  test("shows Chrome Web Store update controls in General", async ({
     page,
     extensionId,
   }) => {
-    await page.goto(`chrome-extension://${extensionId}/options.html?tab=debug`)
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=general`
+    )
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })

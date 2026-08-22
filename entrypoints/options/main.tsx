@@ -1,6 +1,6 @@
 /**
  * Tako Manga Downloader - Options Page
- * Refactored with sidebar navigation following shadcn/ui patterns
+ * Apple HIG Inset Grouped design with modern WXT / React 19 architecture
  */
 
 import { createRoot } from "react-dom/client"
@@ -40,32 +40,37 @@ import {
   type OptionsSection,
 } from "./tab-routing"
 import { useOptionsPageState } from "./hooks/useOptionsPageState"
-
-// Lazy load all tabs for code splitting
-const GlobalSettingsTab = lazy(() =>
-  import("./tabs/GlobalSettingsTab").then((m) => ({
-    default: m.GlobalSettingsTab,
-  }))
-)
-const SiteIntegrationManagementTab = lazy(() =>
-  import("./tabs/SiteIntegrationManagementTab").then((m) => ({
-    default: m.SiteIntegrationManagementTab,
-  }))
-)
-const HistoryTab = lazy(() =>
-  import("./tabs/HistoryTab").then((m) => ({ default: m.HistoryTab }))
-)
-const DownloadsTab = lazy(() =>
-  import("./tabs/DownloadsTab").then((m) => ({ default: m.DownloadsTab }))
-)
-
-// Debug settings component (imported directly since it's small)
-import { DebugSettingsSection } from "./components/DebugSettingsSection"
-import { ExtensionUpdateSection } from "./components/ExtensionUpdateSection"
-import { ExternalSettingsConflictBanner } from "./components/ExternalSettingsConflictBanner"
 import { OptionsSidebar } from "./components/OptionsSidebar"
 import { SectionLoadingSkeleton } from "./components/SectionLoadingSkeleton"
 import { UnsavedChangesFooter } from "./components/UnsavedChangesFooter"
+import { ExternalSettingsConflictBanner } from "./components/ExternalSettingsConflictBanner"
+
+// Lazy load all 5 tabs for code splitting
+const GeneralTab = lazy(() =>
+  import("./tabs/GeneralTab").then((m) => ({
+    default: m.GeneralTab,
+  }))
+)
+const StorageTab = lazy(() =>
+  import("./tabs/StorageTab").then((m) => ({
+    default: m.StorageTab,
+  }))
+)
+const NetworkTab = lazy(() =>
+  import("./tabs/NetworkTab").then((m) => ({
+    default: m.NetworkTab,
+  }))
+)
+const SiteIntegrationsTab = lazy(() =>
+  import("./tabs/SiteIntegrationsTab").then((m) => ({
+    default: m.SiteIntegrationsTab,
+  }))
+)
+const ActivityTab = lazy(() =>
+  import("./tabs/ActivityTab").then((m) => ({
+    default: m.ActivityTab,
+  }))
+)
 
 // Performance monitoring callback (development only)
 function onRenderCallback(
@@ -124,8 +129,6 @@ function OptionsPage() {
   const { locale } = useI18n()
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const [isDiscarding, setIsDiscarding] = useState(false)
-  const [pendingSectionChange, setPendingSectionChange] =
-    useState<OptionsSection | null>(null)
   const [activeSection, setActiveSection] = useState<OptionsSection>(() =>
     getInitialOptionsSection(window.location.search)
   )
@@ -146,35 +149,34 @@ function OptionsPage() {
   const handleSectionChange = useCallback(
     (section: OptionsSection) => {
       if (section === activeSection) return
-      if (hasUnsavedChanges) {
-        setPendingSectionChange(section)
-        setShowDiscardDialog(true)
-      } else {
-        commitSectionChange(section)
-      }
+      commitSectionChange(section)
     },
-    [activeSection, commitSectionChange, hasUnsavedChanges]
+    [activeSection, commitSectionChange]
   )
+
+  // Keyboard shortcut: Cmd/Ctrl + S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault()
+        if (hasUnsavedChanges && !isSaving && !hasExternalChanges) {
+          void saveConfiguration()
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [hasUnsavedChanges, isSaving, hasExternalChanges, saveConfiguration])
 
   useEffect(() => {
     const handlePopState = () => {
       const section = getInitialOptionsSection(window.location.search)
       if (section === activeSection) return
-      if (hasUnsavedChanges) {
-        window.history.replaceState(
-          null,
-          "",
-          getOptionsSectionUrl(window.location.href, activeSection)
-        )
-        setPendingSectionChange(section)
-        setShowDiscardDialog(true)
-        return
-      }
       setActiveSection(section)
     }
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
-  }, [activeSection, hasUnsavedChanges])
+  }, [activeSection])
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -268,9 +270,9 @@ function OptionsPage() {
         onSectionChange={handleSectionChange}
       />
 
-      {/* Main Content - following shadcn/ui dashboard patterns */}
+      {/* Main Content Area */}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col p-4 pb-24 sm:p-6 sm:pb-24 md:p-8 md:pb-24">
+        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col p-4 pb-28 sm:p-6 sm:pb-28 md:p-8 md:pb-28">
           {hasExternalChanges && (
             <ExternalSettingsConflictBanner
               isResolving={isResolvingExternalChanges}
@@ -283,13 +285,14 @@ function OptionsPage() {
             />
           )}
 
-          {activeSection === "global" && (
+          {/* 1. General Tab */}
+          {activeSection === "general" && (
             <section
-              aria-labelledby="options-global-heading"
-              className="animate-in fade-in slide-in-from-right-4 duration-300"
+              aria-labelledby="options-general-heading"
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
-                <GlobalSettingsTab
+                <GeneralTab
                   settings={settingsBuffer}
                   onChange={handleSettingsChange}
                 />
@@ -297,13 +300,48 @@ function OptionsPage() {
             </section>
           )}
 
+          {/* 2. Storage & Files Tab */}
+          {activeSection === "storage" && (
+            <section
+              aria-labelledby="options-storage-heading"
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
+            >
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <StorageTab
+                  settings={settingsBuffer}
+                  onChange={handleSettingsChange}
+                  selectedFolderName={selectedFolderName}
+                  onPickFolder={pickDownloadFolder}
+                  isPickingFolder={isPickingFolder}
+                  isSaving={isSaving}
+                />
+              </Suspense>
+            </section>
+          )}
+
+          {/* 3. Network & Speed Tab */}
+          {activeSection === "network" && (
+            <section
+              aria-labelledby="options-network-heading"
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
+            >
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <NetworkTab
+                  settings={settingsBuffer}
+                  onChange={handleSettingsChange}
+                />
+              </Suspense>
+            </section>
+          )}
+
+          {/* 4. Site Integrations Tab */}
           {activeSection === "integrations" && (
             <section
               aria-labelledby="options-integrations-heading"
-              className="animate-in fade-in slide-in-from-right-4 duration-300"
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
-                <SiteIntegrationManagementTab
+                <SiteIntegrationsTab
                   overrides={overrides}
                   siteIntegrationEnablement={siteIntegrationEnablement}
                   globalSettings={settingsBuffer}
@@ -322,17 +360,20 @@ function OptionsPage() {
             </section>
           )}
 
-          {activeSection === "downloads" && (
+          {/* 5. Activity & History Tab */}
+          {activeSection === "activity" && (
             <section
-              aria-labelledby="options-downloads-heading"
-              className="animate-in fade-in slide-in-from-right-4 duration-300"
+              aria-labelledby="options-activity-heading"
+              className="animate-in fade-in slide-in-from-bottom-2 duration-200"
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
-                <DownloadsTab
-                  settings={settingsBuffer}
-                  onChange={handleSettingsChange}
-                  selectedFolderName={selectedFolderName}
-                  onPickFolder={pickDownloadFolder}
+                <ActivityTab
+                  stats={historyStats}
+                  series={historySeries}
+                  onClearAllHistory={clearAllHistory}
+                  onClearSeriesHistory={clearSeriesHistory}
+                  onRefreshSeries={handleRefreshHistory}
+                  isClearingHistory={isClearing}
                   onRepairFolder={repairDownloadFolder}
                   onGrantFolderAccess={grantDownloadFolderAccess}
                   isPickingFolder={isPickingFolder}
@@ -341,38 +382,10 @@ function OptionsPage() {
               </Suspense>
             </section>
           )}
-
-          {activeSection === "debug" && (
-            <section
-              aria-labelledby="options-debug-heading"
-              className="animate-in fade-in slide-in-from-right-4 duration-300"
-            >
-              <div className="flex flex-col gap-6">
-                {/* Debug Settings Section */}
-                <DebugSettingsSection
-                  settings={settingsBuffer}
-                  onChange={handleSettingsChange}
-                />
-
-                <ExtensionUpdateSection />
-
-                {/* History Tab Content */}
-                <Suspense fallback={<SectionLoadingSkeleton />}>
-                  <HistoryTab
-                    stats={historyStats}
-                    series={historySeries}
-                    onClearAll={clearAllHistory}
-                    onClearSeries={clearSeriesHistory}
-                    onRefreshSeries={handleRefreshHistory}
-                    isClearing={isClearing}
-                  />
-                </Suspense>
-              </div>
-            </section>
-          )}
         </div>
       </main>
 
+      {/* Floating Save/Discard Footer */}
       {hasUnsavedChanges && (
         <UnsavedChangesFooter
           isSaving={isSaving}
@@ -382,15 +395,12 @@ function OptionsPage() {
         />
       )}
 
-      {/* Discard confirmation dialog */}
+      {/* Discard Confirmation Dialog */}
       <AlertDialog
         open={showDiscardDialog}
         onOpenChange={(open) => {
           if (!open && isDiscarding) return
           setShowDiscardDialog(open)
-          if (!open) {
-            setPendingSectionChange(null)
-          }
         }}
       >
         <AlertDialogContent>
@@ -415,10 +425,6 @@ function OptionsPage() {
                   const discarded = await discardChanges()
                   if (!discarded) return
                   setShowDiscardDialog(false)
-                  if (pendingSectionChange) {
-                    commitSectionChange(pendingSectionChange, "replace")
-                    setPendingSectionChange(null)
-                  }
                 })().finally(() => setIsDiscarding(false))
               }}
             >

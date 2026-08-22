@@ -9,30 +9,42 @@ export class OptionsPageObject {
     this.extensionId = extensionId
   }
 
-  async navigate(): Promise<void> {
-    await this.page.goto(`chrome-extension://${this.extensionId}/options.html`)
+  async navigate(tab?: string): Promise<void> {
+    const search = tab ? `?tab=${tab}` : ""
+    await this.page.goto(
+      `chrome-extension://${this.extensionId}/options.html${search}`
+    )
     await this.page.waitForLoadState("domcontentloaded")
-    await expect(
-      this.page.locator('[data-testid="archive-format-radiogroup"]')
-    ).toBeVisible({ timeout: 5000 })
+    await expect(this.page.locator("#root")).toBeVisible({ timeout: 5000 })
   }
 
   // Sidebar navigation (Options page uses sidebar, not tabs)
-  async switchToSection(
-    section: "General" | "Site Integrations" | "Downloads" | "About / Debug"
-  ): Promise<void> {
-    await this.page.getByRole("button", { name: section }).click()
+  async switchToSection(section: string): Promise<void> {
+    const normalized = section.toLowerCase()
+    const target =
+      normalized.includes("download") || normalized.includes("storage")
+        ? "Storage"
+        : normalized.includes("history") || normalized.includes("activity")
+          ? "Activity"
+          : normalized.includes("debug") || normalized.includes("about")
+            ? "General"
+            : section
+    await this.page
+      .getByRole("button", { name: new RegExp(target, "i") })
+      .click()
   }
-
-  // Ensure settings are initialized (test helper)
   async ensureInitialized(): Promise<void> {
-    await expect(
-      this.page.locator('[data-testid="archive-format-radiogroup"]')
-    ).toBeVisible({ timeout: 5000 })
+    await expect(this.page.locator("#root")).toBeVisible({ timeout: 5000 })
   }
-
   // General Settings - Using Accessible Selectors
   async getArchiveFormat(): Promise<string> {
+    if (
+      (await this.page
+        .locator('[data-testid="archive-format-radiogroup"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     // RadioGroup - find checked radio button
     const radioGroup = this.page.locator(
       '[data-testid="archive-format-radiogroup"]'
@@ -43,6 +55,13 @@ export class OptionsPageObject {
   }
 
   async setArchiveFormat(format: "cbz" | "zip" | "none"): Promise<void> {
+    if (
+      (await this.page
+        .locator('[data-testid="archive-format-radiogroup"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     // Click the label for the format option
     const formatLabels = {
       cbz: "format-cbz",
@@ -53,12 +72,26 @@ export class OptionsPageObject {
   }
 
   async getFileNameTemplate(): Promise<string> {
+    if (
+      (await this.page
+        .locator('[data-testid="filename-template-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     return await this.page
       .locator('[data-testid="filename-template-input"]')
       .inputValue()
   }
 
   async setFileNameTemplate(template: string): Promise<void> {
+    if (
+      (await this.page
+        .locator('[data-testid="filename-template-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     await this.page
       .locator('[data-testid="filename-template-input"]')
       .fill(template)
@@ -66,6 +99,13 @@ export class OptionsPageObject {
 
   // Rate Limiting Settings - Using data-testid Selectors
   async getImageConcurrency(): Promise<number> {
+    if (
+      (await this.page
+        .locator('[data-testid="image-concurrency-slider"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Network")
+    }
     // Slider doesn't have inputValue - get aria-valuenow or read display text
     const slider = this.page.locator('[data-testid="image-concurrency-slider"]')
     const value = await slider.getAttribute("aria-valuenow")
@@ -73,6 +113,13 @@ export class OptionsPageObject {
   }
 
   async getRequestDelay(): Promise<number> {
+    if (
+      (await this.page
+        .locator('[data-testid="request-delay-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Network")
+    }
     const value = await this.page
       .locator('[data-testid="request-delay-input"]')
       .inputValue()
@@ -80,6 +127,13 @@ export class OptionsPageObject {
   }
 
   async setRequestDelay(delayMs: number): Promise<void> {
+    if (
+      (await this.page
+        .locator('[data-testid="request-delay-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Network")
+    }
     await this.page
       .locator('[data-testid="request-delay-input"]')
       .fill(String(delayMs))
@@ -87,6 +141,13 @@ export class OptionsPageObject {
 
   // Notifications Settings
   async areNotificationsEnabled(): Promise<boolean> {
+    if (
+      (await this.page
+        .getByRole("switch", { name: "Enable Notifications" })
+        .count()) === 0
+    ) {
+      await this.switchToSection("General")
+    }
     const state = await this.page
       .getByRole("switch", { name: "Enable Notifications" })
       .getAttribute("data-state")
@@ -94,6 +155,13 @@ export class OptionsPageObject {
   }
 
   async toggleNotifications(): Promise<void> {
+    if (
+      (await this.page
+        .getByRole("switch", { name: "Enable Notifications" })
+        .count()) === 0
+    ) {
+      await this.switchToSection("General")
+    }
     const switchControl = this.page.getByRole("switch", {
       name: "Enable Notifications",
     })
@@ -103,6 +171,12 @@ export class OptionsPageObject {
 
   // ComicInfo Settings
   async isComicInfoEnabled(): Promise<boolean> {
+    if (
+      (await this.page.locator('[data-testid="comicinfo-switch"]').count()) ===
+      0
+    ) {
+      await this.switchToSection("Storage")
+    }
     const state = await this.page
       .locator('[data-testid="comicinfo-switch"]')
       .getAttribute("data-state")
@@ -110,11 +184,23 @@ export class OptionsPageObject {
   }
 
   async toggleComicInfo(): Promise<void> {
+    if (
+      (await this.page.locator('[data-testid="comicinfo-switch"]').count()) ===
+      0
+    ) {
+      await this.switchToSection("Storage")
+    }
     await this.page.locator('[data-testid="comicinfo-switch"]').click()
   }
 
   // Image Normalization
   async isImageNormalizationEnabled(): Promise<boolean> {
+    if (
+      (await this.page.locator('[data-testid="normalize-switch"]').count()) ===
+      0
+    ) {
+      await this.switchToSection("Storage")
+    }
     const state = await this.page
       .locator('[data-testid="normalize-switch"]')
       .getAttribute("data-state")
@@ -122,6 +208,12 @@ export class OptionsPageObject {
   }
 
   async toggleImageNormalization(): Promise<void> {
+    if (
+      (await this.page.locator('[data-testid="normalize-switch"]').count()) ===
+      0
+    ) {
+      await this.switchToSection("Storage")
+    }
     await this.page.locator('[data-testid="normalize-switch"]').click()
   }
 
@@ -496,6 +588,13 @@ export class OptionsPageObject {
    * Set directory path template
    */
   async setDirectoryTemplate(pathTemplate: string): Promise<void> {
+    if (
+      (await this.page
+        .locator('[data-testid="download-path-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     await this.page
       .locator('[data-testid="download-path-input"]')
       .fill(pathTemplate)
@@ -505,6 +604,13 @@ export class OptionsPageObject {
    * Get directory path template
    */
   async getDirectoryTemplate(): Promise<string> {
+    if (
+      (await this.page
+        .locator('[data-testid="download-path-input"]')
+        .count()) === 0
+    ) {
+      await this.switchToSection("Storage")
+    }
     return await this.page
       .locator('[data-testid="download-path-input"]')
       .inputValue()
@@ -550,25 +656,23 @@ export class OptionsPageObject {
    * Get include ComicInfo.xml setting
    */
   async getIncludeComicInfo(): Promise<boolean> {
-    const state = await this.page
-      .locator('[data-testid="comicinfo-switch"]')
-      .getAttribute("data-state")
-    return state === "checked"
+    return await this.isComicInfoEnabled()
   }
 }
 
-export async function openOptions(page: Page, extensionId: string) {
-  await page.goto(`chrome-extension://${extensionId}/options.html`)
+export async function openOptions(
+  page: Page,
+  extensionId: string,
+  tab: string = "storage"
+) {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=${tab}`)
 
   // Wait for options page to be ready
   await page.waitForLoadState("domcontentloaded")
-  await expect(
-    page.locator('[data-testid="archive-format-radiogroup"]')
-  ).toBeVisible({ timeout: 5000 })
+  await expect(page.locator("#root")).toBeVisible({ timeout: 5000 })
 
   return {
     page,
-
     // Helper to check if element exists
     hasElement: async (selector: string) => {
       return (await page.locator(selector).count()) > 0

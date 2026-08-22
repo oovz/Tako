@@ -59,15 +59,14 @@ test.describe("Options Downloads history management", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       { waitUntil: "domcontentloaded" }
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
 
     await seedDownloadQueueState(page, seededQueue)
 
-    await page.getByRole("button", { name: "Downloads" }).click()
-
+    await page.getByRole("button", { name: /Activity/i }).click()
     await expect(page.getByText("Series done")).toBeVisible()
     await expect(page.getByText("Series failed")).toBeVisible()
     await expect(page.getByText("Series active")).toBeVisible()

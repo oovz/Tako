@@ -653,7 +653,7 @@ export const runtimeMessageRegistry = {
       type: z.literal("OPEN_OPTIONS"),
       payload: z.strictObject({
         page: z
-          .enum(["global", "integrations", "downloads", "debug"])
+          .enum(["general", "storage", "network", "integrations", "activity"])
           .optional(),
       }),
     }),

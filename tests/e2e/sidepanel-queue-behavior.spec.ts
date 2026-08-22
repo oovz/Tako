@@ -276,13 +276,13 @@ test.describe("Side panel queue behavior", () => {
 
     const existingOptionsPage = await context.newPage()
     await existingOptionsPage.goto(
-      `chrome-extension://${extensionId}/options.html?tab=debug`,
+      `chrome-extension://${extensionId}/options.html?tab=general`,
       {
         waitUntil: "domcontentloaded",
       }
     )
     await expect(
-      existingOptionsPage.getByRole("button", { name: "About & Debug" })
+      existingOptionsPage.getByRole("button", { name: "General" })
     ).toBeVisible()
 
     const sp = await context.newPage()
@@ -301,14 +301,13 @@ test.describe("Side panel queue behavior", () => {
 
     await expect
       .poll(() => existingOptionsPage.url())
-      .toContain("options.html?tab=downloads")
+      .toContain("options.html?tab=activity")
     await expect(
-      existingOptionsPage.getByRole("button", { name: "Downloads" })
+      existingOptionsPage.getByRole("button", { name: /Activity/i })
     ).toBeVisible()
     await expect(
-      existingOptionsPage.getByText("Download destination", { exact: true })
+      existingOptionsPage.getByText("Active Downloads", { exact: true })
     ).toBeVisible()
-
     await sp.close()
     await existingOptionsPage.close()
   })

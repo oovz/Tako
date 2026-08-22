@@ -202,7 +202,7 @@ export function useCommandCenterActions() {
 
   const openFullHistory = useCallback(async () => {
     try {
-      await openOptionsPage("downloads")
+      await openOptionsPage("activity")
     } catch (error) {
       logger.error("[CommandCenter] Failed to open full history:", error)
     }

@@ -1,4 +1,4 @@
-import { Bug, Download, Puzzle, Settings } from "lucide-react"
+import { Activity, FolderArchive, Puzzle, Settings, Zap } from "lucide-react"
 
 import { cn } from "@/src/shared/utils"
 import type { OptionsSection } from "../tab-routing"
@@ -26,14 +26,14 @@ function NavItem({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-auto shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full md:gap-3",
+        "flex w-auto shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full cursor-pointer",
         active
-          ? "bg-accent text-accent-foreground font-medium border-l-2 border-l-primary"
+          ? "bg-accent text-accent-foreground shadow-2xs font-semibold"
           : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
       )}
     >
-      <Icon className="size-4" />
-      {label}
+      <Icon className="size-4 shrink-0" />
+      <span className="truncate">{label}</span>
     </button>
   )
 }
@@ -44,14 +44,14 @@ export function OptionsSidebar({
 }: OptionsSidebarProps) {
   return (
     <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-sidebar md:w-64 md:overflow-y-auto md:border-b-0 md:border-r">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-4 md:h-14">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border/40 px-4 md:h-14">
         <img
           aria-hidden="true"
           alt=""
           className="size-6 shrink-0"
           src="icon/32.png"
         />
-        <span className="text-base font-semibold">
+        <span className="text-base font-semibold tracking-tight">
           {t("options_takoSettings")}
         </span>
       </div>
@@ -63,8 +63,20 @@ export function OptionsSidebar({
         <NavItem
           icon={Settings}
           label={t("options_general")}
-          active={activeSection === "global"}
-          onClick={() => onSectionChange("global")}
+          active={activeSection === "general"}
+          onClick={() => onSectionChange("general")}
+        />
+        <NavItem
+          icon={FolderArchive}
+          label={t("options_storage")}
+          active={activeSection === "storage"}
+          onClick={() => onSectionChange("storage")}
+        />
+        <NavItem
+          icon={Zap}
+          label={t("options_network")}
+          active={activeSection === "network"}
+          onClick={() => onSectionChange("network")}
         />
         <NavItem
           icon={Puzzle}
@@ -73,16 +85,10 @@ export function OptionsSidebar({
           onClick={() => onSectionChange("integrations")}
         />
         <NavItem
-          icon={Download}
-          label={t("options_downloads")}
-          active={activeSection === "downloads"}
-          onClick={() => onSectionChange("downloads")}
-        />
-        <NavItem
-          icon={Bug}
-          label={t("options_aboutDebug")}
-          active={activeSection === "debug"}
-          onClick={() => onSectionChange("debug")}
+          icon={Activity}
+          label={t("options_activity")}
+          active={activeSection === "activity"}
+          onClick={() => onSectionChange("activity")}
         />
       </nav>
       <div className="hidden border-t border-border/40 px-4 py-3 md:block">

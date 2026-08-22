@@ -169,11 +169,11 @@ html[data-tako-motion="reduce"] *::after {
   transition-duration: 0.01ms !important;
 }
 
-/* UI/UX Enhancement: Animation utilities */
+/* UI/UX Enhancement: Apple HIG & Motion Design utilities */
 @layer utilities {
   /* Fade and slide animations */
   .animate-in {
-    animation: animate-in 0.2s ease-out;
+    animation: animate-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .fade-in {
@@ -188,8 +188,20 @@ html[data-tako-motion="reduce"] *::after {
     --tw-enter-translate-y: 0.5rem;
   }
 
+  .slide-in-from-bottom-4 {
+    --tw-enter-translate-y: 1rem;
+  }
+
+  .duration-150 {
+    animation-duration: 0.15s;
+  }
+
   .duration-200 {
     animation-duration: 0.2s;
+  }
+
+  .duration-250 {
+    animation-duration: 0.25s;
   }
 
   .duration-300 {
@@ -210,10 +222,41 @@ html[data-tako-motion="reduce"] *::after {
     }
   }
 
+  /* Collapsible animations for Radix CollapsibleContent */
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+    to {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes collapsible-up {
+    from {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
+
+  .animate-collapsible-down {
+    animation: collapsible-down 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-collapsible-up {
+    animation: collapsible-up 0.2s cubic-bezier(0.4, 0, 1, 1);
+  }
+
   /* Smooth expand/collapse */
   .expand-collapse {
     transition:
-      max-height 0.3s ease-out,
+      max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1),
       opacity 0.2s ease-out;
     overflow: hidden;
   }

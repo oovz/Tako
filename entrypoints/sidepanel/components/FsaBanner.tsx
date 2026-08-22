@@ -71,7 +71,7 @@ export function FsaBanner({ className }: FsaBannerProps) {
 
   const openOptions = useCallback(async () => {
     try {
-      await openOptionsPage("downloads")
+      await openOptionsPage("storage")
     } catch (error) {
       logger.debug("[FsaBanner] Failed to open options (non-fatal):", error)
     }

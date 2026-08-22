@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "從 MangaDex、Pixiv Comic、少年 Jump+ 等網站批次下載漫畫章節。在 Chrome 側邊欄中排隊、重試並匯出 CBZ/ZIP 檔案。"
   },
+  "common_all": {
+    "message": "全部"
+  },
   "common_active": {
     "message": "進行中"
   },
@@ -503,14 +506,17 @@
   "options_general": {
     "message": "一般"
   },
+  "options_storage": {
+    "message": "儲存與檔案"
+  },
+  "options_network": {
+    "message": "網路與速度"
+  },
   "options_siteIntegrations": {
     "message": "網站整合"
   },
-  "options_downloads": {
-    "message": "下載"
-  },
-  "options_aboutDebug": {
-    "message": "關於 & 除錯"
+  "options_activity": {
+    "message": "活動與記錄"
   },
   "options_loadingSettings": {
     "message": "正在載入設定..."
@@ -856,7 +862,7 @@
     "message": "取消於"
   },
   "options_taskSummaryCompleted": {
-    "message": "✅ 已完成（$TOTAL$ 章）",
+    "message": "已完成（$TOTAL$ 章）",
     "placeholders": {
       "total": {
         "content": "$1"
@@ -867,7 +873,7 @@
     }
   },
   "options_taskSummaryFailed": {
-    "message": "❌ 已失敗（$COMPLETED$/$TOTAL$ 章已儲存）",
+    "message": "已失敗（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -878,7 +884,7 @@
     }
   },
   "options_taskSummaryCanceled": {
-    "message": "⚠ 已取消（$COMPLETED$/$TOTAL$ 章已儲存）",
+    "message": "已取消（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -908,7 +914,7 @@
     }
   },
   "options_taskSummaryPartial": {
-    "message": "⚠ 部分完成（$COMPLETED$/$TOTAL$ 章已儲存）",
+    "message": "部分完成（$COMPLETED$/$TOTAL$ 章已儲存）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1198,7 +1204,7 @@
     "message": "策略層級："
   },
   "options_overrideActive": {
-    "message": "✓ 覆蓋：活躍（此表單）"
+    "message": "自訂覆蓋：啟用"
   },
   "options_siteIntegrationDefault": {
     "message": "網站整合預設值"
@@ -1522,7 +1528,7 @@
     "message": "部分"
   },
   "options_taskCompleted": {
-    "message": "✅ 已完成（$TOTAL$ 章）",
+    "message": "已完成（$TOTAL$ 章）",
     "placeholders": {
       "total": {
         "content": "$1"
@@ -1530,7 +1536,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "❌ 失敗（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "失敗（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1541,7 +1547,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "⚠ 已取消（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "已取消（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1571,7 +1577,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "⚠ 部分完成（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "部分完成（已儲存 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"

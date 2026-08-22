@@ -254,7 +254,7 @@ export function SiteIntegrationCard({
           </div>
         </CardHeader>
 
-        <CollapsibleContent className="border-t border-border/60">
+        <CollapsibleContent className="border-t border-border/60 data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
           <CardContent className="flex flex-col gap-6 px-5 py-5">
             {/* Download Settings */}
             <div className="flex flex-col gap-3">

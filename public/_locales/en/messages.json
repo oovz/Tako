@@ -5,6 +5,9 @@
   "extDescription": {
     "message": "Batch-download manga from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP from the Side Panel."
   },
+  "common_all": {
+    "message": "All"
+  },
   "common_active": {
     "message": "active"
   },
@@ -503,14 +506,17 @@
   "options_general": {
     "message": "General"
   },
+  "options_storage": {
+    "message": "Storage & Files"
+  },
+  "options_network": {
+    "message": "Network & Speed"
+  },
   "options_siteIntegrations": {
     "message": "Site Integrations"
   },
-  "options_downloads": {
-    "message": "Downloads"
-  },
-  "options_aboutDebug": {
-    "message": "About & Debug"
+  "options_activity": {
+    "message": "Activity & History"
   },
   "options_loadingSettings": {
     "message": "Loading settings..."
@@ -856,7 +862,7 @@
     "message": "Canceled at"
   },
   "options_taskSummaryCompleted": {
-    "message": "✅ Completed ($TOTAL$ chapter$PLURAL$)",
+    "message": "Completed ($TOTAL$ chapter$PLURAL$)",
     "placeholders": {
       "total": {
         "content": "$1"
@@ -867,7 +873,7 @@
     }
   },
   "options_taskSummaryFailed": {
-    "message": "❌ Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -878,7 +884,7 @@
     }
   },
   "options_taskSummaryCanceled": {
-    "message": "⚠ Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -908,7 +914,7 @@
     }
   },
   "options_taskSummaryPartial": {
-    "message": "⚠ Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1198,7 +1204,7 @@
     "message": "Policy Hierarchy:"
   },
   "options_overrideActive": {
-    "message": "✓ Override: Active (this form)"
+    "message": "Custom override active"
   },
   "options_siteIntegrationDefault": {
     "message": "Site Integration Default"
@@ -1522,7 +1528,7 @@
     "message": "Partial"
   },
   "options_taskCompleted": {
-    "message": "✅ Completed ($TOTAL$ chapters)",
+    "message": "Completed ($TOTAL$ chapters)",
     "placeholders": {
       "total": {
         "content": "$1"
@@ -1530,7 +1536,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "❌ Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1541,7 +1547,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "⚠ Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1571,7 +1577,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "⚠ Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
     "placeholders": {
       "completed": {
         "content": "$1"

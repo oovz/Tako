@@ -1,10 +1,15 @@
-export type OptionsSection = "global" | "integrations" | "downloads" | "debug"
+export type OptionsSection =
+  "general" | "storage" | "network" | "integrations" | "activity"
 
 const SECTION_ALIASES: Record<string, OptionsSection> = {
-  global: "global",
+  general: "general",
+  storage: "storage",
+  network: "network",
   integrations: "integrations",
-  downloads: "downloads",
-  debug: "debug",
+  activity: "activity",
+  downloads: "activity",
+  debug: "network",
+  global: "general",
 }
 
 export function getInitialOptionsSection(search: string): OptionsSection {
@@ -12,13 +17,13 @@ export function getInitialOptionsSection(search: string): OptionsSection {
     const params = new URLSearchParams(search)
     const rawTab = params.get("tab")
     if (!rawTab) {
-      return "global"
+      return "general"
     }
 
     const normalized = rawTab.trim().toLowerCase()
-    return SECTION_ALIASES[normalized] ?? "global"
+    return SECTION_ALIASES[normalized] ?? "general"
   } catch {
-    return "global"
+    return "general"
   }
 }
 

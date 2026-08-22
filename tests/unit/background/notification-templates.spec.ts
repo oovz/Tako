@@ -135,7 +135,7 @@ describe("notification content templates", () => {
         new QueueRepository(new QueueProjectionService())
       )
 
-      const targetUrl = "chrome-extension://test/options.html?tab=downloads"
+      const targetUrl = "chrome-extension://test/options.html?tab=activity"
       expect(tabsUpdate).toHaveBeenCalledWith(12, {
         active: true,
         url: targetUrl,

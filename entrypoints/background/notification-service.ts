@@ -61,7 +61,7 @@ function getDestinationIssueMessage(kind: DestinationIssueKind): string {
 }
 
 async function openDownloadsOptionsPage(): Promise<void> {
-  const url = chrome.runtime.getURL("options.html?tab=downloads")
+  const url = chrome.runtime.getURL("options.html?tab=activity")
   const tabs = await chrome.tabs.query({
     url: chrome.runtime.getURL("options.html*"),
   })

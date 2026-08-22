@@ -33,19 +33,19 @@ describe("openOptionsPage", () => {
   it("sends OPEN_OPTIONS with the requested page target", async () => {
     sendMessage.mockResolvedValue({ success: true })
 
-    await expect(openOptionsPage("downloads")).resolves.toBeUndefined()
+    await expect(openOptionsPage("activity")).resolves.toBeUndefined()
 
     expect(sendMessage).toHaveBeenCalledWith({
       target: "background",
       type: "OPEN_OPTIONS",
-      payload: { page: "downloads" },
+      payload: { page: "activity" },
     })
   })
 
   it("throws when the background reports an options navigation failure", async () => {
     sendMessage.mockResolvedValue({ success: false, error: "boom" })
 
-    await expect(openOptionsPage("debug")).rejects.toThrow("boom")
+    await expect(openOptionsPage("storage")).rejects.toThrow("boom")
   })
 
   it("throws when no response is returned", async () => {
