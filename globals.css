@@ -101,7 +101,7 @@
   flex-direction: column;
 }
 
-/* Phase 2.1: Accessibility - Focus visible indicators (WCAG 2.4.7) */
+/* Accessible focus indicators for keyboard navigation */
 @layer base {
   /* Focus visible for all interactive elements */
   *:focus-visible {
@@ -127,7 +127,7 @@
   }
 }
 
-/* Phase 2.2: Screen reader only utility class */
+/* Screen reader-only utility class */
 @layer utilities {
   .sr-only {
     position: absolute;
