@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures/extension"
+import { redactDiagnosticText } from "../../src/runtime/diagnostic-redaction"
 import {
   getSessionState,
   getTabId,
@@ -26,7 +27,7 @@ async function waitForTabSeriesTitle(
 
   const finalState = await getSessionState(context, `tab_${tabId}`)
   throw new Error(
-    `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)})`
+    `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${redactDiagnosticText(finalState)})`
   )
 }
 
@@ -44,7 +45,7 @@ async function waitForTabStateCleared(
 
   const finalState = await getSessionState(context, `tab_${tabId}`)
   throw new Error(
-    `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`
+    `Timeout waiting for tab_${tabId} to clear (last state: ${redactDiagnosticText(finalState)})`
   )
 }
 

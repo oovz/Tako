@@ -50,7 +50,7 @@ test.describe("Queue cancel and restart behavior", () => {
 
     await expect(sp.locator("#root")).toBeVisible()
     await sp.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp.getByText("Cancel this download?")).toBeVisible()
+    await expect(sp.getByText("Cancel this Tako task?")).toBeVisible()
     await sp.getByRole("button", { name: "Yes" }).click()
 
     await waitForGlobalState(context, (state) => {
@@ -98,10 +98,10 @@ test.describe("Queue cancel and restart behavior", () => {
 
     await expect(sp.locator("#root")).toBeVisible()
     await sp.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp.getByText("Cancel this download?")).toBeVisible()
+    await expect(sp.getByText("Cancel this Tako task?")).toBeVisible()
 
     await sp.getByRole("button", { name: "No" }).click()
-    await expect(sp.getByText("Cancel this download?")).toHaveCount(0)
+    await expect(sp.getByText("Cancel this Tako task?")).toHaveCount(0)
 
     await waitForGlobalState(context, (state) => {
       const t = state.downloadQueue.find(

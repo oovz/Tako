@@ -25,8 +25,9 @@ export default defineConfig({
     // Chrome extensions are exercised in a persistent headed context. CI runs
     // this configuration through Xvfb.
     headless: false,
-    // Extension testing requires headed mode - configured in fixture
-    trace: "on-first-retry",
+    // Keep the initial failure evidence in local runs, where retries are off.
+    // This suite uses deterministic fixtures and blocks external requests.
+    trace: "retain-on-failure",
     // Prevent browser windows from grabbing focus during tests
     launchOptions: {
       args: [

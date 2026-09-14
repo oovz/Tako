@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
+import { runInNewContext } from "node:vm"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
-import { assertTaskSucceeded } from "@/tests/e2e/fixtures/download-workflow-helpers"
+import {
+  assertTaskSucceeded,
+  waitForBrowserDownloadArtifact,
+} from "@/tests/e2e/fixtures/download-workflow-helpers"
 
 function makeTask(
   overrides: Partial<DownloadTaskState> = {}
@@ -33,6 +37,24 @@ function makeTask(
 }
 
 describe("download workflow terminal assertions", () => {
+  it("reports Chrome interruption reasons across the serialized browser boundary", async () => {
+    const page = {
+      evaluate: (callback: (id: number) => unknown, id: number) =>
+        runInNewContext(`(${callback.toString()})(${id})`, {
+          chrome: {
+            downloads: {
+              search: async () => [
+                { state: "interrupted", error: "NETWORK_FAILED" },
+              ],
+            },
+          },
+        }),
+    }
+    await expect(
+      waitForBrowserDownloadArtifact(page as never, 42)
+    ).rejects.toThrow("Browser download interrupted: NETWORK_FAILED")
+  })
+
   it("accepts only fully completed output", () => {
     expect(() => assertTaskSucceeded(makeTask())).not.toThrow()
   })

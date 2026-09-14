@@ -86,12 +86,12 @@ test.describe("Options UI behavior", () => {
       .locator("xpath=ancestor::*[@aria-busy][1]")
 
     await activeTaskCard.getByRole("button", { name: "Cancel" }).click()
-    await expect(page.getByText("Cancel this download?")).toBeVisible()
+    await expect(page.getByText("Cancel this Tako task?")).toBeVisible()
     await page.getByRole("button", { name: "No" }).click()
-    await expect(page.getByText("Cancel this download?")).toHaveCount(0)
+    await expect(page.getByText("Cancel this Tako task?")).toHaveCount(0)
 
     await queuedTaskCard.getByRole("button", { name: "Cancel" }).click()
-    await expect(page.getByText("Cancel this download?")).toHaveCount(0)
+    await expect(page.getByText("Cancel this Tako task?")).toHaveCount(0)
 
     await expect
       .poll(async () => {

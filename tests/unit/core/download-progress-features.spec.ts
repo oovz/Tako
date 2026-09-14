@@ -3,7 +3,7 @@
  *
  * - Per-image progress display
  * - Open Folder button constraints
- * - Task audit trail storage
+ * - Chapter outcome storage
  */
 
 import { describe, it, expect } from "vitest"
@@ -84,8 +84,8 @@ describe("Open Folder button constraints", () => {
   })
 })
 
-describe("Task audit trail storage", () => {
-  it("uses chapters as the canonical task audit trail", () => {
+describe("Chapter outcome storage", () => {
+  it("uses chapters as the canonical outcome record", () => {
     const task = makeTask({
       id: "task-5",
       chapters: [
@@ -129,7 +129,7 @@ describe("Task audit trail storage", () => {
     expect(task.chapters[2]?.imagesFailed).toBe(2)
   })
 
-  it("does not require a separate chapterOutcomes task field", () => {
+  it("does not add a separate chapterOutcomes field", () => {
     const task = makeTask({
       id: "task-5b",
       chapters: [

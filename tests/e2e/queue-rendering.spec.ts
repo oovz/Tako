@@ -7,6 +7,7 @@ import {
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
+import { MANGADEX_UPLOADS_BASE_URL } from "./fixtures/mock-data/site-integrations/mangadex/image-fixtures"
 
 const exampleRootUrl = buildExampleUrl("/")
 
@@ -42,8 +43,7 @@ test.describe("Queue rendering", () => {
     await page.goto(exampleRootUrl, { waitUntil: "domcontentloaded" })
 
     const now = Date.now()
-    const coverUrl =
-      'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="18" viewBox="0 0 12 18"%3E%3Crect width="12" height="18" fill="%23111827"/%3E%3Crect x="2" y="2" width="8" height="14" fill="%2360a5fa"/%3E%3C/svg%3E'
+    const coverUrl = `${MANGADEX_UPLOADS_BASE_URL}/covers/covered-series/cover.png`
     const tasks: DownloadTaskState[] = [
       makeTask({
         id: "covered-task",
@@ -68,6 +68,7 @@ test.describe("Queue rendering", () => {
       timeout: 15000,
     })
     await expect(sp.locator("img")).toHaveAttribute("src", coverUrl)
+    await expect(sp.locator("img")).toHaveJSProperty("naturalWidth", 1)
   })
 
   test("renders global queue and header summary for active and queued tasks with recent history", async ({

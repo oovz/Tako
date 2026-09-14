@@ -24,8 +24,9 @@ export default defineConfig({
     // Live browser extraction needs the same headed extension context as the
     // deterministic suite. CI supplies Xvfb.
     headless: false,
-    // Extension testing requires headed mode - configured in fixture
-    trace: "on-first-retry",
+    // Playwright traces retain network URLs/headers outside our diagnostic
+    // redactor. Live runs use redacted failure diagnostics for CI output.
+    trace: "off",
     // Prevent browser windows from grabbing focus during tests
     launchOptions: {
       args: [

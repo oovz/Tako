@@ -111,7 +111,7 @@ test.describe("Queue actions and cross-window behavior", () => {
     await expect(sp2.getByText(/0\s*queued/)).toBeVisible()
 
     await sp1.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp1.getByText("Cancel this download?")).toBeVisible()
+    await expect(sp1.getByText("Cancel this Tako task?")).toBeVisible()
     await sp1.getByRole("button", { name: "Yes" }).click()
 
     await waitForGlobalState(context, (state) => {
@@ -208,7 +208,7 @@ test.describe("Queue actions and cross-window behavior", () => {
 
       const now = Date.now()
       // Create 10 non-terminal tasks (1 active + 9 queued) to verify the queue no longer enforces
-      // the historical 5-task capacity limit while avoiding auto-resume of synthetic queued tasks.
+      // the 5-task capacity limit while avoiding auto-resume of synthetic queued tasks.
       const tasks: DownloadTaskState[] = Array.from({ length: 10 }, (_, i) =>
         makeTask({
           id: `task-${i}`,

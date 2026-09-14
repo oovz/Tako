@@ -206,20 +206,39 @@ test.describe("Side Panel chapter/volume order", () => {
     await expect(panel).toHaveAttribute("aria-hidden", "false")
     await expectComplementaryLayoutTransitions()
 
+    // Capture transition-start state in the browser's mutation microtask;
+    // remote assertions may arrive after the 280ms closing transition ends.
+    await panel.evaluate((element) => {
+      const observer = new MutationObserver(() => {
+        if (element.getAttribute("data-state") !== "closed") return
+        element.setAttribute(
+          "data-closing-snapshot",
+          JSON.stringify({
+            state: element.getAttribute("data-state"),
+            ariaHidden: element.getAttribute("aria-hidden"),
+            inert: element.hasAttribute("inert"),
+            children: element.childElementCount,
+          })
+        )
+        observer.disconnect()
+      })
+      observer.observe(element, {
+        attributes: true,
+        attributeFilter: ["data-state"],
+      })
+    })
     await selectionToggle.click()
     await expect(panel).toHaveAttribute("data-state", "closed")
-    const closingState = await panel.evaluate((element) => ({
-      state: element.getAttribute("data-state"),
-      ariaHidden: element.getAttribute("aria-hidden"),
-      inert: element.hasAttribute("inert"),
-    }))
+    const closingState = await panel.evaluate((element) =>
+      JSON.parse(element.getAttribute("data-closing-snapshot")!)
+    )
     expect(closingState).toEqual({
       state: "closed",
       ariaHidden: "true",
       inert: true,
+      children: 1,
     })
     await expectComplementaryLayoutTransitions()
-    expect(await panel.evaluate((element) => element.childElementCount)).toBe(1)
     await expect(panel).toBeHidden()
     await selectionRegion.evaluate((element) => {
       element.dispatchEvent(
@@ -681,12 +700,12 @@ test.describe("Side Panel chapter/volume order", () => {
     const sp = await openSidepanelHarness(context, extensionId, page)
     const pageErrors: string[] = []
     const consoleErrors: string[] = []
-    sp.on("pageerror", (error) => {
-      pageErrors.push(error.message)
+    sp.on("pageerror", () => {
+      pageErrors.push("Uncaught sidepanel error")
     })
     sp.on("console", (message) => {
       if (message.type() === "error") {
-        consoleErrors.push(message.text())
+        consoleErrors.push("Sidepanel console error")
       }
     })
 
