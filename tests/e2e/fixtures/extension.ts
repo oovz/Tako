@@ -27,6 +27,12 @@ import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integra
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
+import {
+  redactDiagnostic,
+  redactDiagnosticText,
+} from "../../../src/runtime/diagnostic-redaction"
+
+import { installContextDiagnostics } from "./diagnostics"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
@@ -55,58 +61,6 @@ type CoverageTargetKind = "page" | "worker"
 
 const collectedCoverageTargets = new WeakSet<object>()
 const coverageCloseHooks = new WeakSet<Page>()
-
-/**
- * Install opt-in diagnostics at the context boundary so existing and future
- * extension pages, target-site pages, and worker contexts are observed for the
- * lifetime of the E2E fixture.
- */
-function installE2EDiagnostics(context: BrowserContext): void {
-  if (!collectDiagnostics) return
-
-  context.on("console", (message) => {
-    const page = message.page()
-    if (page) {
-      console.log(
-        "[browser console]",
-        page.url(),
-        message.type(),
-        message.text()
-      )
-      return
-    }
-    console.log("[worker console]", message.type(), message.text())
-  })
-  context.on("weberror", (webError) => {
-    console.log(
-      "[browser error]",
-      webError.page()?.url() ?? "<unknown page>",
-      webError.error().message
-    )
-  })
-  context.on("request", (request) => {
-    if (request.url().startsWith("chrome-extension://")) return
-    console.log(
-      "[browser request]",
-      request.method(),
-      request.url(),
-      "resourceType=",
-      request.resourceType()
-    )
-  })
-  context.on("response", (response) => {
-    if (response.ok() && response.url().startsWith("chrome-extension://"))
-      return
-    console.log("[browser response]", response.status(), response.url())
-  })
-  context.on("requestfailed", (request) => {
-    console.log(
-      "[browser requestfailed]",
-      request.url(),
-      request.failure()?.errorText
-    )
-  })
-}
 
 async function writeCoverage(
   coverage: unknown,
@@ -215,7 +169,7 @@ async function isOurBackgroundWorker(sw: Worker): Promise<boolean> {
   }
 }
 
-async function resolveBackgroundWorker(
+export async function resolveBackgroundWorker(
   context: BrowserContext
 ): Promise<Worker> {
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -238,7 +192,11 @@ async function resolveBackgroundWorker(
 
   const seenWorkerUrls = context.serviceWorkers().map((sw) => sw.url())
   throw new Error(
-    `Failed to locate ${BACKGROUND_WORKER_NAME} service worker. Seen workers: ${JSON.stringify(seenWorkerUrls)}`
+    redactDiagnosticText({
+      event: "background-worker-not-found",
+      expectedName: BACKGROUND_WORKER_NAME,
+      seenWorkerUrls,
+    })
   )
 }
 
@@ -286,7 +244,10 @@ async function initializeDeterministicMockProfile(
         }
 
         throw new Error(
-          `Deterministic E2E background initialization failed: ${JSON.stringify(response)}`
+          redactDiagnosticText({
+            message: "Deterministic E2E background initialization failed",
+            response,
+          })
         )
       } catch (error) {
         lastError = error
@@ -354,7 +315,10 @@ export async function teardownExtensionResources(
       await clearDnrRedirectRules(backgroundWorker)
     } catch (error) {
       errors.push(error as Error)
-      console.warn("[extension.fixture] failed to clear DNR test rules:", error)
+      console.warn(
+        "[extension.fixture] failed to clear DNR test rules:",
+        redactDiagnostic(error)
+      )
     }
   }
 
@@ -366,14 +330,17 @@ export async function teardownExtensionResources(
       errors.push(error as Error)
       console.warn(
         "[extension.fixture] failed to collect extension coverage:",
-        error
+        redactDiagnostic(error)
       )
     }
     try {
       await context.close()
     } catch (error) {
       errors.push(error as Error)
-      console.warn("[extension.fixture] failed to close context:", error)
+      console.warn(
+        "[extension.fixture] failed to close context:",
+        redactDiagnostic(error)
+      )
     }
   }
 
@@ -382,7 +349,10 @@ export async function teardownExtensionResources(
       await localMockServer.close()
     } catch (error) {
       errors.push(error as Error)
-      console.warn("[extension.fixture] failed to close mock server:", error)
+      console.warn(
+        "[extension.fixture] failed to close mock server:",
+        redactDiagnostic(error)
+      )
     }
   }
 
@@ -390,12 +360,19 @@ export async function teardownExtensionResources(
     await fs.rm(userDataDir, { recursive: true, force: true })
   } catch (error) {
     errors.push(error as Error)
-    console.warn("[extension.fixture] failed to remove userDataDir:", error)
+    console.warn(
+      "[extension.fixture] failed to remove userDataDir:",
+      redactDiagnostic(error)
+    )
   }
 
   if (errors.length > 0) {
     throw new Error(
-      `Teardown failed with ${errors.length} errors: ${errors.map((error) => error.message).join(", ")}`
+      redactDiagnosticText({
+        message: "Teardown failed",
+        errorCount: errors.length,
+        errors,
+      })
     )
   }
 }
@@ -463,7 +440,7 @@ async function setupExtensionContext(
       ],
     })
     contextForCleanup = context
-    installE2EDiagnostics(context)
+    if (collectDiagnostics) installContextDiagnostics(context)
     installCoverageHooks(context)
 
     if (!shouldUseMockRoutes && !shouldAllowNetwork) {

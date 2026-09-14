@@ -1,6 +1,10 @@
 // Lightweight structured logger for browser contexts
 // Simplified: uses only logLevel (no separate debugMode flag)
 import type { AdvancedSettings } from "@/src/domain/settings/types"
+import {
+  redactDiagnostic,
+  redactDiagnosticText,
+} from "@/src/runtime/diagnostic-redaction"
 
 type LogLevel = "debug" | "info" | "warn" | "error"
 
@@ -35,8 +39,9 @@ let hasAppliedPersistedSettings = false
 let pendingDebugEntries: BufferedDebugEntry[] = []
 
 function writeToConsole(level: LogLevel, msg: string, data?: unknown): void {
-  const prefix = `[TMD] ${msg}`
-  const payload = data !== undefined ? [prefix, data] : [prefix]
+  const prefix = `[TMD] ${redactDiagnosticText(msg)}`
+  const payload =
+    data !== undefined ? [prefix, redactDiagnostic(data)] : [prefix]
   switch (level) {
     case "debug":
       console.debug(...payload)
@@ -57,7 +62,11 @@ function appendPendingDebugEntry(msg: string, data: unknown): void {
   if (pendingDebugEntries.length >= MAX_PENDING_DEBUG_ENTRIES) {
     pendingDebugEntries.shift()
   }
-  pendingDebugEntries.push({ msg, data, capturedAt: performance.now() })
+  pendingDebugEntries.push({
+    msg: redactDiagnosticText(msg),
+    data: redactDiagnostic(data),
+    capturedAt: performance.now(),
+  })
 }
 
 function addBufferedTiming(

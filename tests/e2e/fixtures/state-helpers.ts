@@ -19,6 +19,8 @@ import type { DownloadedChapterRecord } from "../../../src/domain/history/types"
 import type { ExtensionSettings } from "../../../src/domain/settings/types"
 import type { MangaPageState } from "../../../src/types/tab-state"
 import type { ResolvedTabReadyContext } from "../../../src/types/resolved-tab-context"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
+import { DEFAULT_FETCH_TIMEOUT_MS } from "../../../src/constants/timeouts"
 import { MANGADEX_GENERIC_SERIES_URL } from "./test-domains-constants"
 
 type TabContextSeedPayload = Omit<
@@ -75,7 +77,10 @@ async function getServiceWorker(
 
   const seenWorkerUrls = context.serviceWorkers().map((sw) => sw.url())
   throw new Error(
-    `Service worker not found - extension may not be loaded. Seen workers: ${JSON.stringify(seenWorkerUrls)}`
+    redactDiagnosticText({
+      message: "Service worker not found",
+      seenWorkerUrls,
+    })
   )
 }
 
@@ -261,8 +266,8 @@ export async function seedTabContext(
     await page.bringToFront()
     await expect
       .poll(
-        () =>
-          senderPage.evaluate(
+        async () => {
+          const ready = await senderPage.evaluate(
             async ({ targetTabId, expectedUrl }) => {
               const tab = await chrome.tabs.get(targetTabId)
               return (
@@ -272,7 +277,16 @@ export async function seedTabContext(
               )
             },
             { targetTabId: tabId, expectedUrl: navigateToUrl }
-          ),
+          )
+          if (!ready) {
+            // Other headed workers can briefly take OS focus after the first
+            // activation request. Reassert focus only for that observed
+            // state; the seed listener still performs its own active-tab
+            // validation before committing.
+            await focusTab(context, tabId)
+          }
+          return ready
+        },
         { timeout: 15_000, intervals: [100] }
       )
       .toBe(true)
@@ -294,25 +308,59 @@ export async function seedTabContext(
     )
     if (!response?.success) {
       throw new Error(
-        response?.error ??
-          "E2E tab context seed adapter is unavailable; verify the mocked E2E build flag"
+        redactDiagnosticText(
+          response?.error ??
+            "E2E tab context seed adapter is unavailable; verify the mocked E2E build flag"
+        )
       )
     }
   } finally {
     await senderPage.close()
   }
 
-  await focusTab(context, tabId)
-  await page.bringToFront()
-  await expect
-    .poll(
-      async () =>
-        isExpectedState(
-          await getSessionState<MangaPageState>(context, `tab_${tabId}`)
-        ),
-      { timeout: 15_000, intervals: [100] }
+  // Closing the sender page restores focus to the bound source tab. Do not
+  // activate it again: a redundant focus operation can start the normal
+  // resolver after the authoritative E2E seed and race its projection.
+  try {
+    await expect
+      .poll(
+        async () =>
+          isExpectedState(
+            await getSessionState<MangaPageState>(context, `tab_${tabId}`)
+          ),
+        { timeout: 15_000, intervals: [100] }
+      )
+      .toBe(true)
+  } catch (error) {
+    const worker = context
+      .serviceWorkers()
+      .find((candidate) => candidate.url().startsWith("chrome-extension://"))
+    const diagnostics = worker
+      ? await worker
+          .evaluate(async (targetTabId) => {
+            const [tab, activeContext] = await Promise.all([
+              chrome.tabs.get(targetTabId).catch(() => null),
+              chrome.storage.session.get("activeTabContextByWindow"),
+            ])
+            return { tab, activeContext }
+          }, tabId)
+          .catch(() => null)
+      : null
+    throw new Error(
+      redactDiagnosticText({
+        message: "E2E seeded tab context did not converge",
+        tabId,
+        expectedSiteId,
+        expectedSeriesId,
+        expectedSeriesTitle,
+        expectedChapterIds,
+        observedState: await getSessionState(context, `tab_${tabId}`),
+        diagnostics,
+        failure: error,
+      }),
+      { cause: error }
     )
-    .toBe(true)
+  }
 
   return tabId
 }
@@ -544,8 +592,10 @@ export async function seedDownloadQueueStateInContext(
 
       if (!response?.success) {
         throw new Error(
-          response?.error ??
-            "E2E queue seed adapter is unavailable; verify the mocked E2E build flag"
+          redactDiagnosticText(
+            response?.error ??
+              "E2E queue seed adapter is unavailable; verify the mocked E2E build flag"
+          )
         )
       }
 
@@ -806,116 +856,115 @@ export async function getTabId(
 
   // Wait until chrome.tabs.query is available in the worker, then query for this page's tab by URL
   let chromeTabId: number | undefined
-  try {
-    await expect
-      .poll(
-        async () => {
-          const tabsAvailable = await worker
-            .evaluate(
-              () =>
-                !!(chrome as any)?.tabs &&
-                typeof (chrome as any).tabs.query === "function"
-            )
-            .catch(() => false)
-          if (!tabsAvailable) {
-            return false
-          }
-          const targetUrl = pageUrl
-          chromeTabId = await worker
-            .evaluate(async (u: string | undefined) => {
-              const tabs = await chrome.tabs.query({})
-              const wins = await chrome.windows.getAll({
-                populate: true,
-                windowTypes: ["normal"],
-              })
-              const lastFocused = wins.find((w) => w.focused) || wins[0]
-              const active = lastFocused?.tabs?.find((t) => t.active)
+  await expect
+    .poll(
+      async () => {
+        const tabsAvailable = await worker
+          .evaluate(
+            () =>
+              !!(chrome as any)?.tabs &&
+              typeof (chrome as any).tabs.query === "function"
+          )
+          .catch(() => false)
+        if (!tabsAvailable) {
+          return false
+        }
+        const targetUrl = pageUrl
+        chromeTabId = await worker
+          .evaluate(async (u: string | undefined) => {
+            const tabs = await chrome.tabs.query({})
+            const wins = await chrome.windows.getAll({
+              populate: true,
+              windowTypes: ["normal"],
+            })
+            const lastFocused = wins.find((w) => w.focused) || wins[0]
+            const active = lastFocused?.tabs?.find((t) => t.active)
 
-              const normalizeUrl = (
-                value: string | undefined
-              ): string | undefined => {
-                if (!value) {
-                  return undefined
-                }
-
-                try {
-                  const parsed = new URL(value)
-                  parsed.hash = ""
-                  parsed.search = ""
-                  parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/"
-                  return parsed.toString()
-                } catch {
-                  return value
-                }
-              }
-
-              const normalizedTarget = normalizeUrl(u)
-
-              if (
-                active &&
-                typeof active.id === "number" &&
-                (!u || active.url === u)
-              ) {
-                return active.id
-              }
-
-              if (u) {
-                const matches = tabs.filter((t) => t.url === u)
-                if (
-                  matches.length === 1 &&
-                  typeof matches[0]?.id === "number"
-                ) {
-                  return matches[0].id
-                }
-
-                const activeMatch = matches.find(
-                  (t) => t.active && typeof t.id === "number"
-                )
-                if (activeMatch && typeof activeMatch.id === "number") {
-                  return activeMatch.id
-                }
-
-                if (normalizedTarget) {
-                  const normalizedMatches = tabs.filter(
-                    (tab) => normalizeUrl(tab.url) === normalizedTarget
-                  )
-                  if (
-                    normalizedMatches.length === 1 &&
-                    typeof normalizedMatches[0]?.id === "number"
-                  ) {
-                    return normalizedMatches[0].id
-                  }
-
-                  const normalizedActiveMatch = normalizedMatches.find(
-                    (tab) => tab.active && typeof tab.id === "number"
-                  )
-                  if (
-                    normalizedActiveMatch &&
-                    typeof normalizedActiveMatch.id === "number"
-                  ) {
-                    return normalizedActiveMatch.id
-                  }
-                }
-
+            const normalizeUrl = (
+              value: string | undefined
+            ): string | undefined => {
+              if (!value) {
                 return undefined
               }
 
-              // Fallback: choose the active tab in the last focused normal window
-              return (
-                (active?.id as number | undefined) ??
-                (tabs[0]?.id as number | undefined)
-              )
-            }, targetUrl)
-            .catch(() => undefined)
+              try {
+                const parsed = new URL(value)
+                parsed.hash = ""
+                parsed.search = ""
+                parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/"
+                return parsed.toString()
+              } catch {
+                return value
+              }
+            }
 
-          return !!chromeTabId
-        },
-        { timeout: 2000, intervals: [100] }
-      )
-      .toBe(true)
-  } catch {
-    // fall through; chromeTabId may still be undefined below
-  }
+            const normalizedTarget = normalizeUrl(u)
+
+            if (
+              active &&
+              typeof active.id === "number" &&
+              (!u || active.url === u)
+            ) {
+              return active.id
+            }
+
+            if (u) {
+              const matches = tabs.filter((t) => t.url === u)
+              if (matches.length === 1 && typeof matches[0]?.id === "number") {
+                return matches[0].id
+              }
+
+              const activeMatch = matches.find(
+                (t) => t.active && typeof t.id === "number"
+              )
+              if (activeMatch && typeof activeMatch.id === "number") {
+                return activeMatch.id
+              }
+
+              if (normalizedTarget) {
+                const normalizedMatches = tabs.filter(
+                  (tab) => normalizeUrl(tab.url) === normalizedTarget
+                )
+                if (
+                  normalizedMatches.length === 1 &&
+                  typeof normalizedMatches[0]?.id === "number"
+                ) {
+                  return normalizedMatches[0].id
+                }
+
+                const normalizedActiveMatch = normalizedMatches.find(
+                  (tab) => tab.active && typeof tab.id === "number"
+                )
+                if (
+                  normalizedActiveMatch &&
+                  typeof normalizedActiveMatch.id === "number"
+                ) {
+                  return normalizedActiveMatch.id
+                }
+              }
+
+              return undefined
+            }
+
+            // Fallback: choose the active tab in the last focused normal window
+            return (
+              (active?.id as number | undefined) ??
+              (tabs[0]?.id as number | undefined)
+            )
+          }, targetUrl)
+          .catch(() => undefined)
+
+        return !!chromeTabId
+      },
+      // A recorded eight-worker Chrome query took 2.075s. Use the same
+      // bounded 15s admission window as the surrounding context helpers.
+      {
+        timeout: 15_000,
+        intervals: [100],
+        message: `Chrome tab lookup for ${redactDiagnosticText(pageUrl)}`,
+      }
+    )
+    .toBe(true)
 
   if (!chromeTabId) {
     throw new Error("Tab ID is undefined")
@@ -1101,7 +1150,10 @@ export async function waitForTabSeriesTitle(
   expectedTitle: string,
   options: { timeout?: number } = {}
 ): Promise<void> {
-  const timeout = options.timeout ?? 15000
+  // Provider resolution has a 30s production deadline. Keep this observable
+  // assertion just above that boundary so worker contention cannot turn a
+  // slow but valid resolution into a fixture-only failure.
+  const timeout = options.timeout ?? DEFAULT_FETCH_TIMEOUT_MS + 5_000
 
   try {
     await expect
@@ -1138,7 +1190,14 @@ export async function waitForTabSeriesTitle(
           .catch(() => null)
       : null
     throw new Error(
-      `Timeout waiting for tab_${tabId}.seriesTitle == "${expectedTitle}" (last state: ${JSON.stringify(finalState)}, resolution error: ${JSON.stringify(resolutionError)}, worker diagnostics: ${JSON.stringify(workerDiagnostics)})`
+      redactDiagnosticText({
+        message: "Timeout waiting for series title",
+        tabId,
+        expectedTitle,
+        finalState,
+        resolutionError,
+        workerDiagnostics,
+      })
     )
   }
 }
@@ -1167,7 +1226,11 @@ export async function waitForTabStateCleared(
   } catch {
     const finalState = await getSessionState(context, `tab_${tabId}`)
     throw new Error(
-      `Timeout waiting for tab_${tabId} to clear (last state: ${JSON.stringify(finalState)})`
+      redactDiagnosticText({
+        message: "Timeout waiting for tab state to clear",
+        tabId,
+        finalState,
+      })
     )
   }
 }
@@ -1208,14 +1271,13 @@ export async function waitForGlobalState(
     // expect.poll's `message` option is evaluated at call time (before any
     // polling), so we rethrow here with the actual final lastState/lastError
     // to preserve the diagnostic quality of the original while-loop error.
-    const errorDetail =
-      lastError instanceof Error
-        ? lastError.message
-        : lastError
-          ? String(lastError)
-          : undefined
     throw new Error(
-      `Timeout waiting for global state condition after ${timeout}ms. Last state: ${JSON.stringify(lastState)}${errorDetail ? `. Last error: ${errorDetail}` : ""}`
+      redactDiagnosticText({
+        message: "Timeout waiting for global state condition",
+        timeoutMs: timeout,
+        lastState,
+        lastError,
+      })
     )
   }
 

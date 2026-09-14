@@ -26,6 +26,7 @@ import type { BrowserContext, Page } from "@playwright/test"
 import { expect } from "@playwright/test"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
 import {
   focusTab,
   type QueueTestState,
@@ -166,7 +167,7 @@ export async function listSeededDirectoryFiles(
 /**
  * Read a file from a seeded OPFS directory. This is intentionally limited to
  * test fixtures so download-workflow specs can validate archive contents
- * rather than treating a non-empty output file as proof of a correct result.
+ * rather than treating a non-empty output file alone as a correct result.
  */
 export async function readSeededDirectoryFile(
   optionsPage: Page,
@@ -493,9 +494,10 @@ export async function startSingleChapterDownload(
       { chapter: input.chapter, snapshotIdentity }
     )
 
-    expect(response?.success, response?.error ?? JSON.stringify(response)).toBe(
-      true
-    )
+    expect(
+      response?.success,
+      redactDiagnosticText(response?.error ?? response)
+    ).toBe(true)
     expect(typeof response?.taskId).toBe("string")
     return response.taskId as string
   } finally {
@@ -563,21 +565,22 @@ export function assertTaskSucceeded(task: DownloadTaskState): void {
   }
 
   throw new Error(
-    `Download task ${task.id} finished with status ${task.status}: ${JSON.stringify(
-      {
-        errorMessage: task.errorMessage,
-        errorCategory: task.errorCategory,
-        chapters: task.chapters.map((chapter) => ({
-          id: chapter.id,
-          status: chapter.status,
-          errorMessage: chapter.errorMessage,
-          imagesFailed: chapter.imagesFailed,
-          totalImages: chapter.totalImages,
-          outputs: chapter.outputs,
-          title: chapter.title,
-        })),
-      }
-    )}`
+    redactDiagnosticText({
+      event: "task-finished",
+      taskId: task.id,
+      status: task.status,
+      errorMessage: task.errorMessage,
+      errorCategory: task.errorCategory,
+      chapters: task.chapters.map((chapter) => ({
+        id: chapter.id,
+        status: chapter.status,
+        errorMessage: chapter.errorMessage,
+        imagesFailed: chapter.imagesFailed,
+        totalImages: chapter.totalImages,
+        outputs: chapter.outputs,
+        title: chapter.title,
+      })),
+    })
   )
 }
 

@@ -24,6 +24,8 @@
  */
 
 import http from "node:http"
+import { randomInt } from "node:crypto"
+import { redactDiagnostic } from "../../../src/runtime/diagnostic-redaction"
 import type { AddressInfo } from "node:net"
 
 /**
@@ -187,7 +189,11 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
       const url = new URL(req.url ?? "/", "http://127.0.0.1")
 
       if (process.env.TMD_TEST_E2E_DIAG === "true") {
-        console.log("[local-mock-server]", req.method, url.pathname)
+        console.log(
+          "[local-mock-server]",
+          req.method,
+          redactDiagnostic(url.pathname)
+        )
       }
 
       // Answer CORS preflight without invoking handlers — the browser
@@ -239,7 +245,10 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
       res.end(buffer)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error("[local-mock-server] handler threw:", error)
+      console.error(
+        "[local-mock-server] handler threw:",
+        redactDiagnostic(error)
+      )
       if (!res.headersSent) {
         res.writeHead(500, {
           "content-type": "text/plain; charset=utf-8",
@@ -250,14 +259,36 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
     }
   })
 
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => reject(error)
-    server.once("error", onError)
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", onError)
-      resolve()
-    })
-  })
+  // Windows can assign listen(0) a Fetch-blocked port (observed: 6667).
+  // Claim the actual HTTP socket in the dynamic/private range, above the
+  // browser's restricted ports. A probe-and-close port finder would race
+  // parallel workers between discovery and this bind.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => {
+          server.off("listening", onListening)
+          reject(error)
+        }
+        const onListening = () => {
+          server.off("error", onError)
+          resolve()
+        }
+        server.once("error", onError)
+        server.once("listening", onListening)
+        server.listen(randomInt(49152, 65536), "127.0.0.1")
+      })
+      break
+    } catch (error) {
+      if (
+        attempt === 19 ||
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        (error.code !== "EADDRINUSE" && error.code !== "EACCES")
+      )
+        throw error
+    }
+  }
 
   const addressInfo = server.address() as AddressInfo | null
   if (!addressInfo || typeof addressInfo === "string") {
