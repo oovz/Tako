@@ -80,10 +80,7 @@ export function useDownloadsTabState() {
     ): void => {
       if (
         areaName !== "local" ||
-        ![
-          LOCAL_STORAGE_KEYS.downloadQueue,
-          LOCAL_STORAGE_KEYS.destinationIssues,
-        ].some((key) => key in changes)
+        ![LOCAL_STORAGE_KEYS.downloadQueue].some((key) => key in changes)
       ) {
         return
       }

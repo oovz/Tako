@@ -3,8 +3,11 @@ import { describe, expect, it, vi } from "vitest"
 import {
   OptionsConfigurationService,
   type OptionsConfigurationServiceDependencies,
-  type OptionsConfigurationSnapshot,
 } from "@/entrypoints/background/options-configuration-service"
+import {
+  OptionsConfigurationRepository,
+  type OptionsConfigurationSnapshot,
+} from "@/src/storage/options-configuration-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { SETTINGS_STORAGE_KEY } from "@/src/storage/settings-repository"
 import { SITE_OVERRIDES_STORAGE_KEY } from "@/src/storage/site-overrides-service"
@@ -24,15 +27,19 @@ function configuration(
 }
 
 function createDependencies(
-  storage: OptionsConfigurationServiceDependencies["storage"],
+  storage: ConstructorParameters<typeof OptionsConfigurationRepository>[0],
   calls: string[] = []
 ): OptionsConfigurationServiceDependencies {
+  const settingsRepository = {
+    getSettings: vi.fn(async () => structuredClone(DEFAULT_SETTINGS)),
+    acceptExternalDocument: vi.fn(() => calls.push("settings-cache")),
+  }
   return {
-    storage,
-    settingsRepository: {
-      getSettings: vi.fn(async () => structuredClone(DEFAULT_SETTINGS)),
-      acceptExternalDocument: vi.fn(() => calls.push("settings-cache")),
-    },
+    configurationRepository: new OptionsConfigurationRepository(
+      storage,
+      settingsRepository
+    ),
+    settingsRepository,
     historyRepository: {
       getStorageStats: vi.fn(async () => ({
         totalChapters: 2,
@@ -117,6 +124,53 @@ describe("OptionsConfigurationService", () => {
     await expect(reading).resolves.toEqual(next)
     expect(storage.get).toHaveBeenCalledTimes(1)
     expect(storage.set).toHaveBeenCalledTimes(1)
+  })
+
+  it("detaches a queued save from caller mutation", async () => {
+    const initial = storedConfiguration()
+    const first = configuration({
+      overrides: { mangadex: { pathTemplate: "First" } },
+    })
+    const second = configuration({
+      overrides: { mangadex: { pathTemplate: "Second" } },
+    })
+    let releaseFirst!: () => void
+    let firstSetStarted!: () => void
+    const firstSetGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const firstSetReady = new Promise<void>((resolve) => {
+      firstSetStarted = resolve
+    })
+    let setCount = 0
+    const storage = {
+      get: vi.fn(async () => structuredClone(initial)),
+      set: vi.fn(async () => {
+        setCount += 1
+        if (setCount === 1) {
+          firstSetStarted()
+          await firstSetGate
+        }
+      }),
+    }
+    const service = new OptionsConfigurationService(createDependencies(storage))
+
+    const firstSave = service.saveConfiguration(first)
+    await firstSetReady
+    const secondSave = service.saveConfiguration(second)
+    second.overrides.mangadex!.pathTemplate = "Mutated after enqueue"
+    releaseFirst()
+
+    await firstSave
+    await expect(secondSave).resolves.toMatchObject({
+      overrides: { mangadex: { pathTemplate: "Second" } },
+    })
+    expect(storage.set).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        [SITE_OVERRIDES_STORAGE_KEY]: { mangadex: { pathTemplate: "Second" } },
+      })
+    )
   })
 
   it("performs one exact four-key durable write before publication", async () => {

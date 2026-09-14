@@ -1,8 +1,5 @@
 import { z } from "zod"
-import type {
-  DestinationIssue,
-  DestinationIssueKind,
-} from "@/src/domain/queue/state"
+import type { DestinationIssueKind } from "@/src/domain/queue/state"
 
 const DESTINATION_ISSUE_KINDS = [
   "fsa_permission_required",
@@ -20,18 +17,6 @@ export const DestinationIssueSchema = z.strictObject({
   occurredAt: z.number().finite().nonnegative(),
   acknowledgedAt: z.number().finite().nonnegative().optional(),
 })
-
-export const DestinationIssuesSchema = z.array(DestinationIssueSchema)
-
-/**
- * Parse the current durable destination issue document. An absent key denotes
- * an empty issue list; a present malformed value is a durable-state failure.
- */
-export function parseDestinationIssues(raw: unknown): DestinationIssue[] {
-  if (raw === undefined) return []
-  const parsed = DestinationIssuesSchema.parse(raw)
-  return structuredClone(parsed)
-}
 
 export function getDestinationIssueMessageKey(
   kind: DestinationIssueKind

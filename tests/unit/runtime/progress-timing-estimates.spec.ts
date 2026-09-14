@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ProgressTimingEstimator,
   progressTimingEstimateKey,
-} from "@/src/runtime/progress-timing-estimates"
+} from "@/src/storage/progress-timing-estimates-repository"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
 const context = {

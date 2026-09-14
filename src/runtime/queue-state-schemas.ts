@@ -11,7 +11,11 @@ import {
 } from "@/src/shared/download-contract"
 import { RATE_POLICY_LIMITS } from "@/src/shared/rate-policy-limits"
 import { SETTINGS_LIMITS } from "@/src/domain/settings/schema"
-import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
+import {
+  PublicHttpsUrlSchema,
+  SeriesMetadataSnapshotSchema,
+} from "@/src/runtime/series-data-schemas"
+import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
 
 const finiteNumber = z.number().finite()
 const nonnegativeInteger = z.number().int().nonnegative()
@@ -73,6 +77,10 @@ const taskSettingsSnapshotSchema = z
   })
   .strict()
 
+const epoch2TaskSettingsSnapshotSchema = taskSettingsSnapshotSchema.extend({
+  comicInfo: z.record(z.string(), z.unknown()).optional(),
+})
+
 const outputAccountingSchema = z
   .object({
     requested: nonnegativeInteger,
@@ -126,54 +134,105 @@ const taskChapterSchema = z
   })
   .strict()
 
-export const DownloadTaskStateSchema = z
-  .object({
-    id: nonemptyString,
-    siteIntegrationId: nonemptyString,
-    mangaId: nonemptyString,
-    seriesTitle: z.string(),
-    seriesCoverUrl: z.string().optional(),
-    chapters: z.array(taskChapterSchema),
-    status: DownloadTaskStatusSchema,
-    errorMessage: z.string().optional(),
-    errorCategory: DownloadErrorCategorySchema.optional(),
-    activeBlock: z
-      .enum([
-        "destination_action_required",
-        "provider_network_policy_pending",
-        "provider_network_policy_action_required",
-        "native_output_action_required",
-      ])
-      .optional(),
-    destinationOverride: z.literal("downloads-api").optional(),
-    created: finiteNumber,
-    started: finiteNumber.optional(),
-    completed: finiteNumber.optional(),
-    isRetried: z.boolean().optional(),
-    isRetryTask: z.boolean().optional(),
-    lastSuccessfulDownloadId: nonnegativeInteger.optional(),
-    nextChapterDispatchAt: finiteNumber.optional(),
-    destinationBlockRevision: nonnegativeInteger.optional(),
-    destinationResume: z
-      .strictObject({
-        commandId: nonemptyString,
-        blockRevision: nonnegativeInteger,
-      })
-      .optional(),
-    activeCancel: z
-      .strictObject({
-        commandId: nonemptyString,
-      })
-      .optional(),
-    restoredUndo: z
-      .strictObject({
-        token: nonemptyString,
-        type: z.enum(["cancel_queued", "remove_history"]),
-      })
-      .optional(),
-    settingsSnapshot: taskSettingsSnapshotSchema,
-  })
+const downloadTaskStateShape = {
+  id: nonemptyString,
+  siteIntegrationId: nonemptyString,
+  mangaId: nonemptyString,
+  seriesTitle: z.string(),
+  seriesCoverUrl: PublicHttpsUrlSchema.optional(),
+  chapters: z.array(taskChapterSchema),
+  status: DownloadTaskStatusSchema,
+  errorMessage: z.string().optional(),
+  errorCategory: DownloadErrorCategorySchema.optional(),
+  activeBlock: z
+    .enum([
+      "destination_action_required",
+      "provider_network_policy_pending",
+      "provider_network_policy_action_required",
+      "native_output_action_required",
+    ])
+    .optional(),
+  destinationIssue: DestinationIssueSchema.optional(),
+  destinationOverride: z.literal("downloads-api").optional(),
+  created: finiteNumber,
+  started: finiteNumber.optional(),
+  completed: finiteNumber.optional(),
+  isRetried: z.boolean().optional(),
+  isRetryTask: z.boolean().optional(),
+  lastSuccessfulDownloadId: nonnegativeInteger.optional(),
+  nextChapterDispatchAt: finiteNumber.optional(),
+  destinationBlockRevision: nonnegativeInteger.optional(),
+  destinationResume: z
+    .strictObject({
+      commandId: nonemptyString,
+      blockRevision: nonnegativeInteger,
+    })
+    .optional(),
+  activeCancel: z
+    .strictObject({
+      commandId: nonemptyString,
+    })
+    .optional(),
+  restoredUndo: z
+    .strictObject({
+      token: nonemptyString,
+      type: z.enum(["cancel_queued", "remove_history"]),
+    })
+    .optional(),
+  settingsSnapshot: taskSettingsSnapshotSchema,
+} as const
+
+export const DownloadTaskStateDocumentSchema = z
+  .object(downloadTaskStateShape)
   .strict()
+
+/** Storage shape used by the released epoch-2 document before destination pairing. */
+export const Epoch2DownloadTaskStateSchema =
+  DownloadTaskStateDocumentSchema.extend({
+    seriesCoverUrl: z.string().optional(),
+    settingsSnapshot: epoch2TaskSettingsSnapshotSchema,
+  })
+
+export const DownloadTaskStateSchema =
+  DownloadTaskStateDocumentSchema.superRefine((task, ctx) => {
+    if (task.activeBlock === "destination_action_required") {
+      if (!task.destinationIssue) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destinationIssue"],
+          message: "destination blocks require a paired destination issue",
+        })
+        return
+      }
+      if (task.destinationIssue.taskId !== task.id) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destinationIssue", "taskId"],
+          message: "destination issue task ID must match its task",
+        })
+      }
+      if (
+        task.destinationIssue.chapterId !== undefined &&
+        !task.chapters.some(
+          (chapter) => chapter.id === task.destinationIssue?.chapterId
+        )
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destinationIssue", "chapterId"],
+          message: "destination issue chapter ID must match its task",
+        })
+      }
+      return
+    }
+    if (task.destinationIssue) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["destinationIssue"],
+        message: "destination issues require a destination block",
+      })
+    }
+  })
 
 export const ActiveDispatchLeaseSchema = z
   .object({
@@ -206,6 +265,18 @@ export const PendingUndoActionSchema = z
     token: nonemptyString,
     type: z.enum(["cancel_queued", "remove_history"]),
     taskSnapshot: DownloadTaskStateSchema,
+    previousQueuePosition: nonnegativeInteger,
+    createdAt: finiteNumber,
+    expiresAt: finiteNumber,
+  })
+  .strict()
+  .refine((action) => action.expiresAt >= action.createdAt)
+
+export const Epoch2PendingUndoActionSchema = z
+  .object({
+    token: nonemptyString,
+    type: z.enum(["cancel_queued", "remove_history"]),
+    taskSnapshot: Epoch2DownloadTaskStateSchema,
     previousQueuePosition: nonnegativeInteger,
     createdAt: finiteNumber,
     expiresAt: finiteNumber,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
+import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -196,6 +197,141 @@ describe("QueueRepository", () => {
       },
     } as unknown as typeof chrome)
   })
+
+  it.each([
+    "provider_network_policy_pending",
+    "provider_network_policy_action_required",
+  ] as const)(
+    "replaces destination repair state with %s durably",
+    async (block) => {
+      const repository = new QueueRepository()
+      await repository.enqueueDownloadTask(createTask())
+      const destination = await repository.blockTaskForDestination({
+        taskId: "task-1",
+        now: 500,
+        destinationIssue: {
+          id: "issue-1",
+          taskId: "task-1",
+          kind: "fsa_folder_missing",
+          occurredAt: 500,
+        },
+      })
+      expect(destination.outcome).toBe("applied")
+      expect(
+        DownloadTaskStateSchema.safeParse((await repository.getQueue())[0])
+          .success
+      ).toBe(true)
+
+      const replaced = await repository.blockTaskForProviderPolicy({
+        taskId: "task-1",
+        block,
+      })
+      expect(replaced.outcome).toBe("applied")
+      const reloaded = await new QueueRepository().getQueue()
+      expect(reloaded[0]).toMatchObject({
+        status: "queued",
+        activeBlock: block,
+      })
+      expect(reloaded[0]?.destinationIssue).toBeUndefined()
+      expect(DownloadTaskStateSchema.safeParse(reloaded[0]).success).toBe(true)
+
+      expect(
+        (await repository.releaseProviderPolicyBlock("task-1")).outcome
+      ).toBe("applied")
+      const released = await new QueueRepository().getQueue()
+      expect(released[0]?.activeBlock).toBeUndefined()
+      expect(DownloadTaskStateSchema.safeParse(released[0]).success).toBe(true)
+    }
+  )
+
+  it.each(["retry", "restart"] as const)(
+    "accounts a new native job after %s without inheriting old settlement",
+    async (operation) => {
+      const original = createTask({ status: "partial_success" })
+      original.chapters[0] = {
+        ...original.chapters[0]!,
+        status: "partial_success",
+        dispatchAttempt: 1,
+        nativeOutputSettlement: {
+          jobId: "old-job",
+          attempt: 1,
+          taskId: "task-1",
+          chapterId: "chapter-1",
+          requested: 2,
+          completed: 1,
+          interrupted: 1,
+          surrendered: 0,
+          appliedAt: 200,
+        },
+      }
+      local[LOCAL_STORAGE_KEYS.downloadQueue] = [original]
+      const repository = new QueueRepository()
+      const created =
+        operation === "retry"
+          ? await repository.retryFailedChapters({
+              taskId: "task-1",
+              retryTaskId: "new-task",
+              now: 300,
+            })
+          : await repository.restartDownloadTask({
+              taskId: "task-1",
+              restartTaskId: "new-task",
+              now: 300,
+            })
+      expect(created.outcome).toBe("applied")
+      const cold = new QueueRepository()
+      expect(
+        (await cold.startDownloadTask({ taskId: "new-task", now: 400 })).outcome
+      ).toBe("applied")
+      const lease = createBoundDispatchLease({
+        jobId: "new-job",
+        taskId: "new-task",
+        chapterId: "chapter-1",
+        attempt: 1,
+        now: 400,
+      })
+      expect(
+        (
+          await cold.beginChapterDispatch({
+            taskId: "new-task",
+            chapterId: "chapter-1",
+            lease,
+            expectedPreviousLease: null,
+            now: 400,
+          })
+        ).outcome
+      ).toBe("applied")
+      expect(
+        (await cold.clearDispatchLease(fullLeaseIdentity(lease))).outcome
+      ).toBe("applied")
+      expect(
+        (
+          await cold.applyNativeOutputSettlement({
+            jobId: "new-job",
+            taskId: "new-task",
+            chapterId: "chapter-1",
+            attempt: 1,
+            requested: 1,
+            completed: 1,
+            interrupted: 0,
+            surrendered: 0,
+            now: 500,
+          })
+        ).outcome
+      ).toBe("applied")
+      const reloaded = await new QueueRepository().getQueue()
+      expect(
+        reloaded.find((entry) => entry.id === "new-task")?.chapters[0]
+      ).toMatchObject({
+        status: "completed",
+        nativeOutputSettlement: { jobId: "new-job", taskId: "new-task" },
+      })
+      expect(
+        reloaded.find((entry) => entry.id === "task-1")?.chapters[0]
+          ?.nativeOutputSettlement
+      ).toEqual(original.chapters[0].nativeOutputSettlement)
+    }
+  )
 
   it("serializes queue writes", async () => {
     const repository = new QueueRepository()

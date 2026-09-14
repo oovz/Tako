@@ -9,8 +9,12 @@ import {
   composeDownloadedChapterKey,
   type DownloadedChapterRecord,
 } from "@/src/domain/history/types"
-import { normalizeInterruptedTask } from "@/src/domain/queue/task-lifecycle"
+import {
+  isTerminalDownloadTask,
+  normalizeInterruptedTask,
+} from "@/src/domain/queue/task-lifecycle"
 import type {
+  DestinationIssueKind,
   DownloadTaskState,
   PendingUndoAction,
 } from "@/src/domain/queue/state"
@@ -24,12 +28,15 @@ import {
   SiteOverrideRecordSchema,
   type SiteOverrideRecord,
 } from "@/src/domain/site-integrations/storage-schemas"
-import { DestinationIssuesSchema } from "@/src/runtime/destination-issue-state"
+import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
+import type { DestinationIssue } from "@/src/domain/queue/state"
 import logger from "@/src/runtime/logger"
 import { PersistentErrorsSchema } from "@/src/runtime/persistent-error-schema"
 import {
   ActiveDispatchLeaseSchema,
   DownloadTaskStateSchema,
+  Epoch2DownloadTaskStateSchema,
+  Epoch2PendingUndoActionSchema,
   PendingUndoActionSchema,
 } from "@/src/runtime/queue-state-schemas"
 import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
@@ -61,6 +68,7 @@ import {
   assertValidSettingsFieldValue,
   getDefinition,
 } from "@/src/site-integrations/catalog"
+import { assertSafePublicHttpsUrl } from "@/src/site-integrations/request-policy"
 import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 import {
   parseSiteIntegrationEnablementDocument,
@@ -75,21 +83,54 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 2
+export const CURRENT_STATE_SCHEMA_EPOCH = 3
 
 const SCHEMA_EPOCH_STORAGE_KEY = "stateSchemaEpoch"
+const MIGRATION_JOURNAL_STORAGE_KEY = "stateSchemaMigrationJournal"
+const LEGACY_DESTINATION_ISSUES_STORAGE_KEY = "destinationIssues"
 const OBSOLETE_COMMAND_RESULTS_KEY = "commandResults"
 const UPDATE_INTERRUPTION_MESSAGE =
   "Download interrupted by extension update; restart the task to continue"
 
+const DestinationIssuesSchema = z.array(DestinationIssueSchema)
+const MigrationJournalSchema = z.strictObject({
+  sourceEpoch: z.number().int().nonnegative().nullable(),
+  targetEpoch: z.literal(CURRENT_STATE_SCHEMA_EPOCH),
+  phase: z.enum(["prepared", "canonical-written", "obsolete-removed"]),
+  writes: z.record(z.string(), z.unknown()),
+  obsoleteKeys: z.array(z.string().min(1)),
+})
+type MigrationJournal = z.infer<typeof MigrationJournalSchema>
+
 const MIGRATION_STORAGE_KEYS = [
   SCHEMA_EPOCH_STORAGE_KEY,
+  MIGRATION_JOURNAL_STORAGE_KEY,
   ...Object.values(LOCAL_STORAGE_KEYS),
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
   SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
   SITE_OVERRIDES_STORAGE_KEY,
+  LEGACY_DESTINATION_ISSUES_STORAGE_KEY,
   OBSOLETE_COMMAND_RESULTS_KEY,
 ] as const
+
+const MIGRATION_WRITE_KEYS = new Set([
+  LOCAL_STORAGE_KEYS.downloadQueue,
+  LOCAL_STORAGE_KEYS.pendingUndoActions,
+  LOCAL_STORAGE_KEYS.settings,
+  LOCAL_STORAGE_KEYS.downloadedChapters,
+  LOCAL_STORAGE_KEYS.seriesDownloadHistory,
+  LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
+  LOCAL_STORAGE_KEYS.persistentErrors,
+  SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
+  SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
+  SITE_OVERRIDES_STORAGE_KEY,
+])
+const MIGRATION_OBSOLETE_KEYS = new Set([
+  OBSOLETE_COMMAND_RESULTS_KEY,
+  LOCAL_STORAGE_KEYS.pendingOutputs,
+  LOCAL_STORAGE_KEYS.activeDispatchLease,
+  LEGACY_DESTINATION_ISSUES_STORAGE_KEY,
+])
 
 function boundedInteger(
   value: unknown,
@@ -270,8 +311,29 @@ function snapshotMetadata(
 ): z.infer<typeof SeriesMetadataSnapshotSchema> | undefined {
   if (!isRecord(raw)) return undefined
   const candidate = { ...raw }
+  if (typeof candidate.coverUrl === "string") {
+    try {
+      candidate.coverUrl = assertSafePublicHttpsUrl(
+        candidate.coverUrl,
+        "stored cover"
+      ).toString()
+    } catch {
+      delete candidate.coverUrl
+    }
+  } else if (candidate.coverUrl !== undefined) {
+    delete candidate.coverUrl
+  }
   delete candidate.title
   return SeriesMetadataSnapshotSchema.safeParse(candidate).data
+}
+
+function migrateCoverUrl(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined
+  try {
+    return assertSafePublicHttpsUrl(raw, "stored cover").toString()
+  } catch {
+    return undefined
+  }
 }
 
 function migrateDownloadTask(raw: unknown): DownloadTaskState {
@@ -371,7 +433,7 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
     siteIntegrationId: legacy.siteIntegrationId,
     mangaId: legacy.mangaId,
     seriesTitle: legacy.seriesTitle,
-    seriesCoverUrl: legacy.seriesCoverUrl,
+    seriesCoverUrl: migrateCoverUrl(legacy.seriesCoverUrl),
     chapters: legacy.chapters.map((chapter) => ({
       ...chapter,
       locked: chapter.locked === true,
@@ -398,6 +460,19 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
     errorMessage: legacy.errorMessage,
     errorCategory: normalizeDownloadErrorCategory(legacy.errorCategory),
     activeBlock: legacy.activeBlock,
+    destinationIssue:
+      legacy.activeBlock === "destination_action_required"
+        ? {
+            id: `${legacy.id}:${legacy.chapters.find((chapter) => chapter.status === "queued" || chapter.status === "downloading")?.id ?? ""}:${destinationIssueKindForErrorCategory(legacy.errorCategory)}`,
+            taskId: legacy.id,
+            chapterId: legacy.chapters.find(
+              (chapter) =>
+                chapter.status === "queued" || chapter.status === "downloading"
+            )?.id,
+            kind: destinationIssueKindForErrorCategory(legacy.errorCategory),
+            occurredAt: legacy.started ?? legacy.created,
+          }
+        : undefined,
     destinationOverride: legacy.destinationOverride,
     created: legacy.created,
     started: legacy.started,
@@ -408,6 +483,19 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
     nextChapterDispatchAt: legacy.nextChapterDispatchAt,
     settingsSnapshot,
   })
+}
+
+function migrateEpoch2DownloadTask(raw: unknown): DownloadTaskState {
+  const parsed = Epoch2DownloadTaskStateSchema.parse(raw)
+  const candidate = {
+    ...parsed,
+    seriesCoverUrl: migrateCoverUrl(parsed.seriesCoverUrl),
+    settingsSnapshot: {
+      ...parsed.settingsSnapshot,
+      comicInfo: snapshotMetadata(parsed.settingsSnapshot.comicInfo),
+    },
+  } as unknown as DownloadTaskState
+  return DownloadTaskStateSchema.parse(normalizeDestinationIssuePair(candidate))
 }
 
 function migrateQueue(raw: unknown): DownloadTaskState[] {
@@ -421,6 +509,128 @@ function migrateQueue(raw: unknown): DownloadTaskState[] {
   return queue
 }
 
+function migrateEpoch2Queue(raw: unknown): DownloadTaskState[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw))
+    throw new Error("Stored download queue is not an array")
+  const queue = raw.map(migrateEpoch2DownloadTask)
+  if (new Set(queue.map((task) => task.id)).size !== queue.length) {
+    throw new Error("Stored download queue contains duplicate task IDs")
+  }
+  return queue
+}
+
+function migrateDestinationIssues(raw: unknown): DestinationIssue[] {
+  if (raw === undefined) return []
+  const parsed = DestinationIssuesSchema.safeParse(raw)
+  if (!parsed.success) {
+    logger.warn("[Migration] Dropped malformed destination issue document")
+    return []
+  }
+  const issues = parsed.data
+  const latestByTask = new Map<string, DestinationIssue>()
+  for (const issue of issues) {
+    const existing = latestByTask.get(issue.taskId)
+    if (!existing || issue.occurredAt >= existing.occurredAt) {
+      latestByTask.set(issue.taskId, issue)
+    }
+  }
+  return [...latestByTask.values()]
+}
+
+function destinationIssueKindForErrorCategory(
+  errorCategory: unknown
+): DestinationIssueKind {
+  switch (errorCategory) {
+    case "folder_permission_required":
+      return "fsa_permission_required"
+    case "folder_write_failed":
+      return "fsa_write_failed"
+    case "disk_full":
+      return "disk_full"
+    case "folder_unavailable":
+      return "fsa_folder_missing"
+    default:
+      return "fsa_folder_missing"
+  }
+}
+
+function destinationIssueKindForTask(
+  task: DownloadTaskState
+): DestinationIssueKind {
+  return destinationIssueKindForErrorCategory(task.errorCategory)
+}
+
+function synthesizeDestinationIssue(task: DownloadTaskState): DestinationIssue {
+  const chapterId = task.chapters.find(
+    (chapter) => chapter.status === "queued" || chapter.status === "downloading"
+  )?.id
+  const kind = destinationIssueKindForTask(task)
+  return {
+    id: `${task.id}:${chapterId ?? ""}:${kind}`,
+    taskId: task.id,
+    chapterId,
+    kind,
+    occurredAt: task.started ?? task.created,
+  }
+}
+
+function normalizeDestinationIssuePair(
+  task: DownloadTaskState,
+  migratedIssue?: DestinationIssue
+): DownloadTaskState {
+  if (isTerminalDownloadTask(task)) {
+    return {
+      ...task,
+      activeBlock: undefined,
+      destinationIssue: undefined,
+    }
+  }
+  if (task.activeBlock !== "destination_action_required") {
+    return { ...task, destinationIssue: undefined }
+  }
+  const issue = migratedIssue ?? task.destinationIssue
+  const validIssue =
+    issue &&
+    issue.taskId === task.id &&
+    (issue.chapterId === undefined ||
+      task.chapters.some((chapter) => chapter.id === issue.chapterId))
+  return {
+    ...task,
+    status: "queued",
+    chapters: task.chapters.map((chapter) =>
+      chapter.status === "downloading"
+        ? { ...chapter, status: "queued" as const }
+        : chapter
+    ),
+    destinationIssue: validIssue ? issue : synthesizeDestinationIssue(task),
+  }
+}
+
+function attachDestinationIssues(
+  queue: DownloadTaskState[],
+  pendingUndoActions: PendingUndoAction[],
+  raw: unknown
+): {
+  queue: DownloadTaskState[]
+  pendingUndoActions: PendingUndoAction[]
+} {
+  const issues = migrateDestinationIssues(raw)
+  const issueByTask = new Map(issues.map((issue) => [issue.taskId, issue]))
+  return {
+    queue: queue.map((task) =>
+      normalizeDestinationIssuePair(task, issueByTask.get(task.id))
+    ),
+    pendingUndoActions: pendingUndoActions.map((action) => {
+      const issue = issueByTask.get(action.taskSnapshot.id)
+      return {
+        ...action,
+        taskSnapshot: normalizeDestinationIssuePair(action.taskSnapshot, issue),
+      }
+    }),
+  }
+}
+
 function migratePendingUndoActions(raw: unknown): PendingUndoAction[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw))
@@ -432,6 +642,19 @@ function migratePendingUndoActions(raw: unknown): PendingUndoAction[] {
     return PendingUndoActionSchema.parse({
       ...legacy,
       taskSnapshot: migrateDownloadTask(legacy.taskSnapshot),
+    })
+  })
+}
+
+function migrateEpoch2PendingUndoActions(raw: unknown): PendingUndoAction[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw))
+    throw new Error("Stored pending Undo actions are not an array")
+  return raw.map((value) => {
+    const action = Epoch2PendingUndoActionSchema.parse(value)
+    return PendingUndoActionSchema.parse({
+      ...action,
+      taskSnapshot: migrateEpoch2DownloadTask(action.taskSnapshot),
     })
   })
 }
@@ -736,101 +959,305 @@ function legacyInFlightTaskIds(stored: Record<string, unknown>): Set<string> {
   return taskIds
 }
 
+function readSupportedEpoch(raw: unknown): number | null {
+  if (raw === undefined) return null
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+    throw new Error("Stored state schema epoch is invalid")
+  }
+  if (raw > CURRENT_STATE_SCHEMA_EPOCH) {
+    throw new Error(
+      `Stored state schema epoch ${raw} is newer than supported epoch ${CURRENT_STATE_SCHEMA_EPOCH}`
+    )
+  }
+  return raw
+}
+
+function validateMigrationJournal(journal: MigrationJournal): void {
+  for (const key of [
+    LOCAL_STORAGE_KEYS.downloadQueue,
+    LOCAL_STORAGE_KEYS.pendingUndoActions,
+  ]) {
+    if (!Object.hasOwn(journal.writes, key)) {
+      throw new Error(
+        `State migration journal is missing canonical write key: ${key}`
+      )
+    }
+  }
+  for (const key of Object.keys(journal.writes)) {
+    if (!MIGRATION_WRITE_KEYS.has(key)) {
+      throw new Error(
+        `State migration journal contains an invalid write key: ${key}`
+      )
+    }
+  }
+  const seenObsoleteKeys = new Set<string>()
+  for (const key of journal.obsoleteKeys) {
+    if (!MIGRATION_OBSOLETE_KEYS.has(key)) {
+      throw new Error(
+        `State migration journal contains an invalid obsolete key: ${key}`
+      )
+    }
+    if (seenObsoleteKeys.has(key)) {
+      throw new Error(
+        `State migration journal contains a duplicate obsolete key: ${key}`
+      )
+    }
+    seenObsoleteKeys.add(key)
+  }
+
+  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
+    z.array(DownloadTaskStateSchema).parse(
+      journal.writes[LOCAL_STORAGE_KEYS.downloadQueue]
+    )
+  }
+  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
+    z.array(PendingUndoActionSchema).parse(
+      journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions]
+    )
+  }
+  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.settings)) {
+    parseSettingsDocument(journal.writes[LOCAL_STORAGE_KEYS.settings])
+  }
+  if (Object.hasOwn(journal.writes, SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)) {
+    parseSiteIntegrationEnablementDocument(
+      journal.writes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
+    )
+  }
+  if (Object.hasOwn(journal.writes, SITE_INTEGRATION_SETTINGS_STORAGE_KEY)) {
+    parseSiteIntegrationSettingsDocument(
+      journal.writes[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
+    )
+  }
+  if (Object.hasOwn(journal.writes, SITE_OVERRIDES_STORAGE_KEY)) {
+    parseSiteOverridesDocument(journal.writes[SITE_OVERRIDES_STORAGE_KEY])
+  }
+  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.persistentErrors)) {
+    PersistentErrorsSchema.parse(
+      journal.writes[LOCAL_STORAGE_KEYS.persistentErrors]
+    )
+  }
+
+  const historyKeys = [
+    LOCAL_STORAGE_KEYS.downloadedChapters,
+    LOCAL_STORAGE_KEYS.seriesDownloadHistory,
+    LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
+  ]
+  const presentHistoryKeys = historyKeys.filter((key) =>
+    Object.hasOwn(journal.writes, key)
+  )
+  if (presentHistoryKeys.length > 0) {
+    if (presentHistoryKeys.length !== historyKeys.length) {
+      throw new Error(
+        "State migration journal contains a partial history aggregate"
+      )
+    }
+    parseHistoryAggregate({
+      downloadedChapters: journal.writes[LOCAL_STORAGE_KEYS.downloadedChapters],
+      seriesDownloadHistory:
+        journal.writes[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
+      clearCutoffs:
+        journal.writes[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs],
+    })
+  }
+}
+
+function buildMigrationJournal(
+  stored: Record<string, unknown>,
+  sourceEpoch: number | null
+): MigrationJournal {
+  const now = Date.now()
+  const isReleasedEpoch2 = sourceEpoch === 2
+  let queue = isReleasedEpoch2
+    ? migrateEpoch2Queue(stored[LOCAL_STORAGE_KEYS.downloadQueue])
+    : migrateQueue(stored[LOCAL_STORAGE_KEYS.downloadQueue])
+  let pendingUndoActions = isReleasedEpoch2
+    ? migrateEpoch2PendingUndoActions(
+        stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
+      )
+    : migratePendingUndoActions(stored[LOCAL_STORAGE_KEYS.pendingUndoActions])
+  const destinationState = attachDestinationIssues(
+    queue,
+    pendingUndoActions,
+    stored[LEGACY_DESTINATION_ISSUES_STORAGE_KEY]
+  )
+  queue = destinationState.queue
+  pendingUndoActions = destinationState.pendingUndoActions
+
+  const rawLease = stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
+  const currentLease = ActiveDispatchLeaseSchema.safeParse(rawLease)
+  const inFlightTaskIds = legacyInFlightTaskIds(stored)
+  const hasLegacyPendingOutputs = LOCAL_STORAGE_KEYS.pendingOutputs in stored
+  if (
+    (rawLease !== undefined && !currentLease.success) ||
+    hasLegacyPendingOutputs
+  ) {
+    queue = queue.map((task) =>
+      inFlightTaskIds.has(task.id) &&
+      (task.status === "queued" || task.status === "downloading")
+        ? normalizeInterruptedTask(task, UPDATE_INTERRUPTION_MESSAGE, now)
+        : task
+    )
+  }
+
+  const writes: Record<string, unknown> = {
+    [LOCAL_STORAGE_KEYS.downloadQueue]: queue,
+    [LOCAL_STORAGE_KEYS.pendingUndoActions]: pendingUndoActions,
+  }
+
+  const settings = canonicalizeSettings(stored[LOCAL_STORAGE_KEYS.settings])
+  if (settings) writes[LOCAL_STORAGE_KEYS.settings] = settings
+
+  const history = migrateHistory(stored)
+  if (history) Object.assign(writes, history)
+
+  const enablement = migrateEnablement(
+    stored[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
+  )
+  if (enablement) writes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY] = enablement
+
+  const siteSettings = migrateSiteSettings(
+    stored[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
+  )
+  if (siteSettings) writes[SITE_INTEGRATION_SETTINGS_STORAGE_KEY] = siteSettings
+
+  const siteOverrides = migrateSiteOverrides(stored[SITE_OVERRIDES_STORAGE_KEY])
+  if (siteOverrides) writes[SITE_OVERRIDES_STORAGE_KEY] = siteOverrides
+
+  const persistentErrors = migratePersistentErrors(
+    stored[LOCAL_STORAGE_KEYS.persistentErrors],
+    now
+  )
+  if (persistentErrors)
+    writes[LOCAL_STORAGE_KEYS.persistentErrors] = persistentErrors
+
+  const obsoleteKeys = [
+    ...(OBSOLETE_COMMAND_RESULTS_KEY in stored
+      ? [OBSOLETE_COMMAND_RESULTS_KEY]
+      : []),
+    ...(LOCAL_STORAGE_KEYS.pendingOutputs in stored
+      ? [LOCAL_STORAGE_KEYS.pendingOutputs]
+      : []),
+    ...(rawLease !== undefined && !currentLease.success
+      ? [LOCAL_STORAGE_KEYS.activeDispatchLease]
+      : []),
+    ...(LEGACY_DESTINATION_ISSUES_STORAGE_KEY in stored
+      ? [LEGACY_DESTINATION_ISSUES_STORAGE_KEY]
+      : []),
+  ]
+
+  const journal = MigrationJournalSchema.parse({
+    sourceEpoch,
+    targetEpoch: CURRENT_STATE_SCHEMA_EPOCH,
+    phase: "prepared",
+    writes,
+    obsoleteKeys,
+  })
+  validateMigrationJournal(journal)
+  return journal
+}
+
+function parseMigrationJournal(raw: unknown): MigrationJournal | null {
+  if (raw === undefined) return null
+  const parsed = MigrationJournalSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error("Stored state schema migration journal is invalid")
+  }
+  if (
+    parsed.data.sourceEpoch !== null &&
+    parsed.data.sourceEpoch >= CURRENT_STATE_SCHEMA_EPOCH
+  ) {
+    throw new Error(
+      "Stored state schema migration journal has an invalid source epoch"
+    )
+  }
+  validateMigrationJournal(parsed.data)
+  return parsed.data
+}
+
+function validateMigrationJournalAgainstStoredState(
+  journal: MigrationJournal,
+  stored: Record<string, unknown>,
+  epoch: number | null
+): void {
+  if (epoch === CURRENT_STATE_SCHEMA_EPOCH) return
+  if (journal.sourceEpoch !== epoch) {
+    throw new Error(
+      "State migration journal source epoch does not match stored epoch"
+    )
+  }
+  for (const key of MIGRATION_OBSOLETE_KEYS) {
+    const presentAndObsolete =
+      key === LOCAL_STORAGE_KEYS.activeDispatchLease
+        ? key in stored &&
+          !ActiveDispatchLeaseSchema.safeParse(stored[key]).success
+        : key in stored
+    if (presentAndObsolete && !journal.obsoleteKeys.includes(key)) {
+      throw new Error(
+        `State migration journal does not remove obsolete key: ${key}`
+      )
+    }
+  }
+}
+
+async function persistMigrationJournal(
+  journal: MigrationJournal
+): Promise<void> {
+  validateMigrationJournal(journal)
+  await chrome.storage.local.set({
+    [MIGRATION_JOURNAL_STORAGE_KEY]: journal,
+  })
+}
+
+async function replayMigrationJournal(
+  journal: MigrationJournal
+): Promise<void> {
+  let current = journal
+  if (current.phase === "prepared") {
+    await chrome.storage.local.set(current.writes)
+    current = { ...current, phase: "canonical-written" }
+    await persistMigrationJournal(current)
+  }
+  if (current.phase === "canonical-written") {
+    if (current.obsoleteKeys.length > 0) {
+      await chrome.storage.local.remove(current.obsoleteKeys)
+    }
+    current = { ...current, phase: "obsolete-removed" }
+    await persistMigrationJournal(current)
+  }
+  await chrome.storage.local.set({
+    [SCHEMA_EPOCH_STORAGE_KEY]: CURRENT_STATE_SCHEMA_EPOCH,
+  })
+  await chrome.storage.local.remove(MIGRATION_JOURNAL_STORAGE_KEY)
+}
+
 /**
- * One-time migration from released storage shapes into the current strict
- * documents. It runs before any repository hydrates, preserves the FSA
- * IndexedDB handle, and writes the epoch marker only after every canonical
- * write and obsolete-key removal succeeds.
+ * Migrates supported released documents before repository hydration. The
+ * journal stores the canonical write set and its phase, so every interrupted
+ * phase can be replayed without reading partially migrated documents.
  */
 export async function migrateDurableStateForCurrentSchema(): Promise<void> {
   try {
     const stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
-    const epoch = stored[SCHEMA_EPOCH_STORAGE_KEY]
-    if (typeof epoch === "number" && epoch >= CURRENT_STATE_SCHEMA_EPOCH) return
+    const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
+    const journal = parseMigrationJournal(stored[MIGRATION_JOURNAL_STORAGE_KEY])
+    if (journal) {
+      validateMigrationJournalAgainstStoredState(journal, stored, epoch)
+      if (epoch === CURRENT_STATE_SCHEMA_EPOCH) {
+        if (journal.phase !== "obsolete-removed") {
+          throw new Error(
+            "State migration journal phase is inconsistent with the current epoch"
+          )
+        }
+      }
+    }
+    if (epoch === CURRENT_STATE_SCHEMA_EPOCH && journal === null) return
 
+    const plan = journal ?? buildMigrationJournal(stored, epoch)
+    if (journal === null) await persistMigrationJournal(plan)
     logger.info(
-      `[Init] Migrating durable state schema from ${String(epoch)} to ${CURRENT_STATE_SCHEMA_EPOCH}`
+      `[Init] Migrating durable state schema from ${String(plan.sourceEpoch)} to ${CURRENT_STATE_SCHEMA_EPOCH}`
     )
-
-    const now = Date.now()
-    let queue = migrateQueue(stored[LOCAL_STORAGE_KEYS.downloadQueue])
-    const rawLease = stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
-    const currentLease = ActiveDispatchLeaseSchema.safeParse(rawLease)
-    const inFlightTaskIds = legacyInFlightTaskIds(stored)
-    const hasLegacyPendingOutputs = LOCAL_STORAGE_KEYS.pendingOutputs in stored
-    if (
-      (rawLease !== undefined && !currentLease.success) ||
-      hasLegacyPendingOutputs
-    ) {
-      queue = queue.map((task) =>
-        inFlightTaskIds.has(task.id) &&
-        (task.status === "queued" || task.status === "downloading")
-          ? normalizeInterruptedTask(task, UPDATE_INTERRUPTION_MESSAGE, now)
-          : task
-      )
-    }
-
-    const writes: Record<string, unknown> = {
-      [LOCAL_STORAGE_KEYS.downloadQueue]: queue,
-      [LOCAL_STORAGE_KEYS.pendingUndoActions]: migratePendingUndoActions(
-        stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
-      ),
-    }
-
-    const settings = canonicalizeSettings(stored[LOCAL_STORAGE_KEYS.settings])
-    if (settings) writes[LOCAL_STORAGE_KEYS.settings] = settings
-
-    const history = migrateHistory(stored)
-    if (history) Object.assign(writes, history)
-
-    const enablement = migrateEnablement(
-      stored[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
-    )
-    if (enablement) writes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY] = enablement
-
-    const siteSettings = migrateSiteSettings(
-      stored[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
-    )
-    if (siteSettings)
-      writes[SITE_INTEGRATION_SETTINGS_STORAGE_KEY] = siteSettings
-
-    const siteOverrides = migrateSiteOverrides(
-      stored[SITE_OVERRIDES_STORAGE_KEY]
-    )
-    if (siteOverrides) writes[SITE_OVERRIDES_STORAGE_KEY] = siteOverrides
-
-    const persistentErrors = migratePersistentErrors(
-      stored[LOCAL_STORAGE_KEYS.persistentErrors],
-      now
-    )
-    if (persistentErrors)
-      writes[LOCAL_STORAGE_KEYS.persistentErrors] = persistentErrors
-
-    if (LOCAL_STORAGE_KEYS.destinationIssues in stored) {
-      writes[LOCAL_STORAGE_KEYS.destinationIssues] =
-        DestinationIssuesSchema.parse(
-          stored[LOCAL_STORAGE_KEYS.destinationIssues]
-        )
-    }
-
-    await chrome.storage.local.set(writes)
-
-    const obsoleteKeys = [
-      ...(OBSOLETE_COMMAND_RESULTS_KEY in stored
-        ? [OBSOLETE_COMMAND_RESULTS_KEY]
-        : []),
-      ...(LOCAL_STORAGE_KEYS.pendingOutputs in stored
-        ? [LOCAL_STORAGE_KEYS.pendingOutputs]
-        : []),
-      ...(rawLease !== undefined && !currentLease.success
-        ? [LOCAL_STORAGE_KEYS.activeDispatchLease]
-        : []),
-    ]
-    if (obsoleteKeys.length > 0) await chrome.storage.local.remove(obsoleteKeys)
-
-    await chrome.storage.local.set({
-      [SCHEMA_EPOCH_STORAGE_KEY]: CURRENT_STATE_SCHEMA_EPOCH,
-    })
+    await replayMigrationJournal(plan)
   } catch (error) {
     logger.error("Durable state schema migration failed", error)
     throw error

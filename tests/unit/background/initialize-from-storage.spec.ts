@@ -107,8 +107,9 @@ function createHarness(queue: DownloadTaskState[] = []) {
     getLiveTaskIds: vi.fn(async () => [] as string[]),
     reconcileStartupOpenManifests: vi.fn(async () => ({
       observedJobSealed: false,
+      effects: [],
     })),
-    reconcile: vi.fn(async () => undefined),
+    reconcile: vi.fn(async () => []),
     hasLiveDependencies: vi.fn(async () => false),
     hasReconcilableLiveDependencies: vi.fn(async () => false),
     sealManifest: vi.fn(async () => undefined),

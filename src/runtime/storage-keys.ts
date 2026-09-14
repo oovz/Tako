@@ -17,7 +17,6 @@ export const SETTINGS_STORAGE_KEYS = {
 
 export const LOCAL_STORAGE_KEYS = {
   downloadQueue: "downloadQueue",
-  destinationIssues: "destinationIssues",
   settings: SETTINGS_STORAGE_KEYS.global,
   downloadedChapters: "downloadedChapters",
   seriesDownloadHistory: "seriesDownloadHistory",

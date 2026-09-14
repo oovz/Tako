@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createBackgroundSettingsUiMessageHandlers } from "@/entrypoints/background/background-settings-ui-message-handlers"
 import { dispatchRuntimeMessage } from "@/src/runtime/runtime-message-dispatcher"
-import { clearPersistentError, getPersistentErrors } from "@/src/runtime/errors"
+import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
@@ -20,7 +20,7 @@ describe("persistent errors query", () => {
   it("treats an absent durable document as an empty list", async () => {
     storageGet.mockResolvedValue({})
 
-    await expect(getPersistentErrors()).resolves.toEqual([])
+    await expect(persistentErrorsRepository.getAll()).resolves.toEqual([])
     expect(storageGet).toHaveBeenCalledWith(LOCAL_STORAGE_KEYS.persistentErrors)
   })
 
@@ -41,7 +41,7 @@ describe("persistent errors query", () => {
   ])("rejects malformed durable records %#", async (document) => {
     storageGet.mockResolvedValue(document)
 
-    await expect(getPersistentErrors()).rejects.toBeInstanceOf(
+    await expect(persistentErrorsRepository.getAll()).rejects.toBeInstanceOf(
       InvalidDurableStateError
     )
   })
@@ -92,9 +92,9 @@ describe("persistent errors query", () => {
       storage: { local: { get: storageGet, set: storageSet } },
     })
 
-    await expect(clearPersistentError("invalid")).rejects.toBeInstanceOf(
-      InvalidDurableStateError
-    )
+    await expect(
+      persistentErrorsRepository.clear("invalid")
+    ).rejects.toBeInstanceOf(InvalidDurableStateError)
 
     expect(storageSet).not.toHaveBeenCalled()
   })
@@ -107,9 +107,9 @@ describe("persistent errors query", () => {
       storage: { local: { get: storageGet, set: storageSet } },
     })
 
-    await expect(clearPersistentError("failed-read")).rejects.toThrow(
-      "read failed"
-    )
+    await expect(
+      persistentErrorsRepository.clear("failed-read")
+    ).rejects.toThrow("read failed")
     expect(storageSet).not.toHaveBeenCalled()
   })
 
@@ -168,9 +168,9 @@ describe("persistent errors query", () => {
       storage: { local: { get: storageGet, set: storageSet } },
     })
 
-    const firstClear = clearPersistentError("first")
+    const firstClear = persistentErrorsRepository.clear("first")
     await vi.waitFor(() => expect(storageSet).toHaveBeenCalledTimes(1))
-    const secondClear = clearPersistentError("second")
+    const secondClear = persistentErrorsRepository.clear("second")
     await Promise.resolve()
     expect(storageGet).toHaveBeenCalledTimes(1)
 
