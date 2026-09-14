@@ -156,7 +156,13 @@ export async function initializeFromStorage(
     throw new Error("Startup dispatch lease changed during recovery")
   }
 
-  await dependencies.nativeOutputCoordinator.reconcile()
+  const nativeSettlementEffects = [
+    ...startupNativeOutput.effects,
+    ...(await dependencies.nativeOutputCoordinator.reconcile()),
+  ]
+  await dependencies.terminalCoordinator.continueAfterNativeOutputSettlement(
+    nativeSettlementEffects
+  )
   const normalizedQueue = await dependencies.queueRepository.getQueue()
   const interruptedTaskIds = new Set(recovery.interruptedTaskIds)
   if (interruptedTaskIds.size > 0) {

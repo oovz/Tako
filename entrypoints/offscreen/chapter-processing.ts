@@ -135,18 +135,18 @@ export async function processNoneFormatChapter(
         type: coverImage.mimeType || "application/octet-stream",
       })
       if (writableRoot) {
-        await onArchiveProgress(92, "saving cover")
+        await onProgress(10, "saving cover")
         await writeFsaOutput({
           dir: writableRoot,
           path: coverPath,
           blob: coverBlob,
           collisionPolicy,
           signal: abortSignal,
-          onBytesWritten: () => onArchiveProgress(92, "saving cover"),
+          onBytesWritten: () => onProgress(10, "saving cover"),
         })
         committedFsaOutputs++
       } else {
-        await onArchiveProgress(92, "download handoff")
+        await onProgress(10, "download handoff")
         const coverResp = await runtime.requestBrowserBlobDownload({
           jobId,
           attempt,
@@ -221,21 +221,22 @@ export async function processNoneFormatChapter(
 
         if (writableRoot) {
           if (fsaWriteFailure) throw fsaWriteFailure
-          await onArchiveProgress(95, "saving images")
+          // Loose-file writes overlap the image pipeline's downloading phase.
+          await onProgress(10, "saving images")
           await writeFsaOutput({
             dir: writableRoot,
             path: filePath,
             blob,
             collisionPolicy,
             signal: abortSignal,
-            onBytesWritten: () => onArchiveProgress(95, "saving images"),
+            onBytesWritten: () => onProgress(10, "saving images"),
           })
           committedFsaOutputs++
           committedFsaImages++
           return
         }
 
-        await onArchiveProgress(95, "download handoff")
+        await onProgress(10, "download handoff")
         const response = await runtime.requestBrowserBlobDownload({
           jobId,
           attempt,
@@ -449,12 +450,7 @@ export async function processArchiveFormatChapter(
       comicInfoVersion,
       hasCoverImage: !!coverImage,
     })
-    addCoverToArchiveWorker(
-      session,
-      runtime.liveResourceLedger,
-      `${jobId}:archive-input:cover`,
-      coverImage
-    )
+    addCoverToArchiveWorker(session, `${jobId}:archive-input:cover`, coverImage)
 
     const { total, succeeded, failed, failedUrls, failedReasons } =
       await downloadChapterImages(runtime, {
@@ -474,12 +470,6 @@ export async function processArchiveFormatChapter(
         onDownloaded: ({ index, result }) => {
           const filename = sanitizeFilename(result.filename)
           const buffer = result.data
-          const inputLease =
-            result.liveResourceLease ??
-            runtime.liveResourceLedger.reserve(
-              buffer.byteLength,
-              "untracked archive image input"
-            )
           session.post(
             {
               type: "addImage",
@@ -490,7 +480,7 @@ export async function processArchiveFormatChapter(
               mimeType: result.mimeType,
             },
             [buffer],
-            inputLease
+            result.liveResourceLease
           )
         },
         onDownloadFailed: ({ url, error, failedCount, total: totalImages }) => {

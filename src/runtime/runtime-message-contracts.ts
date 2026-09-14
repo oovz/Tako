@@ -20,6 +20,7 @@ import {
 } from "@/src/runtime/offscreen-job-contracts"
 import {
   SeriesChapterListSchema,
+  PublicHttpsUrlSchema,
   SeriesMetadataSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
@@ -184,7 +185,7 @@ const OffscreenDownloadChapterPayloadSchema = z.strictObject({
   book: z.strictObject({
     siteIntegrationId: z.string().min(1),
     seriesTitle: z.string().min(1),
-    coverUrl: z.string().url().optional(),
+    coverUrl: PublicHttpsUrlSchema.optional(),
     metadata: SeriesMetadataSnapshotSchema.optional(),
   }),
   chapter: z.strictObject({
@@ -312,7 +313,7 @@ export const runtimeMessageRegistry = {
       payload: z.strictObject({
         tabId: z.number().int().nonnegative().optional(),
         windowId: z.number().int().nonnegative().optional(),
-        reason: z.literal("sidepanel-mount").optional(),
+        reason: z.enum(["sidepanel-mount", "sidepanel-retry"]).optional(),
       }),
     }),
     response: successOrFailure(),

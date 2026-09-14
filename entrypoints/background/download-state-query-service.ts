@@ -1,4 +1,3 @@
-import type { DestinationService } from "@/entrypoints/background/destination"
 import {
   OptionsDownloadStateSchema,
   SidepanelDownloadStateSchema,
@@ -17,33 +16,35 @@ export interface DownloadStateQueryService {
 export class BackgroundDownloadStateQueryService implements DownloadStateQueryService {
   constructor(
     private readonly queueRepository: QueueRepository,
-    private readonly historyQueryService: HistoryQueryService,
-    private readonly destinationService: DestinationService
+    private readonly historyQueryService: HistoryQueryService
   ) {}
 
   async getOptionsDownloadState(): Promise<OptionsDownloadState> {
-    const [tasks, destinationIssues, queueStorageBytes] = await Promise.all([
+    const [tasks, queueStorageBytes] = await Promise.all([
       this.queueRepository.getQueue(),
-      this.destinationService.getIssues(),
       chrome.storage.local.getBytesInUse(LOCAL_STORAGE_KEYS.downloadQueue),
     ])
+    const destinationIssue =
+      tasks.find((task) => task.destinationIssue)?.destinationIssue ?? null
 
     return OptionsDownloadStateSchema.parse({
       tasks,
-      destinationIssue: destinationIssues[0] ?? null,
+      destinationIssue,
       queueStorageBytes,
     })
   }
 
   async getSidepanelDownloadState(): Promise<SidepanelDownloadState> {
-    const [downloadedChapters, destinationIssues] = await Promise.all([
+    const [downloadedChapters, tasks] = await Promise.all([
       this.historyQueryService.getDownloadedChapters(),
-      this.destinationService.getIssues(),
+      this.queueRepository.getQueue(),
     ])
+    const destinationIssue =
+      tasks.find((task) => task.destinationIssue)?.destinationIssue ?? null
 
     return SidepanelDownloadStateSchema.parse({
       downloadedChapters,
-      destinationIssue: destinationIssues[0] ?? null,
+      destinationIssue,
     })
   }
 }

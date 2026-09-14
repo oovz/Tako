@@ -37,7 +37,7 @@ function dispatchPayload(): Omit<
   }
 }
 
-describe("Phase 10 offscreen job protocol", () => {
+describe("Offscreen job protocol", () => {
   it("fingerprints the complete validated dispatch payload canonically", async () => {
     const payload = dispatchPayload()
     const reordered = {

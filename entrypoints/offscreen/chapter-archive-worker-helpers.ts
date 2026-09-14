@@ -2,10 +2,7 @@ import type { Chapter } from "@/src/types/chapter"
 import logger from "@/src/runtime/logger"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
 import { MAX_ARCHIVE_BYTES, MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
-import type {
-  OffscreenLiveResourceLedger,
-  OffscreenLiveResourceLease,
-} from "@/src/runtime/offscreen-live-resource-ledger"
+import type { OffscreenLiveResourceLease } from "@/src/runtime/offscreen-live-resource-ledger"
 import { ArchiveWorkerSession } from "./archive-worker-session"
 import {
   buildCoverOutputFilename,
@@ -83,12 +80,11 @@ export function addComicInfoToArchiveWorker(input: {
 
 export function addCoverToArchiveWorker(
   session: ArchiveWorkerSession,
-  liveResourceLedger: OffscreenLiveResourceLedger,
   inputId: string,
   coverImage?: {
     data: ArrayBuffer
     mimeType: string
-    liveResourceLease?: OffscreenLiveResourceLease
+    liveResourceLease: OffscreenLiveResourceLease
   }
 ): void {
   if (!coverImage) {
@@ -96,12 +92,6 @@ export function addCoverToArchiveWorker(
   }
 
   const coverBuffer = coverImage.data
-  const inputLease =
-    coverImage.liveResourceLease ??
-    liveResourceLedger.reserve(
-      coverBuffer.byteLength,
-      "untracked archive cover input"
-    )
   session.post(
     {
       type: "addImage",
@@ -112,6 +102,6 @@ export function addCoverToArchiveWorker(
       mimeType: coverImage.mimeType,
     },
     [coverBuffer],
-    inputLease
+    coverImage.liveResourceLease
   )
 }

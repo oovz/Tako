@@ -27,6 +27,7 @@ const MAX_STALE_RESOLUTION_RETRIES = 2
 export interface ResolveTabContextOptions {
   windowId?: number
   allowCached?: boolean
+  retryErrors?: boolean
   supersedeInFlight?: boolean
 }
 
@@ -99,8 +100,9 @@ export function createTabContextResolver(deps: {
     number,
     {
       url: string | undefined
-      promise: Promise<void>
+      promise: Promise<TabContextResolutionOutcome>
       controller: AbortController
+      retryErrors: boolean
     }
   >()
 
@@ -207,6 +209,7 @@ export function createTabContextResolver(deps: {
           : await deps.tabContextCache.readAndCache(tabId)
       if (
         (inMemory !== undefined || cached !== null) &&
+        (!options.retryErrors || cached === null || !("error" in cached)) &&
         !isIncompleteCachedContext(cached) &&
         isCachedContextForUrl(cached, url)
       ) {
@@ -240,6 +243,8 @@ export function createTabContextResolver(deps: {
     }
 
     let acceptsPartialResults = true
+    let stage = "provider-setup"
+    let probe: { url: string; data?: unknown } | undefined
     const resolutionController = new AbortController()
     const abortOwner = () =>
       resolutionController.abort(ownerSignal?.reason ?? "superseded")
@@ -256,7 +261,6 @@ export function createTabContextResolver(deps: {
       const awaitOptionalEnrichment = <T>(operation: Promise<T>) =>
         withinTimeout(operation, resolutionTimeoutMs)
       const manifest = getDefinition(matched.integrationId)
-      let probe: { url: string; data?: unknown } | undefined
       let shouldRunPageProbe = manifest?.pageProbe !== "none"
       const providerAdapter = shouldRunPageProbe
         ? await getBackgroundSiteAdapterById(matched.integrationId)
@@ -278,6 +282,7 @@ export function createTabContextResolver(deps: {
         }
       }
       if (shouldRunPageProbe) {
+        stage = "page-probe"
         try {
           const probeOperation = executeApprovedPageProbe(
             tabId,
@@ -387,6 +392,7 @@ export function createTabContextResolver(deps: {
         }
       }
 
+      stage = "provider-resolution"
       const result = await awaitWithinResolutionDeadline(
         resolveSiteIntegrationSeriesData({
           siteIntegrationId: matched.integrationId,
@@ -399,6 +405,7 @@ export function createTabContextResolver(deps: {
         })
       )
       acceptsPartialResults = false
+      stage = "normalization"
       const normalized = normalizeFetchedSeriesData(result.chapterList)
       const extractionError = result.metadataError ?? result.chapterListError
       const payload = buildResolvedTabContext({
@@ -412,6 +419,7 @@ export function createTabContextResolver(deps: {
         chapterListNotice: result.chapterListNotice,
       })
 
+      stage = "ownership-check"
       const currentTab = await awaitWithinResolutionDeadline(
         chrome.tabs.get(tabId)
       )
@@ -456,6 +464,7 @@ export function createTabContextResolver(deps: {
         }
       }
 
+      stage = "state-commit"
       await initializeTabContext(payload, tabId, {
         requestId,
         windowId,
@@ -474,7 +483,19 @@ export function createTabContextResolver(deps: {
       if (ownerSignal?.aborted) {
         return "completed"
       }
-      logger.error("Tab context resolution failed:", error)
+      logger.error("Tab context resolution failed", {
+        tabId,
+        windowId,
+        requestId,
+        integrationId: matched.integrationId,
+        stage,
+        url,
+        documentUrlAtStart: tab.url,
+        pendingUrlAtStart: tab.pendingUrl,
+        probeUrl: probe?.url,
+        durationMs: Math.round(performance.now() - resolutionStartedAt),
+        error,
+      })
       const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
         windowId,
         requestId
@@ -513,7 +534,19 @@ export function createTabContextResolver(deps: {
 
     const existing = inFlightByTab.get(tabId)
     if (existing?.url === requestedUrl && !options.supersedeInFlight) {
-      return await existing.promise
+      await existing.promise
+      const cached = deps.tabContextCache.getCachedContext(tabId)
+      if (
+        options.retryErrors &&
+        !existing.retryErrors &&
+        cached &&
+        "error" in cached
+      ) {
+        // An ordinary activation can finish by restoring an error from cache.
+        // A recovery caller still needs its one fresh provider attempt.
+        return await resolveTabContext(tabId, options, retryCount)
+      }
+      return
     }
 
     existing?.controller.abort("superseded by a newer tab URL")
@@ -524,13 +557,17 @@ export function createTabContextResolver(deps: {
       options,
       controller.signal
     )
-    const promise = operation.then(() => undefined)
-    inFlightByTab.set(tabId, { url: requestedUrl, promise, controller })
+    inFlightByTab.set(tabId, {
+      url: requestedUrl,
+      promise: operation,
+      controller,
+      retryErrors: options.retryErrors === true,
+    })
     let outcome: TabContextResolutionOutcome
     try {
       outcome = await operation
     } finally {
-      if (inFlightByTab.get(tabId)?.promise === promise) {
+      if (inFlightByTab.get(tabId)?.promise === operation) {
         inFlightByTab.delete(tabId)
       }
     }
@@ -552,7 +589,15 @@ export function createTabContextResolver(deps: {
     }
   }
 
+  function cancelTabContextResolution(tabId: number, reason?: unknown): void {
+    const existing = inFlightByTab.get(tabId)
+    if (!existing) return
+    inFlightByTab.delete(tabId)
+    existing.controller.abort(reason ?? "superseded by external context")
+  }
+
   return {
     resolveTabContext,
+    cancelTabContextResolution,
   }
 }

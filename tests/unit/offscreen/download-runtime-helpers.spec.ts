@@ -64,16 +64,22 @@ describe("prefetchCoverImage", () => {
   it("prefers the dedicated cover hook and admits it once", async () => {
     const dedicated = vi.fn(async (_url, options) => {
       await options.onBytesReceived?.(12)
+      const liveResourceLease = options.liveResourceLedger.reserve(
+        1,
+        "test cover"
+      )
       return {
         data: new ArrayBuffer(1),
         filename: "cover.gif",
         mimeType: "image/gif",
+        liveResourceLease,
       }
     })
-    const chapter = vi.fn(async () => ({
+    const chapter = vi.fn(async (_url, options) => ({
       data: new ArrayBuffer(2),
       filename: "chapter.jpg",
       mimeType: "image/jpeg",
+      liveResourceLease: options.liveResourceLedger.reserve(2, "test chapter"),
     }))
     offscreenSiteAdaptersById["test-site"] = makeIntegration({
       cover: dedicated,

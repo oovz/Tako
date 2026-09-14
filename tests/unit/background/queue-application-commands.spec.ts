@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { QueueApplicationCommands } from "@/entrypoints/background/queue-application-commands"
 import { DownloadTaskCancellationCoordinator } from "@/entrypoints/background/download-task-cancellation-coordinator"
-import type { DestinationService } from "@/entrypoints/background/destination"
 import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
 import type { StartDownloadSettingsDependencies } from "@/entrypoints/background/download-queue-enqueue"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
@@ -19,9 +19,8 @@ const mocks = vi.hoisted(() => ({
   loadStartDownloadSettingsInputs: vi.fn(),
   buildStartDownloadTask: vi.fn(),
   processDownloadQueue: vi.fn(async () => undefined),
-  clearDestinationIssuesForTask: vi.fn(async () => undefined),
   schedulePendingUndoAction: vi.fn(async () => undefined),
-  restorePendingUndoAndCleanup: vi.fn(),
+  restorePendingUndo: vi.fn(),
 }))
 
 vi.mock("@/entrypoints/background/download-queue-enqueue", () => ({
@@ -29,13 +28,9 @@ vi.mock("@/entrypoints/background/download-queue-enqueue", () => ({
   buildStartDownloadTask: mocks.buildStartDownloadTask,
 }))
 
-vi.mock("@/entrypoints/background/destination", () => ({
-  clearDestinationIssuesForTask: mocks.clearDestinationIssuesForTask,
-}))
-
 vi.mock("@/entrypoints/background/pending-undo-coordinator", () => ({
   schedulePendingUndoAction: mocks.schedulePendingUndoAction,
-  restorePendingUndoAndCleanup: mocks.restorePendingUndoAndCleanup,
+  restorePendingUndo: mocks.restorePendingUndo,
 }))
 
 vi.mock("@/entrypoints/background/download-task-side-effect-gate", () => ({
@@ -76,10 +71,6 @@ const startDownloadSettings = {
     getForSite: vi.fn(async () => ({})),
   },
 } satisfies StartDownloadSettingsDependencies
-
-const destinationService = {
-  clearDestinationIssuesForTask: mocks.clearDestinationIssuesForTask,
-} as unknown as DestinationService
 
 const finalizationDependencies = {
   settingsRepository: {
@@ -259,7 +250,7 @@ describe("QueueApplicationCommands", () => {
       outcome: "applied",
       task: task("task-1"),
     })
-    mocks.restorePendingUndoAndCleanup.mockResolvedValue({
+    mocks.restorePendingUndo.mockResolvedValue({
       outcome: "applied",
       action: pendingAction("remove_history"),
       restored: true,
@@ -272,16 +263,17 @@ describe("QueueApplicationCommands", () => {
       startDownloadSettings,
       queueRepository,
       nativeOutputCoordinator,
+      terminalCoordinator: {
+        continueAfterNativeOutputSettlement: vi.fn(async () => undefined),
+      } as unknown as OffscreenJobTerminalCoordinator,
       cancellationCoordinator: new DownloadTaskCancellationCoordinator(
         queueRepository,
         nativeOutputCoordinator,
-        destinationService,
         finalizationDependencies
       ),
       queueScheduler: {
         activate: mocks.processDownloadQueue,
       } as unknown as QueueScheduler,
-      destinationService,
       siteIntegrationEnablementService: {
         getAll: vi.fn(async () => ({ mangadex: true })),
       },
@@ -332,16 +324,17 @@ describe("QueueApplicationCommands", () => {
       startDownloadSettings,
       queueRepository,
       nativeOutputCoordinator,
+      terminalCoordinator: {
+        continueAfterNativeOutputSettlement: vi.fn(async () => undefined),
+      } as unknown as OffscreenJobTerminalCoordinator,
       cancellationCoordinator: new DownloadTaskCancellationCoordinator(
         queueRepository,
         nativeOutputCoordinator,
-        destinationService,
         finalizationDependencies
       ),
       queueScheduler: {
         activate: mocks.processDownloadQueue,
       } as unknown as QueueScheduler,
-      destinationService,
       siteIntegrationEnablementService: { getAll: providerLookup },
       getCurrentSeriesContext,
     })
@@ -467,7 +460,7 @@ describe("QueueApplicationCommands", () => {
     expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
   })
 
-  it("re-drives destination cleanup and activation for an exact replay", async () => {
+  it("re-drives destination unblock and activation for an exact replay", async () => {
     vi.mocked(queueRepository.resumeDestinationTask)
       .mockResolvedValueOnce({ outcome: "applied", task: task("task-1") })
       .mockResolvedValueOnce({
@@ -482,7 +475,6 @@ describe("QueueApplicationCommands", () => {
     await expect(
       commands.retryDestination("task-1", "command-destination")
     ).resolves.toBeUndefined()
-    expect(mocks.clearDestinationIssuesForTask).toHaveBeenCalledTimes(2)
     expect(mocks.processDownloadQueue).toHaveBeenCalledTimes(2)
     expect(queueRepository.resumeDestinationTask).toHaveBeenNthCalledWith(
       1,
@@ -504,7 +496,6 @@ describe("QueueApplicationCommands", () => {
     await expect(
       commands.retryDestination("task-1", "old-destination-command")
     ).resolves.toBeUndefined()
-    expect(mocks.clearDestinationIssuesForTask).not.toHaveBeenCalled()
     expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
   })
 
@@ -531,7 +522,7 @@ describe("QueueApplicationCommands", () => {
     expect(mocks.schedulePendingUndoAction).toHaveBeenCalledTimes(2)
   })
 
-  it("orders active cancellation effects after commit and tolerates only diagnostic cleanup failure", async () => {
+  it("orders active cancellation effects after the durable queue commit", async () => {
     const events: string[] = []
     const lease = activeLease()
     vi.mocked(queueRepository.cancelDownloadTask).mockImplementation(
@@ -545,10 +536,6 @@ describe("QueueApplicationCommands", () => {
         }
       }
     )
-    mocks.clearDestinationIssuesForTask.mockImplementation(async () => {
-      events.push("destination")
-      throw new Error("diagnostic write failed")
-    })
     sendMessage.mockImplementation(async () => {
       events.push("offscreen")
       return {
@@ -582,7 +569,6 @@ describe("QueueApplicationCommands", () => {
 
     expect(events).toEqual([
       "commit",
-      "destination",
       "offscreen",
       "clear-lease",
       "pending-output",
@@ -762,20 +748,16 @@ describe("QueueApplicationCommands", () => {
     ).rejects.toThrow("queue activation failed")
   })
 
-  it("requires destination cleanup before activation", async () => {
-    mocks.clearDestinationIssuesForTask.mockRejectedValueOnce(
-      new Error("destination cleanup failed")
-    )
-
+  it("activates after destination unblock commits", async () => {
     await expect(
       commands.retryDestination("task-1", "command-destination")
-    ).rejects.toThrow("destination cleanup failed")
+    ).resolves.toBeUndefined()
     expect(queueRepository.resumeDestinationTask).toHaveBeenCalled()
-    expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
+    expect(mocks.processDownloadQueue).toHaveBeenCalled()
   })
 
   it("activates after Undo only when a queued task was restored", async () => {
-    mocks.restorePendingUndoAndCleanup
+    mocks.restorePendingUndo
       .mockResolvedValueOnce({
         outcome: "applied",
         action: pendingAction("remove_history"),
@@ -797,7 +779,7 @@ describe("QueueApplicationCommands", () => {
   })
 
   it("treats an exact queued Undo replay as success and reactivates again", async () => {
-    mocks.restorePendingUndoAndCleanup
+    mocks.restorePendingUndo
       .mockResolvedValueOnce({
         outcome: "applied",
         action: pendingAction("cancel_queued"),

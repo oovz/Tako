@@ -14,14 +14,14 @@ const recoveryMocks = vi.hoisted(() => ({
   refreshLivenessAlarmForDurableWork: vi.fn(async () => undefined),
 }))
 const pendingUndoMocks = vi.hoisted(() => ({
-  finalizePendingUndoAndCleanup: vi.fn(async () => undefined),
+  finalizePendingUndo: vi.fn(async () => undefined),
 }))
 const progressPortMocks = vi.hoisted(() => ({
   registerActiveTaskProgressPort: vi.fn(),
 }))
 
 vi.mock("@/entrypoints/background/pending-undo-coordinator", () => ({
-  finalizePendingUndoAndCleanup: pendingUndoMocks.finalizePendingUndoAndCleanup,
+  finalizePendingUndo: pendingUndoMocks.finalizePendingUndo,
 }))
 
 vi.mock("@/entrypoints/background/active-task-progress-bus", async () => {
@@ -49,7 +49,6 @@ import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { ProviderPolicyQueueCoordinator } from "@/entrypoints/background/provider-policy-queue-coordinator"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
-import type { DestinationService } from "@/entrypoints/background/destination"
 import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
@@ -59,9 +58,15 @@ type ListenerDependencies = Parameters<
 
 function createNativeOutputCoordinatorStub(): NativeOutputCoordinator {
   return {
-    handleDownloadChanged: vi.fn(async () => false),
-    handleDownloadErased: vi.fn(async () => false),
-    reconcile: vi.fn(async () => undefined),
+    handleDownloadChanged: vi.fn(async () => ({
+      handled: false,
+      effects: [],
+    })),
+    handleDownloadErased: vi.fn(async () => ({
+      handled: false,
+      effects: [],
+    })),
+    reconcile: vi.fn(async () => []),
   } as unknown as NativeOutputCoordinator
 }
 
@@ -82,7 +87,9 @@ function createListenerDependencies(
       activate: vi.fn(async () => undefined),
       resumeTask: vi.fn(async () => undefined),
     } as unknown as QueueScheduler,
-    terminalCoordinator: {} as OffscreenJobTerminalCoordinator,
+    terminalCoordinator: {
+      continueAfterNativeOutputSettlement: vi.fn(async () => undefined),
+    } as unknown as OffscreenJobTerminalCoordinator,
     providerPolicyQueueCoordinator: {
       resumeBlockedQueue: vi.fn(async () => false),
     } as unknown as ProviderPolicyQueueCoordinator,
@@ -95,9 +102,6 @@ function createListenerDependencies(
     settingsRepository: {
       getSettings: vi.fn(async () => DEFAULT_SETTINGS),
     } as unknown as Pick<SettingsRepository, "getSettings">,
-    destinationService: {
-      clearDestinationIssuesForTask: vi.fn(async () => undefined),
-    } as unknown as DestinationService,
     ...overrides,
   }
 }
@@ -517,9 +521,10 @@ describe("registerBackgroundRuntimeListeners", () => {
 
     await vi.waitFor(() => {
       expect(waitForReadiness).toHaveBeenCalledWith("runtime-ready")
-      expect(
-        pendingUndoMocks.finalizePendingUndoAndCleanup
-      ).toHaveBeenCalledWith(queueRepository, "undo-123", expect.any(Object))
+      expect(pendingUndoMocks.finalizePendingUndo).toHaveBeenCalledWith(
+        queueRepository,
+        "undo-123"
+      )
     })
     expect(nativeOutputCoordinator.reconcile).not.toHaveBeenCalled()
     expect(recoveryMocks.recoverFromLivenessTimeout).not.toHaveBeenCalled()

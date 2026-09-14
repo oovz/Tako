@@ -1,13 +1,5 @@
 /**
- * Adversarial Tests: Download Queue Guards
- *
- * Covers:
- *  - Guard 1: MAX_CONCURRENT_QUEUED_TASKS (queue overload protection)
- *    Source: src/domain/queue/scheduler-policy.ts
- *    Enforcement: entrypoints/background/queue-scheduler.ts
- *  - Guard 4: Chapter delay enforcement
- *    Source: persisted task settings
- *    Enforcement: entrypoints/background/download-task-executor.ts
+ * Download queue scheduling and chapter-delay behavior.
  */
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
@@ -180,7 +172,7 @@ describe("Download Queue Guards", () => {
     installDispatchAcknowledgementResponder()
   })
 
-  describe("MAX_CONCURRENT_QUEUED_TASKS (queue overload protection)", () => {
+  describe("Single active task scheduling", () => {
     it("does not dispatch when the queued-to-downloading transition loses a cancellation race", async () => {
       const queuedTask = makeTask({
         id: "canceled-before-start",

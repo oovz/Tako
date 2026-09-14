@@ -34,6 +34,7 @@ export function createBackgroundTabContextMessageHandlers(
       await deps.tabContextResolver.resolveTabContext(tabId, {
         windowId: tab.windowId,
         allowCached: true,
+        retryErrors: true,
       })
       return { success: true }
     },

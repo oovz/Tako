@@ -8,7 +8,7 @@ import {
   notifyDownloadTaskCompletion,
   type DownloadQueueFinalizationDependencies,
 } from "./download-queue-finalization"
-import { DestinationService } from "./destination"
+import { DestinationPreflightError, DestinationService } from "./destination"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import { isEnabled } from "@/src/site-integrations/catalog"
 import type { ProviderPolicyQueueCoordinator } from "./provider-policy-queue-coordinator"
@@ -188,42 +188,13 @@ async function runDownloadTask(
       taskDestinationContext
     )
     if (!destinationPreflight.ready) {
-      const transition = await stateManager.blockTaskForDestination({
-        taskId,
-        now: Date.now(),
-      })
-      if (transition.outcome === "applied") {
-        try {
-          await destinationService.recordDestinationIssue(
-            taskDestinationContext,
-            destinationPreflight
-          )
-        } catch (error) {
-          logger.warn("[Queue] Destination diagnostic write failed", error)
-        }
-      }
-      if (currentLeaseForTask) {
-        await cancellationCoordinator.cancelProducerAndClearLease(
-          currentLeaseForTask
-        )
-      }
-      await clearActiveTaskProgress()
-      logger.info("[Queue]", {
-        event: "DESTINATION_ACTION_REQUIRED",
-        taskId,
-        reason: destinationPreflight.reason,
-      })
-      return "queue-continuation"
+      throw new DestinationPreflightError(
+        taskDestinationContext,
+        destinationPreflight
+      )
     }
     if (task.activeBlock === "destination_action_required") {
-      const transition = await stateManager.releaseDestinationBlock(taskId)
-      if (transition.outcome === "applied") {
-        try {
-          await destinationService.clearDestinationIssuesForTask(taskId)
-        } catch (error) {
-          logger.warn("[Queue] Destination diagnostic cleanup failed", error)
-        }
-      }
+      await stateManager.releaseDestinationBlock(taskId)
     }
 
     await ensureOffscreenReady()
@@ -335,6 +306,21 @@ async function runDownloadTask(
     })
     return "queue-continuation"
   } catch (error) {
+    if (error instanceof DestinationPreflightError) {
+      await destinationService.blockForPreflight(error.context, error.result)
+      if (currentLeaseForTask) {
+        await cancellationCoordinator.cancelProducerAndClearLease(
+          currentLeaseForTask
+        )
+      }
+      await clearActiveTaskProgress()
+      logger.info("[Queue]", {
+        event: "DESTINATION_ACTION_REQUIRED",
+        taskId,
+        reason: error.result.reason,
+      })
+      return "queue-continuation"
+    }
     if (error instanceof ProviderNetworkPolicyPendingError) {
       const blockTransition = await stateManager.blockTaskForProviderPolicy({
         taskId,

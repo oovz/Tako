@@ -55,7 +55,7 @@ export function FsaBanner({ className }: FsaBannerProps) {
     ): void => {
       if (
         areaName !== "local" ||
-        !(LOCAL_STORAGE_KEYS.destinationIssues in changes)
+        !(LOCAL_STORAGE_KEYS.downloadQueue in changes)
       ) {
         return
       }

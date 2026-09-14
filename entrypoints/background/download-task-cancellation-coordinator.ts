@@ -6,13 +6,12 @@ import type {
 import type { NativeOutputJobIdentity } from "@/src/domain/native-output/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
-import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
+import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 
 import type { NativeOutputCoordinator } from "./native-output-coordinator"
 import { runTaskSideEffectExclusive } from "./download-task-side-effect-gate"
 import { schedulePendingUndoAction } from "./pending-undo-coordinator"
-import type { DestinationService } from "./destination"
 import { clearActiveTaskProgress } from "./active-task-progress-bus"
 import {
   notifyTerminalDownloadTask,
@@ -28,7 +27,6 @@ export class DownloadTaskCancellationCoordinator {
   constructor(
     private readonly queueRepository: QueueRepository,
     private readonly nativeOutputCoordinator: NativeOutputCoordinator,
-    private readonly destinationService: DestinationService,
     private readonly finalizationDependencies: DownloadQueueFinalizationDependencies
   ) {}
 
@@ -46,11 +44,7 @@ export class DownloadTaskCancellationCoordinator {
         now: Date.now(),
       })
       if (transition.outcome === "unchanged" && transition.undo) {
-        await schedulePendingUndoAction(
-          this.queueRepository,
-          transition.undo,
-          this.destinationService
-        )
+        await schedulePendingUndoAction(this.queueRepository, transition.undo)
         return {
           result: { kind: "queued", undo: transition.undo },
           queueCanContinue: false,
@@ -76,25 +70,13 @@ export class DownloadTaskCancellationCoordinator {
       }
 
       if (transition.undo) {
-        await schedulePendingUndoAction(
-          this.queueRepository,
-          transition.undo,
-          this.destinationService
-        )
+        await schedulePendingUndoAction(this.queueRepository, transition.undo)
         return {
           result: { kind: "queued", undo: transition.undo },
           queueCanContinue: false,
         }
       }
 
-      try {
-        await this.destinationService.clearDestinationIssuesForTask(taskId)
-      } catch (error) {
-        logger.warn(
-          "[Queue] Destination diagnostic cleanup failed after cancellation",
-          error
-        )
-      }
       await clearActiveTaskProgress()
       if (transition.canceledLease) {
         await progressTimingEstimator.finish(transition.canceledLease.jobId)

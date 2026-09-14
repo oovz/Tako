@@ -39,7 +39,7 @@ const incarnation = {
   documentInstanceId: "document-1",
 }
 
-describe("Phase 10 offscreen resource lifecycles", () => {
+describe("Offscreen resource lifecycles", () => {
   afterEach(() => vi.useRealTimers())
 
   it("times out only finalization and disposes an archive worker once", async () => {

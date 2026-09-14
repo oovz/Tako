@@ -4,14 +4,15 @@ import {
   queryFsaPermission,
 } from "@/src/storage/fs-access"
 import logger from "@/src/runtime/logger"
-import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type {
+  DispatchLeaseAuthority,
   DestinationIssue,
   DestinationIssueKind,
+  DownloadTaskState,
+  OutputAccounting,
 } from "@/src/domain/queue/state"
 import type { DownloadDestination } from "@/src/shared/download-contract"
-import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
-import { parseDestinationIssues } from "@/src/runtime/destination-issue-state"
+import type { QueueRepository } from "@/src/storage/queue-repository"
 
 type EffectiveDestination =
   | { kind: "custom"; handleId: string; handle: FileSystemDirectoryHandle }
@@ -37,12 +38,17 @@ export type DestinationPreflight =
     }
 
 export class DestinationPreflightError extends Error {
-  readonly reason: Exclude<DestinationPreflight, { ready: true }>["reason"]
+  readonly context: DestinationContext
+  readonly result: Exclude<DestinationPreflight, { ready: true }>
 
-  constructor(reason: DestinationPreflightError["reason"]) {
-    super(`Destination preflight failed: ${reason}`)
+  constructor(
+    context: DestinationContext,
+    result: Exclude<DestinationPreflight, { ready: true }>
+  ) {
+    super(`Destination preflight failed: ${result.reason}`)
     this.name = "DestinationPreflightError"
-    this.reason = reason
+    this.context = context
+    this.result = result
   }
 }
 
@@ -85,53 +91,28 @@ export interface DestinationSettingsReader {
   getSettings(): Promise<{ notifications: boolean }>
 }
 
-export type DestinationIssueRecordResult = {
-  issue: DestinationIssue
-  inserted: boolean
-}
+export type DestinationBlockResult = Awaited<
+  ReturnType<QueueRepository["blockTaskForDestination"]>
+>
 
-/** Owns the durable destination-issue document and its read-modify-write queue. */
-export class DestinationIssueRepository {
-  private readonly mutations = new StorageMutationQueue()
+type DestinationQueueOwner = Pick<QueueRepository, "blockTaskForDestination">
 
-  async getAll(): Promise<DestinationIssue[]> {
-    return await this.mutations.run(() => this.readDocument())
-  }
-
-  async record(issue: DestinationIssue): Promise<DestinationIssueRecordResult> {
-    return await this.mutations.run(async () => {
-      const current = await this.readDocument()
-      const existing = current.find((candidate) => candidate.id === issue.id)
-      if (existing) return { issue: existing, inserted: false }
-
-      await chrome.storage.local.set({
-        [LOCAL_STORAGE_KEYS.destinationIssues]: [...current, issue],
-      })
-      return { issue, inserted: true }
-    })
-  }
-
-  async clearForTask(taskId: string): Promise<void> {
-    await this.mutations.run(async () => {
-      const current = await this.readDocument()
-      const next = current.filter((issue) => issue.taskId !== taskId)
-      if (next.length === current.length) return
-      await chrome.storage.local.set({
-        [LOCAL_STORAGE_KEYS.destinationIssues]: next,
-      })
-    })
-  }
-
-  private async readDocument(): Promise<DestinationIssue[]> {
-    const stored = await chrome.storage.local.get(
-      LOCAL_STORAGE_KEYS.destinationIssues
-    )
-    return parseDestinationIssues(stored[LOCAL_STORAGE_KEYS.destinationIssues])
+export type DestinationBlockInput = {
+  context: DestinationContext
+  kind: DestinationIssueKind
+  now?: number
+  errorMessage?: string
+  errorCategory?: DownloadTaskState["errorCategory"]
+  chapter?: {
+    chapterId: string
+    lease: DispatchLeaseAuthority
+    imagesFailed?: number
+    outputs?: OutputAccounting
   }
 }
 
 export interface DestinationServiceDependencies {
-  issueRepository: DestinationIssueRepository
+  queueRepository: DestinationQueueOwner
   settingsReader: DestinationSettingsReader
   notifier: DestinationIssueNotifier
 }
@@ -139,35 +120,28 @@ export interface DestinationServiceDependencies {
 export class DestinationService {
   constructor(private readonly deps: DestinationServiceDependencies) {}
 
-  async getIssues(): Promise<DestinationIssue[]> {
-    return await this.deps.issueRepository.getAll()
-  }
-
-  async recordDestinationIssue(
+  async blockForPreflight(
     context: DestinationContext,
     result: Exclude<DestinationPreflight, { ready: true }>
-  ): Promise<DestinationIssue> {
-    return await this.recordDestinationIssueKind(
+  ): Promise<DestinationBlockResult> {
+    return await this.block({
       context,
-      issueKindForPreflight(result)
-    )
+      kind: issueKindForPreflight(result),
+    })
   }
 
-  async recordDestinationRuntimeIssue(
-    context: DestinationContext,
-    kind: Extract<
-      DestinationIssueKind,
-      | "fsa_permission_required"
-      | "fsa_folder_missing"
-      | "fsa_write_failed"
-      | "disk_full"
-    >
-  ): Promise<DestinationIssue> {
-    return await this.recordDestinationIssueKind(context, kind)
-  }
-
-  async clearDestinationIssuesForTask(taskId: string): Promise<void> {
-    await this.deps.issueRepository.clearForTask(taskId)
+  async blockForRuntimeIssue(
+    input: Omit<DestinationBlockInput, "kind"> & {
+      kind: Extract<
+        DestinationIssueKind,
+        | "fsa_permission_required"
+        | "fsa_folder_missing"
+        | "fsa_write_failed"
+        | "disk_full"
+      >
+    }
+  ): Promise<DestinationBlockResult> {
+    return await this.block(input)
   }
 
   async preflight(context: DestinationContext): Promise<DestinationPreflight> {
@@ -217,15 +191,13 @@ export class DestinationService {
 
     const preflight = await this.preflight(context)
     if (!preflight.ready) {
-      await this.recordDestinationIssue(context, preflight)
-      throw new DestinationPreflightError(preflight.reason)
+      throw new DestinationPreflightError(context, preflight)
     }
 
     const handle = await loadDownloadRootHandle()
     if (!handle) {
       const unavailable = { ready: false, reason: "not_configured" } as const
-      await this.recordDestinationIssue(context, unavailable)
-      throw new DestinationPreflightError(unavailable.reason)
+      throw new DestinationPreflightError(context, unavailable)
     }
 
     return {
@@ -235,17 +207,23 @@ export class DestinationService {
     }
   }
 
-  private async recordDestinationIssueKind(
-    context: DestinationContext,
-    kind: DestinationIssueKind
-  ): Promise<DestinationIssue> {
-    const issue = createDestinationIssue(context, kind)
-    const result = await this.deps.issueRepository.record(issue)
-    if (result.inserted) {
+  private async block(
+    input: DestinationBlockInput
+  ): Promise<DestinationBlockResult> {
+    const issue = createDestinationIssue(input.context, input.kind)
+    const transition = await this.deps.queueRepository.blockTaskForDestination({
+      taskId: input.context.taskId,
+      now: input.now ?? Date.now(),
+      destinationIssue: issue,
+      errorMessage: input.errorMessage,
+      errorCategory: input.errorCategory,
+      chapter: input.chapter,
+    })
+    if (transition.outcome === "applied") {
       try {
         const settings = await this.deps.settingsReader.getSettings()
         await this.deps.notifier.notifyDestinationActionRequired({
-          issue: result.issue,
+          issue,
           notificationsEnabled: settings.notifications,
         })
       } catch (error) {
@@ -255,6 +233,6 @@ export class DestinationService {
         )
       }
     }
-    return result.issue
+    return transition
   }
 }

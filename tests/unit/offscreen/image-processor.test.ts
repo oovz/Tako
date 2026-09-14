@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { fetchImageWithStallDetection } from "@/entrypoints/offscreen/image-processor"
+import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image-core"
 import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
 
 vi.mock("@/src/site-integrations/http-client", () => ({

@@ -101,11 +101,15 @@ export function createBackgroundOffscreenEventMessageHandlers(
           reason: "stale-offscreen-document",
         }
       }
-      return await runTaskSideEffectExclusive(
+      const result = await runTaskSideEffectExclusive(
         message.payload.taskId,
         async () =>
           await deps.nativeOutputCoordinator.handleOutputReady(message.payload)
       )
+      await deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+        result.effects
+      )
+      return result.response
     },
     OFFSCREEN_DOWNLOAD_PROGRESS: async (message, sender) => {
       if (!(await isCurrentOffscreenSender(sender))) {
@@ -179,7 +183,7 @@ async function isCurrentOffscreenSender(
 ): Promise<boolean> {
   // Chrome may omit documentId for legitimate offscreen messages. The runtime
   // dispatcher has already required the exact same-extension, tabless
-  // /offscreen.html principal; Phase 10 effects additionally carry the
+  // /offscreen.html principal; job and output messages additionally carry the
   // mandatory application documentInstanceId and validate it against durable
   // job/output authority.
   if (sender.documentId === undefined) {

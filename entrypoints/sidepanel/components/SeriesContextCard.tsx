@@ -7,6 +7,7 @@ import {
   Layers,
   AlertCircle,
   Loader2,
+  RotateCw,
 } from "lucide-react"
 import { cn } from "@/src/shared/utils"
 import { Badge } from "@/components/ui/badge"
@@ -65,7 +66,12 @@ export function SeriesContextCard({
   triggerRef,
 }: SeriesContextCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
-  const messageState = resolveSeriesCardMessage(data.blockingMessage)
+  const messageState = data.retrySeriesContext
+    ? {
+        title: t("sidepanel_seriesLoadFailed"),
+        description: t("sidepanel_retrySeriesDescription"),
+      }
+    : resolveSeriesCardMessage(data.blockingMessage)
 
   if (data.isLoading) {
     return (
@@ -107,12 +113,23 @@ export function SeriesContextCard({
               "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
               isExpanded && "ring-1 ring-border"
             )}
-            disabled
-            aria-expanded={isExpanded}
-            aria-controls="inline-selection-panel"
+            disabled={!data.retrySeriesContext}
+            onClick={data.retrySeriesContext}
+            aria-expanded={data.retrySeriesContext ? undefined : isExpanded}
+            aria-controls={
+              data.retrySeriesContext ? undefined : "inline-selection-panel"
+            }
           >
-            <List className="size-4" />
-            {t("sidepanel_selectChapters")}
+            {data.retrySeriesContext ? (
+              <RotateCw className="size-4" />
+            ) : (
+              <List className="size-4" />
+            )}
+            {t(
+              data.retrySeriesContext
+                ? "sidepanel_retrySeriesContext"
+                : "sidepanel_selectChapters"
+            )}
           </Button>
         </div>
       </div>

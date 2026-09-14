@@ -13,15 +13,10 @@ describe("classifyRuntimeMessagePrincipal", () => {
   it.each([
     ["sidepanel", "/sidepanel.html", undefined, "sidepanel-document"],
     ["sidepanel", "/sidepanel.html", undefined, undefined],
-    ["sidepanel", "/sidepanel/index.html", undefined, undefined],
-    ["sidepanel", "/sidepanel", undefined, undefined],
     ["options", "/options.html?tab=downloads", undefined, "options-document"],
     ["options", "/options.html", undefined, undefined],
-    ["options", "/options/index.html", undefined, undefined],
-    ["options", "/options", undefined, undefined],
     ["offscreen", "/offscreen.html", undefined, "offscreen-document"],
-    ["offscreen", "/offscreen/index.html", undefined, undefined],
-    ["offscreen", "/offscreen", undefined, undefined],
+    ["background", "/background.js", undefined, undefined],
     ["sidepanel", "/sidepanel.html", tab(5), "sidepanel-document"],
     ["sidepanel", "/sidepanel.html", tab(5), undefined],
   ] as const)(
@@ -88,6 +83,62 @@ describe("classifyRuntimeMessagePrincipal", () => {
         documentId: "document",
       },
       "non-exact offscreen path",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/offscreen/index.html`,
+      },
+      "unbuilt offscreen index alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/offscreen`,
+      },
+      "unbuilt offscreen path alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/options/index.html`,
+      },
+      "unbuilt options index alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/options`,
+      },
+      "unbuilt options path alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/sidepanel/index.html`,
+      },
+      "unbuilt sidepanel index alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/sidepanel`,
+      },
+      "unbuilt sidepanel path alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/background`,
+      },
+      "unbuilt background path alias",
+    ],
+    [
+      {
+        id: EXTENSION_ID,
+        url: `chrome-extension://${EXTENSION_ID}/_generated_background_page.html`,
+      },
+      "unbuilt background page alias",
     ],
     [
       {

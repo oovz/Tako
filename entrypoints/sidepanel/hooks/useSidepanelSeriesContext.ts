@@ -34,6 +34,7 @@ export interface SidepanelSeriesContextData {
   siteId: string | undefined
   author?: string
   coverUrl?: string
+  retrySeriesContext?: () => void
 }
 
 export async function resolveCurrentSidepanelWindowId(): Promise<
@@ -83,6 +84,7 @@ interface SeriesContextRecoveryObservation {
   hydrated: boolean
   tabId: number | undefined
   windowId: number | undefined
+  sourceUrl?: string
 }
 
 function describeRecoverableSeriesContext(
@@ -107,58 +109,89 @@ export function createSeriesContextRecoveryCoordinator(input: {
   requestRefresh: (target: {
     tabId: number
     windowId: number
+    reason?: "sidepanel-retry"
   }) => Promise<RuntimeMessageResponse<"REQUEST_TAB_CONTEXT_REFRESH">>
 }) {
   let activeAttempt:
     | {
         key: string
+        targetKey: string
+        pending: boolean
+        errorRecovery: boolean
       }
     | undefined
 
-  return {
-    async recoverIfNeeded(
-      observation: SeriesContextRecoveryObservation
-    ): Promise<void> {
-      if (
-        !observation.hydrated ||
-        typeof observation.tabId !== "number" ||
-        typeof observation.windowId !== "number"
-      ) {
-        return
-      }
+  async function recover(
+    observation: SeriesContextRecoveryObservation,
+    explicitRetry = false
+  ): Promise<void> {
+    if (
+      !observation.hydrated ||
+      typeof observation.tabId !== "number" ||
+      typeof observation.windowId !== "number"
+    ) {
+      return
+    }
 
+    if (
+      observation.activeTabContext.kind === "ready" &&
+      typeof observation.activeTabContext.revision === "number" &&
+      observation.activeTabContext.mangaState.chaptersLoading !== true
+    ) {
+      activeAttempt = undefined
+      return
+    }
+    const targetKey = [
+      observation.windowId,
+      observation.tabId,
+      observation.sourceUrl,
+    ].join(":")
+    if (activeAttempt?.targetKey === targetKey) {
+      if (activeAttempt.pending) return
       if (
-        observation.activeTabContext.kind === "ready" &&
-        typeof observation.activeTabContext.revision === "number" &&
-        observation.activeTabContext.mangaState.chaptersLoading !== true
-      ) {
+        !explicitRetry &&
+        activeAttempt.errorRecovery &&
+        (observation.activeTabContext.kind === "error" ||
+          observation.activeTabContext.kind === "loading")
+      )
+        return
+    }
+    const key = [
+      targetKey,
+      describeRecoverableSeriesContext(observation.activeTabContext),
+    ].join(":")
+    if (!explicitRetry && activeAttempt?.key === key) return
+
+    const attempt = {
+      key,
+      targetKey,
+      pending: true,
+      errorRecovery: observation.activeTabContext.kind === "error",
+    }
+    activeAttempt = attempt
+    try {
+      const response = await input.requestRefresh({
+        tabId: observation.tabId,
+        windowId: observation.windowId,
+        ...(explicitRetry ? { reason: "sidepanel-retry" as const } : {}),
+      })
+      if (!response.success && activeAttempt === attempt) {
         activeAttempt = undefined
-        return
       }
-      const key = [
-        observation.windowId,
-        observation.tabId,
-        describeRecoverableSeriesContext(observation.activeTabContext),
-      ].join(":")
-      if (activeAttempt?.key === key) return
-
-      const attempt = { key }
-      activeAttempt = attempt
-      try {
-        const response = await input.requestRefresh({
-          tabId: observation.tabId,
-          windowId: observation.windowId,
-        })
-        if (!response.success && activeAttempt === attempt) {
-          activeAttempt = undefined
-        }
-      } catch (error) {
-        if (activeAttempt === attempt) {
-          activeAttempt = undefined
-        }
-        throw error
+    } catch (error) {
+      if (activeAttempt === attempt) {
+        activeAttempt = undefined
       }
-    },
+      throw error
+    } finally {
+      attempt.pending = false
+    }
+  }
+  return {
+    recoverIfNeeded: (observation: SeriesContextRecoveryObservation) =>
+      recover(observation),
+    retry: (observation: SeriesContextRecoveryObservation) =>
+      recover(observation, true),
   }
 }
 
@@ -168,14 +201,18 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
   const recoveryCoordinator = useMemo(
     () =>
       createSeriesContextRecoveryCoordinator({
-        requestRefresh: ({ tabId: targetTabId, windowId: targetWindowId }) =>
+        requestRefresh: ({
+          tabId: targetTabId,
+          windowId: targetWindowId,
+          reason,
+        }) =>
           sendRuntimeMessage({
             target: "background",
             type: "REQUEST_TAB_CONTEXT_REFRESH",
             payload: {
               tabId: targetTabId,
               windowId: targetWindowId,
-              reason: "sidepanel-mount",
+              reason: reason ?? "sidepanel-mount",
             },
           }),
       }),
@@ -265,11 +302,40 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
         hydrated,
         tabId,
         windowId,
+        sourceUrl: activeUrl,
       })
       .catch((error) =>
         logger.debug("[sidepanel] Context refresh request failed", error)
       )
-  }, [activeTabContext, hydrated, recoveryCoordinator, tabId, windowId])
+  }, [
+    activeTabContext,
+    activeUrl,
+    hydrated,
+    recoveryCoordinator,
+    tabId,
+    windowId,
+  ])
+
+  const retrySeriesContext = useCallback(() => {
+    void recoveryCoordinator
+      .retry({
+        activeTabContext,
+        hydrated,
+        tabId,
+        windowId,
+        sourceUrl: activeUrl,
+      })
+      .catch((error) =>
+        logger.debug("[sidepanel] Context retry request failed", error)
+      )
+  }, [
+    activeTabContext,
+    activeUrl,
+    hydrated,
+    recoveryCoordinator,
+    tabId,
+    windowId,
+  ])
 
   const data = useMemo(() => {
     const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)
@@ -297,6 +363,8 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     seriesRevision:
       activeTabContext.kind === "ready" ? activeTabContext.revision : undefined,
     ...data,
+    retrySeriesContext:
+      activeTabContext.kind === "error" ? retrySeriesContext : undefined,
     // Until the session snapshot has hydrated, an initial "unsupported"
     // placeholder is not a resolved result. Keep the loading projection so a
     // panel opening on a supported page does not flash the wrong state.

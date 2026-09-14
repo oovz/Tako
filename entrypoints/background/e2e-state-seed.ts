@@ -91,6 +91,7 @@ function isTabContextSeedMessage(
 export function registerE2EStateSeedListener(input: {
   ensureRuntimeReady: () => Promise<void>
   getTabContextStateService: () => TabContextStateService
+  cancelTabContextResolution: (tabId: number) => void
   queueRepository: QueueRepository
   siteIntegrationEnablementService: Pick<
     SiteIntegrationEnablementService,
@@ -152,6 +153,8 @@ export function registerE2EStateSeedListener(input: {
         throw new Error("E2E tab context target is not the active source page")
       }
 
+      input.cancelTabContextResolution(message.payload.tabId)
+
       const result = await input
         .getTabContextStateService()
         .commitResolvedTabContext(
@@ -166,6 +169,10 @@ export function registerE2EStateSeedListener(input: {
       if (!result.success) {
         throw new Error("E2E tab context seed was rejected")
       }
+      // An activation may have started between target validation and the
+      // serialized state commit. Cancel that owner as well so it cannot
+      // publish a provider result after the authoritative seed.
+      input.cancelTabContextResolution(message.payload.tabId)
       return { success: true }
     })()
       .then(sendResponse)

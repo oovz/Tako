@@ -1,82 +1,46 @@
-import type { DestinationService } from "@/entrypoints/background/destination"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import {
   cancelPendingUndoExpiry,
   schedulePendingUndoExpiry,
 } from "@/src/runtime/pending-undo-actions"
-import logger from "@/src/runtime/logger"
-import type {
-  PendingUndoAction,
-  PendingUndoReceipt,
-} from "@/src/domain/queue/state"
+import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 
-async function cleanUpFinalizedAction(
-  action: PendingUndoAction,
-  destinationService: DestinationService
-): Promise<void> {
-  if (action.type === "cancel_queued") {
-    try {
-      await destinationService.clearDestinationIssuesForTask(
-        action.taskSnapshot.id
-      )
-    } catch (error) {
-      logger.warn(
-        "[Queue] Destination diagnostic cleanup failed after Undo finalization",
-        error
-      )
-    }
-  }
-}
-
-export async function finalizePendingUndoAndCleanup(
+export async function finalizePendingUndo(
   stateManager: QueueRepository,
-  token: string,
-  destinationService: DestinationService
+  token: string
 ): Promise<void> {
-  const result = await stateManager.finalizePendingUndoAction(token)
+  await stateManager.finalizePendingUndoAction(token)
   await cancelPendingUndoExpiry(token)
-  if (result.outcome === "applied") {
-    await cleanUpFinalizedAction(result.action, destinationService)
-  }
 }
 
 export async function schedulePendingUndoAction(
   stateManager: QueueRepository,
-  action: PendingUndoReceipt,
-  destinationService: DestinationService
+  action: PendingUndoReceipt
 ): Promise<void> {
   await schedulePendingUndoExpiry(action, (token) =>
-    finalizePendingUndoAndCleanup(stateManager, token, destinationService)
+    finalizePendingUndo(stateManager, token)
   )
 }
 
-export async function restorePendingUndoAndCleanup(
+export async function restorePendingUndo(
   stateManager: QueueRepository,
-  token: string,
-  destinationService: DestinationService
+  token: string
 ): Promise<Awaited<ReturnType<QueueRepository["restorePendingUndoAction"]>>> {
   const result = await stateManager.restorePendingUndoAction({
     token,
     now: Date.now(),
   })
   await cancelPendingUndoExpiry(token)
-  if (result.outcome === "applied" && !result.restored) {
-    await cleanUpFinalizedAction(result.action, destinationService)
-  }
   return result
 }
 
 export async function recoverPendingUndoActions(
-  stateManager: QueueRepository,
-  destinationService: DestinationService
+  stateManager: QueueRepository
 ): Promise<void> {
-  const result = await stateManager.reconcileExpiredPendingUndoActions(
+  const { pending } = await stateManager.reconcileExpiredPendingUndoActions(
     Date.now()
   )
-  for (const action of result.finalized) {
-    await cleanUpFinalizedAction(action, destinationService)
-  }
-  for (const action of result.pending) {
-    await schedulePendingUndoAction(stateManager, action, destinationService)
+  for (const action of pending) {
+    await schedulePendingUndoAction(stateManager, action)
   }
 }

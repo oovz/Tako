@@ -59,7 +59,7 @@ vi.mock("@/src/runtime/i18n", () => ({
 }))
 
 vi.mock("@/src/site-integrations/host-permission-service", () => ({
-  reconcileBroadHttpsPermissionEnablement: mocks.reconcilePermission,
+  reconcileOptionalHostPermissionEnablement: mocks.reconcilePermission,
 }))
 
 vi.mock("@/src/runtime/background-site-integration-initialization", () => ({
@@ -113,7 +113,7 @@ function createQueueRepository(): QueueRepository {
 
 function createNativeOutputCoordinator(): NativeOutputCoordinator {
   return {
-    initialize: vi.fn(async () => undefined),
+    initialize: vi.fn(async () => []),
   } as unknown as NativeOutputCoordinator
 }
 
@@ -157,8 +157,9 @@ function createKernel(input?: {
     ensureLivenessAlarm,
     setLivenessAlarmArmed: vi.fn(async () => undefined),
     queueScheduler,
-    terminalCoordinator: {} as OffscreenJobTerminalCoordinator,
-    destinationService: {} as never,
+    terminalCoordinator: {
+      continueAfterNativeOutputSettlement: vi.fn(async () => undefined),
+    } as unknown as OffscreenJobTerminalCoordinator,
     awaitSchemaMigration,
   })
   return {

@@ -34,8 +34,8 @@ vi.mock("@/entrypoints/background/active-task-progress-bus", () => ({
   runActiveTaskProgressExclusive: mocks.runProgressExclusive,
 }))
 
-vi.mock("@/src/runtime/progress-timing-estimates", () => ({
-  progressTimingEstimator: {
+vi.mock("@/src/storage/progress-timing-estimates-repository", () => ({
+  progressTimingEstimatesRepository: {
     observe: mocks.observeProgressTiming,
     finish: mocks.finishProgressTiming,
   },

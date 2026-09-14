@@ -257,10 +257,10 @@
     "message": "无法撤销此操作"
   },
   "sidepanel_cancelThisDownload": {
-    "message": "取消此下载？"
+    "message": "取消此 Tako 任务？"
   },
   "sidepanel_cancelProgressWarning": {
-    "message": "正在下载的章节进度可能会丢失。"
+    "message": "停止此任务剩余的处理。Chrome 已接受的下载会继续，请在 Chrome 下载页面管理。"
   },
   "sidepanel_forgetUnobservableDownload": {
     "message": "要忘记此任务的所有待处理下载吗？"
@@ -1835,5 +1835,14 @@
   },
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "可用时使用 MangaDex 网站本地设置。"
+  },
+  "sidepanel_seriesLoadFailed": {
+    "message": "无法加载此漫画"
+  },
+  "sidepanel_retrySeriesDescription": {
+    "message": "请重新加载漫画信息。"
+  },
+  "sidepanel_retrySeriesContext": {
+    "message": "重试加载漫画"
   }
 }

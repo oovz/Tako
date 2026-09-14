@@ -1,5 +1,5 @@
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
-import { clearPersistentError, getPersistentErrors } from "@/src/runtime/errors"
+import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 
 type SettingsUiMessageType =
@@ -38,7 +38,7 @@ export function createBackgroundSettingsUiMessageHandlers(
     },
     GET_PERSISTENT_ERRORS: async () => ({
       success: true,
-      data: await getPersistentErrors(),
+      data: await persistentErrorsRepository.getAll(),
     }),
     GET_SITE_INTEGRATION_ENABLEMENT: async () => ({
       success: true,
@@ -56,7 +56,7 @@ export function createBackgroundSettingsUiMessageHandlers(
       return { success: true }
     },
     ACKNOWLEDGE_ERROR: async (message) => {
-      await clearPersistentError(message.payload.code)
+      await persistentErrorsRepository.clear(message.payload.code)
       return { success: true }
     },
     OPEN_OPTIONS: async (message) => {

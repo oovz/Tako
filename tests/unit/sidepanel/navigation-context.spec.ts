@@ -1,18 +1,6 @@
 /**
- * @file navigation-context.spec.ts
- * @description Tests for side panel navigation context handling
- *
- * Tests the fix for navigation issues when:
- * - Navigating from supported URL to unsupported URL
- * - Navigating from unsupported URL to supported URL
- * - Navigating from supported → unsupported → back to supported
- * - Tab switches and back/forward navigation
- * - Background-driven SPA navigations
- *
- * Root causes fixed:
- * - Module-level lastNavigationUrl pollution across tab switches
- * - tabIdRef.current being undefined during tab switch
- * - Background clearing tab state not detected by side panel
+ * Tests side panel navigation state, URL classification, chapter grouping,
+ * and downloaded chapter markers.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
@@ -136,7 +124,7 @@ function simulateTabStorageCleared(tabId: number) {
 
 describe("Navigation Context", () => {
   beforeEach(() => {
-    vi.clearAllMocks() // Use clearAllMocks to preserve mock implementations
+    vi.clearAllMocks() // Preserve the mock implementations between cases.
     clearMockStorage()
     clearAllListeners()
     vi.resetModules()
@@ -172,40 +160,12 @@ describe("Navigation Context", () => {
     })
   })
 
-  describe("Tab switch navigation state reset", () => {
-    it("should reset lastNavigationUrl when switching tabs", () => {
-      /**
-       * Scenario:
-       * 1. Tab 1 is on URL A (supported manga page)
-       * 2. User switches to Tab 2 which is also on URL A (same series, different tab)
-       * 3. Side panel should reinitialize for Tab 2, NOT deduplicate
-       *
-       * Root cause: Module-level lastNavigationUrl was not reset on tab switch
-       */
-
-      // Verify the helper is working
-      expect(isInternalUrl("https://mangadex.org/title/abc123/test")).toBe(
-        false
-      )
-
-      // The actual test would require rendering the hook, which needs React Testing Library
-      // For now, we test the underlying logic
-    })
-  })
-
   describe("Background tab state clearing detection", () => {
-    it("should detect when storage key is cleared (newValue undefined)", async () => {
-      /**
-       * Scenario:
-       * 1. Side panel is showing manga info for Tab 123
-       * 2. Background navigates to unsupported URL and clears tab_123 from storage
-       * 3. Side panel should detect this and show "unsupported" message
-       */
-
+    it("detects a cleared tab state", async () => {
       const tabId = 123
       const tabKey = `tab_${tabId}`
 
-      // Setup: tab state exists
+      // Start with state for the active tab.
       mockStorageData[tabKey] = {
         siteId: "mangadex",
         seriesId: "abc123",
@@ -213,7 +173,7 @@ describe("Navigation Context", () => {
         chapters: [],
       }
 
-      // Simulate storage listener detecting the clear
+      // Observe the storage event for this tab.
       let detectedClear = false
       const testListener = (
         changes: Record<string, chrome.storage.StorageChange>,
@@ -227,7 +187,7 @@ describe("Navigation Context", () => {
 
       storageChangeListeners.push(testListener)
 
-      // Simulate background clearing the tab state
+      // Clear the tab state.
       simulateTabStorageCleared(tabId)
 
       expect(detectedClear).toBe(true)
@@ -235,14 +195,8 @@ describe("Navigation Context", () => {
     })
   })
 
-  describe("Navigation scenarios", () => {
-    it("scenario: supported → unsupported URL", async () => {
-      /**
-       * 1. User is on https://mangadex.org/title/abc123/manga (supported)
-       * 2. User navigates to https://mangadex.org/ (unsupported)
-       * 3. Side panel should show "This tab is not supported"
-       */
-
+  describe("Navigation state transitions", () => {
+    it("clears tab state when navigation becomes unsupported", async () => {
       const tabId = 100
 
       // Initial state: on supported page
@@ -260,13 +214,7 @@ describe("Navigation Context", () => {
       expect(mockStorageData[`tab_${tabId}`]).toBeUndefined()
     })
 
-    it("scenario: unsupported → supported URL", async () => {
-      /**
-       * 1. User is on https://google.com/ (unsupported)
-       * 2. User navigates to https://mangadex.org/title/abc123/manga (supported)
-       * 3. Side panel should show manga information
-       */
-
+    it("stores state when navigation becomes supported", async () => {
       const tabId = 200
 
       // Initial state: no tab state (unsupported)
@@ -286,14 +234,7 @@ describe("Navigation Context", () => {
       expect(mockStorageData[`tab_${tabId}`]).toEqual(mangaState)
     })
 
-    it("scenario: supported → unsupported → supported (back button)", async () => {
-      /**
-       * 1. User is on https://mangadex.org/title/abc123/manga (supported)
-       * 2. User navigates to https://mangadex.org/ (unsupported)
-       * 3. User clicks back button
-       * 4. Side panel should show manga information again
-       */
-
+    it("restores state after returning to a supported page", async () => {
       const tabId = 300
 
       // Step 1: Initial state on supported page
@@ -314,14 +255,7 @@ describe("Navigation Context", () => {
       expect(mockStorageData[`tab_${tabId}`]).toEqual(mangaState)
     })
 
-    it("scenario: tab switch to same URL", async () => {
-      /**
-       * 1. Tab 1 is on https://mangadex.org/title/abc123/manga
-       * 2. Tab 2 is also on https://mangadex.org/title/abc123/manga
-       * 3. User switches from Tab 1 to Tab 2
-       * 4. Side panel should reinitialize for Tab 2 (NOT deduplicate based on URL)
-       */
-
+    it("keeps state for multiple tabs on the same URL", async () => {
       const tab1Id = 400
       const tab2Id = 401
 

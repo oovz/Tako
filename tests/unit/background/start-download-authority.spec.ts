@@ -5,6 +5,7 @@ import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/backgro
 import { QueueApplicationCommands } from "@/entrypoints/background/queue-application-commands"
 import type { DownloadTaskCancellationCoordinator } from "@/entrypoints/background/download-task-cancellation-coordinator"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import {
   createTabContextCache,
@@ -101,11 +102,11 @@ describe("START_DOWNLOAD background authority", () => {
         getTask: vi.fn(async () => undefined),
       } as unknown as QueueRepository,
       nativeOutputCoordinator: {} as NativeOutputCoordinator,
+      terminalCoordinator: {} as OffscreenJobTerminalCoordinator,
       cancellationCoordinator: {} as DownloadTaskCancellationCoordinator,
       queueScheduler: {
         activate: mocks.processDownloadQueue,
       } as unknown as QueueScheduler,
-      destinationService: {} as never,
       siteIntegrationEnablementService: enablementService,
       getCurrentSeriesContext: resolveCurrentSeriesContext,
     })
@@ -457,11 +458,11 @@ describe("START_DOWNLOAD background authority", () => {
         getTask: vi.fn(async () => existingTask),
       } as unknown as QueueRepository,
       nativeOutputCoordinator: {} as NativeOutputCoordinator,
+      terminalCoordinator: {} as OffscreenJobTerminalCoordinator,
       cancellationCoordinator: {} as DownloadTaskCancellationCoordinator,
       queueScheduler: {
         activate: mocks.processDownloadQueue,
       } as unknown as QueueScheduler,
-      destinationService: {} as never,
       siteIntegrationEnablementService: {
         getAll: vi.fn(async () => ({ mangadex: true })),
       },

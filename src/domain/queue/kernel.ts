@@ -22,7 +22,6 @@ import {
 } from "./task-lifecycle"
 import type {
   ActiveDispatchLease,
-  ActiveTaskBlock,
   DispatchLeaseAuthority,
   DispatchLeaseIdentity,
   DownloadTaskState,
@@ -1132,6 +1131,7 @@ export function applyNativeOutputSettlement(
           status: terminalStatus,
           completed: input.now,
           activeBlock: undefined,
+          destinationIssue: undefined,
           errorMessage:
             terminalStatus === "completed"
               ? undefined
@@ -1165,6 +1165,7 @@ export function blockTaskForDestination(
   input: {
     taskId: string
     now: number
+    destinationIssue: NonNullable<DownloadTaskState["destinationIssue"]>
     errorMessage?: string
     errorCategory?: DownloadErrorCategory
     chapter?: {
@@ -1246,11 +1247,24 @@ export function blockTaskForDestination(
       },
       input.now
     )
+  } else if (
+    task.chapters.some((chapter) => chapter.status === "downloading")
+  ) {
+    chapters = task.chapters.map((chapter) =>
+      chapter.status === "downloading"
+        ? {
+            ...chapter,
+            status: "queued",
+            lastUpdated: input.now,
+          }
+        : chapter
+    )
   }
 
   if (
     task.status === "queued" &&
     task.activeBlock === "destination_action_required" &&
+    task.destinationIssue?.id === input.destinationIssue.id &&
     chapters === task.chapters &&
     task.errorMessage === input.errorMessage &&
     task.errorCategory === input.errorCategory
@@ -1265,6 +1279,7 @@ export function blockTaskForDestination(
     ...task,
     status: "queued",
     activeBlock: "destination_action_required",
+    destinationIssue: input.destinationIssue,
     destinationBlockRevision: (task.destinationBlockRevision ?? 0) + 1,
     errorMessage: input.errorMessage ?? task.errorMessage,
     errorCategory: input.errorCategory ?? task.errorCategory,
@@ -1319,6 +1334,7 @@ export function releaseDestinationBlock(
     ...task,
     status: "queued" as const,
     activeBlock: undefined,
+    destinationIssue: undefined,
   }
   return {
     next: {
@@ -1393,6 +1409,7 @@ export function resumeDestinationTask(
     ...task,
     status: "queued",
     activeBlock: undefined,
+    destinationIssue: undefined,
     destinationResume: {
       commandId: input.commandId,
       blockRevision,
@@ -1423,7 +1440,12 @@ export function resumeDestinationTask(
 
 export function blockTaskForProviderPolicy(
   state: QueueAggregateState,
-  input: { taskId: string; block: ActiveTaskBlock }
+  input: {
+    taskId: string
+    block:
+      | "provider_network_policy_pending"
+      | "provider_network_policy_action_required"
+  }
 ): QueueKernelDecision<
   | Applied<{ task: DownloadTaskState }>
   | Unchanged<{ reason: "already-blocked" }>
@@ -1460,6 +1482,7 @@ export function blockTaskForProviderPolicy(
     ...task,
     status: "queued",
     activeBlock: input.block,
+    destinationIssue: undefined,
   }
   return {
     next: {
@@ -1509,7 +1532,11 @@ export function releaseProviderPolicyBlock(
       result: { outcome: "unchanged", reason: "not-blocked" },
     }
   }
-  const updatedTask = { ...task, activeBlock: undefined }
+  const updatedTask = {
+    ...task,
+    activeBlock: undefined,
+    destinationIssue: undefined,
+  }
   return {
     next: {
       ...state,
@@ -1532,7 +1559,7 @@ export function releaseProviderPolicyBlocks(
       task.activeBlock === "provider_network_policy_pending"
     ) {
       releasedTaskIds.push(task.id)
-      return { ...task, activeBlock: undefined }
+      return { ...task, activeBlock: undefined, destinationIssue: undefined }
     }
     return task
   })
@@ -1598,6 +1625,7 @@ export function blockTaskForNativeOutputAction(
     ...task,
     status: "queued",
     activeBlock: "native_output_action_required",
+    destinationIssue: undefined,
     errorMessage: input.errorMessage,
     errorCategory: "browser_download_unobservable",
   }
@@ -1650,6 +1678,7 @@ export function releaseNativeOutputActionBlock(
     ...task,
     status: "queued",
     activeBlock: undefined,
+    destinationIssue: undefined,
     errorMessage: undefined,
     errorCategory: undefined,
   }
@@ -1896,6 +1925,7 @@ export function retryFailedChapters(
     seriesCoverUrl: original.seriesCoverUrl,
     chapters: failedChapters.map((chapter) => ({
       ...chapter,
+      nativeOutputSettlement: undefined,
       status: "queued",
       errorMessage: undefined,
       totalImages: undefined,
@@ -1988,6 +2018,7 @@ export function restartDownloadTask(
     id: input.restartTaskId,
     chapters: original.chapters.map((chapter) => ({
       ...chapter,
+      nativeOutputSettlement: undefined,
       status: "queued",
       errorMessage: undefined,
       totalImages: undefined,
@@ -2000,6 +2031,7 @@ export function restartDownloadTask(
     errorMessage: undefined,
     errorCategory: undefined,
     activeBlock: undefined,
+    destinationIssue: undefined,
     created: input.now,
     started: undefined,
     completed: undefined,

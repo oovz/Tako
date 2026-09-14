@@ -1,12 +1,18 @@
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
-import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import logger from "@/src/runtime/logger"
+import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import {
   isTerminalChapterStatus,
   isTerminalDownloadTask,
 } from "@/src/domain/queue/task-lifecycle"
 
-import type { NativeOutputCoordinator } from "./native-output-coordinator"
+import type {
+  NativeOutputCoordinator,
+  NativeOutputSettlementEffect,
+  NativeOutputSettlementEffects,
+} from "./native-output-coordinator"
 import type { QueueScheduler } from "./queue-scheduler"
 import {
   clearActiveTaskProgress,
@@ -15,6 +21,7 @@ import {
 import type { DestinationService } from "./destination"
 import {
   finalizeDownloadTaskAfterDispatch,
+  reconcileCompletedChapterHistory,
   notifyDownloadTaskCompletion,
   notifyTerminalDownloadTask,
   type DownloadQueueFinalizationDependencies,
@@ -27,6 +34,22 @@ export type OffscreenTerminalSettlement =
   | "chapter-settled"
   | "destination-blocked"
   | "terminal-owner-released"
+
+function ownsNativeSettlement(
+  task: DownloadTaskState | undefined,
+  effect: NativeOutputSettlementEffect
+): boolean {
+  const settlement = task?.chapters.find(
+    (chapter) => chapter.id === effect.chapterId
+  )?.nativeOutputSettlement
+  return (
+    settlement !== undefined &&
+    settlement.jobId === effect.jobId &&
+    settlement.attempt === effect.attempt &&
+    settlement.taskId === effect.taskId &&
+    settlement.chapterId === effect.chapterId
+  )
+}
 
 export class OffscreenJobTerminalCoordinator {
   constructor(
@@ -47,7 +70,8 @@ export class OffscreenJobTerminalCoordinator {
     settlement: OffscreenTerminalSettlement
   ): Promise<void> {
     if (settlement === "native-output-pending") {
-      await this.nativeOutputCoordinator.reconcile()
+      const effects = await this.nativeOutputCoordinator.reconcile()
+      await this.continueAfterNativeOutputSettlement(effects)
       return
     }
     if (settlement === "chapter-settled") {
@@ -56,6 +80,44 @@ export class OffscreenJobTerminalCoordinator {
     }
     if (settlement === "terminal-owner-released") {
       this.queueScheduler.requestContinuation()
+    }
+  }
+
+  async continueAfterNativeOutputSettlement(
+    effects: NativeOutputSettlementEffects
+  ): Promise<void> {
+    const handled = new Set<string>()
+    for (const effect of effects) {
+      const effectKey = [
+        effect.jobId,
+        effect.attempt,
+        effect.taskId,
+        effect.chapterId,
+      ].join("\u0000")
+      if (handled.has(effectKey)) continue
+      handled.add(effectKey)
+      const task = await this.queueRepository.getTask(effect.taskId)
+      if (!ownsNativeSettlement(task, effect)) {
+        // The old job has released its accounting owner. Let the scheduler
+        // choose current work rather than resume a same-ID replacement task.
+        this.queueScheduler.requestContinuation()
+        await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
+        continue
+      }
+      if (task && isTerminalDownloadTask(task)) {
+        try {
+          await reconcileCompletedChapterHistory(
+            [task],
+            this.finalizationDependencies
+          )
+        } catch (error) {
+          // Queue settlement is durable. History is a repairable projection
+          // and will be reconciled during the next startup or alarm pass.
+          logger.warn("Native output history projection will be retried", error)
+        }
+      }
+      await this.continueTask(effect.taskId, effect)
+      await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
     }
   }
 
@@ -126,8 +188,14 @@ export class OffscreenJobTerminalCoordinator {
               ? "fsa_write_failed"
               : null
     if (destinationIssueKind) {
-      const transition = await this.queueRepository.blockTaskForDestination({
-        taskId: payload.taskId,
+      const transition = await this.destinationService.blockForRuntimeIssue({
+        context: {
+          taskId: payload.taskId,
+          chapterId: payload.chapterId,
+          destination: currentTask.settingsSnapshot.destination,
+          destinationOverride: currentTask.destinationOverride,
+        },
+        kind: destinationIssueKind,
         now: Date.now(),
         errorMessage: payload.outcome.errorMessage,
         errorCategory: payload.outcome.errorCategory,
@@ -138,17 +206,6 @@ export class OffscreenJobTerminalCoordinator {
           outputs: { requested, committed, failed },
         },
       })
-      if (transition.outcome === "applied") {
-        await this.destinationService.recordDestinationRuntimeIssue(
-          {
-            taskId: payload.taskId,
-            chapterId: payload.chapterId,
-            destination: currentTask.settingsSnapshot.destination,
-            destinationOverride: currentTask.destinationOverride,
-          },
-          destinationIssueKind
-        )
-      }
       if (transition.outcome === "rejected") {
         throw new Error("Destination-block terminal settlement was rejected")
       }
@@ -195,8 +252,15 @@ export class OffscreenJobTerminalCoordinator {
     return "chapter-settled"
   }
 
-  async continueTask(taskId: string): Promise<void> {
+  async continueTask(
+    taskId: string,
+    nativeSettlement?: NativeOutputSettlementEffect
+  ): Promise<void> {
     const task = await this.queueRepository.getTask(taskId)
+    if (nativeSettlement && !ownsNativeSettlement(task, nativeSettlement)) {
+      this.queueScheduler.requestContinuation()
+      return
+    }
     if (!task) return
     if (isTerminalDownloadTask(task)) {
       await notifyTerminalDownloadTask({

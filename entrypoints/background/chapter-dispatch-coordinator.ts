@@ -8,14 +8,17 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { resolveDownloadPlan } from "./queue-helpers"
-import type { DestinationService } from "./destination"
+import {
+  DestinationPreflightError,
+  type DestinationService,
+} from "./destination"
 import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { SiteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
 import { isEnabled } from "@/src/site-integrations/catalog"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { runTaskSideEffectExclusive } from "./download-task-side-effect-gate"
-import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
+import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import { createOffscreenDispatchFingerprint } from "@/src/runtime/offscreen-job-fingerprint"
 import { resolveSiteIntegrationDispatchContext } from "@/src/runtime/site-integration-dispatch-context"
 import {
@@ -352,6 +355,9 @@ export class ChapterDispatchCoordinator {
               )) !== undefined
             if (cleared) currentLeaseForTask = undefined
           }
+          throw error
+        }
+        if (error instanceof DestinationPreflightError) {
           throw error
         }
         const errorMessage =

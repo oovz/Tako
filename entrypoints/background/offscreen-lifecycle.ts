@@ -12,8 +12,13 @@ import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
 import type { NativeOutputJobIdentity } from "@/src/domain/native-output/state"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { OffscreenInitializationState } from "@/src/runtime/runtime-message-contracts"
+import type {
+  OffscreenDocumentAdmissionContext,
+  OffscreenDocumentLifecycleReservation,
+} from "@/src/runtime/resolve-series-data-offscreen"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
+import type { NativeOutputSettlementEffects } from "@/entrypoints/background/native-output-coordinator"
 import { notifyTerminalDownloadTask } from "@/entrypoints/background/download-queue-finalization"
 import { clearActiveTaskProgress } from "@/entrypoints/background/active-task-progress-bus"
 import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-task-side-effect-gate"
@@ -42,6 +47,20 @@ type RuntimeGetContexts = (params: {
   documentUrls: string[]
 }) => Promise<unknown[]>
 
+const activeSeriesResolutionReservations = new Set<object>()
+
+function reserveSeriesResolution(): OffscreenDocumentLifecycleReservation {
+  const reservation = {}
+  activeSeriesResolutionReservations.add(reservation)
+  return {
+    release: () => activeSeriesResolutionReservations.delete(reservation),
+  }
+}
+
+function releaseAllSeriesResolutionReservations(): void {
+  activeSeriesResolutionReservations.clear()
+}
+
 export async function getOffscreenContexts(): Promise<unknown[]> {
   const offscreenUrl = chrome.runtime.getURL("offscreen.html")
   const runtimeWithGetContexts = chrome.runtime as unknown as {
@@ -62,8 +81,12 @@ export async function hasOffscreenDocument(): Promise<boolean> {
 
 export async function terminateOffscreenDocumentForUnboundLease(): Promise<void> {
   await runOffscreenLifecycleOperation(async () => {
-    if (!(await chrome.offscreen.hasDocument())) return
+    if (!(await chrome.offscreen.hasDocument())) {
+      releaseAllSeriesResolutionReservations()
+      return
+    }
     await chrome.offscreen.closeDocument()
+    releaseAllSeriesResolutionReservations()
   })
 }
 
@@ -87,7 +110,10 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
   }
 
   const contexts = await getOffscreenContexts()
-  if (contexts.length === 0) return "stale"
+  if (contexts.length === 0) {
+    releaseAllSeriesResolutionReservations()
+    return "stale"
+  }
   if (
     input.browserDocumentId !== undefined &&
     !contexts.some(
@@ -103,6 +129,7 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
   }
 
   await chrome.offscreen.closeDocument()
+  releaseAllSeriesResolutionReservations()
   return "closed"
 }
 
@@ -214,8 +241,21 @@ export async function recoverFromLivenessTimeout(
     (task) => isWatchdogEligibleTask(task) && !nativeOutputTaskIds.has(task.id)
   )
   const lease = await stateManager.getActiveDispatchLease()
+  let startupNativeSettlementEffects: NativeOutputSettlementEffects = []
   if (activeTasks.length === 0 && !lease) {
     await queueScheduler.activate()
+    return
+  }
+  const idleDispatchTask = activeTasks.length === 1 ? activeTasks[0] : undefined
+  if (
+    !lease &&
+    idleDispatchTask &&
+    idleDispatchTask.chapters.every(
+      (chapter) => chapter.status !== "downloading"
+    ) &&
+    !queueScheduler.isTaskActive(idleDispatchTask.id)
+  ) {
+    await queueScheduler.resumeTask(idleDispatchTask.id)
     return
   }
   if (lease && Date.now() <= lease.leaseExpiresAt) {
@@ -348,26 +388,32 @@ export async function recoverFromLivenessTimeout(
     jobQuerySucceeded &&
     (queriedJob === null || exactQueriedJob?.status !== "active")
   ) {
-    await nativeOutputCoordinator.reconcileStartupOpenManifests({
-      offscreenJob: queriedJob,
-      activeLease: lease.documentInstanceId
-        ? {
-            jobId: lease.jobId,
-            attempt: lease.attempt,
-            taskId: lease.taskId,
-            chapterId: lease.chapterId,
-            fingerprint: lease.fingerprint,
-            documentInstanceId: lease.documentInstanceId,
-          }
-        : null,
-    })
+    const startupReconciliation =
+      await nativeOutputCoordinator.reconcileStartupOpenManifests({
+        offscreenJob: queriedJob,
+        activeLease: lease.documentInstanceId
+          ? {
+              jobId: lease.jobId,
+              attempt: lease.attempt,
+              taskId: lease.taskId,
+              chapterId: lease.chapterId,
+              fingerprint: lease.fingerprint,
+              documentInstanceId: lease.documentInstanceId,
+            }
+          : null,
+      })
+    startupNativeSettlementEffects = startupReconciliation.effects
     nativeOutputPhase = await nativeOutputCoordinator.getJobPhase(lease.jobId)
   }
 
   if (lease && nativeOutputPhase === "sealed") {
     const clearing = await stateManager.clearDispatchLease(lease)
     if (clearing.outcome === "applied") {
-      await nativeOutputCoordinator.reconcile()
+      const effects = [
+        ...startupNativeSettlementEffects,
+        ...(await nativeOutputCoordinator.reconcile()),
+      ]
+      await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
       await queueScheduler.activate()
     }
     return
@@ -531,6 +577,7 @@ async function ensureOffscreenDocumentAdmission(): Promise<void> {
     }
   }
 
+  releaseAllSeriesResolutionReservations()
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: [
@@ -567,12 +614,12 @@ export async function ensureOffscreenDocumentReady(): Promise<void> {
  * owns document creation and closure.
  */
 export async function runOffscreenDocumentAdmissionExclusive<T>(
-  operation: () => Promise<T>
+  operation: (context: OffscreenDocumentAdmissionContext) => Promise<T>
 ): Promise<T> {
   await ensureLivenessAlarm()
   return await runOffscreenLifecycleOperation(async () => {
     await ensureOffscreenDocumentAdmission()
-    return await operation()
+    return await operation({ reserveSeriesResolution })
   })
 }
 
@@ -635,7 +682,8 @@ export async function scheduleOffscreenCloseIfIdle(
         !candidateStatus ||
         candidateStatus.initializationState !== "ready" ||
         candidateStatus.activeJobCount !== 0 ||
-        candidateStatus.activeSeriesResolutionCount !== 0
+        candidateStatus.activeSeriesResolutionCount !== 0 ||
+        activeSeriesResolutionReservations.size !== 0
       ) {
         return
       }
@@ -677,7 +725,8 @@ export async function scheduleOffscreenCloseIfIdle(
         currentStatus.documentInstanceId !==
           candidateStatus.documentInstanceId ||
         currentStatus.activeJobCount !== 0 ||
-        currentStatus.activeSeriesResolutionCount !== 0
+        currentStatus.activeSeriesResolutionCount !== 0 ||
+        activeSeriesResolutionReservations.size !== 0
       ) {
         return
       }

@@ -299,7 +299,7 @@ describe("native output kernel", () => {
       throw new Error("expected Blob release")
     }
 
-    // Accounting disposition is the terminal proof of queue settlement.
+    // Accounting disposition records terminal queue settlement.
     const accounted = markNativeOutputAccountingDisposition(blobReleased.next, {
       outputId: identity.outputId,
       disposition: "accounted",

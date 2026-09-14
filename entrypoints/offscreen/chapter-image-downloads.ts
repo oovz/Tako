@@ -277,7 +277,7 @@ export async function downloadChapterImages(
               total,
             })
           } finally {
-            downloadedResult?.liveResourceLease?.release()
+            downloadedResult?.liveResourceLease.release()
             processed++
             const pct = Math.max(10, Math.round((processed / total) * 100))
             await onProgress(pct, undefined, { current: processed, total })

@@ -5,6 +5,7 @@ import {
   normalizeDownloadErrorCategory,
 } from "@/src/shared/download-contract"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { PublicHttpsUrlSchema } from "@/src/runtime/series-data-schemas"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 import { isRecord } from "@/src/shared/type-guards"
@@ -54,7 +55,9 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
     seriesKey: data.seriesKey,
     seriesTitle: data.seriesTitle,
     siteIntegration: data.siteIntegration,
-    coverUrl: typeof data.coverUrl === "string" ? data.coverUrl : undefined,
+    coverUrl: PublicHttpsUrlSchema.safeParse(data.coverUrl).success
+      ? (data.coverUrl as string)
+      : undefined,
     status: data.status,
     activeBlock: data.activeBlock,
     chapters: {

@@ -5,11 +5,7 @@ import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { NotificationService } from "@/entrypoints/background/notification-service"
 import { QueueRepository } from "@/src/storage/queue-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
-import {
-  addPersistentError,
-  clearPersistentError,
-  getPersistentErrors,
-} from "@/src/runtime/errors"
+import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
@@ -268,15 +264,15 @@ describe("settings and persistent error behavior", () => {
       })
       .mockResolvedValueOnce({ persistent_errors: [] })
 
-    await addPersistentError({
+    await persistentErrorsRepository.add({
       code: "FSA_HANDLE_INVALID",
       message: "invalid",
       severity: "error",
       ts: 1,
     })
-    await clearPersistentError("FSA_HANDLE_INVALID")
+    await persistentErrorsRepository.clear("FSA_HANDLE_INVALID")
 
-    const errors = await getPersistentErrors()
+    const errors = await persistentErrorsRepository.getAll()
     expect(errors).toEqual([])
     expect(storageLocalSet).toHaveBeenCalledTimes(2)
   })

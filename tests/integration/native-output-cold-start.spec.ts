@@ -95,6 +95,11 @@ describe("native output cold-start recovery", () => {
   let revoke: ReturnType<typeof vi.fn>
   let settingsRepository: SettingsRepository
   const destinationService = {} as never
+  const queueScheduler = {
+    requestContinuation: vi.fn(),
+    resumeTask: vi.fn(async () => undefined),
+    isTaskActive: vi.fn(() => false),
+  } as unknown as QueueScheduler
 
   beforeEach(() => {
     local = {
@@ -163,8 +168,6 @@ describe("native output cold-start recovery", () => {
       requestBlobRevocation:
         revoke as NativeOutputCoordinatorDependencies["requestBlobRevocation"],
       ensureLivenessAlarm: vi.fn(async () => undefined),
-      onQueueSettlement: vi.fn(async () => undefined),
-      activateQueue: vi.fn(async () => undefined),
     })
     return { queueRepository, repository, coordinator }
   }
@@ -208,9 +211,19 @@ describe("native output cold-start recovery", () => {
     }))
     const restarted = createRuntime(queryExactJob)
     await restarted.queueRepository.initialize()
-    await restarted.coordinator.initialize()
+    const effects = await restarted.coordinator.initialize()
+    const requestContinuation = vi.fn()
+    const terminal = new OffscreenJobTerminalCoordinator(
+      restarted.queueRepository,
+      restarted.coordinator,
+      { requestContinuation } as unknown as QueueScheduler,
+      {} as never,
+      finalizationDependencies()
+    )
+    await terminal.continueAfterNativeOutputSettlement(effects)
 
     expect(queryExactJob).toHaveBeenCalledWith(identity)
+    expect(requestContinuation).toHaveBeenCalledOnce()
     // The canceled task's output is fully released and pruned; the queue
     // keeps the terminal accounting.
     await expect(
@@ -280,7 +293,7 @@ describe("native output cold-start recovery", () => {
     const terminalCoordinator = new OffscreenJobTerminalCoordinator(
       runtime.queueRepository,
       runtime.coordinator,
-      {} as QueueScheduler,
+      queueScheduler,
       destinationService,
       finalizationDependencies()
     )
@@ -308,7 +321,9 @@ describe("native output cold-start recovery", () => {
     )
 
     await expect(
-      first.coordinator.handleOutputReady(output)
+      first.coordinator
+        .handleOutputReady(output)
+        .then((result) => result.response)
     ).resolves.toMatchObject({
       success: true,
       disposition: "tracked",
@@ -325,7 +340,10 @@ describe("native output cold-start recovery", () => {
     search.mockResolvedValue([completeDownloadItem()])
     const restarted = createRuntime()
     await restarted.queueRepository.initialize()
-    await restarted.coordinator.initialize()
+    const restartedEffects = await restarted.coordinator.initialize()
+    for (const effect of restartedEffects) {
+      await restarted.coordinator.acknowledgeSettlement(effect)
+    }
 
     expect(download).toHaveBeenCalledOnce()
     await expect(
@@ -416,7 +434,7 @@ describe("native output cold-start recovery", () => {
       terminalCoordinator: new OffscreenJobTerminalCoordinator(
         runtime.queueRepository,
         runtime.coordinator,
-        {} as QueueScheduler,
+        queueScheduler,
         destinationService,
         finalizationDependencies()
       ),
@@ -481,7 +499,7 @@ describe("native output cold-start recovery", () => {
           offscreenJob: stoppedJob,
           activeLease: observedLease,
         })
-      ).resolves.toEqual({ observedJobSealed: true })
+      ).resolves.toEqual({ observedJobSealed: true, effects: [] })
       const firstManifest = await first.repository.getManifest(output.jobId)
       expect(firstManifest).toMatchObject({ phase: "sealed" })
       expect(firstManifest).not.toHaveProperty("dependencyReleasedAt")
@@ -497,7 +515,7 @@ describe("native output cold-start recovery", () => {
           offscreenJob: stoppedJob,
           activeLease: observedLease,
         })
-      expect(sealedEvidence).toEqual({ observedJobSealed: true })
+      expect(sealedEvidence).toEqual({ observedJobSealed: true, effects: [] })
 
       const recovery = await restarted.queueRepository.recoverQueueAfterStartup(
         {
@@ -611,7 +629,7 @@ describe("native output cold-start recovery", () => {
         offscreenJob: exactJobState("active"),
         activeLease: observedLease,
       })
-    ).resolves.toEqual({ observedJobSealed: false })
+    ).resolves.toEqual({ observedJobSealed: false, effects: [] })
     await expect(
       runtime.queueRepository.getActiveDispatchLease()
     ).resolves.toMatchObject(observedLease)
@@ -738,7 +756,7 @@ describe("native output cold-start recovery", () => {
         terminalCoordinator: new OffscreenJobTerminalCoordinator(
           runtime.queueRepository,
           runtime.coordinator,
-          {} as QueueScheduler,
+          queueScheduler,
           destinationService,
           finalizationDependencies()
         ),

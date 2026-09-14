@@ -2,23 +2,15 @@ import type { RuntimeMessagePrincipal } from "@/src/runtime/runtime-message-cont
 
 const OFFSCREEN_PATHS: Record<string, true> = {
   "/offscreen.html": true,
-  "/offscreen/index.html": true,
-  "/offscreen": true,
 }
 const OPTIONS_PATHS: Record<string, true> = {
   "/options.html": true,
-  "/options/index.html": true,
-  "/options": true,
 }
 const SIDEPANEL_PATHS: Record<string, true> = {
   "/sidepanel.html": true,
-  "/sidepanel/index.html": true,
-  "/sidepanel": true,
 }
 const BACKGROUND_PATHS: Record<string, true> = {
   "/background.js": true,
-  "/background": true,
-  "/_generated_background_page.html": true,
 }
 
 function parseOwnExtensionUrl(

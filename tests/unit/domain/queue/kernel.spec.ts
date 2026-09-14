@@ -99,6 +99,20 @@ function createLease(
   }
 }
 
+function destinationIssue(
+  taskId = "task-1",
+  chapterId = "chapter-1",
+  kind: "fsa_folder_missing" | "fsa_write_failed" = "fsa_folder_missing"
+): NonNullable<DownloadTaskState["destinationIssue"]> {
+  return {
+    id: `${taskId}:${chapterId}:${kind}`,
+    taskId,
+    chapterId,
+    kind,
+    occurredAt: 400,
+  }
+}
+
 function createState(
   queue: DownloadTaskState[] = [],
   lease: ActiveDispatchLease | null = null,
@@ -1000,6 +1014,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const blocked = blockTaskForDestination(state, {
       taskId: "task-1",
       now: 500,
+      destinationIssue: destinationIssue(),
       errorMessage: "Folder missing",
       errorCategory: "folder_unavailable",
       chapter: {
@@ -1014,6 +1029,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expect(blocked.next.queue[0]).toMatchObject({
       status: "queued",
       activeBlock: "destination_action_required",
+      destinationIssue: destinationIssue(),
       errorMessage: "Folder missing",
       chapters: [
         expect.objectContaining({
@@ -1029,6 +1045,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       blockTaskForDestination(state, {
         taskId: "task-1",
         now: 500,
+        destinationIssue: destinationIssue(),
         chapter: {
           chapterId: "chapter-1",
           lease: createLease({ jobId: "stale" }),
@@ -1041,12 +1058,14 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const alreadyBlocked = createState([
       createTask("task-1", "queued", {
         activeBlock: "destination_action_required",
+        destinationIssue: destinationIssue(),
       }),
     ])
     expectNoChange(
       blockTaskForDestination(alreadyBlocked, {
         taskId: "task-1",
         now: 500,
+        destinationIssue: destinationIssue(),
       }),
       alreadyBlocked,
       "unchanged"
@@ -1064,6 +1083,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       blockTaskForDestination(terminalChapter, {
         taskId: "task-1",
         now: 500,
+        destinationIssue: destinationIssue(),
         chapter: { chapterId: "chapter-1", lease },
       }),
       terminalChapter,
@@ -1074,6 +1094,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       blockTaskForDestination(terminalTask, {
         taskId: "task-1",
         now: 500,
+        destinationIssue: destinationIssue(),
       }),
       terminalTask,
       "rejected"
@@ -1083,6 +1104,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
   it("releases and resumes destination blocks with distinct semantics", () => {
     const blockedTask = createTask("task-1", "queued", {
       activeBlock: "destination_action_required",
+      destinationIssue: destinationIssue(),
       errorMessage: "permission",
       errorCategory: "folder_permission_required",
       chapters: [
@@ -1097,9 +1119,29 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expect(released.changedKeys).toEqual(["queue"])
     expect(released.next.queue[0]).toMatchObject({
       activeBlock: undefined,
+      destinationIssue: undefined,
       errorMessage: "permission",
     })
     expect(released.next.queue[0]?.chapters[0]?.status).toBe("downloading")
+
+    const latePreflight = blockTaskForDestination(
+      createState([
+        createTask("task-late", "downloading", {
+          chapters: [createChapter("chapter-late", "downloading")],
+        }),
+      ]),
+      {
+        taskId: "task-late",
+        now: 600,
+        destinationIssue: destinationIssue("task-late", "chapter-late"),
+      }
+    )
+    expect(latePreflight.next.queue[0]).toMatchObject({
+      status: "queued",
+      activeBlock: "destination_action_required",
+      destinationIssue: expect.objectContaining({ taskId: "task-late" }),
+      chapters: [expect.objectContaining({ status: "queued" })],
+    })
 
     const resumed = resumeDestinationTask(state, {
       taskId: "task-1",
@@ -1111,6 +1153,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expect(resumed.next.queue[0]).toMatchObject({
       status: "queued",
       activeBlock: undefined,
+      destinationIssue: undefined,
       destinationOverride: "downloads-api",
       errorMessage: undefined,
       errorCategory: undefined,
@@ -1141,6 +1184,11 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       taskId: "task-1",
       errorMessage: "new permission issue",
       now: 950,
+      destinationIssue: destinationIssue(
+        "task-1",
+        "chapter-1",
+        "fsa_write_failed"
+      ),
     })
     expect(reblocked.next.queue[0]).toMatchObject({
       activeBlock: "destination_action_required",
@@ -2252,6 +2300,7 @@ describe("queue aggregate kernel rejection matrices", () => {
       blockTaskForDestination(missing, {
         taskId: "missing",
         now: 500,
+        destinationIssue: destinationIssue("missing"),
       }),
       missing,
       "task-not-found"
@@ -2280,6 +2329,7 @@ describe("queue aggregate kernel rejection matrices", () => {
       blockTaskForDestination(active, {
         taskId: "task-1",
         now: 500,
+        destinationIssue: destinationIssue(),
         chapter: { chapterId: "missing", lease: createLease() },
       }),
       active,

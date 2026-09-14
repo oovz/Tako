@@ -1,4 +1,5 @@
 import type { QueueApplicationCommands } from "@/entrypoints/background/queue-application-commands"
+import type { ResolveTabContextOptions } from "@/entrypoints/background/tab-context-resolver"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
@@ -22,7 +23,7 @@ export interface BackgroundRuntimeHandlerDependencies {
   tabContextResolver: {
     resolveTabContext: (
       tabId: number,
-      options?: { windowId?: number; allowCached?: boolean }
+      options?: ResolveTabContextOptions
     ) => Promise<void>
   }
 }

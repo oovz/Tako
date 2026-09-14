@@ -103,6 +103,22 @@ describe("useQueueView normalizeQueueView", () => {
     ])
   })
 
+  it("drops unsafe cover URLs from an older stored projection", () => {
+    const normalized = normalizeQueueView([
+      {
+        ...makeQueueTask("task-1", "completed", "Series A"),
+        coverUrl: "https://127.0.0.1/cover.jpg",
+      },
+    ])
+
+    expect(normalized).toEqual([
+      {
+        ...makeQueueTask("task-1", "completed", "Series A"),
+        coverUrl: undefined,
+      },
+    ])
+  })
+
   it("normalizes history independently from the nonterminal queue projection", () => {
     expect(
       normalizeHistoryView([

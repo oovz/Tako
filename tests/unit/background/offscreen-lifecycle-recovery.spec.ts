@@ -70,9 +70,10 @@ function createNativeOutputCoordinator(
     getLiveTaskIds: vi.fn(async () => []),
     getJobPhase: vi.fn(async () => null),
     hasLiveDependencies: vi.fn(async () => false),
-    reconcile: vi.fn(async () => undefined),
+    reconcile: vi.fn(async () => []),
     reconcileStartupOpenManifests: vi.fn(async () => ({
       observedJobSealed: false,
+      effects: [],
     })),
     cancelTask: vi.fn(async () => undefined),
     ...overrides,
@@ -80,8 +81,10 @@ function createNativeOutputCoordinator(
 }
 
 const destinationService = {
-  clearDestinationIssuesForTask: vi.fn(async () => undefined),
-  recordDestinationRuntimeIssue: vi.fn(async () => undefined),
+  blockForRuntimeIssue: vi.fn(async () => ({
+    outcome: "applied" as const,
+    task: {},
+  })),
 } as unknown as DestinationService
 
 const finalizationDependencies = {
@@ -288,6 +291,29 @@ describe("recoverFromLivenessTimeout", () => {
     expect(mocks.getLease).toHaveBeenCalledOnce()
     expect(sendMessage).not.toHaveBeenCalled()
     expect(onRecover).toHaveBeenCalledOnce()
+  })
+
+  it("resumes idle work with no lease after a failed dispatch handoff", async () => {
+    const { manager, interruptDownloadTask } = createStateManager()
+    const preservedTask = {
+      ...(await manager.getTask("task-1"))!,
+      chapters: (await manager.getTask("task-1"))!.chapters.map((chapter) => ({
+        ...chapter,
+        status: "queued" as const,
+      })),
+    }
+    vi.mocked(manager.getQueue).mockResolvedValue([preservedTask])
+    vi.mocked(manager.getTask).mockResolvedValue(preservedTask)
+    const onRecover = vi.fn(async (_taskId?: string) => undefined)
+
+    await recoverFromLivenessTimeout(
+      manager,
+      createNativeOutputCoordinator(),
+      onRecover
+    )
+
+    expect(onRecover).toHaveBeenCalledWith("task-1")
+    expect(interruptDownloadTask).not.toHaveBeenCalled()
   })
 
   it("stops and atomically clears an expired unbound dispatch lease", async () => {

@@ -20,7 +20,7 @@ import type { JsonObject } from "@/src/types/site-integrations"
 export type CoverImageAsset = {
   data: ArrayBuffer
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }
 
 type ImageRetryHooks = {

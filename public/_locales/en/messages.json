@@ -257,10 +257,10 @@
     "message": "This action can no longer be undone"
   },
   "sidepanel_cancelThisDownload": {
-    "message": "Cancel this download?"
+    "message": "Cancel this Tako task?"
   },
   "sidepanel_cancelProgressWarning": {
-    "message": "Progress for in-flight chapter may be lost."
+    "message": "Stops this task’s remaining work. Downloads already accepted by Chrome continue; manage them in Chrome Downloads."
   },
   "sidepanel_forgetUnobservableDownload": {
     "message": "Forget all pending downloads for this task?"
@@ -1835,5 +1835,14 @@
   },
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "Use MangaDex website local settings when available."
+  },
+  "sidepanel_seriesLoadFailed": {
+    "message": "Couldn’t load this series"
+  },
+  "sidepanel_retrySeriesDescription": {
+    "message": "Try loading the series information again."
+  },
+  "sidepanel_retrySeriesContext": {
+    "message": "Retry series"
   }
 }

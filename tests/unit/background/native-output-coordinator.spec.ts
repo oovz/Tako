@@ -26,6 +26,23 @@ const payload = {
   outputKind: "archive" as const,
 }
 
+async function outputResponse(
+  coordinator: NativeOutputCoordinator
+): Promise<
+  Awaited<ReturnType<NativeOutputCoordinator["handleOutputReady"]>>["response"]
+> {
+  return (await coordinator.handleOutputReady(payload)).response
+}
+
+async function reconcileAndAcknowledge(
+  coordinator: NativeOutputCoordinator
+): Promise<void> {
+  const effects = await coordinator.reconcile()
+  for (const effect of effects) {
+    await coordinator.acknowledgeSettlement(effect)
+  }
+}
+
 function downloadItem(
   overrides: Partial<chrome.downloads.DownloadItem> = {}
 ): chrome.downloads.DownloadItem {
@@ -62,7 +79,6 @@ describe("NativeOutputCoordinator", () => {
   let revoke: ReturnType<typeof vi.fn>
   let applySettlement: ReturnType<typeof vi.fn>
   let ensureLiveness: ReturnType<typeof vi.fn>
-  let activateQueue: ReturnType<typeof vi.fn>
   let queryJob: NativeOutputCoordinatorDependencies["queryOffscreenJob"]
   let settingsRepository: SettingsRepository
 
@@ -78,7 +94,6 @@ describe("NativeOutputCoordinator", () => {
       settlement: {},
     }))
     ensureLiveness = vi.fn(async () => undefined)
-    activateQueue = vi.fn(async () => undefined)
     queryJob = vi.fn(async (identity) => ({
       ...identity,
       status: "active" as const,
@@ -108,16 +123,36 @@ describe("NativeOutputCoordinator", () => {
   })
 
   function createCoordinator(repository = new NativeOutputRepository()) {
+    let queueSettlementApplied = false
     const queueRepository = {
       getActiveDispatchLease: vi.fn(async () => ({
         ...jobIdentity,
       })),
       getTask: vi.fn(async () => ({
         status: "downloading",
-        chapters: [{ id: jobIdentity.chapterId, status: "downloading" }],
+        chapters: [
+          {
+            id: jobIdentity.chapterId,
+            status: "downloading",
+            ...(queueSettlementApplied
+              ? {
+                  nativeOutputSettlement: {
+                    jobId: jobIdentity.jobId,
+                    attempt: jobIdentity.attempt,
+                  },
+                }
+              : {}),
+          },
+        ],
         settingsSnapshot: { conflictPolicy: "uniquify" },
       })),
-      applyNativeOutputSettlement: applySettlement,
+      applyNativeOutputSettlement: vi.fn(async (input) => {
+        queueSettlementApplied = true
+        const apply = applySettlement as unknown as (
+          input: unknown
+        ) => Promise<unknown>
+        return await apply(input)
+      }),
       blockTaskForNativeOutputAction: vi.fn(async () => ({
         outcome: "applied",
       })),
@@ -135,11 +170,8 @@ describe("NativeOutputCoordinator", () => {
         revoke as NativeOutputCoordinatorDependencies["requestBlobRevocation"],
       ensureLivenessAlarm:
         ensureLiveness as NativeOutputCoordinatorDependencies["ensureLivenessAlarm"],
-      onQueueSettlement: vi.fn(async () => undefined),
-      activateQueue:
-        activateQueue as NativeOutputCoordinatorDependencies["activateQueue"],
     })
-    return { coordinator, repository, queueRepository, activateQueue }
+    return { coordinator, repository, queueRepository }
   }
 
   it("does not call Chrome when the durable acceptance marker fails", async () => {
@@ -148,7 +180,7 @@ describe("NativeOutputCoordinator", () => {
       new Error("marker write failed")
     )
 
-    await expect(coordinator.handleOutputReady(payload)).resolves.toEqual({
+    await expect(outputResponse(coordinator)).resolves.toEqual({
       success: true,
       disposition: "tracked",
       phase: "prepared",
@@ -210,7 +242,7 @@ describe("NativeOutputCoordinator", () => {
       )
       const { coordinator, queueRepository } = createCoordinator()
 
-      const handling = coordinator.handleOutputReady(payload)
+      const handling = outputResponse(coordinator)
       await settingsStarted
       queueRepository.getActiveDispatchLease.mockResolvedValue(mutate())
       releaseSettings()
@@ -262,9 +294,9 @@ describe("NativeOutputCoordinator", () => {
       )
       const { coordinator, queueRepository } = createCoordinator()
 
-      const handling = coordinator.handleOutputReady(payload)
+      const handling = outputResponse(coordinator)
       await settingsStarted
-      queueRepository.getTask.mockResolvedValue(task)
+      queueRepository.getTask.mockResolvedValue(task as never)
       releaseSettings()
 
       await expect(handling).resolves.toMatchObject({
@@ -279,14 +311,12 @@ describe("NativeOutputCoordinator", () => {
     download.mockRejectedValueOnce(new Error("blocked by policy"))
     const { coordinator, repository } = createCoordinator()
 
-    await expect(coordinator.handleOutputReady(payload)).resolves.toMatchObject(
-      {
-        success: true,
-        disposition: "tracked",
-        phase: "interrupted",
-        terminalOutcome: "interrupted",
-      }
-    )
+    await expect(outputResponse(coordinator)).resolves.toMatchObject({
+      success: true,
+      disposition: "tracked",
+      phase: "interrupted",
+      terminalOutcome: "interrupted",
+    })
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
       "interrupted"
     )
@@ -310,7 +340,7 @@ describe("NativeOutputCoordinator", () => {
         })
       }
 
-      await expect(coordinator.handleOutputReady(payload)).resolves.toEqual({
+      await expect(outputResponse(coordinator)).resolves.toEqual({
         success: true,
         disposition: "tracked",
         phase: "acceptance_unknown",
@@ -342,9 +372,7 @@ describe("NativeOutputCoordinator", () => {
       new Error("acceptance write failed")
     )
 
-    await expect(
-      first.coordinator.handleOutputReady(payload)
-    ).resolves.toMatchObject({
+    await expect(outputResponse(first.coordinator)).resolves.toMatchObject({
       success: true,
       disposition: "tracked",
       phase: "acceptance_unknown",
@@ -357,7 +385,10 @@ describe("NativeOutputCoordinator", () => {
         : [downloadItem({ state: "complete" })]
     )
     const restarted = createCoordinator(new NativeOutputRepository())
-    await restarted.coordinator.initialize()
+    const restartedEffects = await restarted.coordinator.initialize()
+    for (const effect of restartedEffects) {
+      await restarted.coordinator.acknowledgeSettlement(effect)
+    }
 
     expect(download).toHaveBeenCalledOnce()
     expect(
@@ -370,7 +401,7 @@ describe("NativeOutputCoordinator", () => {
     vi.spyOn(repository, "attachDownload").mockRejectedValueOnce(
       new Error("acceptance write failed")
     )
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     search.mockResolvedValue([
       downloadItem({ id: 41 }),
       downloadItem({ id: 42 }),
@@ -393,7 +424,7 @@ describe("NativeOutputCoordinator", () => {
     vi.spyOn(repository, "interruptBeforeAcceptance").mockRejectedValueOnce(
       new Error("terminal marker unavailable")
     )
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
 
     await coordinator.reconcileStartupOpenManifests({
       offscreenJob: {
@@ -474,7 +505,10 @@ describe("NativeOutputCoordinator", () => {
       lastSequence: 2,
     }))
     const restarted = createCoordinator(new NativeOutputRepository())
-    await restarted.coordinator.initialize()
+    const restartedEffects = await restarted.coordinator.initialize()
+    for (const effect of restartedEffects) {
+      await restarted.coordinator.acknowledgeSettlement(effect)
+    }
 
     expect(seal).toHaveBeenCalledOnce()
     // The canceled job's output was released and pruned; the queue keeps the
@@ -509,7 +543,7 @@ describe("NativeOutputCoordinator", () => {
 
   it("blocks the task when a tracked download is erased and forget surrenders it", async () => {
     const { coordinator, repository, queueRepository } = createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
       "waiting"
     )
@@ -539,45 +573,40 @@ describe("NativeOutputCoordinator", () => {
   })
 
   it("converges a forget replay with zero surrendered when nothing is unobservable", async () => {
-    const { coordinator, queueRepository, activateQueue } = createCoordinator()
+    const { coordinator, queueRepository } = createCoordinator()
     // The browser still knows the download, so the output stays observable.
     search.mockResolvedValue([downloadItem({ state: "in_progress" })])
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
 
     await expect(
       coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toEqual({ surrendered: 0 })
+    ).resolves.toMatchObject({ surrendered: 0, effects: [] })
     expect(queueRepository.releaseNativeOutputActionBlock).toHaveBeenCalledWith(
       "task-1"
     )
-    expect(activateQueue).toHaveBeenCalledOnce()
   })
 
   it("replays forget after durable surrender and release response loss", async () => {
-    const { coordinator, repository, queueRepository, activateQueue } =
-      createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    const { coordinator, repository, queueRepository } = createCoordinator()
+    await outputResponse(coordinator)
     await coordinator.handleDownloadErased(42)
 
-    activateQueue.mockRejectedValueOnce(new Error("response lost"))
-    await expect(
-      coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).rejects.toThrow("response lost")
+    const first = await coordinator.forgetTaskUnobservableOutputs("task-1")
+    expect(first.surrendered).toBe(1)
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
       "surrendered"
     )
 
     await expect(
       coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toEqual({ surrendered: 0 })
+    ).resolves.toMatchObject({ surrendered: 0 })
     expect(
       queueRepository.releaseNativeOutputActionBlock
     ).toHaveBeenCalledTimes(2)
-    expect(activateQueue).toHaveBeenCalledTimes(2)
   })
 
   it("treats a terminal or missing task block as a converged forget replay", async () => {
-    const { coordinator, queueRepository, activateQueue } = createCoordinator()
+    const { coordinator, queueRepository } = createCoordinator()
     vi.mocked(
       queueRepository.releaseNativeOutputActionBlock
     ).mockResolvedValueOnce({
@@ -587,13 +616,12 @@ describe("NativeOutputCoordinator", () => {
 
     await expect(
       coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toEqual({ surrendered: 0 })
-    expect(activateQueue).not.toHaveBeenCalled()
+    ).resolves.toMatchObject({ surrendered: 0 })
   })
 
   it("surrenders erased outputs when a task is canceled without a job identity", async () => {
     const { coordinator, repository } = createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     await coordinator.handleDownloadErased(42)
     // The producer finished, so the manifest is sealed before cancellation.
     await coordinator.sealManifest({
@@ -622,7 +650,7 @@ describe("NativeOutputCoordinator", () => {
 
   it("surrenders erased outputs after canceling their exact producer", async () => {
     const { coordinator, repository } = createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     await coordinator.handleDownloadErased(42)
 
     await coordinator.cancelTask("task-1", jobIdentity)
@@ -642,7 +670,7 @@ describe("NativeOutputCoordinator", () => {
 
   it("keeps user-pending erased work live for offscreen but excludes it from the alarm", async () => {
     const { coordinator, repository, queueRepository } = createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     await coordinator.handleDownloadErased(42)
 
     vi.mocked(queueRepository.getQueue).mockResolvedValue([
@@ -672,7 +700,7 @@ describe("NativeOutputCoordinator", () => {
       return 42
     })
 
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
     await coordinator.reconcile()
 
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
@@ -688,6 +716,7 @@ describe("NativeOutputCoordinator", () => {
       outputsRequested: 2,
       outputsFailedBeforeHandoff: 2,
     })
+    await reconcileAndAcknowledge(coordinator)
 
     expect(download).not.toHaveBeenCalled()
     expect(applySettlement).toHaveBeenCalledWith(
@@ -751,6 +780,7 @@ describe("NativeOutputCoordinator", () => {
       outputsRequested: 1,
       outputsFailedBeforeHandoff: 0,
     })
+    await reconcileAndAcknowledge(coordinator)
 
     await expect(
       repository.getByOutputId(payload.outputId)
@@ -778,9 +808,10 @@ describe("NativeOutputCoordinator", () => {
     const conflicted = await repository.getManifest(payload.jobId)
     expect(conflicted).toMatchObject({ phase: "sealed", slots: [] })
     expect(conflicted).not.toHaveProperty("dependencyReleasedAt")
-    expect(ensureLiveness).toHaveBeenCalled()
 
     await coordinator.reconcile()
+    expect(ensureLiveness).toHaveBeenCalled()
+    await reconcileAndAcknowledge(coordinator)
 
     // The second settlement attempt succeeds and the released job is pruned.
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
@@ -794,13 +825,14 @@ describe("NativeOutputCoordinator", () => {
     })
     download.mockRejectedValueOnce(new Error("rejected"))
     const { coordinator, repository } = createCoordinator()
-    await coordinator.handleOutputReady(payload)
+    await outputResponse(coordinator)
 
     await coordinator.sealManifest({
       ...jobIdentity,
       outputsRequested: 1,
       outputsFailedBeforeHandoff: 0,
     })
+    await reconcileAndAcknowledge(coordinator)
 
     // not-owner disposition releases and prunes the output.
     await expect(
@@ -871,7 +903,7 @@ describe("NativeOutputCoordinator", () => {
       now: 1,
     })
 
-    await coordinator.reconcileStartupOpenManifests({
+    const startupSettlement = await coordinator.reconcileStartupOpenManifests({
       offscreenJob: {
         ...jobIdentity,
         status: "terminal",
@@ -886,6 +918,9 @@ describe("NativeOutputCoordinator", () => {
       },
       activeLease: jobIdentity,
     })
+    for (const effect of startupSettlement.effects) {
+      await coordinator.acknowledgeSettlement(effect)
+    }
 
     // The zero-output job was released and pruned after startup settlement.
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
@@ -908,7 +943,7 @@ describe("NativeOutputCoordinator", () => {
       now: 1,
     })
 
-    await coordinator.reconcileStartupOpenManifests({
+    const startupSettlement = await coordinator.reconcileStartupOpenManifests({
       offscreenJob: {
         ...jobIdentity,
         status: "terminal",
@@ -923,6 +958,9 @@ describe("NativeOutputCoordinator", () => {
       },
       activeLease: null,
     })
+    for (const effect of startupSettlement.effects) {
+      await coordinator.acknowledgeSettlement(effect)
+    }
 
     // The interrupted output was accounted and fully released (pruned).
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
@@ -989,7 +1027,7 @@ describe("NativeOutputCoordinator", () => {
         },
         activeLease: otherIdentity,
       })
-    ).resolves.toEqual({ observedJobSealed: false })
+    ).resolves.toEqual({ observedJobSealed: false, effects: [] })
 
     expect(await repository.getManifest(payload.jobId)).toMatchObject({
       phase: "open",
@@ -1010,10 +1048,13 @@ describe("NativeOutputCoordinator", () => {
       now: 1,
     })
 
-    await coordinator.reconcileStartupOpenManifests({
+    const startupSettlement = await coordinator.reconcileStartupOpenManifests({
       offscreenJob: null,
       activeLease: jobIdentity,
     })
+    for (const effect of startupSettlement.effects) {
+      await coordinator.acknowledgeSettlement(effect)
+    }
 
     // The prepared slot was interrupted, accounted, and the job released and
     // pruned; the settlement totals prove the null-slot seal shape.

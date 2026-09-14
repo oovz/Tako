@@ -10,7 +10,7 @@ import {
 } from "@/src/runtime/runtime-phase-errors"
 import { validateBackgroundSiteIntegrations } from "@/src/runtime/background-site-integration-initialization"
 import { setEnablementMap } from "@/src/site-integrations/catalog"
-import { reconcileBroadHttpsPermissionEnablement } from "@/src/site-integrations/host-permission-service"
+import { reconcileOptionalHostPermissionEnablement } from "@/src/site-integrations/host-permission-service"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -18,7 +18,6 @@ import type { HistoryRepository } from "@/src/storage/history-repository"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
-import type { DestinationService } from "@/entrypoints/background/destination"
 import {
   getOffscreenContexts,
   hasOffscreenDocument,
@@ -53,7 +52,6 @@ export interface BackgroundRuntimeKernelInput {
   ensureLivenessAlarm: () => Promise<void>
   setLivenessAlarmArmed: (shouldArm: boolean) => Promise<void>
   queueScheduler: QueueScheduler
-  destinationService: DestinationService
   /**
    * Durable-state schema migration gate. Every readiness phase above listener
    * registration awaits this before any storage-backed service hydrates or
@@ -185,7 +183,7 @@ export class BackgroundRuntimeKernel {
 
     const attempt = (async () => {
       try {
-        const { enablement } = await reconcileBroadHttpsPermissionEnablement(
+        const { enablement } = await reconcileOptionalHostPermissionEnablement(
           this.input.siteIntegrationEnablementService
         )
         if (this.integrationPhase !== phase) {
@@ -242,11 +240,12 @@ export class BackgroundRuntimeKernel {
   }
 
   private async recoverRuntime(): Promise<StartupQueueActivation | undefined> {
-    await recoverPendingUndoActions(
-      this.input.queueRepository,
-      this.input.destinationService
+    await recoverPendingUndoActions(this.input.queueRepository)
+    const nativeSettlementEffects =
+      await this.input.nativeOutputCoordinator.initialize()
+    await this.input.terminalCoordinator.continueAfterNativeOutputSettlement(
+      nativeSettlementEffects
     )
-    await this.input.nativeOutputCoordinator.initialize()
 
     const startupRecovery = await initializeFromStorage({
       settingsRepository: this.input.settingsRepository,

@@ -4,7 +4,10 @@ import {
   ChapterResourceLimitError,
   downloadChapterImages,
 } from "@/entrypoints/offscreen/chapter-image-downloads"
-import type { ChapterProcessingRuntime } from "@/entrypoints/offscreen/chapter-processing"
+import type {
+  ChapterDownloadImageResult,
+  ChapterProcessingRuntime,
+} from "@/entrypoints/offscreen/chapter-processing"
 import {
   MAX_CHAPTER_IMAGE_BYTES,
   MAX_CHAPTER_IMAGES,
@@ -87,6 +90,10 @@ describe("downloadChapterImages", () => {
           data: new ArrayBuffer(1),
           filename: "1.jpg",
           mimeType: "image/jpeg",
+          liveResourceLease: new OffscreenLiveResourceLedger().reserve(
+            1,
+            "test image"
+          ),
         })),
         onDownloaded: vi.fn(),
         onDownloadFailed: vi.fn(),
@@ -170,10 +177,7 @@ describe("downloadChapterImages", () => {
       (_, index) => `https://example.com/${index + 1}.jpg`
     )
     const downloadImage = vi.fn(
-      () =>
-        new Promise<{ data: ArrayBuffer; filename: string; mimeType: string }>(
-          () => undefined
-        )
+      () => new Promise<ChapterDownloadImageResult>(() => undefined)
     )
     const runtime: ChapterProcessingRuntime = {
       liveResourceLedger: new OffscreenLiveResourceLedger(),
@@ -243,7 +247,7 @@ describe("downloadChapterImages", () => {
         options: {
           signal?: AbortSignal
           onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-          liveResourceLedger?: OffscreenLiveResourceLedger
+          liveResourceLedger: OffscreenLiveResourceLedger
         }
       ) => {
         const result = await fetchImageWithStallDetection(url, {
@@ -263,6 +267,7 @@ describe("downloadChapterImages", () => {
         renderLease?.release()
         return {
           ...result,
+          liveResourceLease: result.liveResourceLease!,
           filename: `${rendered}.jpg`,
         }
       }
@@ -327,11 +332,7 @@ describe("downloadChapterImages", () => {
     const onProgress = vi.fn(async () => undefined)
     const downloadImage = vi.fn(
       (_url: string, opts?: { signal?: AbortSignal }) => {
-        return new Promise<{
-          data: ArrayBuffer
-          filename: string
-          mimeType: string
-        }>((_resolve, reject) => {
+        return new Promise<ChapterDownloadImageResult>((_resolve, reject) => {
           const rejectAsAborted = () => reject(new Error("aborted"))
           if (opts?.signal?.aborted) {
             rejectAsAborted()
@@ -387,11 +388,7 @@ describe("downloadChapterImages", () => {
     vi.useFakeTimers()
     try {
       const onProgress = vi.fn(async () => undefined)
-      let resolveImage!: (value: {
-        data: ArrayBuffer
-        filename: string
-        mimeType: string
-      }) => void
+      let resolveImage!: (value: ChapterDownloadImageResult) => void
       let reportBytes:
         ((bytesReceived: number) => void | Promise<void>) | undefined
       const downloadImage = vi.fn(
@@ -401,11 +398,7 @@ describe("downloadChapterImages", () => {
             onBytesReceived?: (bytesReceived: number) => void | Promise<void>
           }
         ) =>
-          new Promise<{
-            data: ArrayBuffer
-            filename: string
-            mimeType: string
-          }>((resolve) => {
+          new Promise<ChapterDownloadImageResult>((resolve) => {
             reportBytes = opts?.onBytesReceived
             resolveImage = resolve
           })
@@ -457,6 +450,10 @@ describe("downloadChapterImages", () => {
         data: new ArrayBuffer(1),
         filename: "slow.jpg",
         mimeType: "image/jpeg",
+        liveResourceLease: new OffscreenLiveResourceLedger().reserve(
+          1,
+          "test image"
+        ),
       })
 
       await resultPromise

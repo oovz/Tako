@@ -8,6 +8,7 @@ import { QueueRepository } from "@/src/storage/queue-repository"
 import { HistoryRepository } from "@/src/storage/history-repository"
 import { HistoryQueryService } from "@/src/storage/history-query-service"
 import { SettingsRepository } from "@/src/storage/settings-repository"
+import { OptionsConfigurationRepository } from "@/src/storage/options-configuration-repository"
 import {
   SettingsSubscriber,
   applySettingsSideEffects,
@@ -24,13 +25,12 @@ import {
 } from "@/src/runtime/rate-limit"
 import { registerSiteIntegrationEnablementListener } from "@/src/runtime/site-integration-initialization"
 import { getDefinition } from "@/src/site-integrations/catalog"
-import { includesBroadHttpsPermission } from "@/src/site-integrations/host-permission-service"
+import { includesManagedHostPermission } from "@/src/site-integrations/host-permission-service"
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { NativeOutputRecord } from "@/src/domain/native-output/state"
-import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 
 import { BackgroundRuntimeKernel } from "@/entrypoints/background/background-runtime-kernel"
 import { createBackgroundRuntimeMessageHandlers } from "@/entrypoints/background/background-runtime-message-handlers"
@@ -60,12 +60,8 @@ import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import { ProviderPolicyQueueCoordinator } from "@/entrypoints/background/provider-policy-queue-coordinator"
 import { ChapterDispatchCoordinator } from "@/entrypoints/background/chapter-dispatch-coordinator"
-import { reconcileCompletedChapterHistory } from "@/entrypoints/background/download-queue-finalization"
 import { OptionsConfigurationService } from "@/entrypoints/background/options-configuration-service"
-import {
-  DestinationIssueRepository,
-  DestinationService,
-} from "@/entrypoints/background/destination"
+import { DestinationService } from "@/entrypoints/background/destination"
 
 configureSeriesDataOffscreenLifecycle(runOffscreenDocumentAdmissionExclusive)
 
@@ -87,12 +83,6 @@ const rateLimitPolicySource = new StorageRateLimitPolicySource({
     getDefinition(integrationId)?.policyDefaults?.[scope],
 })
 const rateLimitService = new RateLimitService(rateLimitPolicySource)
-const destinationIssueRepository = new DestinationIssueRepository()
-const destinationService = new DestinationService({
-  issueRepository: destinationIssueRepository,
-  settingsReader: settingsRepository,
-  notifier: getNotificationService(),
-})
 const siteIntegrationSessionRuleManager = new SiteIntegrationSessionRuleManager(
   {
     service: siteIntegrationEnablementService,
@@ -122,25 +112,31 @@ const finalizationDependencies = {
 
 const queueProjectionService = new QueueProjectionService()
 const queueRepository = new QueueRepository(queueProjectionService)
+const destinationService = new DestinationService({
+  queueRepository,
+  settingsReader: settingsRepository,
+  notifier: getNotificationService(),
+})
 const downloadStateQueryService = new BackgroundDownloadStateQueryService(
   queueRepository,
-  historyQueryService,
-  destinationService
+  historyQueryService
 )
 const nativeOutputRepository = new NativeOutputRepository()
 const tabUiCoordinator = createTabUiCoordinator()
 const tabContextStateService = new TabContextStateService(tabContextCache)
 const optionsConfigurationService = new OptionsConfigurationService({
-  storage: {
-    get: (keys) => chrome.storage.local.get(keys),
-    set: (values) => chrome.storage.local.set(values),
-  },
+  configurationRepository: new OptionsConfigurationRepository(
+    {
+      get: (keys) => chrome.storage.local.get(keys),
+      set: (values) => chrome.storage.local.set(values),
+    },
+    settingsRepository
+  ),
   settingsRepository,
   historyRepository,
   applySettingsSideEffects,
   cleanupRateLimiters: () => rateLimitService.cleanupRateLimiters(),
 })
-
 async function requestBlobRevocation(
   record: Pick<
     NativeOutputRecord,
@@ -178,26 +174,11 @@ const nativeOutputCoordinator = new NativeOutputCoordinator({
   queryOffscreenJob,
   requestBlobRevocation,
   ensureLivenessAlarm,
-  onQueueSettlement: async (taskId) => {
-    const task = await queueRepository.getTask(taskId)
-    if (task && isTerminalDownloadTask(task)) {
-      try {
-        await reconcileCompletedChapterHistory([task], finalizationDependencies)
-      } catch (error) {
-        logger.warn("Native output history projection will be retried", error)
-      }
-    }
-    await terminalCoordinator.continueTask(taskId)
-  },
-  activateQueue: async () => {
-    await queueScheduler.activate()
-  },
 })
 
 const cancellationCoordinator = new DownloadTaskCancellationCoordinator(
   queueRepository,
   nativeOutputCoordinator,
-  destinationService,
   finalizationDependencies
 )
 
@@ -270,7 +251,6 @@ const runtimeKernel = new BackgroundRuntimeKernel({
   ensureLivenessAlarm,
   setLivenessAlarmArmed,
   queueScheduler,
-  destinationService,
   awaitSchemaMigration,
 })
 
@@ -286,9 +266,9 @@ const tabContextResolver = createTabContextResolver({
 const queueApplicationCommands = new QueueApplicationCommands({
   queueRepository,
   nativeOutputCoordinator,
+  terminalCoordinator,
   cancellationCoordinator,
   queueScheduler,
-  destinationService,
   startDownloadSettings: {
     settingsRepository,
     siteIntegrationSettingsService,
@@ -400,7 +380,6 @@ export default defineBackground({
       ensureLivenessAlarm,
       livenessAlarmName: LIVENESS_ALARM_NAME,
       settingsRepository,
-      destinationService,
     })
 
     if (__TAKO_E2E_STATE_SEED__) {
@@ -408,6 +387,8 @@ export default defineBackground({
         ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
         getTabContextStateService: () =>
           runtimeKernel.getTabContextStateService(),
+        cancelTabContextResolution: (tabId) =>
+          tabContextResolver.cancelTabContextResolution(tabId),
         queueRepository,
         siteIntegrationEnablementService,
       })
@@ -437,7 +418,7 @@ export default defineBackground({
     })
 
     chrome.permissions.onRemoved.addListener((permissions) => {
-      if (!includesBroadHttpsPermission(permissions)) return
+      if (!includesManagedHostPermission(permissions)) return
       void reconcileIntegrationSupportAfterPermissionRemoval().catch(
         (error) => {
           logger.error(

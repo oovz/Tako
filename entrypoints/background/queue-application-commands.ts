@@ -9,9 +9,9 @@ import {
 import type { StartDownloadSettingsDependencies } from "@/entrypoints/background/download-queue-enqueue"
 import type { CurrentSeriesContext } from "@/entrypoints/background/tab-cache"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
-import type { DestinationService } from "@/entrypoints/background/destination"
+import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import {
-  restorePendingUndoAndCleanup,
+  restorePendingUndo,
   schedulePendingUndoAction,
 } from "@/entrypoints/background/pending-undo-coordinator"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
@@ -20,6 +20,7 @@ import {
   type StartDownloadFailureCode,
 } from "@/src/runtime/start-download-errors"
 import { getDefinition, isEnabled } from "@/src/site-integrations/catalog"
+import { hasIntegrationHostPermission } from "@/src/site-integrations/host-permission-service"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import {
   type CancelTaskResult,
@@ -30,9 +31,9 @@ interface QueueApplicationCommandDependencies {
   startDownloadSettings: StartDownloadSettingsDependencies
   queueRepository: QueueRepository
   nativeOutputCoordinator: NativeOutputCoordinator
+  terminalCoordinator: OffscreenJobTerminalCoordinator
   cancellationCoordinator: DownloadTaskCancellationCoordinator
   queueScheduler: QueueScheduler
-  destinationService: DestinationService
   siteIntegrationEnablementService: Pick<
     SiteIntegrationEnablementService,
     "getAll"
@@ -291,11 +292,7 @@ export class QueueApplicationCommands {
         "Only completed, failed, partial-success, or canceled tasks can be removed."
       )
     }
-    await schedulePendingUndoAction(
-      this.deps.queueRepository,
-      result.undo,
-      this.deps.destinationService
-    )
+    await schedulePendingUndoAction(this.deps.queueRepository, result.undo)
     return result.undo
   }
 
@@ -318,7 +315,13 @@ export class QueueApplicationCommands {
       await this.deps.nativeOutputCoordinator.forgetTaskUnobservableOutputs(
         taskId
       )
-    return result
+    await this.deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+      result.effects
+    )
+    if (result.queueCanContinue && result.effects.length === 0) {
+      await this.activateQueue()
+    }
+    return { surrendered: result.surrendered }
   }
 
   async retryDestination(taskId: string, commandId: string): Promise<void> {
@@ -332,11 +335,7 @@ export class QueueApplicationCommands {
   async undoQueueAction(
     token: string
   ): Promise<{ restoredQueuedTask: boolean }> {
-    const result = await restorePendingUndoAndCleanup(
-      this.deps.queueRepository,
-      token,
-      this.deps.destinationService
-    )
+    const result = await restorePendingUndo(this.deps.queueRepository, token)
     if (
       (result.outcome !== "applied" && result.outcome !== "unchanged") ||
       !result.restored
@@ -376,7 +375,6 @@ export class QueueApplicationCommands {
       throw new Error("This task is not waiting for download-folder action.")
     }
 
-    await this.deps.destinationService.clearDestinationIssuesForTask(taskId)
     await this.activateQueue()
   }
 
@@ -402,16 +400,13 @@ export class QueueApplicationCommands {
         `Unknown site integration ID: ${siteIntegrationId}`
       )
     }
-    if (definition.requiredOrigins.length === 0) return
     if (!chrome.permissions?.contains) {
       throw rejected(
         "host_permission_required",
         "Required extension capability is unavailable: chrome.permissions.contains"
       )
     }
-    const granted = await chrome.permissions.contains({
-      origins: definition.requiredOrigins,
-    })
+    const granted = await hasIntegrationHostPermission(siteIntegrationId)
     if (!granted) {
       throw rejected(
         "host_permission_required",

@@ -33,6 +33,7 @@ vi.mock("@/src/storage/site-integration-settings-service", () => ({
   },
 }))
 import { createTabContextResolver as createTabContextResolverImpl } from "@/entrypoints/background/tab-context-resolver"
+import logger from "@/src/runtime/logger"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 
@@ -434,6 +435,105 @@ describe("tab context resolver", () => {
     expect(beforeResolution).toHaveBeenCalledOnce()
     expect(cache.projectLoadingForTab).toHaveBeenCalledOnce()
     expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+  })
+
+  it("cancels an in-flight resolution for an external authoritative context", async () => {
+    let providerSignal: AbortSignal | undefined
+    mocks.resolveSeriesData.mockImplementationOnce(
+      (input: { signal?: AbortSignal }) => {
+        providerSignal = input.signal
+        return new Promise((_, reject) => {
+          input.signal?.addEventListener(
+            "abort",
+            () => reject(input.signal?.reason ?? new Error("aborted")),
+            { once: true }
+          )
+        })
+      }
+    )
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: createCache() as never,
+    })
+
+    const resolution = resolver.resolveTabContext(9)
+    await vi.waitFor(() =>
+      expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+    )
+    resolver.cancelTabContextResolution(9, "authoritative E2E seed")
+
+    await expect(resolution).resolves.toBeUndefined()
+    expect(providerSignal?.aborted).toBe(true)
+    expect(mocks.commitResolvedTabContext).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ context: "error" }),
+      9,
+      expect.anything()
+    )
+  })
+
+  it("does not create an unhandled rejection when early loading projection fails", async () => {
+    const cache = createCache()
+    const failure = new Error("loading projection unavailable")
+    cache.projectLoadingForTab.mockRejectedValueOnce(failure)
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+      rateLimitService,
+      siteIntegrationSettingsReader,
+    })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on("unhandledRejection", onUnhandled)
+    try {
+      await expect(resolver.resolveTabContext(9)).rejects.toThrow(
+        "loading projection unavailable"
+      )
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off("unhandledRejection", onUnhandled)
+    }
+  })
+
+  it("shares one observed rejection with coalesced callers", async () => {
+    const cache = createCache()
+    const failure = new Error("shared loading projection unavailable")
+    const beforeResolution = Promise.withResolvers<void>()
+    const beforeResolutionStarted = vi.fn()
+    cache.projectLoadingForTab.mockRejectedValueOnce(failure)
+    const resolver = createTabContextResolver({
+      getTabContextStateService: () => createStateService() as never,
+      tabContextCache: cache as never,
+      beforeResolution: async () => {
+        beforeResolutionStarted()
+        await beforeResolution.promise
+      },
+      rateLimitService,
+      siteIntegrationSettingsReader,
+    })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on("unhandledRejection", onUnhandled)
+    try {
+      const first = resolver.resolveTabContext(9)
+      await vi.waitFor(() =>
+        expect(beforeResolutionStarted).toHaveBeenCalledOnce()
+      )
+      const second = resolver.resolveTabContext(9)
+      beforeResolution.resolve()
+      await expect(first).rejects.toThrow(
+        "shared loading projection unavailable"
+      )
+      await expect(second).rejects.toThrow(
+        "shared loading projection unavailable"
+      )
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(cache.projectLoadingForTab).toHaveBeenCalledOnce()
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off("unhandledRejection", onUnhandled)
+    }
   })
 
   it("retries when a source activation coalesces with an owner that observed the tab inactive", async () => {
@@ -853,7 +953,59 @@ describe("tab context resolver", () => {
         ownerSignal: expect.any(AbortSignal),
       }
     )
+    expect(logger.error).toHaveBeenCalledWith(
+      "Tab context resolution failed",
+      expect.objectContaining({
+        tabId: 9,
+        windowId: 3,
+        requestId: 4,
+        integrationId: "manhuagui",
+        stage: "page-probe",
+        url: "https://www.manhuagui.com/comic/21243/",
+        documentUrlAtStart: "https://www.manhuagui.com/comic/21243/",
+        probeUrl: "https://www.manhuagui.com/comic/99999/",
+        error: expect.objectContaining({ name: "PageProbeUrlMismatchError" }),
+      })
+    )
   })
+
+  it.each(["provider-resolution", "state-commit"] as const)(
+    "correlates a %s failure with its owning tab request",
+    async (stage) => {
+      const error = new Error("Controlled boundary failure")
+      if (stage === "provider-resolution") {
+        mocks.resolveSeriesData.mockRejectedValueOnce(error)
+      } else {
+        mocks.commitResolvedTabContext.mockRejectedValueOnce(error)
+      }
+      const resolver = createTabContextResolver({
+        getTabContextStateService: () => createStateService() as never,
+        tabContextCache: createCache() as never,
+      })
+
+      await resolver.resolveTabContext(9)
+
+      expect(logger.error).toHaveBeenCalledWith(
+        "Tab context resolution failed",
+        expect.objectContaining({
+          tabId: 9,
+          windowId: 3,
+          requestId: 4,
+          integrationId: "pixiv-comic",
+          stage,
+          url: "https://comic.pixiv.net/works/123",
+          documentUrlAtStart: "https://comic.pixiv.net/works/123",
+          error,
+        })
+      )
+      expect(mocks.commitResolvedTabContext).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ context: "error" }),
+        9,
+        expect.objectContaining({ requestId: 4, windowId: 3 })
+      )
+    }
+  )
 
   it("continues when an optional integration page probe fails", async () => {
     getTab.mockResolvedValue({

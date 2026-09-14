@@ -14,7 +14,7 @@ import {
   calculatePhaseWeightedChapterFraction,
   calculateTimeWeightedTaskFraction,
 } from "@/src/runtime/progress-calculator"
-import { progressTimingEstimator } from "@/src/runtime/progress-timing-estimates"
+import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import type { OffscreenJobStage } from "@/src/runtime/offscreen-job-contracts"
 import { isTerminalChapterStatus } from "@/src/domain/queue/task-lifecycle"
 import { normalizeDownloadErrorCategory } from "@/src/shared/download-contract"

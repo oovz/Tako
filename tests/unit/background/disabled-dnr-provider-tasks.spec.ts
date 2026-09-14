@@ -5,7 +5,6 @@ import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { DownloadTaskCancellationCoordinator } from "@/entrypoints/background/download-task-cancellation-coordinator"
 import { ProviderPolicyQueueCoordinator } from "@/entrypoints/background/provider-policy-queue-coordinator"
-import type { DestinationService } from "@/entrypoints/background/destination"
 import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
 import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
 import type { ProviderNetworkPolicyContinuationCoordinator } from "@/src/site-integrations/provider-network-policy-continuation"
@@ -42,10 +41,6 @@ vi.mock("@/src/runtime/logger", () => ({
 
 const DOCUMENT_INSTANCE_ID = "disabled-provider-document-1"
 const FINGERPRINT = "a".repeat(64)
-
-const destinationService = {
-  clearDestinationIssuesForTask: vi.fn(async () => undefined),
-} as unknown as DestinationService
 
 const finalizationDependencies = {
   settingsRepository: {
@@ -114,7 +109,6 @@ describe("disabled provider task policy", () => {
     const cancellationCoordinator = new DownloadTaskCancellationCoordinator(
       queueRepository,
       coordinator,
-      destinationService,
       finalizationDependencies
     )
     const providerCoordinator = new ProviderPolicyQueueCoordinator(

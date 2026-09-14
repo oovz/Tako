@@ -126,6 +126,7 @@ export interface DownloadTaskState {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
+  destinationIssue?: DestinationIssue
   destinationOverride?: "downloads-api"
   created: number
   started?: number

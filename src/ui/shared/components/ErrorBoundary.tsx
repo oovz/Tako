@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { t } from "@/src/runtime/i18n"
+import logger from "@/src/runtime/logger"
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -28,7 +29,7 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error("[ErrorBoundary] Uncaught render error:", error, info)
+    logger.error("[ErrorBoundary] Uncaught render error", { error, info })
   }
 
   private handleReset = (): void => {

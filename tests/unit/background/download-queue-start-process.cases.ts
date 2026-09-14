@@ -28,6 +28,7 @@ import {
 } from "@/src/site-integrations/session-rule-manager"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
+import { DestinationService } from "@/entrypoints/background/destination"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
@@ -537,9 +538,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           activeBlock: "destination_action_required",
         })
       )
-      expect(
-        mockDestinationService.recordDestinationIssue
-      ).toHaveBeenCalledWith(
+      expect(mockDestinationService.blockForPreflight).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: task.id,
           destination: "file-system-access",
@@ -548,6 +547,52 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       )
       expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
       expect(mockQueueRepository.beginChapterDispatch).not.toHaveBeenCalled()
+    })
+
+    it("keeps the paired repair issue when notification delivery fails", async () => {
+      const task = makeTask({
+        id: "task-folder-notification",
+        settingsSnapshot: {
+          ...createTaskSettingsSnapshot(testSettings, "test-site"),
+          destination: "file-system-access",
+        },
+      })
+      mockGlobalState.downloadQueue = [task]
+      vi.mocked(mockDestinationService.preflight).mockResolvedValue({
+        ready: false,
+        reason: "permission_prompt",
+      })
+      const notifier = vi
+        .fn()
+        .mockRejectedValue(new Error("notification failed"))
+      const destinationService = new DestinationService({
+        queueRepository: mockQueueRepository,
+        settingsReader: { getSettings: async () => ({ notifications: true }) },
+        notifier: { notifyDestinationActionRequired: notifier },
+      })
+      vi.mocked(mockDestinationService.blockForPreflight).mockImplementation(
+        destinationService.blockForPreflight.bind(destinationService)
+      )
+
+      await expect(
+        startDownloadTask(
+          mockQueueRepository,
+          task.id,
+          mockEnsureOffscreenReady
+        )
+      ).resolves.toBeUndefined()
+
+      expect(mockGlobalState.downloadQueue[0]).toEqual(
+        expect.objectContaining({
+          status: "queued",
+          activeBlock: "destination_action_required",
+          destinationIssue: expect.objectContaining({
+            taskId: task.id,
+            kind: "fsa_permission_required",
+          }),
+        })
+      )
+      expect(notifier).toHaveBeenCalledOnce()
     })
 
     it("returns an active FSA chapter to a recoverable queued block after permission loss", async () => {
@@ -586,6 +631,11 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           status: "queued",
           activeBlock: "destination_action_required",
           errorCategory: "folder_permission_required",
+          destinationIssue: expect.objectContaining({
+            taskId: task.id,
+            chapterId: task.chapters[0]?.id,
+            kind: "fsa_permission_required",
+          }),
         })
       )
       expect(mockGlobalState.downloadQueue[0]?.chapters[0]).toEqual(
@@ -594,15 +644,15 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           outputs: { requested: 1, committed: 0, failed: 1 },
         })
       )
-      expect(
-        mockDestinationService.recordDestinationRuntimeIssue
-      ).toHaveBeenCalledWith(
+      expect(mockDestinationService.blockForRuntimeIssue).toHaveBeenCalledWith(
         expect.objectContaining({
-          taskId: task.id,
-          chapterId: task.chapters[0]?.id,
-          destination: "file-system-access",
-        }),
-        "fsa_permission_required"
+          context: expect.objectContaining({
+            taskId: task.id,
+            chapterId: task.chapters[0]?.id,
+            destination: "file-system-access",
+          }),
+          kind: "fsa_permission_required",
+        })
       )
     })
 
@@ -641,13 +691,18 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           status: "queued",
           activeBlock: "destination_action_required",
           errorCategory: "folder_write_failed",
+          destinationIssue: expect.objectContaining({
+            taskId: task.id,
+            chapterId: task.chapters[0]?.id,
+            kind: "fsa_write_failed",
+          }),
         })
       )
-      expect(
-        mockDestinationService.recordDestinationRuntimeIssue
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({ taskId: task.id }),
-        "fsa_write_failed"
+      expect(mockDestinationService.blockForRuntimeIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          context: expect.objectContaining({ taskId: task.id }),
+          kind: "fsa_write_failed",
+        })
       )
     })
 

@@ -87,11 +87,20 @@ function createRuntime(): ChapterProcessingRuntime {
 }
 
 function createDownloadImage(): ChapterDownloadImageFn {
-  return vi.fn(async (url: string) => ({
-    filename: url.endsWith("2.jpg") ? "page-2.jpg" : "page-1.jpg",
-    data: new Uint8Array([1, 2, 3]).buffer,
-    mimeType: "image/jpeg",
-  }))
+  return vi.fn(
+    async (url: string, options: Parameters<ChapterDownloadImageFn>[1]) => {
+      const data = new Uint8Array([1, 2, 3]).buffer
+      return {
+        filename: url.endsWith("2.jpg") ? "page-2.jpg" : "page-1.jpg",
+        data,
+        mimeType: "image/jpeg",
+        liveResourceLease: options.liveResourceLedger.reserve(
+          data.byteLength,
+          "test image"
+        ),
+      }
+    }
+  )
 }
 
 function createBaseOptions<TFormat extends "cbz" | "zip" | "none">(
@@ -296,10 +305,15 @@ describe("chapter processing format contracts", () => {
     })
     const downloadImage = vi.fn(async (url: string) => {
       if (url.endsWith("2.jpg")) return secondImage
+      const data = new Uint8Array([1]).buffer
       return {
         filename: "page-1.jpg",
-        data: new Uint8Array([1]).buffer,
+        data,
         mimeType: "image/jpeg",
+        liveResourceLease: runtime.liveResourceLedger.reserve(
+          data.byteLength,
+          "test image"
+        ),
       }
     })
 
@@ -323,6 +337,7 @@ describe("chapter processing format contracts", () => {
       filename: "page-2.jpg",
       data: new Uint8Array([2]).buffer,
       mimeType: "image/jpeg",
+      liveResourceLease: runtime.liveResourceLedger.reserve(1, "test image"),
     })
     await expect(processing).resolves.toEqual({
       status: "completed",

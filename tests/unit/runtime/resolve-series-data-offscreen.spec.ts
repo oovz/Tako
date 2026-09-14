@@ -1,14 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({
-  runOffscreenDocumentAdmissionExclusive: vi.fn(
-    async <T>(operation: () => Promise<T>): Promise<T> => await operation()
-  ),
-  sendMessage: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+  const reserveSeriesResolution = vi.fn(() => ({ release: vi.fn() }))
+  return {
+    reserveSeriesResolution,
+    runOffscreenDocumentAdmissionExclusive: vi.fn(
+      async <T>(
+        operation: (context: {
+          reserveSeriesResolution: () => { release: () => void }
+        }) => Promise<T>
+      ): Promise<T> => await operation({ reserveSeriesResolution })
+    ),
+    sendMessage: vi.fn(),
+  }
+})
 
 import {
   configureSeriesDataOffscreenLifecycle,
+  type OffscreenDocumentAdmissionContext,
   resolveSeriesDataViaOffscreen,
 } from "@/src/runtime/resolve-series-data-offscreen"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
@@ -35,7 +44,7 @@ describe("resolveSeriesDataViaOffscreen", () => {
     })
     configureSeriesDataOffscreenLifecycle(
       mocks.runOffscreenDocumentAdmissionExclusive as <T>(
-        operation: () => Promise<T>
+        operation: (context: OffscreenDocumentAdmissionContext) => Promise<T>
       ) => Promise<T>
     )
   })

@@ -63,7 +63,7 @@ function createTask(): DownloadTaskState {
   }
 }
 
-describe("critical runtime contracts (behavior-based)", () => {
+describe("Runtime contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getAllSiteOverrides.mockResolvedValue({})

@@ -171,11 +171,20 @@ function createOptions<TFormat extends "cbz" | "zip" | "none">(
 }
 
 function successfulImage(filename = "source.jpg"): ChapterDownloadImageFn {
-  return vi.fn(async () => ({
-    filename,
-    data: new Uint8Array([1, 2, 3]).buffer,
-    mimeType: "image/jpeg",
-  }))
+  return vi.fn(
+    async (_url: string, options: Parameters<ChapterDownloadImageFn>[1]) => {
+      const data = new Uint8Array([1, 2, 3]).buffer
+      return {
+        filename,
+        data,
+        mimeType: "image/jpeg",
+        liveResourceLease: options.liveResourceLedger.reserve(
+          data.byteLength,
+          "test image"
+        ),
+      }
+    }
+  )
 }
 
 function archiveInput(
@@ -234,6 +243,7 @@ describe("archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([9, 8]).buffer,
         mimeType: "image/png",
+        liveResourceLease: runtime.liveResourceLedger.reserve(2, "test cover"),
       },
     }
 
@@ -605,6 +615,7 @@ describe("no-archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([4]).buffer,
         mimeType: "image/png",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test cover"),
       },
     }
 
@@ -683,6 +694,7 @@ describe("no-archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([4]).buffer,
         mimeType: "image/png",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test cover"),
       },
     }
 
@@ -711,6 +723,7 @@ describe("no-archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([4]).buffer,
         mimeType: "image/png",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test cover"),
       },
     }
 
@@ -722,14 +735,21 @@ describe("no-archive chapter edge cases", () => {
 
   it("reports partial success when one image download fails before handoff", async () => {
     const runtime = createRuntime()
-    const downloadImage = vi.fn(async (url: string) => {
-      if (url.endsWith("/1.jpg")) throw new Error("HTTP 404")
-      return {
-        filename: "second.jpg",
-        data: new Uint8Array([2]).buffer,
-        mimeType: "image/jpeg",
+    const downloadImage = vi.fn(
+      async (url: string, options: Parameters<ChapterDownloadImageFn>[1]) => {
+        if (url.endsWith("/1.jpg")) throw new Error("HTTP 404")
+        const data = new Uint8Array([2]).buffer
+        return {
+          filename: "second.jpg",
+          data,
+          mimeType: "image/jpeg",
+          liveResourceLease: options.liveResourceLedger.reserve(
+            data.byteLength,
+            "test image"
+          ),
+        }
       }
-    })
+    )
     const input = noneInput(createOptions("none"), downloadImage)
     input.urls = ["https://example.com/1.jpg", "https://example.com/2.jpg"]
 
@@ -785,6 +805,7 @@ describe("no-archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([4]).buffer,
         mimeType: "image/webp",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test cover"),
       },
       settingsSnapshot: {
         ...createOptions("none").settingsSnapshot,
@@ -823,6 +844,7 @@ describe("no-archive chapter edge cases", () => {
       coverImage: {
         data: new Uint8Array([4]).buffer,
         mimeType: "image/png",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test cover"),
       },
     }
 

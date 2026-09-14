@@ -257,10 +257,10 @@
     "message": "元に戻せませんでした"
   },
   "sidepanel_cancelThisDownload": {
-    "message": "このダウンロードをキャンセルしますか？"
+    "message": "この Tako タスクをキャンセルしますか？"
   },
   "sidepanel_cancelProgressWarning": {
-    "message": "ダウンロード中の章の進行状況が失われる可能性があります。"
+    "message": "このタスクの残りの処理を停止します。Chrome がすでに受け付けたダウンロードは続行されます。Chrome のダウンロードで管理してください。"
   },
   "sidepanel_forgetUnobservableDownload": {
     "message": "このタスクの保留中のダウンロードをすべて忘れますか？"
@@ -1835,5 +1835,14 @@
   },
   "mangadexSetting_autoReadMangaDexSettingsDescription": {
     "message": "利用可能な場合、MangaDexのサイト設定を使用します。"
+  },
+  "sidepanel_seriesLoadFailed": {
+    "message": "シリーズ情報を読み込めませんでした"
+  },
+  "sidepanel_retrySeriesDescription": {
+    "message": "もう一度シリーズ情報を読み込んでください。"
+  },
+  "sidepanel_retrySeriesContext": {
+    "message": "シリーズを再読み込み"
   }
 }

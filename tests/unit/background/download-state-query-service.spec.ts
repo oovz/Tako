@@ -32,14 +32,12 @@ function createTask(): DownloadTaskState {
 describe("BackgroundDownloadStateQueryService", () => {
   const getQueue = vi.fn()
   const getDownloadedChapters = vi.fn()
-  const readDestinationIssues = vi.fn()
   const getBytesInUse = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
     getQueue.mockResolvedValue([])
     getDownloadedChapters.mockResolvedValue([])
-    readDestinationIssues.mockResolvedValue([])
     getBytesInUse.mockResolvedValue(42)
     vi.stubGlobal("chrome", {
       storage: { local: { getBytesInUse } },
@@ -47,20 +45,22 @@ describe("BackgroundDownloadStateQueryService", () => {
   })
 
   it("returns the full queue, current destination issue, and queue bytes for Options", async () => {
-    const task = createTask()
     const issue = {
       id: "task-1::fsa_folder_missing",
       taskId: "task-1",
       kind: "fsa_folder_missing" as const,
       occurredAt: 1,
     }
+    const task = {
+      ...createTask(),
+      activeBlock: "destination_action_required" as const,
+      destinationIssue: issue,
+    }
     getQueue.mockResolvedValue([task])
-    readDestinationIssues.mockResolvedValue([issue])
 
     const service = new BackgroundDownloadStateQueryService(
       { getQueue } as never,
-      { getDownloadedChapters } as never,
-      { getIssues: readDestinationIssues } as never
+      { getDownloadedChapters } as never
     )
 
     await expect(service.getOptionsDownloadState()).resolves.toEqual({
@@ -169,8 +169,7 @@ describe("BackgroundDownloadStateQueryService", () => {
 
     const service = new BackgroundDownloadStateQueryService(
       { getQueue } as never,
-      { getDownloadedChapters } as never,
-      { getIssues: readDestinationIssues } as never
+      { getDownloadedChapters } as never
     )
 
     await expect(service.getSidepanelDownloadState()).resolves.toEqual({
@@ -181,18 +180,15 @@ describe("BackgroundDownloadStateQueryService", () => {
     expect(getBytesInUse).not.toHaveBeenCalled()
   })
 
-  it("rejects malformed durable destination state instead of filtering it", async () => {
-    readDestinationIssues.mockRejectedValue(
-      new Error("Stored destination issues are invalid")
-    )
+  it("propagates malformed queue state from the queue owner", async () => {
+    getQueue.mockRejectedValue(new Error("Stored queue is invalid"))
     const service = new BackgroundDownloadStateQueryService(
       { getQueue } as never,
-      { getDownloadedChapters } as never,
-      { getIssues: readDestinationIssues } as never
+      { getDownloadedChapters } as never
     )
 
     await expect(service.getOptionsDownloadState()).rejects.toThrow(
-      "Stored destination issues are invalid"
+      "Stored queue is invalid"
     )
   })
 })

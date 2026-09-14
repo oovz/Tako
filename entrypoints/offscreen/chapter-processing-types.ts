@@ -69,7 +69,7 @@ export type ProcessChapterStreamingOptions = {
   coverImage?: {
     data: ArrayBuffer
     mimeType: string
-    liveResourceLease?: OffscreenLiveResourceLease
+    liveResourceLease: OffscreenLiveResourceLease
   }
   onImageDownloaded?: () => void
   integrationContext?: JsonObject
@@ -91,7 +91,7 @@ export type ChapterDownloadImageResult = {
   filename: string
   data: ArrayBuffer
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }
 
 export type ChapterDownloadImageFn = (
@@ -101,7 +101,7 @@ export type ChapterDownloadImageFn = (
     dispatchContext?: JsonObject
     runtime: import("@/src/types/site-integrations").ChapterRuntimeData
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ) => Promise<ChapterDownloadImageResult>
 

@@ -1,16 +1,9 @@
 /**
  * @file unsupported-url-navigation.spec.ts
- * @description Tests for side panel behavior when navigating to unsupported URLs
+ * @description Tests side panel helper behavior for unsupported navigation.
  *
- * This test verifies the fix for the bug where navigating from a supported manga page
- * to an unsupported page (e.g., mangadex.org homepage) still showed the previous
- * manga series information instead of the "unsupported" message.
- *
- * Root cause: Race condition where a stale resolver result from the old page arrived after
- * CLEAR_TAB_STATE, and the onTabStateChange listener unconditionally cleared the
- * blocking message.
- *
- * Fix: Track URL support state and ignore stale tab state updates when the URL is unsupported.
+ * The cases cover URL classification and chapter grouping used by navigation
+ * state updates.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
@@ -102,7 +95,7 @@ function clearMockStorage() {
   storageChangeListeners.length = 0
 }
 
-describe("Unsupported URL Navigation Bug Fix", () => {
+describe("Unsupported URL navigation", () => {
   beforeEach(() => {
     vi.resetAllMocks()
     clearMockStorage()
@@ -115,7 +108,7 @@ describe("Unsupported URL Navigation Bug Fix", () => {
   })
 
   describe("isInternalUrl", () => {
-    it("correctly identifies MangaDex homepage as NOT internal (but may be unsupported)", () => {
+    it("treats browser pages as external URLs", () => {
       // The homepage is a valid HTTP URL, not an internal chrome:// URL
       expect(isInternalUrl("https://mangadex.org/")).toBe(false)
       expect(
@@ -123,24 +116,15 @@ describe("Unsupported URL Navigation Bug Fix", () => {
       ).toBe(false)
     })
 
-    it("correctly identifies chrome:// URLs as internal", () => {
+    it("recognizes browser and extension URLs as internal", () => {
       expect(isInternalUrl("chrome://newtab")).toBe(true)
       expect(isInternalUrl("chrome-extension://fake-id/popup.html")).toBe(true)
       expect(isInternalUrl("about:blank")).toBe(true)
     })
   })
 
-  describe("Race condition prevention", () => {
-    it("should preserve blocking message when receiving stale tab state updates", async () => {
-      /**
-       * This test simulates the race condition:
-       * 1. User is on a supported manga page (tab state exists)
-       * 2. User navigates to unsupported page (homepage)
-       * 3. Side panel detects navigation, sets blockingMessage = TAB_NOT_SUPPORTED_MSG
-       * 4. A stale resolver result arrives from the old page's async operation
-       * 5. Side panel should IGNORE this update and keep the blocking message
-       */
-
+  describe("Chapter grouping", () => {
+    it("groups empty and volume-numbered chapter lists", async () => {
       const tabId = 12345
       const oldMangaState = {
         siteId: "mangadex",
@@ -150,11 +134,11 @@ describe("Unsupported URL Navigation Bug Fix", () => {
         lastUpdated: Date.now(),
       }
 
-      // Setup: tab state exists for old manga
+      // Keep representative state for the previous page.
       mockStorageData[`tab_${tabId}`] = oldMangaState
       mockStorageData.globalState = { downloadQueue: [] }
 
-      // Mock tabs.query to return the current tab with unsupported URL
+      // The active tab has moved to an unsupported URL.
       chromeMock.tabs.get.mockResolvedValue({
         id: tabId,
         url: "https://mangadex.org/", // Homepage - unsupported
@@ -172,12 +156,11 @@ describe("Unsupported URL Navigation Bug Fix", () => {
         return []
       })
 
-      // This tests the groupChapters function which is exported
-      // Verify groupChapters handles empty arrays gracefully
+      // Empty input produces no groups.
       const result = groupChapters([])
       expect(result).toEqual([])
 
-      // Verify it handles chapters with volumeNumber
+      // Volume metadata groups the chapters under one volume.
       const chaptersWithVolume = [
         {
           id: "ch1",
@@ -204,8 +187,8 @@ describe("Unsupported URL Navigation Bug Fix", () => {
       expect(groupedWithVolume.length).toBe(1) // Grouped into one volume
     })
 
-    it("groupChapters preserves collapsed state from previous items", async () => {
-      // Create chapters with volume numbers
+    it("preserves collapsed state when regrouping volume chapters", async () => {
+      // Create chapters with volume numbers.
       const chapters = [
         {
           id: "ch1",
@@ -229,42 +212,21 @@ describe("Unsupported URL Navigation Bug Fix", () => {
         },
       ]
 
-      // First grouping - default collapsed: true
+      // The first grouping starts collapsed.
       const firstResult = groupChapters(chapters)
       expect(firstResult.length).toBe(1)
 
       const volume = firstResult[0] as { collapsed: boolean; groupId: string }
       expect(volume.collapsed).toBe(true) // Default
 
-      // Simulate user expanding the volume
+      // Simulate the user expanding the volume.
       const expandedPrevious = [{ ...volume, collapsed: false }]
 
-      // Re-group with previous collapsed state
-      // @ts-expect-error - testing internal collapsed state preservation
+      // Regrouping keeps the previous collapsed state.
+      // @ts-expect-error - the helper accepts its internal row shape here.
       const secondResult = groupChapters(chapters, expandedPrevious)
       const secondVolume = secondResult[0] as { collapsed: boolean }
       expect(secondVolume.collapsed).toBe(false) // Preserved from previous
     })
-  })
-})
-
-describe("URL Support Detection", () => {
-  it("matchUrl returns null for MangaDex homepage (unsupported)", async () => {
-    // Note: We can't easily test matchUrl in isolation due to site integration initialization
-    // This test documents the expected behavior
-    const unsupportedUrls = [
-      "https://mangadex.org/",
-      "https://mangadex.org/titles",
-      "https://google.com/",
-    ]
-
-    const supportedPatterns = [
-      // These should be supported by the MangaDex site integration
-      "https://mangadex.org/title/abc123/manga-name",
-    ]
-
-    // This is a documentation test - actual URL matching depends on site integration patterns
-    expect(unsupportedUrls.length).toBeGreaterThan(0)
-    expect(supportedPatterns.length).toBeGreaterThan(0)
   })
 })

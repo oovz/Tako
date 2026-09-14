@@ -11,9 +11,8 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import type { NativeOutputCoordinator } from "./native-output-coordinator"
-import type { DestinationService } from "./destination"
 import { pendingUndoTokenFromAlarmName } from "@/src/runtime/pending-undo-actions"
-import { finalizePendingUndoAndCleanup } from "./pending-undo-coordinator"
+import { finalizePendingUndo } from "./pending-undo-coordinator"
 import {
   ACTIVE_TASK_PROGRESS_PORT_NAME,
   registerActiveTaskProgressPort,
@@ -42,7 +41,6 @@ interface RegisterBackgroundRuntimeListenersDependencies {
   ensureLivenessAlarm: () => Promise<void>
   livenessAlarmName: string
   settingsRepository: Pick<SettingsRepository, "getSettings">
-  destinationService: DestinationService
 }
 
 export function registerBackgroundRuntimeListeners(
@@ -106,11 +104,14 @@ export function registerBackgroundRuntimeListeners(
         }
 
         await deps.waitForReadiness("runtime-ready")
-        const handled =
+        const result =
           await deps.nativeOutputCoordinator.handleDownloadChanged(delta)
-        if (!handled) {
+        if (!result.handled) {
           logger.debug(`Download ${delta.id} is not a tracked extension output`)
         }
+        await deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+          result.effects
+        )
       } catch (error) {
         logger.error("Failed to process downloads.onChanged cleanup:", error)
         try {
@@ -132,7 +133,11 @@ export function registerBackgroundRuntimeListeners(
     void (async () => {
       try {
         await deps.waitForReadiness("runtime-ready")
-        await deps.nativeOutputCoordinator.handleDownloadErased(downloadId)
+        const result =
+          await deps.nativeOutputCoordinator.handleDownloadErased(downloadId)
+        await deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+          result.effects
+        )
       } catch (error) {
         logger.error("Failed to process downloads.onErased cleanup:", error)
         try {
@@ -152,13 +157,7 @@ export function registerBackgroundRuntimeListeners(
     if (pendingUndoToken) {
       void deps
         .waitForReadiness("runtime-ready")
-        .then(() =>
-          finalizePendingUndoAndCleanup(
-            deps.queueRepository,
-            pendingUndoToken,
-            deps.destinationService
-          )
-        )
+        .then(() => finalizePendingUndo(deps.queueRepository, pendingUndoToken))
         .catch((error) => {
           logger.error("Error finalizing pending Undo action:", error)
         })
@@ -195,7 +194,11 @@ export function registerBackgroundRuntimeListeners(
           // current service worker remains alive. Startup reconciliation
           // alone cannot unblock an output whose acceptance persistence
           // failed transiently.
-          await deps.nativeOutputCoordinator.reconcile()
+          const nativeSettlementEffects =
+            await deps.nativeOutputCoordinator.reconcile()
+          await deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+            nativeSettlementEffects
+          )
           await recoverFromLivenessTimeout(
             deps.queueRepository,
             deps.nativeOutputCoordinator,

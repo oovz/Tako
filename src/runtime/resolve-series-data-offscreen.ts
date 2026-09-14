@@ -6,7 +6,17 @@ import type {
   RateLimitService,
 } from "@/src/runtime/rate-limit"
 
-type OffscreenDocumentAdmission = <T>(operation: () => Promise<T>) => Promise<T>
+export interface OffscreenDocumentLifecycleReservation {
+  release: () => void
+}
+
+export interface OffscreenDocumentAdmissionContext {
+  reserveSeriesResolution: () => OffscreenDocumentLifecycleReservation
+}
+
+type OffscreenDocumentAdmission = <T>(
+  operation: (context: OffscreenDocumentAdmissionContext) => Promise<T>
+) => Promise<T>
 
 let runOffscreenDocumentAdmissionExclusive: OffscreenDocumentAdmission = () =>
   Promise.reject(new Error("Offscreen lifecycle adapter is not configured"))
@@ -57,12 +67,19 @@ export async function resolveSeriesDataViaOffscreen(
 
   let response:
     RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML"> | undefined
+  let admitted:
+    | {
+        response: Promise<RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML">>
+        reservation: OffscreenDocumentLifecycleReservation
+      }
+    | undefined
   try {
     input.signal?.throwIfAborted()
-    response = await runOffscreenDocumentAdmissionExclusive(async () => {
+    admitted = await runOffscreenDocumentAdmissionExclusive((context) => {
       input.signal?.throwIfAborted()
+      const reservation = context.reserveSeriesResolution()
       parseSent = true
-      return await sendRuntimeMessage({
+      const response = sendRuntimeMessage({
         target: "offscreen",
         type: "OFFSCREEN_PARSE_SERIES_HTML",
         payload: {
@@ -74,9 +91,12 @@ export async function resolveSeriesDataViaOffscreen(
           rateLimitSettings,
         },
       })
+      return Promise.resolve({ response, reservation })
     })
+    response = await admitted.response
     input.signal?.throwIfAborted()
   } finally {
+    admitted?.reservation.release()
     input.signal?.removeEventListener("abort", cancel)
   }
 
