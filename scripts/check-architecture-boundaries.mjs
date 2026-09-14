@@ -13,13 +13,19 @@ const constructorOwners = new Set([
   "NativeOutputCoordinator",
   "SettingsRepository",
   "HistoryRepository",
-  "DestinationIssueRepository",
   "RateLimitService",
 ])
 const projectionFunctions = new Set(["projectToQueueView", "updateActionBadge"])
 const allowedSetEnablementMapFiles = new Set([
   "entrypoints/background/background-runtime-kernel.ts",
   "src/runtime/site-integration-initialization.ts",
+  "entrypoints/background/e2e-state-seed.ts",
+])
+// Composition wiring, the upgrade boundary and the isolated E2E seed are the
+// explicit exceptions to repository-owned durable storage mutation.
+const allowedLocalMutationFiles = new Set([
+  "entrypoints/background/index.ts",
+  "src/runtime/state-schema-migration.ts",
   "entrypoints/background/e2e-state-seed.ts",
 ])
 const domainAmbientNames = new Set([
@@ -341,6 +347,21 @@ function inspectSourceFile(metadata) {
 
     if (ts.isCallExpression(node)) {
       const chain = propertyChain(node.expression)
+      if (
+        chain?.length === 4 &&
+        (chain[0] === "chrome" || chain[0] === "browser") &&
+        chain[1] === "storage" &&
+        chain[2] === "local" &&
+        ["set", "remove", "clear"].includes(chain[3]) &&
+        !relativePath.startsWith("src/storage/") &&
+        !allowedLocalMutationFiles.has(relativePath)
+      ) {
+        report(
+          metadata,
+          node,
+          "Durable local storage mutations belong in src/storage/; composition, migration and isolated E2E seeding are explicit exceptions."
+        )
+      }
       if (
         JSON.stringify(chain) ===
         JSON.stringify(["chrome", "runtime", "sendMessage"])

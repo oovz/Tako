@@ -11,6 +11,5 @@
       "@": ["."],
       "@/*": ["./*"]
     }
-  },
-  "exclude": ["manga-scraper-architecture"]
+  }
 }

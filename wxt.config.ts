@@ -50,9 +50,9 @@ export default defineConfig({
     },
   }),
 
-  // Configure manifest. Isolated Playwright builds pre-grant the optional
-  // wildcard permission so mocked and live MangaDex workflows can exercise the
-  // enabled integration. Production keeps the user-gesture permission flow.
+  // Configure manifest. Isolated Playwright builds pre-grant the generated
+  // optional origins so mocked and live workflows can exercise every shipped
+  // integration. Production keeps the user-gesture permission flow.
   manifest: ({ mode }) => {
     const isLiveTest = mode === "live-test"
     // A test environment variable alone must never make a normal production

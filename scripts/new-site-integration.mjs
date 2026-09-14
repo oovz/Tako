@@ -196,7 +196,6 @@ function main() {
         maxResponseBytes: 10000000,
       },
     ],
-    dynamicOrigins: [],
     sessionRefererRules: [],
     customSettings: [],
     fixtures: {

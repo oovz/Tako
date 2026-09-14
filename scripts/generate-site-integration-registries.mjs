@@ -250,42 +250,6 @@ function assertDefinition(id, definition, definitionPath) {
       }
     }
   }
-  const dynamicOriginIds = new Set()
-  for (const dynamicOrigin of definition.dynamicOrigins) {
-    assert(
-      !dynamicOriginIds.has(dynamicOrigin.endpointId),
-      `${id} has duplicate dynamic origin endpoint ${dynamicOrigin.endpointId}`
-    )
-    dynamicOriginIds.add(dynamicOrigin.endpointId)
-    const target = definition.endpointPolicies.find(
-      (endpoint) => endpoint.id === dynamicOrigin.endpointId
-    )
-    const source = definition.endpointPolicies.find(
-      (endpoint) => endpoint.id === dynamicOrigin.sourceEndpointId
-    )
-    assert(
-      target,
-      `${id} dynamic origin target endpoint is unknown: ${dynamicOrigin.endpointId}`
-    )
-    assert(
-      source,
-      `${id} dynamic origin source endpoint is unknown: ${dynamicOrigin.sourceEndpointId}`
-    )
-    if (target && source) {
-      assert(
-        target.originKind === "provider-issued",
-        `${id} dynamic origin target must be provider-issued: ${dynamicOrigin.endpointId}`
-      )
-      assert(
-        target.origins.includes(dynamicOrigin.allowedOriginPattern),
-        `${id} dynamic origin target must include ${dynamicOrigin.allowedOriginPattern}`
-      )
-      assert(
-        definition.optionalOrigins.includes(dynamicOrigin.allowedOriginPattern),
-        `${id} dynamic origin pattern must be declared optional: ${dynamicOrigin.allowedOriginPattern}`
-      )
-    }
-  }
   for (const rule of definition.sessionRefererRules) {
     assert(
       rule.id >= 41000 && rule.id <= 41999,
@@ -434,7 +398,11 @@ function generateRuntimeRegistry(definitions, context) {
     (definition) =>
       `${identifier(definition.id)}${context === "background" ? "Background" : "Offscreen"}Adapter`
   )
-  return `${generatedHeader()}import type { ${typeName} } from '@/src/types/site-integrations'\n${imports.join("\n")}\n\nexport const ${collectionName} = [\n${values.map((value) => `  ${value},`).join("\n")}\n] as const satisfies readonly ${typeName}[]\n\nexport const ${byIdName} = Object.fromEntries(\n  ${collectionName}.map((integration) => [integration.id, integration]),\n) as Readonly<Record<string, ${typeName}>>\n`
+  const entries = selected.map(
+    (definition) =>
+      `  ${JSON.stringify(definition.id)}: ${identifier(definition.id)}${context === "background" ? "Background" : "Offscreen"}Adapter,`
+  )
+  return `${generatedHeader()}import type { ${typeName} } from '@/src/types/site-integrations'\n${imports.join("\n")}\n\nexport const ${collectionName} = [\n${values.map((value) => `  ${value},`).join("\n")}\n] as const satisfies readonly ${typeName}[]\n\nexport const ${byIdName} = {\n${entries.join("\n")}\n} as Readonly<Record<string, ${typeName}>>\n`
 }
 
 function generatePageProbeRegistry(definitions) {
@@ -447,7 +415,11 @@ function generatePageProbeRegistry(definitions) {
   const values = selected.map(
     (definition) => `  ${identifier(definition.id)}PageProbe,`
   )
-  return `${generatedHeader()}import type { SiteIntegrationPageProbe } from '@/src/site-integrations/page-probe-contract'\n${imports.join("\n")}\n\nexport const siteIntegrationPageProbes = [\n${values.join("\n")}\n] as const satisfies readonly SiteIntegrationPageProbe[]\n\nexport const siteIntegrationPageProbesById = Object.fromEntries(\n  siteIntegrationPageProbes.map((probe) => [probe.id, probe]),\n) as Readonly<Record<string, SiteIntegrationPageProbe>>\n`
+  const entries = selected.map(
+    (definition) =>
+      `  ${JSON.stringify(definition.id)}: ${identifier(definition.id)}PageProbe,`
+  )
+  return `${generatedHeader()}import type { SiteIntegrationPageProbe } from '@/src/site-integrations/page-probe-contract'\n${imports.join("\n")}\n\nexport const siteIntegrationPageProbes = [\n${values.join("\n")}\n] as const satisfies readonly SiteIntegrationPageProbe[]\n\nexport const siteIntegrationPageProbesById = {\n${entries.join("\n")}\n} as Readonly<Record<string, SiteIntegrationPageProbe>>\n`
 }
 
 function generatePermissions(definitions) {
@@ -464,7 +436,13 @@ function generatePermissions(definitions) {
     ...new Set(
       definitions
         .filter((definition) => definition.shipped)
-        .flatMap((definition) => definition.optionalOrigins)
+        .flatMap((definition) => [
+          ...definition.optionalOrigins,
+          ...(definition.enabledByDefault ||
+          definition.optionalOrigins.includes("https://*/*")
+            ? []
+            : definition.requiredOrigins),
+        ])
     ),
   ].sort()
   return `${generatedHeader()}export interface SiteIntegrationWxtPermissions {\n  requiredOrigins: readonly string[]\n  optionalOrigins: readonly string[]\n}\n\nexport const siteIntegrationWxtPermissions = ${JSON.stringify({ requiredOrigins, optionalOrigins }, null, 2)} as const satisfies SiteIntegrationWxtPermissions\n`

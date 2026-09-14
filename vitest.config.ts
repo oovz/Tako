@@ -30,16 +30,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      // Include src/** plus high-risk, non-UI entrypoint runtime surfaces that
-      // have meaningful unit/integration coverage. This keeps the coverage gate
-      // on background queue, sender-resolution, state-action-router, offscreen
-      // helpers, and options/sidepanel non-UI helpers instead of only src/**.
-      //
-      // UI components (.tsx) and React hooks remain exercised via Playwright
-      // E2E and are excluded below; adding jsdom + React Testing Library unit
-      // tests for them is a tracked follow-up. Runtime modules with dedicated
-      // unit coverage stay in the gate, including the background routers and
-      // listeners, one-shot page probes, and offscreen processing/bridge modules.
+      // Include source and executable extension runtime modules in the gate.
+      // Browser UI components and React hooks are covered by Playwright E2E and
+      // excluded below.
       include: [
         "src/**/*.ts",
         "entrypoints/background/**/*.ts",
@@ -73,10 +66,7 @@ export default defineConfig({
         // Pure type definition modules (no executable logic to cover).
         "entrypoints/offscreen/chapter-processing-types.ts",
         "entrypoints/sidepanel/types.ts",
-        // React hooks that need jsdom + React Testing Library to exercise
-        // meaningfully. They are covered by Playwright E2E today; adding RTL
-        // unit tests for them is a tracked follow-up. Excluding them keeps the
-        // coverage gate honest about what the unit/integration suites cover.
+        // React hooks require jsdom and are covered by Playwright E2E today.
         "entrypoints/options/hooks/useOptionsPageState.ts",
         "entrypoints/options/hooks/useOptionsFolderManagement.ts",
         "entrypoints/options/hooks/useOptionsHistory.ts",
