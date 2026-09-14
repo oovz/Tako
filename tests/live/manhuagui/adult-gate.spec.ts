@@ -7,6 +7,7 @@ import {
   MANHUAGUI_BASE_URL,
 } from "../../e2e/fixtures/test-domains-constants"
 import { resolveCandidateTabIds } from "../fixtures/download-workflow-helpers"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
 
 type ManhuaguiLiveState = {
   siteIntegrationId?: string
@@ -66,9 +67,11 @@ async function loadManhuaguiState(
       chrome.storage.session.get(null)
     )
     throw new Error(
-      `Timed out waiting for live manhuagui state (${expectedChapterAvailability}) ` +
-        `for manga ${expectedMangaId} from ${page.url()}. ` +
-        `Session keys: ${Object.keys(session).join(", ")}`
+      redactDiagnosticText(
+        `Timed out waiting for live manhuagui state (${expectedChapterAvailability}) ` +
+          `for manga ${expectedMangaId} from ${page.url()}. ` +
+          `Session keys: ${Object.keys(session).join(", ")}`
+      )
     )
   } finally {
     await optionsPage.close()

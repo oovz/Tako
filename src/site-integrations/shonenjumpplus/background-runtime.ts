@@ -57,7 +57,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
     )
   }
 
-  const json = readEpisodeJsonSeriesMetadataFromHtml(html)
+  const json = readEpisodeJsonSeriesMetadataFromHtml(html, input.seriesUrl)
   const seriesMetadata: SeriesMetadata = {
     title: json.seriesTitle ?? `Shonen Jump+ ${episodeId}`,
     coverUrl: json.seriesThumbnailUri,
@@ -92,6 +92,5 @@ const background: ServiceWorkerIntegration = {
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "shonenjumpplus",
   background,
 }

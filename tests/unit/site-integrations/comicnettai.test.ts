@@ -48,6 +48,7 @@ function downloadComicNettaiChapterImage(
   return downloadComicNettaiChapterImageImpl(imageUrl, {
     ...(opts ?? {}),
     runtime: { rateLimitService, rateLimitSettings },
+    liveResourceLedger: new OffscreenLiveResourceLedger(),
   } as Parameters<typeof downloadComicNettaiChapterImageImpl>[1])
 }
 
@@ -453,6 +454,7 @@ describe("Comic Nettai site integration", () => {
       const image = await downloadComicNettaiChapterImage(transportUrl)
       expect(image.mimeType).toBe("image/png")
       expect(new Uint8Array(image.data)).toEqual(new Uint8Array([4, 5, 6]))
+      image.liveResourceLease.release()
     } finally {
       vi.unstubAllGlobals()
     }
@@ -611,16 +613,26 @@ describe("Comic Nettai site integration", () => {
   it("fails rather than returning scrambled bytes when reconstruction is unavailable", async () => {
     vi.stubGlobal("createImageBitmap", undefined)
     vi.stubGlobal("OffscreenCanvas", undefined)
+    const buffer = new ArrayBuffer(4)
+    const ledger = new OffscreenLiveResourceLedger()
+    const sourceLease = ledger.reserve(buffer.byteLength, "test source")
 
     await expect(
-      descramblePublusImage(new ArrayBuffer(4), "image/jpeg", {
-        mode: 1,
-        seed1: 2,
-        seed2: 3,
-        seed3: 4,
-        tileWidth: 32,
-        tileHeight: 32,
-      })
+      descramblePublusImage(
+        buffer,
+        "image/jpeg",
+        {
+          mode: 1,
+          seed1: 2,
+          seed2: 3,
+          seed3: 4,
+          tileWidth: 32,
+          tileHeight: 32,
+        },
+        undefined,
+        ledger,
+        sourceLease
+      )
     ).rejects.toThrow("reconstruction is unavailable")
   })
 

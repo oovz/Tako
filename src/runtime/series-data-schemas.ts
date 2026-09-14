@@ -1,11 +1,27 @@
 import { z } from "zod"
 
+import { assertSafePublicHttpsUrl } from "@/src/site-integrations/request-policy"
 import type { Chapter } from "@/src/types/chapter"
 import type { ComicInfoV2, ComicPageInfo } from "@/src/types/comic-info"
 import type { SeriesChapterListResult } from "@/src/types/site-integrations"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 import type { VolumeState } from "@/src/types/tab-state"
+
+export const PublicHttpsUrlSchema = z
+  .string()
+  .url()
+  .refine(
+    (value) => {
+      try {
+        assertSafePublicHttpsUrl(value, "stored cover")
+        return true
+      } catch {
+        return false
+      }
+    },
+    { message: "must be a public HTTPS URL without credentials" }
+  )
 
 const SeriesMetadataSnapshotShape = {
   author: z.string().optional(),
@@ -14,7 +30,7 @@ const SeriesMetadataSnapshotShape = {
   genres: z.array(z.string()).optional(),
   communityRating: z.number().finite().optional(),
   year: z.number().finite().optional(),
-  coverUrl: z.string().optional(),
+  coverUrl: PublicHttpsUrlSchema.optional(),
   alternativeTitles: z.array(z.string()).optional(),
   status: z.string().optional(),
   language: z.string().optional(),

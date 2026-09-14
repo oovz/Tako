@@ -42,7 +42,8 @@ const ALLOWED_RASTER_IMAGE_MIME_TYPES = new Set([
 ])
 
 export function normalizeAllowedImageMimeType(
-  rawContentType: string | null | undefined
+  rawContentType: string | null | undefined,
+  options: { allowEncodedImageMimeType?: boolean } = {}
 ): string {
   const mimeType =
     sanitizeLabel(rawContentType ?? "")
@@ -50,7 +51,13 @@ export function normalizeAllowedImageMimeType(
       ?.trim()
       .toLowerCase() ?? ""
 
-  if (!ALLOWED_RASTER_IMAGE_MIME_TYPES.has(mimeType)) {
+  if (
+    !ALLOWED_RASTER_IMAGE_MIME_TYPES.has(mimeType) &&
+    !(
+      options.allowEncodedImageMimeType &&
+      (mimeType === "image/avif" || mimeType === "application/octet-stream")
+    )
+  ) {
     throw new NonRetryableDownloadError(
       `Unsupported MIME type: ${mimeType || "missing"}`
     )

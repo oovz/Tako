@@ -1,6 +1,7 @@
 import { sanitizeLabel } from "@/src/shared/site-integration-utils"
 import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 import { ProviderContractError } from "../provider-contract-error"
+import { assertIntegrationEndpointRequestUrl } from "../request-policy"
 import {
   parseEpisodeJsonPayload,
   type EpisodeJsonPayload,
@@ -57,7 +58,8 @@ export function readEpisodeJsonAttributeFromHtml(html: string): string | null {
 }
 
 function normalizeEpisodeJsonSeriesMetadata(
-  payload: EpisodeJsonPayload | null
+  payload: EpisodeJsonPayload | null,
+  baseUrl: string
 ): EpisodeJsonSeriesMetadata {
   const series = payload?.readableProduct?.series
   const seriesId =
@@ -68,18 +70,26 @@ function normalizeEpisodeJsonSeriesMetadata(
     typeof series?.title === "string" ? sanitizeLabel(series.title) : ""
   const seriesThumbnailUri =
     typeof series?.thumbnailUri === "string" ? series.thumbnailUri : ""
+  const coverUrl = seriesThumbnailUri
+    ? assertIntegrationEndpointRequestUrl(
+        "shonenjumpplus",
+        "shonenjumpplus-image-cdn",
+        new URL(seriesThumbnailUri, baseUrl).href
+      ).href
+    : undefined
   return {
     seriesId,
     seriesTitle: seriesTitle || undefined,
-    seriesThumbnailUri: seriesThumbnailUri || undefined,
+    seriesThumbnailUri: coverUrl,
   }
 }
 
 export function readEpisodeJsonSeriesMetadataFromHtml(
-  html: string
+  html: string,
+  baseUrl = "https://shonenjumpplus.com/"
 ): EpisodeJsonSeriesMetadata {
   const attribute = readEpisodeJsonAttributeFromHtml(html)
-  return normalizeEpisodeJsonSeriesMetadata(parsePayload(attribute))
+  return normalizeEpisodeJsonSeriesMetadata(parsePayload(attribute), baseUrl)
 }
 
 export function extractImageUrlsFromEpisodeJsonScript(html: string): string[] {

@@ -26,6 +26,12 @@ export interface FetchImageWithStallDetectionCoreOptions {
   onResponse?: (response: Response) => void | Promise<void>
   onBytesReceived?: (bytesReceived: number) => void | Promise<void>
   liveResourceLedger?: OffscreenLiveResourceLedger
+  /**
+   * MangaMillion's image endpoint can return encrypted bytes as
+   * application/octet-stream and may return AVIF. Other integrations keep the
+   * normal raster-only MIME contract.
+   */
+  allowEncodedImageMimeType?: boolean
 }
 
 export type FetchedImageData = {
@@ -112,7 +118,8 @@ export async function fetchImageWithStallDetection(
     }
 
     const mimeType = normalizeAllowedImageMimeType(
-      response.headers.get("content-type")
+      response.headers.get("content-type"),
+      { allowEncodedImageMimeType: options.allowEncodedImageMimeType }
     )
     await options.onResponse?.(response)
 

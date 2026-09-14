@@ -140,17 +140,24 @@ export const integrationHttpClient = {
 
     const perform = async (): Promise<Response> => {
       const response = await fetch(requestUrl.href, init)
-      assertResponseContentLength(response, endpoint.maxResponseBytes)
-      assertResponseType(response, endpoint.responseType)
-      if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
-        assertIntegrationEndpointResponseUrl(
-          input.integrationId,
-          input.endpointId,
-          requestUrl.href,
-          response.url
-        )
+      try {
+        assertResponseContentLength(response, endpoint.maxResponseBytes)
+        assertResponseType(response, endpoint.responseType)
+        if (!shouldAcceptDeterministicE2eMockResponse(response.url)) {
+          assertIntegrationEndpointResponseUrl(
+            input.integrationId,
+            input.endpointId,
+            requestUrl.href,
+            response.url
+          )
+        }
+        return limitResponseBody(response, endpoint.maxResponseBytes)
+      } catch (error) {
+        // The client owns the response until it hands the bounded body to its
+        // caller. Cleanup must preserve the policy failure and its deadline.
+        void response.body?.cancel(error).catch(() => undefined)
+        throw error
       }
-      return limitResponseBody(response, endpoint.maxResponseBytes)
     }
 
     if (input.skipRateLimit) return perform()

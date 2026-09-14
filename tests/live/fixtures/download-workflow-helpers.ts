@@ -10,6 +10,7 @@ import {
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { MangaPageState } from "@/src/types/tab-state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
 import {
   LOCAL_STORAGE_KEYS,
   SESSION_STORAGE_KEYS,
@@ -31,6 +32,21 @@ export type BrowserWorkflowCase = {
   url: string
   expectedMangaId?: string
   expectedSeriesTitle?: string
+}
+
+export function createDiagnosticEventRecorder(maxEvents = 20): {
+  diagnosticEvents: string[]
+  recordDiagnostic: (message: unknown) => void
+} {
+  const diagnosticEvents: string[] = []
+  return {
+    diagnosticEvents,
+    recordDiagnostic: (message) => {
+      if (diagnosticEvents.length < maxEvents) {
+        diagnosticEvents.push(redactDiagnosticText(message))
+      }
+    },
+  }
 }
 
 export type StoredSiteIntegrationSettings = Record<
@@ -249,10 +265,10 @@ export async function loadLiveDownloadState(
   await optionsPage.close()
   throw new Error(
     `Timed out waiting for live download state for ${integrationId}. ` +
-      `Last state: ${JSON.stringify(lastState)}. ` +
-      `Page: ${JSON.stringify(pageDiagnostics)}. ` +
-      `Runtime: ${JSON.stringify(diagnostics)}. ` +
-      `Events: ${JSON.stringify(options.diagnosticEvents ?? [])}`
+      `Last state: ${redactDiagnosticText(lastState)}. ` +
+      `Page: ${redactDiagnosticText(pageDiagnostics)}. ` +
+      `Runtime: ${redactDiagnosticText(diagnostics)}. ` +
+      `Events: ${redactDiagnosticText(options.diagnosticEvents ?? [])}`
   )
 }
 
@@ -425,9 +441,10 @@ export async function startSingleChapterDownload(
       { selectedChapter: chapter, snapshotIdentity }
     )
 
-    expect(response?.success, response?.error ?? JSON.stringify(response)).toBe(
-      true
-    )
+    expect(
+      response?.success,
+      redactDiagnosticText(response?.error ?? response)
+    ).toBe(true)
     expect(typeof response?.taskId).toBe("string")
 
     return {
@@ -509,21 +526,22 @@ export async function waitForTerminalTask(
     const activeTaskProgress =
       await readActiveTaskProgressFromExtensionPage(optionsPage)
     throw new Error(
-      `Timed out waiting for task ${taskId} to finish after ${LIVE_TASK_TERMINAL_TIMEOUT_MS}ms: ${JSON.stringify(
-        {
-          status: task.status,
-          lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
-          activeTaskProgress,
-          chapters: task.chapters.map((chapter) => ({
-            id: chapter.id,
-            status: chapter.status,
-            errorMessage: chapter.errorMessage,
-            imagesFailed: chapter.imagesFailed,
-            totalImages: chapter.totalImages,
-            title: chapter.title,
-          })),
-        }
-      )}`
+      redactDiagnosticText({
+        event: "task-timeout",
+        taskId,
+        timeoutMs: LIVE_TASK_TERMINAL_TIMEOUT_MS,
+        status: task.status,
+        lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
+        activeTaskProgress,
+        chapters: task.chapters.map((chapter) => ({
+          id: chapter.id,
+          status: chapter.status,
+          errorMessage: chapter.errorMessage,
+          imagesFailed: chapter.imagesFailed,
+          totalImages: chapter.totalImages,
+          title: chapter.title,
+        })),
+      })
     )
   }
 
@@ -548,22 +566,23 @@ export function assertTaskSucceeded(task: DownloadTaskState): void {
   }
 
   throw new Error(
-    `Download task ${task.id} finished with status ${task.status}: ${JSON.stringify(
-      {
-        errorMessage: task.errorMessage,
-        errorCategory: task.errorCategory,
-        lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
-        chapters: task.chapters.map((chapter) => ({
-          id: chapter.id,
-          status: chapter.status,
-          errorMessage: chapter.errorMessage,
-          imagesFailed: chapter.imagesFailed,
-          totalImages: chapter.totalImages,
-          outputs: chapter.outputs,
-          title: chapter.title,
-        })),
-      }
-    )}`
+    redactDiagnosticText({
+      event: "task-finished",
+      taskId: task.id,
+      status: task.status,
+      errorMessage: task.errorMessage,
+      errorCategory: task.errorCategory,
+      lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
+      chapters: task.chapters.map((chapter) => ({
+        id: chapter.id,
+        status: chapter.status,
+        errorMessage: chapter.errorMessage,
+        imagesFailed: chapter.imagesFailed,
+        totalImages: chapter.totalImages,
+        outputs: chapter.outputs,
+        title: chapter.title,
+      })),
+    })
   )
 }
 
@@ -609,7 +628,11 @@ export async function waitForBrowserDownload(
   }
 
   throw new Error(
-    `Timed out waiting for browser download ${downloadId}. Last item: ${JSON.stringify(lastItem)}`
+    redactDiagnosticText({
+      event: "browser-download-timeout",
+      downloadId,
+      lastItem,
+    })
   )
 }
 

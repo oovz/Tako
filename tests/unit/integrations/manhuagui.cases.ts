@@ -16,6 +16,7 @@ import {
 } from "@/src/site-integrations/manhuagui/series-dom"
 import { parseSeriesIdFromPath } from "@/src/site-integrations/manhuagui/shared"
 import { offscreenSiteAdapter } from "@/src/site-integrations/manhuagui/offscreen-runtime"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 type MockChapterGroup = {
   groupTitle: string
@@ -794,7 +795,10 @@ export function registerManhuaguiCases(): void {
 
       const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
         "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456",
-        { runtime: { rateLimitService, rateLimitSettings } }
+        {
+          runtime: { rateLimitService, rateLimitSettings },
+          liveResourceLedger: new OffscreenLiveResourceLedger(),
+        }
       )
 
       expect(result).toMatchObject({
@@ -838,7 +842,10 @@ export function registerManhuaguiCases(): void {
       await expect(
         offscreenSiteAdapter.offscreen.chapter.downloadImage(
           "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456",
-          { runtime: { rateLimitService, rateLimitSettings } }
+          {
+            runtime: { rateLimitService, rateLimitSettings },
+            liveResourceLedger: new OffscreenLiveResourceLedger(),
+          }
         )
       ).rejects.toThrow("Unsupported MIME type: text/html")
     })

@@ -123,13 +123,13 @@ export interface ChapterImageIntegration<
         runtime: ChapterRuntimeData
         skipRateLimit?: boolean
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-        liveResourceLedger?: OffscreenLiveResourceLedger
+        liveResourceLedger: OffscreenLiveResourceLedger
       }
     ): Promise<{
       data: ArrayBuffer
       filename: string
       mimeType: string
-      liveResourceLease?: OffscreenLiveResourceLease
+      liveResourceLease: OffscreenLiveResourceLease
     }>
   }
 }
@@ -146,13 +146,13 @@ export interface CoverImageIntegration<
       runtime: ChapterRuntimeData
       skipRateLimit?: boolean
       onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-      liveResourceLedger?: OffscreenLiveResourceLedger
+      liveResourceLedger: OffscreenLiveResourceLedger
     }
   ): Promise<{
     data: ArrayBuffer
     filename: string
     mimeType: string
-    liveResourceLease?: OffscreenLiveResourceLease
+    liveResourceLease: OffscreenLiveResourceLease
   }>
 }
 
@@ -185,13 +185,11 @@ export interface OffscreenIntegration<
 export interface BackgroundSiteAdapter<
   DispatchContext extends JsonObject = JsonObject,
 > {
-  id: string
   background: ServiceWorkerIntegration<DispatchContext>
 }
 
 export interface OffscreenSiteAdapter<
   DispatchContext extends JsonObject = JsonObject,
 > {
-  id: string
   offscreen: OffscreenIntegration<DispatchContext>
 }

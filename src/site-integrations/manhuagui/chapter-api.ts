@@ -79,13 +79,13 @@ export async function downloadManhuaguiChapterImage(
     runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   if (!isAllowedManhuaguiImageUrl(imageUrl)) {
     throw new ProviderContractError("Manhuagui image URL origin is not allowed")
@@ -122,13 +122,13 @@ export async function downloadManhuaguiCoverImage(
     runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   if (!isAllowedManhuaguiCoverUrl(imageUrl)) {
     throw new ProviderContractError("Manhuagui cover URL origin is not allowed")

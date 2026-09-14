@@ -11,33 +11,51 @@ import {
   fetchSharedResource,
   integrationHttpClient,
 } from "@/src/site-integrations/http-client"
+import type {
+  OffscreenLiveResourceLease,
+  OffscreenLiveResourceLedger,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 
-type SharedFetchImageWithStallDetectionOptions =
-  FetchImageWithStallDetectionCoreOptions & {
-    integrationId?: never
-    endpointId?: never
-    rateLimitPolicy?: never
-    rateLimitService?: never
-    skipRateLimit?: never
-  }
+type SharedFetchImageWithStallDetectionOptions = Omit<
+  FetchImageWithStallDetectionCoreOptions,
+  | "integrationId"
+  | "endpointId"
+  | "rateLimitPolicy"
+  | "rateLimitService"
+  | "skipRateLimit"
+> & {
+  integrationId?: never
+  endpointId?: never
+  rateLimitPolicy?: never
+  rateLimitService?: never
+  skipRateLimit?: never
+  liveResourceLedger: OffscreenLiveResourceLedger
+}
 
-type IntegrationFetchImageWithStallDetectionOptions =
-  FetchImageWithStallDetectionCoreOptions & {
-    integrationId: string
-    endpointId: string
-    rateLimitPolicy?: EffectivePolicy
-    rateLimitService: RateLimitService
-    skipRateLimit?: boolean
-  }
+type IntegrationFetchImageWithStallDetectionOptions = Omit<
+  FetchImageWithStallDetectionCoreOptions,
+  "liveResourceLedger"
+> & {
+  integrationId: string
+  endpointId: string
+  rateLimitPolicy?: EffectivePolicy
+  rateLimitService: RateLimitService
+  skipRateLimit?: boolean
+  liveResourceLedger: OffscreenLiveResourceLedger
+}
 
 export type FetchImageWithStallDetectionOptions =
   | SharedFetchImageWithStallDetectionOptions
   | IntegrationFetchImageWithStallDetectionOptions
 
+export type OwnedFetchedImageData = FetchedImageData & {
+  liveResourceLease: OffscreenLiveResourceLease
+}
+
 export async function fetchImageWithStallDetection(
   imageUrl: string,
-  options: FetchImageWithStallDetectionOptions = {}
-): Promise<FetchedImageData> {
+  options: FetchImageWithStallDetectionOptions
+): Promise<OwnedFetchedImageData> {
   const effectiveFetcher =
     options.fetcher ??
     ((url: string, init: RequestInit) => {
@@ -56,8 +74,14 @@ export async function fetchImageWithStallDetection(
       })
     })
 
-  return fetchImageWithStallDetectionCore(imageUrl, {
+  const result = await fetchImageWithStallDetectionCore(imageUrl, {
     ...options,
     fetcher: effectiveFetcher,
   })
+  if (!result.liveResourceLease) {
+    throw new Error(
+      "Integration image transport must return an owned live-resource lease"
+    )
+  }
+  return result as OwnedFetchedImageData
 }

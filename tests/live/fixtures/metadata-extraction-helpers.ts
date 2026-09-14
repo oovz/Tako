@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test"
 import { expect } from "@playwright/test"
 import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import { resolveCandidateTabIds } from "./download-workflow-helpers"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
 
 export type LiveChapter = {
   id: string
@@ -115,7 +116,9 @@ export async function loadLiveTabState(
     }
 
     throw new Error(
-      `Timed out waiting for live ${integrationId} state from ${page.url()}`
+      redactDiagnosticText(
+        `Timed out waiting for live ${integrationId} state from ${page.url()}`
+      )
     )
   } finally {
     await optionsPage.close()

@@ -17,6 +17,11 @@ export const offscreenSiteAdapters = [
   shonenjumpplusOffscreenAdapter,
 ] as const satisfies readonly OffscreenSiteAdapter[]
 
-export const offscreenSiteAdaptersById = Object.fromEntries(
-  offscreenSiteAdapters.map((integration) => [integration.id, integration]),
-) as Readonly<Record<string, OffscreenSiteAdapter>>
+export const offscreenSiteAdaptersById = {
+  "comicnettai": comicnettaiOffscreenAdapter,
+  "mangadex": mangadexOffscreenAdapter,
+  "mangamillion": mangamillionOffscreenAdapter,
+  "manhuagui": manhuaguiOffscreenAdapter,
+  "pixiv-comic": pixiv_comicOffscreenAdapter,
+  "shonenjumpplus": shonenjumpplusOffscreenAdapter,
+} as Readonly<Record<string, OffscreenSiteAdapter>>

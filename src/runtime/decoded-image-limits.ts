@@ -3,6 +3,8 @@ import {
   MAX_IMAGE_DIMENSION_PX,
 } from "@/src/constants/timeouts"
 import { NonRetryableDownloadError } from "@/src/shared/download-contract"
+import { imageDimensionsFromData } from "image-dimensions"
+import type { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 export class DecodedImageResourceLimitError extends NonRetryableDownloadError {
   constructor(message: string) {
@@ -70,6 +72,12 @@ function readGifDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
 }
 
 const MAX_JPEG_METADATA_BYTES = 1024 * 1024
+export const MAX_AVIF_METADATA_BYTES = 1024 * 1024
+// image-dimensions copies the source and each ISO-BMFF hierarchy, then keeps
+// one string per ftyp brand and one object per ispe property. Reserve a
+// conservative working-set envelope for those copies and collections while
+// the parser is bounded to the metadata prefix above.
+const AVIF_METADATA_WORKING_SET_MULTIPLIER = 16
 
 function readJpegDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
   if (!hasBytes(bytes, 0, 2) || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
@@ -187,12 +195,32 @@ function readUint16LE(bytes: Uint8Array, offset: number): number {
 
 export function readEncodedImageDimensions(
   buffer: ArrayBuffer,
-  mimeType: string
+  mimeType: string,
+  liveResourceLedger: OffscreenLiveResourceLedger
 ): EncodedImageDimensions {
   if (mimeType === "image/avif") {
-    throw new DecodedImageResourceLimitError(
-      "AVIF images are not supported by the bounded dimension preflight"
+    const metadataLength = Math.min(buffer.byteLength, MAX_AVIF_METADATA_BYTES)
+    const metadata = new Uint8Array(buffer, 0, metadataLength)
+    const scratchLease = liveResourceLedger.reserve(
+      metadataLength * AVIF_METADATA_WORKING_SET_MULTIPLIER,
+      "AVIF dimension metadata parser"
     )
+    try {
+      const dimensions = imageDimensionsFromData(metadata)
+      if (!dimensions || dimensions.type !== "avif") {
+        throw new DecodedImageResourceLimitError(
+          "Encoded image/avif dimensions are unavailable within the metadata limit"
+        )
+      }
+      return { width: dimensions.width, height: dimensions.height }
+    } catch (error) {
+      if (error instanceof DecodedImageResourceLimitError) throw error
+      throw new DecodedImageResourceLimitError(
+        "Encoded image/avif metadata is malformed"
+      )
+    } finally {
+      scratchLease.release()
+    }
   }
   const bytes = new Uint8Array(buffer)
   const dimensions =

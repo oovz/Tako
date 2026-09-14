@@ -70,6 +70,5 @@ const background: ServiceWorkerIntegration<PixivDispatchContext> = {
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter<PixivDispatchContext> =
   {
-    id: "pixiv-comic",
     background,
   }

@@ -71,7 +71,6 @@
       "maxResponseBytes": 50000000
     }
   ],
-  "dynamicOrigins": [],
   "sessionRefererRules": [
     {
       "id": 41001,

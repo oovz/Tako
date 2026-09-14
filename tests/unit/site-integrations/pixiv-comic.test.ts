@@ -11,6 +11,7 @@ import {
 } from "@/src/site-integrations/pixiv-comic/shared"
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 const rateLimitService = {
   resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
@@ -396,6 +397,7 @@ describe("Pixiv Comic site integration", () => {
         {
           signal: new AbortController().signal,
           runtime: { rateLimitService, rateLimitSettings },
+          liveResourceLedger: new OffscreenLiveResourceLedger(),
         }
       )
 

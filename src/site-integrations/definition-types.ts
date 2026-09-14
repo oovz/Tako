@@ -57,18 +57,6 @@ export interface SiteIntegrationEndpointPolicy {
   maxResponseBytes: number
 }
 
-/** Dynamic origin binding linking an API endpoint to runtime-issued media origins. */
-export interface SiteIntegrationDynamicOrigin {
-  /** Target media endpoint id receiving dynamic origins. */
-  endpointId: string
-  /** Source API endpoint id returning media host URLs. */
-  sourceEndpointId: string
-  /** Origin pattern template permitted for dynamic registration. */
-  allowedOriginPattern: string
-  /** Validation rule applied to issued dynamic URLs (e.g. "public-https"). */
-  validator: "public-https"
-}
-
 /** Declarative Net Request rule declaration for setting required Referer headers. */
 export interface SiteIntegrationSessionRefererRule {
   /** Managed rule id within the 41000-41999 range. */
@@ -199,8 +187,6 @@ export interface SiteIntegrationDefinition {
   imageTransform: SiteIntegrationImageTransform
   /** Hardened network endpoint policies declaring allowed origins, credentials, and limits. */
   endpointPolicies: SiteIntegrationEndpointPolicy[]
-  /** Dynamic origin bindings connecting API endpoints with issued media hosts. */
-  dynamicOrigins: SiteIntegrationDynamicOrigin[]
   /** Declarative Net Request (DNR) session rules for attaching required HTTP headers. */
   sessionRefererRules: SiteIntegrationSessionRefererRule[]
   /** Custom settings definitions exposed in the Options UI for this integration. */

@@ -109,7 +109,6 @@ describe("site integration common contract (integration)", () => {
           adapter,
           `background adapter for ${manifest.id} must be registered`
         ).toBeDefined()
-        expect(adapter!.id).toBe(manifest.id)
         expect(
           adapter!.background,
           `${manifest.id} must expose a background integration object`

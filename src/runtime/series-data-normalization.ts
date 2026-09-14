@@ -1,4 +1,5 @@
 import { isRecord } from "@/src/shared/type-guards"
+import { SeriesMetadataSchema } from "@/src/runtime/series-data-schemas"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import type {
   ResolvedTabContext,
@@ -139,6 +140,10 @@ export function buildResolvedTabContext(
 
   if (!rawMangaId) return { context: "unsupported" }
 
+  const seriesMetadata = input.seriesMetadata
+    ? SeriesMetadataSchema.parse(input.seriesMetadata)
+    : undefined
+
   if (input.extractionError) {
     const errorMessage =
       input.extractionError instanceof Error
@@ -152,7 +157,7 @@ export function buildResolvedTabContext(
     }
   }
 
-  const seriesTitle = input.seriesMetadata?.title?.trim() ?? ""
+  const seriesTitle = seriesMetadata?.title?.trim() ?? ""
   if (!seriesTitle) {
     return { context: "error", error: "Failed to extract series metadata" }
   }
@@ -188,7 +193,7 @@ export function buildResolvedTabContext(
       language: chapter.language,
     })),
     volumes: input.volumes,
-    metadata: normalizeSeriesMetadataSnapshot(input.seriesMetadata),
+    metadata: normalizeSeriesMetadataSnapshot(seriesMetadata),
     chaptersLoading: input.chaptersLoading,
     chapterListNotice: input.chapterListNotice,
   }

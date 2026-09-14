@@ -249,18 +249,3 @@ export function createIntegrationEndpointUrlAssertion(
     assertIntegrationEndpointRequestUrl(integrationId, endpointId, url)
   }
 }
-
-export function createSameOriginDynamicAssetAssertion(
-  initialUrl: string,
-  purpose: string
-): (url: string) => void {
-  const initial = assertSafePublicHttpsUrl(initialUrl, purpose)
-  return (rawUrl) => {
-    const parsed = assertSafePublicHttpsUrl(rawUrl, purpose)
-    if (parsed.origin !== initial.origin) {
-      throw new ProviderContractError(
-        `Blocked cross-origin redirect for ${purpose}.`
-      )
-    }
-  }
-}

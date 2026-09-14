@@ -11,6 +11,7 @@ import {
 } from "./pixiv-comic-test-setup"
 import { backgroundSiteAdapter } from "@/src/site-integrations/pixiv-comic/background-runtime"
 import { offscreenSiteAdapter as offscreenSiteAdapterImpl } from "@/src/site-integrations/pixiv-comic/offscreen-runtime"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 export function registerPixivComicBackgroundImageCases(): void {
   const runtime = { rateLimitService, rateLimitSettings }
@@ -30,6 +31,10 @@ export function registerPixivComicBackgroundImageCases(): void {
     offscreenSiteAdapterImpl.offscreen.chapter.downloadImage(url, {
       ...(input ?? {}),
       runtime,
+      liveResourceLedger:
+        (input?.liveResourceLedger as
+          OffscreenLiveResourceLedger | undefined) ??
+        new OffscreenLiveResourceLedger(),
     } as Parameters<
       typeof offscreenSiteAdapterImpl.offscreen.chapter.downloadImage
     >[1])

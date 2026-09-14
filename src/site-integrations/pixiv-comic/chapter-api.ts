@@ -383,13 +383,13 @@ export async function downloadPixivChapterImage(
     runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   if (opts.signal?.aborted) {
     throw new Error("aborted")
@@ -465,13 +465,13 @@ export async function downloadPixivCoverImage(
     runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   const sourceImageUrl = normalizePixivImageUrl(imageUrl)
   const { data, mimeType, liveResourceLease } =

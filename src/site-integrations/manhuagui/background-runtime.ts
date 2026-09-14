@@ -146,6 +146,5 @@ const background: ServiceWorkerIntegration = {
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "manhuagui",
   background,
 }

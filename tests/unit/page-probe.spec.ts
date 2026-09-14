@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const probes = vi.hoisted(() => ({
   mangadex: {
-    id: "mangadex",
     collect: () => ({ url: globalThis.location.href }),
     parse: (raw: unknown) => raw as { url: string; data?: unknown },
   },

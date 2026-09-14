@@ -5,6 +5,13 @@ import {
   DecodedImageResourceLimitError,
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+
+const dimensionLedger = new OffscreenLiveResourceLedger()
+
+function readDimensions(buffer: ArrayBuffer, mimeType: string) {
+  return readEncodedImageDimensions(buffer, mimeType, dimensionLedger)
+}
 
 function makeJpegFrame(
   marker: number,
@@ -73,7 +80,7 @@ describe("decoded image resource limits", () => {
         0x3b,
       ])
 
-      expect(readEncodedImageDimensions(bytes.buffer, "image/gif")).toEqual({
+      expect(readDimensions(bytes.buffer, "image/gif")).toEqual({
         width: 258,
         height: 513,
       })
@@ -87,9 +94,7 @@ describe("decoded image resource limits", () => {
     new DataView(bytes.buffer).setUint32(16, 1600)
     new DataView(bytes.buffer).setUint32(20, 2400)
 
-    expect(
-      readEncodedImageDimensions(bytes.buffer as ArrayBuffer, "image/png")
-    ).toEqual({
+    expect(readDimensions(bytes.buffer as ArrayBuffer, "image/png")).toEqual({
       width: 1600,
       height: 2400,
     })
@@ -99,20 +104,18 @@ describe("decoded image resource limits", () => {
     "reads baseline/progressive JPEG SOF marker 0x%02x",
     (marker) => {
       const bytes = makeJpegFrame(marker, 1600, 2400)
-      expect(
-        readEncodedImageDimensions(bytes.buffer as ArrayBuffer, "image/jpeg")
-      ).toEqual({
-        width: 1600,
-        height: 2400,
-      })
+      expect(readDimensions(bytes.buffer as ArrayBuffer, "image/jpeg")).toEqual(
+        {
+          width: 1600,
+          height: 2400,
+        }
+      )
     }
   )
 
   it("handles fill, TEM, and restart markers before a JPEG frame", () => {
     const bytes = makeJpegFrame(0xc0, 320, 240, [0xff, 0xff, 0x01, 0xff, 0xd0])
-    expect(
-      readEncodedImageDimensions(bytes.buffer as ArrayBuffer, "image/jpeg")
-    ).toEqual({
+    expect(readDimensions(bytes.buffer as ArrayBuffer, "image/jpeg")).toEqual({
       width: 320,
       height: 240,
     })
@@ -129,18 +132,18 @@ describe("decoded image resource limits", () => {
       new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x01]),
     ],
   ])("rejects hostile JPEG metadata: %s", (_label, bytes) => {
-    expect(() =>
-      readEncodedImageDimensions(bytes.buffer, "image/jpeg")
-    ).toThrow("dimensions are unavailable")
+    expect(() => readDimensions(bytes.buffer, "image/jpeg")).toThrow(
+      "dimensions are unavailable"
+    )
   })
 
   it("does not treat entropy SOF-like bytes as metadata", () => {
     const bytes = new Uint8Array([
       0xff, 0xd8, 0xff, 0xda, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0,
     ])
-    expect(() =>
-      readEncodedImageDimensions(bytes.buffer, "image/jpeg")
-    ).toThrow("dimensions are unavailable")
+    expect(() => readDimensions(bytes.buffer, "image/jpeg")).toThrow(
+      "dimensions are unavailable"
+    )
   })
 
   it("stops scanning JPEG metadata at the bounded budget", () => {
@@ -153,12 +156,12 @@ describe("decoded image resource limits", () => {
       bytes[offset + 2] = 0xff
       bytes[offset + 3] = 0xff
     }
-    expect(() =>
-      readEncodedImageDimensions(bytes.buffer, "image/jpeg")
-    ).toThrow("dimensions are unavailable")
+    expect(() => readDimensions(bytes.buffer, "image/jpeg")).toThrow(
+      "dimensions are unavailable"
+    )
   })
 
-  it("rejects AVIF before metadata parsing", () => {
+  it("rejects truncated AVIF metadata", () => {
     const bytes = new Uint8Array(48)
     new DataView(bytes.buffer).setUint32(0, 24)
     bytes.set([0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66], 4)
@@ -167,12 +170,12 @@ describe("decoded image resource limits", () => {
     new DataView(bytes.buffer).setUint32(36, 1200)
     new DataView(bytes.buffer).setUint32(40, 1800)
 
-    expect(() =>
-      readEncodedImageDimensions(bytes.buffer, "image/avif")
-    ).toThrow("AVIF images are not supported")
+    expect(() => readDimensions(bytes.buffer, "image/avif")).toThrow(
+      "dimensions are unavailable"
+    )
   })
 
-  it("rejects a structurally valid AVIF until bounded support is implemented", () => {
+  it("reads AVIF dimensions within the bounded metadata prefix", () => {
     const bytes = new Uint8Array(72)
     const view = new DataView(bytes.buffer)
     view.setUint32(0, 24)
@@ -189,9 +192,10 @@ describe("decoded image resource limits", () => {
     view.setUint32(64, 1200)
     view.setUint32(68, 1800)
 
-    expect(() =>
-      readEncodedImageDimensions(bytes.buffer, "image/avif")
-    ).toThrow("AVIF images are not supported")
+    expect(readDimensions(bytes.buffer, "image/avif")).toEqual({
+      width: 1200,
+      height: 1800,
+    })
   })
 
   it("accepts a normal comic page", () => {

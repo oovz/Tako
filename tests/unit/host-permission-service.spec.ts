@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { siteIntegrationWxtPermissions } from "@/src/runtime/generated/site-integration-wxt-permissions"
 
 const storageMocks = vi.hoisted(() => ({
   getAll: vi.fn(),
@@ -16,9 +17,10 @@ vi.mock("@/src/runtime/logger", () => ({
 
 import {
   OPTIONAL_BROAD_HTTPS_ORIGIN,
-  includesBroadHttpsPermission,
-  reconcileBroadHttpsPermissionEnablement,
-  removeBroadHttpsPermissionIfUnused,
+  getIntegrationOptionalHostPermissionOrigins,
+  includesManagedHostPermission,
+  reconcileOptionalHostPermissionEnablement,
+  removeUnusedHostPermissions,
   requestIntegrationHostPermission,
 } from "@/src/site-integrations/host-permission-service"
 
@@ -26,6 +28,14 @@ describe("site integration optional host permissions", () => {
   const contains = vi.fn()
   const request = vi.fn()
   const remove = vi.fn()
+  const getManifest = vi.fn(() => ({
+    host_permissions: [
+      ...siteIntegrationWxtPermissions.requiredOrigins,
+    ] as string[],
+    optional_host_permissions: [
+      ...siteIntegrationWxtPermissions.optionalOrigins,
+    ] as string[],
+  }))
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -35,11 +45,23 @@ describe("site integration optional host permissions", () => {
     request.mockResolvedValue(false)
     remove.mockResolvedValue(true)
     vi.stubGlobal("chrome", {
+      runtime: { getManifest },
       permissions: { contains, request, remove },
     })
   })
 
-  it("requests broad HTTPS access only for integrations that declare it", async () => {
+  it("uses the loaded manifest when a build promotes optional origins to required", async () => {
+    getManifest.mockReturnValueOnce({
+      host_permissions: ["https://*/*"],
+      optional_host_permissions: [],
+    })
+    await expect(
+      removeUnusedHostPermissions({ mangadex: false })
+    ).resolves.toBe(false)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it("requests no optional access for a default-enabled fixed-origin integration", async () => {
     await expect(requestIntegrationHostPermission("pixiv-comic")).resolves.toBe(
       true
     )
@@ -50,15 +72,21 @@ describe("site integration optional host permissions", () => {
       true
     )
     expect(request).toHaveBeenCalledWith({
-      origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
+      origins: getIntegrationOptionalHostPermissionOrigins("mangadex"),
     })
   })
 
-  it("disables a broad-host integration when its permission is missing", async () => {
+  it("preserves an explicitly declared broad permission for a disabled provider", () => {
+    expect(getIntegrationOptionalHostPermissionOrigins("mangadex")).toEqual([
+      "https://*/*",
+    ])
+  })
+
+  it("disables a provider when its required host permissions are missing", async () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: true })
 
     await expect(
-      reconcileBroadHttpsPermissionEnablement(storageMocks)
+      reconcileOptionalHostPermissionEnablement(storageMocks)
     ).resolves.toEqual({
       changed: true,
       enablement: { mangadex: false },
@@ -66,12 +94,12 @@ describe("site integration optional host permissions", () => {
     expect(storageMocks.setAll).toHaveBeenCalledWith({ mangadex: false })
   })
 
-  it("keeps an enabled broad-host integration when permission exists", async () => {
+  it("keeps an enabled provider when its required host permissions exist", async () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: true })
     contains.mockResolvedValue(true)
 
     await expect(
-      reconcileBroadHttpsPermissionEnablement(storageMocks)
+      reconcileOptionalHostPermissionEnablement(storageMocks)
     ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: true },
@@ -79,44 +107,44 @@ describe("site integration optional host permissions", () => {
     expect(storageMocks.setAll).not.toHaveBeenCalled()
   })
 
-  it("reconciles abandoned broad access when no persisted integration needs it", async () => {
+  it("reconciles all abandoned optional access when no persisted integration needs it", async () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: false })
     contains.mockResolvedValue(true)
 
     await expect(
-      reconcileBroadHttpsPermissionEnablement(storageMocks)
+      reconcileOptionalHostPermissionEnablement(storageMocks)
     ).resolves.toEqual({
       changed: false,
       enablement: { mangadex: false },
     })
     expect(remove).toHaveBeenCalledWith({
-      origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
+      origins: getIntegrationOptionalHostPermissionOrigins("mangadex"),
     })
   })
 
-  it("removes broad access only when no enabled integration needs it", async () => {
+  it("removes optional access only when no enabled integration needs it", async () => {
     contains.mockResolvedValue(true)
 
     await expect(
-      removeBroadHttpsPermissionIfUnused({ mangadex: false })
+      removeUnusedHostPermissions({ mangadex: false })
     ).resolves.toBe(true)
     expect(remove).toHaveBeenCalledWith({
-      origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
+      origins: getIntegrationOptionalHostPermissionOrigins("mangadex"),
     })
 
     remove.mockClear()
-    await expect(
-      removeBroadHttpsPermissionIfUnused({ mangadex: true })
-    ).resolves.toBe(false)
+    await expect(removeUnusedHostPermissions({ mangadex: true })).resolves.toBe(
+      false
+    )
     expect(remove).not.toHaveBeenCalled()
   })
 
-  it("recognizes revocation of the broad HTTPS origin", () => {
+  it("recognizes revocation of any generated optional provider origin", () => {
     expect(
-      includesBroadHttpsPermission({
+      includesManagedHostPermission({
         origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
       })
     ).toBe(true)
-    expect(includesBroadHttpsPermission({ origins: [] })).toBe(false)
+    expect(includesManagedHostPermission({ origins: [] })).toBe(false)
   })
 })

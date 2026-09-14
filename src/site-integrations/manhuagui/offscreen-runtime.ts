@@ -66,7 +66,7 @@ const offscreen: OffscreenIntegration = {
         dispatchContext?: JsonObject
         runtime: import("@/src/types/site-integrations").ChapterRuntimeData
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-        liveResourceLedger?: OffscreenLiveResourceLedger
+        liveResourceLedger: OffscreenLiveResourceLedger
       }
     ) {
       return downloadManhuaguiChapterImage(imageUrl, {
@@ -78,6 +78,5 @@ const offscreen: OffscreenIntegration = {
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "manhuagui",
   offscreen,
 }

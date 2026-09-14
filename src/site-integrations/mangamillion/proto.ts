@@ -1,417 +1,453 @@
-export class ProtoReader {
-  public pos = 0
-  public readonly len: number
-  private readonly buf: Uint8Array
-  private readonly decoder = new TextDecoder()
+import { BinaryReader, WireType } from "@bufbuild/protobuf/wire"
+import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
+import { ProviderContractError } from "../provider-contract-error"
+import type {
+  MangaMillionDeviceToken,
+  MangaMillionServiceTitle,
+  MangaMillionTitleDetail,
+  MangaMillionChapterInfo,
+  MangaMillionChapterGroup,
+  MangaMillionChapterList,
+  MangaMillionViewerPage,
+  MangaMillionViewerChapter,
+  MangaMillionViewer,
+  MangaMillionResponse,
+} from "./contracts/api"
 
-  constructor(buf: ArrayBuffer | Uint8Array) {
-    this.buf = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
-    this.len = this.buf.length
+// Bound object construction during decoding, including duplicate singular
+// messages and chapter entries distributed across multiple groups.
+const MAX_RESPONSE_BYTES = 15_000_000
+const MAX_MESSAGE_NODES = 20_000
+const MAX_COLLECTION_ENTRIES = 10_000
+const utf8 = new TextDecoder("utf-8", { fatal: true })
+type DecodeBudget = {
+  nodes: number
+  chapters: number
+  groups: number
+  pages: number
+}
+
+function startMessage(data: Uint8Array, budget: DecodeBudget): BinaryReader {
+  if (++budget.nodes > MAX_MESSAGE_NODES) {
+    throw new ProviderContractError(
+      "MangaMillion Protobuf node budget exceeded"
+    )
   }
+  return new BinaryReader(data)
+}
 
-  static create(buf: ArrayBuffer | Uint8Array): ProtoReader {
-    return new ProtoReader(buf)
+function requireWireType(actual: WireType, expected: WireType): void {
+  if (actual !== expected)
+    throw new ProviderContractError("Invalid MangaMillion Protobuf wire type")
+}
+
+function readUint32(reader: BinaryReader): number {
+  const value = BigInt(reader.uint64())
+  if (value > 0xffff_ffffn)
+    throw new ProviderContractError("MangaMillion Protobuf uint32 overflow")
+  return Number(value)
+}
+
+function readDelimited(reader: BinaryReader, data: Uint8Array): Uint8Array {
+  const length = readUint32(reader)
+  const end = reader.pos + length
+  if (end > reader.len)
+    throw new ProviderContractError(
+      "MangaMillion Protobuf child exceeds message bounds"
+    )
+  const result = data.subarray(reader.pos, end)
+  reader.pos = end
+  return result
+}
+
+function skipUnknown(
+  reader: BinaryReader,
+  data: Uint8Array,
+  wire: WireType,
+  field: number
+): void {
+  if (wire === WireType.LengthDelimited) {
+    readDelimited(reader, data)
+    return
   }
-
-  uint32(): number {
-    let b = this.buf[this.pos++]
-    let res = b & 0x7f
-    if (!(b & 0x80)) return res >>> 0
-    b = this.buf[this.pos++]
-    res |= (b & 0x7f) << 7
-    if (!(b & 0x80)) return res >>> 0
-    b = this.buf[this.pos++]
-    res |= (b & 0x7f) << 14
-    if (!(b & 0x80)) return res >>> 0
-    b = this.buf[this.pos++]
-    res |= (b & 0x7f) << 21
-    if (!(b & 0x80)) return res >>> 0
-    b = this.buf[this.pos++]
-    res |= (b & 0x0f) << 28
-    if (!(b & 0x80)) return res >>> 0
-    while (this.pos < this.len && this.buf[this.pos++] & 0x80) {
-      continue
-    }
-    return res >>> 0
+  if (wire === WireType.Varint) {
+    reader.uint64()
+    return
   }
-
-  int32(): number {
-    return this.uint32() | 0
-  }
-
-  bool(): boolean {
-    return this.uint32() !== 0
-  }
-
-  string(): string {
-    const len = this.uint32()
-    const str = this.decoder.decode(this.buf.subarray(this.pos, this.pos + len))
-    this.pos += len
-    return str
-  }
-
-  skipType(wireType: number): void {
-    switch (wireType) {
-      case 0:
-        while (this.pos < this.len && this.buf[this.pos++] & 0x80) {
-          continue
-        }
-        break
-      case 1:
-        this.pos += 8
-        break
-      case 2: {
-        const len = this.uint32()
-        this.pos += len
-        break
-      }
-      case 5:
-        this.pos += 4
-        break
-      default:
-        throw new Error(`Unsupported Protobuf wire type: ${wireType}`)
-    }
-  }
+  reader.skip(wire, field, 0)
 }
 
-export interface MangaMillionChapterInfo {
-  number?: string
-  name?: string
-  translatedChapterId?: number
-  commentCount?: number
-  thumbnailUrl?: string
-  read?: boolean
-}
-
-export interface MangaMillionChapterGroup {
-  groupType?: number
-  chapters?: MangaMillionChapterInfo[]
-}
-
-export interface MangaMillionChapterList {
-  totalChapters?: number
-  chapterGroups?: MangaMillionChapterGroup[]
-  isMPlusRegion?: boolean
-  availableChapters?: number
-}
-
-export interface MangaMillionServiceTitle {
-  coverUrl?: string
-  serviceTitleName?: string
-  authorName?: string
-  description?: string
-  disclaimerText?: string
-}
-
-export interface MangaMillionTitleDetail {
-  serviceTitle?: MangaMillionServiceTitle
-  isMPlusRegion?: boolean
-}
-
-export interface MangaMillionViewerPage {
-  imageUrl?: string
-  widthPx?: number
-  heightPx?: number
-  pageType?: number
-}
-
-export interface MangaMillionViewerChapter {
-  serviceTitleName?: string
-  originalTitleId?: number
-  number?: string
-  prevId?: number
-  nextId?: number
-  commentCount?: number
-}
-
-export interface MangaMillionViewer {
-  pages?: MangaMillionViewerPage[]
-  chapter?: MangaMillionViewerChapter
-  aesKey?: string
-  aesIv?: string
-  maxImageQuality?: number
-}
-
-export interface MangaMillionDeviceTokenRegister {
-  token?: string
-}
-
-export interface MangaMillionResponse {
-  status: number
-  errorMessage?: string
-  deviceTokenRegister?: MangaMillionDeviceTokenRegister
-  titleDetail?: MangaMillionTitleDetail
-  chapterList?: MangaMillionChapterList
-  viewer?: MangaMillionViewer
+function countEntry(
+  budget: DecodeBudget,
+  collection: "chapters" | "groups" | "pages"
+): void {
+  const limit =
+    collection === "pages" ? MAX_CHAPTER_IMAGES : MAX_COLLECTION_ENTRIES
+  if (++budget[collection] > limit)
+    throw new ProviderContractError(
+      `MangaMillion Protobuf ${collection} limit exceeded`
+    )
 }
 
 function decodeDeviceTokenRegister(
-  r: ProtoReader,
-  len: number
-): MangaMillionDeviceTokenRegister {
-  const end = r.pos + len
-  const res: MangaMillionDeviceTokenRegister = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    if (tag >>> 3 === 1) {
-      res.token = r.string()
-    } else {
-      r.skipType(tag & 7)
+  data: Uint8Array,
+  budget: DecodeBudget
+): MangaMillionDeviceToken {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionDeviceToken = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
+      case 1:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.token = utf8.decode(readDelimited(reader, data))
+        break
+      default:
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeServiceTitle(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionServiceTitle {
-  const end = r.pos + len
-  const res: MangaMillionServiceTitle = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionServiceTitle = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.coverUrl = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.coverUrl = utf8.decode(readDelimited(reader, data))
         break
       case 2:
-        res.serviceTitleName = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.serviceTitleName = utf8.decode(readDelimited(reader, data))
         break
       case 3:
-        res.authorName = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.authorName = utf8.decode(readDelimited(reader, data))
         break
       case 7:
-        res.description = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.description = utf8.decode(readDelimited(reader, data))
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeTitleDetail(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionTitleDetail {
-  const end = r.pos + len
-  const res: MangaMillionTitleDetail = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionTitleDetail = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.serviceTitle = decodeServiceTitle(r, r.uint32())
+        requireWireType(wire, WireType.LengthDelimited)
+        result.serviceTitle = decodeServiceTitle(
+          readDelimited(reader, data),
+          budget
+        )
         break
       case 5:
-        res.isMPlusRegion = r.bool()
+        requireWireType(wire, WireType.Varint)
+        result.isMPlusRegion = reader.bool()
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeChapterInfo(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionChapterInfo {
-  const end = r.pos + len
-  const res: MangaMillionChapterInfo = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionChapterInfo = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.number = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.number = utf8.decode(readDelimited(reader, data))
         break
       case 2:
-        res.name = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.name = utf8.decode(readDelimited(reader, data))
         break
       case 3:
-        res.translatedChapterId = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.translatedChapterId = readUint32(reader)
         break
       case 4:
-        res.commentCount = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.commentCount = readUint32(reader)
         break
       case 5:
-        res.thumbnailUrl = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.thumbnailUrl = utf8.decode(readDelimited(reader, data))
         break
       case 6:
-        res.read = r.bool()
+        requireWireType(wire, WireType.Varint)
+        result.read = reader.bool()
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeChapterGroup(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionChapterGroup {
-  const end = r.pos + len
-  const res: MangaMillionChapterGroup = { chapters: [] }
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionChapterGroup = { chapters: [] }
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.groupType = r.int32()
+        requireWireType(wire, WireType.Varint)
+        result.groupType = reader.int32()
         break
       case 2:
-        res.chapters?.push(decodeChapterInfo(r, r.uint32()))
+        requireWireType(wire, WireType.LengthDelimited)
+        countEntry(budget, "chapters")
+        result.chapters!.push(
+          decodeChapterInfo(readDelimited(reader, data), budget)
+        )
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeChapterList(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionChapterList {
-  const end = r.pos + len
-  const res: MangaMillionChapterList = { chapterGroups: [] }
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionChapterList = { chapterGroups: [] }
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.totalChapters = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.totalChapters = readUint32(reader)
         break
       case 2:
-        res.chapterGroups?.push(decodeChapterGroup(r, r.uint32()))
+        requireWireType(wire, WireType.LengthDelimited)
+        countEntry(budget, "groups")
+        result.chapterGroups!.push(
+          decodeChapterGroup(readDelimited(reader, data), budget)
+        )
         break
       case 3:
-        res.isMPlusRegion = r.bool()
+        requireWireType(wire, WireType.Varint)
+        result.isMPlusRegion = reader.bool()
         break
       case 7:
-        res.availableChapters = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.availableChapters = readUint32(reader)
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
-function decodeViewerPage(r: ProtoReader, len: number): MangaMillionViewerPage {
-  const end = r.pos + len
-  const res: MangaMillionViewerPage = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+function decodeViewerPage(
+  data: Uint8Array,
+  budget: DecodeBudget
+): MangaMillionViewerPage {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionViewerPage = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.imageUrl = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.imageUrl = utf8.decode(readDelimited(reader, data))
         break
       case 2:
-        res.widthPx = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.widthPx = readUint32(reader)
         break
       case 3:
-        res.heightPx = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.heightPx = readUint32(reader)
         break
       case 4:
-        res.pageType = r.int32()
+        requireWireType(wire, WireType.Varint)
+        result.pageType = reader.int32()
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
 function decodeViewerChapter(
-  r: ProtoReader,
-  len: number
+  data: Uint8Array,
+  budget: DecodeBudget
 ): MangaMillionViewerChapter {
-  const end = r.pos + len
-  const res: MangaMillionViewerChapter = {}
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionViewerChapter = {}
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.serviceTitleName = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.serviceTitleName = utf8.decode(readDelimited(reader, data))
         break
       case 2:
-        res.originalTitleId = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.originalTitleId = readUint32(reader)
         break
       case 4:
-        res.number = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.number = utf8.decode(readDelimited(reader, data))
         break
       case 5:
-        res.prevId = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.prevId = readUint32(reader)
         break
       case 6:
-        res.nextId = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.nextId = readUint32(reader)
         break
       case 7:
-        res.commentCount = r.uint32()
+        requireWireType(wire, WireType.Varint)
+        result.commentCount = readUint32(reader)
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
 }
 
-function decodeViewer(r: ProtoReader, len: number): MangaMillionViewer {
-  const end = r.pos + len
-  const res: MangaMillionViewer = { pages: [] }
-  while (r.pos < end) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
+function decodeViewer(
+  data: Uint8Array,
+  budget: DecodeBudget
+): MangaMillionViewer {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionViewer = { pages: [] }
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
       case 1:
-        res.pages?.push(decodeViewerPage(r, r.uint32()))
+        requireWireType(wire, WireType.LengthDelimited)
+        countEntry(budget, "pages")
+        result.pages!.push(
+          decodeViewerPage(readDelimited(reader, data), budget)
+        )
         break
       case 2:
-        res.chapter = decodeViewerChapter(r, r.uint32())
+        requireWireType(wire, WireType.LengthDelimited)
+        result.chapter = decodeViewerChapter(
+          readDelimited(reader, data),
+          budget
+        )
         break
       case 7:
-        res.aesKey = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.aesKey = utf8.decode(readDelimited(reader, data))
         break
       case 8:
-        res.aesIv = r.string()
+        requireWireType(wire, WireType.LengthDelimited)
+        result.aesIv = utf8.decode(readDelimited(reader, data))
         break
       case 9:
-        res.maxImageQuality = r.int32()
+        requireWireType(wire, WireType.Varint)
+        result.maxImageQuality = reader.int32()
         break
       default:
-        r.skipType(tag & 7)
+        skipUnknown(reader, data, wire, field)
     }
   }
-  return res
+  return result
+}
+
+function decodeResponse(
+  data: Uint8Array,
+  budget: DecodeBudget
+): MangaMillionResponse {
+  const reader = startMessage(data, budget)
+  const result: MangaMillionResponse = { status: 0 }
+  while (reader.pos < reader.len) {
+    const [field, wire] = reader.tag()
+    switch (field) {
+      case 1:
+        requireWireType(wire, WireType.Varint)
+        result.status = reader.int32()
+        break
+      case 2:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.errorMessage = utf8.decode(readDelimited(reader, data))
+        break
+      case 50:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.titleDetail = decodeTitleDetail(
+          readDelimited(reader, data),
+          budget
+        )
+        break
+      case 60:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.chapterList = decodeChapterList(
+          readDelimited(reader, data),
+          budget
+        )
+        break
+      case 70:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.viewer = decodeViewer(readDelimited(reader, data), budget)
+        break
+      case 170:
+        requireWireType(wire, WireType.LengthDelimited)
+        result.deviceTokenRegister = decodeDeviceTokenRegister(
+          readDelimited(reader, data),
+          budget
+        )
+        break
+      default:
+        skipUnknown(reader, data, wire, field)
+    }
+  }
+  return result
 }
 
 export function decodeMangaMillionResponse(
   buffer: ArrayBuffer | Uint8Array
 ): MangaMillionResponse {
-  const r = ProtoReader.create(buffer)
-  const res: MangaMillionResponse = { status: 0 }
-  while (r.pos < r.len) {
-    const tag = r.uint32()
-    switch (tag >>> 3) {
-      case 1:
-        res.status = r.int32()
-        break
-      case 2:
-        res.errorMessage = r.string()
-        break
-      case 50:
-        res.titleDetail = decodeTitleDetail(r, r.uint32())
-        break
-      case 60:
-        res.chapterList = decodeChapterList(r, r.uint32())
-        break
-      case 70:
-        res.viewer = decodeViewer(r, r.uint32())
-        break
-      case 170:
-        res.deviceTokenRegister = decodeDeviceTokenRegister(r, r.uint32())
-        break
-      default:
-        r.skipType(tag & 7)
-    }
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+  if (bytes.byteLength > MAX_RESPONSE_BYTES)
+    throw new ProviderContractError(
+      "MangaMillion Protobuf response byte limit exceeded"
+    )
+  try {
+    return decodeResponse(bytes, { nodes: 0, chapters: 0, groups: 0, pages: 0 })
+  } catch (error) {
+    if (error instanceof ProviderContractError) throw error
+    throw new ProviderContractError(
+      "Invalid MangaMillion Protobuf response",
+      error
+    )
   }
-  return res
 }

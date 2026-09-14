@@ -21,6 +21,7 @@ import { fetchMangadexSeriesMetadata } from "@/src/site-integrations/mangadex/se
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import { parseMangadexPagePreferences } from "@/src/site-integrations/mangadex/preferences"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 // Mock logger before importing the site integration
 vi.mock("@/src/runtime/logger", () => ({
@@ -126,6 +127,8 @@ describe("MangaDex site integration", () => {
           rateLimitService,
           chapterId: opts?.runtime?.chapterId,
         },
+        liveResourceLedger:
+          opts?.liveResourceLedger ?? new OffscreenLiveResourceLedger(),
       })
   })
 

@@ -9,6 +9,7 @@ export const siteIntegrationPageProbes = [
   manhuaguiPageProbe,
 ] as const satisfies readonly SiteIntegrationPageProbe[]
 
-export const siteIntegrationPageProbesById = Object.fromEntries(
-  siteIntegrationPageProbes.map((probe) => [probe.id, probe]),
-) as Readonly<Record<string, SiteIntegrationPageProbe>>
+export const siteIntegrationPageProbesById = {
+  "mangadex": mangadexPageProbe,
+  "manhuagui": manhuaguiPageProbe,
+} as Readonly<Record<string, SiteIntegrationPageProbe>>

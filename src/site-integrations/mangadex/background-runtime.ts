@@ -170,6 +170,5 @@ const background: ServiceWorkerIntegration<MangadexDispatchContext> = {
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter<MangadexDispatchContext> =
   {
-    id: "mangadex",
     background,
   }

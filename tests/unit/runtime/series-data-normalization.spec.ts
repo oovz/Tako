@@ -63,4 +63,25 @@ describe("buildResolvedTabContext", () => {
       error: "Failed to extract unique stable chapter ids",
     })
   })
+
+  it("rejects unsafe provider metadata before state persistence", () => {
+    expect(() =>
+      buildResolvedTabContext({
+        sourceUrl: "https://example.test/series/1",
+        siteIntegrationId: "test",
+        rawMangaId: "series-1",
+        seriesMetadata: {
+          title: "Series",
+          coverUrl: "https://127.0.0.1/cover.jpg",
+        },
+        chapters: [
+          {
+            id: "chapter-1",
+            url: "https://example.test/1",
+            title: "One",
+          },
+        ],
+      })
+    ).toThrow()
+  })
 })

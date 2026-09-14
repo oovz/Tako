@@ -74,7 +74,7 @@ const offscreen: OffscreenIntegration = {
         runtime: import("@/src/types/site-integrations").ChapterRuntimeData
         skipRateLimit?: boolean
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-        liveResourceLedger?: OffscreenLiveResourceLedger
+        liveResourceLedger: OffscreenLiveResourceLedger
       }
     ) {
       return downloadComicNettaiChapterImage(imageUrl, {
@@ -86,6 +86,5 @@ const offscreen: OffscreenIntegration = {
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "comicnettai",
   offscreen,
 }

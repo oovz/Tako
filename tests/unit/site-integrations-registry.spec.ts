@@ -8,6 +8,7 @@ import {
   setEnablementMap,
   getEnablementMap,
 } from "@/src/site-integrations/catalog"
+import { siteIntegrationWxtPermissions } from "@/src/runtime/generated/site-integration-wxt-permissions"
 
 describe("site integration registry", () => {
   afterEach(() => {
@@ -85,6 +86,25 @@ describe("site integration registry", () => {
             /^https:\/\/(?:\*\.)?[^/]+\/.*$/.test(origin)
           )
         ).toBe(true)
+      }
+    }
+  })
+
+  it("packages every disabled provider required origin as an optional grant", () => {
+    const optionalOrigins = new Set(
+      siteIntegrationWxtPermissions.optionalOrigins
+    )
+
+    for (const definition of siteIntegrationCatalog) {
+      if (
+        !definition.shipped ||
+        definition.enabledByDefault ||
+        definition.optionalOrigins.includes("https://*/*")
+      ) {
+        continue
+      }
+      for (const origin of definition.requiredOrigins) {
+        expect(optionalOrigins).toContain(origin)
       }
     }
   })

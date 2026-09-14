@@ -49,7 +49,6 @@ function parseManhuaguiPageProbe(raw: unknown): {
 }
 
 export const pageProbe: SiteIntegrationPageProbe = {
-  id: "manhuagui",
   collect: collectManhuaguiPageProbe,
   parse: parseManhuaguiPageProbe,
 }

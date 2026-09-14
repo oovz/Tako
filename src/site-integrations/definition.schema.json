@@ -21,7 +21,6 @@
     "runtimes",
     "imageTransform",
     "endpointPolicies",
-    "dynamicOrigins",
     "sessionRefererRules",
     "customSettings",
     "fixtures"
@@ -183,11 +182,6 @@
       "description": "Hardened network endpoint policies declaring allowed origins, credentials, response types, and byte limits.",
       "items": { "$ref": "#/$defs/endpointPolicy" }
     },
-    "dynamicOrigins": {
-      "type": "array",
-      "description": "Dynamic origin bindings linking API endpoints that return dynamic media hosts.",
-      "items": { "$ref": "#/$defs/dynamicOrigin" }
-    },
     "sessionRefererRules": {
       "type": "array",
       "description": "Declarative Net Request (DNR) session rules managed by the extension to attach required HTTP Referer headers.",
@@ -290,38 +284,6 @@
           "type": "integer",
           "minimum": 1,
           "description": "Maximum allowed response payload size in bytes."
-        }
-      }
-    },
-    "dynamicOrigin": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Dynamic origin binding definition.",
-      "required": [
-        "endpointId",
-        "sourceEndpointId",
-        "allowedOriginPattern",
-        "validator"
-      ],
-      "properties": {
-        "endpointId": {
-          "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9-]*$",
-          "description": "Target media endpoint id receiving dynamic origins."
-        },
-        "sourceEndpointId": {
-          "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9-]*$",
-          "description": "Source API endpoint id returning media host URLs."
-        },
-        "allowedOriginPattern": {
-          "type": "string",
-          "pattern": "^https://.+/\\*$",
-          "description": "Origin pattern template permitted for dynamic registration."
-        },
-        "validator": {
-          "const": "public-https",
-          "description": "Validation rule applied to issued dynamic URLs."
         }
       }
     },

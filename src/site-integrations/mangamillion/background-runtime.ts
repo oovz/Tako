@@ -7,7 +7,8 @@ import type {
 import type { Chapter } from "@/src/types/chapter"
 import type { SeriesMetadata } from "@/src/types/series-metadata"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
-import type { MangaMillionChapterList } from "./proto"
+import { assertIntegrationEndpointRequestUrl } from "@/src/site-integrations/request-policy"
+import type { MangaMillionChapterList } from "./contracts/api"
 import { fetchChapterList, fetchTitleDetail } from "./api"
 import {
   MANGAMILLION_ORIGIN,
@@ -48,11 +49,19 @@ async function resolveMangaMillionSeriesData(
   const seriesTitle =
     titleDetail.serviceTitle?.serviceTitleName ?? `MangaMillion ${titleId}`
   const authorName = titleDetail.serviceTitle?.authorName
+  const rawCoverUrl = titleDetail.serviceTitle?.coverUrl?.trim()
+  const coverUrl = rawCoverUrl
+    ? assertIntegrationEndpointRequestUrl(
+        "mangamillion",
+        "mangamillion-image",
+        rawCoverUrl
+      ).href
+    : undefined
 
   const seriesMetadata: SeriesMetadata = {
     title: seriesTitle,
     author: authorName,
-    coverUrl: titleDetail.serviceTitle?.coverUrl,
+    coverUrl,
     description: titleDetail.serviceTitle?.description,
     language,
     readingDirection: "rtl",
@@ -142,6 +151,5 @@ const background: ServiceWorkerIntegration = {
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "mangamillion",
   background,
 }

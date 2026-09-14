@@ -13,15 +13,9 @@ import {
   detectImageMimeTypeAndExt,
   hexToBytes,
 } from "@/src/site-integrations/mangamillion/crypto"
-import {
-  getDeviceToken,
-  setCachedDeviceTokenForTesting,
-} from "@/src/site-integrations/mangamillion/api"
-import { backgroundSiteAdapter } from "@/src/site-integrations/mangamillion/background-runtime"
-import { offscreenSiteAdapter } from "@/src/site-integrations/mangamillion/offscreen-runtime"
-import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import type { Chapter } from "@/src/types/chapter"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import {
   buildResolvedTabContext,
   normalizeFetchedSeriesData,
@@ -77,9 +71,36 @@ function encodeMessage(tag: number, payload: number[]): number[] {
   return encodeField(tag, 2, payload)
 }
 
+function makeDeviceTokenResponse(token = "test-token"): Response {
+  const body = new Uint8Array([
+    ...encodeInt32(1, 0),
+    ...encodeMessage(170, encodeString(1, token)),
+  ])
+  return {
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => body.buffer,
+  } as unknown as Response
+}
+
+async function loadFreshMangaMillionModules() {
+  vi.resetModules()
+  const [api, httpClient, background, offscreen] = await Promise.all([
+    import("@/src/site-integrations/mangamillion/api"),
+    import("@/src/site-integrations/http-client"),
+    import("@/src/site-integrations/mangamillion/background-runtime"),
+    import("@/src/site-integrations/mangamillion/offscreen-runtime"),
+  ])
+  return {
+    api,
+    httpClient: httpClient.integrationHttpClient,
+    backgroundSiteAdapter: background.backgroundSiteAdapter,
+    offscreenSiteAdapter: offscreen.offscreenSiteAdapter,
+  }
+}
+
 describe("MangaMillion site integration", () => {
   afterEach(() => {
-    setCachedDeviceTokenForTesting(null)
     vi.restoreAllMocks()
   })
 
@@ -298,7 +319,8 @@ describe("MangaMillion site integration", () => {
       })
 
       const avifHeader = new Uint8Array([
-        0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66,
+        0, 0, 0, 0x10, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0, 0, 0,
+        0,
       ])
       expect(detectImageMimeTypeAndExt(avifHeader)).toEqual({
         mimeType: "image/avif",
@@ -342,39 +364,48 @@ describe("MangaMillion site integration", () => {
         plainText
       )
 
-      const decrypted = await decryptPageImage(encrypted, keyHex, ivHex)
+      const ledger = new OffscreenLiveResourceLedger()
+      const sourceLease = ledger.reserve(encrypted.byteLength, "test source")
+      const decrypted = await decryptPageImage(
+        encrypted,
+        keyHex,
+        ivHex,
+        ledger,
+        sourceLease
+      )
       expect(decrypted.mimeType).toBe("image/webp")
       expect(decrypted.extension).toBe(".webp")
       expect(new Uint8Array(decrypted.data)).toEqual(plainText)
+      decrypted.liveResourceLease.release()
     })
   })
 
   describe("API and Token Management", () => {
     it("fetches and caches device token", async () => {
+      const { api, httpClient } = await loadFreshMangaMillionModules()
       const tokenPayload = [...encodeString(1, "sample-device-token")]
       const mockProtoResponse = new Uint8Array([
         ...encodeInt32(1, 0),
         ...encodeMessage(170, tokenPayload),
       ])
 
-      const requestSpy = vi
-        .spyOn(integrationHttpClient, "request")
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          arrayBuffer: async () => mockProtoResponse.buffer,
-        } as unknown as Response)
+      const requestSpy = vi.spyOn(httpClient, "request").mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => mockProtoResponse.buffer,
+      } as unknown as Response)
 
-      const token1 = await getDeviceToken(mockRateLimitService)
+      const token1 = await api.getDeviceToken(mockRateLimitService)
       expect(token1).toBe("sample-device-token")
       expect(requestSpy).toHaveBeenCalledTimes(1)
 
-      const token2 = await getDeviceToken(mockRateLimitService)
+      const token2 = await api.getDeviceToken(mockRateLimitService)
       expect(token2).toBe("sample-device-token")
       expect(requestSpy).toHaveBeenCalledTimes(1)
     })
 
     it("coalesces concurrent device token requests into a single network call", async () => {
+      const { api, httpClient } = await loadFreshMangaMillionModules()
       const tokenPayload = [...encodeString(1, "concurrent-device-token")]
       const mockProtoResponse = new Uint8Array([
         ...encodeInt32(1, 0),
@@ -385,7 +416,7 @@ describe("MangaMillion site integration", () => {
         Promise.withResolvers<void>()
 
       const requestSpy = vi
-        .spyOn(integrationHttpClient, "request")
+        .spyOn(httpClient, "request")
         .mockImplementation(async () => {
           await gatePromise
           return {
@@ -395,8 +426,8 @@ describe("MangaMillion site integration", () => {
           } as unknown as Response
         })
 
-      const p1 = getDeviceToken(mockRateLimitService)
-      const p2 = getDeviceToken(mockRateLimitService)
+      const p1 = api.getDeviceToken(mockRateLimitService)
+      const p2 = api.getDeviceToken(mockRateLimitService)
 
       openGate()
       const [token1, token2] = await Promise.all([p1, p2])
@@ -409,7 +440,8 @@ describe("MangaMillion site integration", () => {
 
   describe("Background Resolver", () => {
     it("resolves series metadata and chapter list", async () => {
-      setCachedDeviceTokenForTesting("test-token")
+      const { backgroundSiteAdapter, httpClient } =
+        await loadFreshMangaMillionModules()
 
       const serviceTitleBytes = [
         ...encodeString(2, "One Piece"),
@@ -436,25 +468,26 @@ describe("MangaMillion site integration", () => {
         ...encodeMessage(60, chapterListBytes),
       ])
 
-      vi.spyOn(integrationHttpClient, "request").mockImplementation(
-        async (opts) => {
-          if (opts.url.includes("/api/title_detail")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => titleDetailBuf.buffer,
-            } as unknown as Response
-          }
-          if (opts.url.includes("/api/chapter_list")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => chapterListBuf.buffer,
-            } as unknown as Response
-          }
-          throw new Error(`Unexpected request: ${opts.url}`)
+      vi.spyOn(httpClient, "request").mockImplementation(async (opts) => {
+        if (opts.url.endsWith("/api/register")) {
+          return makeDeviceTokenResponse()
         }
-      )
+        if (opts.url.includes("/api/title_detail")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => titleDetailBuf.buffer,
+          } as unknown as Response
+        }
+        if (opts.url.includes("/api/chapter_list")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => chapterListBuf.buffer,
+          } as unknown as Response
+        }
+        throw new Error(`Unexpected request: ${opts.url}`)
+      })
 
       const result =
         await backgroundSiteAdapter.background.series!.resolveSeriesData({
@@ -481,7 +514,8 @@ describe("MangaMillion site integration", () => {
       expect(chapters[0].comicInfo.Series).toBe("One Piece")
     })
     it("resolves series data with query lang parameter override", async () => {
-      setCachedDeviceTokenForTesting("test-token")
+      const { backgroundSiteAdapter, httpClient } =
+        await loadFreshMangaMillionModules()
 
       const serviceTitleBytes = [
         ...encodeString(2, "航海王"),
@@ -509,26 +543,27 @@ describe("MangaMillion site integration", () => {
       ])
 
       const requestUrls: string[] = []
-      vi.spyOn(integrationHttpClient, "request").mockImplementation(
-        async (opts) => {
-          requestUrls.push(opts.url)
-          if (opts.url.includes("/api/title_detail")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => titleDetailBuf.buffer,
-            } as unknown as Response
-          }
-          if (opts.url.includes("/api/chapter_list")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => chapterListBuf.buffer,
-            } as unknown as Response
-          }
-          throw new Error(`Unexpected request: ${opts.url}`)
+      vi.spyOn(httpClient, "request").mockImplementation(async (opts) => {
+        requestUrls.push(opts.url)
+        if (opts.url.endsWith("/api/register")) {
+          return makeDeviceTokenResponse()
         }
-      )
+        if (opts.url.includes("/api/title_detail")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => titleDetailBuf.buffer,
+          } as unknown as Response
+        }
+        if (opts.url.includes("/api/chapter_list")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => chapterListBuf.buffer,
+          } as unknown as Response
+        }
+        throw new Error(`Unexpected request: ${opts.url}`)
+      })
 
       const result =
         await backgroundSiteAdapter.background.series!.resolveSeriesData({
@@ -563,7 +598,8 @@ describe("MangaMillion site integration", () => {
       ).toBe(true)
     })
     it("handles series with multiple locked chapters without colliding ids", async () => {
-      setCachedDeviceTokenForTesting("test-token")
+      const { backgroundSiteAdapter, httpClient } =
+        await loadFreshMangaMillionModules()
 
       const serviceTitleBytes = [
         ...encodeString(2, "Dandadan"),
@@ -607,25 +643,26 @@ describe("MangaMillion site integration", () => {
         ...encodeMessage(60, chapterListBytes),
       ])
 
-      vi.spyOn(integrationHttpClient, "request").mockImplementation(
-        async (opts) => {
-          if (opts.url.includes("/api/title_detail")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => titleDetailBuf.buffer,
-            } as unknown as Response
-          }
-          if (opts.url.includes("/api/chapter_list")) {
-            return {
-              ok: true,
-              status: 200,
-              arrayBuffer: async () => chapterListBuf.buffer,
-            } as unknown as Response
-          }
-          throw new Error(`Unexpected request: ${opts.url}`)
+      vi.spyOn(httpClient, "request").mockImplementation(async (opts) => {
+        if (opts.url.endsWith("/api/register")) {
+          return makeDeviceTokenResponse()
         }
-      )
+        if (opts.url.includes("/api/title_detail")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => titleDetailBuf.buffer,
+          } as unknown as Response
+        }
+        if (opts.url.includes("/api/chapter_list")) {
+          return {
+            ok: true,
+            status: 200,
+            arrayBuffer: async () => chapterListBuf.buffer,
+          } as unknown as Response
+        }
+        throw new Error(`Unexpected request: ${opts.url}`)
+      })
 
       const result =
         await backgroundSiteAdapter.background.series!.resolveSeriesData({
@@ -680,7 +717,8 @@ describe("MangaMillion site integration", () => {
 
   describe("Offscreen Resolver and Downloader", () => {
     it("resolves chapter image plan with encryption parameters", async () => {
-      setCachedDeviceTokenForTesting("test-token")
+      const { offscreenSiteAdapter, httpClient } =
+        await loadFreshMangaMillionModules()
 
       const pageBytes = [
         ...encodeString(
@@ -705,11 +743,16 @@ describe("MangaMillion site integration", () => {
         ...encodeMessage(70, viewerBytes),
       ])
 
-      vi.spyOn(integrationHttpClient, "request").mockResolvedValue({
-        ok: true,
-        status: 200,
-        arrayBuffer: async () => viewerBuf.buffer,
-      } as unknown as Response)
+      vi.spyOn(httpClient, "request").mockImplementation(async (opts) => {
+        if (opts.url.endsWith("/api/register")) {
+          return makeDeviceTokenResponse()
+        }
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => viewerBuf.buffer,
+        } as unknown as Response
+      })
 
       const plan =
         await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
@@ -736,6 +779,8 @@ describe("MangaMillion site integration", () => {
     })
 
     it("downloads and decrypts chapter image", async () => {
+      const { offscreenSiteAdapter, httpClient } =
+        await loadFreshMangaMillionModules()
       const keyHex =
         "8c12434255319a2a5fb903fc39994f409eb27979d1d78f1009f1a015f69db321"
       const ivHex = "4af66d450c1244868dc4a5cff035898c"
@@ -760,15 +805,23 @@ describe("MangaMillion site integration", () => {
       )
 
       const requestSpy = vi
-        .spyOn(integrationHttpClient, "request")
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          headers: new Headers({ "content-type": "application/octet-stream" }),
-          arrayBuffer: async () => encryptedBuffer,
-        } as unknown as Response)
+        .spyOn(httpClient, "request")
+        .mockImplementation(async (opts) => {
+          if (opts.url.endsWith("/api/register")) {
+            return makeDeviceTokenResponse()
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({
+              "content-type": "application/octet-stream",
+            }),
+            arrayBuffer: async () => encryptedBuffer,
+          } as unknown as Response
+        })
 
       const imageUrl = `https://img.mangamillion.shueisha.co.jp/en/translated_chapter_page/6736/1.webp.enc#k=${keyHex}&iv=${ivHex}`
+      const liveResourceLedger = new OffscreenLiveResourceLedger()
 
       const downloaded =
         await offscreenSiteAdapter.offscreen.chapter.downloadImage(imageUrl, {
@@ -777,11 +830,13 @@ describe("MangaMillion site integration", () => {
             rateLimitService: mockRateLimitService,
             rateLimitSettings,
           },
+          liveResourceLedger,
         })
 
       expect(downloaded.filename).toBe("1.webp")
       expect(downloaded.mimeType).toBe("image/webp")
       expect(new Uint8Array(downloaded.data)).toEqual(plainText)
+      downloaded.liveResourceLease.release()
 
       // Batch image downloads are already scheduled by chapter-image-downloads.
       // Re-scheduling through the shared limiter deadlocks it, so image requests

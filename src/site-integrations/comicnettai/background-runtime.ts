@@ -74,6 +74,5 @@ const background: ServiceWorkerIntegration = {
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "comicnettai",
   background,
 }

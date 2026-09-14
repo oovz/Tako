@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { siteIntegrationWxtPermissions } from "@/src/runtime/generated/site-integration-wxt-permissions"
 import config from "../../wxt.config"
 
 type Manifest = {
@@ -29,9 +30,12 @@ describe("extension manifest permissions", () => {
   it("keeps broad dynamic provider access optional", () => {
     expect(productionManifest.host_permissions).not.toContain("https://*/*")
     expect(productionManifest.host_permissions).not.toContain("<all_urls>")
-    expect(productionManifest.optional_host_permissions).toEqual([
-      "https://*/*",
-    ])
+    expect(productionManifest.optional_host_permissions).toEqual(
+      siteIntegrationWxtPermissions.optionalOrigins
+    )
+    expect(productionManifest.optional_host_permissions).toContain(
+      "https://*/*"
+    )
     expect(productionManifest.host_permissions).toContain(
       "https://comic.pixiv.net/*"
     )
@@ -51,9 +55,9 @@ describe("extension manifest permissions", () => {
       expect(deterministicE2eManifest.optional_host_permissions).toEqual([])
 
       expect(productionManifest.host_permissions).not.toContain("https://*/*")
-      expect(productionManifest.optional_host_permissions).toEqual([
-        "https://*/*",
-      ])
+      expect(productionManifest.optional_host_permissions).toEqual(
+        siteIntegrationWxtPermissions.optionalOrigins
+      )
     } finally {
       if (original === undefined) {
         delete process.env.TAKO_E2E_STATE_SEED

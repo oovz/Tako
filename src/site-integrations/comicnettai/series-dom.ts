@@ -14,6 +14,8 @@ import {
   parseComicNettaiViewerCid,
 } from "./shared"
 import { integrationHttpClient } from "../http-client"
+import { assertIntegrationEndpointRequestUrl } from "../request-policy"
+import { ProviderContractError } from "../provider-contract-error"
 import { readResponseText } from "@/src/shared/html-response-decoder"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
@@ -62,6 +64,25 @@ function readSeriesTitleFromOpenGraph(document: Document): string | undefined {
   return title?.split(" - ")[0]?.trim() || title
 }
 
+function normalizeComicNettaiCoverUrl(
+  rawUrl: string | undefined
+): string | undefined {
+  if (!rawUrl) return undefined
+
+  let absoluteUrl: string
+  try {
+    absoluteUrl = new URL(rawUrl, COMICNETTAI_ORIGIN).href
+  } catch {
+    throw new ProviderContractError("Comic Nettai cover URL is malformed")
+  }
+
+  return assertIntegrationEndpointRequestUrl(
+    "comicnettai",
+    "comicnettai-cdn-image",
+    absoluteUrl
+  ).href
+}
+
 export function extractComicNettaiSeriesMetadataFromDocument(
   document: Document
 ): SeriesMetadata {
@@ -72,6 +93,10 @@ export function extractComicNettaiSeriesMetadataFromDocument(
     throw new Error("Comic Nettai series title not found in page DOM")
   }
 
+  const coverUrl =
+    readMeta(document, 'meta[property="og:image"]') ??
+    document.querySelector<HTMLImageElement>(".detail-catch__img")?.src
+
   return {
     title,
     author: readText(document, ".detail__author__item"),
@@ -79,9 +104,7 @@ export function extractComicNettaiSeriesMetadataFromDocument(
       readText(document, ".detail--discription") ??
       readMeta(document, 'meta[name="description"]') ??
       readMeta(document, 'meta[property="og:description"]'),
-    coverUrl:
-      readMeta(document, 'meta[property="og:image"]') ??
-      document.querySelector<HTMLImageElement>(".detail-catch__img")?.src,
+    coverUrl: normalizeComicNettaiCoverUrl(coverUrl),
     language: "ja",
     readingDirection: "rtl",
   }

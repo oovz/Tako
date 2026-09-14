@@ -1,40 +1,115 @@
 import logger from "@/src/runtime/logger"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
-import {
-  getDefinitions,
-  isEnabled,
-  requiresBroadHttpsPermission,
-} from "./catalog"
+import { siteIntegrationWxtPermissions } from "@/src/runtime/generated/site-integration-wxt-permissions"
+import { getDefinitions, getDefinition, isEnabled } from "./catalog"
 
 export const OPTIONAL_BROAD_HTTPS_ORIGIN = "https://*/*"
 
-export function integrationRequiresBroadHttpsPermission(
-  integrationId: string
-): boolean {
-  return requiresBroadHttpsPermission(integrationId)
+function uniqueSorted(origins: Iterable<string>): string[] {
+  return [...new Set(origins)].sort()
 }
 
-export function enablementRequiresBroadHttpsPermission(
-  enablement: SiteIntegrationEnablementMap
-): boolean {
-  return getDefinitions().some(
-    (definition) =>
-      requiresBroadHttpsPermission(definition.id) &&
-      isEnabled(definition.id, enablement)
+function removableManagedHostOrigins(): Set<string> {
+  const manifest = chrome.runtime.getManifest() as chrome.runtime.ManifestV3
+  const manifestRequiredOrigins = new Set<string>(
+    manifest.host_permissions ?? []
+  )
+  const manifestOptionalOrigins = new Set<string>(
+    manifest.optional_host_permissions ?? []
+  )
+  return new Set(
+    siteIntegrationWxtPermissions.optionalOrigins.filter(
+      (origin) =>
+        manifestOptionalOrigins.has(origin) &&
+        !manifestRequiredOrigins.has(origin)
+    )
   )
 }
 
-export function includesBroadHttpsPermission(
-  permissions: chrome.permissions.Permissions
-): boolean {
-  return permissions.origins?.includes(OPTIONAL_BROAD_HTTPS_ORIGIN) ?? false
+/**
+ * Returns the optional host origins that an integration needs when enabled.
+ * Disabled providers move their core origins into optional permissions so the
+ * production manifest does not grant access before the user enables them.
+ */
+export function getIntegrationOptionalHostPermissionOrigins(
+  integrationId: string
+): string[] {
+  const definition = getDefinition(integrationId)
+  if (!definition?.shipped) return []
+
+  return uniqueSorted([
+    ...definition.optionalOrigins,
+    ...(definition.enabledByDefault ||
+    definition.optionalOrigins.includes(OPTIONAL_BROAD_HTTPS_ORIGIN)
+      ? []
+      : definition.requiredOrigins),
+  ])
 }
 
-export async function hasBroadHttpsPermission(): Promise<boolean> {
-  return chrome.permissions.contains({
-    origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
-  })
+/**
+ * Returns every origin that must be present before an integration can run.
+ * Default-enabled providers receive required origins in the manifest; a
+ * disabled provider's required origins are requested as optional permissions.
+ */
+export function getIntegrationHostPermissionOrigins(
+  integrationId: string
+): string[] {
+  const definition = getDefinition(integrationId)
+  if (!definition?.shipped) return []
+
+  return uniqueSorted([
+    ...(definition.enabledByDefault ? definition.requiredOrigins : []),
+    ...getIntegrationOptionalHostPermissionOrigins(integrationId),
+  ])
+}
+
+export function integrationRequiresOptionalHostPermission(
+  integrationId: string
+): boolean {
+  return getIntegrationOptionalHostPermissionOrigins(integrationId).length > 0
+}
+
+function enabledPermissionOrigins(
+  enablement: SiteIntegrationEnablementMap
+): Set<string> {
+  const origins = new Set<string>()
+  for (const definition of getDefinitions()) {
+    if (!definition.shipped || !isEnabled(definition.id, enablement)) continue
+
+    for (const origin of definition.requiredOrigins) origins.add(origin)
+    for (const origin of getIntegrationOptionalHostPermissionOrigins(
+      definition.id
+    )) {
+      origins.add(origin)
+    }
+  }
+  return origins
+}
+
+export function includesManagedHostPermission(
+  permissions: chrome.permissions.Permissions
+): boolean {
+  const managedOrigins = removableManagedHostOrigins()
+  return (
+    permissions.origins?.some((origin) => managedOrigins.has(origin)) ?? false
+  )
+}
+
+export async function hasIntegrationOptionalHostPermission(
+  integrationId: string
+): Promise<boolean> {
+  const origins = getIntegrationOptionalHostPermissionOrigins(integrationId)
+  if (origins.length === 0) return true
+  return chrome.permissions.contains({ origins })
+}
+
+export async function hasIntegrationHostPermission(
+  integrationId: string
+): Promise<boolean> {
+  const origins = getIntegrationHostPermissionOrigins(integrationId)
+  if (origins.length === 0) return true
+  return chrome.permissions.contains({ origins })
 }
 
 /**
@@ -44,78 +119,66 @@ export async function hasBroadHttpsPermission(): Promise<boolean> {
 export async function requestIntegrationHostPermission(
   integrationId: string
 ): Promise<boolean> {
-  if (!integrationRequiresBroadHttpsPermission(integrationId)) {
-    return true
-  }
+  const origins = getIntegrationOptionalHostPermissionOrigins(integrationId)
+  if (origins.length === 0) return true
 
-  return chrome.permissions.request({
-    origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
-  })
+  return chrome.permissions.request({ origins })
 }
 
-export async function removeBroadHttpsPermissionIfUnused(
+export async function removeUnusedHostPermissions(
   enablement: SiteIntegrationEnablementMap
 ): Promise<boolean> {
-  if (enablementRequiresBroadHttpsPermission(enablement)) {
-    return false
-  }
+  const managedOrigins = removableManagedHostOrigins()
+  const requiredOrigins = enabledPermissionOrigins(enablement)
+  const removableOrigins = [...managedOrigins].filter(
+    (origin) => !requiredOrigins.has(origin)
+  )
+  if (removableOrigins.length === 0) return false
 
-  if (!(await hasBroadHttpsPermission())) {
-    return false
-  }
-
-  return chrome.permissions.remove({
-    origins: [OPTIONAL_BROAD_HTTPS_ORIGIN],
-  })
+  return chrome.permissions.remove({ origins: removableOrigins })
 }
 
 /**
- * Fail closed when a stored integration says it is enabled but its required
- * optional host permission is absent. The explicit false is persisted so all
- * extension contexts converge through the normal storage listener.
+ * Reconcile persisted enablement with optional host permissions. This runs
+ * during background initialization and after Chrome reports a removed grant.
  */
-export async function reconcileBroadHttpsPermissionEnablement(
+export async function reconcileOptionalHostPermissionEnablement(
   service: Pick<SiteIntegrationEnablementService, "getAll" | "setAll">
 ): Promise<{
   changed: boolean
   enablement: SiteIntegrationEnablementMap
 }> {
   const current = await service.getAll()
-  if (!enablementRequiresBroadHttpsPermission(current)) {
-    try {
-      await removeBroadHttpsPermissionIfUnused(current)
-    } catch (error) {
-      // The integration is already disabled. Keep startup available and retry
-      // removal on the next reconciliation rather than retaining an error
-      // state solely because Chrome rejected optional-permission cleanup.
-      logger.warn(
-        "Failed to remove unused optional HTTPS host permission",
-        error
-      )
-    }
-    return { changed: false, enablement: current }
-  }
-
-  if (await hasBroadHttpsPermission()) {
-    return { changed: false, enablement: current }
-  }
-
   const next = { ...current }
   let changed = false
-  for (const manifest of getDefinitions()) {
+
+  for (const definition of getDefinitions()) {
     if (
-      requiresBroadHttpsPermission(manifest.id) &&
-      isEnabled(manifest.id, current)
+      !definition.shipped ||
+      !isEnabled(definition.id, current) ||
+      !integrationRequiresOptionalHostPermission(definition.id)
     ) {
-      next[manifest.id] = false
-      changed = true
+      continue
     }
+
+    if (await hasIntegrationOptionalHostPermission(definition.id)) continue
+    next[definition.id] = false
+    changed = true
   }
 
   if (changed) {
     await service.setAll(next)
     logger.warn(
-      "Disabled site integrations whose optional HTTPS host permission is missing"
+      "Disabled site integrations whose optional host permissions are missing"
+    )
+  }
+
+  try {
+    await removeUnusedHostPermissions(changed ? next : current)
+  } catch (error) {
+    logger.warn(
+      "Failed to remove unused optional site integration host permissions",
+      error
     )
   }
 

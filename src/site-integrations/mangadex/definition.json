@@ -63,14 +63,6 @@
       "maxResponseBytes": 50000000
     }
   ],
-  "dynamicOrigins": [
-    {
-      "endpointId": "mangadex-at-home-image",
-      "sourceEndpointId": "mangadex-api",
-      "allowedOriginPattern": "https://*/*",
-      "validator": "public-https"
-    }
-  ],
   "sessionRefererRules": [],
   "customSettings": [
     {

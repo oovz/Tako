@@ -86,10 +86,43 @@ describe("generated background integration catalog", () => {
     const { getDefinitions } = await import("@/src/site-integrations/catalog")
     const { backgroundSiteAdaptersById } =
       await import("@/src/runtime/generated/site-integration-background-registry")
+    const shippedBackgroundIds = getDefinitions()
+      .filter(
+        (definition) => definition.shipped && definition.runtimes.background
+      )
+      .map((definition) => definition.id)
+      .sort()
+    expect(Object.keys(backgroundSiteAdaptersById).sort()).toEqual(
+      shippedBackgroundIds
+    )
     for (const definition of getDefinitions()) {
       if (definition.shipped && definition.runtimes.background) {
-        expect(backgroundSiteAdaptersById[definition.id]?.id).toBe(
-          definition.id
+        expect(backgroundSiteAdaptersById[definition.id]).toBeDefined()
+        expect(backgroundSiteAdaptersById[definition.id]).not.toHaveProperty(
+          "id"
+        )
+      }
+    }
+  })
+
+  it("uses definition-owned keys for offscreen and page-probe registries", async () => {
+    const { getDefinitions } = await import("@/src/site-integrations/catalog")
+    const { offscreenSiteAdaptersById } =
+      await import("@/src/runtime/generated/site-integration-offscreen-registry")
+    const { siteIntegrationPageProbesById } =
+      await import("@/src/runtime/generated/site-integration-page-probe-registry")
+
+    for (const definition of getDefinitions()) {
+      if (definition.shipped && definition.runtimes.offscreen) {
+        expect(offscreenSiteAdaptersById[definition.id]).toBeDefined()
+        expect(offscreenSiteAdaptersById[definition.id]).not.toHaveProperty(
+          "id"
+        )
+      }
+      if (definition.shipped && definition.pageProbe !== "none") {
+        expect(siteIntegrationPageProbesById[definition.id]).toBeDefined()
+        expect(siteIntegrationPageProbesById[definition.id]).not.toHaveProperty(
+          "id"
         )
       }
     }

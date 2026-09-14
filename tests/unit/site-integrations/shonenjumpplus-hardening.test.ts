@@ -250,9 +250,18 @@ describe("Shonen Jump+ hardening contracts", () => {
   it("fails instead of returning scrambled bytes when canvas support is absent", async () => {
     vi.stubGlobal("createImageBitmap", undefined)
     vi.stubGlobal("OffscreenCanvas", undefined)
+    const buffer = new Uint8Array([1, 2, 3]).buffer
+    const ledger = new OffscreenLiveResourceLedger()
+    const sourceLease = ledger.reserve(buffer.byteLength, "test source")
 
     await expect(
-      descrambleGigaviewerImage(new Uint8Array([1, 2, 3]).buffer, "image/jpeg")
+      descrambleGigaviewerImage(
+        buffer,
+        "image/jpeg",
+        undefined,
+        ledger,
+        sourceLease
+      )
     ).rejects.toThrow("image reconstruction is unavailable")
   })
 
@@ -264,9 +273,18 @@ describe("Shonen Jump+ hardening contracts", () => {
     }))
     vi.stubGlobal("createImageBitmap", createImageBitmap)
     vi.stubGlobal("OffscreenCanvas", class {})
+    const buffer = makePngHeader(20_000, 20_000)
+    const ledger = new OffscreenLiveResourceLedger()
+    const sourceLease = ledger.reserve(buffer.byteLength, "test source")
 
     await expect(
-      descrambleGigaviewerImage(makePngHeader(20_000, 20_000), "image/png")
+      descrambleGigaviewerImage(
+        buffer,
+        "image/png",
+        undefined,
+        ledger,
+        sourceLease
+      )
     ).rejects.toThrow("dimension")
     expect(createImageBitmap).not.toHaveBeenCalled()
   })
@@ -399,11 +417,18 @@ describe("Shonen Jump+ hardening contracts", () => {
     fetchImageWithStallDetectionMock.mockResolvedValue({
       data: makePngHeader(width, height),
       mimeType: "image/png",
+      liveResourceLease: new OffscreenLiveResourceLedger().reserve(
+        24,
+        "test source"
+      ),
     })
 
     const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
       "https://cdn-ak-img.shonenjumpplus.com/public/page/known-vector.png",
-      { runtime: { rateLimitService, rateLimitSettings } }
+      {
+        runtime: { rateLimitService, rateLimitSettings },
+        liveResourceLedger: new OffscreenLiveResourceLedger(),
+      }
     )
     const output = new Uint8Array(result.data)
     const markerAt = (x: number, y: number) => output[(y * width + x) * 4]

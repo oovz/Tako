@@ -17,6 +17,11 @@ export const backgroundSiteAdapters = [
   shonenjumpplusBackgroundAdapter,
 ] as const satisfies readonly BackgroundSiteAdapter[]
 
-export const backgroundSiteAdaptersById = Object.fromEntries(
-  backgroundSiteAdapters.map((integration) => [integration.id, integration]),
-) as Readonly<Record<string, BackgroundSiteAdapter>>
+export const backgroundSiteAdaptersById = {
+  "comicnettai": comicnettaiBackgroundAdapter,
+  "mangadex": mangadexBackgroundAdapter,
+  "mangamillion": mangamillionBackgroundAdapter,
+  "manhuagui": manhuaguiBackgroundAdapter,
+  "pixiv-comic": pixiv_comicBackgroundAdapter,
+  "shonenjumpplus": shonenjumpplusBackgroundAdapter,
+} as Readonly<Record<string, BackgroundSiteAdapter>>

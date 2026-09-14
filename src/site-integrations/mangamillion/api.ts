@@ -1,79 +1,207 @@
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
+import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
-import {
-  decodeMangaMillionResponse,
-  type MangaMillionChapterList,
-  type MangaMillionTitleDetail,
-  type MangaMillionViewer,
-} from "./proto"
+import { decodeMangaMillionResponse } from "./proto"
+import type {
+  MangaMillionChapterList,
+  MangaMillionTitleDetail,
+  MangaMillionViewer,
+} from "./contracts/api"
 import { MANGAMILLION_API_ORIGIN } from "./urls"
 
 let cachedDeviceToken: string | null = null
-let inFlightTokenPromise: Promise<string> | null = null
+type DeviceTokenRegistration = {
+  controller: AbortController
+  promise: Promise<string>
+  waiters: Set<symbol>
+}
 
-export function setCachedDeviceTokenForTesting(token: string | null): void {
-  cachedDeviceToken = token
-  inFlightTokenPromise = null
+let inFlightTokenRegistration: DeviceTokenRegistration | null = null
+
+function cancelResponseBody(response: Response, reason: unknown): void {
+  try {
+    void response.body?.cancel(reason).catch(() => undefined)
+  } catch {
+    // Preserve the provider error; body cancellation is best effort.
+  }
+}
+
+function getAbortReason(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error
+    ? signal.reason
+    : new DOMException("The operation was aborted.", "AbortError")
+}
+
+function abandonDeviceTokenRegistration(
+  registration: DeviceTokenRegistration,
+  reason: unknown
+): void {
+  if (inFlightTokenRegistration !== registration) return
+  inFlightTokenRegistration = null
+  registration.controller.abort(reason)
+}
+
+function createDeviceTokenRegistration(
+  rateLimitService: RateLimitService
+): DeviceTokenRegistration {
+  const controller = new AbortController()
+  const waiters = new Set<symbol>()
+  let rejectAbandoned!: (reason?: unknown) => void
+  const abortedPromise = new Promise<never>((_, reject) => {
+    rejectAbandoned = reject
+  })
+  const timeoutId = setTimeout(() => {
+    const error = new Error("MangaMillion device registration timed out.")
+    controller.abort(error)
+  }, DEFAULT_FETCH_TIMEOUT_MS)
+
+  const onAbort = () => {
+    rejectAbandoned(getAbortReason(controller.signal))
+  }
+  controller.signal.addEventListener("abort", onAbort, { once: true })
+
+  const perform = async (): Promise<string> => {
+    const registerUrl = `${MANGAMILLION_API_ORIGIN}/api/register`
+    const response = await integrationHttpClient.request({
+      integrationId: "mangamillion",
+      endpointId: "mangamillion-api",
+      url: registerUrl,
+      scope: "chapter",
+      rateLimitService,
+      init: {
+        method: "POST",
+        credentials: "omit",
+        signal: controller.signal,
+      },
+    })
+
+    if (!response.ok) {
+      cancelResponseBody(
+        response,
+        `MangaMillion registration HTTP ${response.status}`
+      )
+      throw new ProviderContractError(
+        `MangaMillion device registration failed with HTTP ${response.status}.`
+      )
+    }
+
+    const buffer = await response.arrayBuffer()
+    const decoded = decodeMangaMillionResponse(buffer)
+
+    if (decoded.status !== 0) {
+      throw new ProviderContractError(
+        `MangaMillion device registration failed: ${decoded.errorMessage || `status ${decoded.status}`}`
+      )
+    }
+
+    const token = decoded.deviceTokenRegister?.token
+    if (!token) {
+      throw new ProviderContractError(
+        "MangaMillion device registration did not return a valid token."
+      )
+    }
+
+    return token
+  }
+
+  const operation = Promise.race([perform(), abortedPromise])
+  const registration: DeviceTokenRegistration = {
+    controller,
+    promise: operation
+      .then((token) => {
+        if (
+          inFlightTokenRegistration === registration &&
+          !controller.signal.aborted
+        ) {
+          cachedDeviceToken = token
+        }
+        return token
+      })
+      .finally(() => {
+        clearTimeout(timeoutId)
+        controller.signal.removeEventListener("abort", onAbort)
+        if (inFlightTokenRegistration === registration) {
+          inFlightTokenRegistration = null
+        }
+      }),
+    waiters,
+  }
+  return registration
+}
+
+function waitForDeviceToken(
+  registration: DeviceTokenRegistration,
+  signal: AbortSignal | undefined
+): Promise<string> {
+  if (signal?.aborted) return Promise.reject(getAbortReason(signal))
+
+  const waiter = Symbol("mangamillion-device-token-waiter")
+  registration.waiters.add(waiter)
+
+  return new Promise<string>((resolve, reject) => {
+    let settled = false
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort)
+      registration.waiters.delete(waiter)
+    }
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (registration.waiters.size === 0) {
+        abandonDeviceTokenRegistration(registration, getAbortReason(signal))
+      }
+      reject(getAbortReason(signal))
+    }
+
+    signal?.addEventListener("abort", onAbort, { once: true })
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+
+    void registration.promise.then(
+      (token) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(token)
+      },
+      (error: unknown) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(
+          error instanceof Error
+            ? error
+            : new Error("MangaMillion device registration failed.", {
+                cause: error,
+              })
+        )
+      }
+    )
+  })
 }
 
 export async function getDeviceToken(
   rateLimitService: RateLimitService,
   signal?: AbortSignal
 ): Promise<string> {
+  if (signal?.aborted) {
+    throw getAbortReason(signal)
+  }
   if (cachedDeviceToken) {
     return cachedDeviceToken
   }
-  if (inFlightTokenPromise) {
-    return inFlightTokenPromise
+
+  let registration = inFlightTokenRegistration
+  if (!registration) {
+    registration = createDeviceTokenRegistration(rateLimitService)
+    inFlightTokenRegistration = registration
   }
 
-  inFlightTokenPromise = (async () => {
-    try {
-      const registerUrl = `${MANGAMILLION_API_ORIGIN}/api/register`
-      const response = await integrationHttpClient.request({
-        integrationId: "mangamillion",
-        endpointId: "mangamillion-api",
-        url: registerUrl,
-        scope: "chapter",
-        rateLimitService,
-        init: {
-          method: "POST",
-          credentials: "omit",
-          signal,
-        },
-      })
-
-      if (!response.ok) {
-        throw new ProviderContractError(
-          `MangaMillion device registration failed with HTTP ${response.status}.`
-        )
-      }
-
-      const buffer = await response.arrayBuffer()
-      const decoded = decodeMangaMillionResponse(buffer)
-
-      if (decoded.status !== 0) {
-        throw new ProviderContractError(
-          `MangaMillion device registration failed: ${decoded.errorMessage || `status ${decoded.status}`}`
-        )
-      }
-
-      const token = decoded.deviceTokenRegister?.token
-      if (!token) {
-        throw new ProviderContractError(
-          "MangaMillion device registration did not return a valid token."
-        )
-      }
-
-      cachedDeviceToken = token
-      return token
-    } finally {
-      inFlightTokenPromise = null
-    }
-  })()
-
-  return inFlightTokenPromise
+  return waitForDeviceToken(registration, signal)
 }
 
 async function requestMangaMillionApi(
@@ -104,8 +232,10 @@ async function requestMangaMillionApi(
 
   if (response.status === 401 || response.status === 422) {
     // Token might be invalid or expired; try re-registering once
-    cachedDeviceToken = null
-    inFlightTokenPromise = null
+    cancelResponseBody(response, `MangaMillion API ${path} token refresh`)
+    if (cachedDeviceToken === token) {
+      cachedDeviceToken = null
+    }
     const freshToken = await getDeviceToken(rateLimitService, signal)
     const retryResponse = await integrationHttpClient.request({
       integrationId: "mangamillion",
@@ -124,6 +254,10 @@ async function requestMangaMillionApi(
     })
 
     if (!retryResponse.ok) {
+      cancelResponseBody(
+        retryResponse,
+        `MangaMillion API ${path} retry HTTP ${retryResponse.status}`
+      )
       throw new ProviderContractError(
         `MangaMillion API ${path} failed with HTTP ${retryResponse.status} after re-registration.`
       )
@@ -133,6 +267,10 @@ async function requestMangaMillionApi(
   }
 
   if (!response.ok) {
+    cancelResponseBody(
+      response,
+      `MangaMillion API ${path} HTTP ${response.status}`
+    )
     throw new ProviderContractError(
       `MangaMillion API ${path} failed with HTTP ${response.status}.`
     )

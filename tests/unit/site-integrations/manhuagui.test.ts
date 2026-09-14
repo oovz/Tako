@@ -13,6 +13,7 @@ import { selectReaderHost } from "@/src/site-integrations/manhuagui/reader-confi
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 const rateLimitService = {
   resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
@@ -466,6 +467,7 @@ describe("Manhuagui site integration", () => {
           signal: new AbortController().signal,
           skipRateLimit: true,
           runtime: { rateLimitService, rateLimitSettings },
+          liveResourceLedger: new OffscreenLiveResourceLedger(),
         }
       )
 

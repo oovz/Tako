@@ -45,6 +45,8 @@ function createMockCanvas(width: number, height: number) {
     height,
     getContext: vi.fn(() => context),
     convertToBlob: vi.fn(async () => ({
+      size: 8,
+      type: "image/png",
       arrayBuffer: vi.fn(async () => new ArrayBuffer(8)),
     })),
   }
@@ -71,6 +73,12 @@ function createOffscreenCanvasMock(
   }
 }
 
+function createSourceOwnership(buffer: ArrayBuffer) {
+  const ledger = new OffscreenLiveResourceLedger()
+  const lease = ledger.reserve(buffer.byteLength, "test encoded source")
+  return { ledger, lease }
+}
+
 describe("descramblePixivImage", () => {
   const originalCreateImageBitmap = (
     globalThis as { createImageBitmap?: unknown }
@@ -91,12 +99,16 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = class {}
 
     const buffer = new ArrayBuffer(10)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await expect(
       descramblePixivImage(
         buffer,
         "image/png",
         "test-key",
-        "https://example.com/img.png"
+        "https://example.com/img.png",
+        undefined,
+        ledger,
+        lease
       )
     ).rejects.toThrow("image reconstruction is unavailable")
   })
@@ -106,12 +118,16 @@ describe("descramblePixivImage", () => {
     ;(globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = undefined
 
     const buffer = new ArrayBuffer(10)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await expect(
       descramblePixivImage(
         buffer,
         "image/png",
         "test-key",
-        "https://example.com/img.png"
+        "https://example.com/img.png",
+        undefined,
+        ledger,
+        lease
       )
     ).rejects.toThrow("image reconstruction is unavailable")
   })
@@ -127,12 +143,16 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(64, 64)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await expect(
       descramblePixivImage(
         buffer,
         "image/png",
         "test-key",
-        "https://example.com/img.png"
+        "https://example.com/img.png",
+        undefined,
+        ledger,
+        lease
       )
     ).rejects.toThrow("reconstruction canvas is unavailable")
   })
@@ -147,12 +167,16 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(1, 1)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await expect(
       descramblePixivImage(
         buffer,
         "image/png",
         "test-key",
-        "https://example.com/img.png"
+        "https://example.com/img.png",
+        undefined,
+        ledger,
+        lease
       )
     ).rejects.toThrow("too small to reconstruct safely")
   })
@@ -169,11 +193,15 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(width, height)
+    const { ledger, lease } = createSourceOwnership(buffer)
     const result = await descramblePixivImage(
       buffer,
       "image/png",
       "test-key",
-      "https://example.com/img_gridshuffle32:32.png"
+      "https://example.com/img_gridshuffle32:32.png",
+      undefined,
+      ledger,
+      lease
     )
 
     expect(context.drawImage).toHaveBeenCalledTimes(16)
@@ -184,6 +212,7 @@ describe("descramblePixivImage", () => {
     })
     expect(result.data).toBeInstanceOf(ArrayBuffer)
     expect(result.mimeType).toBe("image/png")
+    result.liveResourceLease.release()
     expect(bitmap.close).toHaveBeenCalled()
   })
 
@@ -199,11 +228,15 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(width, height)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await descramblePixivImage(
       buffer,
       "image/jpeg",
       "test-key",
-      "https://example.com/img_gridshuffle32:32.jpg"
+      "https://example.com/img_gridshuffle32:32.jpg",
+      undefined,
+      ledger,
+      lease
     )
 
     expect(canvas.convertToBlob).toHaveBeenCalledWith({
@@ -224,11 +257,15 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(width, height)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await descramblePixivImage(
       buffer,
       "application/octet-stream",
       "test-key",
-      "https://example.com/img_gridshuffle32:32.bin"
+      "https://example.com/img_gridshuffle32:32.bin",
+      undefined,
+      ledger,
+      lease
     )
 
     expect(canvas.convertToBlob).toHaveBeenCalledWith({
@@ -249,11 +286,15 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(width, height)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await descramblePixivImage(
       buffer,
       "image/png",
       "test-key",
-      "https://example.com/img_gridshuffle1:1.png"
+      "https://example.com/img_gridshuffle1:1.png",
+      undefined,
+      ledger,
+      lease
     )
 
     // With MIN_GRID_DIMENSION=8, a 256×256 image → 32×32=1024 cells (under cap)
@@ -277,12 +318,16 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(1800, 1800)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await expect(
       descramblePixivImage(
         buffer,
         "image/png",
         "test-key",
-        "https://example.com/img_gridshuffle8:8.png"
+        "https://example.com/img_gridshuffle8:8.png",
+        undefined,
+        ledger,
+        lease
       )
     ).rejects.toThrow("Pixiv descrambling safety cap exceeded")
 
@@ -304,11 +349,15 @@ describe("descramblePixivImage", () => {
       createOffscreenCanvasMock(canvas)
 
     const buffer = makePngHeader(width, height)
+    const { ledger, lease } = createSourceOwnership(buffer)
     await descramblePixivImage(
       buffer,
       "image/png",
       "test-key",
-      "https://example.com/img_gridshuffle128:128.png"
+      "https://example.com/img_gridshuffle128:128.png",
+      undefined,
+      ledger,
+      lease
     )
 
     // 128:128 on 128×128 → 1×1=1 cell. Should descramble, not cap to 64.

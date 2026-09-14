@@ -76,7 +76,6 @@ function parseMangadexPageProbe(raw: unknown): {
 }
 
 export const pageProbe: SiteIntegrationPageProbe = {
-  id: "mangadex",
   collect: collectMangadexPageProbe,
   parse: parseMangadexPageProbe,
 }

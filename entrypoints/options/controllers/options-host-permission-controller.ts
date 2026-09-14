@@ -1,6 +1,5 @@
 import {
-  integrationRequiresBroadHttpsPermission,
-  removeBroadHttpsPermissionIfUnused,
+  removeUnusedHostPermissions,
   requestIntegrationHostPermission,
 } from "@/src/site-integrations/host-permission-service"
 import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
@@ -13,13 +12,10 @@ export class OptionsHostPermissionController {
   }
 
   async requestForEnablement(siteIntegrationId: string): Promise<boolean> {
-    if (!integrationRequiresBroadHttpsPermission(siteIntegrationId)) {
-      return true
-    }
     return requestIntegrationHostPermission(siteIntegrationId)
   }
 
   async removeUnused(enablement: SiteIntegrationEnablementMap): Promise<void> {
-    await removeBroadHttpsPermissionIfUnused(enablement)
+    await removeUnusedHostPermissions(enablement)
   }
 }

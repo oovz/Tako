@@ -4,8 +4,14 @@ import type {
 } from "@/src/types/site-integrations"
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
-import { integrationHttpClient } from "@/src/site-integrations/http-client"
+import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
+import { createIntegrationEndpointUrlAssertion } from "@/src/site-integrations/request-policy"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 import { fetchViewer } from "./api"
+import { convertMangaMillionAvifToJpeg } from "./avif"
 import { decryptPageImage, detectImageMimeTypeAndExt } from "./crypto"
 import {
   isTrustedMangaMillionAssetUrl,
@@ -13,10 +19,73 @@ import {
   parseMangaMillionSeriesUrl,
 } from "./urls"
 
+const assertMangaMillionImageUrl = createIntegrationEndpointUrlAssertion(
+  "mangamillion",
+  "mangamillion-image"
+)
+
+type OwnedImage = {
+  data: ArrayBuffer
+  filename: string
+  mimeType: string
+  liveResourceLease: OffscreenLiveResourceLease
+}
+
+async function normalizeMangaMillionImage(
+  image: {
+    data: ArrayBuffer
+    mimeType: string
+    extension: string
+    liveResourceLease: OffscreenLiveResourceLease
+  },
+  signal: AbortSignal | undefined,
+  liveResourceLedger: OffscreenLiveResourceLedger
+): Promise<{
+  data: ArrayBuffer
+  mimeType: string
+  extension: string
+  liveResourceLease: OffscreenLiveResourceLease
+}> {
+  let sourceLease: OffscreenLiveResourceLease | undefined =
+    image.liveResourceLease
+  try {
+    if (image.mimeType !== "image/avif") {
+      sourceLease = undefined
+      return image
+    }
+
+    const converted = await convertMangaMillionAvifToJpeg(
+      image.data,
+      signal,
+      liveResourceLedger,
+      image.liveResourceLease
+    )
+    sourceLease = undefined
+    return {
+      ...converted,
+      extension: ".jpg",
+    }
+  } finally {
+    sourceLease?.release()
+  }
+}
+
+function buildMangaMillionImageFilename(
+  rawUrl: string,
+  extension: string
+): string {
+  const rawFilename =
+    new URL(rawUrl).pathname.split("/").filter(Boolean).pop() || "page"
+  const cleanFilename = rawFilename.replace(/\.enc$/i, "")
+  return cleanFilename.endsWith(extension)
+    ? cleanFilename
+    : cleanFilename.replace(/\.[a-zA-Z0-9]+$/, "") + extension
+}
+
 export const offscreen: OffscreenIntegration = {
   name: "MangaMillion Offscreen",
   cover: {
-    async downloadImage(imageUrl, opts) {
+    async downloadImage(imageUrl, opts): Promise<OwnedImage> {
       if (!isTrustedMangaMillionAssetUrl(imageUrl)) {
         throw new ProviderContractError(
           "Invalid or untrusted MangaMillion cover asset URL."
@@ -26,70 +95,45 @@ export const offscreen: OffscreenIntegration = {
         throw new Error("aborted")
       }
 
-      const response = await integrationHttpClient.request({
+      const fetched = await fetchImageWithStallDetection(imageUrl, {
         integrationId: "mangamillion",
         endpointId: "mangamillion-image",
-        url: imageUrl,
-        scope: "image",
+        signal: opts.signal,
+        rateLimitPolicy: opts.runtime.rateLimitSettings.image,
         rateLimitService: opts.runtime.rateLimitService,
-        policyOverride: opts.runtime.rateLimitSettings.image,
         skipRateLimit: true,
-        init: {
-          credentials: "omit",
-          signal: opts.signal,
-        },
+        onBytesReceived: opts.onBytesReceived,
+        assertUrlAllowed: assertMangaMillionImageUrl,
+        liveResourceLedger: opts.liveResourceLedger,
+        allowEncodedImageMimeType: true,
+        init: { credentials: "omit" },
       })
-
-      if (!response.ok) {
-        throw new ProviderContractError(
-          `MangaMillion cover download failed (HTTP ${response.status}).`
+      let fetchedLease: OffscreenLiveResourceLease | undefined =
+        fetched.liveResourceLease
+      try {
+        const detected = detectImageMimeTypeAndExt(new Uint8Array(fetched.data))
+        const image = await normalizeMangaMillionImage(
+          {
+            data: fetched.data,
+            mimeType: detected.mimeType,
+            extension: detected.extension,
+            liveResourceLease: fetchedLease,
+          },
+          opts.signal,
+          opts.liveResourceLedger
         )
+        fetchedLease = undefined
+
+        const filename =
+          image.mimeType === "image/jpeg"
+            ? "cover.jpg"
+            : new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
+              `cover${image.extension}`
+
+        return { ...image, filename }
+      } finally {
+        fetchedLease?.release()
       }
-
-      const data = await response.arrayBuffer()
-      await opts.onBytesReceived?.(data.byteLength)
-
-      const detected = detectImageMimeTypeAndExt(new Uint8Array(data))
-
-      // If the cover is in AVIF format, convert it to JPEG using OffscreenCanvas for CBZ compatibility
-      if (
-        detected.mimeType === "image/avif" &&
-        typeof OffscreenCanvas !== "undefined"
-      ) {
-        try {
-          const blob = new Blob([data], { type: "image/avif" })
-          const bitmap = await createImageBitmap(blob)
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-          const ctx = canvas.getContext("2d")
-          if (ctx) {
-            ctx.drawImage(bitmap, 0, 0)
-            const jpegBlob = await canvas.convertToBlob({
-              type: "image/jpeg",
-              quality: 0.92,
-            })
-            const jpegData = await jpegBlob.arrayBuffer()
-            return {
-              data: jpegData,
-              filename: "cover.jpg",
-              mimeType: "image/jpeg",
-            }
-          }
-        } catch {
-          // Fall back to original format if conversion is unavailable
-        }
-      }
-
-      const headerMime = response.headers.get("content-type")
-      const mimeType =
-        headerMime && headerMime !== "application/octet-stream"
-          ? headerMime
-          : detected.mimeType
-
-      const filename =
-        new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
-        `cover${detected.extension}`
-
-      return { data, filename, mimeType }
     },
   },
   chapter: {
@@ -157,68 +201,87 @@ export const offscreen: OffscreenIntegration = {
         )
       }
 
-      const response = await integrationHttpClient.request({
+      const fetched = await fetchImageWithStallDetection(rawUrl, {
         integrationId: "mangamillion",
         endpointId: "mangamillion-image",
-        url: rawUrl,
-        scope: "image",
+        signal: opts.signal,
+        rateLimitPolicy: opts.runtime.rateLimitSettings.image,
         rateLimitService: opts.runtime.rateLimitService,
-        policyOverride: opts.runtime.rateLimitSettings.image,
         // Image batches are already scheduled by chapter-image-downloads;
         // re-scheduling here deadlocks the shared rate limiter.
         skipRateLimit: true,
-        init: {
-          credentials: "omit",
-          signal: opts.signal,
-        },
+        onBytesReceived: opts.onBytesReceived,
+        assertUrlAllowed: assertMangaMillionImageUrl,
+        liveResourceLedger: opts.liveResourceLedger,
+        allowEncodedImageMimeType: true,
+        init: { credentials: "omit" },
       })
 
-      if (!response.ok) {
-        throw new ProviderContractError(
-          `MangaMillion chapter image download failed (HTTP ${response.status}).`
-        )
-      }
+      let fetchedLease: OffscreenLiveResourceLease | undefined =
+        fetched.liveResourceLease
+      try {
+        const rawData = fetched.data
 
-      const rawData = await response.arrayBuffer()
-      await opts.onBytesReceived?.(rawData.byteLength)
+        const params = fragment ? new URLSearchParams(fragment) : null
+        const aesKey = params?.get("k")
+        const aesIv = params?.get("iv")
 
-      const params = fragment ? new URLSearchParams(fragment) : null
-      const aesKey = params?.get("k")
-      const aesIv = params?.get("iv")
+        let finalImage: {
+          data: ArrayBuffer
+          mimeType: string
+          extension: string
+          liveResourceLease: OffscreenLiveResourceLease
+        }
+        if (aesKey && aesIv) {
+          const decrypted = await decryptPageImage(
+            rawData,
+            aesKey,
+            aesIv,
+            opts.liveResourceLedger,
+            fetchedLease
+          )
+          fetchedLease = undefined
+          finalImage = await normalizeMangaMillionImage(
+            {
+              data: decrypted.data,
+              mimeType: decrypted.mimeType,
+              extension: decrypted.extension,
+              liveResourceLease: decrypted.liveResourceLease,
+            },
+            opts.signal,
+            opts.liveResourceLedger
+          )
+        } else {
+          const detected = detectImageMimeTypeAndExt(new Uint8Array(rawData))
+          finalImage = await normalizeMangaMillionImage(
+            {
+              data: rawData,
+              mimeType: detected.mimeType,
+              extension: detected.extension,
+              liveResourceLease: fetchedLease,
+            },
+            opts.signal,
+            opts.liveResourceLedger
+          )
+          fetchedLease = undefined
+        }
 
-      let finalData = rawData
-      let finalMime: string
-      let finalExtension: string
-      if (aesKey && aesIv) {
-        const decrypted = await decryptPageImage(rawData, aesKey, aesIv)
-        finalData = decrypted.data
-        finalMime = decrypted.mimeType
-        finalExtension = decrypted.extension
-      } else {
-        const detected = detectImageMimeTypeAndExt(new Uint8Array(rawData))
-        finalMime = detected.mimeType
-        finalExtension = detected.extension
-      }
-
-      const rawFilename =
-        new URL(rawUrl).pathname.split("/").filter(Boolean).pop() || "page"
-      let cleanFilename = rawFilename.replace(/\.enc$/i, "")
-
-      if (finalExtension && !cleanFilename.endsWith(finalExtension)) {
-        cleanFilename =
-          cleanFilename.replace(/\.[a-zA-Z0-9]+$/, "") + finalExtension
-      }
-
-      return {
-        data: finalData,
-        filename: cleanFilename,
-        mimeType: finalMime,
+        return {
+          data: finalImage.data,
+          filename: buildMangaMillionImageFilename(
+            rawUrl,
+            finalImage.extension
+          ),
+          mimeType: finalImage.mimeType,
+          liveResourceLease: finalImage.liveResourceLease,
+        }
+      } finally {
+        fetchedLease?.release()
       }
     },
   },
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "mangamillion",
   offscreen,
 }

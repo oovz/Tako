@@ -141,14 +141,15 @@ async function reportToMangadexNetwork(
 async function fetchMangadexImageAsset(
   imageUrl: string,
   rateLimitService: RateLimitService,
-  signal?: AbortSignal,
-  onBytesReceived?: (bytesReceived: number) => void | Promise<void>,
-  liveResourceLedger?: OffscreenLiveResourceLedger
+  signal: AbortSignal | undefined,
+  onBytesReceived:
+    ((bytesReceived: number) => void | Promise<void>) | undefined,
+  liveResourceLedger: OffscreenLiveResourceLedger
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   const startTime = Date.now()
   let success = false
@@ -242,13 +243,13 @@ export async function downloadMangadexChapterImage(
     dispatchContext?: MangadexDispatchContext
     runtime: ChapterRuntimeData
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   if (opts.signal?.aborted) {
     throw new Error("aborted")
@@ -369,13 +370,13 @@ export async function downloadMangadexCoverImage(
     runtime: ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   const { data, mimeType, liveResourceLease } =
     await fetchImageWithStallDetection(imageUrl, {

@@ -7,7 +7,10 @@ import {
   MangadexDispatchContextSchema,
   type MangadexDispatchContext,
 } from "./contracts/dispatch-context"
-import type { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import type {
+  OffscreenLiveResourceLedger,
+  OffscreenLiveResourceLease,
+} from "@/src/runtime/offscreen-live-resource-ledger"
 import {
   downloadMangadexChapterImage,
   downloadMangadexCoverImage,
@@ -41,9 +44,14 @@ const offscreen: OffscreenIntegration<MangadexDispatchContext> = {
         dispatchContext?: MangadexDispatchContext
         runtime: import("@/src/types/site-integrations").ChapterRuntimeData
         onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-        liveResourceLedger?: OffscreenLiveResourceLedger
+        liveResourceLedger: OffscreenLiveResourceLedger
       }
-    ): Promise<{ data: ArrayBuffer; filename: string; mimeType: string }> {
+    ): Promise<{
+      data: ArrayBuffer
+      filename: string
+      mimeType: string
+      liveResourceLease: OffscreenLiveResourceLease
+    }> {
       return downloadMangadexChapterImage(imageUrl, {
         ...opts,
         dispatchContext: opts.dispatchContext,
@@ -54,6 +62,5 @@ const offscreen: OffscreenIntegration<MangadexDispatchContext> = {
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter<MangadexDispatchContext> =
   {
-    id: "mangadex",
     offscreen,
   }

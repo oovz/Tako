@@ -46,6 +46,5 @@ const offscreen: OffscreenIntegration<PixivDispatchContext> = {
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter<PixivDispatchContext> =
   {
-    id: "pixiv-comic",
     offscreen,
   }

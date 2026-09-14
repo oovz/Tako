@@ -143,13 +143,13 @@ export const descramblePixivImage = async (
   mimeType: string,
   key: string,
   imageUrl: string,
-  signal?: AbortSignal,
-  liveResourceLedger?: OffscreenLiveResourceLedger,
-  sourceLease?: OffscreenLiveResourceLease
+  signal: AbortSignal | undefined,
+  liveResourceLedger: OffscreenLiveResourceLedger,
+  sourceLease: OffscreenLiveResourceLease
 ): Promise<{
   data: ArrayBuffer
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> => {
   const encodedSourceLease = sourceLease
   let sourceBlobLease: OffscreenLiveResourceLease | undefined
@@ -165,7 +165,11 @@ export const descramblePixivImage = async (
         "Pixiv Comic image reconstruction is unavailable in this browser."
       )
     }
-    const dimensions = readEncodedImageDimensions(buffer, mimeType)
+    const dimensions = readEncodedImageDimensions(
+      buffer,
+      mimeType,
+      liveResourceLedger
+    )
     assertDecodedImageWithinLimits(
       dimensions.width,
       dimensions.height,
@@ -175,11 +179,11 @@ export const descramblePixivImage = async (
       dimensions.width * dimensions.height,
       signal,
       async () => {
-        decodedSurfaceLease = liveResourceLedger?.reserve(
+        decodedSurfaceLease = liveResourceLedger.reserve(
           dimensions.width * dimensions.height * 8,
           "Pixiv Comic decoded source and destination surfaces"
         )
-        sourceBlobLease = liveResourceLedger?.reserve(
+        sourceBlobLease = liveResourceLedger.reserve(
           buffer.byteLength,
           "Pixiv Comic encoded source Blob"
         )
@@ -279,7 +283,7 @@ export const descramblePixivImage = async (
           const outputMimeType = mimeType.startsWith("image/")
             ? mimeType
             : "image/png"
-          outputBlobLease = liveResourceLedger?.reserve(
+          outputBlobLease = liveResourceLedger.reserve(
             Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
             "Pixiv Comic encoded output Blob"
           )
@@ -293,7 +297,7 @@ export const descramblePixivImage = async (
             )
           }
           outputBlobLease?.resize(outputBlob.size)
-          outputBufferLease = liveResourceLedger?.reserve(
+          outputBufferLease = liveResourceLedger.reserve(
             outputBlob.size,
             "Pixiv Comic encoded output ArrayBuffer"
           )

@@ -679,13 +679,13 @@ export async function descramblePublusImage(
   buffer: ArrayBuffer,
   mimeType: string,
   metadata: PublusImageMetadata,
-  signal?: AbortSignal,
-  liveResourceLedger?: OffscreenLiveResourceLedger,
-  sourceLease?: OffscreenLiveResourceLease
+  signal: AbortSignal | undefined,
+  liveResourceLedger: OffscreenLiveResourceLedger,
+  sourceLease: OffscreenLiveResourceLease
 ): Promise<{
   data: ArrayBuffer
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   const encodedSourceLease = sourceLease
   let sourceBlobLease: OffscreenLiveResourceLease | undefined
@@ -701,7 +701,11 @@ export async function descramblePublusImage(
         "Comic Nettai PUBLUS image reconstruction is unavailable in this browser context"
       )
     }
-    const dimensions = readEncodedImageDimensions(buffer, mimeType)
+    const dimensions = readEncodedImageDimensions(
+      buffer,
+      mimeType,
+      liveResourceLedger
+    )
     assertDecodedImageWithinLimits(
       dimensions.width,
       dimensions.height,
@@ -711,11 +715,11 @@ export async function descramblePublusImage(
       dimensions.width * dimensions.height,
       signal,
       async () => {
-        decodedSurfaceLease = liveResourceLedger?.reserve(
+        decodedSurfaceLease = liveResourceLedger.reserve(
           dimensions.width * dimensions.height * 8,
           "Comic Nettai decoded source and destination surfaces"
         )
-        sourceBlobLease = liveResourceLedger?.reserve(
+        sourceBlobLease = liveResourceLedger.reserve(
           buffer.byteLength,
           "Comic Nettai encoded source Blob"
         )
@@ -769,7 +773,7 @@ export async function descramblePublusImage(
           const outputMimeType = mimeType.startsWith("image/")
             ? mimeType
             : "image/png"
-          outputBlobLease = liveResourceLedger?.reserve(
+          outputBlobLease = liveResourceLedger.reserve(
             Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
             "Comic Nettai encoded output Blob"
           )
@@ -783,7 +787,7 @@ export async function descramblePublusImage(
             )
           }
           outputBlobLease?.resize(outputBlob.size)
-          outputBufferLease = liveResourceLedger?.reserve(
+          outputBufferLease = liveResourceLedger.reserve(
             outputBlob.size,
             "Comic Nettai encoded output ArrayBuffer"
           )

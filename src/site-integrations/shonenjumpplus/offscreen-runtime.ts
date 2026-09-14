@@ -35,13 +35,13 @@ async function downloadShonenJumpPlusCoverImage(
     runtime: import("@/src/types/site-integrations").ChapterRuntimeData
     skipRateLimit?: boolean
     onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger?: OffscreenLiveResourceLedger
+    liveResourceLedger: OffscreenLiveResourceLedger
   }
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   if (!isTrustedShonenJumpPlusAssetUrl(imageUrl)) {
     throw new ProviderContractError(
@@ -172,6 +172,5 @@ const offscreen: OffscreenIntegration = {
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "shonenjumpplus",
   offscreen,
 }

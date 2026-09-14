@@ -49,13 +49,13 @@ function outputMimeType(sourceMimeType: string): string {
 export async function descrambleGigaviewerImage(
   buffer: ArrayBuffer,
   mimeType: string,
-  signal?: AbortSignal,
-  liveResourceLedger?: OffscreenLiveResourceLedger,
-  sourceLease?: OffscreenLiveResourceLease
+  signal: AbortSignal | undefined,
+  liveResourceLedger: OffscreenLiveResourceLedger,
+  sourceLease: OffscreenLiveResourceLease
 ): Promise<{
   data: ArrayBuffer
   mimeType: string
-  liveResourceLease?: OffscreenLiveResourceLease
+  liveResourceLease: OffscreenLiveResourceLease
 }> {
   const encodedSourceLease = sourceLease
   let sourceBlobLease: OffscreenLiveResourceLease | undefined
@@ -71,7 +71,11 @@ export async function descrambleGigaviewerImage(
         "Shonen Jump+ image reconstruction is unavailable in this browser."
       )
     }
-    const dimensions = readEncodedImageDimensions(buffer, mimeType)
+    const dimensions = readEncodedImageDimensions(
+      buffer,
+      mimeType,
+      liveResourceLedger
+    )
     assertDecodedImageWithinLimits(
       dimensions.width,
       dimensions.height,
@@ -81,11 +85,11 @@ export async function descrambleGigaviewerImage(
       dimensions.width * dimensions.height,
       signal,
       async () => {
-        decodedSurfaceLease = liveResourceLedger?.reserve(
+        decodedSurfaceLease = liveResourceLedger.reserve(
           dimensions.width * dimensions.height * 8,
           "Shonen Jump+ decoded source and destination surfaces"
         )
-        sourceBlobLease = liveResourceLedger?.reserve(
+        sourceBlobLease = liveResourceLedger.reserve(
           buffer.byteLength,
           "Shonen Jump+ encoded source Blob"
         )
@@ -144,7 +148,7 @@ export async function descrambleGigaviewerImage(
           }
 
           const finalMimeType = outputMimeType(mimeType)
-          outputBlobLease = liveResourceLedger?.reserve(
+          outputBlobLease = liveResourceLedger.reserve(
             Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
             "Shonen Jump+ encoded output Blob"
           )
@@ -158,7 +162,7 @@ export async function descrambleGigaviewerImage(
             )
           }
           outputBlobLease?.resize(output.size)
-          outputBufferLease = liveResourceLedger?.reserve(
+          outputBufferLease = liveResourceLedger.reserve(
             output.size,
             "Shonen Jump+ encoded output ArrayBuffer"
           )

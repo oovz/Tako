@@ -54,7 +54,6 @@
       "maxResponseBytes": 50000000
     }
   ],
-  "dynamicOrigins": [],
   "sessionRefererRules": [],
   "customSettings": [],
   "fixtures": {

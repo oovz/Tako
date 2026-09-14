@@ -102,7 +102,6 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 50000000
       }
     ],
-    "dynamicOrigins": [],
     "sessionRefererRules": [],
     "customSettings": [],
     "fixtures": {
@@ -203,14 +202,6 @@ export const siteIntegrationCatalog = [
         "redirect": "error",
         "responseType": "bytes",
         "maxResponseBytes": 50000000
-      }
-    ],
-    "dynamicOrigins": [
-      {
-        "endpointId": "mangadex-at-home-image",
-        "sourceEndpointId": "mangadex-api",
-        "allowedOriginPattern": "https://*/*",
-        "validator": "public-https"
       }
     ],
     "sessionRefererRules": [],
@@ -347,7 +338,6 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 50000000
       }
     ],
-    "dynamicOrigins": [],
     "sessionRefererRules": [],
     "customSettings": [],
     "fixtures": {
@@ -450,7 +440,6 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 50000000
       }
     ],
-    "dynamicOrigins": [],
     "sessionRefererRules": [
       {
         "id": 41002,
@@ -580,7 +569,6 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 50000000
       }
     ],
-    "dynamicOrigins": [],
     "sessionRefererRules": [
       {
         "id": 41001,
@@ -689,7 +677,6 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 50000000
       }
     ],
-    "dynamicOrigins": [],
     "sessionRefererRules": [],
     "customSettings": [],
     "fixtures": {

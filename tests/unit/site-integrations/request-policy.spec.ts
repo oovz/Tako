@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image-core"
 import {
   assertIntegrationEndpointRequestUrl,
   assertIntegrationEndpointResponseUrl,
   assertSafePublicHttpsUrl,
-  createSameOriginDynamicAssetAssertion,
 } from "@/src/site-integrations/request-policy"
 import { integrationHttpClient as integrationHttpClientImpl } from "@/src/site-integrations/http-client"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
@@ -103,52 +101,6 @@ describe("site integration request policy", () => {
     "https://[::ffff:127.0.0.1]/image.jpg",
   ])("blocks non-public or unsafe URL %s", (url) => {
     expect(() => assertSafePublicHttpsUrl(url)).toThrow(ProviderContractError)
-  })
-
-  it("permits a dynamic public image origin but blocks a cross-origin redirect", () => {
-    const assertDynamicUrl = createSameOriginDynamicAssetAssertion(
-      "https://uploads-node.example.net/data/chapter/page.jpg",
-      "MangaDex@Home image request"
-    )
-
-    expect(() =>
-      assertDynamicUrl(
-        "https://uploads-node.example.net/data/chapter/page-final.jpg"
-      )
-    ).not.toThrow()
-    expect(() =>
-      assertDynamicUrl("https://attacker.example/page-final.jpg")
-    ).toThrow(ProviderContractError)
-  })
-
-  it("rejects redirects at fetch time and checks the final URL defensively", async () => {
-    const assertDynamicUrl = createSameOriginDynamicAssetAssertion(
-      "https://uploads-node.example.net/data/page.jpg",
-      "dynamic image request"
-    )
-    const arrayBuffer = vi.fn(async () => new Uint8Array([1, 2, 3]).buffer)
-    const fetcher = vi.fn(async (_url: string, init: RequestInit) => {
-      expect(init.redirect).toBe("error")
-      return {
-        ok: true,
-        url: "https://attacker.example/redirected.jpg",
-        headers: new Headers({ "content-type": "image/jpeg" }),
-        body: null,
-        arrayBuffer,
-      } as unknown as Response
-    })
-
-    await expect(
-      fetchImageWithStallDetection(
-        "https://uploads-node.example.net/data/page.jpg",
-        {
-          assertUrlAllowed: assertDynamicUrl,
-          fetcher,
-        }
-      )
-    ).rejects.toThrow("cross-origin redirect")
-    expect(fetcher).toHaveBeenCalledOnce()
-    expect(arrayBuffer).not.toHaveBeenCalled()
   })
 
   it("validates fixed-origin response redirects against the manifest", () => {

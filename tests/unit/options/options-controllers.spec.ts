@@ -16,10 +16,9 @@ vi.mock("@/src/storage/fs-access", () => ({
 }))
 
 vi.mock("@/src/site-integrations/host-permission-service", () => ({
-  reconcileBroadHttpsPermissionEnablement: vi.fn(),
-  removeBroadHttpsPermissionIfUnused: vi.fn(),
+  reconcileOptionalHostPermissionEnablement: vi.fn(),
+  removeUnusedHostPermissions: vi.fn(),
   requestIntegrationHostPermission: vi.fn(),
-  integrationRequiresBroadHttpsPermission: vi.fn(),
 }))
 
 function configurationData(): OptionsConfigurationData {
@@ -469,12 +468,8 @@ describe("Options external-change controller", () => {
 
 describe("Options host-permission and FSA controllers", () => {
   it("keeps load-time reconciliation in the background and propagates gesture effects", async () => {
-    const {
-      removeBroadHttpsPermissionIfUnused,
-      requestIntegrationHostPermission,
-      integrationRequiresBroadHttpsPermission,
-    } = await import("@/src/site-integrations/host-permission-service")
-    vi.mocked(integrationRequiresBroadHttpsPermission).mockReturnValueOnce(true)
+    const { removeUnusedHostPermissions, requestIntegrationHostPermission } =
+      await import("@/src/site-integrations/host-permission-service")
     vi.mocked(requestIntegrationHostPermission).mockResolvedValueOnce(true)
 
     const controller = new OptionsHostPermissionController()
@@ -483,7 +478,7 @@ describe("Options host-permission and FSA controllers", () => {
       true
     )
     await expect(controller.removeUnused({})).resolves.toBeUndefined()
-    expect(removeBroadHttpsPermissionIfUnused).toHaveBeenCalledWith({})
+    expect(removeUnusedHostPermissions).toHaveBeenCalledWith({})
   })
 
   it("classifies picker support, cancellation, denial, and granted handles", async () => {
