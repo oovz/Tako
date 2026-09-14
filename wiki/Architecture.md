@@ -100,23 +100,30 @@ The watchdog alarm uses `persistAcrossSessions: true` and is verified/recreated 
 5. `complete` commits the output; `interrupted` records a typed output failure.
 6. Service Worker tells offscreen to revoke the Blob URL after terminal state.
 
+Native reconciliation returns identity-bound settlement effects. Outer coordinators continue the queue after the task and native gates have been released. A sealed manifest remains replayable until continuation is acknowledged, including startup, surrender and transient continuation failures.
+
 The durable output states are:
 
-| State                              | Meaning                                                                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `prepared` / `prepared_before_api` | The API has not been called; startup may classify a missing history item as rejected.                                            |
-| `prepared` / `handoff_started`     | API acceptance is unknown; a missing history item is not proof of rejection, so the Blob remains owned and recovery stays armed. |
-| `in_progress` with `downloadId`    | Chrome accepted the handoff; completion is still pending.                                                                        |
-| `erased`                           | Chrome removed history; transfer outcome remains unknown while the owner exists.                                                 |
-| `complete` or `interrupted`        | Positive terminal transfer evidence has been recorded.                                                                           |
-| `accountedAt` set                  | The terminal result has been projected into queue accounting.                                                                    |
-| `blobRevokedAt` set                | The offscreen Blob dependency has been released.                                                                                 |
+| State                                | Meaning                                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `prepared`                           | The output record exists before the Chrome download handoff is attempted.                                                         |
+| `acceptance_unknown`                 | The handoff may have reached Chrome, but Tako does not have a confirmed numeric download ID; the Blob remains owned for recovery. |
+| `waiting` with `downloadId`          | Chrome accepted the handoff and completion is still pending.                                                                      |
+| `waiting` with `erasedAt`            | Chrome removed the history entry before a terminal observation; the transfer outcome remains unknown and requires user action.    |
+| `complete`                           | Chrome reported a positive terminal transfer result.                                                                              |
+| `interrupted`                        | Chrome reported an interrupted terminal transfer result, with `error` when available.                                             |
+| `surrendered`                        | The user explicitly forgot an unobservable output; Tako releases ownership without asserting a transfer result.                   |
+| `accountingDisposition: "accounted"` | The terminal result has been projected into queue accounting.                                                                     |
+| `blobReleasedAt` set                 | The offscreen Blob dependency has been released.                                                                                  |
+| `dependencyReleasedAt` set           | All durable native-output dependencies for this record have been released.                                                        |
 
 `downloads.onErased` only means that Chrome removed the download from history; it is not a transfer outcome. Tako records that the native result is currently unobservable (`erasedAt` on a `waiting` output), keeps the chapter and output identity pending, and keeps the offscreen Blob owner alive. A later `complete`/`interrupted` observation is authoritative and is projected into output accounting; erasure alone never determines success or failure. The task is durably blocked with `activeBlock: "native_output_action_required"` and the `browser_download_unobservable` category, so the queue stops dispatching it and the Side Panel renders the browser-download-unobservable message. The user-facing cancel confirmation becomes an explicit task-wide “forget all pending downloads” action in this state (`FORGET_UNOBSERVABLE_OUTPUTS`); it surrenders every waiting output whose Chrome history entry was erased, revokes every pending Blob owned by the affected job(s), releases queue accounting without claiming Chrome completion or interruption, and lets the queue continue. Canceling such a task performs this surrender as part of its best-effort cleanup routine.
 
 A pending native download is a durable wait state, not a liveness failure. Tako does not poll known long-running Chrome downloads with the offscreen watchdog, and it stops arming the liveness alarm for erased downloads once the task block is in place: the durable `native_output_action_required` block is itself the recovery marker after a Service Worker restart.
 
 ### Cancellation, cleanup, and restart recovery
+
+Native settlement continuation runs outside the task/native gates. A sealed manifest remains replayable until its continuation is acknowledged. Released tracked-output records are durable accounting evidence even after queue history is removed; replay schedules current work and retires that exact manifest. Task-specific continuation checks the settlement identity again after asynchronous history work so a same-ID replacement is not resumed by an old effect. Retry and Restart create fresh chapter accounting while preserving the original task's history.
 
 Canceling a task durably records its canceled status in storage to prevent further chapter dispatch and uncommitted pipeline work. It does not cancel native downloads already accepted by Chrome.
 
@@ -132,7 +139,7 @@ For an unobservable history entry, the explicit task-wide forget action provides
 
 The task's destination is snapshotted at enqueue. Before promotion, Tako checks capability, handle presence, and `queryPermission({mode:'readwrite'})`. A write commits only after the writable stream closes successfully.
 
-Unsupported, prompt/denied, missing-folder, write, or disk-full failures persist a `DestinationIssue`, block further dispatch, and show repair actions. The queue transition and destination-issue mutation use one durable local-storage commit, followed by best-effort session projection and notification. Tako never silently changes the destination. The user can explicitly re-grant, reselect, continue that task in Downloads, or cancel.
+Unsupported, prompt/denied, missing-folder, write, or disk-full failures persist `destinationIssue` inside the blocked queue task and show repair actions. The block and its repair details share the queue document commit; session projection and notification follow it. Early preflight, late dispatch preflight and offscreen write failures use that transition. The user can re-grant, reselect, continue that task in Downloads, or cancel.
 
 Both destinations use one `uniquify | overwrite` collision policy; `uniquify` is the default.
 
@@ -172,27 +179,37 @@ Overall percentage is weighted by locally learned phase duration using provider,
 
 ## Storage ownership
 
-| Store                    | Canonical data                                                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `chrome.storage.local`   | queue/history, settings, queue revision, dispatch lease, pending native output identity, destination issues, pending Undo actions, and migration epoch |
-| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                              |
-| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                              |
-| Runtime Port             | high-frequency active-task progress only                                                                                                               |
-| React state              | component/view state and chapter selection drafts for current UI interactions                                                                          |
+| Store                    | Canonical data                                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chrome.storage.local`   | queue/history, settings, dispatch lease, pending native output identity, embedded destination issues, pending Undo actions, diagnostics, timing estimates and migration epoch/journal |
+| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                                                             |
+| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                                                             |
+| Runtime Port             | high-frequency active-task progress only                                                                                                                                              |
+| React state              | component/view state and chapter selection drafts for current UI interactions                                                                                                         |
 
 Large Blobs are never stored in Chrome storage.
 
+`QueueRepository` owns queue, lease and Undo mutations; `NativeOutputRepository` owns native-output records; `HistoryRepository` owns history. Settings and provider repositories own individual configuration documents, and `OptionsConfigurationRepository` persists full configuration replacements coordinated by the Options service. Persistent diagnostics and timing estimates have storage-layer owners. The architecture check rejects direct durable mutations outside that layer, with explicit exceptions for composition wiring, schema migration and isolated E2E seeding.
+
+Before hydration, the schema boundary converts supported released documents to epoch 3. Epoch-2 conversion preserves dispatch, settlement, cancellation and Undo fields, embeds destination repair details and removes unsafe optional cover URLs. A validated journal records canonical writes, obsolete-key removals and phase progress; the epoch marker is written last. Interrupted phases replay on startup. Future epochs and invalid journals preserve their stored data and reject hydration.
+
+Long series parsing uses a live offscreen reservation. Admission releases the lifecycle gate before pagination finishes; idle-close checks include reservations, and completion, failure or document teardown releases them.
+
 ## Site integrations
 
-Each provider `definition.json` declares identity, contributors, version, shipped/default state, match patterns, required/optional origins, page-probe mode, capabilities, rate/timeout policies, endpoint policies, dynamic origins, DNR session referer rules, fixtures, and custom settings. The JSON is validated against `definition.schema.json` and emitted into generated catalogs and context-specific registries.
+Each provider `definition.json` declares identity, contributors, version, shipped/default state, match patterns, required/optional origins, page-probe mode, capabilities, rate/timeout policies, endpoint policies, DNR session referer rules, fixtures, and custom settings. The JSON is validated against `definition.schema.json` and emitted into generated catalogs and context-specific registries.
 
-The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion. MangaDex is disabled by default. Enabling it from Options requests optional `https://*/*` access for dynamic MangaDex@Home nodes. Runtime URL policy remains narrow even after Chrome grants that broad permission.
+The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion. MangaDex is disabled by default and declares optional `https://*/*` access for its site/API and MangaDex@Home nodes. Disabled fixed-origin providers receive generated exact optional grants. Cleanup uses the loaded manifest and retains required permissions and optional grants still used by enabled providers. Runtime endpoint policy remains independently enforced.
 
-Provider request paths use the shared hardened layer when they delegate to it; provider-owned request roles retain their own explicit credential, origin, and retry policy. The shared layer provides HTTPS and origin policy, pre-follow redirect rejection, defensive final-URL validation, private/loopback rejection unless explicitly approved, response limits, abort signals, and raw response header-MIME/size validation. Image transformation paths additionally validate encoded signatures and dimensions before decoding; all transformation paths reject AVIF until bounded support exists. Filename sanitization and structured retry/error classification apply at their respective boundaries.
+Provider request paths use the shared HTTP client with declared credential, origin and retry policies. It checks HTTPS/public hosts, rejects redirects before follow, validates response URL/MIME/size and cancels bodies rejected before handoff. Image adapters require timed transport and a live-resource ledger. MangaMillion accounts for encrypted/decrypted overlap and converts AVIF through bounded metadata, renderer and output admission; bitmap and buffer ownership is released on completion or failure. Filename sanitization and structured error classification apply at their respective boundaries.
 
 ## Error and diagnostic boundary
 
 The UI shows localized plain-language categories. It never displays raw browser errors, stack traces, signed URLs, headers, or provider bodies. Technical detail goes to redacted extension console diagnostics. `runtime.lastError.message` is not parsed because Chrome does not define it as a stable machine-readable API.
+
+Diagnostic redaction runs before console output, buffered logging and custom live-test error formatting. It handles nested errors, URL credentials/query/fragment data, sensitive fields, headers and local paths. Automatic live-site Playwright tracing is disabled because its network snapshots bypass application redaction. CI exports failure artifacts from `test-results` and `.output`; effective retention and access remain repository/organization settings.
+
+Bounded serialized diagnostics are parsed before field-aware redaction. Ambiguous object dumps and recognized opaque credential/header text are omitted. Extension console collectors inspect structured arguments; provider and unattributed console/error payloads are omitted, retaining event and transport metadata. These controls do not establish that arbitrary free text is non-sensitive.
 
 ## References
 

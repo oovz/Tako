@@ -41,16 +41,13 @@
 | [Comic Nettai](https://www.comicnettai.com)         |  ✅  |
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |  ✅  |
 
-- 默认关闭；在选项页面中启用时需要可选 HTTPS 权限。
+- MangaDex 默认关闭，在选项页面中启用时需要可选 HTTPS 权限。
 
 想要支持新网站？欢迎[提交功能请求](https://github.com/oovz/Tako/issues/new?template=feature_request.md)或贡献集成 — 参见[站点集成指南](https://github.com/oovz/Tako/wiki/Site-Integration-Guide)。
 
 ## 权利与网站访问
 
-Tako 仅用于在您自己浏览器会话中已可正常访问的受支持网站页面。
-
-- 它**不是**用于绕过付费墙、登录限制、DRM 或版权控制的工具。
-- 它**不会**授予您原本没有的访问权限。
+Tako 仅下载您在浏览器会话中有权访问的受支持网站漫画页面，不会绕过付费墙、登录限制、DRM 或版权控制。
 
 ## 开始使用
 
@@ -74,7 +71,7 @@ Tako 仅用于在您自己浏览器会话中已可正常访问的受支持网站
 
 ### 本地构建
 
-Tako 当前针对 Chrome 150 或更高版本。本地构建需要 Node.js 20.19+（或 Node.js 22.12+）以及 pnpm 10.32.1。
+Tako 当前针对 Chrome 150 或更高版本。本地构建需要 Node.js 22.13+ 或 Node.js 24+ 以及 pnpm 10.32.1。
 
 ```powershell
 pnpm install

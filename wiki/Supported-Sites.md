@@ -1,6 +1,6 @@
 # Supported Sites
 
-Tako supports manga, manhua, and comic websites through dedicated, purpose-built integrations.
+Tako supports manga, manhua, and comic websites through dedicated integrations.
 
 ## Supported Websites
 
@@ -13,13 +13,13 @@ Tako supports manga, manhua, and comic websites through dedicated, purpose-built
 | [Comic Nettai](https://www.comicnettai.com)         |   ✅   |
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |   ✅   |
 
-- Disabled by default; requests optional HTTPS permission when enabled in Options.
+- MangaDex is disabled by default and requests optional HTTPS access when you enable it in Options.
 
 ## Requesting New Sites
 
-Want support for a new website?
+To request support for another website:
 
 - [Open a feature request on GitHub](https://github.com/oovz/Tako/issues/new?template=feature_request.md)
-- Or contribute an integration yourself — see the [Site Integration Guide](Site-Integration-Guide).
+- Contribute an integration using the [Site Integration Guide](Site-Integration-Guide).
 
 [Install Tako from the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)

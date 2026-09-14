@@ -2,9 +2,9 @@
 
 Tako requests only the permissions needed for its download, queue, and library organization features.
 
-## Optional `https://*/*` host access
+## Optional provider host access
 
-Used specifically for MangaDex. Because MangaDex serves manga pages from dynamic community nodes (MangaDex@Home), host access is requested on demand when you enable MangaDex in Options. If declined or disabled, host access is revoked.
+Disabled integrations request their declared site, API, and CDN origins when you enable them. MangaDex also declares optional `https://*/*` access because it serves manga pages from dynamic community nodes (MangaDex@Home). If you decline access or disable an integration, Tako revokes optional host access that is no longer needed.
 
 ## Fixed host access
 
@@ -16,7 +16,7 @@ Used to save your settings, active download queue, history, and site preferences
 
 ## `unlimitedStorage`
 
-Removes the default local storage quota so that large download queues, extensive history records, and custom templates save reliably without storage errors.
+Removes Chrome's default quota for extension local storage, allowing larger download queues and history records.
 
 ## `sidePanel`
 
@@ -48,11 +48,11 @@ Allows Tako to show optional desktop notifications when batch downloads complete
 
 ## `alarms`
 
-Provides periodic background wake-ups to manage queue processing and scheduled tasks reliably across browser sessions.
+Wakes the extension periodically so it can continue queue processing and scheduled work across browser sessions.
 
 ## `declarativeNetRequestWithHostAccess`
 
-Sets required headers (such as Referer headers) for image servers that require them, strictly scoped to requests made by the extension on supported domains.
+Sets required request headers, such as `Referer`, for image servers that need them. Rules are scoped to extension requests on supported domains.
 
 ## File System Access
 

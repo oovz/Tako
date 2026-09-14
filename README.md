@@ -4,7 +4,7 @@
 
 # Tako Manga Downloader
 
-**Batch-download manga chapters from Chrome's Side Panel. Queue, retry, and export CBZ or ZIP files — without leaving your reading tab.**
+**Batch-download manga chapters from Chrome's Side Panel. Queue, retry, and export CBZ or ZIP files without leaving your reading tab.**
 
 [![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/tbyBjqi7Zu733AAKA5n4.png)](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)
 
@@ -21,14 +21,14 @@
 
 ## Features
 
-- **Side Panel Command Center** — Select chapters, monitor queue status, and track download progress right in Chrome's Side Panel next to your reading tab. Complete history and settings are easily managed from the Options page.
-- **Reliable Queue & Auto-Retry** — Queue dozens of chapters with confidence. Track per-image progress and automatically or manually retry failed downloads while maintaining browser stability.
-- **Clean, Flexible Exports** — Save chapters as CBZ or ZIP archives, or as loose image folders. Save directly through Chrome Downloads or to a custom local library folder using the File System Access API.
-- **ComicInfo.xml Metadata** — Automatically embeds series metadata, chapter numbers, and titles into CBZ archives, ensuring out-of-the-box compatibility with Komga, Kavita, and modern manga readers.
-- **Customizable Path & Filename Templates** — Organize your manga collection automatically using customizable template macros such as `<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, and `<VOLUME_NUMBER>`.
-- **Optimized Site Integrations** — Purpose-built adapters handle page structures, image delivery, and metadata accurately for each supported platform.
-- **Unified Settings** — Configure global defaults and per-site overrides for download formats, path templates, concurrency, and rate limits.
-- **Privacy-First** — Zero developer analytics, tracking, or telemetry. Settings, queue state, and download history stay strictly inside your local browser.
+- **Side Panel controls** — Select chapters, watch queue status, and track download progress in Chrome's Side Panel. Use the Options page for full history and settings.
+- **Queue and retries** — Queue chapters, track image progress, and retry failed downloads automatically or from the queue.
+- **Export options** — Save chapters as CBZ, ZIP, or loose images. Use Chrome Downloads or choose a local library folder through the File System Access API.
+- **ComicInfo.xml metadata** — CBZ exports can include series metadata, chapter numbers, and titles for Komga, Kavita, and other manga readers.
+- **Path and filename templates** — Organize downloads with macros such as `<SERIES_TITLE>`, `<CHAPTER_NUMBER>`, and `<VOLUME_NUMBER>`.
+- **Site integrations** — Each supported site has a dedicated adapter for its page structure, image delivery, and metadata.
+- **Unified settings** — Set global defaults and per-site overrides for formats, path templates, concurrency, and rate limits.
+- **Privacy** — Tako runs no developer analytics, tracking, or telemetry. Settings, queue state, and download history stay in your local browser.
 
 ## Supported Sites
 
@@ -41,16 +41,13 @@
 | [Comic Nettai](https://www.comicnettai.com)         |   ✅   |
 | [MangaMillion](https://mangamillion.shueisha.co.jp) |   ✅   |
 
-- Disabled by default; requests optional HTTPS permission when enabled in Options.
+- MangaDex is disabled by default and requests optional HTTPS access when you enable it in Options.
 
-Want a new site supported? [Open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md) or contribute an integration — see the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
+To request another site, [open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md) or contribute an integration using the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
 
 ## Rights & Site Access
 
-Tako is designed exclusively for manga and comic pages that are already accessible within your own browser session.
-
-- It is **not** a tool for bypassing paywalls, login restrictions, DRM, or copyright controls.
-- It **does not** grant access to content you do not already have permission to view.
+Tako downloads manga and comic pages that your browser session is authorized to access, without bypassing paywalls, login restrictions, DRM, or copyright controls.
 
 ## Get Started
 
@@ -74,7 +71,7 @@ For detailed steps, check the [Quick Start Guide](https://github.com/oovz/Tako/w
 
 ### Local Build
 
-Tako targets Chrome 150 or newer. Building locally requires Node.js 20.19+ (or Node.js 22.12+) and pnpm 10.32.1.
+Tako targets Chrome 150 or newer. Building locally requires Node.js 22.13+ or Node.js 24+ and pnpm 10.32.1.
 
 ```powershell
 pnpm install
@@ -121,7 +118,7 @@ For the full privacy policy, see [`PRIVACY.md`](PRIVACY.md).
 
 ## Contributing
 
-Contributions are welcome! Please read the [`Contributing Guidelines`](CONTRIBUTING.md) before submitting a pull request.
+To contribute, read the [`Contributing Guidelines`](CONTRIBUTING.md) before submitting a pull request.
 
 ## License
 

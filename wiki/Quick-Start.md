@@ -38,13 +38,13 @@ Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpack
 3. Tako detects the series and lists available chapters.
 4. Select the chapters you want.
 5. Click **Download**.
-6. Watch progress in the queue. Fresh installs save completed chapters as CBZ files through Chrome Downloads. ZIP and image-folder output are available in Options.
+6. Watch progress in the queue. New installs save completed chapters as CBZ files through Chrome Downloads. Choose ZIP or image-folder output in Options.
 
 ## Change output format or save location
 
 1. Right-click the Tako icon and choose **Options**, or use **Settings** in the Side Panel header.
 2. Under **Downloads**, pick CBZ, ZIP, or loose images.
-3. Optionally set a custom download folder using File System Access. If its permission later needs attention, Tako stops that task and offers repair actions instead of silently switching folders.
+3. Optionally set a custom download folder using File System Access. If the folder permission later needs attention, Tako stops that task and offers repair actions. The selected folder stays unchanged until you repair or replace its permission.
 4. Adjust path and filename templates — see [Template Macros](Template-Macros) for the full reference.
 
 ## Queue and retry
@@ -53,3 +53,13 @@ Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpack
 - Failed images retry automatically based on your rate-limit and retry settings.
 - You can retry failed chapters or restart a task from the queue.
 - The Side Panel shows recent activity; the Options page shows full history.
+
+### Interrupted work and series recovery
+
+After a service-worker restart, Tako restores queue and history state and reconciles work that survived the restart. If closing or restarting the browser interrupts processing, use **Retry failed** for a partially successful task or **Restart task** to download it again.
+
+When series information fails to load, the Side Panel makes one recovery attempt. If the error remains, use **Retry series** to try again.
+
+### Cancel a task
+
+Canceling a Tako task stops its remaining processing and future chapter dispatch. Downloads already accepted by Chrome continue; manage those transfers in **Chrome Downloads**. Files already saved remain on disk.

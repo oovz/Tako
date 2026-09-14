@@ -1,6 +1,6 @@
 # Tako Wiki
 
-> **Batch-download manga chapters from Chrome's Side Panel. Queue, retry, and export clean CBZ or ZIP files — without leaving your reading tab.**
+> **Batch-download manga chapters from Chrome's Side Panel. Queue, retry, and export CBZ or ZIP files without leaving your reading tab.**
 
 [![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/tbyBjqi7Zu733AAKA5n4.png)](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
@@ -20,20 +20,20 @@
 
 ## What is Tako?
 
-Tako brings a complete manga download workflow directly into Chrome. Browse a series, select chapters, queue downloads, and export ready-to-read archives from the Side Panel next to your active reading tab. For full history, configuration, and destination recovery, the dedicated Options page is always accessible.
+Tako adds manga downloads to Chrome. Browse a series, select chapters, queue them, and export archives from the Side Panel next to your reading tab. The Options page contains full history, configuration, and destination recovery.
 
-No save-dialog spam. No one-by-one image downloads. No external downloaders needed.
+The download workflow stays in the Side Panel. You do not need to save images one by one or run another downloader.
 
 ## Why Tako
 
-- **Browser-native workflow** — Select chapters and track downloads directly from Chrome's Side Panel, with full history and configuration in Options.
-- **Batch queue with auto-retry** — Queue dozens of chapters and let Tako handle retries automatically while keeping your browser responsive.
-- **Clean exports** — Export as CBZ, ZIP, or loose image folders with custom path and filename templates.
-- **ComicInfo.xml metadata** — Automatically embeds metadata in CBZ archives for comic library managers like Komga and Kavita, plus general CBZ reader compatibility.
-- **Direct folder saving** — Save directly to a chosen local library folder via the File System Access API.
-- **Curated site support** — Optimized integrations for MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion.
-- **Privacy-first** — Zero analytics, telemetry, or user tracking. All data remains locally in your browser.
-- **Open source** — MIT licensed, full source code on GitHub.
+- **Browser-native workflow** — Select chapters and track downloads in Chrome's Side Panel. Options contains full history and configuration.
+- **Batch queue with auto-retry** — Queue chapters and let Tako retry failed images while your browser remains available for reading.
+- **Export options** — Export CBZ, ZIP, or loose image folders with custom path and filename templates.
+- **ComicInfo.xml metadata** — CBZ archives can include metadata for Komga, Kavita, and other CBZ readers.
+- **Direct folder saving** — Save to a local library folder through the File System Access API.
+- **Site support** — Use the MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion integrations.
+- **Privacy** — Settings, queue state, and history stay local. Downloads connect directly to providers. When MangaDex is enabled, required MangaDex@Home reports go directly to MangaDex. See the [privacy policy](https://github.com/oovz/Tako/blob/main/PRIVACY.md).
+- **Open source** — Tako is MIT licensed, with the full source code on GitHub.
 
 ## Install
 

@@ -1,10 +1,10 @@
 # MangaMillion
 
-MangaMillion (`https://mangamillion.shueisha.co.jp/`) is an official manga translation platform by Shueisha.
+MangaMillion (`https://mangamillion.shueisha.co.jp/`) is Shueisha's official manga translation platform.
 
 ## Approach
 
-MangaMillion uses an official Protocol Buffer API (`https://api.mangamillion.shueisha.co.jp/api/*`) requiring a client device access token obtained via anonymous registration (`/api/register`).
+MangaMillion uses an official Protocol Buffer API (`https://api.mangamillion.shueisha.co.jp/api/*`). The API issues a client device access token through anonymous registration (`/api/register`).
 
 - **Background resolver**: Resolves series metadata from `/api/title_detail` and chapter catalog from `/api/chapter_list`.
 - **Offscreen resolver**: Resolves chapter image URLs and decryption parameters from `/api/viewer`.
@@ -19,7 +19,7 @@ MangaMillion uses an official Protocol Buffer API (`https://api.mangamillion.shu
 
 - Free available chapters (`groupType: 0`, `translatedChapterId > 0`).
 - Unavailable/locked chapters (`groupType: 1` or `groupType: 3` for untranslated languages, or `translatedChapterId === 0`).
-- Multi-language titles (English `en`, Japanese `ja`, etc.).
+- Multi-language titles, including English (`en`) and Japanese (`ja`).
 - Image decryption with AES-256-CBC and AVIF/WebP image format detection.
 
 ## Live smoke

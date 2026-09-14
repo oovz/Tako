@@ -1,6 +1,6 @@
 # Comic Nettai
 
-Comic Nettai uses viewer-session HTML and API data together with PUBLUS configuration and image reconstruction.
+Comic Nettai combines viewer-session HTML, API data, PUBLUS configuration, and image reconstruction.
 
 ## Runtime contract
 
@@ -12,4 +12,4 @@ Comic Nettai uses viewer-session HTML and API data together with PUBLUS configur
 
 Endpoint IDs are `comicnettai-viewer-page`, `comicnettai-viewer-api`, `comicnettai-cdn-config`, and `comicnettai-cdn-image`. Production network calls must use the shared endpoint client. The external PUBLUS payload codec lives in `contracts/publus.ts`.
 
-The checked contract fixture is `fixtures/contract.json`. Provider tests cover viewer/config drift, allocation and grid limits, metadata-bearing transport URLs, and reconstructed image output.
+The contract fixture is `fixtures/contract.json`. Provider tests cover viewer/config drift, allocation and grid limits, metadata-bearing transport URLs, and reconstructed image output.

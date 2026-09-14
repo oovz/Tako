@@ -1,22 +1,22 @@
 # Privacy Policy
 
-Last updated: July 20, 2026
+Last updated: September 14, 2026
 
-Tako Manga Downloader is a browser extension that helps users save chapters from supported manga sites for offline reading workflows inside Chrome's Side Panel.
+Tako Manga Downloader is a browser extension for saving chapters from supported manga sites for offline reading. Download controls are available in Chrome's Side Panel.
 
 ## What Tako accesses
 
-To perform user-requested actions, Tako may access:
+While you use the extension, Tako may access:
 
 - Supported-site page URLs and page metadata needed to identify a series or chapter
 - Chapter metadata, cover URLs, and image URLs required to build a download
 - Browser download APIs and local extension storage used for queue state, settings, and history
 - File System Access handles only when the user explicitly chooses a custom download folder
-- Standard same-origin browser credentials when the browser sends requests to supported sites
+- Browser-managed credentials for provider and image requests, subject to Chrome's cookie rules
 
 ## What Tako stores
 
-Tako stores data locally in the browser so the extension can work:
+The extension stores the following data locally:
 
 - Extension settings
 - Queue state and recent task history
@@ -25,11 +25,13 @@ Tako stores data locally in the browser so the extension can work:
 
 ## What Tako sends over the network
 
-Tako makes network requests directly to the supported sites and related infrastructure needed to fulfill the user's requested download workflow. Those requests are not routed through a Tako-operated proxy or analytics service.
+Tako sends network requests directly to supported sites and their image services to show series information and download chapters.
+
+Cover previews use Chrome's image loading. These requests can include cookies for the image host and follow redirects under the browser's rules. Download requests use each integration's configured credential and redirect policy.
 
 The extension does not collect browsing history, reading activity, or download contents for a developer-run analytics backend.
 
-When the disabled-by-default MangaDex integration is explicitly enabled, downloads from MangaDex@Home nodes are reported directly to MangaDex as required by that API. A report may include the full image URL, success status, transferred byte count, transfer duration, and cache status. A reporting failure does not change the requested download result.
+When you enable the disabled-by-default MangaDex integration, downloads from MangaDex@Home nodes are reported directly to MangaDex as required by that API. A report may include the full image URL, success status, transferred byte count, transfer duration, and cache status. A reporting failure does not change the requested download result.
 
 ## What Tako does not do
 
@@ -42,7 +44,7 @@ Tako does not:
 
 ## User controls
 
-Users can:
+You can:
 
 - Remove the extension at any time
 - Clear local history stored by the extension

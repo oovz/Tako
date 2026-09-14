@@ -1,8 +1,8 @@
 # Contributing a Site Integration
 
-This guide covers adding or maintaining a manga, comic, manhwa, or manhua integration for Tako's WXT Manifest V3 architecture.
+This guide explains how to add or maintain a manga, comic, manhwa, or manhua integration in Tako's WXT Manifest V3 extension.
 
-> **Important (Chrome Web Store Remote-Code Policy):** Runtime-loaded integration scripts, remote code execution, dynamic plugins, or user-supplied code evaluation (`eval()`) are strictly prohibited under Chrome Web Store Manifest V3 policies. All site integrations must be written in TypeScript, compiled statically into the extension bundle, and verified through repository build and test gates.
+> **Important (Chrome Web Store Remote-Code Policy):** Chrome Web Store Manifest V3 policies prohibit runtime-loaded integration scripts, remote code execution, dynamic plugins, and user-supplied code evaluation (`eval()`). Write integrations in TypeScript, compile them into the extension bundle, and verify them with the repository's build and test checks.
 
 ## What an integration owns
 
@@ -18,7 +18,7 @@ Use the term **site integration** and the field `siteIntegrationId` consistently
 
 ## Fast track: Minimum Viable Integration (MVI)
 
-To add a new site integration, start with the lightest sufficient implementation: URL parsing (or simple API/HTML fetch) in the background and chapter/image download in offscreen.
+Start with the smallest working implementation: parse URLs or fetch simple API/HTML data in the background, then download chapters and images in offscreen.
 
 ### 1. Scaffold the integration
 
@@ -28,7 +28,7 @@ Run the scaffolding tool:
 pnpm new:site-integration <id> --name "Site Name"
 ```
 
-This creates `src/site-integrations/<id>/` with safe defaults:
+This creates `src/site-integrations/<id>/` with defaults that keep the integration out of shipped builds:
 
 - `definition.json` (`shipped: false`)
 - `offscreen-runtime.ts` (typed adapter stub)
@@ -36,7 +36,7 @@ This creates `src/site-integrations/<id>/` with safe defaults:
 - `fixtures/contract.json` (deterministic fixture seed)
 - `README.md` (Approach, Endpoints, States covered, Live smoke)
 
-Because `shipped: false` is set by default, the scaffold passes all generator checks immediately without injecting unfinished stubs into the build bundle.
+The default `shipped: false` value lets the scaffold pass generator checks without adding unfinished stubs to the build bundle.
 
 ### 2. Configure `definition.json`
 
@@ -82,9 +82,18 @@ Update URL patterns, required origins, endpoint policies, and rate limits:
       "redirect": "error",
       "responseType": "html",
       "maxResponseBytes": 10000000
+    },
+    {
+      "id": "mysite-image",
+      "purpose": "My Site chapter images",
+      "origins": ["https://mysite.example.com/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
     }
   ],
-  "dynamicOrigins": [],
   "sessionRefererRules": [],
   "customSettings": [],
   "fixtures": {
@@ -96,7 +105,7 @@ Update URL patterns, required origins, endpoint policies, and rate limits:
 
 ### 3. Implement Background Series Resolution
 
-Implement `resolveSeriesData` in `background-runtime.ts`. Use `integrationHttpClient` for network requests (raw `fetch()` is prohibited):
+Implement `resolveSeriesData` in `background-runtime.ts`. Use `integrationHttpClient` for network requests; raw `fetch()` is not allowed in this path:
 
 ```typescript
 import type {
@@ -139,7 +148,6 @@ const background: ServiceWorkerIntegration = {
 }
 
 export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  id: "mysite",
   background,
 }
 ```
@@ -154,7 +162,7 @@ import type {
   OffscreenSiteAdapter,
 } from "@/src/types/site-integrations"
 import { ChapterImagePlanSchema } from "../chapter-plan"
-import { integrationHttpClient } from "../http-client"
+import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
 
 const offscreen: OffscreenIntegration = {
   name: "My Site Offscreen",
@@ -165,35 +173,32 @@ const offscreen: OffscreenIntegration = {
       return ChapterImagePlanSchema.parse({ imageUrls: urls })
     },
     async downloadImage(imageUrl, opts) {
-      // Fetch image bytes via the hardened integration HTTP client
-      const response = await integrationHttpClient.request({
+      const image = await fetchImageWithStallDetection(imageUrl, {
         integrationId: "mysite",
-        endpointId: "mysite-series-page",
-        url: imageUrl,
-        scope: "image",
+        endpointId: "mysite-image",
+        signal: opts.signal,
         rateLimitService: opts.runtime.rateLimitService,
-        init: { credentials: "omit", signal: opts.signal },
-        skipRateLimit: opts.skipRateLimit,
+        rateLimitPolicy: opts.runtime.rateLimitSettings.image,
+        liveResourceLedger: opts.liveResourceLedger,
+        onBytesReceived: opts.onBytesReceived,
+        skipRateLimit: true, // The chapter image batch owns scheduling.
       })
-      const data = await response.arrayBuffer()
       return {
-        data,
+        ...image,
         filename: "001.jpg",
-        mimeType: response.headers.get("content-type") ?? "image/jpeg",
       }
     },
   },
 }
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  id: "mysite",
   offscreen,
 }
 ```
 
 ### 5. Document in `README.md`
 
-Fill out the per-site documentation in `src/site-integrations/<id>/README.md`:
+Document the integration in `src/site-integrations/<id>/README.md`:
 
 - **Approach:** How the site is handled (API vs DOM parsing, session requirements).
 - **Endpoints:** All endpoint IDs and their purpose.
@@ -204,7 +209,7 @@ Fill out the per-site documentation in `src/site-integrations/<id>/README.md`:
 
 1. Run initial verification while developing:
    `pnpm check:site-integrations && pnpm type-check && pnpm test:unit`.
-2. When your resolvers and fixtures are complete, set `"shipped": true` in `src/site-integrations/<id>/definition.json`.
+2. After the resolvers and fixtures are complete, set `"shipped": true` in `src/site-integrations/<id>/definition.json`.
 3. Re-run code generation to compile your adapter into the runtime bundle registries:
    ```powershell
    pnpm generate:site-integrations
@@ -242,13 +247,15 @@ When chapter pages are scrambled or split into tiles:
 - Set `imageTransform: { "kind": "integrated-descramble", "estimatedCostMs": 3000 }`.
 - Implement canvas descrambling in offscreen runtime.
 - Add deterministic pixel-tested fixtures covering tile reconstruction.
+- Image adapters use a live-resource ledger and pass each lease with the image bytes. Transformations reserve all required buffers and surfaces before allocation and release them when processing completes, fails, or is canceled.
+- MangaMillion AVIF uses bounded metadata preflight, the renderer budget, and JPEG conversion. Its encoded transport also supports encrypted octet-stream payloads; other image requests keep their declared MIME contract.
 
-### 4. Dynamic origins (provider-issued hosts)
+### 4. Provider-issued origins
 
 When image CDNs or storage nodes are issued dynamically (e.g. MangaDex At-Home nodes):
 
-- Declare `dynamicOrigins` with target endpoint ID and `validator: "public-https"`.
-- Declare target origins as `optionalOrigins`.
+- Declare provider-issued CDN endpoints with `originKind: "provider-issued"`; validate each URL at the provider resolver that discovered it with the endpoint policy and public-HTTPS rules.
+- Declare fixed endpoint origins in `requiredOrigins` and provider-selected patterns in `optionalOrigins`. Disabled shipped providers have their required origins emitted as optional manifest grants automatically.
 
 ### 5. Custom settings and i18n localization
 
@@ -262,11 +269,11 @@ When an integration exposes user-configurable settings in Options:
 
 ## Shared request security
 
-Provider request paths use the shared hardened layer (`integrationHttpClient`). The shared layer enforces:
+Provider request paths use the shared HTTP client (`integrationHttpClient`). It enforces:
 
 - HTTPS by default;
 - integration-specific origin allowlists;
-- redirect rejection before follow (current limit: zero), plus defensive final-URL validation;
+- redirect rejection before following, plus final-URL validation;
 - private, link-local, and loopback rejection;
 - credential modes declared per endpoint (`omit` or `include`);
 - response-size limits and AbortSignal cancellation;
