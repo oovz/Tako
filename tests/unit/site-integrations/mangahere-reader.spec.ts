@@ -6,6 +6,7 @@ import {
   parseMangaHerePackedImages,
 } from "@/src/site-integrations/mangahere/reader"
 import { resolveMangaHereSeries } from "@/src/site-integrations/mangahere/series"
+import { buildOptionalComicInfoXml } from "@/entrypoints/offscreen/chapter-processing-helpers"
 
 const documentFor = (html: string) => {
   const document = new Window().document
@@ -49,8 +50,28 @@ describe("MangaHere reader contracts", () => {
         author: "TOGASHI Yoshihiro",
         language: "en",
       })
+      expect(result.seriesMetadata?.description).not.toContain("...more")
+      expect(
+        result.seriesMetadata?.description?.match(/In Hunter X Hunter/g)
+      ).toHaveLength(1)
       if (!Array.isArray(result.chapterList))
         throw new Error("Expected a chapter array")
+      const xml = buildOptionalComicInfoXml({
+        includeComicInfo: true,
+        chapter: result.chapterList[0],
+        seriesTitle: "Hunter X Hunter",
+        seriesMetadata: result.seriesMetadata,
+        pageCount: 33,
+        comicInfoVersion: "2.0",
+        hasCoverImage: false,
+      })
+      expect(xml).not.toBeNull()
+      const window = new Window()
+      const comicInfo = new window.DOMParser().parseFromString(xml!, "text/xml")
+      const summary = comicInfo.querySelector("Summary")?.textContent
+      expect(summary?.match(/In Hunter X Hunter/g)).toHaveLength(1)
+      expect(summary).not.toContain("...more")
+      expect(summary).toMatch(/perceives and react towards his situation\.$/)
       expect(result.chapterList).toHaveLength(425)
       expect(result.chapterList[0]).toMatchObject({
         id: "hunter_x_hunter/v30/c420",

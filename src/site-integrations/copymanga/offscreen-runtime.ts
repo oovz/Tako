@@ -77,12 +77,22 @@ export const offscreenSiteAdapter: OffscreenSiteAdapter = {
           description: input.document
             .querySelector(".intro")
             ?.textContent?.trim(),
-          author: Array.from(
-            input.document.querySelectorAll('a[href^="/author/"]')
-          )
-            .map((a) => a.textContent?.trim())
-            .filter(Boolean)
-            .join(", "),
+          author: [
+            ...new Set(
+              Array.from(input.document.querySelectorAll('a[href^="/author/"]'))
+                .map((a) => a.textContent?.trim())
+                .filter(Boolean)
+            ),
+          ].join(", "),
+          genres: [
+            ...new Set(
+              Array.from(
+                input.document.querySelectorAll(".comicParticulars-tag a[href]")
+              )
+                .map((link) => link.textContent?.trim().replace(/^#\s*/, ""))
+                .filter((value): value is string => Boolean(value))
+            ),
+          ],
           language: "zh",
         }
         const selector = CopyCatalogSelectorSchema.safeParse(

@@ -6,6 +6,7 @@ import {
   parseCopyReader,
   parseCopyUrl,
   normalizeCopyImageUrl,
+  readCopyKey,
 } from "@/src/site-integrations/copymanga/api"
 import contractFixture from "@/tests/fixtures/site-integrations/copymanga/contract.json"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
@@ -17,7 +18,14 @@ describe("Copy public reader contract", () => {
     expect(() =>
       parseCopyChapterCatalog(
         {
-          build: { path_word: "dianjuren" },
+          build: {
+            path_word: "dianjuren",
+            type: [
+              { id: 1, name: "話" },
+              { id: 2, name: "卷" },
+              { id: 3, name: "番外篇" },
+            ],
+          },
           groups: { default: { name: "默認", count: 0, chapters: [] } },
         },
         new URL("https://www.copy4000.com/comic/dianjuren")
@@ -57,12 +65,93 @@ describe("Copy public reader contract", () => {
       decoded,
       new URL("https://www.copy4000.com/comic/yiquanchaoren")
     )
-    expect(first[0]).toMatchObject({
+    const volume = first.chapters.find(
+      (chapter) => chapter.id === "2c814b6a-4f03-11e9-8b1c-024352452ce0"
+    )
+    expect(volume).toMatchObject({
       id: "2c814b6a-4f03-11e9-8b1c-024352452ce0",
       title: "第01卷",
+      volumeNumber: 1,
+      volumeId: "copy:default:2",
     })
-    expect(first.map((ch) => ch.id)).toEqual(second.map((ch) => ch.id))
-    expect(new Set(first.map((ch) => ch.id)).size).toBe(first.length)
+    expect(volume?.chapterNumber).toBeUndefined()
+    expect(first.chapters.map((ch) => ch.id)).toEqual(
+      second.chapters.map((ch) => ch.id)
+    )
+    expect(new Set(first.chapters.map((ch) => ch.id)).size).toBe(490)
+    expect(first.volumes).toEqual([
+      { id: "copy:default:1", title: "默認 · 話", label: "默認 · 話" },
+      { id: "copy:default:2", title: "默認 · 卷", label: "默認 · 卷" },
+      { id: "copy:default:3", title: "默認 · 番外篇", label: "默認 · 番外篇" },
+      {
+        id: "copy:other_group:1",
+        title: "其他系列 · 話",
+        label: "其他系列 · 話",
+      },
+      {
+        id: "copy:other_group:2",
+        title: "其他系列 · 卷",
+        label: "其他系列 · 卷",
+      },
+      {
+        id: "copy:other_group:3",
+        title: "其他系列 · 番外篇",
+        label: "其他系列 · 番外篇",
+      },
+    ])
+    expect(
+      first.chapters.some((ch) => ch.volumeId === "copy:other_group:2")
+    ).toBe(false)
+    expect(
+      first.chapters.some((ch) => ch.volumeId === "copy:other_group:3")
+    ).toBe(false)
+  })
+
+  it("preserves every captured Chainsaw Man edition and its empty categories", async () => {
+    const html = readFileSync(
+      "tests/fixtures/site-integrations/copymanga/series.html",
+      "utf8"
+    )
+    const catalog = JSON.parse(
+      readFileSync(
+        "tests/fixtures/site-integrations/copymanga/catalog-dianjuren.json",
+        "utf8"
+      )
+    )
+    const result = parseCopyChapterCatalog(
+      await decodeCopyPayload(catalog.results, readCopyKey(html, "ccz")),
+      new URL("https://www.copy3000.com/comic/dianjuren")
+    )
+    expect(result.chapters).toHaveLength(320)
+    expect(new Set(result.chapters.map((chapter) => chapter.id)).size).toBe(320)
+    expect(result.volumes).toHaveLength(9)
+    expect(
+      result.volumes.map(
+        (volume) =>
+          result.chapters.filter((chapter) => chapter.volumeId === volume.id)
+            .length
+      )
+    ).toEqual([233, 11, 14, 0, 22, 0, 29, 11, 0])
+    expect(
+      result.chapters.find(
+        (chapter) => chapter.id === "dc312a94-f526-11e8-a7d3-00163e0ca5bd"
+      )
+    ).toMatchObject({
+      chapterLabel: "第01话",
+      chapterNumber: 1,
+      volumeId: "copy:default:1",
+    })
+    const sameVolume = result.chapters.filter(
+      (chapter) => chapter.volumeNumber === 1
+    )
+    expect(sameVolume).toHaveLength(3)
+    expect(new Set(sameVolume.map((chapter) => chapter.id)).size).toBe(3)
+    const appendix = result.chapters.find(
+      (chapter) => chapter.title === "01卷附录"
+    )
+    expect(appendix).toMatchObject({ volumeId: "copy:default:3" })
+    expect(appendix?.volumeNumber).toBeUndefined()
+    expect(appendix?.chapterNumber).toBeUndefined()
   })
 
   it("uses the encrypted content list and preserves its meaningful order", async () => {

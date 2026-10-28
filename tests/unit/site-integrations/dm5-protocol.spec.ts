@@ -7,6 +7,7 @@ import { offscreenSiteAdapter as mangabz } from "@/src/site-integrations/mangabz
 import dm5Fixture from "@/tests/fixtures/site-integrations/animemangahouse/contract.json"
 import mangabzFixture from "@/tests/fixtures/site-integrations/mangabz/contract.json"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { buildOptionalComicInfoXml } from "@/entrypoints/offscreen/chapter-processing-helpers"
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -22,6 +23,7 @@ const documents = [
       <a href="/m9999/">Advertisement</a>`,
     ids: ["521974", "521975"],
     title: "山海逆战",
+    author: "邱福龙",
   },
   {
     adapter: mangabz,
@@ -31,13 +33,14 @@ const documents = [
       <div id="chapterlistload"><a href="/m200/" class="detail-list-form-item">第2話 Two<span>（2P）</span></a><a href="/m100/" class="detail-list-form-item">第1話 One<span>（2P）</span></a></div>`,
     ids: ["100", "200"],
     title: "海賊王",
+    author: "尾田榮一郎",
   },
 ]
 
 describe("signed-reader series resolution", () => {
   it.each(documents)(
     "resolves $url in reading order and excludes unrelated links",
-    async ({ adapter, url, html, ids, title }) => {
+    async ({ adapter, url, html, ids, title, author }) => {
       const document = new DOMParser().parseFromString(html, "text/html")
       const resolve = adapter.offscreen.series?.resolveSeriesData
       expect(resolve).toBeTypeOf("function")
@@ -49,6 +52,7 @@ describe("signed-reader series resolution", () => {
         rateLimitService: {} as never,
       })
       expect(result.seriesMetadata?.title).toBe(title)
+      expect(result.seriesMetadata?.author).toBe(author)
       const chapters = result.chapterList
       expect(Array.isArray(chapters)).toBe(true)
       if (!Array.isArray(chapters)) throw new Error("chapter list missing")
@@ -68,7 +72,7 @@ describe("captured signed-reader catalogs", () => {
       provider: "animemangahouse",
       url: "https://www.dm5.com/manhua-shanhainizhan1/",
       title: "山海逆战",
-      author: "邱福龙",
+      author: "邱福龙, 瑛麒动漫",
       count: 1022,
       firstIds: ["521974", "521971", "521976"],
       lastId: "1419280",
@@ -100,9 +104,38 @@ describe("captured signed-reader catalogs", () => {
       expect(result.seriesMetadata).toMatchObject({
         title: site.title,
         author: site.author,
+        genres:
+          site.provider === "animemangahouse" ? ["热血", "神鬼"] : ["熱血"],
       })
+      expect(result.seriesMetadata?.description).not.toMatch(
+        /展开|折叠|展開|折疊/
+      )
       const chapters = result.chapterList
       if (!Array.isArray(chapters)) throw new Error("chapter list missing")
+      const xml = buildOptionalComicInfoXml({
+        includeComicInfo: true,
+        chapter: chapters[0],
+        seriesTitle: site.title,
+        seriesMetadata: result.seriesMetadata,
+        pageCount: 13,
+        comicInfoVersion: "2.0",
+        hasCoverImage: false,
+      })
+      expect(xml).not.toBeNull()
+      const comicInfo = new DOMParser().parseFromString(xml!, "text/xml")
+      expect(comicInfo.querySelector("Writer")?.textContent).toBe(site.author)
+      expect(comicInfo.querySelector("Genre")?.textContent).toBe(
+        site.provider === "animemangahouse" ? "热血, 神鬼" : "熱血"
+      )
+      const summary = comicInfo.querySelector("Summary")?.textContent
+      expect(summary).not.toMatch(/展开|折叠|展開|折疊/)
+      if (site.provider === "animemangahouse") {
+        expect(summary).toContain("集团。。少年勾徹")
+        expect(summary).toMatch(/改变了少年和整个世界的命运…$/)
+      } else {
+        expect(summary).toContain("ONEE PIECE")
+        expect(summary).toMatch(/以成為海賊王為目標的冒險旅程$/)
+      }
       expect(chapters).toHaveLength(site.count)
       expect(chapters.slice(0, 3).map((chapter) => chapter.id)).toEqual(
         site.firstIds

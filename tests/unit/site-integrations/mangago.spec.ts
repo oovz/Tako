@@ -15,6 +15,7 @@ import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resour
 import { SHONEN_JUMP_PLUS_SCRAMBLED_PNG } from "@/tests/e2e/fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
 import { parseMangagoUrl } from "@/src/site-integrations/mangago/shared"
 import { parseMangagoSeries } from "@/src/site-integrations/mangago/series-dom"
+import { buildOptionalComicInfoXml } from "@/entrypoints/offscreen/chapter-processing-helpers"
 import contract from "@/tests/fixtures/site-integrations/mangago/contract.json"
 const fixture = contract.data
 const seriesHtml = readFileSync(
@@ -48,6 +49,9 @@ describe("Mangago content contracts", () => {
     expect(result.seriesId).toBe(fixture.seriesId)
     expect(result.seriesMetadata).toMatchObject({
       title: "Hunter X Hunter",
+      author: "TOGASHI Yoshihiro",
+      year: 1998,
+      genres: ["Action", "Adventure", "Fantasy", "Shounen"],
       coverUrl:
         "https://i8.mangapicgallery.com/r/coverlink/rROHYUm8aBWtWyHvm2ureZ5RyXTk8VioExvQIzsBW4Yz71sgDwkjUa7pSGyap1FXkX5kDg6vUgCchdAWYT7sQfuWiC-W266WD8R.jpg?4",
     })
@@ -56,6 +60,28 @@ describe("Mangago content contracts", () => {
         ? result.chapterList.chapters
         : []
     expect(chapters).toHaveLength(423)
+    const xml = buildOptionalComicInfoXml({
+      includeComicInfo: true,
+      chapter: chapters[0],
+      seriesTitle: "Hunter X Hunter",
+      seriesMetadata: result.seriesMetadata,
+      pageCount: 19,
+      comicInfoVersion: "2.0",
+      hasCoverImage: false,
+    })
+    expect(xml).not.toBeNull()
+    const window = new Window()
+    const comicInfo = new window.DOMParser().parseFromString(xml!, "text/xml")
+    expect(comicInfo.querySelector("Writer")?.textContent).toBe(
+      "TOGASHI Yoshihiro"
+    )
+    expect(comicInfo.querySelector("Genre")?.textContent).toBe(
+      "Action, Adventure, Fantasy, Shounen"
+    )
+    expect(comicInfo.querySelector("Year")?.textContent).toBe("1998")
+    expect(comicInfo.querySelector("Summary")?.textContent).toMatch(
+      /right to call themselves Hunters\.$/
+    )
     expect(chapters[0]).toMatchObject({
       id: "an:hunter-x-hunter-chapter-0.html",
     })
@@ -140,6 +166,23 @@ describe("Mangago content contracts", () => {
     const result = parseMangagoSeries(
       documentFor(secondarySeriesHtml),
       fixture.secondary.seriesUrl
+    )
+    expect(result.seriesMetadata).toMatchObject({
+      author: "Nenjuu Mugichatarou, Iiman, Ijou",
+      genres: [
+        "Action",
+        "Fantasy",
+        "School Life",
+        "Shoujo Ai",
+        "Slice Of Life",
+      ],
+      year: 2000,
+    })
+    expect(result.seriesMetadata?.description).toContain(
+      "Royal Capital’s Adventurer’s School"
+    )
+    expect(result.seriesMetadata?.description).toMatch(
+      /stronger than the instructors\.$/
     )
     const chapters =
       result.chapterList && !Array.isArray(result.chapterList)

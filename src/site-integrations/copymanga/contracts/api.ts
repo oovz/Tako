@@ -25,14 +25,24 @@ const groupSchema = z.object({
       z.object({
         id: CopyChapterIdSchema,
         name: z.string().trim().min(1).max(10_000),
-        type: z.number().int(),
+        type: z.union([z.literal(1), z.literal(2), z.literal(3)]),
       })
     )
     .max(20_000),
 })
 
 export const CopyCatalogSchema = z.object({
-  build: z.object({ path_word: z.string() }),
+  build: z.object({
+    path_word: z.string(),
+    type: z
+      .array(
+        z.object({
+          id: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+          name: z.string().trim().min(1).max(1000),
+        })
+      )
+      .length(3),
+  }),
   groups: z.record(z.string(), groupSchema),
 })
 export const CopyReaderSchema = z

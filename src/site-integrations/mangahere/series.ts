@@ -75,7 +75,10 @@ export function resolveMangaHereSeries(
         ) || undefined,
       description:
         sanitizeLabel(
-          document.querySelector(".detail-text-bar")?.textContent ?? ""
+          document.querySelector(".detail-text-bar .fullcontent")
+            ?.textContent ??
+            document.querySelector(".detail-text-bar p")?.textContent ??
+            ""
         ) || undefined,
       coverUrl: cover ? mangaHereImage(cover) : undefined,
     },

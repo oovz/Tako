@@ -7,5 +7,4 @@ export const MyComicChapterGroupSchema = z
       title: z.string().trim().min(1).max(1000),
     })
   )
-  .min(1)
   .max(10000)

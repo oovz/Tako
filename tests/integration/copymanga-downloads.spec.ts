@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
 import { Window } from "happy-dom"
 import { RateLimitService } from "@/src/runtime/rate-limit"
 import { offscreenSiteAdapter } from "@/src/site-integrations/copymanga/offscreen-runtime"
@@ -48,6 +49,38 @@ afterEach(async () => {
 })
 
 describe("Copy adapter workflow", () => {
+  it("extracts captured page genres and preserves all edition categories", async () => {
+    const input = setup("www.copy3000.com")
+    input.seriesUrl = "https://www.copy3000.com/comic/dianjuren"
+    input.html = readFileSync(
+      "tests/fixtures/site-integrations/copymanga/series.html",
+      "utf8"
+    )
+    input.document.documentElement.innerHTML = input.html
+    const catalog = JSON.parse(
+      readFileSync(
+        "tests/fixtures/site-integrations/copymanga/catalog-dianjuren.json",
+        "utf8"
+      )
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => response(url, catalog))
+    )
+    const state =
+      await offscreenSiteAdapter.offscreen.series!.resolveSeriesData(input)
+    expect(state.seriesMetadata).toMatchObject({
+      title: "電鋸人",
+      author: "藤本タツキ",
+      genres: ["格鬥", "奇幻", "职场"],
+    })
+    expect(state.seriesMetadata?.description).toContain("炎拳作者")
+    expect(Array.isArray(state.chapterList)).toBe(false)
+    if (!state.chapterList || Array.isArray(state.chapterList))
+      throw new Error("Expected grouped catalog")
+    expect(state.chapterList.chapters).toHaveLength(320)
+    expect(state.chapterList.volumes).toHaveLength(9)
+  })
   it.each([null, "9\r\nx-extra: 1"])(
     "rejects missing or invalid catalog selectors before requesting data (%s)",
     async (selector) => {

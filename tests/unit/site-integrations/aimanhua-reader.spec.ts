@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { Window } from "happy-dom"
 import { decodeAimanhuaImages } from "@/src/site-integrations/lovemanga/reader"
 import { resolveAimanhuaSeries } from "@/src/site-integrations/lovemanga/series"
+import { buildOptionalComicInfoXml } from "@/entrypoints/offscreen/chapter-processing-helpers"
 const documentFor = (html: string) => {
   const document = new Window().document
   document.documentElement.innerHTML = html
@@ -66,18 +67,39 @@ describe("Aimanhua reader contracts", () => {
       "utf8"
     )
     const resolved = resolveAimanhuaSeries(
-      documentFor(`${html}<a href="/chapter/999/123">Advertisement</a>`),
+      documentFor(
+        `<p class="detail-main-info-author">地区：韩国漫画</p>${html}<a href="/chapter/999/123">Advertisement</a>`
+      ),
       "https://www.aimanhua.org/comic/416895"
     )
     expect(resolved.seriesId).toBe("416895")
     expect(resolved.seriesMetadata).toMatchObject({
       title: "A.I. 医生",
       author: "ZAINO",
+      genres: ["职场"],
     })
     expect(resolved.chapterList).toHaveLength(190)
     const chapters = Array.isArray(resolved.chapterList)
       ? resolved.chapterList
       : []
+    const xml = buildOptionalComicInfoXml({
+      includeComicInfo: true,
+      chapter: chapters[0],
+      seriesTitle: "A.I. 医生",
+      seriesMetadata: resolved.seriesMetadata,
+      pageCount: 73,
+      comicInfoVersion: "2.0",
+      hasCoverImage: false,
+    })
+    expect(xml).not.toBeNull()
+    const window = new Window()
+    const comicInfo = new window.DOMParser().parseFromString(xml!, "text/xml")
+    expect(comicInfo.querySelector("Writer")?.textContent).toBe("ZAINO")
+    expect(comicInfo.querySelector("Genre")?.textContent).toBe("职场")
+    expect(comicInfo.querySelector("Summary")?.textContent).toMatch(
+      /^泰和集团不计一切/
+    )
+    expect(comicInfo.querySelector("Summary")?.textContent).toMatch(/脑\.\.\.$/)
     expect(chapters[0]).toMatchObject({
       id: "133632",
       title: "第1话 未来的A.I.",

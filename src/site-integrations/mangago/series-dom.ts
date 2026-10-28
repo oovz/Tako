@@ -54,11 +54,34 @@ export function parseMangagoSeries(
   }
   if (!chapters.length)
     throw new ProviderContractError("Mangago chapter catalog is unavailable")
+  const detailCells = Array.from(document.querySelectorAll(".manga_right td"))
+  const detail = (label: string) =>
+    detailCells.find(
+      (cell) =>
+        sanitizeLabel(cell.querySelector("label")?.textContent ?? "").replace(
+          /:\s*$/,
+          ""
+        ) === label
+    )
+  const authors = Array.from(detail("Author")?.querySelectorAll("a") ?? [])
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .filter(Boolean)
+  const genres = Array.from(
+    detail("Genre(s)")?.querySelectorAll('a[href*="/genre/"]') ?? []
+  )
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .filter(Boolean)
+  const year = detail("Author")?.textContent?.match(
+    /\b(\d{4})\s+released\b/i
+  )?.[1]
   return {
     seriesId,
     seriesMetadata: {
       title,
       coverUrl,
+      author: [...new Set(authors)].join(", ") || undefined,
+      genres: genres.length ? [...new Set(genres)] : undefined,
+      year: year ? Number(year) : undefined,
       description:
         sanitizeLabel(
           document.querySelector(".manga_summary")?.textContent ?? ""

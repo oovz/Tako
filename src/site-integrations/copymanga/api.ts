@@ -6,6 +6,11 @@ import {
 } from "./contracts/api"
 import { ProviderContractError } from "../provider-contract-error"
 import type { Chapter } from "@/src/types/chapter"
+import type { VolumeState } from "@/src/types/tab-state"
+import {
+  normalizeNumericText,
+  parseChapterNumber,
+} from "@/src/shared/site-integration-utils"
 
 export function parseCopyUrl(value: string): {
   url: URL
@@ -81,7 +86,7 @@ export function readCopyKey(html: string, variable: "ccz" | "cct"): string {
 export function parseCopyChapterCatalog(
   value: unknown,
   source: URL
-): Chapter[] {
+): { chapters: Chapter[]; volumes: VolumeState[] } {
   const route = parseCopyUrl(source.href)
   const catalog = CopyCatalogSchema.parse(value)
   if (catalog.build.path_word !== route.slug)
@@ -89,38 +94,66 @@ export function parseCopyChapterCatalog(
       "Copy catalog identity does not match the requested work"
     )
   const chapters: Chapter[] = []
+  const volumes: VolumeState[] = []
   const seen = new Set<string>()
+  if (new Set(catalog.build.type.map((type) => type.id)).size !== 3)
+    throw new ProviderContractError("Copy catalog categories are unavailable")
   if (Object.keys(catalog.groups).length > 100)
     throw new ProviderContractError("Copy catalog contains too many groups")
-  const groups = Object.values(catalog.groups)
+  const groups = Object.entries(catalog.groups)
   if (
-    groups.reduce((total, group) => total + group.chapters.length, 0) > 20_000
+    groups.reduce((total, [, group]) => total + group.chapters.length, 0) >
+    20_000
   ) {
     throw new ProviderContractError(
       "Copy chapter catalog exceeds the supported size"
     )
   }
-  for (const group of groups) {
+  for (const [groupId, group] of groups) {
     if (group.count !== group.chapters.length)
       throw new ProviderContractError("Copy chapter catalog is incomplete")
-    for (const chapter of group.chapters) {
-      if (seen.has(chapter.id)) continue
-      seen.add(chapter.id)
-      chapters.push({
-        id: chapter.id,
-        title: chapter.name,
-        url: new URL(
-          `/comic/${route.slug}/chapter/${chapter.id}`,
-          source.origin
-        ).href,
-        language: "zh",
-        comicInfo: { Title: chapter.name },
-      })
+    for (const type of catalog.build.type) {
+      const label = `${group.name} · ${type.name}`
+      volumes.push({ id: `copy:${groupId}:${type.id}`, title: label, label })
+    }
+    // Keep each category contiguous while preserving its source entry order.
+    for (const type of catalog.build.type) {
+      for (const chapter of group.chapters.filter(
+        (entry) => entry.type === type.id
+      )) {
+        if (seen.has(chapter.id)) continue
+        seen.add(chapter.id)
+        const volumeMatch =
+          chapter.type === 2
+            ? normalizeNumericText(chapter.name).match(/^第\s*(\d+)\s*卷$/)
+            : null
+        const volumeNumber = volumeMatch
+          ? parseChapterNumber(volumeMatch[1])
+          : undefined
+        const chapterNumber =
+          chapter.type === 1 ? parseChapterNumber(chapter.name) : undefined
+        chapters.push({
+          id: chapter.id,
+          title: chapter.name,
+          url: new URL(
+            `/comic/${route.slug}/chapter/${chapter.id}`,
+            source.origin
+          ).href,
+          language: "zh",
+          chapterLabel:
+            chapter.type === 1 || chapter.type === 3 ? chapter.name : undefined,
+          chapterNumber,
+          volumeId: `copy:${groupId}:${chapter.type}`,
+          volumeLabel: `${group.name} · ${type.name}`,
+          volumeNumber,
+          comicInfo: { Title: chapter.name, Volume: volumeNumber },
+        })
+      }
     }
   }
   if (!chapters.length || chapters.length > 20_000)
     throw new ProviderContractError("Copy chapter catalog is unavailable")
-  return chapters
+  return { chapters, volumes }
 }
 
 export async function parseCopyReader(html: string): Promise<string[]> {

@@ -115,22 +115,37 @@ export function resolveSeriesDocument(
       dm5 ? ".banner_detail_form .cover img" : ".detail-info-cover"
     )
     ?.getAttribute("src")
+  const synopsis = document
+    .querySelector(
+      dm5 ? ".banner_detail_form .content" : ".detail-info-content"
+    )
+    ?.cloneNode(true) as Element | undefined
+  synopsis
+    ?.querySelectorAll(".fold_open, .fold_close")
+    .forEach((control) => control.remove())
+  const authors = Array.from(
+    document.querySelectorAll(
+      dm5
+        ? ".banner_detail_form .subtitle a"
+        : ".detail-info-tip > span:first-child a, .detail-info-tip > a"
+    )
+  )
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .filter(Boolean)
+  const genres = Array.from(
+    document.querySelectorAll(
+      dm5 ? ".banner_detail_form .tip a" : ".detail-info-tip .item"
+    )
+  )
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .filter(Boolean)
   return {
     seriesId,
     seriesMetadata: {
       title,
-      author:
-        sanitizeLabel(
-          document.querySelector(
-            dm5 ? ".banner_detail_form .subtitle a" : ".detail-info-tip a"
-          )?.textContent ?? ""
-        ) || undefined,
-      description:
-        sanitizeLabel(
-          document.querySelector(
-            dm5 ? ".banner_detail_form .content" : ".detail-info-content"
-          )?.textContent ?? ""
-        ) || undefined,
+      author: [...new Set(authors)].join(", ") || undefined,
+      genres: genres.length ? [...new Set(genres)] : undefined,
+      description: sanitizeLabel(synopsis?.textContent ?? "") || undefined,
       coverUrl: cover || undefined,
       language: "zh",
     },

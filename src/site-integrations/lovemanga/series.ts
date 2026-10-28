@@ -49,17 +49,24 @@ export function resolveAimanhuaSeries(
   const cover = document
     .querySelector(".detail-main-cover img")
     ?.getAttribute("src")
+  const author = Array.from(
+    document.querySelectorAll(".detail-main-info-author")
+  )
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .find((text) => /^作者[：:]/.test(text))
+    ?.replace(/^作者[：:]\s*/, "")
+  const genres = Array.from(
+    document.querySelectorAll(".detail-main-info-class a")
+  )
+    .map((node) => sanitizeLabel(node.textContent ?? ""))
+    .filter(Boolean)
   return {
     seriesId,
     seriesMetadata: {
       title,
       language: "zh",
-      author:
-        sanitizeLabel(
-          document
-            .querySelector(".detail-main-info-author")
-            ?.textContent?.replace(/^作者[：:]\s*/, "") ?? ""
-        ) || undefined,
+      author: author || undefined,
+      genres: genres.length ? [...new Set(genres)] : undefined,
       description:
         sanitizeLabel(
           document.querySelector(".detail-desc")?.textContent ?? ""
