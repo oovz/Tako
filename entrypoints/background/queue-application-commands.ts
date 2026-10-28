@@ -1,3 +1,4 @@
+import { runDestinationAccessExclusive } from "./destination-access"
 import logger from "@/src/runtime/logger"
 import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -123,33 +124,36 @@ export class QueueApplicationCommands {
     resolveSelectedChapters(firstContext, payload)
     await this.assertProviderAvailableForDownload(payload.siteIntegrationId)
 
-    const settingsInputs = await loadStartDownloadSettingsInputs(
-      payload.siteIntegrationId,
-      this.deps.startDownloadSettings
-    )
+    const task = await runDestinationAccessExclusive(async () => {
+      const settingsInputs = await loadStartDownloadSettingsInputs(
+        payload.siteIntegrationId,
+        this.deps.startDownloadSettings
+      )
 
-    const secondContext = await this.deps.getCurrentSeriesContext(
-      payload.sourceTabId,
-      payload.sourceWindowId
-    )
-    const currentSelection = resolveSelectedChapters(secondContext, payload)
-    // The command ID is the task ID: a re-delivered START_DOWNLOAD envelope
-    // (same commandId) converges on the same durable task instead of creating
-    // a duplicate semantic command.
-    const taskId = commandId
-    const task = buildStartDownloadTask({
-      context: currentSelection.context,
-      selectedChapters: currentSelection.chapters,
-      settingsInputs,
-      taskId,
-      now: Date.now(),
+      const secondContext = await this.deps.getCurrentSeriesContext(
+        payload.sourceTabId,
+        payload.sourceWindowId
+      )
+      const currentSelection = resolveSelectedChapters(secondContext, payload)
+      // The command ID is the task ID: a re-delivered START_DOWNLOAD envelope
+      // (same commandId) converges on the same durable task instead of creating
+      // a duplicate semantic command.
+      const task = buildStartDownloadTask({
+        context: currentSelection.context,
+        selectedChapters: currentSelection.chapters,
+        settingsInputs,
+        taskId: commandId,
+        now: Date.now(),
+      })
+      const enqueue = await this.deps.queueRepository.enqueueDownloadTask(task)
+      if (enqueue.outcome !== "applied") {
+        const existing = await this.deps.queueRepository.getTask(commandId)
+        if (existing) return existing
+        throw new Error(`Download task identity already exists: ${commandId}`)
+      }
+      return task
     })
-    const enqueue = await this.deps.queueRepository.enqueueDownloadTask(task)
-    if (enqueue.outcome !== "applied") {
-      const existing = await this.deps.queueRepository.getTask(taskId)
-      if (existing) return { taskId }
-      throw new Error(`Download task identity already exists: ${taskId}`)
-    }
+    const taskId = commandId
     logger.info("[Queue]", {
       event: "START_DOWNLOAD_ENQUEUED",
       taskId,
@@ -172,11 +176,13 @@ export class QueueApplicationCommands {
     const existingRetryTask =
       await this.deps.queueRepository.getTask(retryTaskId)
     if (existingRetryTask) return { newTaskId: retryTaskId }
-    const result = await this.deps.queueRepository.retryFailedChapters({
-      taskId,
-      retryTaskId,
-      now: Date.now(),
-    })
+    const result = await runDestinationAccessExclusive(() =>
+      this.deps.queueRepository.retryFailedChapters({
+        taskId,
+        retryTaskId,
+        now: Date.now(),
+      })
+    )
     if (result.outcome !== "applied") {
       if (
         result.reason === "already-retried" ||
@@ -220,11 +226,13 @@ export class QueueApplicationCommands {
     const existingRestartTask =
       await this.deps.queueRepository.getTask(restartTaskId)
     if (existingRestartTask) return { newTaskId: restartTaskId }
-    const result = await this.deps.queueRepository.restartDownloadTask({
-      taskId,
-      restartTaskId,
-      now: Date.now(),
-    })
+    const result = await runDestinationAccessExclusive(() =>
+      this.deps.queueRepository.restartDownloadTask({
+        taskId,
+        restartTaskId,
+        now: Date.now(),
+      })
+    )
     if (result.outcome !== "applied") {
       if (
         result.reason === "already-retried" ||
@@ -309,17 +317,15 @@ export class QueueApplicationCommands {
   }
 
   async retryDestination(taskId: string, commandId: string): Promise<void> {
-    await this.resumeDestination(taskId, commandId, undefined)
-  }
-
-  async continueDownload(taskId: string, commandId: string): Promise<void> {
-    await this.resumeDestination(taskId, commandId, "downloads-api")
+    await this.resumeDestination(taskId, commandId)
   }
 
   async undoQueueAction(
     token: string
   ): Promise<{ restoredQueuedTask: boolean }> {
-    const result = await restorePendingUndo(this.deps.queueRepository, token)
+    const result = await runDestinationAccessExclusive(() =>
+      restorePendingUndo(this.deps.queueRepository, token)
+    )
     if (
       (result.outcome !== "applied" && result.outcome !== "unchanged") ||
       !result.restored
@@ -340,13 +346,11 @@ export class QueueApplicationCommands {
 
   private async resumeDestination(
     taskId: string,
-    commandId: string,
-    destinationOverride: "downloads-api" | undefined
+    commandId: string
   ): Promise<void> {
     const result = await this.deps.queueRepository.resumeDestinationTask({
       taskId,
       commandId,
-      destinationOverride,
       now: Date.now(),
     })
     if (result.outcome === "rejected") {
@@ -364,8 +368,8 @@ export class QueueApplicationCommands {
 
   /**
    * Reject before task construction when the provider is disabled or its
-   * required host permission is absent. The executor keeps its own check as
-   * defense in depth for the window between enqueue and dispatch.
+   * required host permission is absent. The executor checks availability again
+   * because provider policy can change while a task is queued.
    */
   private async assertProviderAvailableForDownload(
     siteIntegrationId: string

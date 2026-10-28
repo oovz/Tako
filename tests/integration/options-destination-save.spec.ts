@@ -1,3 +1,10 @@
+import {
+  buildStartDownloadTask,
+  loadStartDownloadSettingsInputs,
+} from "@/entrypoints/background/download-queue-enqueue"
+import { runDestinationAccessExclusive } from "@/entrypoints/background/destination-access"
+import { SettingsRepository } from "@/src/storage/settings-repository"
+import { DestinationHandleCollector } from "@/entrypoints/background/destination-handle-collector"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { OptionsConfigurationService } from "@/entrypoints/background/options-configuration-service"
@@ -15,23 +22,30 @@ import { SETTINGS_STORAGE_KEY } from "@/src/storage/settings-repository"
 import {
   loadDownloadRootHandle,
   saveDownloadRootHandle,
-  removeUnusedDownloadRootHandles,
+  collectUnusedDownloadRootHandles,
 } from "@/src/storage/fs-access"
 
+const managedIds = vi.hoisted(() => new Set<string>())
 const capabilityStorage = vi.hoisted(
   () => new Map<string, FileSystemDirectoryHandle>()
 )
 vi.mock("@/src/storage/fs-access", () => ({
   saveDownloadRootHandle: vi.fn(async (handle, id) => {
+    if (capabilityStorage.has(id)) throw new Error("Handle ID already exists")
     capabilityStorage.set(id, handle)
   }),
   loadDownloadRootHandle: vi.fn(async (id) => capabilityStorage.get(id)),
   checkPermissionBeforeWrite: vi.fn(async () => undefined),
-  removeUnusedDownloadRootHandles: vi.fn(
-    async (candidates: ReadonlySet<string>, retained: ReadonlySet<string>) => {
-      for (const id of candidates) {
-        if (!retained.has(id)) capabilityStorage.delete(id)
-      }
+  adoptDownloadRootHandle: vi.fn(async (id: string) => {
+    managedIds.add(id)
+  }),
+  collectUnusedDownloadRootHandles: vi.fn(
+    async (retained: ReadonlySet<string>) => {
+      for (const id of managedIds)
+        if (!retained.has(id)) {
+          capabilityStorage.delete(id)
+          managedIds.delete(id)
+        }
     }
   ),
 }))
@@ -61,18 +75,52 @@ function createHarness() {
   }
   const effects = vi.fn(async () => undefined)
   function freshRuntime() {
-    return new OptionsConfigurationService({
-      configurationRepository: new OptionsConfigurationRepository(storage, {
-        getSettings: async () => structuredClone(DEFAULT_SETTINGS),
-      }),
-      settingsRepository: { acceptExternalDocument: vi.fn() },
-      historyRepository: {
-        getStorageStats: vi.fn(),
-        getAllSeriesHistory: vi.fn(),
-      },
-      applySettingsSideEffects: effects,
-      cleanupRateLimiters: vi.fn(),
-    })
+    const service: OptionsConfigurationService =
+      new OptionsConfigurationService({
+        configurationRepository: new OptionsConfigurationRepository(storage, {
+          getSettings: async () => structuredClone(DEFAULT_SETTINGS),
+        }),
+        settingsRepository: { acceptExternalDocument: vi.fn() },
+        historyRepository: {
+          getStorageStats: vi.fn(),
+          getAllSeriesHistory: vi.fn(),
+        },
+        applySettingsSideEffects: effects,
+        cleanupRateLimiters: vi.fn(),
+        collectUnusedHandles: () => collector.collect(),
+      })
+    const collector: DestinationHandleCollector =
+      new DestinationHandleCollector({
+        queueRepository: {
+          getRetainedHandleIds: async () => {
+            const tasks = [
+              ...((stored[
+                LOCAL_STORAGE_KEYS.downloadQueue
+              ] as DownloadTaskState[]) ?? []),
+              ...(
+                (stored[LOCAL_STORAGE_KEYS.pendingUndoActions] as {
+                  taskSnapshot: DownloadTaskState
+                }[]) ?? []
+              ).map((action) => action.taskSnapshot),
+            ]
+            return new Set(
+              tasks.flatMap((task) =>
+                task.settingsSnapshot.destination.kind ===
+                  "file-system-access" &&
+                task.settingsSnapshot.destination.handleId
+                  ? [task.settingsSnapshot.destination.handleId]
+                  : []
+              )
+            )
+          },
+        },
+        settingsRepository: {
+          reload: async () =>
+            structuredClone(stored[SETTINGS_STORAGE_KEY] as typeof oldSettings),
+        },
+        pendingHandleIds: () => service.getPendingHandleIds(),
+      })
+    return service
   }
   async function readPair() {
     const configuration = await freshRuntime().getConfiguration()
@@ -104,6 +152,7 @@ function createHarness() {
 
 beforeEach(() => {
   capabilityStorage.clear()
+  managedIds.clear()
   vi.clearAllMocks()
 })
 
@@ -128,6 +177,7 @@ describe("destination configuration commit", () => {
           "mangadex"
         ),
         chapters: [5, 20].map((lastUpdated) => ({
+          requestedPath: "Tako/Chapter.cbz",
           id: `chapter-${lastUpdated}`,
           url: `https://mangadex.org/chapter/chapter-${lastUpdated}`,
           title: `Chapter ${lastUpdated}`,
@@ -137,9 +187,19 @@ describe("destination configuration commit", () => {
           outputs: { requested: 1, committed: 1, failed: 0 },
         })),
       }
+      const sourceTask = {
+        ...task,
+        settingsSnapshot: {
+          ...task.settingsSnapshot,
+          destination: task.settingsSnapshot.destination.kind,
+        },
+        chapters: task.chapters.map(
+          ({ requestedPath: _path, ...chapter }) => chapter
+        ),
+      }
       await harness.storage.set({
         stateSchemaEpoch: 2,
-        [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
+        [LOCAL_STORAGE_KEYS.downloadQueue]: [sourceTask],
         [LOCAL_STORAGE_KEYS.downloadedChapters]: [],
         [LOCAL_STORAGE_KEYS.seriesDownloadHistory]: {},
         [LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs]: {
@@ -184,6 +244,85 @@ describe("destination configuration commit", () => {
     }
   )
 
+  it("captures committed defaults when a save response is lost before its cache publication", async () => {
+    const harness = createHarness()
+    const submitted = await harness.prepare()
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: harness.storage,
+        session: { set: vi.fn(async () => undefined) },
+      },
+      action: {
+        setBadgeText: vi.fn(async () => undefined),
+        setBadgeBackgroundColor: vi.fn(async () => undefined),
+      },
+    })
+    const settings = new SettingsRepository("warn")
+    expect(
+      (await settings.getSettings()).downloads.customDirectoryHandleId
+    ).toBe("old-folder")
+    let release!: () => void
+    const pause = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const commit = harness.storage.set.getMockImplementation()!
+    harness.storage.set.mockImplementationOnce(async (values) => {
+      await pause
+      await commit(values)
+      throw new Error("response lost")
+    })
+    const saving = harness
+      .freshRuntime()
+      .saveConfiguration(submitted)
+      .catch((error) => error)
+    await vi.waitFor(() => expect(harness.storage.set).toHaveBeenCalledOnce())
+    const chapter = {
+      id: "chapter",
+      url: "https://mangadex.org/chapter/chapter",
+      title: "Chapter",
+      index: 0,
+      status: "queued" as const,
+      lastUpdated: 1,
+    }
+    const queue = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
+    const creating = runDestinationAccessExclusive(async () => {
+      const inputs = await loadStartDownloadSettingsInputs("mangadex", {
+        settingsRepository: settings,
+        siteOverridesService: { getAll: async () => ({}) },
+        siteIntegrationSettingsService: { getForSite: async () => ({}) },
+      })
+      const task = buildStartDownloadTask({
+        settingsInputs: inputs,
+        taskId: "captured",
+        now: 1,
+        selectedChapters: [chapter],
+        context: {
+          sourceUrl: "https://mangadex.org/title/series",
+          siteIntegrationId: "mangadex",
+          mangaId: "series",
+          seriesTitle: "Series",
+          chapters: [chapter],
+          volumes: [],
+          lastUpdated: 1,
+        },
+      })
+      await queue.enqueueDownloadTask(task)
+      return task
+    })
+    release()
+    const captured = await creating
+    expect(await saving).toEqual(new Error("response lost"))
+    expect(captured.settingsSnapshot.destination).toEqual({
+      kind: "file-system-access",
+      handleId: "new-folder",
+    })
+    expect(captured.chapters[0].requestedPath).toBe("New/Series/Chapter.cbz")
+    expect(capabilityStorage.get("new-folder")).toBe(harness.newFolder)
+  })
+
   it("preserves the saved pair when staging fails", async () => {
     const harness = createHarness()
     vi.mocked(saveDownloadRootHandle).mockRejectedValueOnce(
@@ -197,9 +336,8 @@ describe("destination configuration commit", () => {
 
   it("retries cleanup of retired capabilities on a later save", async () => {
     const harness = createHarness()
-    await harness.prepare()
     const submitted = await harness.prepare()
-    vi.mocked(removeUnusedDownloadRootHandles).mockRejectedValueOnce(
+    vi.mocked(collectUnusedDownloadRootHandles).mockRejectedValueOnce(
       new Error("IndexedDB unavailable")
     )
     const service = harness.freshRuntime()

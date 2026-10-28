@@ -325,6 +325,7 @@ describe("tab context resolver", () => {
         seriesTitle: "Previous",
         chapters: [
           {
+            requestedPath: "Tako/Chapter.cbz",
             id: "previous-chapter",
             title: "Previous chapter",
             url: "https://example.com/previous",

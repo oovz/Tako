@@ -26,7 +26,7 @@ const folders = vi.hoisted(() => ({
 vi.mock("@/src/storage/fs-access", () => ({
   loadDownloadRootHandle: folders.load,
   checkPermissionBeforeWrite: folders.check,
-  removeUnusedDownloadRootHandles: folders.prune,
+  adoptDownloadRootHandle: vi.fn(async () => undefined),
 }))
 
 beforeEach(() => {
@@ -93,6 +93,7 @@ function createDependencies(
       calls.push("effects")
     }),
     cleanupRateLimiters: vi.fn(() => calls.push("rate-limiters")),
+    collectUnusedHandles: vi.fn(async () => undefined),
   }
 }
 
@@ -217,7 +218,6 @@ describe("OptionsConfigurationService", () => {
     releaseSet()
     await expect(saving).resolves.toEqual(next)
     await expect(reading).resolves.toEqual(next)
-    expect(storage.get).toHaveBeenCalledTimes(3)
     expect(storage.set).toHaveBeenCalledTimes(1)
   })
 

@@ -67,6 +67,7 @@ describe("completion notification chapter counts", () => {
     const task = makeTask({
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -75,6 +76,7 @@ describe("completion notification chapter counts", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-2",
           url: "https://example.com/ch-2",
           title: "Chapter 2",

@@ -1,3 +1,4 @@
+import { captureRequestedOutputPath } from "@/src/runtime/task-output-path"
 import { describe, expect, it } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
@@ -13,6 +14,7 @@ function createTask(overrides?: Partial<DownloadTaskState>): DownloadTaskState {
     seriesTitle: "Queued Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -63,7 +65,7 @@ describe("resolveDownloadPlan", () => {
       },
     })
 
-    expect(() => resolveDownloadPlan(task)).toThrow(
+    expect(() => captureRequestedOutputPath(task, task.chapters[0])).toThrow(
       "Filename template resolution failed: Filename template is empty"
     )
   })
@@ -76,7 +78,7 @@ describe("resolveDownloadPlan", () => {
       },
     })
 
-    expect(() => resolveDownloadPlan(task)).toThrow(
+    expect(() => captureRequestedOutputPath(task, task.chapters[0])).toThrow(
       "Filename template resolution failed: Unknown or unimplemented macros"
     )
   })

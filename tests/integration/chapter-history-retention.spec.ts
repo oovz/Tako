@@ -22,6 +22,7 @@ function task(): DownloadTaskState {
     settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         title: "Chapter 1",
         url: "https://mangadex.org/chapter/chapter-1",

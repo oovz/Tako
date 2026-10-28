@@ -20,6 +20,7 @@ describe("DownloadTaskCard error presentation", () => {
       completed: 2,
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "chapter-1",
           url: "https://example.com/chapter-1",
           title: "Chapter 1",
@@ -40,6 +41,7 @@ describe("DownloadTaskCard error presentation", () => {
           lastUpdated: 2,
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "chapter-2",
           url: "https://example.com/chapter-2",
           title: "Chapter 2",
@@ -90,6 +92,7 @@ describe("DownloadTaskCard error presentation", () => {
         completed: 2,
         chapters: [
           {
+            requestedPath: "Tako/Chapter.cbz",
             id: "chapter-1",
             url: "https://example.com/chapter-1",
             title: "Chapter 1",
@@ -135,6 +138,7 @@ describe("DownloadTaskCard error presentation", () => {
       completed: 2,
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "chapter-1",
           url: "https://example.com/chapter-1",
           title: "Chapter 1",

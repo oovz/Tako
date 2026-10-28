@@ -83,6 +83,7 @@ function createTask(): DownloadTaskState {
     status: "queued",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: chapterId,
         url: "https://mangadex.org/chapter/first-chapter",
         title: "Chapter 1",
@@ -299,7 +300,6 @@ describe("destination recovery", () => {
     await coldRepository.resumeDestinationTask({
       taskId: itemId,
       commandId: "repair-command",
-      destinationOverride: undefined,
       now: 2,
     })
     const resumed = createRuntime(coldRepository)

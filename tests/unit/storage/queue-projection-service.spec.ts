@@ -1,3 +1,5 @@
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
@@ -13,7 +15,7 @@ function queuedTask(id: string, seriesTitle: string): DownloadTaskState {
     chapters: [],
     status: "queued",
     created: 1,
-    settingsSnapshot: {},
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
   } as unknown as DownloadTaskState
 }
 

@@ -194,7 +194,6 @@ export class OffscreenJobTerminalCoordinator {
           taskId: payload.taskId,
           chapterId: payload.chapterId,
           destination: currentTask.settingsSnapshot.destination,
-          destinationOverride: currentTask.destinationOverride,
         },
         kind: destinationIssueKind,
         now: Date.now(),

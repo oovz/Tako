@@ -19,9 +19,7 @@ interface FsaBannerProps {
 }
 
 export function FsaBanner({ className }: FsaBannerProps) {
-  const [pendingAction, setPendingAction] = useState<
-    "CONTINUE_DOWNLOAD" | "CANCEL_TASK" | null
-  >(null)
+  const [pendingAction, setPendingAction] = useState<"CANCEL_TASK" | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [issue, setIssue] = useState<DestinationIssue | null>(null)
   const latestRequestId = useRef(0)
@@ -78,16 +76,12 @@ export function FsaBanner({ className }: FsaBannerProps) {
   }, [])
 
   const sendTaskAction = useCallback(
-    async (type: "CONTINUE_DOWNLOAD" | "CANCEL_TASK") => {
+    async (type: "CANCEL_TASK") => {
       if (!issue || pendingAction !== null) return
       setPendingAction(type)
       setActionError(null)
       try {
-        if (type === "CONTINUE_DOWNLOAD") {
-          await queueCommandClient.continueDownload(issue.taskId)
-        } else {
-          await queueCommandClient.cancelTask(issue.taskId)
-        }
+        await queueCommandClient.cancelTask(issue.taskId)
         void refreshDestinationIssue()
       } catch (error) {
         logger.warn("[FsaBanner] Destination task action failed", error)
@@ -119,14 +113,6 @@ export function FsaBanner({ className }: FsaBannerProps) {
           <Button variant="outline" size="sm" onClick={openOptions}>
             <Folder data-icon="inline-start" className="size-3.5" />
             {t("destinationIssue_fixFolder")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pendingAction !== null}
-            onClick={() => void sendTaskAction("CONTINUE_DOWNLOAD")}
-          >
-            {t("destinationIssue_continueDownloads")}
           </Button>
           <Button
             variant="ghost"

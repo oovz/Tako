@@ -3,7 +3,6 @@ import { z } from "zod"
 import {
   ArchiveFormatSchema,
   ConflictPolicySchema,
-  DownloadDestinationSchema,
   DownloadErrorCategorySchema,
   DownloadProgressStatusSchema,
   ImagePaddingDigitsSchema,
@@ -155,7 +154,13 @@ const RateLimitSnapshotSchema = z.strictObject({
 
 export const OffscreenChapterSettingsSnapshotSchema = z.strictObject({
   archiveFormat: ArchiveFormatSchema,
-  destination: DownloadDestinationSchema,
+  destination: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("downloads-api") }),
+    z.strictObject({
+      kind: z.literal("file-system-access"),
+      handleId: z.string().min(1).nullable(),
+    }),
+  ]),
   conflictPolicy: ConflictPolicySchema,
   pathTemplate: z.string(),
   fileNameTemplate: z.string().min(1),
@@ -579,19 +584,6 @@ export const runtimeMessageRegistry = {
     target: "background",
     kind: "command",
     allowedSenders: ["options"],
-    readiness: "runtime-ready",
-  }),
-  CONTINUE_DOWNLOAD: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("CONTINUE_DOWNLOAD"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: successOrFailure(),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
   UNDO_QUEUE_ACTION: defineRuntimeMessage({

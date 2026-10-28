@@ -6,7 +6,10 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { notifyTerminalDownloadTask } from "@/entrypoints/background/download-queue-finalization"
-import { isExecutingDownloadTask } from "@/src/domain/queue/task-lifecycle"
+import {
+  isTerminalDownloadTask,
+  isExecutingDownloadTask,
+} from "@/src/domain/queue/task-lifecycle"
 import type { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import {
   planStartupQueueActivation,
@@ -22,6 +25,9 @@ interface InitializeFromStorageDependencies {
   getOffscreenActiveTaskIds: () => Promise<string[]>
   hasOffscreenDocument: () => Promise<boolean>
   terminateOffscreenDocumentForUnboundLease: () => Promise<void>
+  cancelOffscreenJob: (
+    identity: import("@/src/domain/native-output/state").NativeOutputJobIdentity
+  ) => Promise<boolean>
   getOffscreenJobState: (identity: {
     jobId: string
     attempt: number
@@ -74,6 +80,34 @@ export async function initializeFromStorage(
       await dependencies.setLivenessAlarmArmed(true)
       return { queue: initialQueue }
     }
+  }
+  if (
+    activeLease &&
+    exactJobState?.status === "active" &&
+    initialQueue.some(
+      (task) => task.id === activeLease?.taskId && isTerminalDownloadTask(task)
+    )
+  ) {
+    const stopped = await dependencies.cancelOffscreenJob({
+      jobId: exactJobState.jobId,
+      attempt: exactJobState.attempt,
+      taskId: exactJobState.taskId,
+      chapterId: exactJobState.chapterId,
+      fingerprint: exactJobState.fingerprint,
+      documentInstanceId: exactJobState.documentInstanceId,
+    })
+    if (!stopped) {
+      await dependencies.setLivenessAlarmArmed(true)
+      return { queue: initialQueue }
+    }
+    const cleared =
+      await dependencies.queueRepository.clearDispatchLease(activeLease)
+    if (cleared.outcome !== "applied")
+      throw new Error(
+        "Terminal task producer lease changed during startup cancellation"
+      )
+    activeLease = null
+    exactJobState = null
   }
   if (activeLease && exactJobState?.status === "terminal") {
     if (!exactJobState.outcome) {

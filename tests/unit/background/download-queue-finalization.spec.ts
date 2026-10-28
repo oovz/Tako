@@ -62,6 +62,7 @@ describe("download task finalization", () => {
       seriesTitle: "Series 1",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "already-recorded",
           title: "Already recorded",
           url: "https://example.com/already-recorded",
@@ -70,6 +71,7 @@ describe("download task finalization", () => {
           lastUpdated: 1,
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "missing-completed",
           title: "Missing completed",
           url: "https://example.com/missing-completed",
@@ -78,6 +80,7 @@ describe("download task finalization", () => {
           lastUpdated: 1,
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "partial",
           title: "Partial",
           url: "https://example.com/partial",
@@ -86,6 +89,7 @@ describe("download task finalization", () => {
           lastUpdated: 1,
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "failed",
           title: "Failed",
           url: "https://example.com/failed",
@@ -133,6 +137,7 @@ describe("download task finalization", () => {
       seriesTitle: "Series 1",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "cleared",
           title: "Cleared",
           url: "https://example.com/cleared",
@@ -175,6 +180,7 @@ describe("download task finalization", () => {
       seriesTitle: "Series 1",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "new-completion",
           title: "New completion",
           url: "https://example.com/new-completion",
@@ -255,6 +261,7 @@ describe("download task finalization", () => {
       seriesTitle: "Series 1",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "chapter-1",
           title: "Chapter 1",
           url: "https://example.com/chapter-1",
@@ -298,6 +305,7 @@ describe("download task finalization", () => {
       seriesTitle: "Series 1",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "chapter-1",
           title: "Chapter 1",
           url: "https://example.com/chapter-1",

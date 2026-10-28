@@ -13,6 +13,7 @@ function makeQueueTask(
   created = 1000
 ) {
   return {
+    destination: { kind: "downloads-api" },
     id,
     seriesKey: `mangadex#${id}`,
     seriesTitle,

@@ -112,20 +112,6 @@ export const queueCommandClient = {
     )
   },
 
-  async continueDownload(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "CONTINUE_DOWNLOAD",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `CONTINUE_DOWNLOAD:${taskId}` }
-      )
-    )
-  },
-
   async clearTerminalHistory(): Promise<void> {
     assertSuccess(
       await sendRuntimeMessage({

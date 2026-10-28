@@ -70,9 +70,8 @@ type TaskFixture = {
   siteIntegrationId: string
   settingsSnapshot: {
     archiveFormat: "cbz"
-    destination: "downloads-api" | "file-system-access"
+    destination: import("@/src/types/state-snapshots").TaskDestination
   }
-  destinationOverride?: "downloads-api" | "file-system-access"
   chapters: ChapterFixture[]
 }
 
@@ -83,7 +82,7 @@ function makeTask(overrides: Partial<TaskFixture> = {}): TaskFixture {
     siteIntegrationId: "mangadex",
     settingsSnapshot: {
       archiveFormat: "cbz",
-      destination: "downloads-api",
+      destination: { kind: "downloads-api" },
     },
     chapters: [
       {
@@ -314,7 +313,7 @@ describe("offscreen progress handler behavior", () => {
       makeTask({
         settingsSnapshot: {
           archiveFormat: "cbz",
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       }),
     ])
@@ -346,7 +345,7 @@ describe("offscreen progress handler behavior", () => {
       makeTask({
         settingsSnapshot: {
           archiveFormat: "cbz",
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       }),
     ])

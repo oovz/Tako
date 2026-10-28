@@ -353,7 +353,10 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     it("leaves terminal event state recoverable when finalization persistence fails", async () => {
       const fsaSettings = {
         ...createTaskSettingsSnapshot(testSettings, "test-site"),
-        destination: "file-system-access" as const,
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "folder",
+        },
       }
       const interruptedTask = makeTask({
         id: "task-finalization-failure",
@@ -465,7 +468,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         chapters,
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [task]
@@ -527,7 +530,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       ).mock.calls) {
         expect(context).toMatchObject({
           taskId: task.id,
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         })
       }
     })
@@ -537,7 +540,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         id: "task-folder-preflight",
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [task]
@@ -561,7 +564,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(mockDestinationService.blockForPreflight).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: task.id,
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         }),
         { ready: false, reason: "permission_prompt" }
       )
@@ -574,7 +577,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         id: "task-folder-notification",
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [task]
@@ -625,7 +628,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         id: "task-folder-runtime",
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [task]
@@ -674,7 +677,10 @@ export function registerDownloadQueueStartAndProcessCases(): void {
           context: expect.objectContaining({
             taskId: task.id,
             chapterId: task.chapters[0]?.id,
-            destination: "file-system-access",
+            destination: {
+              kind: "file-system-access",
+              handleId: "test-folder",
+            },
           }),
           kind: "fsa_permission_required",
         })
@@ -686,7 +692,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         id: "task-folder-write",
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [task]
@@ -835,31 +841,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
 
       expect(mockRuntimeSendMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: "OFFSCREEN_DOWNLOAD_CHAPTER" })
-      )
-    })
-
-    it("should handle path validation failure", async () => {
-      const { validateDownloadPathForTask } =
-        await import("@/entrypoints/background/queue-helpers")
-      vi.mocked(validateDownloadPathForTask).mockImplementationOnce(() => {
-        throw new Error("Invalid download path")
-      })
-
-      const task = makeTask({ id: "task-1" })
-
-      mockGlobalState.downloadQueue = [task]
-
-      await startDownloadTask(
-        mockQueueRepository,
-        "task-1",
-        mockEnsureOffscreenReady
-      )
-
-      expect(mockQueueRepository.interruptDownloadTask).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: "task-1",
-          errorMessage: "Invalid download path",
-        })
       )
     })
 
@@ -1569,7 +1550,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         id: "dynamic-blocked-task",
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       const runnableTask = makeTask({

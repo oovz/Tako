@@ -63,6 +63,7 @@ test("retains the complete saved chapter and inspection receipt for visual revie
       ),
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "artifact-chapter",
           title: "Chapter 1",
           url: "https://example.test/chapter/1",

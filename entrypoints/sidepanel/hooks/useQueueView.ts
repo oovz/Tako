@@ -23,6 +23,15 @@ const QueueTaskSummaryStorageSchema = z.object({
   status: DownloadTaskStatusSchema,
   outputDestination: z.enum(["downloads-api", "fsa"]).optional(),
   saveConfirmedAt: z.number().finite().nonnegative().optional(),
+  destination: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("downloads-api") }),
+    z.strictObject({
+      kind: z.literal("file-system-access"),
+      handleId: z.string().min(1).nullable(),
+    }),
+  ]),
+  requestedPath: z.string().nullable().optional(),
+  targetUnavailable: z.literal(true).optional(),
   outputMode: z.enum(["downloads-api", "fsa"]).optional(),
   activeBlock: z
     .enum([
@@ -63,6 +72,9 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
     outputDestination: data.outputDestination,
     saveConfirmedAt: data.saveConfirmedAt,
     outputMode: data.outputMode,
+    targetUnavailable: data.targetUnavailable,
+    destination: data.destination,
+    requestedPath: data.requestedPath,
     chapters: {
       total: data.chapters.total,
       completed: data.chapters.completed,

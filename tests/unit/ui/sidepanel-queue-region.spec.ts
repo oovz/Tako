@@ -18,6 +18,7 @@ function makeTask(
   status: QueueTaskSummary["status"]
 ): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id,
     seriesKey: `site#${id}`,
     seriesTitle: `Series ${id}`,

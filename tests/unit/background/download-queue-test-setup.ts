@@ -173,7 +173,8 @@ export const testSettings = {
 
 export const createChapter = (
   partial: Partial<ChapterState>
-): ChapterState => ({
+): ChapterState & { requestedPath: string } => ({
+  requestedPath: "Tako/Chapter.cbz",
   id:
     partial.id ??
     (() => {

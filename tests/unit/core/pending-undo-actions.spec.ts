@@ -136,6 +136,7 @@ describe("pending Undo task persistence", () => {
         mangaId: "expiring-task",
         chapters: [
           {
+            requestedPath: "Tako/Chapter.cbz",
             id: "chapter-1",
             url: "chapter-1",
             title: "Chapter 1",

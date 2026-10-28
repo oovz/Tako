@@ -160,6 +160,7 @@ function createChapter(
   status: TaskChapter["status"]
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: CHAPTER_PAGE_URL,
     title,

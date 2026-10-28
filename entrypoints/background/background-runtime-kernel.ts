@@ -1,3 +1,4 @@
+import { cancelOffscreenJob } from "./offscreen-lifecycle"
 import logger from "@/src/runtime/logger"
 import { applyUiLanguagePreference } from "@/src/runtime/i18n"
 import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
@@ -255,6 +256,7 @@ export class BackgroundRuntimeKernel {
       hasOffscreenDocument,
       terminateOffscreenDocumentForUnboundLease,
       getOffscreenJobState: queryOffscreenJob,
+      cancelOffscreenJob,
       setLivenessAlarmArmed: this.input.setLivenessAlarmArmed,
       getOffscreenActiveTaskIds: async () => {
         const status = await queryOffscreenStatus()

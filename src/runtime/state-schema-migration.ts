@@ -1,3 +1,8 @@
+import { buildTaskDestinationWrites } from "./state-schema-migration-task-destinations"
+import {
+  DownloadTaskStateSchema as CurrentTaskSchema,
+  PendingUndoActionSchema as CurrentUndoSchema,
+} from "./state-schema-migration-task-destination-schemas"
 import { z } from "zod"
 import {
   buildSaveEvidenceWrites,
@@ -27,11 +32,7 @@ import {
   isTerminalDownloadTask,
   normalizeInterruptedTask,
 } from "@/src/domain/queue/task-lifecycle"
-import type {
-  DestinationIssueKind,
-  DownloadTaskState,
-  PendingUndoAction,
-} from "@/src/domain/queue/state"
+import type { DestinationIssueKind } from "@/src/domain/queue/state"
 import { createDefaultSettings } from "@/src/domain/settings/defaults"
 import {
   parseSettingsDocument,
@@ -99,7 +100,10 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 5
+type DownloadTaskState = z.infer<typeof DownloadTaskStateSchema>
+type PendingUndoAction = z.infer<typeof PendingUndoActionSchema>
+
+export const CURRENT_STATE_SCHEMA_EPOCH = 6
 const DESTINATION_PAIRING_EPOCH = 3
 
 const SCHEMA_EPOCH_STORAGE_KEY = "stateSchemaEpoch"
@@ -367,15 +371,16 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
   const parsedSnapshot = rawSnapshot
     ? LegacyTaskSettingsSnapshotSchema.parse(rawSnapshot)
     : undefined
-  const baseSnapshot = taskSettingsSnapshotSchema.strip().parse(
-    createTaskSettingsSnapshot(
+  const baseSnapshot = taskSettingsSnapshotSchema.strip().parse({
+    ...createTaskSettingsSnapshot(
       createDefaultSettings("warn"),
       legacy.siteIntegrationId,
       {
         comicInfo: snapshotMetadata(legacy.seriesMetadata),
       }
-    )
-  )
+    ),
+    destination: "downloads-api",
+  })
   const imagePolicy = parsedSnapshot?.rateLimitSettings?.image
   const chapterPolicy = parsedSnapshot?.rateLimitSettings?.chapter
   const settingsSnapshot = {
@@ -1040,9 +1045,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(
-      journal.targetEpoch === 5
-        ? Epoch5DownloadTaskStateSchema
-        : DownloadTaskStateSchema
+      journal.targetEpoch === 6
+        ? CurrentTaskSchema
+        : journal.targetEpoch === 5
+          ? Epoch5DownloadTaskStateSchema
+          : DownloadTaskStateSchema
     ).parse(
       journal.targetEpoch === 3
         ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
@@ -1053,9 +1060,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(
-      journal.targetEpoch === 5
-        ? Epoch5PendingUndoActionSchema
-        : PendingUndoActionSchema
+      journal.targetEpoch === 6
+        ? CurrentUndoSchema
+        : journal.targetEpoch === 5
+          ? Epoch5PendingUndoActionSchema
+          : PendingUndoActionSchema
     ).parse(
       journal.targetEpoch === 3
         ? (
@@ -1158,7 +1167,13 @@ function buildDestinationPairingJournal(
     queue = queue.map((task) =>
       inFlightTaskIds.has(task.id) &&
       (task.status === "queued" || task.status === "downloading")
-        ? normalizeInterruptedTask(task, UPDATE_INTERRUPTION_MESSAGE, now)
+        ? DownloadTaskStateSchema.parse(
+            normalizeInterruptedTask(
+              task as unknown as import("@/src/domain/queue/state").DownloadTaskState,
+              UPDATE_INTERRUPTION_MESSAGE,
+              now
+            )
+          )
         : task
     )
   }
@@ -1282,6 +1297,20 @@ const MIGRATION_STEPS = [
   },
   { targetEpoch: 4, prepare: buildOutputMigrationJournal },
   { targetEpoch: 5, prepare: buildHistoryEvidenceJournal },
+  {
+    targetEpoch: 6,
+    prepare: (stored: Record<string, unknown>, sourceEpoch: number | null) => {
+      const journal = MigrationJournalSchema.parse({
+        sourceEpoch,
+        targetEpoch: 6,
+        phase: "prepared",
+        writes: buildTaskDestinationWrites(stored),
+        obsoleteKeys: [],
+      })
+      validateMigrationJournal(journal)
+      return journal
+    },
+  },
 ] as const
 
 function parseMigrationJournal(raw: unknown): MigrationJournal | null {
@@ -1372,7 +1401,8 @@ export async function migrateDurableStateForCurrentSchema(): Promise<void> {
     while (true) {
       if (
         (stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 ||
-          stored[SCHEMA_EPOCH_STORAGE_KEY] === 4) &&
+          stored[SCHEMA_EPOCH_STORAGE_KEY] === 4 ||
+          stored[SCHEMA_EPOCH_STORAGE_KEY] === 5) &&
         stored[MIGRATION_JOURNAL_STORAGE_KEY] === undefined
       ) {
         let index

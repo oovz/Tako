@@ -124,6 +124,7 @@ describe("OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)", () => {
     const task = makeTask({
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",

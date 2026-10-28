@@ -66,7 +66,7 @@ describe("DestinationService explicit destination contract", () => {
   it("keeps a frozen Downloads API task independent from FSA state", async () => {
     const context = {
       taskId: "task-downloads",
-      destination: "downloads-api" as const,
+      destination: { kind: "downloads-api" as const },
     }
 
     await expect(service.preflight(context)).resolves.toEqual({ ready: true })
@@ -81,7 +81,10 @@ describe("DestinationService explicit destination contract", () => {
     const context = {
       taskId: "task-fsa",
       chapterId: "chapter-1",
-      destination: "file-system-access" as const,
+      destination: {
+        kind: "file-system-access" as const,
+        handleId: "test-folder",
+      },
     }
 
     await expect(
@@ -117,33 +120,26 @@ describe("DestinationService explicit destination contract", () => {
     await expect(
       service.getEffectiveDestination({
         taskId: "task-fsa",
-        destination: "file-system-access",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
       })
     ).resolves.toEqual({
       kind: "custom",
-      handleId: "selected-id",
+      handleId: "test-folder",
       handle,
     })
-  })
-
-  it("honors an explicit task-scoped Downloads API override", async () => {
-    await expect(
-      service.getEffectiveDestination({
-        taskId: "task-fsa",
-        destination: "file-system-access",
-        destinationOverride: "downloads-api",
-      })
-    ).resolves.toEqual({
-      kind: "downloads",
-    })
-    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
   })
 
   it("notifies once after an atomic destination block", async () => {
     const context = {
       taskId: "task-fsa",
       chapterId: "chapter-1",
-      destination: "file-system-access" as const,
+      destination: {
+        kind: "file-system-access" as const,
+        handleId: "test-folder",
+      },
     }
     const failure = { ready: false, reason: "permission_denied" } as const
 

@@ -49,6 +49,7 @@ function activeTask(): DownloadTaskState {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: output.chapterId,
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -580,6 +581,7 @@ describe("native output cold-start recovery", () => {
       getOffscreenActiveTaskIds: vi.fn(async () => []),
       hasOffscreenDocument: vi.fn(async () => observation !== null),
       terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+      cancelOffscreenJob: vi.fn(async () => true),
       getOffscreenJobState: vi.fn(async () => observation),
       setLivenessAlarmArmed,
     })
@@ -906,6 +908,7 @@ describe("native output cold-start recovery", () => {
       getOffscreenActiveTaskIds: async () => [],
       hasOffscreenDocument: async () => true,
       terminateOffscreenDocumentForUnboundLease: async () => undefined,
+      cancelOffscreenJob: vi.fn(async () => true),
       getOffscreenJobState: async () => exactTerminalJob,
       setLivenessAlarmArmed: async () => undefined,
     })
@@ -1228,6 +1231,7 @@ describe("native output cold-start recovery", () => {
         getOffscreenActiveTaskIds: vi.fn(async () => []),
         hasOffscreenDocument: vi.fn(async () => true),
         terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+        cancelOffscreenJob: vi.fn(async () => true),
         getOffscreenJobState: vi.fn(async () => {
           throw new Error("offscreen query transport failed")
         }),

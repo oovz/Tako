@@ -1,4 +1,6 @@
-import { Folder, ShieldCheck } from "lucide-react"
+import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
+import type { TaskDestination } from "@/src/types/state-snapshots"
+import { ShieldCheck } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -8,21 +10,21 @@ import type { DestinationIssue } from "@/src/domain/queue/state"
 
 interface DownloadsFsaBannerProps {
   issue: DestinationIssue
+  destination?: TaskDestination
+  requestedPath?: string | null
   taskTitle?: string
   isWorking: boolean
   onGrantAccess: () => Promise<void>
-  onPickFolder: () => Promise<void>
-  onContinueInDownloads: () => Promise<void>
   onCancelTask: () => Promise<void>
 }
 
 export function DownloadsFsaBanner({
   issue,
   taskTitle,
+  destination,
+  requestedPath,
   isWorking,
   onGrantAccess,
-  onPickFolder,
-  onContinueInDownloads,
   onCancelTask,
 }: DownloadsFsaBannerProps) {
   return (
@@ -34,6 +36,12 @@ export function DownloadsFsaBanner({
           </p>
           {taskTitle && (
             <p className="text-xs font-medium text-foreground">{taskTitle}</p>
+          )}
+          {destination && (
+            <TaskDestinationCaption
+              destination={destination}
+              requestedPath={requestedPath}
+            />
           )}
           <p className="text-xs text-muted-foreground">
             {t(getDestinationIssueMessageKey(issue.kind))}
@@ -48,23 +56,6 @@ export function DownloadsFsaBanner({
           >
             <ShieldCheck data-icon="inline-start" className="size-3.5" />
             {t("destinationIssue_grantAccess")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void onPickFolder()}
-            disabled={isWorking}
-          >
-            <Folder data-icon="inline-start" className="size-3.5" />
-            {t("destinationIssue_chooseFolder")}
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => void onContinueInDownloads()}
-            disabled={isWorking}
-          >
-            {t("destinationIssue_continueDownloads")}
           </Button>
           <Button
             variant="ghost"

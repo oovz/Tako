@@ -1356,7 +1356,6 @@ export function resumeDestinationTask(
   input: {
     taskId: string
     commandId: string
-    destinationOverride?: "downloads-api"
     now: number
   }
 ): QueueKernelDecision<
@@ -1419,7 +1418,6 @@ export function resumeDestinationTask(
       commandId: input.commandId,
       blockRevision,
     },
-    destinationOverride: input.destinationOverride,
     errorMessage: undefined,
     errorCategory: undefined,
     chapters: task.chapters.map((chapter) =>
@@ -1779,6 +1777,21 @@ export function retryFailedChapters(
       },
     }
   }
+  if (
+    original.chapters.some((chapter) => chapter.requestedPath === null) ||
+    (original.settingsSnapshot.destination.kind === "file-system-access" &&
+      original.settingsSnapshot.destination.handleId === null)
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: {
+        outcome: "rejected",
+        reason: "invalid-status",
+        currentStatus: original.status,
+      },
+    }
+  }
   if (original.isRetried) {
     return {
       next: state,
@@ -1878,6 +1891,21 @@ export function restartDownloadTask(
     original.status !== "failed" &&
     original.status !== "partial_success" &&
     original.status !== "canceled"
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: {
+        outcome: "rejected",
+        reason: "invalid-status",
+        currentStatus: original.status,
+      },
+    }
+  }
+  if (
+    original.chapters.some((chapter) => chapter.requestedPath === null) ||
+    (original.settingsSnapshot.destination.kind === "file-system-access" &&
+      original.settingsSnapshot.destination.handleId === null)
   ) {
     return {
       next: state,

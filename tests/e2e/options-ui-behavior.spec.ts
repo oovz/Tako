@@ -5,8 +5,12 @@ import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
 import type { ChapterState } from "../../src/types/tab-state"
 
-function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
+function makeChapter(
+  id: string,
+  status: ChapterState["status"]
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: `Chapter ${id}`,

@@ -252,6 +252,26 @@ export class QueueRepository {
     })
   }
 
+  async getRetainedHandleIds(): Promise<Set<string>> {
+    return this.mutations.run(async () => {
+      const state = await this.hydrateLocked()
+      const ids = new Set(
+        [
+          ...state.queue,
+          ...state.pendingUndoActions.map((action) => action.taskSnapshot),
+        ].flatMap((task) =>
+          task.settingsSnapshot.destination.kind === "file-system-access" &&
+          task.settingsSnapshot.destination.handleId
+            ? [task.settingsSnapshot.destination.handleId]
+            : []
+        )
+      )
+      if (state.lease?.destinationHandleId)
+        ids.add(state.lease.destinationHandleId)
+      return ids
+    })
+  }
+
   async getTask(taskId: string): Promise<DownloadTaskState | undefined> {
     const queue = await this.getQueue()
     return queue.find((task) => task.id === taskId)
@@ -367,7 +387,6 @@ export class QueueRepository {
   async resumeDestinationTask(input: {
     taskId: string
     commandId: string
-    destinationOverride: "downloads-api" | undefined
     now: number
   }): Promise<ReturnType<typeof decideDestinationResume>["result"]> {
     const detachedInput = structuredClone(input)

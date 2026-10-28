@@ -88,12 +88,15 @@ describe("destination service", () => {
     await expect(
       service.getEffectiveDestination({
         taskId: "task-1",
-        destination: "file-system-access",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
       })
-    ).resolves.toEqual({ kind: "custom", handle, handleId: "selected-id" })
-    expect(mocks.getSettings).toHaveBeenCalledOnce()
+    ).resolves.toEqual({ kind: "custom", handle, handleId: "test-folder" })
+    expect(mocks.getSettings).not.toHaveBeenCalled()
     expect(mocks.loadDownloadRootHandle).toHaveBeenCalledExactlyOnceWith(
-      "selected-id"
+      "test-folder"
     )
     expect(mocks.queryFsaPermission).toHaveBeenCalledExactlyOnceWith(
       handle,
@@ -105,7 +108,10 @@ describe("destination service", () => {
     const context = {
       taskId: "task-1",
       chapterId: "chapter-1",
-      destination: "file-system-access" as const,
+      destination: {
+        kind: "file-system-access" as const,
+        handleId: "test-folder",
+      },
     }
 
     const result = await service.blockForPreflight(context, {
@@ -130,7 +136,10 @@ describe("destination service", () => {
     const context = {
       taskId: "task-1",
       chapterId: "chapter-1",
-      destination: "file-system-access" as const,
+      destination: {
+        kind: "file-system-access" as const,
+        handleId: "test-folder",
+      },
     }
 
     await service.blockForPreflight(context, {
@@ -151,7 +160,10 @@ describe("destination service", () => {
       context: {
         taskId: "task-1",
         chapterId: "chapter-1",
-        destination: "file-system-access",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
       },
       kind: "fsa_write_failed",
       errorCategory: "folder_write_failed",
@@ -172,7 +184,13 @@ describe("destination service", () => {
 
     await expect(
       service.blockForPreflight(
-        { taskId: "task-1", destination: "file-system-access" },
+        {
+          taskId: "task-1",
+          destination: {
+            kind: "file-system-access" as const,
+            handleId: "test-folder",
+          },
+        },
         { ready: false, reason: "not_configured" }
       )
     ).resolves.toMatchObject({ outcome: "applied" })
@@ -181,12 +199,11 @@ describe("destination service", () => {
     )
   })
 
-  it("bypasses File System Access checks for an explicit Downloads override", async () => {
+  it("keeps Chrome tasks independent of folder defaults", async () => {
     await expect(
       service.preflight({
         taskId: "task-1",
-        destination: "file-system-access",
-        destinationOverride: "downloads-api",
+        destination: { kind: "downloads-api" as const },
       })
     ).resolves.toEqual({ ready: true })
     expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
@@ -198,7 +215,10 @@ describe("destination service", () => {
     await expect(
       service.preflight({
         taskId: "task-1",
-        destination: "file-system-access",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
       })
     ).resolves.toEqual({ ready: false, reason: "unsupported" })
   })
@@ -209,7 +229,10 @@ describe("destination service", () => {
       downloads: { customDirectoryHandleId: null },
     })
     await expect(
-      service.preflight({ taskId: "task-1", destination: "file-system-access" })
+      service.preflight({
+        taskId: "task-1",
+        destination: { kind: "file-system-access" as const, handleId: null },
+      })
     ).resolves.toEqual({ ready: false, reason: "not_configured" })
     expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
   })
@@ -219,7 +242,13 @@ describe("destination service", () => {
       new Error("IndexedDB unavailable")
     )
     await expect(
-      service.preflight({ taskId: "task-1", destination: "file-system-access" })
+      service.preflight({
+        taskId: "task-1",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
+      })
     ).resolves.toEqual({ ready: false, reason: "unsupported" })
   })
 
@@ -229,7 +258,10 @@ describe("destination service", () => {
     await expect(
       service.preflight({
         taskId: "task-1",
-        destination: "file-system-access",
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "test-folder",
+        },
       })
     ).resolves.toEqual({ ready: false, reason: "not_configured" })
     expect(mocks.queryFsaPermission).not.toHaveBeenCalled()
@@ -246,7 +278,10 @@ describe("destination service", () => {
       await expect(
         service.preflight({
           taskId: "task-1",
-          destination: "file-system-access",
+          destination: {
+            kind: "file-system-access" as const,
+            handleId: "test-folder",
+          },
         })
       ).resolves.toEqual({ ready: false, reason })
     }

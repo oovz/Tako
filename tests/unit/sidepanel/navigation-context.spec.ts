@@ -291,6 +291,7 @@ describe("groupChapters", () => {
   it("creates volume groups for chapters with volumeNumber", () => {
     const chapters = [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch1",
         url: "ch1",
         title: "Ch 1",
@@ -301,6 +302,7 @@ describe("groupChapters", () => {
         lastUpdated: Date.now(),
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch2",
         url: "ch2",
         title: "Ch 2",
@@ -311,6 +313,7 @@ describe("groupChapters", () => {
         lastUpdated: Date.now(),
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch3",
         url: "ch3",
         title: "Ch 3",
@@ -331,6 +334,7 @@ describe("groupChapters", () => {
   it("preserves collapsed state from previous items", () => {
     const chapters = [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch1",
         url: "ch1",
         title: "Ch 1",

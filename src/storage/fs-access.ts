@@ -21,6 +21,8 @@ export type FileHandle = FileSystemFileHandle
 
 export const DOWNLOAD_ROOT_DB_NAME = "tako-fs"
 export const DOWNLOAD_ROOT_STORE_NAME = "handles"
+export const MANAGED_DOWNLOAD_ROOT_STORE_NAME = "managed-handles"
+export const DOWNLOAD_ROOT_DB_VERSION = 2
 export const DOWNLOAD_ROOT_HANDLE_ID = "download-root"
 
 export interface FsaCapabilities {
@@ -84,12 +86,14 @@ export async function queryFsaPermission(
 // Open IndexedDB
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DOWNLOAD_ROOT_DB_NAME, 1)
+    const req = indexedDB.open(DOWNLOAD_ROOT_DB_NAME, DOWNLOAD_ROOT_DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(DOWNLOAD_ROOT_STORE_NAME)) {
         db.createObjectStore(DOWNLOAD_ROOT_STORE_NAME)
       }
+      if (!db.objectStoreNames.contains(MANAGED_DOWNLOAD_ROOT_STORE_NAME))
+        db.createObjectStore(MANAGED_DOWNLOAD_ROOT_STORE_NAME)
     }
     req.onsuccess = () => {
       const db = req.result
@@ -103,8 +107,12 @@ function openDB(): Promise<IDBDatabase> {
 
 async function runTransaction<T>(
   mode: IDBTransactionMode,
-  requestFactory: (store: IDBObjectStore) => IDBRequest,
-  getResult: (request: IDBRequest) => T
+  requestFactory: (
+    store: IDBObjectStore,
+    transaction: IDBTransaction
+  ) => IDBRequest,
+  getResult: (request: IDBRequest) => T,
+  stores: string[] = [DOWNLOAD_ROOT_STORE_NAME]
 ): Promise<T> {
   const db = await openDB()
   try {
@@ -120,8 +128,8 @@ async function runTransaction<T>(
       }
 
       try {
-        const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, mode)
-        const request = requestFactory(tx.objectStore(DOWNLOAD_ROOT_STORE_NAME))
+        const tx = db.transaction(stores, mode)
+        const request = requestFactory(tx.objectStore(stores[0]), tx)
         request.onsuccess = () => {
           result = getResult(request)
         }
@@ -166,10 +174,10 @@ async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
   )
 }
 
-async function idbSet(key: string, value: unknown): Promise<void> {
+async function idbAdd(key: string, value: unknown): Promise<void> {
   await runTransaction(
     "readwrite",
-    (store) => store.put(value, key),
+    (store) => store.add(value, key),
     () => undefined
   )
 }
@@ -181,23 +189,44 @@ export async function saveDownloadRootHandle(
   handle: DirHandle,
   handleId: string
 ): Promise<void> {
-  await idbSet(handleId, handle)
+  await idbAdd(handleId, handle)
 }
 
-/** Remove capabilities known to belong to settled saves. */
-export async function removeUnusedDownloadRootHandles(
-  candidates: ReadonlySet<string>,
+/** Register a capability once the background accepts it as a durable reference. */
+export async function adoptDownloadRootHandle(handleId: string): Promise<void> {
+  await runTransaction(
+    "readwrite",
+    (store) => store.put(true, handleId),
+    () => undefined,
+    [MANAGED_DOWNLOAD_ROOT_STORE_NAME]
+  )
+}
+
+/** Staged picker selections stay outside managed collection until accepted. */
+export async function collectUnusedDownloadRootHandles(
   retainedIds: ReadonlySet<string>
 ): Promise<void> {
-  const unused = [...candidates].filter((id) => !retainedIds.has(id))
+  const managed = await runTransaction(
+    "readonly",
+    (store) => store.getAllKeys(),
+    (request) => request.result as string[],
+    [MANAGED_DOWNLOAD_ROOT_STORE_NAME]
+  )
+  const unused = managed.filter((id) => !retainedIds.has(id))
   if (unused.length === 0) return
   await runTransaction(
     "readwrite",
-    (store) => {
-      const requests = unused.map((id) => store.delete(id))
-      return requests[requests.length - 1]
+    (handles, tx) => {
+      const markers = tx.objectStore(MANAGED_DOWNLOAD_ROOT_STORE_NAME)
+      let last!: IDBRequest
+      for (const id of unused) {
+        handles.delete(id)
+        last = markers.delete(id)
+      }
+      return last
     },
-    () => undefined
+    () => undefined,
+    [DOWNLOAD_ROOT_STORE_NAME, MANAGED_DOWNLOAD_ROOT_STORE_NAME]
   )
 }
 

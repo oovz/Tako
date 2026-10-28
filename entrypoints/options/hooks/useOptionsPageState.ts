@@ -422,11 +422,7 @@ export function useOptionsPageState() {
     })
   }
 
-  const {
-    pickDownloadFolder,
-    repairDownloadFolder,
-    grantDownloadFolderAccess,
-  } = folder
+  const { pickDownloadFolder, grantDownloadFolderAccess } = folder
   const { clearChapterHistory, clearSeriesHistory, handleRefreshHistory } =
     history
 
@@ -547,7 +543,6 @@ export function useOptionsPageState() {
     handleOverrideChange,
     handleSiteIntegrationEnablementChange,
     pickDownloadFolder,
-    repairDownloadFolder,
     grantDownloadFolderAccess,
     saveConfiguration,
     clearChapterHistory,

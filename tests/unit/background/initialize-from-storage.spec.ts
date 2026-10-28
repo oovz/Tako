@@ -41,6 +41,7 @@ function task(
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.test/chapter-1",
         title: "Chapter 1",
@@ -146,6 +147,7 @@ function createHarness(queue: DownloadTaskState[] = []) {
       getOffscreenActiveTaskIds: vi.fn(async () => [] as string[]),
       hasOffscreenDocument: vi.fn(async () => false),
       terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+      cancelOffscreenJob: vi.fn(async () => true),
       getOffscreenJobState: vi.fn<() => Promise<OffscreenJobState | null>>(
         async () => null
       ),
@@ -246,6 +248,47 @@ describe("initializeFromStorage", () => {
       queueActivation: { kind: "resume-task", taskId: activeTask.id },
     })
   })
+
+  it.each([true, false])(
+    "cancels an exact live producer whose migrated owner is terminal, acknowledged=%s",
+    async (acknowledged) => {
+      const terminal = task("failed", "active-task")
+      const harness = createHarness([terminal])
+      const lease = activeLease(terminal.id)
+      harness.getActiveDispatchLease
+        .mockResolvedValueOnce(lease)
+        .mockResolvedValue(null)
+      harness.dependencies.hasOffscreenDocument.mockResolvedValue(true)
+      const job: OffscreenJobState = {
+        ...lease,
+        documentInstanceId: lease.documentInstanceId!,
+        status: "active",
+        lastSequence: lease.sequence,
+      }
+      harness.dependencies.getOffscreenJobState.mockResolvedValue(job)
+      harness.dependencies.cancelOffscreenJob.mockResolvedValue(acknowledged)
+      await initializeFromStorage(harness.dependencies)
+      expect(
+        harness.dependencies.cancelOffscreenJob
+      ).toHaveBeenCalledExactlyOnceWith({
+        jobId: job.jobId,
+        attempt: job.attempt,
+        taskId: job.taskId,
+        chapterId: job.chapterId,
+        fingerprint: job.fingerprint,
+        documentInstanceId: job.documentInstanceId,
+      })
+      if (acknowledged)
+        expect(harness.clearDispatchLease).toHaveBeenCalledExactlyOnceWith(
+          lease
+        )
+      else {
+        expect(harness.clearDispatchLease).not.toHaveBeenCalled()
+        expect(harness.recoverQueueAfterStartup).not.toHaveBeenCalled()
+        expect(harness.setLivenessAlarmArmed).toHaveBeenCalledWith(true)
+      }
+    }
+  )
 
   it("settles an exactly queried terminal native job before startup recovery", async () => {
     const activeTask = task("downloading", "active-task")

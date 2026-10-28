@@ -351,12 +351,6 @@
   "destinationIssue_grantAccess": {
     "message": "再次授權"
   },
-  "destinationIssue_chooseFolder": {
-    "message": "選擇其他資料夾"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "改用瀏覽器下載"
-  },
   "destinationIssue_cancelTask": {
     "message": "取消工作"
   },
@@ -699,7 +693,7 @@
     "message": "管理下載目標和監控活躍任務。"
   },
   "options_downloadDestination": {
-    "message": "下載目標"
+    "message": "新任務的預設儲存位置"
   },
   "options_useCustomFolder": {
     "message": "使用自訂資料夾（檔案系統存取）"
@@ -1361,7 +1355,7 @@
     "message": "權限被拒絕"
   },
   "options_toastCustomFolderSet": {
-    "message": "自訂下載資料夾已設定：$NAME$",
+    "message": "已選擇資料夾：$NAME$。儲存變更後，新任務將使用此資料夾。",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1722,12 +1716,6 @@
   "settings_invalidDownloadMode": {
     "message": "下載模式無效"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "自訂資料夾已清除，已切換為瀏覽器下載。"
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "已失去自訂資料夾的存取權限，已切換為瀏覽器下載。"
-  },
   "settings_unknownError": {
     "message": "未知錯誤"
   },
@@ -1889,5 +1877,14 @@
         "content": "$1"
       }
     }
+  },
+  "destinationIssue_originalUnavailable": {
+    "message": "此任務的原始儲存位置無法使用。請建立新任務。"
+  },
+  "destination_taskChrome": {
+    "message": "Chrome 下載"
+  },
+  "destination_taskFolder": {
+    "message": "所選資料夾"
   }
 }

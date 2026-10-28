@@ -197,13 +197,9 @@ export function useDownloadsTabState() {
   }, [refreshDownloadState])
 
   const sendDestinationTaskAction = useCallback(
-    async (taskId: string, type: "RETRY_DESTINATION" | "CONTINUE_DOWNLOAD") => {
+    async (taskId: string) => {
       try {
-        if (type === "RETRY_DESTINATION") {
-          await queueCommandClient.retryDestination(taskId)
-        } else {
-          await queueCommandClient.continueDownload(taskId)
-        }
+        await queueCommandClient.retryDestination(taskId)
         void refreshDownloadState()
         return true
       } catch (error) {
@@ -227,9 +223,6 @@ export function useDownloadsTabState() {
     restartTask,
     removeTask,
     clearTaskHistory,
-    retryDestinationTask: (taskId: string) =>
-      sendDestinationTaskAction(taskId, "RETRY_DESTINATION"),
-    continueTaskInDownloads: (taskId: string) =>
-      sendDestinationTaskAction(taskId, "CONTINUE_DOWNLOAD"),
+    retryDestinationTask: (taskId: string) => sendDestinationTaskAction(taskId),
   }
 }

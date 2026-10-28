@@ -6,12 +6,6 @@
  */
 
 import logger from "@/src/runtime/logger"
-import { validateDownloadPath } from "@/src/shared/download-path-validator"
-import {
-  resolveDownloadDirectory,
-  resolveFileName,
-  type TemplateContext,
-} from "@/src/shared/template-resolver"
 import type { Book } from "@/src/types/book"
 import type { Chapter, ChapterInput } from "@/src/types/chapter"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
@@ -43,11 +37,6 @@ export function resolveDownloadPlan(
 
   logger.debug(`[Format Resolution] Final format: ${format}`)
 
-  const finalTemplate = settingsSnapshot.pathTemplate
-  if (!finalTemplate) {
-    throw new Error("Missing path template in settings or site override")
-  }
-
   const seriesMetadata = settingsSnapshot.comicInfo
   const comicInfoBase = buildSeriesComicInfoBase(
     task.seriesTitle,
@@ -78,71 +67,12 @@ export function resolveDownloadPlan(
       volumeLabel: ch.volumeLabel,
     }
     const composed = composeChapterMetadata(book, input)
-    // Resolve directory & final path
-    const dirCtx: TemplateContext = {
-      date: new Date(),
-      publisher: seriesMetadata?.publisher,
-      integrationName: task.siteIntegrationId,
-      seriesTitle: task.seriesTitle,
-      chapterTitle: composed.title,
-      chapterNumber: composed.chapterNumber,
-      volumeNumber: composed.volumeNumber,
-      volumeTitle: undefined,
-      format,
-    }
-    const dirRes = resolveDownloadDirectory(finalTemplate, dirCtx)
-    if (!dirRes.success || !dirRes.resolvedPath) {
+    if (ch.requestedPath === null)
       throw new Error(
-        `Directory template resolution failed: ${dirRes.error || "no path"}`
+        "The original output path is unavailable; create a new task"
       )
-    }
-    const fileNameRes = resolveFileName(
-      settingsSnapshot.fileNameTemplate,
-      dirCtx
-    )
-    if (!fileNameRes.success || !fileNameRes.resolvedName) {
-      throw new Error(
-        `Filename template resolution failed: ${fileNameRes.error || "no filename"}`
-      )
-    }
-    const fileBase = fileNameRes.resolvedName
-    if (format === "none") {
-      // When not archiving, resolvedPath is the directory where images will be stored under a subdirectory per chapter
-      composed.resolvedPath = `${dirRes.resolvedPath}/${fileBase}` // offscreen will create subfolder
-    } else {
-      composed.resolvedPath = `${dirRes.resolvedPath}/${fileBase}.${format}`
-    }
+    composed.resolvedPath = ch.requestedPath
     chapters.push(composed)
   }
   return Promise.resolve({ format, book, chapters })
-}
-
-/**
- * Validates download path from settings before task processing
- *
- * @param taskId - Task ID for error context
- * @param settings - Settings object containing download path
- * @throws Error if download path is missing or invalid
- */
-export function validateDownloadPathForTask(
-  taskId: string,
-  settings: { downloads?: { pathTemplate?: string } }
-): void {
-  try {
-    const pathTemplate = settings.downloads?.pathTemplate
-    if (!pathTemplate) {
-      throw new Error("Path template not set in settings")
-    }
-
-    const pathValidation = validateDownloadPath(pathTemplate)
-    if (!pathValidation.isValid) {
-      const errorMsg = `Invalid download path: ${pathValidation.error}`
-      throw new Error(errorMsg)
-    }
-
-    logger.debug(`Download path validated for task ${taskId}: ${pathTemplate}`)
-  } catch (error) {
-    logger.error(`Path validation failed for task ${taskId}:`, error)
-    throw error
-  }
 }

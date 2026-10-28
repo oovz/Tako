@@ -5,7 +5,13 @@ import {
   migrateDurableStateForCurrentSchema,
 } from "@/src/runtime/state-schema-migration"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
-import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { createTaskSettingsSnapshot as createCurrentSnapshot } from "@/src/runtime/settings-snapshot"
+function createTaskSettingsSnapshot(
+  ...args: Parameters<typeof createCurrentSnapshot>
+) {
+  const snapshot = createCurrentSnapshot(...args)
+  return { ...snapshot, destination: snapshot.destination.kind }
+}
 
 const SETTINGS_KEY = "settings:global"
 
@@ -264,6 +270,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -418,10 +430,9 @@ describe("migrateDurableStateForCurrentSchema", () => {
     expect(local.downloadQueue).toEqual([
       expect.objectContaining({
         id: "task-1",
-        destinationIssue: expect.objectContaining({
-          id: "issue-1",
-          kind: "disk_full",
-        }),
+        status: "partial_success",
+        destinationIssue: undefined,
+        errorCategory: "folder_unavailable",
       }),
     ])
     expect(local).not.toHaveProperty("destinationIssues")
@@ -493,7 +504,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect.objectContaining({
         id: "task-v155",
         settingsSnapshot: expect.objectContaining({
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: null },
           conflictPolicy: "uniquify",
           archiveFormat: "zip",
         }),
@@ -681,12 +692,35 @@ describe("migrateDurableStateForCurrentSchema", () => {
 
     await migrateDurableStateForCurrentSchema()
 
+    const prepared = vi
+      .mocked(chrome.storage.local.set)
+      .mock.calls.map(
+        ([values]) =>
+          (
+            values as {
+              stateSchemaMigrationJournal?: {
+                targetEpoch: number
+                phase: string
+                writes: { downloadQueue: unknown }
+              }
+            }
+          ).stateSchemaMigrationJournal
+      )
+      .find(
+        (journal) => journal?.targetEpoch === 3 && journal.phase === "prepared"
+      )
+    expect(prepared?.writes.downloadQueue).toMatchObject([
+      {
+        activeBlock: "destination_action_required",
+        destinationIssue: { id: "issue-epoch-2" },
+      },
+    ])
     expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
     expect(local.downloadQueue).toEqual([
       expect.objectContaining({
         id: "task-epoch-2",
-        activeBlock: "destination_action_required",
-        destinationIssue: expect.objectContaining({ id: "issue-epoch-2" }),
+        activeBlock: undefined,
+        destinationIssue: undefined,
         destinationBlockRevision: 7,
         destinationResume: expect.objectContaining({
           commandId: "destination-command",
@@ -725,14 +759,37 @@ describe("migrateDurableStateForCurrentSchema", () => {
 
     await migrateDurableStateForCurrentSchema()
 
+    const prepared = vi
+      .mocked(chrome.storage.local.set)
+      .mock.calls.map(
+        ([values]) =>
+          (
+            values as {
+              stateSchemaMigrationJournal?: {
+                targetEpoch: number
+                phase: string
+                writes: { downloadQueue: unknown }
+              }
+            }
+          ).stateSchemaMigrationJournal
+      )
+      .find(
+        (journal) => journal?.targetEpoch === 3 && journal.phase === "prepared"
+      )
+    expect(prepared?.writes.downloadQueue).toMatchObject([
+      {
+        activeBlock: "destination_action_required",
+        destinationIssue: {
+          taskId: "task-blocked",
+          kind: "fsa_permission_required",
+        },
+      },
+    ])
     expect(local.downloadQueue).toEqual([
       expect.objectContaining({
         id: "task-blocked",
-        activeBlock: "destination_action_required",
-        destinationIssue: expect.objectContaining({
-          taskId: "task-blocked",
-          kind: "fsa_permission_required",
-        }),
+        activeBlock: undefined,
+        destinationIssue: undefined,
       }),
     ])
     expect(local).not.toHaveProperty("destinationIssues")
@@ -937,7 +994,7 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4, 5])
+    ).toEqual([3, 4, 5, 6])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,

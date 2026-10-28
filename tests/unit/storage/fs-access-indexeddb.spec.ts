@@ -4,7 +4,8 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
 import {
   loadDownloadRootHandle,
-  removeUnusedDownloadRootHandles,
+  collectUnusedDownloadRootHandles,
+  adoptDownloadRootHandle,
   saveDownloadRootHandle,
 } from "@/src/storage/fs-access"
 
@@ -41,6 +42,16 @@ function createIndexedDbHarness() {
       requests.push(request)
       return request
     }),
+    add: vi.fn(() => {
+      const request = createRequest()
+      requests.push(request)
+      return request
+    }),
+    getAllKeys: vi.fn(() => {
+      const request = createRequest()
+      requests.push(request)
+      return request
+    }),
     put: vi.fn(() => {
       const request = createRequest()
       requests.push(request)
@@ -53,9 +64,10 @@ function createIndexedDbHarness() {
     }),
   }
   const db = {
-    objectStoreNames: { contains: vi.fn(() => true) },
+    objectStoreNames: { contains: vi.fn((_name: string) => true) },
     onversionchange: null as (() => void) | null,
     close: vi.fn(),
+    createObjectStore: vi.fn(),
     transaction: vi.fn(() => {
       const transaction: FakeTransaction = {
         error: null,
@@ -89,18 +101,42 @@ describe("File System Access IndexedDB lifecycle", () => {
   it("reclaims unreferenced capabilities in one completed transaction", async () => {
     const harness = createIndexedDbHarness()
     vi.stubGlobal("indexedDB", harness.indexedDb)
-    const pending = removeUnusedDownloadRootHandles(
-      new Set(["selected-id", "queued-save-id", "retired-id"]),
+    const pending = collectUnusedDownloadRootHandles(
       new Set(["selected-id", "queued-save-id"])
     )
     await vi.waitFor(() => expect(harness.requests).toHaveLength(1))
+    harness.requests[0].result = ["selected-id", "queued-save-id", "retired-id"]
     harness.requests[0].onsuccess?.()
-    expect(harness.objectStore.delete).toHaveBeenCalledExactlyOnceWith(
-      "retired-id"
+    harness.transactions[0].oncomplete?.()
+    await vi.waitFor(() => expect(harness.transactions).toHaveLength(2))
+    expect(harness.db.transaction).toHaveBeenLastCalledWith(
+      ["handles", "managed-handles"],
+      "readwrite"
+    )
+    expect(harness.objectStore.delete).toHaveBeenCalledWith("retired-id")
+    harness.transactions[1].oncomplete?.()
+    await expect(pending).resolves.toBeUndefined()
+    expect(harness.db.close).toHaveBeenCalledTimes(2)
+  })
+
+  it("upgrades capability ownership metadata without replacing the handle store", async () => {
+    const harness = createIndexedDbHarness()
+    harness.db.objectStoreNames.contains.mockImplementation(
+      (name: string) => name === "handles"
+    )
+    vi.stubGlobal("indexedDB", harness.indexedDb)
+    const pending = adoptDownloadRootHandle("accepted")
+    harness.openRequest.onupgradeneeded?.()
+    await vi.waitFor(() => expect(harness.requests).toHaveLength(1))
+    expect(harness.db.createObjectStore).toHaveBeenCalledExactlyOnceWith(
+      "managed-handles"
+    )
+    expect(harness.objectStore.put).toHaveBeenCalledExactlyOnceWith(
+      true,
+      "accepted"
     )
     harness.transactions[0].oncomplete?.()
     await expect(pending).resolves.toBeUndefined()
-    expect(harness.db.close).toHaveBeenCalledOnce()
   })
 
   it("loads the capability selected by the committed configuration", async () => {
@@ -213,6 +249,11 @@ describe("File System Access IndexedDB lifecycle", () => {
       } as FileSystemDirectoryHandle)
       await vi.waitFor(() => expect(harness.requests).toHaveLength(1))
       const [transaction] = harness.transactions
+      expect(harness.objectStore.add).toHaveBeenCalledWith(
+        expect.anything(),
+        "folder-id"
+      )
+      expect(harness.objectStore.put).not.toHaveBeenCalled()
 
       transaction.oncomplete?.()
       await expect(pending).resolves.toBeUndefined()

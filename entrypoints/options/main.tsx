@@ -115,7 +115,6 @@ function OptionsPage() {
     handleOverrideChange,
     handleSiteIntegrationEnablementChange,
     pickDownloadFolder,
-    repairDownloadFolder,
     grantDownloadFolderAccess,
     saveConfiguration,
     clearChapterHistory,
@@ -313,8 +312,8 @@ function OptionsPage() {
                   onChange={handleSettingsChange}
                   selectedFolderName={selectedFolderName}
                   folderAccessRequired={folderAccessRequired}
-                  onGrantFolderAccess={grantDownloadFolderAccess}
                   onPickFolder={pickDownloadFolder}
+                  onGrantFolderAccess={grantDownloadFolderAccess}
                   isPickingFolder={isPickingFolder}
                   isSaving={isSaving}
                 />
@@ -377,8 +376,6 @@ function OptionsPage() {
                   onClearSeriesHistory={clearSeriesHistory}
                   onRefreshSeries={handleRefreshHistory}
                   isClearingHistory={isClearing}
-                  onRepairFolder={repairDownloadFolder}
-                  onGrantFolderAccess={grantDownloadFolderAccess}
                   isPickingFolder={isPickingFolder}
                   isSaving={isSaving}
                 />

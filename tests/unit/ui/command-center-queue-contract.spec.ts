@@ -10,6 +10,7 @@ import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<QueueTaskSummary>): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id: "task-1",
     seriesKey: "mangadex#manga-1",
     seriesTitle: "Series 1",

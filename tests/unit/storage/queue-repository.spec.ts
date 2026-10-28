@@ -62,6 +62,7 @@ function createTask(
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",

@@ -1,3 +1,4 @@
+import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
 
 import logger from "@/src/runtime/logger"
@@ -127,19 +128,27 @@ const downloadStateQueryService = new BackgroundDownloadStateQueryService(
 const nativeOutputRepository = new NativeOutputRepository()
 const tabUiCoordinator = createTabUiCoordinator()
 const tabContextStateService = new TabContextStateService(tabContextCache)
-const optionsConfigurationService = new OptionsConfigurationService({
-  configurationRepository: new OptionsConfigurationRepository(
-    {
-      get: (keys) => chrome.storage.local.get(keys),
-      set: (values) => chrome.storage.local.set(values),
-    },
-    settingsRepository
-  ),
-  settingsRepository,
-  historyRepository,
-  applySettingsSideEffects,
-  cleanupRateLimiters: () => rateLimitService.cleanupRateLimiters(),
-})
+const optionsConfigurationService: OptionsConfigurationService =
+  new OptionsConfigurationService({
+    configurationRepository: new OptionsConfigurationRepository(
+      {
+        get: (keys) => chrome.storage.local.get(keys),
+        set: (values) => chrome.storage.local.set(values),
+      },
+      settingsRepository
+    ),
+    settingsRepository,
+    historyRepository,
+    applySettingsSideEffects,
+    cleanupRateLimiters: () => rateLimitService.cleanupRateLimiters(),
+    collectUnusedHandles: () => destinationHandleCollector.collect(),
+  })
+const destinationHandleCollector: DestinationHandleCollector =
+  new DestinationHandleCollector({
+    queueRepository,
+    settingsRepository,
+    pendingHandleIds: () => optionsConfigurationService.getPendingHandleIds(),
+  })
 async function requestBlobRevocation(
   record: Pick<
     NativeOutputRecord,
@@ -358,6 +367,10 @@ export default defineBackground({
     })
     registerSiteIntegrationEnablementListener(siteIntegrationEnablementService)
 
+    destinationHandleCollector.register(() =>
+      runtimeKernel.ensure("runtime-ready")
+    )
+
     registerBackgroundRuntimeListeners({
       waitForReadiness: (readiness) => runtimeKernel.ensure(readiness),
       getTabContextStateService: () =>
@@ -430,6 +443,7 @@ export default defineBackground({
 
     runtimeKernel.markControlReady()
     runtimeKernel.start()
+
     logger.info("Background script initialized")
   },
 })

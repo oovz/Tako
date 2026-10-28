@@ -9,7 +9,6 @@ import {
   nativeOutputJobIdentityMatches,
   type NativeOutputState,
 } from "@/src/domain/native-output/state"
-import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 import { parseCurrentNativeOutputState } from "@/src/storage/native-output-repository"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import {
@@ -40,6 +39,9 @@ export const Epoch5PendingUndoActionSchema = PendingUndoActionSchema.safeExtend(
     taskSnapshot: Epoch5DownloadTaskStateSchema,
   }
 )
+type DownloadTaskState = z.infer<typeof Epoch5DownloadTaskStateSchema>
+type TaskChapter = DownloadTaskState["chapters"][number]
+
 const RecordSchema = DownloadedChapterRecordSchema.extend({
   saveConfirmedAt: confirmationSchema,
 })
@@ -82,7 +84,9 @@ export function validateSaveEvidenceHistory(
   }
 }
 
-function readNativeState(stored: Record<string, unknown>): NativeOutputState {
+export function readEpoch5NativeOutputState(
+  stored: Record<string, unknown>
+): NativeOutputState {
   const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
   return parseCurrentNativeOutputState({
     manifestsByJobId: Object.fromEntries(
@@ -160,7 +164,7 @@ export function buildSaveEvidenceWrites(
         ? []
         : stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
     )
-  const native = readNativeState(stored)
+  const native = readEpoch5NativeOutputState(stored)
   type SaveEvidence = {
     saveConfirmedAt: number
     outputDestination: "fsa" | "downloads-api"

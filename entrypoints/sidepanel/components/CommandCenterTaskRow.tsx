@@ -1,3 +1,4 @@
+import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { memo, useEffect, useRef, useState } from "react"
 import { cn } from "@/src/shared/utils"
 
@@ -221,7 +222,16 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
                 </p>
               )}
 
+            <TaskDestinationCaption
+              destination={task.destination}
+              requestedPath={task.requestedPath}
+            />
             {/* Failure message */}
+            {task.targetUnavailable && (
+              <p className="text-xs">
+                {t("destinationIssue_originalUnavailable")}
+              </p>
+            )}
             {failureMessage && (
               <div className="text-[11px] text-destructive">
                 {failureMessage}
@@ -246,8 +256,8 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
             isRemoving={isRemoving}
             isMoving={isMoving}
             canCancel={canCancel}
-            canRetryFailed={canRetryFailed}
-            canRestart={canRestart}
+            canRetryFailed={canRetryFailed && !task.targetUnavailable}
+            canRestart={canRestart && !task.targetUnavailable}
             canMoveToTop={canMoveToTop}
             canRemove={canRemove}
             onBeginCancel={onBeginCancel}

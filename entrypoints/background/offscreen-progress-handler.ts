@@ -378,8 +378,7 @@ export async function handleOffscreenDownloadProgress(
         outputsExpectedToCommit > 0 &&
         outputsCommitted >= outputsExpectedToCommit
       const effectiveDestination =
-        taskBeforeUpdate.destinationOverride ??
-        taskBeforeUpdate.settingsSnapshot.destination
+        taskBeforeUpdate.settingsSnapshot.destination.kind
       const awaitingNativeDestinationCommit =
         isTerminalProgress &&
         effectiveDestination === "downloads-api" &&

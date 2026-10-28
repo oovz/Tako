@@ -81,7 +81,6 @@ describe("queueCommandClient", () => {
 
   it("owns the fixed destination, Undo, reorder, restart, and clear messages", async () => {
     await queueCommandClient.retryDestination("task-1")
-    await queueCommandClient.continueDownload("task-1")
     await queueCommandClient.undoQueueAction("undo-1")
     await queueCommandClient.moveTaskToTop("task-1")
     await queueCommandClient.restartTask("task-1")
@@ -91,12 +90,7 @@ describe("queueCommandClient", () => {
       mocks.sendRuntimeMessageWithRetry.mock.calls.map(
         ([message]) => message.type
       )
-    ).toEqual([
-      "RETRY_DESTINATION",
-      "CONTINUE_DOWNLOAD",
-      "UNDO_QUEUE_ACTION",
-      "RESTART_TASK",
-    ])
+    ).toEqual(["RETRY_DESTINATION", "UNDO_QUEUE_ACTION", "RESTART_TASK"])
     expect(
       mocks.sendRuntimeMessage.mock.calls.map(([message]) => message.type)
     ).toEqual(["MOVE_TASK_TO_TOP", "CLEAR_ALL_HISTORY"])

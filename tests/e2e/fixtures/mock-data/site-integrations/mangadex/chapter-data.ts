@@ -220,6 +220,7 @@ export function createMangadexChapters(
     const chNum = i + 1
     const uuid = `${String(chNum).padStart(8, "0")}-0000-0000-0000-000000000000`
     return {
+      requestedPath: "Tako/Chapter.cbz",
       id: uuid,
       url: `https://mangadex.test/chapter/${uuid}`,
       title: `Chapter ${chNum}`,

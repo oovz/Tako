@@ -129,6 +129,7 @@ function makeStartContext(
 
 function makeQueueTask(overrides: Partial<QueueTaskSummary>): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id: "task-1",
     seriesKey: "mangadex#manga-123",
     seriesTitle: "Series 1",

@@ -62,7 +62,7 @@ const historyUndo = {
 
 const startDownloadSettings = {
   settingsRepository: {
-    getSettings: vi.fn(async () => DEFAULT_SETTINGS),
+    reload: vi.fn(async () => DEFAULT_SETTINGS),
   },
   siteOverridesService: {
     getAll: vi.fn(async () => ({})),
@@ -102,6 +102,7 @@ const currentSeriesContext = {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         title: "One",
         url: "https://mangadex.org/chapter/chapter-1",
@@ -313,7 +314,7 @@ describe("QueueApplicationCommands", () => {
       return undefined
     })
     getCurrentSeriesContext.mockRejectedValue(new Error("context unavailable"))
-    startDownloadSettings.settingsRepository.getSettings.mockRejectedValue(
+    startDownloadSettings.settingsRepository.reload.mockRejectedValue(
       new Error("settings unavailable")
     )
     const providerLookup = vi.fn(async () => {
@@ -349,7 +350,7 @@ describe("QueueApplicationCommands", () => {
     ).resolves.toEqual({ newTaskId: "restart:command-restart" })
     expect(getCurrentSeriesContext).not.toHaveBeenCalled()
     expect(
-      startDownloadSettings.settingsRepository.getSettings
+      startDownloadSettings.settingsRepository.reload
     ).not.toHaveBeenCalled()
     expect(providerLookup).not.toHaveBeenCalled()
     expect(queueRepository.retryFailedChapters).not.toHaveBeenCalled()

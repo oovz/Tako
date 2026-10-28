@@ -25,8 +25,12 @@ function chapterRecord(): DownloadedChapterRecord {
   }
 }
 
-function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
+function makeChapter(
+  id: string,
+  status: ChapterState["status"]
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: `Chapter ${id}`,

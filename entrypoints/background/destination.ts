@@ -10,7 +10,7 @@ import type {
   DownloadTaskState,
   OutputAccounting,
 } from "@/src/domain/queue/state"
-import type { DownloadDestination } from "@/src/shared/download-contract"
+import type { TaskDestination } from "@/src/types/state-snapshots"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 
 type EffectiveDestination =
@@ -20,8 +20,7 @@ type EffectiveDestination =
 export interface DestinationContext {
   taskId: string
   chapterId?: string
-  destination: DownloadDestination
-  destinationOverride?: "downloads-api"
+  destination: TaskDestination
 }
 
 export type DestinationPreflight =
@@ -147,24 +146,24 @@ export class DestinationService {
   }
 
   async preflight(context: DestinationContext): Promise<DestinationPreflight> {
-    const destination = context.destinationOverride ?? context.destination
-    if (destination === "downloads-api") {
+    const destination = context.destination
+    if (destination.kind === "downloads-api") {
       return { ready: true }
     }
 
-    const resolved = await this.resolveCustomDestination()
+    const resolved = await this.resolveCustomDestination(destination.handleId)
     return resolved.ready ? { ready: true } : resolved
   }
 
   async getEffectiveDestination(
     context: DestinationContext
   ): Promise<EffectiveDestination> {
-    const destination = context.destinationOverride ?? context.destination
-    if (destination === "downloads-api") {
+    const destination = context.destination
+    if (destination.kind === "downloads-api") {
       return { kind: "downloads" }
     }
 
-    const resolved = await this.resolveCustomDestination()
+    const resolved = await this.resolveCustomDestination(destination.handleId)
     if (!resolved.ready) {
       throw new DestinationPreflightError(context, resolved)
     }
@@ -175,15 +174,14 @@ export class DestinationService {
     }
   }
 
-  private async resolveCustomDestination(): Promise<
+  private async resolveCustomDestination(
+    handleId: string | null
+  ): Promise<
     | { ready: true; handle: FileSystemDirectoryHandle; handleId: string }
     | Exclude<DestinationPreflight, { ready: true }>
   > {
     let handle: FileSystemDirectoryHandle | undefined
-    let handleId: string | null
     try {
-      const settings = await this.deps.settingsReader.getSettings()
-      handleId = settings.downloads.customDirectoryHandleId
       if (handleId === null) {
         return { ready: false, reason: "not_configured" }
       }

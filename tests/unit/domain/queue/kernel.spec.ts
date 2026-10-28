@@ -1,3 +1,5 @@
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -49,6 +51,7 @@ function createChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: id,
@@ -72,7 +75,7 @@ function createTask(
     chapters: [createChapter()],
     status,
     created: 100,
-    settingsSnapshot: {} as DownloadTaskState["settingsSnapshot"],
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
     ...overrides,
   }
 }
@@ -1145,7 +1148,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const resumed = resumeDestinationTask(state, {
       taskId: "task-1",
       commandId: "command-destination",
-      destinationOverride: "downloads-api",
       now: 500,
     })
     expect(resumed.changedKeys).toEqual(["queue"])
@@ -1153,12 +1155,12 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       status: "queued",
       activeBlock: undefined,
       destinationIssue: undefined,
-      destinationOverride: "downloads-api",
       errorMessage: undefined,
       errorCategory: undefined,
     })
     expect(resumed.next.queue[0]?.chapters).toEqual([
       expect.objectContaining({
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         status: "queued",
         errorMessage: undefined,
@@ -1170,7 +1172,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const destinationReplay = resumeDestinationTask(resumed.next, {
       taskId: "task-1",
       commandId: "command-destination",
-      destinationOverride: "downloads-api",
       now: 900,
     })
     expectNoChange(destinationReplay, resumed.next, "unchanged")
@@ -1196,7 +1197,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const delayedReplay = resumeDestinationTask(reblocked.next, {
       taskId: "task-1",
       commandId: "command-destination",
-      destinationOverride: "downloads-api",
       now: 1_000,
     })
     expectNoChange(delayedReplay, reblocked.next, "unchanged")
@@ -1221,7 +1221,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       {
         taskId: "task-1",
         commandId: "command-destination",
-        destinationOverride: "downloads-api",
         now: 1_000,
       }
     )
@@ -1240,7 +1239,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       {
         taskId: "task-1",
         commandId: "other-command",
-        destinationOverride: "downloads-api",
         now: 1_000,
       }
     )
@@ -1257,7 +1255,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       resumeDestinationTask(unblocked, {
         taskId: "task-1",
         commandId: "command-destination",
-        destinationOverride: undefined,
         now: 500,
       }),
       unblocked,
@@ -1268,7 +1265,6 @@ describe("queue aggregate kernel output accounting and block operations", () => 
       resumeDestinationTask(missing, {
         taskId: "missing",
         commandId: "command-destination",
-        destinationOverride: undefined,
         now: 500,
       }),
       missing,

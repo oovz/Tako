@@ -197,7 +197,7 @@ export async function queryOffscreenJob(
   return response.job
 }
 
-async function cancelOffscreenJob(
+export async function cancelOffscreenJob(
   input: NativeOutputJobIdentity
 ): Promise<boolean> {
   try {

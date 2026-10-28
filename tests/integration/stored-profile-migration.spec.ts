@@ -3,8 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { canReleaseNativeOutputBlob } from "@/src/domain/native-output/state"
 import { markNativeOutputBlobReleased } from "@/src/domain/native-output/kernel"
-import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
+import { createTaskSettingsSnapshot as createCurrentSnapshot } from "@/src/runtime/settings-snapshot"
+function createTaskSettingsSnapshot(
+  ...args: Parameters<typeof createCurrentSnapshot>
+) {
+  const snapshot = createCurrentSnapshot(...args)
+  return { ...snapshot, destination: snapshot.destination.kind }
+}
+import {
+  CURRENT_STATE_SCHEMA_EPOCH,
+  migrateDurableStateForCurrentSchema,
+} from "@/src/runtime/state-schema-migration"
 import { HistoryRepository } from "@/src/storage/history-repository"
 import { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
@@ -316,7 +325,7 @@ describe("retained save evidence", () => {
         destination === "fsa" ? 9 : complete ? 8 : undefined
       )
       expect((await history.getAggregate()).clearCutoffs.allBefore).toBe(5)
-      expect(stored.stateSchemaEpoch).toBe(5)
+      expect(stored.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
     }
   )
 
@@ -350,7 +359,7 @@ describe("retained save evidence", () => {
       (await new HistoryRepository().getDownloadedChapters())[0]
         ?.saveConfirmedAt
     ).toBeUndefined()
-    expect(stored.stateSchemaEpoch).toBe(5)
+    expect(stored.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
   })
 
   it.each(["downloadQueue", "pendingUndoActions"])(
@@ -401,7 +410,7 @@ describe("retained save evidence", () => {
         (await new HistoryRepository().getDownloadedChapters())[0]
           ?.saveConfirmedAt
       ).toBe(8)
-      expect(stored.stateSchemaEpoch).toBe(5)
+      expect(stored.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
       expect(stored).not.toHaveProperty("stateSchemaMigrationJournal")
     }
   )

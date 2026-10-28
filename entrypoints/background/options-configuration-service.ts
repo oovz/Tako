@@ -7,7 +7,7 @@ import {
 import {
   checkPermissionBeforeWrite,
   loadDownloadRootHandle,
-  removeUnusedDownloadRootHandles,
+  adoptDownloadRootHandle,
 } from "@/src/storage/fs-access"
 import { t } from "@/src/runtime/i18n"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
@@ -46,14 +46,24 @@ export interface OptionsConfigurationServiceDependencies {
   >
   applySettingsSideEffects: typeof applySettingsSideEffects
   cleanupRateLimiters: () => void
+  collectUnusedHandles: () => Promise<void>
 }
 
 export class OptionsConfigurationService {
   private readonly mutations = new StorageMutationQueue()
-  private readonly unsettledHandleCleanup = new Set<string>()
   private readonly pendingSaves = new Set<OptionsConfigurationSnapshot>()
 
   constructor(private readonly deps: OptionsConfigurationServiceDependencies) {}
+
+  getPendingHandleIds(): ReadonlySet<string> {
+    return new Set(
+      [...this.pendingSaves].flatMap((save) =>
+        save.settings.downloads.customDirectoryHandleId
+          ? [save.settings.downloads.customDirectoryHandleId]
+          : []
+      )
+    )
+  }
 
   async getConfiguration(): Promise<OptionsConfigurationSnapshot> {
     return await this.mutations.run(() =>
@@ -96,75 +106,61 @@ export class OptionsConfigurationService {
     this.pendingSaves.add(submitted)
     const submittedHandleId =
       submitted.settings.downloads.customDirectoryHandleId
-    if (submittedHandleId) this.unsettledHandleCleanup.add(submittedHandleId)
-    return this.mutations.run(() =>
-      runDestinationAccessExclusive(async () => {
-        try {
-          if (
-            submitted.settings.downloads.destination === "file-system-access"
-          ) {
-            let handle: FileSystemDirectoryHandle | undefined
-            try {
-              handle = await loadDownloadRootHandle(
-                submitted.settings.downloads.customDirectoryHandleId
-              )
-              if (handle && handle.kind === "directory")
-                await checkPermissionBeforeWrite(handle)
-            } catch (error) {
-              logger.warn(
-                "[OPTIONS] Saved folder capability validation failed",
-                error
-              )
-              const message =
-                error instanceof PermissionExpiredError
-                  ? "settings_customFolderPermissionDenied"
-                  : error instanceof DirectoryNotFoundError
-                    ? "settings_customFolderNotFound"
-                    : "options_savedFolderRepairRequired"
-              throw new Error(t(message), { cause: error })
-            }
-            if (!handle || handle.kind !== "directory")
-              throw new Error(t("settings_customFolderRequired"))
-          }
-          const previous = await this.deps.configurationRepository.get()
-          for (const configuration of [previous, submitted]) {
-            const id = configuration.settings.downloads.customDirectoryHandleId
-            if (id) this.unsettledHandleCleanup.add(id)
-          }
-          const saved = await this.deps.configurationRepository.save(submitted)
-
-          // Publish the committed configuration after its capability is durable.
-          this.deps.settingsRepository.acceptExternalDocument(saved.settings)
-          await this.deps.applySettingsSideEffects(saved.settings)
-          this.deps.cleanupRateLimiters()
-          return saved
-        } finally {
-          this.pendingSaves.delete(submitted)
-          // A failed acknowledgement can follow a committed write. Read durable
-          // authority before reclaiming either the previous or staged capability.
+    try {
+      return await this.mutations.run(() =>
+        runDestinationAccessExclusive(async () => {
           try {
-            const current = await this.deps.configurationRepository.get()
-            const retainedIds = new Set<string>()
-            for (const configuration of [current, ...this.pendingSaves]) {
-              const id =
-                configuration.settings.downloads.customDirectoryHandleId
-              if (id) retainedIds.add(id)
+            if (
+              submitted.settings.downloads.destination === "file-system-access"
+            ) {
+              let handle: FileSystemDirectoryHandle | undefined
+              try {
+                handle = await loadDownloadRootHandle(
+                  submitted.settings.downloads.customDirectoryHandleId
+                )
+                if (handle && handle.kind === "directory")
+                  await checkPermissionBeforeWrite(handle)
+              } catch (error) {
+                logger.warn(
+                  "[OPTIONS] Saved folder capability validation failed",
+                  error
+                )
+                const message =
+                  error instanceof PermissionExpiredError
+                    ? "settings_customFolderPermissionDenied"
+                    : error instanceof DirectoryNotFoundError
+                      ? "settings_customFolderNotFound"
+                      : "options_savedFolderRepairRequired"
+                throw new Error(t(message), { cause: error })
+              }
+              if (!handle || handle.kind !== "directory")
+                throw new Error(t("settings_customFolderRequired"))
             }
-            await removeUnusedDownloadRootHandles(
-              this.unsettledHandleCleanup,
-              retainedIds
-            )
-            for (const id of this.unsettledHandleCleanup) {
-              if (!retainedIds.has(id)) this.unsettledHandleCleanup.delete(id)
-            }
-          } catch (error) {
-            logger.warn(
-              "[OPTIONS] Could not reclaim unused folder capabilities",
-              error
-            )
+            const previous = await this.deps.configurationRepository.get()
+            const previousId =
+              previous.settings.downloads.customDirectoryHandleId
+            if (previousId) await adoptDownloadRootHandle(previousId)
+            if (submittedHandleId)
+              await adoptDownloadRootHandle(submittedHandleId)
+            const saved =
+              await this.deps.configurationRepository.save(submitted)
+
+            // Publish the committed configuration after its capability is durable.
+            this.deps.settingsRepository.acceptExternalDocument(saved.settings)
+            await this.deps.applySettingsSideEffects(saved.settings)
+            this.deps.cleanupRateLimiters()
+            return saved
+          } finally {
+            this.pendingSaves.delete(submitted)
           }
-        }
-      })
-    )
+        })
+      )
+    } finally {
+      try {
+        await this.deps.collectUnusedHandles()
+      } catch (error) {
+        logger.warn("Could not collect unused folder capabilities", error)
+      }
+    }
   }
 }

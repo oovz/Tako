@@ -16,6 +16,7 @@ const CANONICAL_TASK_STATUSES: Array<DownloadTaskState["status"]> = [
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? "chapter-1",
     url: overrides.url ?? "https://example.com/chapter-1",
     title: overrides.title ?? "Chapter 1",

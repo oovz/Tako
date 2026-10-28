@@ -136,6 +136,7 @@ function createStateManager(
     activeBlock,
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.com/chapter-1",
         title: "Chapter 1",
@@ -145,6 +146,7 @@ function createStateManager(
         lastUpdated: 1,
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-2",
         url: "https://example.com/chapter-2",
         title: "Chapter 2",

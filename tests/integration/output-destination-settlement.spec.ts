@@ -32,6 +32,8 @@ async function fixture(
 ) {
   const settings = structuredClone(DEFAULT_SETTINGS)
   settings.downloads.destination = mode === "fsa" ? "file-system-access" : mode
+  settings.downloads.customDirectoryHandleId =
+    mode === "fsa" ? "captured-folder" : null
   settings.notifications = false
   const task: DownloadTaskState = {
     id: identity.taskId,
@@ -44,6 +46,7 @@ async function fixture(
     settingsSnapshot: createTaskSettingsSnapshot(settings, "mangadex"),
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: identity.chapterId,
         url: "https://mangadex.org/chapter/chapter",
         title: "Chapter",

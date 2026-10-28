@@ -141,7 +141,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
                 { create: true }
               )
               const db = await new Promise<IDBDatabase>((resolve, reject) => {
-                const request = indexedDB.open("tako-fs", 1)
+                const request = indexedDB.open("tako-fs")
                 request.onsuccess = () => resolve(request.result)
                 request.onerror = () => reject(request.error)
               })
@@ -173,7 +173,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
               })
             if (!saved.success) throw new Error(saved.error)
             const db = await new Promise<IDBDatabase>((resolve, reject) => {
-              const request = indexedDB.open("tako-fs", 1)
+              const request = indexedDB.open("tako-fs")
               request.onsuccess = () => resolve(request.result)
               request.onerror = () => reject(request.error)
             })
@@ -186,8 +186,8 @@ test.describe("MangaDex download workflow (mocked)", () => {
                 request.onsuccess = () => resolve(request.result)
                 request.onerror = () => reject(request.error)
               })
-              if (retained !== undefined)
-                throw new Error("Retired folder capability was not reclaimed")
+              if (retained === undefined)
+                throw new Error("The task lost its captured folder capability")
             } finally {
               db.close()
             }
@@ -286,9 +286,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
           await sidepanel.close()
         }
 
-        // Custom-mode downloads never use chrome.downloads, so
-        // `lastSuccessfulDownloadId` stays undefined — this is also a
-        // defensive check that we actually went through the OPFS path.
+        // Direct folder output records its own filesystem result.
         expect(task.lastSuccessfulDownloadId).toBeUndefined()
 
         const files = await waitForCbzArtifact(optionsPage, seededDirectoryName)
@@ -297,6 +295,39 @@ test.describe("MangaDex download workflow (mocked)", () => {
             (file) => file.path.toLowerCase().endsWith(".cbz") && file.size > 0
           )
         ).toBe(true)
+        await optionsPage.evaluate(async (command) => {
+          const cleared = await chrome.runtime.sendMessage({
+            target: "background",
+            type: "CLEAR_ALL_HISTORY",
+            ...command,
+            payload: {},
+          })
+          if (!cleared.success) throw new Error(cleared.error)
+        }, createCommandEnvelope())
+        await expect
+          .poll(() =>
+            optionsPage.evaluate(async () => {
+              const db = await new Promise<IDBDatabase>((resolve, reject) => {
+                const request = indexedDB.open("tako-fs")
+                request.onsuccess = () => resolve(request.result)
+                request.onerror = () => reject(request.error)
+              })
+              try {
+                return await new Promise<boolean>((resolve, reject) => {
+                  const request = db
+                    .transaction("handles", "readonly")
+                    .objectStore("handles")
+                    .get("download-root")
+                  request.onsuccess = () =>
+                    resolve(request.result === undefined)
+                  request.onerror = () => reject(request.error)
+                })
+              } finally {
+                db.close()
+              }
+            })
+          )
+          .toBe(true)
       } finally {
         releasePlan()
         await optionsPage.close()

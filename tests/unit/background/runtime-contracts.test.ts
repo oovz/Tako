@@ -44,6 +44,7 @@ function createTask(): DownloadTaskState {
     seriesTitle: "Hunter x Hunter",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch-1",
         url: "https://mangadex.org/chapter/ch-1",
         title: "Chapter 1",

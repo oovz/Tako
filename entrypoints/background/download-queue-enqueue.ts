@@ -1,3 +1,4 @@
+import { captureRequestedOutputPath } from "@/src/runtime/task-output-path"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { getDefinition } from "@/src/site-integrations/catalog"
 import type { SiteIntegrationDefinition } from "@/src/site-integrations/definition-types"
@@ -16,7 +17,7 @@ export interface StartDownloadSettingsInputs {
 }
 
 export interface StartDownloadSettingsDependencies {
-  settingsRepository: Pick<SettingsRepository, "getSettings">
+  settingsRepository: Pick<SettingsRepository, "reload">
   siteIntegrationSettingsService: Pick<
     SiteIntegrationSettingsService,
     "getForSite"
@@ -29,7 +30,7 @@ export async function loadStartDownloadSettingsInputs(
   deps: StartDownloadSettingsDependencies
 ): Promise<StartDownloadSettingsInputs> {
   const [settings, siteOverrides, siteSettings] = await Promise.all([
-    deps.settingsRepository.getSettings(),
+    deps.settingsRepository.reload(),
     deps.siteOverridesService.getAll(),
     deps.siteIntegrationSettingsService.getForSite(siteIntegrationId),
   ])
@@ -61,40 +62,52 @@ export function buildStartDownloadTask(input: {
     }
   )
 
-  const chapters: DownloadTaskState["chapters"] = selectedChapters.map(
-    (chapter) => ({
-      id: chapter.id,
-      url: chapter.url,
-      title: sanitizeLabel(chapter.title),
-      index: chapter.index,
-      language: chapter.language,
-      chapterLabel: chapter.chapterLabel
-        ? sanitizeLabel(chapter.chapterLabel)
-        : undefined,
-      chapterNumber: chapter.chapterNumber,
-      volumeId: chapter.volumeId ? sanitizeLabel(chapter.volumeId) : undefined,
-      volumeNumber: chapter.volumeNumber,
-      volumeLabel: chapter.volumeLabel
-        ? sanitizeLabel(chapter.volumeLabel)
-        : undefined,
-      status: "queued",
-      outputs: { requested: 0, committed: 0, failed: 0 },
-      lastUpdated: now,
-    })
+  if (
+    settingsSnapshot.destination.kind === "file-system-access" &&
+    settingsSnapshot.destination.handleId === null
   )
+    throw new Error("Select a download folder before creating a task")
 
-  return {
+  const chapters = selectedChapters.map((chapter) => ({
+    id: chapter.id,
+    url: chapter.url,
+    title: sanitizeLabel(chapter.title),
+    index: chapter.index,
+    language: chapter.language,
+    chapterLabel: chapter.chapterLabel
+      ? sanitizeLabel(chapter.chapterLabel)
+      : undefined,
+    chapterNumber: chapter.chapterNumber,
+    volumeId: chapter.volumeId ? sanitizeLabel(chapter.volumeId) : undefined,
+    volumeNumber: chapter.volumeNumber,
+    volumeLabel: chapter.volumeLabel
+      ? sanitizeLabel(chapter.volumeLabel)
+      : undefined,
+    status: "queued",
+    outputs: { requested: 0, committed: 0, failed: 0 },
+    lastUpdated: now,
+  }))
+
+  const task = {
     id: taskId,
     siteIntegrationId: context.siteIntegrationId,
     mangaId: context.mangaId,
     seriesTitle: sanitizeLabel(context.seriesTitle),
     seriesCoverUrl: context.metadata?.coverUrl,
     chapters,
-    status: "queued",
+    status: "queued" as const,
     created: now,
     isRetried: false,
     isRetryTask: false,
     lastSuccessfulDownloadId: undefined,
     settingsSnapshot,
+  }
+  return {
+    ...task,
+    chapters: chapters.map((chapter) => ({
+      ...chapter,
+      status: "queued",
+      requestedPath: captureRequestedOutputPath(task, chapter),
+    })),
   }
 }

@@ -1,3 +1,6 @@
+import { toast } from "sonner"
+import logger from "@/src/runtime/logger"
+import { OptionsFsaController } from "../controllers/options-fsa-controller"
 import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
 import { useState } from "react"
 import { Database, Layers, Loader2, Trash2 } from "lucide-react"
@@ -69,8 +72,6 @@ export function ActivityTab({
   onClearSeriesHistory,
   onRefreshSeries,
   isClearingHistory = false,
-  onRepairFolder,
-  onGrantFolderAccess,
   isPickingFolder = false,
   isSaving = false,
 }: ActivityTabProps) {
@@ -96,7 +97,6 @@ export function ActivityTab({
     removeTask,
     clearTaskHistory,
     retryDestinationTask,
-    continueTaskInDownloads,
   } = useDownloadsTabState()
 
   const {
@@ -121,6 +121,9 @@ export function ActivityTab({
       if (await repair()) {
         await retryDestinationTask(destinationIssue.taskId)
       }
+    } catch (error) {
+      logger.warn("Task folder permission renewal failed", error)
+      toast.error(t("destinationIssue_actionFailed"))
     } finally {
       setIsDestinationActionPending(false)
     }
@@ -177,17 +180,32 @@ export function ActivityTab({
         <DownloadsFsaBanner
           issue={destinationIssue}
           taskTitle={destinationTask?.seriesTitle}
+          destination={destinationTask?.settingsSnapshot.destination}
+          requestedPath={destinationTask?.chapters[0]?.requestedPath}
           isWorking={isSaving || isPickingFolder || isDestinationActionPending}
-          onGrantAccess={() => repairAndRetry(onGrantFolderAccess)}
-          onPickFolder={() => repairAndRetry(onRepairFolder)}
-          onContinueInDownloads={async () => {
-            setIsDestinationActionPending(true)
-            try {
-              await continueTaskInDownloads(destinationIssue.taskId)
-            } finally {
-              setIsDestinationActionPending(false)
-            }
-          }}
+          onGrantAccess={() =>
+            repairAndRetry(async () => {
+              const target = destinationTask?.settingsSnapshot.destination
+              if (
+                !target ||
+                target.kind !== "file-system-access" ||
+                !target.handleId
+              )
+                return false
+              const access = await new OptionsFsaController().grantSavedAccess(
+                target.handleId
+              )
+              if (access.status !== "granted")
+                toast.error(
+                  t(
+                    access.status === "missing"
+                      ? "settings_customFolderNotFound"
+                      : "options_toastPermissionDenied"
+                  )
+                )
+              return access.status === "granted"
+            })
+          }
           onCancelTask={async () => {
             setIsDestinationActionPending(true)
             try {

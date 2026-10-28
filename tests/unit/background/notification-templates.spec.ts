@@ -25,6 +25,7 @@ vi.mock("@/src/site-integrations/catalog", () => ({
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? "ch-1",
     url: overrides.url ?? "https://example.com/ch-1",
     title: overrides.title ?? "Chapter 1",

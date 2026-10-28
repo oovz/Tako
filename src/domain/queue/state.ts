@@ -57,6 +57,7 @@ export interface ActiveDispatchLease {
   fingerprint: string
   documentInstanceId?: string
   saveMode: "fsa" | "downloads-api"
+  destinationHandleId?: string
   lastEventSignature?: string
   stage: OffscreenJobStage
   startedAt: number
@@ -93,6 +94,7 @@ export interface NativeOutputSettlement {
 }
 
 export interface TaskChapter {
+  requestedPath: string | null
   id: string
   url: string
   title: string
@@ -129,7 +131,6 @@ export interface DownloadTaskState {
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
   destinationIssue?: DestinationIssue
-  destinationOverride?: "downloads-api"
   created: number
   started?: number
   completed?: number
@@ -183,6 +184,9 @@ export interface QueueTaskSummary {
   status: DownloadTaskStatus
   outputDestination?: "downloads-api" | "fsa"
   saveConfirmedAt?: number
+  destination: TaskSettingsSnapshot["destination"]
+  requestedPath?: string | null
+  targetUnavailable?: true
   outputMode?: "downloads-api" | "fsa"
   activeBlock?: ActiveTaskBlock
   chapters: {

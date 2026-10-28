@@ -5,8 +5,9 @@ import type { ChapterState, VolumeState } from "@/src/types/tab-state"
 
 function makeChapter(
   partial: Partial<ChapterState> & { url: string; title: string }
-): ChapterState {
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: partial.id ?? partial.url,
     url: partial.url,
     title: partial.title,

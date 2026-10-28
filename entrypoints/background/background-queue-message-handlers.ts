@@ -11,7 +11,6 @@ type QueueMessageType =
   | "REMOVE_TASK"
   | "CANCEL_TASK"
   | "RETRY_DESTINATION"
-  | "CONTINUE_DOWNLOAD"
   | "UNDO_QUEUE_ACTION"
 
 export function createBackgroundQueueMessageHandlers(
@@ -83,13 +82,7 @@ export function createBackgroundQueueMessageHandlers(
       )
       return { success: true }
     },
-    CONTINUE_DOWNLOAD: async (message) => {
-      await deps.queueApplicationCommands.continueDownload(
-        message.payload.taskId,
-        message.commandId
-      )
-      return { success: true }
-    },
+
     UNDO_QUEUE_ACTION: async (message) => {
       await deps.queueApplicationCommands.undoQueueAction(message.payload.token)
       return { success: true }

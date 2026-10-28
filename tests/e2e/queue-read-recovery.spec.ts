@@ -45,6 +45,7 @@ test.describe("Queue read recovery", () => {
       await chrome.storage.session.set({
         queueView: [
           {
+            destination: { kind: "downloads-api" },
             id: "known",
             seriesKey: "mangadex#known",
             seriesTitle: "Known queued series",

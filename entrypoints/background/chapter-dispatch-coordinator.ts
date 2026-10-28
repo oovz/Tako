@@ -123,7 +123,6 @@ export class ChapterDispatchCoordinator {
             taskId,
             chapterId: chapter.id,
             destination: latestTask.settingsSnapshot.destination,
-            destinationOverride: latestTask.destinationOverride,
           })
         const saveMode: RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]["saveMode"] =
           destination.kind === "custom" ? "fsa" : "downloads-api"
@@ -274,6 +273,10 @@ export class ChapterDispatchCoordinator {
                   attempt,
                   fingerprint,
                   saveMode,
+                  destinationHandleId:
+                    destination.kind === "custom"
+                      ? destination.handleId
+                      : undefined,
                 }),
                 now: Date.now(),
               })

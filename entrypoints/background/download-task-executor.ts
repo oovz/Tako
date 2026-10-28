@@ -2,7 +2,6 @@ import logger from "@/src/runtime/logger"
 import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { clearActiveTaskProgress } from "./active-task-progress-bus"
-import { validateDownloadPathForTask } from "./queue-helpers"
 import {
   finalizeDownloadTaskAfterDispatch,
   notifyDownloadTaskCompletion,
@@ -182,7 +181,6 @@ async function runDownloadTask(
     const taskDestinationContext = {
       taskId,
       destination: task.settingsSnapshot.destination,
-      destinationOverride: task.destinationOverride,
     } as const
     const destinationPreflight = await destinationService.preflight(
       taskDestinationContext
@@ -198,12 +196,6 @@ async function runDownloadTask(
     }
 
     await ensureOffscreenReady()
-
-    validateDownloadPathForTask(taskId, {
-      downloads: {
-        pathTemplate: task.settingsSnapshot.pathTemplate,
-      },
-    })
 
     const settingsSnapshot = task.settingsSnapshot
     const chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined> =

@@ -46,7 +46,13 @@ export function createTaskSettingsSnapshot(
     archiveFormat:
       canonicalSiteOverride?.outputFormat ??
       canonicalSettings.downloads.defaultFormat,
-    destination: canonicalSettings.downloads.destination,
+    destination:
+      canonicalSettings.downloads.destination === "downloads-api"
+        ? { kind: "downloads-api" }
+        : {
+            kind: "file-system-access",
+            handleId: canonicalSettings.downloads.customDirectoryHandleId,
+          },
     conflictPolicy: canonicalSettings.downloads.conflictPolicy,
     pathTemplate:
       canonicalSiteOverride?.pathTemplate ??

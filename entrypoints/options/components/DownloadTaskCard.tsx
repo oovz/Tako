@@ -1,3 +1,4 @@
+import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import { useId, useState } from "react"
 import {
@@ -83,6 +84,10 @@ export function DownloadTaskCard({
   const totalChapters = task.chapters.length
   const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
+  const targetUnavailable =
+    task.chapters.some((chapter) => chapter.requestedPath === null) ||
+    (task.settingsSnapshot.destination.kind === "file-system-access" &&
+      task.settingsSnapshot.destination.handleId === null)
   const isRetried = task.isRetried ?? false
   const acceptanceUncertain = hasUncertainNativeOutput(task.chapters)
   const failureChapter = firstUnsuccessfulChapter(task.chapters)
@@ -298,6 +303,19 @@ export function DownloadTaskCard({
           )}
         </div>
 
+        <TaskDestinationCaption
+          destination={task.settingsSnapshot.destination}
+          requestedPath={
+            (
+              failureChapter ??
+              task.chapters.find((chapter) => chapter.status === "queued") ??
+              task.chapters[0]
+            )?.requestedPath
+          }
+        />
+        {targetUnavailable && (
+          <p className="text-xs">{t("destinationIssue_originalUnavailable")}</p>
+        )}
         {failureMessage && (
           <p className="text-sm text-destructive">
             {t("common_error")}: {failureMessage}
@@ -367,36 +385,40 @@ export function DownloadTaskCard({
 
           {task.status === "partial_success" && !isRetried && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pendingAction !== null}
-                onClick={() =>
-                  void runTaskAction("retry", () => onRetry(task.id))
-                }
-              >
-                <RotateCcw data-icon="inline-start" className="size-4" />
-                {t(
-                  acceptanceUncertain
-                    ? "sidepanel_retryUncertainHandoff"
-                    : "sidepanel_retryFailedChapters"
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pendingAction !== null}
-                onClick={() =>
-                  void runTaskAction("restart", () => onRestart(task.id))
-                }
-              >
-                <RotateCcw data-icon="inline-start" className="size-4" />
-                {t(
-                  acceptanceUncertain
-                    ? "sidepanel_restartUncertainHandoff"
-                    : "sidepanel_restartTask"
-                )}
-              </Button>
+              {!targetUnavailable && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingAction !== null}
+                    onClick={() =>
+                      void runTaskAction("retry", () => onRetry(task.id))
+                    }
+                  >
+                    <RotateCcw data-icon="inline-start" className="size-4" />
+                    {t(
+                      acceptanceUncertain
+                        ? "sidepanel_retryUncertainHandoff"
+                        : "sidepanel_retryFailedChapters"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pendingAction !== null}
+                    onClick={() =>
+                      void runTaskAction("restart", () => onRestart(task.id))
+                    }
+                  >
+                    <RotateCcw data-icon="inline-start" className="size-4" />
+                    {t(
+                      acceptanceUncertain
+                        ? "sidepanel_restartUncertainHandoff"
+                        : "sidepanel_restartTask"
+                    )}
+                  </Button>
+                </>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -413,7 +435,7 @@ export function DownloadTaskCard({
 
           {(task.status === "failed" || task.status === "canceled") && (
             <>
-              {!isRetried && (
+              {!isRetried && !targetUnavailable && (
                 <Button
                   variant="outline"
                   size="sm"

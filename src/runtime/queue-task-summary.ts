@@ -48,11 +48,22 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     coverUrl: task.seriesCoverUrl,
     status: task.status,
     activeBlock: task.activeBlock,
+    destination: task.settingsSnapshot.destination,
+    requestedPath: (
+      failureChapter ??
+      task.chapters.find((chapter) => chapter.status === "queued") ??
+      task.chapters[0]
+    )?.requestedPath,
+    targetUnavailable:
+      task.chapters.some((chapter) => chapter.requestedPath === null) ||
+      (task.settingsSnapshot.destination.kind === "file-system-access" &&
+        task.settingsSnapshot.destination.handleId === null)
+        ? true
+        : undefined,
     outputDestination: getCompletedOutputDestination(task.chapters),
     saveConfirmedAt: getCompletedSaveConfirmedAt(task.chapters),
     outputMode:
-      (task.destinationOverride ?? task.settingsSnapshot.destination) ===
-      "file-system-access"
+      task.settingsSnapshot.destination.kind === "file-system-access"
         ? "fsa"
         : "downloads-api",
     chapters: {

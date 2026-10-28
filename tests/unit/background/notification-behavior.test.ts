@@ -94,6 +94,7 @@ describe("notification behavior", () => {
     const task = makeTask({
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -137,6 +138,7 @@ describe("notification behavior", () => {
       lastSuccessfulDownloadId: 321,
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -194,6 +196,7 @@ describe("notification behavior", () => {
           ),
           chapters: [
             {
+              requestedPath: "Tako/Chapter.cbz",
               id: "ch-1",
               url: "https://example.com/ch-1",
               title: "Chapter 1",

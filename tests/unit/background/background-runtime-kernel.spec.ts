@@ -91,6 +91,7 @@ vi.mock("@/entrypoints/background/offscreen-lifecycle", () => ({
   getOffscreenContexts: vi.fn(async () => []),
   hasOffscreenDocument: vi.fn(async () => false),
   queryOffscreenJob: vi.fn(async () => null),
+  cancelOffscreenJob: vi.fn(async () => true),
   queryOffscreenStatus: vi.fn(async () => null),
   scheduleOffscreenCloseIfIdle: vi.fn(async () => undefined),
   terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),

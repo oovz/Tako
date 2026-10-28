@@ -5,7 +5,6 @@ import {
   ArchiveFormatSchema,
   ConflictPolicySchema,
   DownloadDestinationSchema,
-  DownloadErrorCategorySchema,
   DownloadTaskChapterStatusSchema,
   DownloadTaskStatusSchema,
   ImagePaddingDigitsSchema,
@@ -17,6 +16,21 @@ import {
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
 import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
+
+const DownloadErrorCategorySchema = z.enum([
+  "network_unavailable",
+  "provider_rate_limited",
+  "provider_changed",
+  "chapter_unavailable",
+  "folder_permission_required",
+  "folder_unavailable",
+  "folder_write_failed",
+  "disk_full",
+  "browser_download_interrupted",
+  "browser_handoff_interrupted",
+  "archive_creation_failed",
+  "unknown",
+])
 
 const finiteNumber = z.number().finite()
 const nonnegativeInteger = z.number().int().nonnegative()

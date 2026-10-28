@@ -645,7 +645,7 @@ export async function seedCustomDirectoryHandle(
     })
 
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("tako-fs", 1)
+      const request = indexedDB.open("tako-fs")
       request.onupgradeneeded = () => {
         const db = request.result
         if (!db.objectStoreNames.contains("handles")) {

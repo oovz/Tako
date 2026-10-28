@@ -24,7 +24,7 @@ vi.mock("@/src/runtime/logger", () => ({
 }))
 
 const settingsDependencies = {
-  settingsRepository: { getSettings: settingsMocks.getSettings },
+  settingsRepository: { reload: settingsMocks.getSettings },
   siteOverridesService: { getAll: vi.fn(async () => ({})) },
   siteIntegrationSettingsService: {
     getForSite: vi.fn(async () => ({})),
@@ -130,6 +130,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
         downloads: {
           defaultFormat: "none",
           destination: "file-system-access",
+          customDirectoryHandleId: "captured-folder",
           conflictPolicy: "overwrite",
           pathTemplate: "Library/<SERIES_TITLE>",
           fileNameTemplate: "<CHAPTER_NUMBER>-<CHAPTER_TITLE>",
@@ -162,7 +163,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     const createdTask = createdTaskRaw as {
       settingsSnapshot: {
         archiveFormat: string
-        destination: string
+        destination: import("@/src/types/state-snapshots").TaskDestination
         conflictPolicy: string
         pathTemplate: string
         fileNameTemplate: string
@@ -174,7 +175,10 @@ describe("settings snapshot isolation (behavior-based)", () => {
     }
 
     expect(createdTask.settingsSnapshot.archiveFormat).toBe("none")
-    expect(createdTask.settingsSnapshot.destination).toBe("file-system-access")
+    expect(createdTask.settingsSnapshot.destination).toEqual({
+      kind: "file-system-access",
+      handleId: "captured-folder",
+    })
     expect(createdTask.settingsSnapshot.conflictPolicy).toBe("overwrite")
     expect(createdTask.settingsSnapshot.pathTemplate).toBe(
       "Library/<SERIES_TITLE>"
@@ -219,6 +223,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
 
     settingsRef.current.downloads.defaultFormat = "zip"
     settingsRef.current.downloads.destination = "file-system-access"
+    settingsRef.current.downloads.customDirectoryHandleId = "captured-folder"
     settingsRef.current.downloads.conflictPolicy = "overwrite"
     settingsRef.current.globalPolicy.image.concurrency = 9
     settingsRef.current.globalPolicy.chapter.delayMs = 250
@@ -238,7 +243,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
       firstTaskRaw as {
         settingsSnapshot: {
           archiveFormat: string
-          destination: string
+          destination: import("@/src/types/state-snapshots").TaskDestination
           conflictPolicy: string
           rateLimitSettings: {
             image: { concurrency: number; delayMs: number }
@@ -252,7 +257,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
       secondTaskRaw as {
         settingsSnapshot: {
           archiveFormat: string
-          destination: string
+          destination: import("@/src/types/state-snapshots").TaskDestination
           conflictPolicy: string
           rateLimitSettings: {
             image: { concurrency: number; delayMs: number }
@@ -263,7 +268,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     ).settingsSnapshot
 
     expect(firstTaskSnapshot.archiveFormat).toBe("cbz")
-    expect(firstTaskSnapshot.destination).toBe("downloads-api")
+    expect(firstTaskSnapshot.destination).toEqual({ kind: "downloads-api" })
     expect(firstTaskSnapshot.conflictPolicy).toBe("uniquify")
     expect(firstTaskSnapshot.rateLimitSettings.image).toEqual({
       concurrency: 2,
@@ -275,7 +280,10 @@ describe("settings snapshot isolation (behavior-based)", () => {
     })
 
     expect(secondTaskSnapshot.archiveFormat).toBe("zip")
-    expect(secondTaskSnapshot.destination).toBe("file-system-access")
+    expect(secondTaskSnapshot.destination).toEqual({
+      kind: "file-system-access",
+      handleId: "captured-folder",
+    })
     expect(secondTaskSnapshot.conflictPolicy).toBe("overwrite")
     expect(secondTaskSnapshot.rateLimitSettings.image).toEqual({
       concurrency: 2,

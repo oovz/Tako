@@ -38,7 +38,6 @@ const EXPECTED_RUNTIME_MESSAGES = {
   SAVE_OPTIONS_CONFIGURATION: "background|command|options|runtime-ready",
   GET_UI_PREFERENCES: "background|query|sidepanel,options|runtime-ready",
   GET_PERSISTENT_ERRORS: "background|query|sidepanel|control-ready",
-  CONTINUE_DOWNLOAD: "background|command|sidepanel,options|runtime-ready",
   UNDO_QUEUE_ACTION: "background|command|sidepanel,options|runtime-ready",
   CLEAR_PERSISTED_DOWNLOAD_HISTORY: "background|command|options|runtime-ready",
   ACKNOWLEDGE_ERROR: "background|command|sidepanel|control-ready",
@@ -73,7 +72,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(34)
+    expect(Object.keys(actual)).toHaveLength(33)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {

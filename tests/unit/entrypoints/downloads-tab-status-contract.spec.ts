@@ -14,6 +14,7 @@ function makeTask(status: DownloadTaskState["status"]): DownloadTaskState {
     seriesTitle: `Series ${status}`,
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.com/chapter-1",
         title: "Chapter 1",

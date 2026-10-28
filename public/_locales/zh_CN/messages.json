@@ -351,12 +351,6 @@
   "destinationIssue_grantAccess": {
     "message": "再次授权"
   },
-  "destinationIssue_chooseFolder": {
-    "message": "选择其他文件夹"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "改用浏览器下载"
-  },
   "destinationIssue_cancelTask": {
     "message": "取消任务"
   },
@@ -699,7 +693,7 @@
     "message": "管理下载目标和监控活跃任务。"
   },
   "options_downloadDestination": {
-    "message": "下载目标"
+    "message": "新任务的默认保存位置"
   },
   "options_useCustomFolder": {
     "message": "使用自定义文件夹（文件系统访问）"
@@ -1361,7 +1355,7 @@
     "message": "权限被拒绝"
   },
   "options_toastCustomFolderSet": {
-    "message": "自定义下载文件夹已设置：$NAME$",
+    "message": "已选择文件夹：$NAME$。保存更改后，新任务将使用此文件夹。",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1722,12 +1716,6 @@
   "settings_invalidDownloadMode": {
     "message": "下载模式无效"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "自定义文件夹已清除，已切换为浏览器下载。"
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "已失去自定义文件夹的访问权限，已切换为浏览器下载。"
-  },
   "settings_unknownError": {
     "message": "未知错误"
   },
@@ -1889,5 +1877,14 @@
         "content": "$1"
       }
     }
+  },
+  "destinationIssue_originalUnavailable": {
+    "message": "此任务的原始保存位置不可用。请创建新任务。"
+  },
+  "destination_taskChrome": {
+    "message": "Chrome 下载"
+  },
+  "destination_taskFolder": {
+    "message": "所选文件夹"
   }
 }

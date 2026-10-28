@@ -19,6 +19,7 @@ function makeChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? url,
     url,
     title: overrides.title ?? url,
@@ -237,9 +238,12 @@ describe("toQueueTaskSummary", () => {
 
   it("projects the effective active output mode independently of completed output", () => {
     const task = makeTask()
-    task.settingsSnapshot.destination = "file-system-access"
+    task.settingsSnapshot.destination = {
+      kind: "file-system-access",
+      handleId: "folder",
+    }
     expect(toQueueTaskSummary(task).outputMode).toBe("fsa")
-    task.destinationOverride = "downloads-api"
+    task.settingsSnapshot.destination = { kind: "downloads-api" }
     expect(toQueueTaskSummary(task).outputMode).toBe("downloads-api")
     expect(toQueueTaskSummary(task).outputDestination).toBeUndefined()
   })

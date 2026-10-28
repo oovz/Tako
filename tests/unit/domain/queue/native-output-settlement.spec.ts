@@ -15,6 +15,7 @@ function task(overrides: Partial<DownloadTaskState> = {}): DownloadTaskState {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.com/chapter-1",
         title: "Chapter 1",

@@ -351,12 +351,6 @@
   "destinationIssue_grantAccess": {
     "message": "アクセスを再許可"
   },
-  "destinationIssue_chooseFolder": {
-    "message": "別のフォルダーを選択"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "ダウンロードに保存して続行"
-  },
   "destinationIssue_cancelTask": {
     "message": "タスクをキャンセル"
   },
@@ -699,7 +693,7 @@
     "message": "ダウンロード先を管理しアクティブタスクを監視。"
   },
   "options_downloadDestination": {
-    "message": "ダウンロード先"
+    "message": "新しいタスクの保存先の既定値"
   },
   "options_useCustomFolder": {
     "message": "カスタムフォルダを使用（File System Access）"
@@ -1361,7 +1355,7 @@
     "message": "権限が拒否されました"
   },
   "options_toastCustomFolderSet": {
-    "message": "カスタムダウンロードフォルダを設定しました：$NAME$",
+    "message": "フォルダーを選択しました: $NAME$。新しいタスクに使用するには変更を保存してください。",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1722,12 +1716,6 @@
   "settings_invalidDownloadMode": {
     "message": "ダウンロードモードが無効です"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "カスタムフォルダーが解除されたため、ブラウザーのダウンロードに切り替えました。"
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "カスタムフォルダーへのアクセスが失われたため、ブラウザーのダウンロードに切り替えました。"
-  },
   "settings_unknownError": {
     "message": "不明なエラー"
   },
@@ -1889,5 +1877,14 @@
         "content": "$1"
       }
     }
+  },
+  "destinationIssue_originalUnavailable": {
+    "message": "このタスクの元の保存先は利用できません。新しいタスクを作成してください。"
+  },
+  "destination_taskChrome": {
+    "message": "Chrome のダウンロード"
+  },
+  "destination_taskFolder": {
+    "message": "選択したフォルダー"
   }
 }

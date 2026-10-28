@@ -504,7 +504,7 @@ describe("Download Queue Guards", () => {
         started: Date.now() - 5_000,
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "mangadex"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [resumedTask]

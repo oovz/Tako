@@ -15,8 +15,9 @@ function makeChapter(
     index: number
     chapterLabel?: string
   }
-): ChapterState {
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: partial.id ?? partial.url,
     url: partial.url,
     title: partial.title,

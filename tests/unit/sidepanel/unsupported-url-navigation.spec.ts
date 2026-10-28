@@ -163,6 +163,7 @@ describe("Unsupported URL navigation", () => {
       // Volume metadata groups the chapters under one volume.
       const chaptersWithVolume = [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch1",
           url: "ch1",
           title: "Ch 1",
@@ -173,6 +174,7 @@ describe("Unsupported URL navigation", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch2",
           url: "ch2",
           title: "Ch 2",
@@ -191,6 +193,7 @@ describe("Unsupported URL navigation", () => {
       // Create chapters with volume numbers.
       const chapters = [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch1",
           url: "ch1",
           title: "Ch 1",
@@ -201,6 +204,7 @@ describe("Unsupported URL navigation", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch2",
           url: "ch2",
           title: "Ch 2",

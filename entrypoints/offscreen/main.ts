@@ -392,8 +392,8 @@ export class OffscreenWorker {
     const record: OffscreenJobRecord = {
       request,
       integrationContext,
-      // Capture the capability before acknowledging admission. Settings may
-      // reclaim its stored ID once the background receives this acknowledgement.
+      // Capture the exact task capability before acknowledging admission.
+      // Task, Undo and dispatch-lease references retain its stored identity.
       // Execution reports access failures through the normal terminal outcome.
       writableRoot:
         request.saveMode === "fsa"

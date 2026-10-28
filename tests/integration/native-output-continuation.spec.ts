@@ -51,6 +51,7 @@ function task(): DownloadTaskState {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: identity.chapterId,
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -60,6 +61,7 @@ function task(): DownloadTaskState {
         lastUpdated: 1,
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-2",
         url: "https://mangadex.org/chapter/chapter-2",
         title: "Chapter 2",

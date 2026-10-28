@@ -8,6 +8,7 @@ export function createDispatchLease(input: {
   attempt: number
   fingerprint: string
   saveMode: "fsa" | "downloads-api"
+  destinationHandleId?: string
   now?: number
 }): ActiveDispatchLease {
   const now = input.now ?? Date.now()
@@ -18,6 +19,7 @@ export function createDispatchLease(input: {
     attempt: input.attempt,
     fingerprint: input.fingerprint,
     saveMode: input.saveMode,
+    destinationHandleId: input.destinationHandleId,
     stage: "dispatching",
     startedAt: now,
     lastActivityAt: now,

@@ -4,8 +4,6 @@ import {
   verifyPermission,
   type DirHandle,
 } from "@/src/storage/fs-access"
-import { parseSettingsDocument } from "@/src/domain/settings/schema"
-import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
 type DirectoryPicker = () => Promise<FileSystemDirectoryHandle>
 
@@ -28,12 +26,6 @@ function getDirectoryPicker(): DirectoryPicker | undefined {
 
 /** Owns the browser File System Access boundary used by Options. */
 export class OptionsFsaController {
-  private mutationRevision = 0
-
-  get revision(): number {
-    return this.mutationRevision
-  }
-
   async loadSaved(handleId?: string | null): Promise<DirHandle | null> {
     return (await loadDownloadRootHandle(handleId)) ?? null
   }
@@ -61,20 +53,12 @@ export class OptionsFsaController {
     await saveDownloadRootHandle(handle, handleId)
   }
 
-  async repair(handle: DirHandle): Promise<void> {
-    const stored = await chrome.storage.local.get(SETTINGS_STORAGE_KEYS.global)
-    const handleId = parseSettingsDocument(stored[SETTINGS_STORAGE_KEYS.global])
-      .downloads.customDirectoryHandleId
-    if (!handleId) throw new Error("Custom folder is not configured")
-    ++this.mutationRevision
-    await saveDownloadRootHandle(handle, handleId)
-  }
-
-  async grantSavedAccess(): Promise<FolderAccessResult> {
-    const handle = await this.loadSaved()
+  async grantSavedAccess(
+    handleId?: string | null
+  ): Promise<FolderAccessResult> {
+    const handle = await this.loadSaved(handleId)
     if (!handle) return { status: "missing" }
     if (!(await verifyPermission(handle, true))) return { status: "denied" }
-    ++this.mutationRevision
     return { status: "granted", handle }
   }
 }

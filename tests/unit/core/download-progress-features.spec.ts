@@ -90,6 +90,7 @@ describe("Chapter outcome storage", () => {
       id: "task-5",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch1",
           title: "Chapter 1",
@@ -98,6 +99,7 @@ describe("Chapter outcome storage", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-2",
           url: "https://example.com/ch2",
           title: "Chapter 2",
@@ -107,6 +109,7 @@ describe("Chapter outcome storage", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-3",
           url: "https://example.com/ch3",
           title: "Chapter 3",
@@ -134,6 +137,7 @@ describe("Chapter outcome storage", () => {
       id: "task-5b",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch1",
           title: "Chapter 1",
@@ -156,6 +160,7 @@ describe("QueueTaskSummary status handling", () => {
       id: "task-6",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch1",
           url: "ch1",
           title: "Ch1",
@@ -164,6 +169,7 @@ describe("QueueTaskSummary status handling", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch2",
           url: "ch2",
           title: "Ch2",
@@ -191,6 +197,7 @@ describe("QueueTaskSummary status handling", () => {
       id: "task-7",
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch1",
           url: "ch1",
           title: "Ch1",
@@ -199,6 +206,7 @@ describe("QueueTaskSummary status handling", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch2",
           url: "ch2",
           title: "Ch2",
@@ -207,6 +215,7 @@ describe("QueueTaskSummary status handling", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch3",
           url: "ch3",
           title: "Ch3",

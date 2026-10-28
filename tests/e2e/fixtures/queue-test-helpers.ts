@@ -20,6 +20,7 @@ export function makeChapter(
   index: number = 1
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: url,
     url,
     title: url,

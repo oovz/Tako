@@ -351,12 +351,6 @@
   "destinationIssue_grantAccess": {
     "message": "Grant access again"
   },
-  "destinationIssue_chooseFolder": {
-    "message": "Choose another folder"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "Continue in Downloads"
-  },
   "destinationIssue_cancelTask": {
     "message": "Cancel task"
   },
@@ -699,7 +693,7 @@
     "message": "Manage download destination and monitor active tasks."
   },
   "options_downloadDestination": {
-    "message": "Download destination"
+    "message": "Download defaults for new tasks"
   },
   "options_useCustomFolder": {
     "message": "Use custom folder (File System Access)"
@@ -1361,7 +1355,7 @@
     "message": "Permission denied"
   },
   "options_toastCustomFolderSet": {
-    "message": "Custom download folder set: $NAME$",
+    "message": "Folder selected: $NAME$. Save changes to use it for new tasks.",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1725,12 +1719,6 @@
   "settings_invalidDownloadMode": {
     "message": "Invalid download mode"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "The custom folder was cleared. Switched to browser downloads."
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "Access to the custom folder was lost. Switched to browser downloads."
-  },
   "settings_unknownError": {
     "message": "Unknown error"
   },
@@ -1901,5 +1889,14 @@
         "content": "$2"
       }
     }
+  },
+  "destinationIssue_originalUnavailable": {
+    "message": "This task’s original destination is unavailable. Create a new task."
+  },
+  "destination_taskChrome": {
+    "message": "Chrome Downloads"
+  },
+  "destination_taskFolder": {
+    "message": "Selected folder"
   }
 }

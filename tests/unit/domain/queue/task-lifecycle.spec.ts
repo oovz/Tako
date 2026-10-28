@@ -24,6 +24,7 @@ function createChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: `chapter-${status}`,
     url: `https://example.com/${status}`,
     title: status,

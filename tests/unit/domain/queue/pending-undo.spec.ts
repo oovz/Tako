@@ -26,6 +26,7 @@ function createTask(
     seriesTitle: id,
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: `${id}-queued`,
         url: `https://example.com/${id}/queued`,
         title: "Queued",
@@ -158,6 +159,7 @@ describe("pending Undo domain formulas", () => {
           "skipped",
         ] as const
       ).map((status, index) => ({
+        requestedPath: "Tako/Chapter.cbz",
         id: `chapter-${status}`,
         url: `https://example.com/${status}`,
         title: status,

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
 import { toast } from "sonner"
 import logger from "@/src/runtime/logger"
 import { t } from "@/src/runtime/i18n"
@@ -27,22 +34,44 @@ export function useOptionsFolderManagement(
     useState<DirHandle | null>(null)
   const [isPickingFolder, setIsPickingFolder] = useState(false)
   const isPickingFolderRef = useRef(false)
+  const savedFolderOwner = useRef<{
+    controller: OptionsFsaController
+    handleId: string | null
+    accessRevision: number
+  } | null>(null)
+
+  useLayoutEffect(() => {
+    const owner = {
+      controller: fsaController,
+      handleId: options.savedHandleId,
+      accessRevision: 0,
+    }
+    savedFolderOwner.current = owner
+    return () => {
+      savedFolderOwner.current = null
+    }
+  }, [fsaController, options.savedHandleId])
 
   useEffect(() => {
     let canceled = false
-    const revision = fsaController.revision
+    const owner = savedFolderOwner.current
+    const revision = owner?.accessRevision
+    const isCurrent = () =>
+      !canceled &&
+      savedFolderOwner.current === owner &&
+      owner?.accessRevision === revision
     void fsaController
       .loadSaved(options.savedHandleId)
       .then(async (handle) => {
         const permission = handle
           ? await queryFsaPermission(handle, true)
           : null
-        if (canceled || fsaController.revision !== revision) return
+        if (!isCurrent()) return
         setSavedFolderHandle(handle)
         setFolderAccessRequired(handle !== null && permission !== "granted")
       })
       .catch((error) => {
-        if (canceled || fsaController.revision !== revision) return
+        if (!isCurrent()) return
         setSavedFolderHandle(null)
         setFolderAccessRequired(true)
         logger.error("[OPTIONS] Failed to load custom folder handle:", error)
@@ -115,41 +144,18 @@ export function useOptionsFolderManagement(
     settingsBuffer,
   ])
 
-  const repairDownloadFolder = useCallback(async (): Promise<boolean> => {
-    if (!beginFolderAction()) return false
-    try {
-      const result = await fsaController.requestFromUser()
-      if (result.status === "unsupported") {
-        toast.error(t("options_toastFsaNotSupported"))
-        return false
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return false
-      }
-      if (result.status === "aborted") return false
-      if (result.status !== "granted") return false
-      const handle = result.handle
-
-      await fsaController.repair(handle)
-      setSavedFolderHandle(handle)
-      setFolderAccessRequired(false)
-      setPendingFolderHandle(null)
-      toast.success(t("options_toastCustomFolderSet", [handle.name]))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to repair custom folder:", error)
-      toast.error(t("options_toastSetFolderFailed"))
-      return false
-    } finally {
-      endFolderAction()
-    }
-  }, [beginFolderAction, endFolderAction, fsaController])
-
   const grantDownloadFolderAccess = useCallback(async (): Promise<boolean> => {
+    const owner = savedFolderOwner.current
+    if (
+      !owner ||
+      owner.controller !== fsaController ||
+      owner.handleId !== options.savedHandleId
+    )
+      return false
     if (!beginFolderAction()) return false
     try {
-      const result = await fsaController.grantSavedAccess()
+      const result = await fsaController.grantSavedAccess(options.savedHandleId)
+      if (savedFolderOwner.current !== owner) return false
       if (result.status === "missing") {
         toast.error(t("settings_customFolderRequired"))
         return false
@@ -159,18 +165,20 @@ export function useOptionsFolderManagement(
         return false
       }
       const handle = result.handle
+      owner.accessRevision++
       setSavedFolderHandle(handle)
       setFolderAccessRequired(false)
-      toast.success(t("destinationIssue_accessGranted"))
+      toast.success(t("folderAccess_granted"))
       return true
     } catch (error) {
+      if (savedFolderOwner.current !== owner) return false
       logger.error("[OPTIONS] Failed to grant custom-folder access:", error)
       toast.error(t("options_toastPermissionDenied"))
       return false
     } finally {
       endFolderAction()
     }
-  }, [beginFolderAction, endFolderAction, fsaController])
+  }, [beginFolderAction, endFolderAction, fsaController, options.savedHandleId])
 
   return {
     savedFolderHandle,
@@ -183,7 +191,6 @@ export function useOptionsFolderManagement(
     selectedFolderName,
     folderAccessRequired: folderAccessRequired && pendingFolderHandle === null,
     pickDownloadFolder,
-    repairDownloadFolder,
     grantDownloadFolderAccess,
   }
 }

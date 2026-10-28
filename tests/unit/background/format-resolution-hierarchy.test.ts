@@ -1,3 +1,4 @@
+import { captureRequestedOutputPath } from "@/src/runtime/task-output-path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
@@ -41,13 +42,14 @@ function createTask(
   overrides: Partial<DownloadTaskState> = {}
 ): DownloadTaskState {
   const now = Date.now()
-  return {
+  const task: DownloadTaskState = {
     id: "task-1",
     siteIntegrationId: "mangadex",
     mangaId: "mangadex:series-1",
     seriesTitle: "Hunter x Hunter",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch-1",
         url: "https://mangadex.org/chapter/ch-1",
         title: "Chapter 1",
@@ -66,6 +68,11 @@ function createTask(
     ),
     ...overrides,
   }
+  task.chapters = task.chapters.map((chapter) => ({
+    ...chapter,
+    requestedPath: captureRequestedOutputPath(task, chapter),
+  }))
+  return task
 }
 
 describe("format resolution hierarchy (behavior-based)", () => {

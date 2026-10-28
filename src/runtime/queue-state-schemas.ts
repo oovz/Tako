@@ -3,7 +3,6 @@ import { z } from "zod"
 import {
   ArchiveFormatSchema,
   ConflictPolicySchema,
-  DownloadDestinationSchema,
   DownloadErrorCategorySchema,
   DownloadTaskChapterStatusSchema,
   DownloadTaskStatusSchema,
@@ -51,7 +50,13 @@ const chapterRatePolicySchema = z
 const taskSettingsSnapshotSchema = z
   .object({
     archiveFormat: ArchiveFormatSchema,
-    destination: DownloadDestinationSchema,
+    destination: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("downloads-api") }),
+      z.strictObject({
+        kind: z.literal("file-system-access"),
+        handleId: z.string().min(1).nullable(),
+      }),
+    ]),
     conflictPolicy: ConflictPolicySchema,
     pathTemplate: z.string(),
     fileNameTemplate: z.string().min(1),
@@ -76,10 +81,6 @@ const taskSettingsSnapshotSchema = z
     siteIntegrationId: nonemptyString,
   })
   .strict()
-
-const epoch2TaskSettingsSnapshotSchema = taskSettingsSnapshotSchema.extend({
-  comicInfo: z.record(z.string(), z.unknown()).optional(),
-})
 
 const outputAccountingSchema = z
   .object({
@@ -112,6 +113,7 @@ const nativeOutputSettlementSchema = z
 
 const taskChapterSchema = z
   .object({
+    requestedPath: nonemptyString.nullable(),
     id: nonemptyString,
     url: nonemptyString,
     title: z.string(),
@@ -155,7 +157,6 @@ const downloadTaskStateShape = {
     ])
     .optional(),
   destinationIssue: DestinationIssueSchema.optional(),
-  destinationOverride: z.literal("downloads-api").optional(),
   created: finiteNumber,
   started: finiteNumber.optional(),
   completed: finiteNumber.optional(),
@@ -188,15 +189,32 @@ export const DownloadTaskStateDocumentSchema = z
   .object(downloadTaskStateShape)
   .strict()
 
-/** Storage shape used by the released epoch-2 document before destination pairing. */
-export const Epoch2DownloadTaskStateSchema =
-  DownloadTaskStateDocumentSchema.extend({
-    seriesCoverUrl: z.string().optional(),
-    settingsSnapshot: epoch2TaskSettingsSnapshotSchema,
-  })
-
 export const DownloadTaskStateSchema =
   DownloadTaskStateDocumentSchema.superRefine((task, ctx) => {
+    if (
+      (task.status === "queued" || task.status === "downloading") &&
+      task.settingsSnapshot.destination.kind === "file-system-access" &&
+      task.settingsSnapshot.destination.handleId === null
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["settingsSnapshot", "destination"],
+        message: "Active folder tasks require their captured folder identity",
+      })
+    }
+    if (
+      (task.status === "queued" || task.status === "downloading") &&
+      task.chapters.some(
+        (chapter) =>
+          (chapter.status === "queued" || chapter.status === "downloading") &&
+          chapter.requestedPath === null
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["chapters"],
+        message: "Active chapters require a captured requested path",
+      })
     if (task.activeBlock === "destination_action_required") {
       if (!task.destinationIssue) {
         ctx.addIssue({
@@ -245,6 +263,7 @@ export const ActiveDispatchLeaseSchema = z
     fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
     documentInstanceId: nonemptyString.optional(),
     saveMode: z.enum(["fsa", "downloads-api"]),
+    destinationHandleId: nonemptyString.optional(),
     lastEventSignature: nonemptyString.optional(),
     stage: z.enum([
       "dispatching",
@@ -267,18 +286,6 @@ export const PendingUndoActionSchema = z
     token: nonemptyString,
     type: z.enum(["cancel_queued", "remove_history"]),
     taskSnapshot: DownloadTaskStateSchema,
-    previousQueuePosition: nonnegativeInteger,
-    createdAt: finiteNumber,
-    expiresAt: finiteNumber,
-  })
-  .strict()
-  .refine((action) => action.expiresAt >= action.createdAt)
-
-export const Epoch2PendingUndoActionSchema = z
-  .object({
-    token: nonemptyString,
-    type: z.enum(["cancel_queued", "remove_history"]),
-    taskSnapshot: Epoch2DownloadTaskStateSchema,
     previousQueuePosition: nonnegativeInteger,
     createdAt: finiteNumber,
     expiresAt: finiteNumber,
