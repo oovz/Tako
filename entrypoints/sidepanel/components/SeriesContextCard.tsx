@@ -1,4 +1,5 @@
-import React, { useState } from "react"
+import React from "react"
+import { CoverPreview } from "@/entrypoints/sidepanel/components/CoverPreview"
 
 import {
   List,
@@ -65,7 +66,6 @@ export function SeriesContextCard({
   isExpanded,
   triggerRef,
 }: SeriesContextCardProps) {
-  const [imageLoaded, setImageLoaded] = useState(false)
   const messageState = data.retrySeriesContext
     ? {
         title: t("sidepanel_seriesLoadFailed"),
@@ -154,7 +154,6 @@ export function SeriesContextCard({
     )
   }
 
-  const coverSrc = data.coverUrl || chrome.runtime.getURL("icon/128.png")
   const subtitleParts: string[] = []
   if (data.author) subtitleParts.push(data.author)
   if (data.siteId) subtitleParts.push(getDisplayName(data.siteId))
@@ -176,21 +175,30 @@ export function SeriesContextCard({
     <div className="group flex gap-4 transition-all duration-200">
       {/* Cover image - enlarged for better visibility */}
       <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted">
-        {coverSrc && (
-          <img
-            src={coverSrc}
-            alt={data.mangaTitle}
-            className={cn(
-              "h-full w-full object-contain transition-all duration-300 group-hover:scale-105",
-              imageLoaded ? "opacity-100" : "opacity-0"
-            )}
-            onLoad={() => setImageLoaded(true)}
-            draggable={false}
-          />
-        )}
-        {!imageLoaded && (
-          <div className="absolute inset-0 bg-muted animate-pulse" />
-        )}
+        <CoverPreview
+          identity={
+            data.siteId &&
+            data.coverUrl &&
+            data.seriesId &&
+            data.tabId !== undefined &&
+            data.windowId !== undefined &&
+            data.seriesRevision !== undefined
+              ? {
+                  integrationId: data.siteId,
+                  coverUrl: data.coverUrl,
+                  source: {
+                    kind: "series",
+                    tabId: data.tabId,
+                    windowId: data.windowId,
+                    seriesId: data.seriesId,
+                    seriesRevision: data.seriesRevision,
+                  },
+                }
+              : undefined
+          }
+          alt={data.mangaTitle}
+          className="object-contain transition-all duration-300 group-hover:scale-105"
+        />
       </div>
       {/* Content */}
       <div className="flex flex-1 flex-col justify-between min-w-0">

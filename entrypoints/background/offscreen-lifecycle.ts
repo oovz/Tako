@@ -47,18 +47,18 @@ type RuntimeGetContexts = (params: {
   documentUrls: string[]
 }) => Promise<unknown[]>
 
-const activeSeriesResolutionReservations = new Set<object>()
+const activeTransientWorkReservations = new Set<object>()
 
-function reserveSeriesResolution(): OffscreenDocumentLifecycleReservation {
+function reserveTransientWork(): OffscreenDocumentLifecycleReservation {
   const reservation = {}
-  activeSeriesResolutionReservations.add(reservation)
+  activeTransientWorkReservations.add(reservation)
   return {
-    release: () => activeSeriesResolutionReservations.delete(reservation),
+    release: () => activeTransientWorkReservations.delete(reservation),
   }
 }
 
-function releaseAllSeriesResolutionReservations(): void {
-  activeSeriesResolutionReservations.clear()
+function releaseAllTransientWorkReservations(): void {
+  activeTransientWorkReservations.clear()
 }
 
 export async function getOffscreenContexts(): Promise<unknown[]> {
@@ -82,11 +82,11 @@ export async function hasOffscreenDocument(): Promise<boolean> {
 export async function terminateOffscreenDocumentForUnboundLease(): Promise<void> {
   await runOffscreenLifecycleOperation(async () => {
     if (!(await chrome.offscreen.hasDocument())) {
-      releaseAllSeriesResolutionReservations()
+      releaseAllTransientWorkReservations()
       return
     }
     await chrome.offscreen.closeDocument()
-    releaseAllSeriesResolutionReservations()
+    releaseAllTransientWorkReservations()
   })
 }
 
@@ -111,7 +111,7 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
 
   const contexts = await getOffscreenContexts()
   if (contexts.length === 0) {
-    releaseAllSeriesResolutionReservations()
+    releaseAllTransientWorkReservations()
     return "stale"
   }
   if (
@@ -129,7 +129,7 @@ async function closeOffscreenDocumentIfCurrentInLifecycle(
   }
 
   await chrome.offscreen.closeDocument()
-  releaseAllSeriesResolutionReservations()
+  releaseAllTransientWorkReservations()
   return "closed"
 }
 
@@ -573,7 +573,7 @@ async function ensureOffscreenDocumentAdmission(): Promise<void> {
     }
   }
 
-  releaseAllSeriesResolutionReservations()
+  releaseAllTransientWorkReservations()
   await chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: [
@@ -615,7 +615,7 @@ export async function runOffscreenDocumentAdmissionExclusive<T>(
   await ensureLivenessAlarm()
   return await runOffscreenLifecycleOperation(async () => {
     await ensureOffscreenDocumentAdmission()
-    return await operation({ reserveSeriesResolution })
+    return await operation({ reserveTransientWork })
   })
 }
 
@@ -625,7 +625,7 @@ export async function runOffscreenDocumentAdmissionExclusive<T>(
 export async function queryOffscreenStatus(): Promise<{
   initializationState: OffscreenInitializationState
   activeJobCount: number
-  activeSeriesResolutionCount: number
+  activeTransientWorkCount: number
   activeTaskIds: string[]
   documentInstanceId: string
 } | null> {
@@ -644,14 +644,14 @@ export async function queryOffscreenStatus(): Promise<{
         (left, right) => left.localeCompare(right)
       )
       const activeJobCount = response.activeJobCount
-      const activeSeriesResolutionCount = response.activeSeriesResolutionCount
+      const activeTransientWorkCount = response.activeTransientWorkCount
       if (activeJobCount !== activeTaskIds.length) {
         return null
       }
       return {
         initializationState: response.initializationState,
         activeJobCount,
-        activeSeriesResolutionCount,
+        activeTransientWorkCount,
         activeTaskIds,
         documentInstanceId: response.documentInstanceId,
       }
@@ -678,8 +678,8 @@ export async function scheduleOffscreenCloseIfIdle(
         !candidateStatus ||
         candidateStatus.initializationState !== "ready" ||
         candidateStatus.activeJobCount !== 0 ||
-        candidateStatus.activeSeriesResolutionCount !== 0 ||
-        activeSeriesResolutionReservations.size !== 0
+        candidateStatus.activeTransientWorkCount !== 0 ||
+        activeTransientWorkReservations.size !== 0
       ) {
         return
       }
@@ -721,8 +721,8 @@ export async function scheduleOffscreenCloseIfIdle(
         currentStatus.documentInstanceId !==
           candidateStatus.documentInstanceId ||
         currentStatus.activeJobCount !== 0 ||
-        currentStatus.activeSeriesResolutionCount !== 0 ||
-        activeSeriesResolutionReservations.size !== 0
+        currentStatus.activeTransientWorkCount !== 0 ||
+        activeTransientWorkReservations.size !== 0
       ) {
         return
       }

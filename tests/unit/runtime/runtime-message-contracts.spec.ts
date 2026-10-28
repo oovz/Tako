@@ -21,6 +21,10 @@ const EXACT_JOB_IDENTITY = {
 }
 
 const EXPECTED_RUNTIME_MESSAGES = {
+  GET_COVER_PREVIEW: "background|query|sidepanel|control-ready",
+  CANCEL_COVER_PREVIEW: "background|command|sidepanel|control-ready",
+  OFFSCREEN_FETCH_COVER_PREVIEW: "offscreen|query|background|runtime-ready",
+  OFFSCREEN_CANCEL_COVER_PREVIEW: "offscreen|command|background|runtime-ready",
   OFFSCREEN_BEGIN_FSA_WRITE: "background|command|offscreen|queue-hydrated",
   REQUEST_TAB_CONTEXT_REFRESH:
     "background|command|sidepanel|integrations-ready",
@@ -72,7 +76,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(33)
+    expect(Object.keys(actual)).toHaveLength(37)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {
@@ -327,7 +331,7 @@ describe("runtime message registry", () => {
           initializationState,
           documentInstanceId: DOCUMENT_INSTANCE_ID,
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }).success
       ).toBe(true)
@@ -338,7 +342,7 @@ describe("runtime message registry", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
         isInitialized: true,
       }).success
@@ -349,7 +353,7 @@ describe("runtime message registry", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
         ready: true,
       }).success
@@ -359,7 +363,7 @@ describe("runtime message registry", () => {
         success: true,
         initializationState: "ready",
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }).success
     ).toBe(false)

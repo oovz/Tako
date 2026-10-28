@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
-  const reserveSeriesResolution = vi.fn(() => ({ release: vi.fn() }))
+  const reserveTransientWork = vi.fn(() => ({ release: vi.fn() }))
   return {
-    reserveSeriesResolution,
+    reserveTransientWork,
     runOffscreenDocumentAdmissionExclusive: vi.fn(
       async <T>(
         operation: (context: {
-          reserveSeriesResolution: () => { release: () => void }
+          reserveTransientWork: () => { release: () => void }
         }) => Promise<T>
-      ): Promise<T> => await operation({ reserveSeriesResolution })
+      ): Promise<T> => await operation({ reserveTransientWork })
     ),
     sendMessage: vi.fn(),
   }

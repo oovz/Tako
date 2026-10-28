@@ -10,6 +10,7 @@ export function createBackgroundRuntimeMessageHandlers(
   deps: BackgroundRuntimeHandlerDependencies
 ): RuntimeMessageHandlerMap<"background"> {
   return {
+    ...deps.coverPreviewHandlers,
     ...createBackgroundQueueMessageHandlers(deps),
     ...createBackgroundDownloadStateMessageHandlers(deps),
     ...createBackgroundTabContextMessageHandlers(deps),

@@ -39,7 +39,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     expect(state?.metadata?.coverUrl).toBe(series.coverUrl)
 
     const cover = sp.getByRole("img", { name: series.seriesTitle })
-    await expect(cover).toHaveAttribute("src", series.coverUrl!)
+    await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
         cover.evaluate(

@@ -50,9 +50,6 @@ export function CommandCenterQueue({
   const [confirmingCancelTaskId, setConfirmingCancelTaskId] = useState<
     string | null
   >(null)
-  const [coverLoadFailures, setCoverLoadFailures] = useState<
-    Record<string, true>
-  >({})
   const [cancelErrorsByTaskId, setCancelErrorsByTaskId] = useState<
     Record<string, string>
   >({})
@@ -81,7 +78,6 @@ export function CommandCenterQueue({
               isMoving={movingTaskIds?.has(task.id) ?? false}
               isConfirmingCancel={confirmingCancelTaskId === task.id}
               cancelError={cancelErrorsByTaskId[task.id] ?? null}
-              coverFailed={coverLoadFailures[task.id] === true}
               activeTaskProgress={activeTaskProgress}
               showActiveProgress={showActiveProgress}
               isFirstQueuedTask={firstQueuedTaskId === task.id}
@@ -133,12 +129,6 @@ export function CommandCenterQueue({
                   })
                 }
                 setConfirmingCancelTaskId(null)
-              }}
-              onCoverError={(taskId) => {
-                setCoverLoadFailures((previousFailures) => ({
-                  ...previousFailures,
-                  [taskId]: true,
-                }))
               }}
               onCancelTask={onCancelTask}
               onRetryFailed={onRetryFailed}

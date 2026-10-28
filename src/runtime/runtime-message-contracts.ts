@@ -35,6 +35,11 @@ import {
 import { PersistentErrorsSchema } from "@/src/runtime/persistent-error-schema"
 import { StartDownloadFailureCodeSchema } from "@/src/runtime/start-download-errors"
 
+import {
+  CoverPreviewSourceSchema,
+  CoverPreviewResponseSchema,
+} from "./cover-preview-contracts"
+
 export type RuntimeMessageTarget = "background" | "offscreen"
 export type RuntimeMessageKind = "command" | "query" | "event"
 export type RuntimeMessageReadiness =
@@ -321,6 +326,65 @@ function defineRuntimeMessage<const TEntry extends RegistryEntry>(
 const successOrFailure = () => z.union([SuccessSchema, RuntimeFailureSchema])
 
 export const runtimeMessageRegistry = {
+  GET_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("GET_COVER_PREVIEW"),
+      payload: z.strictObject({
+        requestId: z.string().uuid(),
+        source: CoverPreviewSourceSchema,
+      }),
+    }),
+    response: CoverPreviewResponseSchema,
+    target: "background",
+    kind: "query",
+    allowedSenders: ["sidepanel"],
+    readiness: "control-ready",
+  }),
+  CANCEL_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("CANCEL_COVER_PREVIEW"),
+      payload: z.strictObject({ requestId: z.string().uuid() }),
+    }),
+    response: successOrFailure(),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["sidepanel"],
+    readiness: "control-ready",
+  }),
+  OFFSCREEN_FETCH_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("OFFSCREEN_FETCH_COVER_PREVIEW"),
+      payload: z.strictObject({
+        requestId: z.string().uuid(),
+        integrationId: z.string().min(1),
+        coverUrl: PublicHttpsUrlSchema,
+        rateLimitSettings: z.strictObject({
+          image: RateLimitSnapshotSchema,
+          chapter: RateLimitSnapshotSchema,
+        }),
+      }),
+    }),
+    response: CoverPreviewResponseSchema,
+    target: "offscreen",
+    kind: "query",
+    allowedSenders: ["background"],
+    readiness: "runtime-ready",
+  }),
+  OFFSCREEN_CANCEL_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("OFFSCREEN_CANCEL_COVER_PREVIEW"),
+      payload: z.strictObject({ requestId: z.string().uuid() }),
+    }),
+    response: successOrFailure(),
+    target: "offscreen",
+    kind: "command",
+    allowedSenders: ["background"],
+    readiness: "runtime-ready",
+  }),
   REQUEST_TAB_CONTEXT_REFRESH: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),
@@ -785,7 +849,7 @@ export const runtimeMessageRegistry = {
         initializationState: OffscreenInitializationStateSchema,
         documentInstanceId: z.string().min(1),
         activeJobCount: z.number().int().nonnegative(),
-        activeSeriesResolutionCount: z.number().int().nonnegative(),
+        activeTransientWorkCount: z.number().int().nonnegative(),
         activeTaskIds: z.array(z.string().min(1)),
       }),
       RuntimeFailureSchema,

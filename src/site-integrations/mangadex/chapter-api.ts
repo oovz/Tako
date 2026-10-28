@@ -387,6 +387,7 @@ export async function downloadMangadexCoverImage(
       integrationId: "mangadex",
       endpointId: "mangadex-at-home-image",
       rateLimitService: opts.runtime.rateLimitService,
+      skipRateLimit: opts.skipRateLimit,
       onBytesReceived: opts.onBytesReceived,
       liveResourceLedger: opts.liveResourceLedger,
     })

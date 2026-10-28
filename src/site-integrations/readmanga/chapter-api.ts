@@ -26,6 +26,10 @@ const assertManhuaguiImageUrl = createIntegrationEndpointUrlAssertion(
   "readmanga",
   "readmanga-image-cdn"
 )
+const assertManhuaguiCoverUrl = createIntegrationEndpointUrlAssertion(
+  "readmanga",
+  "readmanga-cover-image"
+)
 
 /**
  * Fetch the chapter viewer HTML and reconstruct the signed image URL list.
@@ -138,12 +142,12 @@ export async function downloadManhuaguiCoverImage(
   const { data, mimeType, liveResourceLease } =
     await fetchImageWithStallDetection(imageUrl, {
       integrationId: "readmanga",
-      endpointId: "readmanga-image-cdn",
+      endpointId: "readmanga-cover-image",
       signal: opts.signal,
       rateLimitService: opts.runtime.rateLimitService,
       skipRateLimit: opts.skipRateLimit,
       onBytesReceived: opts.onBytesReceived,
-      assertUrlAllowed: assertManhuaguiImageUrl,
+      assertUrlAllowed: assertManhuaguiCoverUrl,
       liveResourceLedger: opts.liveResourceLedger,
       init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.image },
     })

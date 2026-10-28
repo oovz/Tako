@@ -33,7 +33,7 @@ test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
 
     const series = ShonenJumpPlus.BASIC_SERIES.series
     const cover = sp.getByRole("img", { name: series.seriesTitle })
-    await expect(cover).toHaveAttribute("src", series.coverUrl!)
+    await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
         cover.evaluate(

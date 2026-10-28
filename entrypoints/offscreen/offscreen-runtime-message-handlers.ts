@@ -28,6 +28,10 @@ export interface OffscreenWorkerRuntime {
   parseSeriesHtml: (
     payload: OffscreenParseSeriesHtmlPayload
   ) => Promise<RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML">>
+  fetchCoverPreview: (
+    payload: RuntimeMessageRequest<"OFFSCREEN_FETCH_COVER_PREVIEW">["payload"]
+  ) => Promise<RuntimeMessageResponse<"OFFSCREEN_FETCH_COVER_PREVIEW">>
+  cancelCoverPreview: (requestId: string) => boolean
   cancelSeriesHtml: (requestId: string) => boolean
   cancelJob: (
     input: RuntimeMessageRequest<"OFFSCREEN_CANCEL_JOB">["payload"]
@@ -42,7 +46,7 @@ export interface OffscreenWorkerRuntime {
     input: RuntimeMessageRequest<"OFFSCREEN_CANCEL_JOB">["payload"]
   ) => OffscreenJobState | null
   getActiveJobCount: () => number
-  getActiveSeriesResolutionCount: () => number
+  getActiveTransientWorkCount: () => number
   getActiveTaskIds: () => string[]
 }
 
@@ -51,6 +55,12 @@ export function createOffscreenRuntimeMessageHandlers(
   getInitializationState: () => OffscreenInitializationState
 ): RuntimeMessageHandlerMap<"offscreen"> {
   return {
+    OFFSCREEN_FETCH_COVER_PREVIEW: (message) =>
+      worker.fetchCoverPreview(message.payload),
+    OFFSCREEN_CANCEL_COVER_PREVIEW: (message) => {
+      worker.cancelCoverPreview(message.payload.requestId)
+      return { success: true }
+    },
     OFFSCREEN_DOWNLOAD_CHAPTER: async (message) => ({
       success: true,
       ...(await worker.processDownloadChapter(message.payload)),
@@ -60,7 +70,7 @@ export function createOffscreenRuntimeMessageHandlers(
       initializationState: getInitializationState(),
       documentInstanceId: worker.documentInstanceId,
       activeJobCount: worker.getActiveJobCount(),
-      activeSeriesResolutionCount: worker.getActiveSeriesResolutionCount(),
+      activeTransientWorkCount: worker.getActiveTransientWorkCount(),
       activeTaskIds: [...new Set(worker.getActiveTaskIds())].sort(
         (left, right) => left.localeCompare(right)
       ),

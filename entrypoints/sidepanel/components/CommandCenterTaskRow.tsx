@@ -22,6 +22,7 @@ import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import { getDownloadCancelPresentation } from "@/src/runtime/download-error-presentation"
 import { useI18n } from "@/src/ui/shared/hooks/useI18n"
+import { CoverPreview } from "@/entrypoints/sidepanel/components/CoverPreview"
 
 interface CommandCenterTaskRowProps {
   task: QueueTaskSummary
@@ -32,14 +33,12 @@ interface CommandCenterTaskRowProps {
   isMoving: boolean
   isConfirmingCancel: boolean
   cancelError: string | null
-  coverFailed: boolean
   activeTaskProgress: ActiveTaskProgressState | null | undefined
   showActiveProgress: boolean
   isFirstQueuedTask?: boolean
   onBeginCancel: (taskId: string) => void
   onConfirmCancel: (taskId: string) => void
   onDismissCancel: () => void
-  onCoverError: (taskId: string) => void
   onCancelTask?: (taskId: string) => void
   onRetryFailed?: (taskId: string) => void
   onRestartTask?: (taskId: string) => void
@@ -56,14 +55,12 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
   isMoving,
   isConfirmingCancel,
   cancelError,
-  coverFailed,
   activeTaskProgress,
   showActiveProgress,
   isFirstQueuedTask = false,
   onBeginCancel,
   onConfirmCancel,
   onDismissCancel,
-  onCoverError,
   onCancelTask,
   onRetryFailed,
   onRestartTask,
@@ -123,9 +120,6 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
   }, [showProgressInRow])
 
   const failureMessage = getTaskFailureMessage(task)
-  const fallbackCoverUrl = chrome.runtime.getURL("icon/128.png")
-  const coverSrc =
-    task.coverUrl && !coverFailed ? task.coverUrl : fallbackCoverUrl
 
   const icon = getTaskStatusIcon(task.status)
 
@@ -160,18 +154,18 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
 
         {/* Thumbnail */}
         <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50 transition-transform duration-200 group-hover:scale-105">
-          <img
-            src={coverSrc}
+          <CoverPreview
+            identity={
+              task.coverUrl
+                ? {
+                    integrationId: task.siteIntegration,
+                    coverUrl: task.coverUrl,
+                    source: { kind: "task", taskId: task.id },
+                  }
+                : undefined
+            }
             alt=""
-            className="h-full w-full object-cover"
-            onError={() => {
-              if (!task.coverUrl || coverFailed) {
-                return
-              }
-
-              onCoverError(task.id)
-            }}
-            draggable={false}
+            className="object-cover"
           />
         </div>
 

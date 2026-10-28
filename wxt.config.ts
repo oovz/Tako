@@ -93,6 +93,7 @@ export default defineConfig({
         ? [
             ...siteIntegrationWxtPermissions.requiredOrigins,
             ...siteIntegrationWxtPermissions.optionalOrigins,
+            ...(isDeterministicE2e ? ["http://127.0.0.1/*"] : []),
           ]
         : [...siteIntegrationWxtPermissions.requiredOrigins],
       optional_host_permissions: grantsBroadHttpsForIsolatedTest

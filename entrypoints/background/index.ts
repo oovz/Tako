@@ -1,3 +1,4 @@
+import { createBackgroundCoverPreviewMessageHandlers } from "./background-cover-preview-message-handlers"
 import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
 
@@ -274,6 +275,17 @@ const queueApplicationCommands = new QueueApplicationCommands({
 })
 
 const backgroundRuntimeHandlers = createBackgroundRuntimeMessageHandlers({
+  coverPreviewHandlers: createBackgroundCoverPreviewMessageHandlers({
+    ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
+    getCurrentSeriesContext:
+      tabContextCache.getCurrentSeriesContext.bind(tabContextCache),
+    queueRepository,
+    siteIntegrationEnablementService,
+    rateLimitService,
+    ensureNetworkReady: (integrationId) =>
+      siteIntegrationSessionRuleManager.ensureNetworkReady(integrationId),
+    admit: runOffscreenDocumentAdmissionExclusive,
+  }),
   settingsRepository,
   historyRepository,
   siteIntegrationEnablementService,

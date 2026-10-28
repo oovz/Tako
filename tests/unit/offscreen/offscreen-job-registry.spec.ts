@@ -325,13 +325,13 @@ describe("offscreen job registry", () => {
     })
     await vi.waitFor(() => expect(enablementMocks.load).toHaveBeenCalledOnce())
 
-    expect(worker.getActiveSeriesResolutionCount()).toBe(1)
+    expect(worker.getActiveTransientWorkCount()).toBe(1)
     releaseEnablement?.({ mangadex: false })
     await expect(parsing).resolves.toEqual({
       success: false,
       error: "Site integration mangadex is disabled",
     })
-    expect(worker.getActiveSeriesResolutionCount()).toBe(0)
+    expect(worker.getActiveTransientWorkCount()).toBe(0)
   })
 
   it("keeps a canceled series resolution active until its parser settles", () => {

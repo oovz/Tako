@@ -222,7 +222,7 @@ describe("recoverFromLivenessTimeout", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }
     }

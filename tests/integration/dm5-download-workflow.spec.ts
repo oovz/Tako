@@ -71,7 +71,7 @@ describe.each([
       })
     )
     configureSeriesDataOffscreenLifecycle((operation) =>
-      operation({ reserveSeriesResolution: () => ({ release: () => {} }) })
+      operation({ reserveTransientWork: () => ({ release: () => {} }) })
     )
     const resolver = new OffscreenSeriesResolver(() => rateLimitService)
     vi.stubGlobal("chrome", {

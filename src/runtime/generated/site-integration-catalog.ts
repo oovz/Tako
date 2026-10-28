@@ -1774,6 +1774,22 @@ export const siteIntegrationCatalog = [
         "redirect": "error",
         "responseType": "bytes",
         "maxResponseBytes": 50000000
+      },
+      {
+        "id": "readmanga-cover-image",
+        "purpose": "Manhuagui cover images",
+        "origins": [
+          "https://www.manhuagui.com/*",
+          "https://manhuagui.com/*",
+          "https://cf.mhgui.com/*",
+          "https://hamreus.com/*",
+          "https://*.hamreus.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
       }
     ],
     "sessionRefererRules": [

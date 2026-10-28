@@ -1,3 +1,4 @@
+import { CoverPreviewService } from "./cover-preview-service"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 /**
  * Offscreen document runtime for archive creation, image processing,
@@ -171,6 +172,7 @@ export class OffscreenWorker {
   >()
   private readonly jobs = new Map<string, OffscreenJobRecord>()
   private readonly browserBlobs: BrowserBlobLeaseRegistry
+  private readonly coverPreviews: CoverPreviewService
   private readonly seriesResolver: OffscreenSeriesResolver
   private readonly jobEvents: OffscreenJobEventCoordinator
 
@@ -178,6 +180,13 @@ export class OffscreenWorker {
     readonly documentInstanceId: string = crypto.randomUUID(),
     private readonly liveResourceLedger = new OffscreenLiveResourceLedger()
   ) {
+    this.coverPreviews = new CoverPreviewService(
+      new RateLimitService({
+        resolveEffectivePolicy: () =>
+          Promise.reject(new Error("Cover previews require a policy snapshot")),
+      }),
+      liveResourceLedger
+    )
     this.browserBlobs = new BrowserBlobLeaseRegistry(
       undefined,
       undefined,
@@ -894,8 +903,20 @@ export class OffscreenWorker {
       .length
   }
 
-  getActiveSeriesResolutionCount(): number {
-    return this.seriesResolver.getActiveCount()
+  fetchCoverPreview(
+    payload: RuntimeMessageRequest<"OFFSCREEN_FETCH_COVER_PREVIEW">["payload"]
+  ) {
+    return this.coverPreviews.fetch(payload)
+  }
+
+  cancelCoverPreview(requestId: string): boolean {
+    return this.coverPreviews.cancel(requestId)
+  }
+
+  getActiveTransientWorkCount(): number {
+    return (
+      this.seriesResolver.getActiveCount() + this.coverPreviews.getActiveCount()
+    )
   }
 
   getActiveTaskIds(): string[] {
