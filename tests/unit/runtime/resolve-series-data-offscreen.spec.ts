@@ -52,6 +52,7 @@ describe("resolveSeriesDataViaOffscreen", () => {
   it("admits the parse send with the offscreen lifecycle and maps a successful response", async () => {
     mocks.sendMessage.mockResolvedValue({
       success: true,
+      seriesId: "series-1",
       seriesMetadata: { title: "Series" },
       chapterList: { chapters: [], volumes: [] },
       metadataError: undefined,
@@ -68,6 +69,7 @@ describe("resolveSeriesDataViaOffscreen", () => {
         rateLimitService,
       })
     ).resolves.toEqual({
+      seriesId: "series-1",
       seriesMetadata: { title: "Series" },
       chapterList: { chapters: [], volumes: [] },
       metadataError: undefined,

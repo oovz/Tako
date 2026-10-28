@@ -14,6 +14,8 @@ import type { LiveChapter } from "./metadata-extraction-helpers"
 import { inspectChapterArchive } from "../../e2e/fixtures/chapter-artifact"
 import { startSingleChapterDownload as dispatchSingleChapterDownload } from "../../e2e/fixtures/download-workflow-helpers"
 import packageJson from "../../../package.json" with { type: "json" }
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
 
 export type { LiveChapter }
 
@@ -279,22 +281,20 @@ export async function persistDownloadSettings(
     async ({
       patch,
       sitePatch,
+      command,
     }: {
       patch: Partial<ExtensionSettings["downloads"]>
       sitePatch?: StoredSiteIntegrationSettings
+      command: ReturnType<typeof createCommandEnvelope>
     }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error("Missing persisted settings payload")
-      }
+      const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "GET_OPTIONS_CONFIGURATION",
+        })
+      if (!current.success) throw new Error(current.error)
+      const configuration = current.data.configuration
+      const baseSettings = configuration.settings
 
       const mergedSettings: ExtensionSettings = {
         ...baseSettings,
@@ -309,24 +309,33 @@ export async function persistDownloadSettings(
       }
 
       const mergedSiteSettings: StoredSiteIntegrationSettings = {
-        ...(current.siteIntegrationSettings ?? {}),
+        ...configuration.integrationSettings,
         ...(sitePatch ?? {}),
       }
-
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      })
-
-      return {
-        globalSettings: mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      }
+      const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "SAVE_OPTIONS_CONFIGURATION",
+          ...command,
+          payload: {
+            configuration: {
+              ...configuration,
+              settings: mergedSettings,
+              integrationSettings: mergedSiteSettings,
+            },
+          },
+        })
+      if (!saved.success) throw new Error(saved.error)
+      return saved.data.settings
     },
-    { patch: downloadPatch, sitePatch: siteSettingsPatch }
+    {
+      patch: downloadPatch,
+      sitePatch: siteSettingsPatch,
+      command: createCommandEnvelope(),
+    }
   )
 
-  expect(nextSettings.globalSettings.downloads.defaultFormat).toBe("cbz")
+  expect(nextSettings.downloads.defaultFormat).toBe("cbz")
 }
 
 export async function startSingleChapterDownload(
@@ -390,13 +399,14 @@ export async function readActiveTaskProgressFromExtensionPage(
 
 export async function waitForTerminalTask(
   optionsPage: Page,
-  taskId: string
+  taskId: string,
+  timeoutMs = LIVE_TASK_TERMINAL_TIMEOUT_MS
 ): Promise<DownloadTaskState> {
   const startedAt = Date.now()
   let globalState: { downloadQueue: DownloadTaskState[] } | undefined
   let terminalTask: DownloadTaskState | undefined
 
-  while (Date.now() - startedAt < LIVE_TASK_TERMINAL_TIMEOUT_MS) {
+  while (Date.now() - startedAt < timeoutMs) {
     globalState = await readGlobalStateFromExtensionPage(optionsPage)
     terminalTask = globalState?.downloadQueue.find(
       (task) =>
@@ -433,7 +443,7 @@ export async function waitForTerminalTask(
       redactDiagnosticText({
         event: "task-timeout",
         taskId,
-        timeoutMs: LIVE_TASK_TERMINAL_TIMEOUT_MS,
+        timeoutMs,
         status: task.status,
         lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
         activeTaskProgress,

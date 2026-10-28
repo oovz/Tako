@@ -100,6 +100,7 @@ export class OffscreenSeriesResolver {
       })
       return {
         success: true,
+        seriesId: result.seriesId,
         seriesMetadata: result.seriesMetadata,
         chapterList: result.chapterList,
         metadataError: result.metadataError,

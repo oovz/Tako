@@ -295,6 +295,7 @@ const OffscreenRenewalResponseSchema = z.union([
 
 const OffscreenParseSeriesHtmlSuccessSchema = z.strictObject({
   success: z.literal(true),
+  seriesId: z.string().min(1).optional(),
   seriesMetadata: SeriesMetadataSchema.optional(),
   chapterList: SeriesChapterListSchema.optional(),
   metadataError: z.string().optional(),

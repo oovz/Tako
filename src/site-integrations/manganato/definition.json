@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "manganato",
+  "name": "MangaNato",
+  "englishName": "MangaNato",
+  "contributors": ["Otaro"],
+  "version": "1.0.0",
+  "shipped": true,
+  "enabledByDefault": true,
+  "patterns": {
+    "domains": ["manganato.gg", "www.manganato.gg"],
+    "seriesMatches": ["/manga/*"],
+    "excludeMatches": ["/manga/*/*"]
+  },
+  "requiredOrigins": [
+    "https://manganato.gg/*",
+    "https://www.manganato.gg/*",
+    "https://*.2xstorage.com/*",
+    "https://storage.waitst.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": {
+      "concurrency": 2,
+      "delayMs": 500
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": {
+      "mode": "none"
+    }
+  },
+  "imageTransform": {
+    "kind": "none",
+    "estimatedCostMs": 0
+  },
+  "endpointPolicies": [
+    {
+      "id": "manganato-page",
+      "purpose": "Series and reader HTML",
+      "origins": ["https://manganato.gg/*", "https://www.manganato.gg/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "manganato-chapters",
+      "purpose": "Paginated chapter catalog",
+      "origins": ["https://manganato.gg/*", "https://www.manganato.gg/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "manganato-image",
+      "purpose": "Reader and cover images",
+      "origins": ["https://*.2xstorage.com/*", "https://storage.waitst.com/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "sessionRefererRules": [
+    {
+      "id": 41011,
+      "requestDomains": ["2xstorage.com", "storage.waitst.com"],
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "referer": "https://www.manganato.gg/"
+    }
+  ],
+  "customSettings": []
+}

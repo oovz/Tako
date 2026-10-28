@@ -4,6 +4,16 @@ import { assertValidSessionRefererRuleDeclaration } from "@/src/site-integration
 import { siteIntegrationCatalog } from "@/src/runtime/generated/site-integration-catalog"
 import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/manhuagui/shared"
 import { normalizePixivImageUrl } from "@/src/site-integrations/pixiv-comic/shared"
+import { assertIntegrationEndpointRequestUrl } from "@/src/site-integrations/request-policy"
+
+const otherIntegrationsDisabled = Object.fromEntries(
+  siteIntegrationCatalog
+    .filter(({ id }) => id !== "pixiv-comic" && id !== "manhuagui")
+    .map(({ id }) => [id, false])
+)
+const managedRuleIds = siteIntegrationCatalog
+  .flatMap(({ sessionRefererRules }) => sessionRefererRules.map(({ id }) => id))
+  .sort((a, b) => a - b)
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -48,7 +58,10 @@ function installChromeMock(input?: {
     storage: {
       local: {
         get: vi.fn(async () => ({
-          siteIntegrationEnablement: input?.storedEnablement ?? {},
+          siteIntegrationEnablement: {
+            ...otherIntegrationsDisabled,
+            ...input?.storedEnablement,
+          },
         })),
       },
       session: {
@@ -153,7 +166,10 @@ async function loadManager() {
     reconcileSiteIntegrationSessionRules: (
       enablement?: Record<string, boolean>,
       _service?: typeof testEnablementService
-    ) => get().reconcile(enablement),
+    ) =>
+      get().reconcile(
+        enablement ? { ...otherIntegrationsDisabled, ...enablement } : undefined
+      ),
     ensureSiteIntegrationNetworkReady: (
       siteIntegrationId: string,
       _service?: typeof testEnablementService
@@ -249,9 +265,20 @@ describe("site integration session-rule manager", () => {
           } else if (definition.id === "pixiv-comic") {
             expect(() => normalizePixivImageUrl(imageUrl)).not.toThrow()
           } else {
-            throw new Error(
-              `Add a runtime network-policy assertion for ${definition.id}`
-            )
+            expect(
+              definition.endpointPolicies.some(({ id }) => {
+                try {
+                  assertIntegrationEndpointRequestUrl(
+                    definition.id,
+                    id,
+                    imageUrl
+                  )
+                  return true
+                } catch {
+                  return false
+                }
+              })
+            ).toBe(true)
           }
         }
       }
@@ -271,7 +298,7 @@ describe("site integration session-rule manager", () => {
     )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [
         expect.objectContaining({
           id: 41002,
@@ -299,7 +326,7 @@ describe("site integration session-rule manager", () => {
     )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
   })
@@ -671,14 +698,18 @@ describe("site integration session-rule manager", () => {
     storageChangeListeners[0](
       {
         siteIntegrationEnablement: {
-          newValue: { "pixiv-comic": false, manhuagui: true },
+          newValue: {
+            ...otherIntegrationsDisabled,
+            "pixiv-comic": false,
+            manhuagui: true,
+          },
         },
       },
       "local"
     )
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(2))
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41002 })],
     })
 
@@ -696,7 +727,7 @@ describe("site integration session-rule manager", () => {
     })
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(4))
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
   })
@@ -782,7 +813,7 @@ describe("site integration session-rule manager", () => {
       service: testEnablementService,
     })
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
 
@@ -790,7 +821,7 @@ describe("site integration session-rule manager", () => {
     await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [
         expect.objectContaining({ id: 41001 }),
         expect.objectContaining({ id: 41002 }),

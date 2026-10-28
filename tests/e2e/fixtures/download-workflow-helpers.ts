@@ -28,6 +28,8 @@ import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
 import { type QueueTestState, waitForGlobalState } from "./state-helpers"
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
 
 export type StoredSiteIntegrationSettings = Record<
   string,
@@ -193,69 +195,64 @@ export async function readSeededDirectoryFile(
   return Uint8Array.from(bytes)
 }
 
-/**
- * Persist the download settings required to exercise the custom-folder
- * pipeline (destination = 'file-system-access', format = 'cbz', concurrency = 1) plus
- * any site-integration preferences the test needs. The background observes
- * the durable settings write through its synchronous storage subscriber.
- */
+export async function persistDownloadSettings(
+  optionsPage: Page,
+  patch: Partial<ExtensionSettings["downloads"]>,
+  siteSettingsPatch?: StoredSiteIntegrationSettings
+): Promise<ExtensionSettings> {
+  return await optionsPage.evaluate(
+    async ({ patch, sitePatch, command }) => {
+      const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "GET_OPTIONS_CONFIGURATION",
+        })
+      if (!current.success) throw new Error(current.error)
+      const configuration = current.data.configuration
+      const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "SAVE_OPTIONS_CONFIGURATION",
+          ...command,
+          payload: {
+            configuration: {
+              ...configuration,
+              settings: {
+                ...configuration.settings,
+                downloads: { ...configuration.settings.downloads, ...patch },
+              },
+              integrationSettings: {
+                ...configuration.integrationSettings,
+                ...(sitePatch ?? {}),
+              },
+            },
+          },
+        })
+      if (!saved.success) throw new Error(saved.error)
+      return saved.data.settings
+    },
+    { patch, sitePatch: siteSettingsPatch, command: createCommandEnvelope() }
+  )
+}
+
+/** Persist the chosen-folder CBZ destination through the background owner. */
 export async function persistCustomModeDownloadSettings(
   optionsPage: Page,
   siteSettingsPatch?: StoredSiteIntegrationSettings
 ): Promise<void> {
-  const nextSettings = await optionsPage.evaluate(
-    async ({ sitePatch }: { sitePatch?: StoredSiteIntegrationSettings }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error(
-          "Missing persisted settings payload — extension did not hydrate defaults"
-        )
-      }
-
-      const mergedSettings: ExtensionSettings = {
-        ...baseSettings,
-        downloads: {
-          ...baseSettings.downloads,
-          destination: "file-system-access",
-          customDirectoryHandleId: "download-root",
-          defaultFormat: "cbz",
-          conflictPolicy: "overwrite",
-        },
-      }
-
-      const mergedSiteSettings: StoredSiteIntegrationSettings = {
-        ...(current.siteIntegrationSettings ?? {}),
-        ...(sitePatch ?? {}),
-      }
-
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      })
-
-      return {
-        globalSettings: mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      }
+  const nextSettings = await persistDownloadSettings(
+    optionsPage,
+    {
+      destination: "file-system-access",
+      customDirectoryHandleId: "download-root",
+      defaultFormat: "cbz",
+      conflictPolicy: "overwrite",
     },
-    { sitePatch: siteSettingsPatch }
+    siteSettingsPatch
   )
-
-  expect(nextSettings.globalSettings.downloads.defaultFormat).toBe("cbz")
-  expect(nextSettings.globalSettings.downloads.destination).toBe(
-    "file-system-access"
-  )
-  expect(nextSettings.globalSettings.downloads.customDirectoryHandleId).toBe(
-    "download-root"
-  )
+  expect(nextSettings.downloads.defaultFormat).toBe("cbz")
+  expect(nextSettings.downloads.destination).toBe("file-system-access")
+  expect(nextSettings.downloads.customDirectoryHandleId).toBe("download-root")
 }
 
 /** Persist the default browser-download CBZ path used by fresh installs. */
@@ -263,39 +260,14 @@ export async function persistBrowserModeDownloadSettings(
   optionsPage: Page,
   siteSettingsPatch?: StoredSiteIntegrationSettings
 ): Promise<void> {
-  const nextSettings = await optionsPage.evaluate(
-    async ({ sitePatch }: { sitePatch?: StoredSiteIntegrationSettings }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error("Missing persisted settings payload")
-      }
-      const mergedSettings: ExtensionSettings = {
-        ...baseSettings,
-        downloads: {
-          ...baseSettings.downloads,
-          destination: "downloads-api",
-          defaultFormat: "cbz",
-        },
-      }
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: {
-          ...(current.siteIntegrationSettings ?? {}),
-          ...(sitePatch ?? {}),
-        },
-      })
-      return mergedSettings
+  const nextSettings = await persistDownloadSettings(
+    optionsPage,
+    {
+      destination: "downloads-api",
+      defaultFormat: "cbz",
     },
-    { sitePatch: siteSettingsPatch }
+    siteSettingsPatch
   )
-
   expect(nextSettings.downloads.destination).toBe("downloads-api")
   expect(nextSettings.downloads.defaultFormat).toBe("cbz")
 }
@@ -331,27 +303,31 @@ export async function waitForBrowserDownloadArtifact(
  */
 export async function seedMangadexSessionPreferences(
   optionsPage: Page,
-  seriesId: string
+  seriesId: string,
+  filteredLanguages: string[] = []
 ): Promise<void> {
-  await optionsPage.evaluate(async (mangaId: string) => {
-    const storageKey = "mangadexUserPreferencesBySeries"
-    const current = (await chrome.storage.session.get(storageKey)) as Record<
-      string,
-      unknown
-    >
-    const existing = current[storageKey]
-    const bySeries =
-      existing && typeof existing === "object" && !Array.isArray(existing)
-        ? { ...(existing as Record<string, unknown>) }
-        : {}
+  await optionsPage.evaluate(
+    async ({ mangaId, languages }) => {
+      const storageKey = "mangadexUserPreferencesBySeries"
+      const current = (await chrome.storage.session.get(storageKey)) as Record<
+        string,
+        unknown
+      >
+      const existing = current[storageKey]
+      const bySeries =
+        existing && typeof existing === "object" && !Array.isArray(existing)
+          ? { ...(existing as Record<string, unknown>) }
+          : {}
 
-    bySeries[`mangadex#${mangaId}`] = {
-      dataSaver: false,
-      filteredLanguages: ["en"],
-    }
+      bySeries[`mangadex#${mangaId}`] = {
+        dataSaver: false,
+        filteredLanguages: languages,
+      }
 
-    await chrome.storage.session.set({ [storageKey]: bySeries })
-  }, seriesId)
+      await chrome.storage.session.set({ [storageKey]: bySeries })
+    },
+    { mangaId: seriesId, languages: filteredLanguages }
+  )
 }
 
 /**
@@ -453,7 +429,7 @@ export async function startSingleChapterDownload(
               chapter.id === input.chapter.id && chapter.locked !== true
           )
         ) {
-          return (await chrome.runtime.sendMessage({
+          const result = (await chrome.runtime.sendMessage({
             target: "background",
             type: "START_DOWNLOAD",
             commandId: crypto.randomUUID(),
@@ -467,7 +443,20 @@ export async function startSingleChapterDownload(
               seriesRevision: projection.revision,
               selectedChapterIds: [input.chapter.id],
             },
-          })) as { success?: boolean; taskId?: string; error?: string }
+          })) as {
+            success?: boolean
+            taskId?: string
+            error?: string
+            code?: string
+          }
+          if (
+            result?.success !== false ||
+            result.code !== "stale_series_context"
+          ) {
+            return result
+          }
+          // A stale rejection enqueues nothing. Read the newer projection
+          // before dispatching again within this same bounded deadline.
         }
         observed = {
           active: tab.active,

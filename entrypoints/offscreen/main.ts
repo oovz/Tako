@@ -741,8 +741,8 @@ export class OffscreenWorker {
   ): Promise<ChapterOutcome> {
     const { chapter, abortSignal, onProgress } = opts
     const normalizeSettings: ArchiveNormalizationSettings = {
-      normalizeImageFilenames: opts.normalizeImageFilenames ?? true,
-      imagePaddingDigits: opts.imagePaddingDigits ?? "auto",
+      normalizeImageFilenames: opts.settingsSnapshot.normalizeImageFilenames,
+      imagePaddingDigits: opts.settingsSnapshot.imagePaddingDigits,
     }
 
     try {

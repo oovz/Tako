@@ -109,6 +109,7 @@ export async function resolveSeriesDataViaOffscreen(
   }
 
   return {
+    seriesId: response.seriesId,
     seriesMetadata: response.seriesMetadata,
     chapterList: response.chapterList,
     metadataError: response.metadataError,

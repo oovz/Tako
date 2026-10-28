@@ -126,10 +126,10 @@ function createBaseOptions<TFormat extends "cbz" | "zip" | "none">(
     onProgress: vi.fn(async () => undefined),
     onArchiveProgress: vi.fn(async () => undefined),
     abortSignal: new AbortController().signal,
-    normalizeImageFilenames: true,
-    imagePaddingDigits: 3 as const,
     settingsSnapshot: {
       ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+      normalizeImageFilenames: true,
+      imagePaddingDigits: 3,
       archiveFormat: format,
       rateLimitSettings: {
         image: { concurrency: 2, delayMs: 0 },

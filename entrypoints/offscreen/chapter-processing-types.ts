@@ -66,8 +66,6 @@ export type ProcessChapterStreamingOptions = {
   ) => Promise<void>
   onArchiveProgress: (pct: number, label?: string) => Promise<void>
   abortSignal: AbortSignal
-  normalizeImageFilenames?: boolean
-  imagePaddingDigits?: "auto" | 2 | 3 | 4 | 5
   coverImage?: {
     data: ArrayBuffer
     mimeType: string
@@ -85,6 +83,8 @@ export type ProcessDownloadChapterSettingsSnapshot = Pick<
   | "conflictPolicy"
   | "includeComicInfo"
   | "includeCoverImage"
+  | "normalizeImageFilenames"
+  | "imagePaddingDigits"
   | "rateLimitSettings"
   | "retrySettings"
 >

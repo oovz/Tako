@@ -79,6 +79,9 @@ export const LIVE_MANGAMILLION_REFERENCE_URL =
 export const LIVE_MANGAMILLION_CHAPTER_URL =
   "https://mangamillion.shueisha.co.jp/en/title/1/chapter/6736"
 
+export const LIVE_MANGANATO_REFERENCE_URL =
+  "https://www.manganato.gg/manga/hunter-x-hunter"
+
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return new URL(normalized, MANGADEX_BASE_URL).toString()

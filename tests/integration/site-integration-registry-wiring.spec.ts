@@ -52,6 +52,18 @@ vi.mock("@/src/storage/site-integration-settings-service", () => ({
 }))
 
 const enabledDefinitions = siteIntegrationCatalog.filter((m) => m.shipped)
+const seriesUrls: Readonly<Record<string, string>> = {
+  comicnettai: "https://www.comicnettai.com/book/9",
+
+  mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",
+
+  mangamillion: "https://mangamillion.shueisha.co.jp/en/title/1",
+  manganato: "https://www.manganato.gg/manga/hunter-x-hunter",
+
+  "pixiv-comic": "https://comic.pixiv.net/works/12345",
+  manhuagui: "https://www.manhuagui.com/comic/28004/",
+  shonenjumpplus: "https://shonenjumpplus.com/episode/3269754496649675702",
+}
 const rateLimitService = {
   resolveEffectivePolicy: vi.fn(async () => ({ concurrency: 1, delayMs: 0 })),
   scheduleForIntegrationScope: vi.fn(
@@ -142,20 +154,20 @@ describe("site integration common contract (integration)", () => {
       "%s resolveSeriesData surfaces network failure (no silent empty success)",
       async (id) => {
         const adapter = await getBackgroundSiteAdapterById(id)
-        ;(global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(
-          new Error("network down")
-        )
+        vi.mocked(global.fetch).mockImplementation(async (url) => {
+          const response = new Response(null, {
+            status: 503,
+            statusText: "Service Unavailable",
+          })
+          Object.defineProperty(response, "url", { value: String(url) })
+          return response
+        })
 
-        const seriesUrl =
-          id === "shonenjumpplus"
-            ? "https://shonenjumpplus.com/episode/12345"
-            : id === "pixiv-comic"
-              ? "https://comic.pixiv.net/works/12345"
-              : id === "mangadex"
-                ? "https://mangadex.org/title/12345678-abcd-1234-abcd-123456789012"
-                : id === "manhuagui"
-                  ? "https://www.manhuagui.com/comic/28004"
-                  : "https://comicnettai.com/book/12345"
+        const seriesUrl = seriesUrls[id]
+        expect(
+          seriesUrl,
+          `${id} needs a valid public series route`
+        ).toBeDefined()
 
         const outcome = await adapter!.background!.series!.resolveSeriesData!({
           seriesUrl,
@@ -166,15 +178,23 @@ describe("site integration common contract (integration)", () => {
           (error) => ({ resolved: false as const, error })
         )
 
+        expect(
+          global.fetch,
+          `${id} must reach the network boundary`
+        ).toHaveBeenCalled()
         if (outcome.resolved) {
-          // The result may contain a structured error; ensure it is not a
-          // silent empty-success result.
+          const errors = [
+            outcome.value.metadataError,
+            outcome.value.chapterListError,
+          ].filter(Boolean)
           expect(
-            outcome.value.metadataError || outcome.value.chapterListError,
-            "resolved result must surface a network error"
-          ).toBeTruthy()
+            errors,
+            "resolved result must surface the HTTP failure"
+          ).not.toEqual([])
+          for (const error of errors) expect(error).toContain("HTTP 503")
         } else {
-          expect(outcome.error).toBeDefined()
+          expect(outcome.error).toBeInstanceOf(Error)
+          expect(outcome.error.message).toContain("HTTP 503")
         }
       }
     )

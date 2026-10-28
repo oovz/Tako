@@ -97,5 +97,13 @@ export default defineConfig({
         channel: "chromium-tip-of-tree",
       },
     },
+    ...["manganato"].map((name) => ({
+      name,
+      testDir: path.resolve(__dirname, `tests/live/${name}`),
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chromium-tip-of-tree",
+      },
+    })),
   ],
 })

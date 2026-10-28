@@ -616,6 +616,21 @@ describe("runtime message registry", () => {
     ).toBe(false)
   })
 
+  it("accepts an optional nonempty identity from offscreen series resolution", () => {
+    const schema = runtimeMessageRegistry.OFFSCREEN_PARSE_SERIES_HTML.response
+    expect(schema.safeParse({ success: true }).success).toBe(true)
+    expect(schema.parse({ success: true, seriesId: "series-1" })).toEqual({
+      success: true,
+      seriesId: "series-1",
+    })
+    expect(schema.safeParse({ success: true, seriesId: "" }).success).toBe(
+      false
+    )
+    expect(schema.safeParse({ success: true, seriesId: 123 }).success).toBe(
+      false
+    )
+  })
+
   it("validates parsed series metadata and chapter-list output recursively", () => {
     const response = {
       success: true,
