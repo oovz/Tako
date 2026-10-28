@@ -5,11 +5,9 @@ import {
   composeDownloadedChapterKey,
   type DownloadedChapterRecord,
 } from "@/src/domain/history/types"
-import {
-  nativeOutputJobIdentityMatches,
-  type NativeOutputState,
-} from "@/src/domain/native-output/state"
-import { parseCurrentNativeOutputState } from "@/src/storage/native-output-repository"
+import { nativeOutputJobIdentityMatches } from "@/src/domain/native-output/state"
+import { parseEpoch5NativeOutputState } from "./state-schema-migration-native-schema"
+type NativeOutputState = ReturnType<typeof parseEpoch5NativeOutputState>
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import {
   DownloadTaskStateSchema,
@@ -88,7 +86,7 @@ export function readEpoch5NativeOutputState(
   stored: Record<string, unknown>
 ): NativeOutputState {
   const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
-  return parseCurrentNativeOutputState({
+  return parseEpoch5NativeOutputState({
     manifestsByJobId: Object.fromEntries(
       index.jobIds.flatMap((id) => {
         const value = stored[nativeStorageKeys.manifestPrefix + id]

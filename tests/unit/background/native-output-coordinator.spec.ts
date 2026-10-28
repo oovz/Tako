@@ -351,7 +351,7 @@ describe("NativeOutputCoordinator", () => {
       expect(applySettlement).not.toHaveBeenCalled()
       expect(revoke).not.toHaveBeenCalled()
       expect(interrupted).toMatchObject({
-        phase: "handoff_interrupted",
+        phase: "outcome_unknown",
         accountingDisposition: "pending",
       })
       expect(interrupted?.blobReleasedAt).toBeUndefined()
@@ -403,7 +403,7 @@ describe("NativeOutputCoordinator", () => {
     await coordinator.reconcile()
 
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "handoff_interrupted"
+      "outcome_unknown"
     )
     expect(ensureLiveness).toHaveBeenCalled()
     expect(download).toHaveBeenCalledOnce()
@@ -443,7 +443,7 @@ describe("NativeOutputCoordinator", () => {
     })
     const quarantined = await repository.getByOutputId(payload.outputId)
     expect(quarantined).toMatchObject({
-      phase: "handoff_interrupted",
+      phase: "outcome_unknown",
       accountingDisposition: "accounted",
     })
     expect(quarantined?.blobReleasedAt).toBeUndefined()
@@ -452,7 +452,7 @@ describe("NativeOutputCoordinator", () => {
       expect.objectContaining({
         completed: 0,
         interrupted: 1,
-        acceptanceUncertain: true,
+        outputUncertain: true,
       })
     )
     expect(revoke).not.toHaveBeenCalled()
@@ -541,7 +541,7 @@ describe("NativeOutputCoordinator", () => {
     expect(ensureLiveness).toHaveBeenCalled()
   })
 
-  it("releases exactly erased output while keeping acknowledged product accounting", async () => {
+  it("releases exactly erased output while preserving the uncertain result", async () => {
     const { coordinator, repository } = createCoordinator()
     await outputResponse(coordinator)
     await coordinator.sealManifest({
@@ -551,7 +551,11 @@ describe("NativeOutputCoordinator", () => {
     })
     await reconcileAndAcknowledge(coordinator)
     expect(applySettlement).toHaveBeenCalledWith(
-      expect.objectContaining({ completed: 1, interrupted: 0 })
+      expect.objectContaining({
+        completed: 0,
+        interrupted: 1,
+        outputUncertain: true,
+      })
     )
     expect(revoke).not.toHaveBeenCalled()
     await coordinator.handleDownloadErased(42)

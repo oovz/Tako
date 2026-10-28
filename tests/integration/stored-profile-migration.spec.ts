@@ -171,7 +171,7 @@ describe("retained profile migration and hydration", () => {
         requested: 1,
         completed: 0,
         interrupted: 1,
-        acceptanceUncertain: true,
+        outputUncertain: true,
       })
       expect(await history.getDownloadedChapters()).toEqual([])
       expect((await history.getAggregate()).clearCutoffs.allBefore).toBe(5)
@@ -179,16 +179,14 @@ describe("retained profile migration and hydration", () => {
         {
           taskSnapshot: {
             id: "retained-task",
-            chapters: [
-              { nativeOutputSettlement: { acceptanceUncertain: true } },
-            ],
+            chapters: [{ nativeOutputSettlement: { outputUncertain: true } }],
           },
         },
       ])
       const state = await native.snapshot()
       const output = state.outputsByOutputId.output!
       expect(output).toMatchObject({
-        phase: "waiting",
+        phase: "outcome_unknown",
         downloadId: 42,
         erasedAt: 5,
         accountingDisposition: "accounted",
@@ -214,7 +212,7 @@ describe("retained profile migration and hydration", () => {
     const repository = new NativeOutputRepository()
     const state = await repository.snapshot()
     expect(state.outputsByOutputId.output).toMatchObject({
-      phase: "waiting",
+      phase: "outcome_unknown",
       blobReleasedAt: 10,
       dependencyReleasedAt: 11,
     })

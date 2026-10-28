@@ -45,14 +45,14 @@ describe("useQueueView normalizeQueueView", () => {
           outputDestination: "downloads-api",
           outputMode: "fsa",
           saveConfirmedAt: 42,
-          acceptanceUncertain: true,
+          outputUncertain: true,
         },
       ])[0]
     ).toMatchObject({
       outputDestination: "downloads-api",
       outputMode: "fsa",
       saveConfirmedAt: 42,
-      acceptanceUncertain: true,
+      outputUncertain: true,
     })
     expect(
       normalizeQueueView([makeQueueTask("old", "completed", "Series A")])[0]

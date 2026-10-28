@@ -252,6 +252,6 @@ export function getTaskFailureMessage(
 ): string | undefined {
   return getDownloadFailureMessage(
     task.failureCategory,
-    task.acceptanceUncertain === true
+    task.outputUncertain === true
   )
 }

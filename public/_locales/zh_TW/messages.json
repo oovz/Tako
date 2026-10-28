@@ -451,7 +451,7 @@
     "message": "磁碟空間不足。"
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "Chrome 無法接收輸出檔案。"
+    "message": "Chrome 未能完成檔案儲存。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 無法建立壓縮檔。"
@@ -1847,9 +1847,6 @@
       }
     }
   },
-  "downloadError_browserHandoffInterrupted": {
-    "message": "向 Chrome 移交檔案的過程已中斷，無法確認是否已接受。重試可能會產生重複檔案。"
-  },
   "sidepanel_retryUncertainHandoff": {
     "message": "重試失敗章節（可能產生重複檔案）"
   },
@@ -1886,5 +1883,8 @@
   },
   "destination_taskFolder": {
     "message": "所選資料夾"
+  },
+  "downloadError_browserOutputUnconfirmed": {
+    "message": "無法確認 Chrome 是否已儲存檔案。重試可能會產生重複檔案。"
   }
 }

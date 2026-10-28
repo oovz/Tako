@@ -33,7 +33,7 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
           requested: 1,
           completed: 0,
           interrupted: 1,
-          acceptanceUncertain: true,
+          outputUncertain: true,
           appliedAt: now,
         },
       },
@@ -54,7 +54,7 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
   ])
   await page.goto(`chrome-extension://${extensionId}/options.html?tab=activity`)
   const warning =
-    "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+    "Chrome file saving could not be confirmed. Retrying may create duplicate files."
   await expect(page.getByText(warning, { exact: false })).toBeVisible()
   await expect(
     page.getByText("Tako could not create the archive.", { exact: false })

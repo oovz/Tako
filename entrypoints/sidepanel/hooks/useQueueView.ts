@@ -49,7 +49,7 @@ const QueueTaskSummaryStorageSchema = z.object({
     created: z.number(),
     completed: z.number().optional(),
   }),
-  acceptanceUncertain: z.boolean().optional(),
+  outputUncertain: z.boolean().optional(),
   failureCategory: z.unknown().optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
@@ -84,7 +84,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
       created: data.timestamps.created,
       completed: data.timestamps.completed,
     },
-    acceptanceUncertain: data.acceptanceUncertain,
+    outputUncertain: data.outputUncertain,
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:

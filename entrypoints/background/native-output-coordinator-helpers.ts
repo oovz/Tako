@@ -1,3 +1,4 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
@@ -60,8 +61,10 @@ export function manifestTrackedOutputIds(
 export interface NativeOutputSettlementStats {
   completed: number
   interrupted: number
-  acceptanceUncertain: boolean
+  outputUncertain: boolean
   lastSuccessfulDownloadId: number | undefined
+  errorMessage: string | undefined
+  errorCategory: DownloadErrorCategory | undefined
 }
 
 export function calculateNativeOutputSettlementStats(
@@ -69,11 +72,15 @@ export function calculateNativeOutputSettlementStats(
   records: NativeOutputRecord[]
 ): NativeOutputSettlementStats {
   const completed = records.filter(
-    (record) => record.downloadId !== undefined
+    (record) => record.phase === "complete"
   ).length
+  const firstUnsuccessful =
+    records.find((record) => record.phase === "interrupted") ??
+    records.find((record) => record.phase === "outcome_unknown")
   const interrupted = manifest.outputsRequested - completed
   const lastSuccessfulDownloadId = records.reduce<number | undefined>(
     (latest, record) =>
+      record.phase === "complete" &&
       record.downloadId !== undefined &&
       (latest === undefined || record.downloadId > latest)
         ? record.downloadId
@@ -83,10 +90,18 @@ export function calculateNativeOutputSettlementStats(
   return {
     completed,
     interrupted,
-    acceptanceUncertain: records.some(
-      (record) => record.phase === "handoff_interrupted"
+    outputUncertain: records.some(
+      (record) => record.phase === "outcome_unknown"
     ),
     lastSuccessfulDownloadId,
+    errorMessage: manifest.errorMessage ?? firstUnsuccessful?.error,
+    errorCategory:
+      manifest.errorCategory ??
+      (firstUnsuccessful?.phase === "outcome_unknown"
+        ? "browser_output_unconfirmed"
+        : firstUnsuccessful
+          ? "browser_download_interrupted"
+          : undefined),
   }
 }
 

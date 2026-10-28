@@ -91,7 +91,7 @@ describe("applyNativeOutputSettlement", () => {
   it("fences producer failures during settlement replay", () => {
     const failure = {
       ...settlement,
-      acceptanceUncertain: true as const,
+      outputUncertain: true as const,
       errorMessage: "Archive worker failed",
       errorCategory: "archive_creation_failed" as const,
     }
@@ -102,7 +102,7 @@ describe("applyNativeOutputSettlement", () => {
         status: "partial_success",
         errorMessage: failure.errorMessage,
         errorCategory: failure.errorCategory,
-        nativeOutputSettlement: { acceptanceUncertain: true },
+        nativeOutputSettlement: { outputUncertain: true },
       },
     })
     expect(

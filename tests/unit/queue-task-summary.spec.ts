@@ -175,7 +175,7 @@ describe("toQueueTaskSummary", () => {
         requested: 1,
         completed: 0,
         interrupted: 1,
-        acceptanceUncertain: true,
+        outputUncertain: true,
         appliedAt: 10,
       },
     })
@@ -183,11 +183,11 @@ describe("toQueueTaskSummary", () => {
       toQueueTaskSummary(makeTask({ status: "failed", chapters: [chapter] }))
     ).toMatchObject({
       failureCategory: "archive_creation_failed",
-      acceptanceUncertain: true,
+      outputUncertain: true,
     })
-    expect(
-      toQueueTaskSummary(makeTask({ chapters: [] })).acceptanceUncertain
-    ).toBe(false)
+    expect(toQueueTaskSummary(makeTask({ chapters: [] })).outputUncertain).toBe(
+      false
+    )
   })
 
   it("uses the first unsuccessful chapter before stale task or successful-chapter errors", () => {

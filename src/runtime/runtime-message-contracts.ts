@@ -710,7 +710,7 @@ export const runtimeMessageRegistry = {
         phase: z.enum([
           "prepared",
           "acceptance_unknown",
-          "handoff_interrupted",
+          "outcome_unknown",
           "waiting",
           "complete",
           "interrupted",

@@ -114,7 +114,12 @@ async function fixture(
       settingsRepository,
       repository,
       queueRepository: queue,
-      queryOffscreenJob: async () => null,
+      queryOffscreenJob: async (job) => ({
+        ...job,
+        status: "active" as const,
+        stage: "saving" as const,
+        lastSequence: 1,
+      }),
       requestBlobRevocation: revoke,
       ensureLivenessAlarm: async () => undefined,
     })
@@ -190,7 +195,7 @@ async function fixture(
 afterEach(() => vi.unstubAllGlobals())
 
 describe("output destination settlement", () => {
-  it("requires every durable acknowledgement and recovers the missing receipt after restart", async () => {
+  it("requires every final save and recovers the missing initiation receipt after restart", async () => {
     const f = await fixture(2)
     await f.native.handleOutputReady(f.ready(0))
     const second = f.ready(1)
@@ -212,6 +217,11 @@ describe("output destination settlement", () => {
 
     f.search.mockResolvedValue([
       {
+        id: 41,
+        url: f.ready(0).fileUrl,
+        state: "complete",
+      } as chrome.downloads.DownloadItem,
+      {
         id: 42,
         url: second.fileUrl,
         state: "in_progress",
@@ -221,6 +231,15 @@ describe("output destination settlement", () => {
     await cold.queue.initialize()
     const effects = await cold.native.initialize()
     await cold.terminal.continueAfterNativeOutputSettlement(effects)
+    expect((await cold.queue.getTask(identity.taskId))?.status).toBe(
+      "downloading"
+    )
+    expect(await cold.history.getDownloadedChapters()).toEqual([])
+    const final = await cold.native.handleDownloadChanged({
+      id: 42,
+      state: { current: "complete" },
+    })
+    await cold.terminal.continueAfterNativeOutputSettlement(final.effects)
     expect(await cold.queue.getTask(identity.taskId)).toMatchObject({
       status: "completed",
       chapters: [
@@ -231,10 +250,13 @@ describe("output destination settlement", () => {
       ],
     })
     expect(await cold.history.getDownloadedChapters()).toMatchObject([
-      { outputDestination: "downloads-api" },
+      {
+        outputDestination: "downloads-api",
+        saveConfirmedAt: expect.any(Number),
+      },
     ])
     expect(f.download).toHaveBeenCalledOnce()
-    expect(f.revoke).not.toHaveBeenCalled()
+    expect(f.revoke).toHaveBeenCalledTimes(2)
   })
 
   it("accounts for acknowledged loose files when a later handoff is rejected", async () => {
@@ -242,27 +264,196 @@ describe("output destination settlement", () => {
     await f.native.handleOutputReady(f.ready(0))
     f.download.mockRejectedValueOnce(new Error("Chrome rejected the file"))
     await f.native.handleOutputReady(f.ready(1))
+    await f.native.handleDownloadChanged({
+      id: 41,
+      state: { current: "complete" },
+    })
     await f.finish()
     expect(await f.queue.getTask(identity.taskId)).toMatchObject({
       status: "partial_success",
       chapters: [{ outputs: { requested: 2, committed: 1, failed: 1 } }],
     })
     expect(await f.history.getDownloadedChapters()).toEqual([])
-    expect(await f.repository.getByOutputId("output-0")).toMatchObject({
-      phase: "waiting",
-      accountingDisposition: "accounted",
-    })
+    expect(await f.repository.getByOutputId("output-0")).toBeUndefined()
   })
 
-  it("settles known acknowledgement while Chrome observation is unavailable", async () => {
+  it("reports an unknown save outcome when Chrome observation is unavailable", async () => {
     const f = await fixture(1)
     await f.native.handleOutputReady(f.ready(0))
     f.search.mockRejectedValue(new Error("Chrome search unavailable"))
     await f.finish()
-    expect((await f.queue.getTask(identity.taskId))?.status).toBe("completed")
-    expect(await f.history.getDownloadedChapters()).toHaveLength(1)
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "failed",
+      errorCategory: "browser_output_unconfirmed",
+      chapters: [{ nativeOutputSettlement: { outputUncertain: true } }],
+    })
+    expect(await f.history.getDownloadedChapters()).toHaveLength(0)
     expect(f.revoke).not.toHaveBeenCalled()
   })
+
+  it("restores pending native work when an exact paused download is observed before settlement", async () => {
+    const f = await fixture(1)
+    await f.native.handleOutputReady(f.ready(0))
+    f.search.mockRejectedValueOnce(new Error("Temporary Chrome query failure"))
+    await f.native.reconcile()
+    expect(await f.repository.getByOutputId("output-0")).toMatchObject({
+      phase: "outcome_unknown",
+      accountingDisposition: "pending",
+    })
+    f.search.mockResolvedValue([
+      {
+        id: 41,
+        url: f.ready(0).fileUrl,
+        state: "in_progress",
+        paused: true,
+      } as chrome.downloads.DownloadItem,
+    ])
+    await f.finish()
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "downloading",
+      chapters: [{ status: "downloading" }],
+    })
+    expect(await f.repository.getByOutputId("output-0")).toMatchObject({
+      phase: "waiting",
+      accountingDisposition: "pending",
+    })
+    expect(await f.history.getDownloadedChapters()).toEqual([])
+    expect(f.revoke).not.toHaveBeenCalled()
+    const { effects } = await f.native.handleDownloadChanged({
+      id: 41,
+      state: { current: "complete" },
+    })
+    await f.terminal.continueAfterNativeOutputSettlement(effects)
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "completed",
+      chapters: [{ saveConfirmedAt: expect.any(Number) }],
+    })
+    expect(await f.history.getDownloadedChapters()).toHaveLength(1)
+    expect(f.revoke).toHaveBeenCalledOnce()
+  })
+
+  it.each([false, true])(
+    "keeps a durable unknown outcome fixed after a crash before its accounting receipt with lost ID=%s",
+    async (lostId) => {
+      const f = await fixture(1, "downloads-api", 2)
+      if (lostId)
+        vi.spyOn(f.repository, "attachDownload").mockRejectedValueOnce(
+          new Error("Download ID receipt unavailable")
+        )
+      await f.native.handleOutputReady(f.ready(0))
+      vi.spyOn(f.repository, "markAccountingDisposition").mockRejectedValueOnce(
+        new Error("Accounting receipt unavailable")
+      )
+      await expect(f.finish()).rejects.toThrow("Accounting receipt unavailable")
+      const before = await f.queue.getTask(identity.taskId)
+      expect(before).toMatchObject({
+        status: "downloading",
+        chapters: [
+          {
+            status: "failed",
+            nativeOutputSettlement: { outputUncertain: true },
+          },
+          { status: "queued" },
+        ],
+      })
+      expect(await f.repository.getByOutputId("output-0")).toMatchObject({
+        phase: "outcome_unknown",
+        accountingDisposition: "pending",
+      })
+      f.search.mockResolvedValue([
+        {
+          id: 41,
+          url: f.ready(0).fileUrl,
+          state: "in_progress",
+          paused: true,
+        } as chrome.downloads.DownloadItem,
+      ])
+      const cold = f.runtime()
+      await cold.queue.initialize()
+      await cold.native.initialize()
+      expect(await cold.repository.getByOutputId("output-0")).toMatchObject({
+        phase: "outcome_unknown",
+        accountingDisposition: "accounted",
+      })
+      expect(await cold.queue.getTask(identity.taskId)).toEqual(before)
+      expect(f.revoke).not.toHaveBeenCalled()
+      const result = await cold.native.handleDownloadChanged({
+        id: 41,
+        state: { current: "complete" },
+      })
+      for (const effect of result.effects)
+        await cold.native.acknowledgeSettlement(effect)
+      expect(await cold.queue.getTask(identity.taskId)).toEqual(before)
+      expect(await cold.history.getDownloadedChapters()).toEqual([])
+      expect(f.revoke).toHaveBeenCalledOnce()
+    }
+  )
+
+  it.each([false, true])(
+    "retains the original failure with earlier output uncertainty and producer error=%s",
+    async (producerFailed) => {
+      const f = await fixture(2)
+      await f.native.handleOutputReady(f.ready(0))
+      await f.native.handleOutputReady(f.ready(1))
+      await f.native.handleDownloadChanged({
+        id: 42,
+        state: { current: "interrupted" },
+        error: { current: "FILE_NO_SPACE" },
+      })
+      await f.terminal.handle(
+        f.terminalPayload({
+          status: "failed",
+          outputsRequested: 2,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          ...(producerFailed
+            ? {
+                errorMessage: "Archive creation failed",
+                errorCategory: "archive_creation_failed" as const,
+              }
+            : {}),
+        })
+      )
+      const cause = producerFailed
+        ? {
+            errorMessage: "Archive creation failed",
+            errorCategory: "archive_creation_failed",
+          }
+        : {
+            errorMessage: "FILE_NO_SPACE",
+            errorCategory: "browser_download_interrupted",
+          }
+      const before = await f.queue.getTask(identity.taskId)
+      expect(before).toMatchObject({
+        status: "failed",
+        ...cause,
+        chapters: [
+          {
+            ...cause,
+            nativeOutputSettlement: { outputUncertain: true },
+            outputs: { requested: 2, committed: 0, failed: 2 },
+          },
+        ],
+      })
+      expect(await f.repository.getByOutputId("output-1")).toBeUndefined()
+      expect(await f.repository.getByOutputId("output-0")).toMatchObject({
+        phase: "outcome_unknown",
+      })
+      expect(f.revoke).toHaveBeenCalledOnce()
+      const cold = f.runtime()
+      await cold.queue.initialize()
+      await cold.native.initialize()
+      const result = await cold.native.handleDownloadChanged({
+        id: 41,
+        state: { current: "complete" },
+      })
+      for (const effect of result.effects)
+        await cold.native.acknowledgeSettlement(effect)
+      expect(await cold.queue.getTask(identity.taskId)).toEqual(before)
+      expect(await cold.history.getDownloadedChapters()).toEqual([])
+      expect(f.revoke).toHaveBeenCalledTimes(2)
+    }
+  )
 
   it("releases retained output using an existing durable settlement receipt", async () => {
     const f = await fixture(1)
@@ -298,21 +489,21 @@ describe("output destination settlement", () => {
     expect(await cold.history.getDownloadedChapters()).toEqual([])
   })
 
-  it("keeps acknowledged history through task removal and late browser cancellation after restart", async () => {
+  it("keeps confirmed history through task removal and later browser erasure", async () => {
     const f = await fixture(1)
     await f.native.handleOutputReady(f.ready(0))
+    await f.native.handleDownloadChanged({
+      id: 41,
+      state: { current: "complete" },
+    })
     await f.finish()
     await f.queue.clearTerminalHistory()
     const cold = f.runtime()
     await cold.queue.initialize()
     await cold.native.initialize()
     expect(await cold.queue.getQueue()).toEqual([])
-    expect(f.revoke).not.toHaveBeenCalled()
-    await cold.native.handleDownloadChanged({
-      id: 41,
-      state: { current: "interrupted" },
-      error: { current: "USER_CANCELED" },
-    })
+    expect(f.revoke).toHaveBeenCalledOnce()
+    await cold.native.handleDownloadErased(41)
     expect(await cold.history.getDownloadedChapters()).toMatchObject([
       { outputDestination: "downloads-api" },
     ])

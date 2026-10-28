@@ -37,6 +37,6 @@ export function hasUncertainNativeOutput(
   chapters: readonly Pick<TaskChapter, "nativeOutputSettlement">[]
 ): boolean {
   return chapters.some(
-    (chapter) => chapter.nativeOutputSettlement?.acceptanceUncertain === true
+    (chapter) => chapter.nativeOutputSettlement?.outputUncertain === true
   )
 }

@@ -926,7 +926,7 @@ export function applyNativeOutputSettlement(
     requested: number
     completed: number
     interrupted: number
-    acceptanceUncertain?: true
+    outputUncertain?: true
     errorMessage?: string
     errorCategory?: DownloadErrorCategory
     lastSuccessfulDownloadId?: number
@@ -1001,7 +1001,7 @@ export function applyNativeOutputSettlement(
       existing.requested === input.requested &&
       existing.completed === input.completed &&
       existing.interrupted === input.interrupted &&
-      existing.acceptanceUncertain === input.acceptanceUncertain &&
+      existing.outputUncertain === input.outputUncertain &&
       existing.errorMessage === input.errorMessage &&
       existing.errorCategory === input.errorCategory &&
       existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
@@ -1060,19 +1060,19 @@ export function applyNativeOutputSettlement(
     requested: input.requested,
     completed: input.completed,
     interrupted: input.interrupted,
-    ...(input.acceptanceUncertain ? { acceptanceUncertain: true } : {}),
+    ...(input.outputUncertain ? { outputUncertain: true } : {}),
     errorMessage: input.errorMessage,
     errorCategory: input.errorCategory,
     lastSuccessfulDownloadId: input.lastSuccessfulDownloadId,
     appliedAt: input.now,
   }
-  const interruptionMessage = input.acceptanceUncertain
-    ? "Chrome handoff acceptance could not be established. Retrying may create duplicates."
+  const interruptionMessage = input.outputUncertain
+    ? "Chrome file-save outcome could not be established. Retrying may create duplicates."
     : input.interrupted === 0
       ? undefined
       : input.completed > 0
-        ? `${input.interrupted} output file(s) were not sent to Chrome.`
-        : "Output could not be sent to Chrome."
+        ? `${input.interrupted} output file(s) could not be saved by Chrome.`
+        : "Output could not be saved by Chrome."
   const succeeded = input.requested > 0 && input.completed === input.requested
   const updatedChapter: TaskChapter = {
     ...chapter,
@@ -1087,8 +1087,8 @@ export function applyNativeOutputSettlement(
     errorCategory: succeeded
       ? undefined
       : (input.errorCategory ??
-        (input.acceptanceUncertain
-          ? "browser_handoff_interrupted"
+        (input.outputUncertain
+          ? "browser_output_unconfirmed"
           : input.interrupted > 0
             ? "browser_download_interrupted"
             : undefined)),
@@ -1099,6 +1099,7 @@ export function applyNativeOutputSettlement(
     },
     nativeOutputSettlement: settlement,
     outputDestination: "downloads-api",
+    saveConfirmedAt: succeeded ? input.now : undefined,
     lastUpdated: Math.max(chapter.lastUpdated, input.now),
   }
   const chapters = [...task.chapters]

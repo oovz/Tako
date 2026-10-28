@@ -269,44 +269,61 @@ describe("native output continuation boundaries", () => {
     }
   }
 
-  it("settles acknowledged output while Chrome consumes its retained Blob", async () => {
-    await terminalCoordinator.handle(terminalPayload())
-    expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
-      chapters: [
-        {
-          id: identity.chapterId,
-          status: "completed",
-          outputDestination: "downloads-api",
-          outputs: { requested: 1, committed: 1, failed: 0 },
-        },
-        { id: "chapter-2", status: "queued" },
-      ],
-    })
-    expect(await historyRepository.getDownloadedChapters()).toMatchObject([
-      { chapterId: identity.chapterId, outputDestination: "downloads-api" },
-    ])
-    expect(taskGateAcquired).toHaveBeenCalledOnce()
-    expect(resources.getUsedBytes()).toBe(3)
-    expect(revokeObjectURL).not.toHaveBeenCalled()
-    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
-      {
+  it.each(["complete", "interrupted"] as const)(
+    "waits for Chrome before recording a final %s result and continuing",
+    async (phase) => {
+      await terminalCoordinator.handle(terminalPayload())
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        status: "downloading",
+        chapters: [{ status: "downloading" }, { status: "queued" }],
+      })
+      expect(await historyRepository.getDownloadedChapters()).toEqual([])
+      expect(taskGateAcquired).not.toHaveBeenCalled()
+      expect(resources.getUsedBytes()).toBe(3)
+      expect(revokeObjectURL).not.toHaveBeenCalled()
+      expect(
+        await nativeRepository.getByOutputId(output.outputId)
+      ).toMatchObject({
         phase: "waiting",
-        accountingDisposition: "accounted",
-      }
-    )
-
-    const before = await queueRepository.getTask(identity.taskId)
-    const result = await nativeCoordinator.handleDownloadChanged({
-      id: 42,
-      state: { current: "interrupted" },
-      error: { current: "USER_CANCELED" },
-    })
-    expect(result.effects).toEqual([])
-    expect(await queueRepository.getTask(identity.taskId)).toEqual(before)
-    expect(await historyRepository.getDownloadedChapters()).toHaveLength(1)
-    expect(resources.getUsedBytes()).toBe(0)
-    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
-  })
+        accountingDisposition: "pending",
+      })
+      const result = await nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: phase },
+        ...(phase === "interrupted"
+          ? { error: { current: "USER_CANCELED" } }
+          : {}),
+      })
+      await terminalCoordinator.continueAfterNativeOutputSettlement(
+        result.effects
+      )
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        chapters: [
+          {
+            status: phase === "complete" ? "completed" : "failed",
+            outputs: {
+              requested: 1,
+              committed: phase === "complete" ? 1 : 0,
+              failed: phase === "complete" ? 0 : 1,
+            },
+            ...(phase === "interrupted"
+              ? {
+                  errorMessage: "USER_CANCELED",
+                  errorCategory: "browser_download_interrupted",
+                }
+              : { saveConfirmedAt: expect.any(Number) }),
+          },
+          { status: "queued" },
+        ],
+      })
+      expect(await historyRepository.getDownloadedChapters()).toHaveLength(
+        phase === "complete" ? 1 : 0
+      )
+      expect(taskGateAcquired).toHaveBeenCalledOnce()
+      expect(resources.getUsedBytes()).toBe(0)
+      expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    }
+  )
 
   it("rejects native queue settlement while the real producer lease is active", async () => {
     await nativeRepository.markTerminal({
@@ -452,7 +469,7 @@ describe("native output continuation boundaries", () => {
   })
 
   it.each(["complete", "interrupted", "erased"] as const)(
-    "retains acknowledged missing Chrome output after cold recovery until Chrome reports %s",
+    "keeps an unknown save outcome fixed while late Chrome %s evidence releases its Blob",
     async (observation) => {
       await terminalCoordinator.settle(terminalPayload())
       search.mockResolvedValue([])
@@ -465,7 +482,7 @@ describe("native output continuation boundaries", () => {
       expect(
         await nativeRepository.getByOutputId(output.outputId)
       ).toMatchObject({
-        phase: "waiting",
+        phase: "outcome_unknown",
         accountingDisposition: "accounted",
       })
       const coldRepository = new NativeOutputRepository()
@@ -497,7 +514,13 @@ describe("native output continuation boundaries", () => {
       expect(revokeObjectURL).toHaveBeenCalledOnce()
       expect(await cold.hasLiveDependencies()).toBe(false)
       expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
-        chapters: [{ nativeOutputSettlement: { completed: 1 } }, {}],
+        chapters: [
+          {
+            status: "failed",
+            nativeOutputSettlement: { completed: 0, outputUncertain: true },
+          },
+          {},
+        ],
       })
     }
   )
@@ -526,7 +549,7 @@ describe("native output continuation boundaries", () => {
     expect(
       await nativeRepository.getByOutputId(uncertain.outputId)
     ).toMatchObject({
-      phase: "handoff_interrupted",
+      phase: "outcome_unknown",
     })
     expect(blobs.getRetainedCount()).toBe(2)
     expect(blobs.getRetainedBytes()).toBe(6)
@@ -578,11 +601,16 @@ describe("native output continuation boundaries", () => {
   it("keeps a later chapter runnable when acknowledged browser history disappears", async () => {
     await terminalCoordinator.handle(terminalPayload())
     search.mockResolvedValue([])
-    await nativeCoordinator.reconcile()
+    await terminalCoordinator.continueAfterNativeOutputSettlement(
+      await nativeCoordinator.reconcile()
+    )
     await nativeCoordinator.handleDownloadErased(42)
     expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
       status: "downloading",
-      chapters: [{ status: "completed" }, { status: "queued" }],
+      chapters: [
+        { status: "failed", nativeOutputSettlement: { outputUncertain: true } },
+        { status: "queued" },
+      ],
     })
     expect(
       (await queueRepository.getTask(identity.taskId))?.activeBlock
@@ -633,7 +661,7 @@ describe("native output continuation boundaries", () => {
     })
   })
 
-  it("continues at acknowledgement before a later browser completion", async () => {
+  it("continues only after final browser completion", async () => {
     const handlers = createBackgroundOffscreenEventMessageHandlers({
       queueRepository,
       nativeOutputCoordinator: nativeCoordinator,
@@ -650,22 +678,23 @@ describe("native output continuation boundaries", () => {
     )
 
     await expect(queueRepository.getActiveDispatchLease()).resolves.toBeNull()
-    expect(taskGateAcquired).toHaveBeenCalledOnce()
+    expect(taskGateAcquired).not.toHaveBeenCalled()
 
     search.mockResolvedValue([downloadItem("complete")])
     const result = await nativeCoordinator.handleDownloadChanged({
       id: 42,
       state: { current: "complete" },
     })
-    expect(result.effects).toEqual([])
+    expect(result.effects).toHaveLength(1)
     await terminalCoordinator.continueAfterNativeOutputSettlement(
       result.effects
     )
     expect(taskGateAcquired).toHaveBeenCalledOnce()
   })
 
-  it("keeps acknowledged settlement replayable until continuation succeeds", async () => {
+  it("keeps final settlement replayable until continuation succeeds", async () => {
     await terminalCoordinator.settle(terminalPayload())
+    search.mockResolvedValue([downloadItem("complete")])
     const effects = await nativeCoordinator.reconcile()
 
     const failingContinuation = new OffscreenJobTerminalCoordinator(
@@ -690,7 +719,7 @@ describe("native output continuation boundaries", () => {
     await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
     await expect(
       nativeRepository.getManifest(identity.jobId)
-    ).resolves.toMatchObject({ settlementAcknowledgedAt: expect.any(Number) })
+    ).resolves.toBeUndefined()
   })
 
   it.each([

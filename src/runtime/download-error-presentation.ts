@@ -14,7 +14,7 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   folder_write_failed: "downloadError_folderWriteFailed",
   disk_full: "downloadError_diskFull",
   browser_download_interrupted: "downloadError_browserDownloadInterrupted",
-  browser_handoff_interrupted: "downloadError_browserHandoffInterrupted",
+  browser_output_unconfirmed: "downloadError_browserOutputUnconfirmed",
   archive_creation_failed: "downloadError_archiveCreationFailed",
   unknown: "downloadError_unknown",
 }
@@ -30,13 +30,13 @@ export function getDownloadErrorMessage(category: unknown): string {
 
 export function getDownloadFailureMessage(
   category: DownloadErrorCategory | undefined,
-  acceptanceUncertain: boolean
+  outputUncertain: boolean
 ): string | undefined {
   const message = category ? getDownloadErrorMessage(category) : undefined
-  if (!acceptanceUncertain || category === "browser_handoff_interrupted") {
+  if (!outputUncertain || category === "browser_output_unconfirmed") {
     return message
   }
-  return [message, getDownloadErrorMessage("browser_handoff_interrupted")]
+  return [message, getDownloadErrorMessage("browser_output_unconfirmed")]
     .filter(Boolean)
     .join(" ")
 }

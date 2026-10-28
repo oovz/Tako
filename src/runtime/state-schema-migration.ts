@@ -3,6 +3,13 @@ import {
   DownloadTaskStateSchema as CurrentTaskSchema,
   PendingUndoActionSchema as CurrentUndoSchema,
 } from "./state-schema-migration-task-destination-schemas"
+import { buildFinalSaveWrites } from "./state-schema-migration-final-saves"
+import { parseCurrentNativeOutputState } from "@/src/storage/native-output-repository"
+import {
+  DownloadTaskStateSchema as CurrentDownloadTaskStateSchema,
+  PendingUndoActionSchema as CurrentPendingUndoActionSchema,
+} from "./queue-state-schemas"
+import { Epoch5DownloadErrorCategorySchema } from "./state-schema-migration-native-schema"
 import { z } from "zod"
 import {
   buildSaveEvidenceWrites,
@@ -28,10 +35,7 @@ import {
   composeDownloadedChapterKey,
   type DownloadedChapterRecord,
 } from "@/src/domain/history/types"
-import {
-  isTerminalDownloadTask,
-  normalizeInterruptedTask,
-} from "@/src/domain/queue/task-lifecycle"
+import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 import type { DestinationIssueKind } from "@/src/domain/queue/state"
 import { createDefaultSettings } from "@/src/domain/settings/defaults"
 import {
@@ -65,7 +69,6 @@ import {
   DOWNLOAD_DESTINATIONS,
   IMAGE_PADDING_DIGITS,
   LOG_LEVELS,
-  normalizeDownloadErrorCategory,
 } from "@/src/shared/download-contract"
 import {
   LegacyTaskSettingsSnapshotSchema,
@@ -100,10 +103,12 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
+export const CURRENT_STATE_SCHEMA_EPOCH = 7
 type DownloadTaskState = z.infer<typeof DownloadTaskStateSchema>
 type PendingUndoAction = z.infer<typeof PendingUndoActionSchema>
+const normalizeDownloadErrorCategory = (raw: unknown) =>
+  Epoch5DownloadErrorCategorySchema.safeParse(raw).data
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 6
 const DESTINATION_PAIRING_EPOCH = 3
 
 const SCHEMA_EPOCH_STORAGE_KEY = "stateSchemaEpoch"
@@ -967,6 +972,71 @@ function migratePersistentErrors(raw: unknown, now: number): unknown {
   )
 }
 
+function normalizeRetainedInterruptedTask(
+  task: DownloadTaskState,
+  now: number
+): DownloadTaskState {
+  const chapters = task.chapters.map((chapter) => {
+    if (chapter.status !== "downloading" && chapter.status !== "queued")
+      return chapter
+    const requested = Math.max(0, chapter.outputs?.requested ?? 0)
+    const committed = Math.max(0, chapter.outputs?.committed ?? 0)
+    const failed = Math.max(
+      0,
+      chapter.outputs?.failed ?? 0,
+      requested - committed
+    )
+    const complete =
+      chapter.status === "downloading" &&
+      requested > 0 &&
+      committed === requested &&
+      failed === 0
+    return {
+      ...chapter,
+      status: complete
+        ? ("completed" as const)
+        : chapter.status === "downloading" && committed > 0
+          ? ("partial_success" as const)
+          : ("failed" as const),
+      errorMessage: complete ? undefined : UPDATE_INTERRUPTION_MESSAGE,
+      errorCategory: complete ? undefined : ("unknown" as const),
+      ...(chapter.status === "downloading" && committed > 0
+        ? { outputs: { requested, committed, failed } }
+        : {}),
+      lastUpdated: now,
+    }
+  })
+  const allCompleted =
+    chapters.length > 0 &&
+    chapters.every((chapter) => chapter.status === "completed")
+  const firstFailure = chapters.find(
+    (chapter) =>
+      chapter.status === "failed" || chapter.status === "partial_success"
+  )
+  return {
+    ...task,
+    chapters,
+    status: allCompleted
+      ? "completed"
+      : chapters.some(
+            (chapter) =>
+              chapter.status === "completed" ||
+              chapter.status === "partial_success"
+          )
+        ? "partial_success"
+        : "failed",
+    activeBlock: undefined,
+    destinationIssue: undefined,
+    errorMessage: allCompleted
+      ? undefined
+      : (firstFailure?.errorMessage ?? UPDATE_INTERRUPTION_MESSAGE),
+    errorCategory: allCompleted
+      ? undefined
+      : (firstFailure?.errorCategory ?? "unknown"),
+    completed: task.completed ?? now,
+  }
+}
+
 function legacyInFlightTaskIds(stored: Record<string, unknown>): Set<string> {
   const taskIds = new Set<string>()
   const lease = stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
@@ -1017,7 +1087,7 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     if (
       !MIGRATION_WRITE_KEYS.has(key) &&
       !(
-        journal.targetEpoch === 4 &&
+        (journal.targetEpoch === 4 || journal.targetEpoch === 7) &&
         (key === nativeStorageKeys.index ||
           key.startsWith(nativeStorageKeys.manifestPrefix) ||
           key.startsWith(nativeStorageKeys.outputPrefix))
@@ -1045,11 +1115,13 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(
-      journal.targetEpoch === 6
-        ? CurrentTaskSchema
-        : journal.targetEpoch === 5
-          ? Epoch5DownloadTaskStateSchema
-          : DownloadTaskStateSchema
+      journal.targetEpoch === 7
+        ? CurrentDownloadTaskStateSchema
+        : journal.targetEpoch === 6
+          ? CurrentTaskSchema
+          : journal.targetEpoch === 5
+            ? Epoch5DownloadTaskStateSchema
+            : DownloadTaskStateSchema
     ).parse(
       journal.targetEpoch === 3
         ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
@@ -1060,11 +1132,13 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(
-      journal.targetEpoch === 6
-        ? CurrentUndoSchema
-        : journal.targetEpoch === 5
-          ? Epoch5PendingUndoActionSchema
-          : PendingUndoActionSchema
+      journal.targetEpoch === 7
+        ? CurrentPendingUndoActionSchema
+        : journal.targetEpoch === 6
+          ? CurrentUndoSchema
+          : journal.targetEpoch === 5
+            ? Epoch5PendingUndoActionSchema
+            : PendingUndoActionSchema
     ).parse(
       journal.targetEpoch === 3
         ? (
@@ -1103,7 +1177,10 @@ function validateMigrationJournal(journal: MigrationJournal): void {
       throw new Error(
         "State migration journal is missing the native output index"
       )
-    validateNativeOutputMigrationWrites(journal.writes)
+    validateNativeOutputMigrationWrites(
+      journal.writes,
+      journal.targetEpoch === 7 ? parseCurrentNativeOutputState : undefined
+    )
   }
 
   const historyKeys = [
@@ -1121,7 +1198,7 @@ function validateMigrationJournal(journal: MigrationJournal): void {
       )
     }
     const validateHistory =
-      journal.targetEpoch === 5
+      journal.targetEpoch >= 5
         ? validateSaveEvidenceHistory
         : parseHistoryAggregate
     validateHistory({
@@ -1167,13 +1244,7 @@ function buildDestinationPairingJournal(
     queue = queue.map((task) =>
       inFlightTaskIds.has(task.id) &&
       (task.status === "queued" || task.status === "downloading")
-        ? DownloadTaskStateSchema.parse(
-            normalizeInterruptedTask(
-              task as unknown as import("@/src/domain/queue/state").DownloadTaskState,
-              UPDATE_INTERRUPTION_MESSAGE,
-              now
-            )
-          )
+        ? normalizeRetainedInterruptedTask(task, now)
         : task
     )
   }
@@ -1299,12 +1370,32 @@ const MIGRATION_STEPS = [
   { targetEpoch: 5, prepare: buildHistoryEvidenceJournal },
   {
     targetEpoch: 6,
-    prepare: (stored: Record<string, unknown>, sourceEpoch: number | null) => {
+    prepare: (
+      stored: Record<string, unknown>,
+      sourceEpoch: number | null
+    ): MigrationJournal => {
       const journal = MigrationJournalSchema.parse({
         sourceEpoch,
         targetEpoch: 6,
         phase: "prepared",
         writes: buildTaskDestinationWrites(stored),
+        obsoleteKeys: [],
+      })
+      validateMigrationJournal(journal)
+      return journal
+    },
+  },
+  {
+    targetEpoch: 7,
+    prepare: (
+      stored: Record<string, unknown>,
+      sourceEpoch: number | null
+    ): MigrationJournal => {
+      const journal = MigrationJournalSchema.parse({
+        sourceEpoch,
+        targetEpoch: 7,
+        phase: "prepared",
+        writes: buildFinalSaveWrites(stored),
         obsoleteKeys: [],
       })
       validateMigrationJournal(journal)
@@ -1402,7 +1493,8 @@ export async function migrateDurableStateForCurrentSchema(): Promise<void> {
       if (
         (stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 ||
           stored[SCHEMA_EPOCH_STORAGE_KEY] === 4 ||
-          stored[SCHEMA_EPOCH_STORAGE_KEY] === 5) &&
+          stored[SCHEMA_EPOCH_STORAGE_KEY] === 5 ||
+          stored[SCHEMA_EPOCH_STORAGE_KEY] === 6) &&
         stored[MIGRATION_JOURNAL_STORAGE_KEY] === undefined
       ) {
         let index

@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { parseCurrentNativeOutputState } from "@/src/storage/native-output-repository"
+import { parseEpoch5NativeOutputState } from "./state-schema-migration-native-schema"
 import { isRecord } from "@/src/shared/type-guards"
 
 export const nativeStorageKeys = {
@@ -132,7 +132,7 @@ export function convertStoredNativeState(
       return [[id, manifest]]
     })
   )
-  const state = parseCurrentNativeOutputState({
+  const state = parseEpoch5NativeOutputState({
     manifestsByJobId,
     outputsByOutputId,
   })
@@ -163,7 +163,10 @@ export function convertStoredNativeState(
 }
 
 export function validateNativeOutputMigrationWrites(
-  writes: Record<string, unknown>
+  writes: Record<string, unknown>,
+  parseState: (raw: unknown) => {
+    outputsByOutputId: Record<string, { downloadId?: number; outputId: string }>
+  } = parseEpoch5NativeOutputState
 ): void {
   const index = parseNativeStorageIndex(writes[nativeStorageKeys.index])
   const keys = new Set([
@@ -185,7 +188,7 @@ export function validateNativeOutputMigrationWrites(
       throw new Error(
         "State migration journal is missing an indexed native output"
       )
-  const state = parseCurrentNativeOutputState({
+  const state = parseState({
     manifestsByJobId: Object.fromEntries(
       index.jobIds.map((id) => [
         id,

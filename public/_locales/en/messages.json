@@ -451,7 +451,7 @@
     "message": "There is not enough disk space."
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "Chrome could not accept the output."
+    "message": "Chrome could not finish saving the output."
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako could not create the archive."
@@ -1853,9 +1853,6 @@
       }
     }
   },
-  "downloadError_browserHandoffInterrupted": {
-    "message": "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
-  },
   "sidepanel_retryUncertainHandoff": {
     "message": "Retry failed chapters (may create duplicates)"
   },
@@ -1898,5 +1895,8 @@
   },
   "destination_taskFolder": {
     "message": "Selected folder"
+  },
+  "downloadError_browserOutputUnconfirmed": {
+    "message": "Chrome file saving could not be confirmed. Retrying may create duplicate files."
   }
 }

@@ -35,7 +35,7 @@ describe("DownloadTaskCard error presentation", () => {
             requested: 1,
             completed: 0,
             interrupted: 1,
-            acceptanceUncertain: true,
+            outputUncertain: true,
             appliedAt: 2,
           },
           lastUpdated: 2,
@@ -66,7 +66,7 @@ describe("DownloadTaskCard error presentation", () => {
       })
     )
     expect(html).toContain(
-      "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+      "Chrome file saving could not be confirmed. Retrying may create duplicate files."
     )
     expect(html).toContain("Retry all chapters (may create duplicates)")
     expect(html).toContain("Tako could not create the archive.")
@@ -165,7 +165,7 @@ describe("DownloadTaskCard error presentation", () => {
       })
     )
 
-    expect(html).toContain("Chrome could not accept the output.")
+    expect(html).toContain("Chrome could not finish saving the output.")
     expect(html).not.toContain("The selected folder is no longer available.")
     expect(html).not.toContain("ERR_FILE_ACCESS_DENIED")
     expect(html).not.toContain("task-secret")

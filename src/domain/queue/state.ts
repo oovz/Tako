@@ -86,7 +86,7 @@ export interface NativeOutputSettlement {
   requested: number
   completed: number
   interrupted: number
-  acceptanceUncertain?: true
+  outputUncertain?: true
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   lastSuccessfulDownloadId?: number
@@ -198,7 +198,7 @@ export interface QueueTaskSummary {
     created: number
     completed?: number
   }
-  acceptanceUncertain?: boolean
+  outputUncertain?: boolean
   failureCategory?: DownloadErrorCategory
   isRetried?: boolean
   isRetryTask?: boolean

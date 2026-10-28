@@ -276,6 +276,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -963,13 +969,13 @@ describe("ordered stored-state migration steps", () => {
     expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
     expect(local.downloadQueue).toMatchObject([
       {
-        errorCategory: "browser_handoff_interrupted",
+        errorCategory: "browser_output_unconfirmed",
         chapters: [
           {
             nativeOutputSettlement: {
               completed: 1,
               interrupted: 1,
-              acceptanceUncertain: true,
+              outputUncertain: true,
             },
           },
         ],
@@ -994,17 +1000,17 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4, 5, 6])
+    ).toEqual([3, 4, 5, 6, 7])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,
-        errorCategory: "browser_handoff_interrupted",
+        errorCategory: "browser_output_unconfirmed",
         chapters: [
           {
             nativeOutputSettlement: {
               completed: 1,
               interrupted: 1,
-              acceptanceUncertain: true,
+              outputUncertain: true,
             },
           },
         ],
@@ -1065,7 +1071,7 @@ describe("ordered stored-state migration steps", () => {
             nativeOutputSettlement: {
               completed: 1,
               interrupted: 1,
-              acceptanceUncertain: true,
+              outputUncertain: true,
             },
           },
         ],

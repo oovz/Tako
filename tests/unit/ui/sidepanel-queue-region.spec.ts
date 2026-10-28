@@ -71,13 +71,13 @@ describe("SidePanelQueueRegion unified queue layout", () => {
         {
           ...makeTask("uncertain", "failed"),
           failureCategory: "archive_creation_failed",
-          acceptanceUncertain: true,
+          outputUncertain: true,
           chapters: { total: 1, completed: 0, unsuccessful: 1 },
         },
       ],
     })
     expect(html).toContain(
-      "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+      "Chrome file saving could not be confirmed. Retrying may create duplicate files."
     )
     expect(html).toContain(
       'aria-label="Retry all chapters (may create duplicates)"'

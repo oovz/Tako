@@ -89,7 +89,7 @@ export function DownloadTaskCard({
     (task.settingsSnapshot.destination.kind === "file-system-access" &&
       task.settingsSnapshot.destination.handleId === null)
   const isRetried = task.isRetried ?? false
-  const acceptanceUncertain = hasUncertainNativeOutput(task.chapters)
+  const outputUncertain = hasUncertainNativeOutput(task.chapters)
   const failureChapter = firstUnsuccessfulChapter(task.chapters)
   const failureMessage = getDownloadFailureMessage(
     task.status === "completed"
@@ -97,7 +97,7 @@ export function DownloadTaskCard({
       : failureChapter
         ? (failureChapter.errorCategory ?? "unknown")
         : task.errorCategory,
-    acceptanceUncertain
+    outputUncertain
   )
   const cancelPresentation = getDownloadCancelPresentation()
   const requiresCancelConfirmation = task.status === "downloading"
@@ -397,7 +397,7 @@ export function DownloadTaskCard({
                   >
                     <RotateCcw data-icon="inline-start" className="size-4" />
                     {t(
-                      acceptanceUncertain
+                      outputUncertain
                         ? "sidepanel_retryUncertainHandoff"
                         : "sidepanel_retryFailedChapters"
                     )}
@@ -412,7 +412,7 @@ export function DownloadTaskCard({
                   >
                     <RotateCcw data-icon="inline-start" className="size-4" />
                     {t(
-                      acceptanceUncertain
+                      outputUncertain
                         ? "sidepanel_restartUncertainHandoff"
                         : "sidepanel_restartTask"
                     )}
@@ -446,7 +446,7 @@ export function DownloadTaskCard({
                 >
                   <RotateCcw data-icon="inline-start" className="size-4" />
                   {t(
-                    acceptanceUncertain
+                    outputUncertain
                       ? "sidepanel_restartUncertainHandoff"
                       : "sidepanel_restartTask"
                   )}

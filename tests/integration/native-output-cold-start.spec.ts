@@ -246,7 +246,7 @@ describe("native output cold-start recovery", () => {
             status: "failed",
             ...producerError,
             ...(hasUncertainOutput
-              ? { nativeOutputSettlement: { acceptanceUncertain: true } }
+              ? { nativeOutputSettlement: { outputUncertain: true } }
               : {}),
           },
         ],
@@ -363,6 +363,8 @@ describe("native output cold-start recovery", () => {
           ...(finalStatus === "failed" ? finalFailure : {}),
         },
       })
+      if (finalStatus === "completed")
+        search.mockResolvedValue([completeDownloadItem()])
       const cold = createRuntime()
       await cold.queueRepository.initialize()
       await cold.coordinator.initialize()
@@ -636,7 +638,7 @@ describe("native output cold-start recovery", () => {
         await restarted.queueRepository.getTask(output.taskId)
       ).toMatchObject({
         status: "failed",
-        errorCategory: "browser_handoff_interrupted",
+        errorCategory: "browser_output_unconfirmed",
         chapters: [
           {
             status: "failed",
@@ -776,7 +778,7 @@ describe("native output cold-start recovery", () => {
     const original = await restarted.queueRepository.getTask(output.taskId)
     expect(original).toMatchObject({
       status: "failed",
-      errorCategory: "browser_handoff_interrupted",
+      errorCategory: "browser_output_unconfirmed",
     })
     expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
     expect(
@@ -830,7 +832,7 @@ describe("native output cold-start recovery", () => {
     ).toMatchObject({
       status: "failed",
       chapters: [
-        { errorCategory: "browser_handoff_interrupted", status: "failed" },
+        { errorCategory: "browser_output_unconfirmed", status: "failed" },
       ],
     })
     expect(await restarted.coordinator.getLiveTaskIds()).toEqual([])

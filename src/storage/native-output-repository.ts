@@ -7,7 +7,7 @@ import {
   attachNativeDownload,
   ensureNativeOutputManifest,
   interruptNativeOutputBeforeAcceptance,
-  interruptNativeOutputHandoff,
+  markNativeOutputOutcomeUnknown,
   markNativeDownloadTerminal,
   markNativeOutputAcceptanceUnknown,
   markNativeOutputAccountingDisposition,
@@ -15,6 +15,7 @@ import {
   markNativeOutputDependencyReleased,
   markNativeOutputJobDependencyReleased,
   observeNativeDownloadErased,
+  observeNativeDownloadPending,
   prepareNativeOutput,
   sealNativeOutputManifest,
   type NativeOutputKernelDecision,
@@ -200,7 +201,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     phase: z.enum([
       "prepared",
       "acceptance_unknown",
-      "handoff_interrupted",
+      "outcome_unknown",
       "waiting",
       "complete",
       "interrupted",
@@ -222,7 +223,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       record.phase === "complete" || record.phase === "interrupted"
     const requiresAcceptance =
       record.phase === "acceptance_unknown" ||
-      record.phase === "handoff_interrupted" ||
+      record.phase === "outcome_unknown" ||
       record.phase === "waiting" ||
       record.phase === "complete" ||
       (record.phase === "interrupted" &&
@@ -246,9 +247,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       })
     }
     if (
-      (record.phase === "prepared" ||
-        record.phase === "acceptance_unknown" ||
-        record.phase === "handoff_interrupted") &&
+      (record.phase === "prepared" || record.phase === "acceptance_unknown") &&
       (record.downloadId !== undefined || record.terminalAt !== undefined)
     ) {
       context.addIssue({
@@ -267,7 +266,10 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
         message: "accepted output phase requires downloadId",
       })
     }
-    if (record.phase === "waiting" && record.terminalAt !== undefined) {
+    if (
+      (record.phase === "waiting" || record.phase === "outcome_unknown") &&
+      record.terminalAt !== undefined
+    ) {
       context.addIssue({
         code: "custom",
         path: ["terminalAt"],
@@ -323,14 +325,18 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       context.addIssue({
         code: "custom",
         path: ["accountingDisposition"],
-        message: "accounting disposition requires a resolved handoff",
+        message: "accounting disposition requires a resolved output outcome",
       })
     }
     if (
       record.blobReleasedAt !== undefined &&
       (record.blobReleasedAt < record.createdAt ||
         (!canReleaseNativeOutputBlob(record) &&
-          !(record.phase === "waiting" && record.erasedAt !== undefined)))
+          !(
+            (record.phase === "waiting" ||
+              record.phase === "outcome_unknown") &&
+            record.erasedAt !== undefined
+          )))
     ) {
       context.addIssue({
         code: "custom",
@@ -342,7 +348,10 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     if (
       record.dependencyReleasedAt !== undefined &&
       ((!canReleaseNativeOutputBlob(record) &&
-        !(record.phase === "waiting" && record.erasedAt !== undefined)) ||
+        !(
+          (record.phase === "waiting" || record.phase === "outcome_unknown") &&
+          record.erasedAt !== undefined
+        )) ||
         record.accountingDisposition === "pending" ||
         record.blobReleasedAt === undefined ||
         record.dependencyReleasedAt < record.blobReleasedAt)
@@ -838,12 +847,21 @@ export class NativeOutputRepository {
     )
   }
 
-  async interruptHandoff(
-    input: Parameters<typeof interruptNativeOutputHandoff>[1]
-  ): Promise<ReturnType<typeof interruptNativeOutputHandoff>["result"]> {
+  async observePending(
+    input: Parameters<typeof observeNativeDownloadPending>[1]
+  ): Promise<ReturnType<typeof observeNativeDownloadPending>["result"]> {
     const detached = structuredClone(input)
     return await this.execute((state) =>
-      interruptNativeOutputHandoff(state, detached)
+      observeNativeDownloadPending(state, detached)
+    )
+  }
+
+  async markOutcomeUnknown(
+    input: Parameters<typeof markNativeOutputOutcomeUnknown>[1]
+  ): Promise<ReturnType<typeof markNativeOutputOutcomeUnknown>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      markNativeOutputOutcomeUnknown(state, detached)
     )
   }
 

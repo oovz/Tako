@@ -75,7 +75,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
       created: task.created,
       completed: task.completed,
     },
-    acceptanceUncertain: hasUncertainNativeOutput(task.chapters),
+    outputUncertain: hasUncertainNativeOutput(task.chapters),
     failureCategory,
     isRetried: task.isRetried ?? false,
     isRetryTask: task.isRetryTask ?? false,

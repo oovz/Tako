@@ -44,8 +44,8 @@ export interface NativeOutputManifest extends NativeOutputJobIdentity {
 export type NativeOutputPhase =
   | "prepared"
   | "acceptance_unknown"
-  // Accounting can finish while the Blob remains owned for later observation.
-  | "handoff_interrupted"
+  // An unknown outcome is actionable while its Blob remains owned for observation.
+  | "outcome_unknown"
   | "waiting"
   | "complete"
   | "interrupted"
@@ -115,11 +115,7 @@ export function isNativeOutputTerminal(record: NativeOutputRecord): boolean {
 }
 
 export function canAccountNativeOutput(record: NativeOutputRecord): boolean {
-  return (
-    record.downloadId !== undefined ||
-    record.phase === "handoff_interrupted" ||
-    isNativeOutputTerminal(record)
-  )
+  return record.phase === "outcome_unknown" || isNativeOutputTerminal(record)
 }
 
 /** Browser consumption determines Blob lifetime independently of accounting. */

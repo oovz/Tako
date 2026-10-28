@@ -329,7 +329,7 @@ export function attachNativeDownload(
   }
   if (
     current.phase !== "acceptance_unknown" &&
-    current.phase !== "handoff_interrupted"
+    current.phase !== "outcome_unknown"
   ) {
     return rejected(state, "invalid-transition")
   }
@@ -342,13 +342,43 @@ export function attachNativeDownload(
   }
   const record: NativeOutputRecord = {
     ...current,
-    phase: "waiting",
+    phase: current.phase === "outcome_unknown" ? "outcome_unknown" : "waiting",
     downloadId: input.downloadId,
   }
   return applied(replaceOutput(state, record), { record })
 }
 
-export function interruptNativeOutputHandoff(
+export function observeNativeDownloadPending(
+  state: NativeOutputState,
+  input: { downloadId: number }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ record: NativeOutputRecord }>
+  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
+  | NativeOutputRejected<"download-not-found">
+  | InvalidTransition
+> {
+  const current = Object.values(state.outputsByOutputId).find(
+    (record) => record.downloadId === input.downloadId
+  )
+  if (!current) return rejected(state, "download-not-found")
+  if (current.phase === "waiting") return unchanged(state, { record: current })
+  if (
+    current.phase !== "outcome_unknown" ||
+    current.accountingDisposition !== "pending" ||
+    current.blobReleasedAt !== undefined ||
+    current.erasedByBrowserAt !== undefined
+  )
+    return rejected(state, "invalid-transition")
+  const record: NativeOutputRecord = {
+    ...current,
+    phase: "waiting",
+    error: undefined,
+    erasedAt: undefined,
+  }
+  return applied(replaceOutput(state, record), { record })
+}
+
+export function markNativeOutputOutcomeUnknown(
   state: NativeOutputState,
   input: { outputId: string }
 ): NativeOutputKernelDecision<
@@ -359,16 +389,16 @@ export function interruptNativeOutputHandoff(
 > {
   const current = state.outputsByOutputId[input.outputId]
   if (!current) return rejected(state, "output-not-found")
-  if (current.phase === "handoff_interrupted") {
+  if (current.phase === "outcome_unknown") {
     return unchanged(state, { record: current })
   }
-  if (current.phase !== "acceptance_unknown") {
+  if (current.phase !== "acceptance_unknown" && current.phase !== "waiting") {
     return rejected(state, "invalid-transition")
   }
   const record: NativeOutputRecord = {
     ...current,
-    phase: "handoff_interrupted",
-    error: "Chrome handoff acceptance could not be established",
+    phase: "outcome_unknown",
+    error: "Chrome file-save outcome could not be established",
   }
   return applied(replaceOutput(state, record), { record })
 }
@@ -422,7 +452,7 @@ export function markNativeDownloadTerminal(
       ? unchanged(state, { record: current })
       : rejected(state, "terminal-conflict")
   }
-  if (current.phase !== "waiting") {
+  if (current.phase !== "waiting" && current.phase !== "outcome_unknown") {
     return rejected(state, "invalid-transition")
   }
   const record: NativeOutputRecord = {
@@ -455,6 +485,12 @@ export function observeNativeDownloadErased(
   const record = {
     ...current,
     erasedAt: current.erasedAt ?? input.now,
+    ...(!isNativeOutputTerminal(current)
+      ? {
+          phase: "outcome_unknown" as const,
+          error: "Chrome file-save outcome could not be established",
+        }
+      : {}),
     ...(input.confirmedByBrowser ? { erasedByBrowserAt: input.now } : {}),
   }
   return applied(replaceOutput(state, record), { record })

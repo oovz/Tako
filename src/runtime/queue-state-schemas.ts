@@ -99,7 +99,7 @@ const nativeOutputSettlementSchema = z
     requested: nonnegativeInteger,
     completed: nonnegativeInteger,
     interrupted: nonnegativeInteger,
-    acceptanceUncertain: z.literal(true).optional(),
+    outputUncertain: z.literal(true).optional(),
     errorMessage: z.string().optional(),
     errorCategory: DownloadErrorCategorySchema.optional(),
     lastSuccessfulDownloadId: nonnegativeInteger.optional(),

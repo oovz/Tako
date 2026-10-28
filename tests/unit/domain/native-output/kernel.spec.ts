@@ -186,7 +186,7 @@ describe("native output kernel", () => {
     })
     expect(erased.result).toMatchObject({
       outcome: "applied",
-      record: { phase: "waiting", erasedAt: 12 },
+      record: { phase: "outcome_unknown", erasedAt: 12 },
     })
   })
 

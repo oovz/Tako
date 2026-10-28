@@ -1,3 +1,4 @@
+import type { NativeOutputSettlement } from "@/src/domain/queue/state"
 import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 
 import logger from "@/src/runtime/logger"
@@ -83,6 +84,23 @@ function addSettlementEffects(
   additions: NativeOutputSettlementEffects
 ): void {
   for (const effect of additions) addSettlementEffect(effects, effect)
+}
+
+function settlementReceiptMatches(
+  identity: Pick<
+    NativeOutputManifest,
+    "jobId" | "attempt" | "taskId" | "chapterId" | "outputsRequested"
+  >,
+  settlement: NativeOutputSettlement | undefined
+): boolean {
+  return (
+    settlement !== undefined &&
+    settlement.jobId === identity.jobId &&
+    settlement.attempt === identity.attempt &&
+    settlement.taskId === identity.taskId &&
+    settlement.chapterId === identity.chapterId &&
+    settlement.requested === identity.outputsRequested
+  )
 }
 
 function settlementEffect(
@@ -749,7 +767,7 @@ export class NativeOutputCoordinator {
 
     if (
       current.phase === "acceptance_unknown" ||
-      current.phase === "handoff_interrupted"
+      (current.phase === "outcome_unknown" && current.downloadId === undefined)
     ) {
       let matches: chrome.downloads.DownloadItem[]
       try {
@@ -759,7 +777,7 @@ export class NativeOutputCoordinator {
           outputId: current.outputId,
           error,
         })
-        await this.deps.repository.interruptHandoff({
+        await this.deps.repository.markOutcomeUnknown({
           outputId: current.outputId,
         })
         await this.armLivenessLocked()
@@ -790,7 +808,7 @@ export class NativeOutputCoordinator {
           )
         }
       } else {
-        await this.deps.repository.interruptHandoff({
+        await this.deps.repository.markOutcomeUnknown({
           outputId: current.outputId,
         })
         await this.armLivenessLocked()
@@ -798,8 +816,24 @@ export class NativeOutputCoordinator {
       return effects
     }
 
-    if (current.phase === "waiting" && current.downloadId !== undefined) {
-      const items = await chrome.downloads.search({ id: current.downloadId })
+    if (
+      (current.phase === "waiting" || current.phase === "outcome_unknown") &&
+      current.downloadId !== undefined
+    ) {
+      let items: chrome.downloads.DownloadItem[]
+      try {
+        items = await chrome.downloads.search({ id: current.downloadId })
+      } catch (error) {
+        logger.warn("Chrome file-save evidence is unavailable", {
+          outputId: current.outputId,
+          error,
+        })
+        await this.deps.repository.markOutcomeUnknown({
+          outputId: current.outputId,
+        })
+        await this.armLivenessLocked()
+        return effects
+      }
       const item = items.find(
         (candidate) => candidate.id === current.downloadId
       )
@@ -833,6 +867,27 @@ export class NativeOutputCoordinator {
     record: NativeOutputRecord,
     item: chrome.downloads.DownloadItem
   ): Promise<NativeOutputSettlementEffects> {
+    if (
+      item.state === "in_progress" &&
+      record.phase === "outcome_unknown" &&
+      record.accountingDisposition === "pending"
+    ) {
+      const task = await this.deps.queueRepository.getTask(record.taskId)
+      const chapter = task?.chapters.find(
+        (chapter) => chapter.id === record.chapterId
+      )
+      if (
+        task?.status === "downloading" &&
+        chapter?.dispatchAttempt === record.attempt &&
+        !settlementReceiptMatches(
+          { ...record, outputsRequested: record.outputCount },
+          chapter.nativeOutputSettlement
+        )
+      ) {
+        await this.deps.repository.observePending({ downloadId: item.id })
+      }
+      return []
+    }
     if (item.state !== "complete" && item.state !== "interrupted") return []
     await this.deps.repository.markTerminal({
       downloadId: item.id,
@@ -895,15 +950,10 @@ export class NativeOutputCoordinator {
           task?.chapters.find((chapter) => chapter.id === manifest.chapterId)
             ?.nativeOutputSettlement
       )
-    const queueSettlementProven =
-      chapterSettlement !== undefined &&
-      chapterSettlement.jobId === manifest.jobId &&
-      chapterSettlement.attempt === manifest.attempt &&
-      chapterSettlement.taskId === manifest.taskId &&
-      chapterSettlement.chapterId === manifest.chapterId &&
-      chapterSettlement.requested === manifest.outputsRequested &&
-      chapterSettlement.errorMessage === manifest.errorMessage &&
-      chapterSettlement.errorCategory === manifest.errorCategory
+    const queueSettlementProven = settlementReceiptMatches(
+      manifest,
+      chapterSettlement
+    )
 
     if (
       manifest.phase === "sealed" &&
@@ -915,8 +965,10 @@ export class NativeOutputCoordinator {
       const {
         completed,
         interrupted,
-        acceptanceUncertain,
+        outputUncertain,
         lastSuccessfulDownloadId,
+        errorMessage: outputErrorMessage,
+        errorCategory: outputErrorCategory,
       } = stats
       const settlement = queueSettlementProven
         ? { outcome: "already_applied" as const }
@@ -928,9 +980,9 @@ export class NativeOutputCoordinator {
             requested: manifest.outputsRequested,
             completed,
             interrupted,
-            acceptanceUncertain: acceptanceUncertain || undefined,
-            errorMessage: manifest.errorMessage,
-            errorCategory: manifest.errorCategory,
+            outputUncertain: outputUncertain || undefined,
+            errorMessage: outputErrorMessage,
+            errorCategory: outputErrorCategory,
             lastSuccessfulDownloadId,
             now: Date.now(),
           })
