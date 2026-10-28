@@ -13,12 +13,27 @@ import {
 import { isTrustedShonenJumpPlusAssetUrl } from "@/src/site-integrations/shonenjumpplus/urls"
 import { fetchShonenJumpPlusChapterList } from "@/src/site-integrations/shonenjumpplus/series-api"
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
-
+import {
+  extractComicNettaiChapterListWithPagination,
+  extractComicNettaiSeriesMetadataFromDocument,
+} from "@/src/site-integrations/comictropics/series-dom"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 const rateLimitService = {} as RateLimitService
 
 afterEach(() => vi.restoreAllMocks())
+
+function comicPage(page: number): Document {
+  return new DOMParser().parseFromString(
+    readFileSync(
+      resolve(
+        `tests/fixtures/site-integrations/comictropics/series-page-${page}.html`
+      ),
+      "utf8"
+    ),
+    "text/html"
+  )
+}
 
 describe("captured publisher pages", () => {
   it("paginates the guest Shonen Jump+ catalog with its access labels and episode identities", async () => {
@@ -70,5 +85,44 @@ describe("captured publisher pages", () => {
       true
     )
     expect(extractImageUrlsFromEpisodeJsonScript(html)).toHaveLength(71)
+  })
+
+  it("collects the three COMIC熱帯 catalog pages and skips the hidden next control", async () => {
+    const firstPage = comicPage(1)
+    const loadDocument = vi.fn(async (url: string) => {
+      const page = Number(new URL(url).searchParams.get("page") ?? 1)
+      if (page > 3) throw new Error(`Unexpected catalog page ${page}`)
+      return comicPage(page)
+    })
+    const result = await extractComicNettaiChapterListWithPagination(
+      firstPage,
+      "https://www.comicnettai.com/book/9",
+      rateLimitService,
+      loadDocument
+    )
+    const chapters = Array.isArray(result) ? result : result.chapters
+
+    expect(
+      extractComicNettaiSeriesMetadataFromDocument(firstPage)
+    ).toMatchObject({
+      title: "煙たい話",
+      author: "林史也",
+      language: "ja",
+    })
+    expect(loadDocument.mock.calls.map(([url]) => new URL(url).search)).toEqual(
+      ["?page=2", "?page=3"]
+    )
+    expect(chapters).toHaveLength(51)
+    expect(chapters.filter((chapter) => !chapter.locked)).toHaveLength(6)
+    expect(chapters[0]).toMatchObject({
+      id: "1033",
+      title: "第49話",
+      locked: false,
+    })
+    expect(chapters.at(-1)).toMatchObject({
+      id: "97",
+      title: "第1話",
+      locked: false,
+    })
   })
 })

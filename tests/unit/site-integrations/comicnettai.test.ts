@@ -814,6 +814,7 @@ describe("Comic Nettai site integration", () => {
         if (selector === 'a[href*="page="]') {
           return (opts.paginationHrefs ?? []).map((href) => ({
             getAttribute: (name: string) => (name === "href" ? href : null),
+            closest: () => null,
           }))
         }
         return []

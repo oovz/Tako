@@ -5,7 +5,8 @@ import type {
 } from "../../../local-mock-server"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 import { MOCK_PUBLUS_CONFIG, MOCK_PUBLUS_IMAGE_PATHS } from "./config-fixtures"
-import { BASIC_SERIES_PAGE_HTML, HOME_PAGE_HTML } from "./html-fixtures"
+import { SERIES_PAGE_HTML, HOME_PAGE_HTML } from "./html-fixtures"
+import capturedChapters from "@/tests/fixtures/site-integrations/comictropics/captured-chapters.json" with { type: "json" }
 
 export const COMICNETTAI_LOCAL_SITE_PREFIX = "/__comicnettai/site"
 export const COMICNETTAI_LOCAL_CDN_PREFIX = "/__comicnettai/cdn"
@@ -13,19 +14,21 @@ export const COMICNETTAI_LOCAL_CDN_PREFIX = "/__comicnettai/cdn"
 const COMICNETTAI_SITE_RULE_ID = 9600
 const COMICNETTAI_CDN_RULE_ID = 9601
 
-const cidToContentId: Record<string, string> = {
-  "mock-cid-958": "958",
-  "mock-cid-938": "938",
-  "mock-cid-925": "925",
-}
+const chaptersByCid = new Map(
+  capturedChapters
+    .filter((chapter) => chapter.url)
+    .map((chapter) => [new URL(chapter.url!).searchParams.get("cid"), chapter])
+)
+const cdnBase = "https://cdn.comicnettai.com/9_c2b3fc5aa6547df94ec500f29b54c231"
 
 const comicNettaiSiteHandler: MockRouteHandler = (req) => {
   const pathname = req.pathnameAfterPrefix
   if (pathname === "/book/9" || pathname === "/book/9/") {
+    const page = Number(req.url.searchParams.get("page") ?? 1)
     return {
-      status: 200,
+      status: SERIES_PAGE_HTML[page] ? 200 : 404,
       headers: { "content-type": "text/html; charset=utf-8" },
-      body: BASIC_SERIES_PAGE_HTML,
+      body: SERIES_PAGE_HTML[page] ?? "",
     }
   }
 
@@ -39,8 +42,8 @@ const comicNettaiSiteHandler: MockRouteHandler = (req) => {
 
   if (pathname === "/api/viewer/c") {
     const cid = req.url.searchParams.get("cid") ?? ""
-    const contentId = cidToContentId[cid]
-    if (!contentId) {
+    const chapter = chaptersByCid.get(cid)
+    if (!chapter) {
       return {
         status: 200,
         headers: { "content-type": "application/json; charset=utf-8" },
@@ -53,8 +56,8 @@ const comicNettaiSiteHandler: MockRouteHandler = (req) => {
       headers: { "content-type": "application/json; charset=utf-8" },
       body: {
         status: "200",
-        url: `https://cdn.comicnettai.com/9_hash/epub/book_contents/c${contentId}/`,
-        cti: `Mock ${contentId}`,
+        url: `${cdnBase}/epub/book_contents/c${chapter.id}/`,
+        cti: chapter.title,
         cty: 1,
       },
     }
@@ -77,12 +80,7 @@ const comicNettaiCdnHandler: MockRouteHandler = (req) => {
     }
   }
 
-  if (
-    MOCK_PUBLUS_IMAGE_PATHS.some(
-      (path) =>
-        pathname.endsWith(path.replace("/9_hash", "")) || pathname === path
-    )
-  ) {
+  if (MOCK_PUBLUS_IMAGE_PATHS.some((path) => pathname === path)) {
     return {
       status: 200,
       headers: { "content-type": SMALL_PNG_MIME_TYPE },
@@ -111,12 +109,12 @@ export function registerComicNettaiLocalServerHandlers(
   return [
     {
       id: COMICNETTAI_SITE_RULE_ID,
-      regexFilter: "^https?://www\\.comictropics\\.com/(.*)$",
+      regexFilter: "^https?://www\\.comicnettai\\.com/(.*)$",
       regexSubstitution: `${base}${COMICNETTAI_LOCAL_SITE_PREFIX}/\\1`,
     },
     {
       id: COMICNETTAI_CDN_RULE_ID,
-      regexFilter: "^https?://cdn\\.comictropics\\.com/(.*)$",
+      regexFilter: "^https?://cdn\\.comicnettai\\.com/(.*)$",
       regexSubstitution: `${base}${COMICNETTAI_LOCAL_CDN_PREFIX}/\\1`,
     },
   ]

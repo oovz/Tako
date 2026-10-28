@@ -185,7 +185,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "comictropics",
-    "name": "Comic Nettai",
+    "name": "COMIC熱帯",
     "englishName": "Comic Nettai",
     "contributors": [
       "TMD Team"

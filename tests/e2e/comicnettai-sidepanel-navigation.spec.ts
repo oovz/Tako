@@ -36,8 +36,8 @@ test.describe("Comic Nettai side panel navigation workflows (mocked)", () => {
 
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
     await expect(sp.getByRole("checkbox", { name: /第44話/ })).toBeDisabled()
-    await expect(sp.getByText("Locked", { exact: true })).toBeVisible()
-    await expect(sp.getByRole("checkbox", { name: /第46話/ })).toBeEnabled()
+    await expect(sp.getByText("Locked", { exact: true }).first()).toBeVisible()
+    await expect(sp.getByRole("checkbox", { name: /^第49話$/ })).toBeEnabled()
 
     await sp.close()
   })

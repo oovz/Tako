@@ -221,6 +221,9 @@ function discoverPaginationUrls(
   for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
     'a[href*="page="]'
   )) {
+    if (anchor.closest(".is-hidde")) {
+      continue
+    }
     const href = anchor.getAttribute("href")
     if (!href) {
       continue

@@ -1,42 +1,22 @@
 import type { SiteIntegrationChapterDataset } from "../../types"
+import chapters from "@/tests/fixtures/site-integrations/comictropics/captured-chapters.json" with { type: "json" }
 
 export const BASIC_CHAPTERS: SiteIntegrationChapterDataset = {
-  id: "COMICNETTAI_BASIC",
-  description: "Basic 3-chapter Comic Nettai series using PUBLUS viewer URLs",
-  chapters: [
-    {
-      id: "958",
-      url: "https://www.comicnettai.com/publus/viewer.html?cid=mock-cid-958",
-      title: "第46話",
-      index: 1,
-      chapterLabel: "第46話",
-      chapterNumber: 46,
-      language: "ja",
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "938",
-      url: "https://www.comicnettai.com/publus/viewer.html?cid=mock-cid-938",
-      title: "第45話",
-      index: 2,
-      chapterLabel: "第45話",
-      chapterNumber: 45,
-      language: "ja",
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "925",
-      url: "https://www.comicnettai.com/publus/viewer.html?cid=mock-cid-925",
-      title: "第44話",
-      index: 3,
-      chapterLabel: "第44話",
-      chapterNumber: 44,
-      language: "ja",
-      locked: true,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-  ],
+  id: "COMICTROPICS_BASIC",
+  description:
+    "51 captured 煙たい話 entries across three pages, with six readable episodes",
+  chapters: chapters.map((chapter, index) => ({
+    id: chapter.id,
+    url:
+      chapter.url ??
+      `https://www.comicnettai.com/book/9#book-content-${chapter.id}`,
+    title: chapter.title,
+    index: index + 1,
+    chapterLabel: chapter.title,
+    chapterNumber: Number(chapter.title.match(/\d+/)?.[0]) || undefined,
+    language: "ja",
+    locked: chapter.locked,
+    status: "queued",
+    lastUpdated: 0,
+  })),
 }

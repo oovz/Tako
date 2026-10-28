@@ -61,6 +61,6 @@ export const MOCK_PUBLUS_CONFIG = {
 } as const
 
 export const MOCK_PUBLUS_IMAGE_PATHS = [
-  "/9_hash/epub/book_contents/c958/item/xhtml/p-cover.xhtml/106858d4a8cf8d2165.png",
-  "/9_hash/epub/book_contents/c958/item/xhtml/p-000.xhtml/1016cec4222ae82a25.png",
+  "/9_c2b3fc5aa6547df94ec500f29b54c231/epub/book_contents/c1033/item/xhtml/p-cover.xhtml/106858d4a8cf8d2165.png",
+  "/9_c2b3fc5aa6547df94ec500f29b54c231/epub/book_contents/c1033/item/xhtml/p-000.xhtml/1016cec4222ae82a25.png",
 ] as const
