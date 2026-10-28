@@ -103,6 +103,7 @@ export default defineConfig({
       "manganato",
       "mangakakalot",
       "coolmic",
+      "mangaplus",
       "animemangahouse",
       "mangabz",
     ].map((name) => ({

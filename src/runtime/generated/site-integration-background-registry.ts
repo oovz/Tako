@@ -11,6 +11,7 @@ import { backgroundSiteAdapter as mangagoBackgroundAdapter } from '@/src/site-in
 import { backgroundSiteAdapter as mangakakalotBackgroundAdapter } from '@/src/site-integrations/mangakakalot/background-runtime'
 import { backgroundSiteAdapter as mangamillionBackgroundAdapter } from '@/src/site-integrations/mangamillion/background-runtime'
 import { backgroundSiteAdapter as manganatoBackgroundAdapter } from '@/src/site-integrations/manganato/background-runtime'
+import { backgroundSiteAdapter as mangaplusBackgroundAdapter } from '@/src/site-integrations/mangaplus/background-runtime'
 import { backgroundSiteAdapter as manhuaguiBackgroundAdapter } from '@/src/site-integrations/manhuagui/background-runtime'
 import { backgroundSiteAdapter as pixiv_comicBackgroundAdapter } from '@/src/site-integrations/pixiv-comic/background-runtime'
 import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/site-integrations/shonenjumpplus/background-runtime'
@@ -26,6 +27,7 @@ export const backgroundSiteAdapters = [
   mangakakalotBackgroundAdapter,
   mangamillionBackgroundAdapter,
   manganatoBackgroundAdapter,
+  mangaplusBackgroundAdapter,
   manhuaguiBackgroundAdapter,
   pixiv_comicBackgroundAdapter,
   shonenjumpplusBackgroundAdapter,
@@ -42,6 +44,7 @@ export const backgroundSiteAdaptersById = {
   "mangakakalot": mangakakalotBackgroundAdapter,
   "mangamillion": mangamillionBackgroundAdapter,
   "manganato": manganatoBackgroundAdapter,
+  "mangaplus": mangaplusBackgroundAdapter,
   "manhuagui": manhuaguiBackgroundAdapter,
   "pixiv-comic": pixiv_comicBackgroundAdapter,
   "shonenjumpplus": shonenjumpplusBackgroundAdapter,

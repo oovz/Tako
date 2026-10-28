@@ -11,6 +11,7 @@ import { offscreenSiteAdapter as mangagoOffscreenAdapter } from '@/src/site-inte
 import { offscreenSiteAdapter as mangakakalotOffscreenAdapter } from '@/src/site-integrations/mangakakalot/offscreen-runtime'
 import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site-integrations/mangamillion/offscreen-runtime'
 import { offscreenSiteAdapter as manganatoOffscreenAdapter } from '@/src/site-integrations/manganato/offscreen-runtime'
+import { offscreenSiteAdapter as mangaplusOffscreenAdapter } from '@/src/site-integrations/mangaplus/offscreen-runtime'
 import { offscreenSiteAdapter as manhuaguiOffscreenAdapter } from '@/src/site-integrations/manhuagui/offscreen-runtime'
 import { offscreenSiteAdapter as pixiv_comicOffscreenAdapter } from '@/src/site-integrations/pixiv-comic/offscreen-runtime'
 import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/site-integrations/shonenjumpplus/offscreen-runtime'
@@ -26,6 +27,7 @@ export const offscreenSiteAdapters = [
   mangakakalotOffscreenAdapter,
   mangamillionOffscreenAdapter,
   manganatoOffscreenAdapter,
+  mangaplusOffscreenAdapter,
   manhuaguiOffscreenAdapter,
   pixiv_comicOffscreenAdapter,
   shonenjumpplusOffscreenAdapter,
@@ -42,6 +44,7 @@ export const offscreenSiteAdaptersById = {
   "mangakakalot": mangakakalotOffscreenAdapter,
   "mangamillion": mangamillionOffscreenAdapter,
   "manganato": manganatoOffscreenAdapter,
+  "mangaplus": mangaplusOffscreenAdapter,
   "manhuagui": manhuaguiOffscreenAdapter,
   "pixiv-comic": pixiv_comicOffscreenAdapter,
   "shonenjumpplus": shonenjumpplusOffscreenAdapter,

@@ -29,7 +29,7 @@ import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/r
 
 import { mangagoFixture } from "./fixtures/mock-data/site-integrations/mangago/routes"
 import { coolmicFixture } from "./fixtures/mock-data/site-integrations/coolmic/routes"
-
+import { mangaplusFixture } from "./fixtures/mock-data/site-integrations/mangaplus/routes"
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
 const fixtures = [
@@ -40,6 +40,7 @@ const fixtures = [
   mangabzFixture,
   mangagoFixture,
   coolmicFixture,
+  mangaplusFixture,
 ]
 
 test.describe("site downloads through the chapter selector", () => {

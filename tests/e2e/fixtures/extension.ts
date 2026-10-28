@@ -34,7 +34,7 @@ import { registerMangabzLocalServerHandlers } from "./mock-data/site-integration
 
 import { registerMangagoLocalServerHandlers } from "./mock-data/site-integrations/mangago/routes"
 import { registerCoolmicLocalServerHandlers } from "./mock-data/site-integrations/coolmic/routes"
-
+import { registerMangaplusLocalServerHandlers } from "./mock-data/site-integrations/mangaplus/routes"
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
 import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
@@ -469,6 +469,7 @@ async function setupExtensionContext(
         ...registerMangabzLocalServerHandlers(localMockServer),
         ...registerMangagoLocalServerHandlers(localMockServer),
         ...registerCoolmicLocalServerHandlers(localMockServer),
+        ...registerMangaplusLocalServerHandlers(localMockServer),
       ]
     }
 
