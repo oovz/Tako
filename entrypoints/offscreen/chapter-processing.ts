@@ -1,4 +1,5 @@
 import logger from "@/src/runtime/logger"
+import { redactDiagnosticText } from "@/src/runtime/diagnostic-redaction"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
 import { assertNonemptyImagePayload } from "@/src/shared/site-integration-utils"
 import createZipArchiveWorker from "./archive-worker-factory"
@@ -533,7 +534,7 @@ export async function processArchiveFormatChapter(
       logger.error(`   ${succeeded}/${total} succeeded, ${failed} failed`)
       return {
         status: "failed",
-        errorMessage: errorMsg,
+        errorMessage: redactDiagnosticText(errorMsg),
         imagesFailed: failed,
         outputsRequested: 1,
         outputsFailedBeforeHandoff: 1,

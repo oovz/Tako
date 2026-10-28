@@ -407,7 +407,8 @@ export async function writeBlobToPath(
   const dir = await ensureSubdir(root, parts)
 
   throwIfAborted(options.signal)
-  if (collisionPolicy === "uniquify" && (await fileExists(dir, fileName))) {
+  let existed = await fileExists(dir, fileName)
+  if (collisionPolicy === "uniquify" && existed) {
     const extensionIndex = fileName.lastIndexOf(".")
     const hasExtension = extensionIndex > 0
     const baseName = hasExtension ? fileName.slice(0, extensionIndex) : fileName
@@ -416,10 +417,13 @@ export async function writeBlobToPath(
       const candidate = `${baseName} (${suffix})${extension}`
       if (!(await fileExists(dir, candidate))) {
         fileName = candidate
+        existed = false
         break
       }
     }
   }
+
+  throwIfAborted(options.signal)
 
   // Type assertion for FileSystemFileHandle with createWritable method
   type FileHandleWithWritable = FileSystemFileHandle & {
@@ -429,17 +433,35 @@ export async function writeBlobToPath(
   }
 
   const fh = await dir.getFileHandle(fileName, { create: true })
-  const ws = await (fh as FileHandleWithWritable).createWritable({
-    keepExistingData: false,
-  })
-  if (!options.signal && !options.onBytesWritten) {
-    await ws.write(blob)
+  let ws: FileSystemWritableFileStream | undefined
+  try {
+    ws = await (fh as FileHandleWithWritable).createWritable({
+      keepExistingData: false,
+    })
+    throwIfAborted(options.signal)
+    if (!options.signal && !options.onBytesWritten) {
+      await ws.write(blob)
+    } else {
+      await writeBlobStream(ws, blob, options)
+    }
+    throwIfAborted(options.signal)
     await ws.close()
     return { status: "written" }
+  } catch (error) {
+    try {
+      await ws?.abort()
+    } catch {
+      // Cleanup must preserve the original write, close or cancellation error.
+    }
+    if (!existed) {
+      try {
+        await dir.removeEntry(fileName)
+      } catch {
+        // A failed new entry may remain when the directory is unavailable.
+      }
+    }
+    throw error
   }
-
-  await writeBlobStream(ws, blob, options)
-  return { status: "written" }
 }
 
 async function writeBlobStream(
@@ -468,20 +490,17 @@ async function writeBlobStream(
     }
     completed = true
   } finally {
+    if (!completed) {
+      try {
+        await reader.cancel()
+      } catch {
+        // Preserve the stream's original failure.
+      }
+    }
     try {
       reader.releaseLock()
     } catch {
       // no-op
-    }
-
-    if (completed) {
-      await ws.close()
-    } else {
-      try {
-        await ws.abort()
-      } catch {
-        // no-op
-      }
     }
   }
 }

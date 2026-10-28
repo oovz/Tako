@@ -237,7 +237,7 @@ describe("File System Access helpers", () => {
       ).resolves.toEqual({ status: "written" })
 
       expect(createdDirectories).toEqual(["Series", "Volume 1"])
-      expect(requestedFiles).toEqual(["Chapter 001.cbz"])
+      expect(requestedFiles).toEqual(["Chapter 001.cbz", "Chapter 001.cbz"])
       expect(written).toEqual([blob])
       expect(closed).toEqual(["Chapter 001.cbz"])
     })
@@ -455,7 +455,7 @@ describe("File System Access helpers", () => {
       })
     })
 
-    it("overwrites existing file without existence probe", async () => {
+    it("replaces an existing file at the original filename", async () => {
       const write = vi.fn(async () => undefined)
       const close = vi.fn(async () => undefined)
       const createWritable = vi.fn(async () => ({ write, close }))
@@ -470,7 +470,7 @@ describe("File System Access helpers", () => {
           "overwrite"
         )
       ).resolves.toEqual({ status: "written" })
-      expect(getFileHandle).toHaveBeenCalledOnce()
+      expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz")
       expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz", {
         create: true,
       })

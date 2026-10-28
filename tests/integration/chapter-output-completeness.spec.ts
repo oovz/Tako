@@ -72,6 +72,7 @@ function fixture(
   concurrency = 1
 ) {
   const files = new Map<string, Uint8Array>()
+  const entries = new Set<string>()
   const handoffs: Array<{ filename: string; blob: Blob }> = []
   const close = vi.fn(async () => undefined)
   const ledger = new OffscreenLiveResourceLedger()
@@ -83,23 +84,34 @@ function fixture(
     ({
       getDirectoryHandle: async (name: string) =>
         directory(`${prefix}${name}/`),
-      getFileHandle: async (name: string) => ({
-        createWritable: async () => {
-          const chunks: Uint8Array[] = []
-          return {
-            write: async (chunk: Uint8Array) => chunks.push(chunk.slice()),
-            close: async () => {
-              await close()
-              const blob = new Blob(chunks as BlobPart[])
-              files.set(
-                `${prefix}${name}`,
-                new Uint8Array(await blob.arrayBuffer())
-              )
-            },
-            abort: async () => undefined,
-          }
-        },
-      }),
+      removeEntry: async (name: string) => {
+        entries.delete(`${prefix}${name}`)
+        files.delete(`${prefix}${name}`)
+      },
+      getFileHandle: async (name: string, options?: { create?: boolean }) => {
+        const path = `${prefix}${name}`
+        if (!entries.has(path) && !options?.create) {
+          throw new DOMException("File does not exist", "NotFoundError")
+        }
+        entries.add(path)
+        return {
+          createWritable: async () => {
+            const chunks: Uint8Array[] = []
+            return {
+              write: async (chunk: Uint8Array) => chunks.push(chunk.slice()),
+              close: async () => {
+                await close()
+                const blob = new Blob(chunks as BlobPart[])
+                files.set(
+                  `${prefix}${name}`,
+                  new Uint8Array(await blob.arrayBuffer())
+                )
+              },
+              abort: async () => undefined,
+            }
+          },
+        }
+      },
     }) as unknown as FileSystemDirectoryHandle
   const runtime: ChapterProcessingRuntime = {
     liveResourceLedger: ledger,
@@ -181,6 +193,7 @@ function fixture(
     ledger,
     handoffs,
     files,
+    entries,
     close,
     downloadImage,
   }
@@ -208,6 +221,27 @@ afterEach(() => {
 })
 
 describe("complete chapter output", () => {
+  it("omits signed image access parameters from archive failure details", async () => {
+    const f = fixture("cbz", "browser")
+    const signed =
+      "https://jumpg-assets3.tokyo-cdn.com/secure/page.jpg?hash=publisher-signature&key=session-value#private-fragment"
+    const outcome = await f.process(async () => {
+      throw new Error(`HTTP 403: ${signed}`)
+    }, [signed])
+    expect(outcome.status).toBe("failed")
+    expect(outcome.errorMessage).toContain(
+      "https://jumpg-assets3.tokyo-cdn.com/secure/page.jpg"
+    )
+    expect(outcome.errorMessage).toContain("HTTP 403")
+    for (const secret of [
+      "publisher-signature",
+      "session-value",
+      "private-fragment",
+    ])
+      expect(outcome.errorMessage).not.toContain(secret)
+    expect(f.handoffs).toHaveLength(0)
+    expect(f.ledger.getUsedBytes()).toBe(0)
+  })
   it.each(["cbz", "none"] as const)(
     "finishes %s folder output after writable closure and reports close failure",
     async (format) => {
@@ -234,6 +268,7 @@ describe("complete chapter output", () => {
         outputsCommitted: 1,
       })
       expect(f.files.size).toBe(1)
+      expect(f.entries.size).toBe(1)
       expect(f.ledger.getUsedBytes()).toBe(0)
 
       const failed = fixture(format, "custom")
@@ -253,6 +288,7 @@ describe("complete chapter output", () => {
           errorCategory: "folder_write_failed",
         })
       }
+      expect(failed.entries.size).toBe(0)
       expect(failed.files.size).toBe(0)
       expect(failed.ledger.getUsedBytes()).toBe(0)
     }
