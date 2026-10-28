@@ -1,6 +1,6 @@
 # Contributing to Tako
 
-This guide covers local setup, development, testing, and pull requests.
+Set up Tako locally, run the tests, and prepare a pull request.
 
 ## Quick setup
 
@@ -9,7 +9,7 @@ pnpm install
 pnpm build
 ```
 
-The extension loads from `.output\chrome-mv3`. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**.
+Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select `.output\chrome-mv3`.
 
 ## Development workflow
 
@@ -20,38 +20,38 @@ pnpm test:e2e # Deterministic extension behavior
 pnpm test:live # Real-site validation (requires supported sites to be accessible)
 ```
 
-Use one of three build modes:
+Choose the build mode for your task:
 
-| Mode              | Command                   | Artifact and policy                                                                                                |
-| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Production        | `pnpm build` / `pnpm zip` | `.output\chrome-mv3`; release build                                                                                |
-| Deterministic E2E | `pnpm test:e2e`           | `.output\chrome-mv3-e2e-test`; local mock state/redirect support only                                              |
-| Live E2E          | `pnpm test:live`          | `.output\chrome-mv3-live-test`; live state seeding is enabled, while production redirect rejection remains enabled |
+| Mode              | Command                   | Artifact and policy                                                                          |
+| ----------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
+| Production        | `pnpm build` / `pnpm zip` | `.output\chrome-mv3`; release build                                                          |
+| Deterministic E2E | `pnpm test:e2e`           | `.output\chrome-mv3-e2e-test`; controlled state and request routing                          |
+| Live E2E          | `pnpm test:live`          | `.output\chrome-mv3-live-test`; real sites, test state setup, and production redirect checks |
 
-Load the production artifact for everyday use. Deterministic and live artifacts are for their respective test suites; coverage instrumentation runs in deterministic E2E builds.
+Use the production build for everyday use. The deterministic and live builds support their test suites. E2E coverage runs use the deterministic build.
 
-Extension tests use a persistent Playwright-managed Chromium context, with `chromium-tip-of-tree` as the default channel. Tako requires Chrome/Chromium 150 or newer; CI uses the compatible Chromium 151 canary. Install the fixture's browser before running E2E tests:
+Extension tests run in a persistent Chromium profile managed by Playwright. The default channel is `chromium-tip-of-tree`. Tako requires Chrome/Chromium 150 or newer, and CI uses Chromium 151 canary. Install the test browser before running E2E tests:
 
 ```powershell
 pnpm exec playwright install chromium-tip-of-tree
 pnpm test:e2e
 ```
 
-[Playwright's extension guidance](https://playwright.dev/docs/chrome-extensions) recommends its bundled Chromium because Chrome and Edge removed the command-line extension side-loading flags. Keep the repository's tested channel for extension validation.
+Use the repository’s tested browser channel for extension checks. [Playwright's extension guidance](https://playwright.dev/docs/chrome-extensions) recommends bundled Chromium for command-line extension loading; Chrome and Edge have removed those loading flags.
 
 ### E2E diagnostics
 
-When a mocked or live E2E failure involves more than one browser context, enable diagnostics before running the smallest reproducing spec:
+For a failure that spans browser pages or workers, enable diagnostics and run the smallest spec that reproduces it:
 
 ```powershell
 pnpm test:e2e:diag -- tests/e2e/mangadex-sidepanel-navigation.spec.ts
 ```
 
-The diagnostic stream correlates console messages and uncaught errors from browser pages, worker console messages (including the MV3 service worker), integration requests and responses, failed requests, and requests received by the local mock server. It omits successful extension asset requests. Enable diagnostics for a reproducing run; routing and test behavior stay the same. Set `TMD_TEST_E2E_DIAG=true` when using another Playwright configuration, such as the live-test configuration.
+Diagnostics combine page console messages and uncaught errors, worker logs, integration requests and responses, failed requests, and local mock-server traffic. This includes the MV3 service worker. Successful extension asset requests are omitted. Routing and test behavior stay the same. For other Playwright configurations, including live tests, set `TMD_TEST_E2E_DIAG=true`.
 
-Diagnostics retain technical identifiers and provider URL origins and paths. Extension console arguments are inspected structurally before redaction; provider console and page-error payloads are omitted. Credential fields, supported credential and header text, URL parameters, bodies, and local paths are redacted. Review failure artifacts before sharing, including free text and browsing context. Live-site runs leave automatic network tracing disabled.
+Diagnostics retain technical identifiers and provider URL origins and paths. They inspect extension console arguments and redact credential fields, supported credential and header text, URL parameters, bodies, and local paths. Provider console and page-error payloads are omitted. Review artifacts for free text and browsing context before sharing them. Live tests use redacted diagnostics with automatic network tracing turned off.
 
-Run targeted checks while iterating, then run the broader suite before finishing:
+Run focused checks as you work, then run the broader suite:
 
 ```powershell
 pnpm lint
@@ -65,28 +65,28 @@ pnpm test:e2e
 
 ## Code style
 
-- TypeScript strict mode. Follow existing patterns in the area you are changing.
-- Put asynchronous Chrome API work in the entrypoint initialization path.
-- Register event listeners synchronously during entrypoint initialization, before asynchronous setup.
-- Keep background and offscreen site runtime files separate. Use the generated registries under `src/runtime/generated/`. Resolve page context from URLs, provider APIs, or fetched HTML first; use the bundled one-shot page probe only when an integration requires live page state.
+- Use TypeScript strict mode and follow the surrounding code’s conventions.
+- Initialize asynchronous Chrome API work in the entrypoint.
+- Register event listeners synchronously before starting asynchronous setup.
+- Keep background and offscreen site runtimes in separate files and use the registries under `src/runtime/generated/`. Resolve page context from URLs, provider APIs, or fetched HTML. Use the bundled one-shot probe for data that requires live page state.
 - To scaffold a new site integration, run `pnpm new:site-integration <id>` and follow the [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide).
 - Pass integration-specific data through the generic `integrationContext` field.
-- Typed message handlers return a schema-valid response or a Promise. The dispatcher owns target, request, principal and readiness validation. `createRuntimeMessageListener()` owns the Chrome callback bridge: it calls `sendResponse` and returns `true` while the response is pending.
+- Return a schema-valid response or Promise from typed message handlers. The dispatcher validates the target, request, principal, and readiness. `createRuntimeMessageListener()` calls `sendResponse` and returns `true` while the response is pending.
 
 ## Testing
 
 - **Unit tests** (`tests/unit/`) cover pure logic, message contracts, and component behavior.
-- **Integration tests** run in Node environment with mocked Chrome APIs for cross-context module wiring.
+- **Integration tests** run in Node with mocked Chrome APIs and check how modules work across extension contexts.
 - **E2E tests** (`tests/e2e/`) use Playwright against the built extension with mocked routes.
 - **Live tests** (`tests/live/`) validate real-site behavior.
 
-Site-specific captured pages, protocol vectors, and controlled image inputs live in `tests/fixtures/site-integrations/<id>/`. Optional integration READMEs explain protocol and implementation details for contributors; reader instructions live in the wiki.
+Captured pages, protocol samples, and controlled image inputs live in `tests/fixtures/site-integrations/<id>/`. Fixture READMEs document their sources and synthetic inputs. The wiki covers site usage and integration development.
 
-Use existing coverage where it establishes the changed behavior. Add focused tests for distinct new behavior or failure cases. Site integrations require unit coverage and, when UI-visible, mocked E2E coverage.
+Use existing tests when they cover the changed behavior. Add focused cases for new behavior and distinct failures. Site integrations need unit tests, plus mocked E2E tests for behavior visible in the UI.
 
 ### Recovery and output validation
 
-Run `pnpm test:coverage` for the complete unit/integration suite and its coverage thresholds. The composed integration tests use real domain transitions, repositories, and coordinators with controlled browser, storage, network, and worker boundaries:
+Run `pnpm test:coverage` for the full unit and integration suite with coverage thresholds. Integration tests combine real domain transitions, repositories, and coordinators with controlled browser, storage, network, and worker interfaces:
 
 | Behavior                                                                                | Integration coverage                                                         |
 | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -99,23 +99,25 @@ Run `pnpm test:coverage` for the complete unit/integration suite and its coverag
 | Supported profile upgrades, historical outcomes and final-save evidence                 | `stored-profile-migration.spec.ts`, `native-save-migration.spec.ts`          |
 | Concurrent first-use scheduling, retry and policy invalidation                          | `rate-limit-scheduling.spec.ts`                                              |
 
-Run `pnpm test:e2e --workers=1` for deterministic workflows against the isolated built extension. The browser suite verifies Blob readability while Chrome holds an accepted transfer, actual saved bytes, terminal consumption and erasure, Options closure on both sides of a folder-save commit, opted-in fallback output, manual retry after an unconfirmed save, and rendered queue/history recovery. These packaged-browser observations establish the platform release boundary; the composed tests establish aggregate admission across retained outputs. Measure peak memory separately when validating large jobs.
+Run `pnpm test:e2e --workers=1` to test the built extension against deterministic fixtures. The browser suite checks Blob access during Chrome transfers, saved file bytes, download completion and cleanup, folder saves when Options closes, fallback output, retries after unconfirmed saves, and queue/history recovery in the UI. Integration tests cover shared resource limits across retained outputs. Measure peak memory when testing large jobs.
 
-Record every command and terminal result, including parallel-run failures and focused reruns. Record an earlier suite failure alongside any passing focused rerun. Browser startup requires access to the host's browser services. The fixture uses disposable profiles and deterministic routes; keep live-provider validation opt-in.
+Browser tests use disposable profiles and require access to your system’s browser services. Deterministic tests use controlled routes; live tests run when you request them. When reporting a run, include its command and result, any failures, and the results of focused reruns.
 
-For release validation, also run `pnpm lint`, `pnpm type-check`, `pnpm format:check`, and `pnpm build`. Lint checks generated integration data and architecture boundaries. Inspect `.output/chrome-mv3/manifest.json`, the canonical entrypoints, packaged locales, permissions and the absence of test-seeding handlers. Keep the production artifact separate from the deterministic test artifact.
+Before a release, run `pnpm lint`, `pnpm type-check`, `pnpm format:check`, and `pnpm build`. Lint also checks generated integration data and module boundaries. Inspect `.output/chrome-mv3/manifest.json`, the extension entrypoints, packaged locales, and permissions. Check that state-seeding handlers are confined to test builds. Use the production output for release packaging.
 
 ### Live chapter validation
 
-Live-provider runs are opt-in. Each shipped integration has a single-chapter download test using a real work URL owned by `tests/e2e/fixtures/test-domains-constants.ts`. Run one integration explicitly, for example:
+Each shipped integration has a live test that downloads one chapter from a work listed in `tests/e2e/fixtures/test-domains-constants.ts`. To check a site, run its project:
 
 ```powershell
 pnpm exec playwright test --config=playwright.live.config.ts --project=shonenjumpplus download-workflow.spec.ts
 ```
 
-These tests wait for Tako’s confirmed save result, query the native download result and read the saved CBZ. The MangaDex custom-folder test reads its saved OPFS artifact. Tests disable covers and ComicInfo, use three-digit page names, check the image sequence against the resolved chapter page count, and decode every page with Chromium. The checker uses the installed [fflate ZIP reader](https://github.com/101arrowz/fflate) and the browser's [image decoder](https://developer.mozilla.org/en-US/docs/Web/API/Window/createImageBitmap).
+The tests wait for save confirmation, check Chrome’s download result, and open the saved CBZ. The MangaDex custom-folder case reads its saved OPFS file. Each test includes ComicInfo, uses chapter images with three-digit filenames, and checks the image count and sequence. Chromium decodes every image. The XML checks compare series details, credits, synopsis, genres, language, and available chapter and volume fields with the metadata captured for the task. The checker uses the installed [fflate ZIP reader](https://github.com/101arrowz/fflate) and the browser's [image decoder](https://developer.mozilla.org/en-US/docs/Web/API/Window/createImageBitmap). Covers are turned off for these checks.
 
-Each inspection retains the full saved CBZ as a test attachment. Successful inspection also attaches a JSON receipt with the run date, Tako/browser versions, work and selected chapter, and decoded page dimensions, plus previews of the first three pages. Inspect the retained archive against the same chapter in the site's reader before recording visual correctness, especially for these transformations:
+Metadata checks compare extracted fields with the work page before downloading and attach the page synopsis and Open Graph description for review. Choose a work-specific synopsis from Open Graph metadata or the page’s full description, including hidden continuations. Deterministic tests also check CopyManga and MYCOMIC’s chapter, volume, and extra groups, including disabled empty groups. Set volume numbers from explicit single-volume labels.
+
+Test attachments include the saved CBZ and ComicInfo XML. A successful check adds a JSON report with the run date, Tako and browser versions, work and chapter, verified metadata, and image dimensions, along with previews of the first three pages. Compare the saved pages with the site’s reader when checking these image transformations:
 
 | Integration                   | Visual check                                                              |
 | ----------------------------- | ------------------------------------------------------------------------- |
@@ -124,9 +126,9 @@ Each inspection retains the full saved CBZ as a test attachment. Successful insp
 | Comic Nettai (COMIC熱帯)      | PUBLUS reconstruction preserves page edges, panel order and orientation.  |
 | MANGA MILLION                 | Decryption and any AVIF-to-JPEG conversion preserve visible page content. |
 
-Decoding establishes image readability; visual comparison establishes page layout. Record the command, terminal result, tested work/chapter, version and date when reporting a live run. Deterministic passes establish harness coverage. Record real-site runs and visual review separately.
+Image decoding checks readability. Visual comparison checks page layout. When reporting a live run, include the command, result, work and chapter, version, and date. Report deterministic checks, real-site downloads, and visual review separately.
 
-The checker itself has deterministic valid, missing-page, numbering, empty-image, malformed-archive and corrupt-image controls:
+The archive checker has deterministic cases for valid output, missing pages, numbering errors, empty images, malformed archives, and corrupt images:
 
 ```powershell
 pnpm exec vitest run tests/unit/e2e/chapter-artifact.spec.ts
@@ -139,11 +141,11 @@ pnpm exec playwright test tests/e2e/chapter-artifact.spec.ts tests/e2e/shonenjum
 2. Branch from `main`.
 3. Update relevant docs in the same PR.
 4. Ensure `pnpm lint` and `pnpm type-check` pass.
-5. Keep commits focused and the diff minimal.
+5. Group commits by purpose and keep each diff focused.
 
 ## Documentation
 
-If you change behavior, contributor workflow, or submission assets, update the relevant wiki page in the same pull request.
+Update the relevant wiki page in the same pull request when you change behavior, the contributor workflow, or submission assets.
 
 - [Architecture](https://github.com/oovz/Tako/wiki/Architecture) — Core runtime, storage, messaging, and state flow
 - [Site Integration Guide](https://github.com/oovz/Tako/wiki/Site-Integration-Guide) — Adding or maintaining supported-site integrations
