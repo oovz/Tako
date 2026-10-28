@@ -6,6 +6,7 @@ import { backgroundSiteAdapter as boyloveBackgroundAdapter } from '@/src/site-in
 import { backgroundSiteAdapter as comicnettaiBackgroundAdapter } from '@/src/site-integrations/comicnettai/background-runtime'
 import { backgroundSiteAdapter as coolmicBackgroundAdapter } from '@/src/site-integrations/coolmic/background-runtime'
 import { backgroundSiteAdapter as copymangaBackgroundAdapter } from '@/src/site-integrations/copymanga/background-runtime'
+import { backgroundSiteAdapter as lovemangaBackgroundAdapter } from '@/src/site-integrations/lovemanga/background-runtime'
 import { backgroundSiteAdapter as mangaagainBackgroundAdapter } from '@/src/site-integrations/mangaagain/background-runtime'
 import { backgroundSiteAdapter as mangabzBackgroundAdapter } from '@/src/site-integrations/mangabz/background-runtime'
 import { backgroundSiteAdapter as mangadexBackgroundAdapter } from '@/src/site-integrations/mangadex/background-runtime'
@@ -26,6 +27,7 @@ export const backgroundSiteAdapters = [
   comicnettaiBackgroundAdapter,
   coolmicBackgroundAdapter,
   copymangaBackgroundAdapter,
+  lovemangaBackgroundAdapter,
   mangaagainBackgroundAdapter,
   mangabzBackgroundAdapter,
   mangadexBackgroundAdapter,
@@ -47,6 +49,7 @@ export const backgroundSiteAdaptersById = {
   "comicnettai": comicnettaiBackgroundAdapter,
   "coolmic": coolmicBackgroundAdapter,
   "copymanga": copymangaBackgroundAdapter,
+  "lovemanga": lovemangaBackgroundAdapter,
   "mangaagain": mangaagainBackgroundAdapter,
   "mangabz": mangabzBackgroundAdapter,
   "mangadex": mangadexBackgroundAdapter,

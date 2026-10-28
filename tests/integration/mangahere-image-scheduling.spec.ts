@@ -5,7 +5,7 @@ import {
 } from "@/entrypoints/offscreen/chapter-processing"
 import { prefetchCoverImage } from "@/entrypoints/offscreen/download-runtime-helpers"
 import { offscreenSiteAdapter as mangaHere } from "@/src/site-integrations/mangahere/offscreen-runtime"
-
+import { offscreenSiteAdapter as aimanhua } from "@/src/site-integrations/lovemanga/offscreen-runtime"
 import { RateLimitService } from "@/src/runtime/rate-limit"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -25,6 +25,11 @@ const cases = [
     id: "mangahere",
     adapter: mangaHere,
     url: "https://zjcdn.mangahere.org/store/manga/1/page.jpg",
+  },
+  {
+    id: "lovemanga",
+    adapter: aimanhua,
+    url: "https://img1.baipiaoguai.org/static/upload2/book/1/page.jpg",
   },
 ]
 describe.each(cases)("$id image scheduling", ({ id, adapter, url }) => {

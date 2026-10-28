@@ -93,7 +93,8 @@ export const LIVE_MANGABZ_REFERENCE_URL = "https://www.mangabz.com/139bz/"
 export const LIVE_MYCOMIC_REFERENCE_URL = "https://mycomic.com/cn/comics/35937"
 export const LIVE_MANGAHERE_REFERENCE_URL =
   "https://newm.mangahere.cc/manga/hunter_x_hunter/"
-
+export const LIVE_AIMANHUA_REFERENCE_URL =
+  "https://www.aimanhua.org/comic/416895"
 export const LIVE_ZAIMANHUA_REFERENCE_URL =
   "https://www.zaimanhua.com/info/doufo.html"
 export const LIVE_COPY_REFERENCE_URL =

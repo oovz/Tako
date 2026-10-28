@@ -484,6 +484,96 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "lovemanga",
+    "name": "爱漫画",
+    "englishName": "Love Manga",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.aimanhua.org"
+      ],
+      "seriesMatches": [
+        "/comic/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.aimanhua.org/*",
+      "https://img1.baipiaoguai.org/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "lovemanga-page",
+        "purpose": "Aimanhua series and reader HTML",
+        "origins": [
+          "https://www.aimanhua.org/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "lovemanga-image",
+        "purpose": "Aimanhua chapter and cover images",
+        "origins": [
+          "https://img1.baipiaoguai.org/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41014,
+        "priority": 1,
+        "requestDomains": [
+          "img1.baipiaoguai.org"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.aimanhua.org/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangaagain",
     "name": "再漫画",
     "englishName": "Manga Again",

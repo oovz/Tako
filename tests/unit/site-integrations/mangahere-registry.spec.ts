@@ -35,4 +35,14 @@ describe("mobile site registry URL recognition", () => {
       matchUrl("https://m.mangahere.cc/manga/hunter_x_hunter/v01/c001/")
     ).toBeNull()
   })
+  it("recognizes Aimanhua catalog pages and excludes its separate reader route", () => {
+    for (const suffix of ["", "/"]) {
+      expect(
+        matchUrl(`https://www.aimanhua.org/comic/416895${suffix}`)
+      ).toEqual({ integrationId: "lovemanga", role: "series" })
+    }
+    expect(
+      matchUrl("https://www.aimanhua.org/chapter/416895/133632")
+    ).toBeNull()
+  })
 })

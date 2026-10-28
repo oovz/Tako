@@ -58,7 +58,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
   comicnettai: "https://www.comicnettai.com/book/9",
   coolmic: "https://coolmic.me/titles/5101",
   copymanga: "https://www.copy3000.com/comic/dianjuren",
-
+  lovemanga: "https://www.aimanhua.org/comic/416895",
   mangaagain: "https://www.zaimanhua.com/info/doufo.html",
   mangabz: "https://www.mangabz.com/139bz/",
   mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",
