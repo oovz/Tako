@@ -389,6 +389,87 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "mangaagain",
+    "name": "再漫画",
+    "englishName": "Manga Again",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.zaimanhua.com",
+        "manhua.zaimanhua.com"
+      ],
+      "seriesMatches": [
+        "/info/*.html",
+        "/view/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.zaimanhua.com/*",
+      "https://manhua.zaimanhua.com/*",
+      "https://images.zaimanhua.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangaagain-api",
+        "purpose": "Zaimanhua api",
+        "origins": [
+          "https://www.zaimanhua.com/*",
+          "https://manhua.zaimanhua.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangaagain-image",
+        "purpose": "Zaimanhua chapter and cover images",
+        "origins": [
+          "https://images.zaimanhua.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangabz",
     "name": "Māngabz",
     "englishName": "Māngabz",

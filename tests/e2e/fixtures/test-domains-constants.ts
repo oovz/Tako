@@ -91,6 +91,9 @@ export const LIVE_DM5_REFERENCE_URL =
   "https://www.dm5.com/manhua-shanhainizhan1/"
 export const LIVE_MANGABZ_REFERENCE_URL = "https://www.mangabz.com/139bz/"
 
+export const LIVE_ZAIMANHUA_REFERENCE_URL =
+  "https://www.zaimanhua.com/info/doufo.html"
+
 export const LIVE_COOLMIC_REFERENCE_URL = "https://coolmic.me/titles/5101"
 export const LIVE_MANGAPLUS_REFERENCE_URL =
   "https://mangaplus.shueisha.co.jp/titles/100467"

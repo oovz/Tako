@@ -31,6 +31,7 @@ import { registerBoyloveLocalServerHandlers } from "./mock-data/site-integration
 
 import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
 import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
+import { registerZaimanhuaLocalServerHandlers } from "./mock-data/site-integrations/mangaagain/routes"
 
 import { registerMangagoLocalServerHandlers } from "./mock-data/site-integrations/mangago/routes"
 import { registerCoolmicLocalServerHandlers } from "./mock-data/site-integrations/coolmic/routes"
@@ -467,6 +468,7 @@ async function setupExtensionContext(
         ...registerBoyloveLocalServerHandlers(localMockServer),
         ...registerDm5LocalServerHandlers(localMockServer),
         ...registerMangabzLocalServerHandlers(localMockServer),
+        ...registerZaimanhuaLocalServerHandlers(localMockServer),
         ...registerMangagoLocalServerHandlers(localMockServer),
         ...registerCoolmicLocalServerHandlers(localMockServer),
         ...registerMangaplusLocalServerHandlers(localMockServer),

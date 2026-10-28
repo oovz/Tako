@@ -105,6 +105,7 @@ export default defineConfig({
       "coolmic",
       "mangaplus",
       "animemangahouse",
+      "mangaagain",
       "mangabz",
     ].map((name) => ({
       name,
