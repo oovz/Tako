@@ -29,7 +29,6 @@ import { includesManagedHostPermission } from "@/src/site-integrations/host-perm
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
-import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { NativeOutputRecord } from "@/src/domain/native-output/state"
 
 import { BackgroundRuntimeKernel } from "@/entrypoints/background/background-runtime-kernel"
@@ -86,7 +85,8 @@ const rateLimitService = new RateLimitService(rateLimitPolicySource)
 const siteIntegrationSessionRuleManager = new SiteIntegrationSessionRuleManager(
   {
     service: siteIntegrationEnablementService,
-    awaitSchemaMigration,
+    awaitSchemaMigration: (): Promise<void> =>
+      runtimeKernel.ensureSchemaMigrated(),
     onReconciliationSucceeded: async (enablement) => {
       try {
         await runtimeKernel.ensure("runtime-ready")
@@ -228,18 +228,6 @@ const terminalCoordinator = new OffscreenJobTerminalCoordinator(
   finalizationDependencies
 )
 
-/**
- * One-time durable-state migration gate. The promise is
- * created inside `main()` (the only context guaranteed to have `chrome`);
- * every readiness phase and the DNR manager await the SAME gate through
- * `awaitSchemaMigration()`. A rejected migration is sticky and fatal.
- */
-const schemaMigrationGate: { promise: Promise<void> | null } = { promise: null }
-
-function awaitSchemaMigration(): Promise<void> {
-  return schemaMigrationGate.promise ?? Promise.resolve()
-}
-
 const runtimeKernel = new BackgroundRuntimeKernel({
   settingsRepository,
   siteIntegrationEnablementService,
@@ -251,7 +239,7 @@ const runtimeKernel = new BackgroundRuntimeKernel({
   ensureLivenessAlarm,
   setLivenessAlarmArmed,
   queueScheduler,
-  awaitSchemaMigration,
+  awaitSchemaMigration: migrateDurableStateForCurrentSchema,
 })
 
 const tabContextResolver = createTabContextResolver({
@@ -342,7 +330,7 @@ export default defineBackground({
     logger.info("Background script starting")
 
     // Event listeners are registered synchronously below. Versioned state
-    // migration then runs before any repository hydrates or the kernel starts.
+    // migration gates every storage-backed readiness phase and DNR read.
     try {
       chrome.sidePanel
         .setPanelBehavior({ openPanelOnActionClick: true })
@@ -431,46 +419,14 @@ export default defineBackground({
 
     siteIntegrationSessionRuleManager.registerListeners()
 
-    // The migration promise is created HERE, in the service-worker runtime, so
-    // build-time module evaluation (which has no `chrome`) never executes it.
-    schemaMigrationGate.promise = migrateDurableStateForCurrentSchema()
-    void schemaMigrationGate.promise.catch(() => undefined)
+    const initialSessionRuleReconciliation =
+      siteIntegrationSessionRuleManager.start()
+    void initialSessionRuleReconciliation.catch((error) => {
+      logger.warn("Initial provider session DNR reconciliation failed", error)
+    })
 
-    void (async () => {
-      try {
-        // Migrate retained state before strict repositories hydrate it.
-        await schemaMigrationGate.promise
-      } catch (error) {
-        logger.error(
-          "Refusing to initialize: retained durable state could not be migrated",
-          error
-        )
-        try {
-          await chrome.storage.session.set({
-            [SESSION_STORAGE_KEYS.initFailed]: true,
-            [SESSION_STORAGE_KEYS.initError]:
-              "Retained state could not be migrated; restart the extension to retry.",
-          })
-        } catch (diagnosticError) {
-          logger.warn(
-            "Unable to publish the schema-migration failure diagnostic",
-            diagnosticError
-          )
-        }
-        return
-      }
-
-      // Initial DNR reconciliation and its enablement/continuation reads must
-      // not run against pre-migration storage.
-      const initialSessionRuleReconciliation =
-        siteIntegrationSessionRuleManager.start()
-      void initialSessionRuleReconciliation.catch((error) => {
-        logger.warn("Initial provider session DNR reconciliation failed", error)
-      })
-
-      runtimeKernel.markControlReady()
-      runtimeKernel.start()
-    })()
+    runtimeKernel.markControlReady()
+    runtimeKernel.start()
     logger.info("Background script initialized")
   },
 })

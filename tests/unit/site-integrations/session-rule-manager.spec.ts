@@ -540,6 +540,64 @@ describe("site integration session-rule manager", () => {
     expect(updateSessionRules).toHaveBeenCalledTimes(2)
   })
 
+  it("retries migration from its alarm before reading enablement or writing rules", async () => {
+    const { alarmListeners, createAlarm, updateSessionRules } =
+      installChromeMock()
+    const { SiteIntegrationSessionRuleManager } = await loadManager()
+    const migration = vi
+      .fn(async () => undefined)
+      .mockRejectedValueOnce(new Error("migration storage unavailable"))
+    const getAll = vi.fn(testEnablementService.getAll)
+    const manager = new SiteIntegrationSessionRuleManager({
+      service: { getAll },
+      awaitSchemaMigration: migration,
+      onReconciliationSucceeded: async () => undefined,
+    })
+    manager.registerListeners()
+
+    await expect(manager.start()).rejects.toThrow(
+      "migration storage unavailable"
+    )
+    expect(getAll).not.toHaveBeenCalled()
+    expect(updateSessionRules).not.toHaveBeenCalled()
+    expect(createAlarm).toHaveBeenCalledWith(
+      "site-integration-session-rule-retry",
+      expect.objectContaining({ delayInMinutes: 0.5 })
+    )
+
+    for (const listener of alarmListeners) {
+      listener({
+        name: "site-integration-session-rule-retry",
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
+    }
+    await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledOnce())
+    expect(migration).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps invalid migration state behind the gate without scheduling reconciliation retries", async () => {
+    const { createAlarm, updateSessionRules } = installChromeMock()
+    const { SiteIntegrationSessionRuleManager } = await loadManager()
+    // Use the same error constructor as the manager after module isolation.
+    const { InvalidDurableStateError } =
+      await import("@/src/runtime/runtime-phase-errors")
+    const cause = new InvalidDurableStateError("unsupported schema epoch")
+    const getAll = vi.fn(testEnablementService.getAll)
+    const manager = new SiteIntegrationSessionRuleManager({
+      service: { getAll },
+      awaitSchemaMigration: async () => {
+        throw cause
+      },
+      onReconciliationSucceeded: async () => undefined,
+    })
+
+    await expect(manager.start()).rejects.toBe(cause)
+    expect(getAll).not.toHaveBeenCalled()
+    expect(updateSessionRules).not.toHaveBeenCalled()
+    expect(createAlarm).not.toHaveBeenCalled()
+  })
+
   it("caps retry backoff and does not replace an already scheduled retry", async () => {
     const { alarmListeners, createAlarm } = installChromeMock({
       updateSessionRules: async () => {

@@ -1,4 +1,5 @@
 export type BackgroundRuntimePhase =
+  | "schema-migrated"
   | "internal-state-ready"
   | "queue-hydrated"
   | "integrations-ready"

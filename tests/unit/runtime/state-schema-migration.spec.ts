@@ -501,6 +501,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
   })
 
   it.each([
+    "journal-prepared",
     "canonical-write",
     "journal-canonical",
     "obsolete-remove",
@@ -510,7 +511,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
   ] as const)(
     "replays after a %s migration interruption",
     async (failurePoint) => {
-      local = { stateSchemaEpoch: 2, commandResults: { old: true } }
+      local = {
+        stateSchemaEpoch: 2,
+        commandResults: { old: true },
+        downloadQueue: [epoch2Task()],
+        unrelatedUserState: { keep: true },
+      }
       const set = vi.mocked(chrome.storage.local.set)
       const remove = vi.mocked(chrome.storage.local.remove)
       const originalSet = set.getMockImplementation()!
@@ -520,6 +526,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
         const valuesRecord = values as Record<string, unknown>
         const journal = valuesRecord.stateSchemaMigrationJournal as
           { phase?: string } | undefined
+        if (
+          failurePoint === "journal-prepared" &&
+          journal?.phase === "prepared"
+        ) {
+          throw new Error("prepared journal failed")
+        }
         if (
           failurePoint === "canonical-write" &&
           Object.hasOwn(valuesRecord, "downloadQueue")
@@ -581,6 +593,13 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
       expect(local).not.toHaveProperty("stateSchemaMigrationJournal")
       expect(local).not.toHaveProperty("commandResults")
+      expect(local.downloadQueue).toEqual([
+        expect.objectContaining({
+          id: "task-epoch-2",
+          chapters: [expect.objectContaining({ id: "chapter-epoch-2" })],
+        }),
+      ])
+      expect(local.unrelatedUserState).toEqual({ keep: true })
     }
   )
 

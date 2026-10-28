@@ -10,6 +10,10 @@ import {
   InvalidDurableStateError,
   RuntimePhaseError,
 } from "@/src/runtime/runtime-phase-errors"
+import {
+  CURRENT_STATE_SCHEMA_EPOCH,
+  migrateDurableStateForCurrentSchema,
+} from "@/src/runtime/state-schema-migration"
 
 const mocks = vi.hoisted(() => ({
   stateInitialize: vi.fn<() => Promise<void>>(async () => undefined),
@@ -208,30 +212,129 @@ describe("BackgroundRuntimeKernel", () => {
     expect(nativeOutputCoordinator.initialize).toHaveBeenCalledOnce()
   })
 
-  it("treats a rejected schema migration as sticky and fatal without hydrating", async () => {
-    const resetError = new Error("storage unavailable")
+  it("keeps invalid migration state fatal without hydrating", async () => {
+    const resetError = new InvalidDurableStateError(
+      "Unsupported retained state"
+    )
     const { kernel, queueRepository } = createKernel({
       awaitSchemaMigration: () => Promise.reject(resetError),
     })
 
     await expect(kernel.ensure("queue-hydrated")).rejects.toThrow(
-      "Retained state could not be migrated"
+      "Unsupported retained state"
     )
     expect(mocks.stateInitialize).not.toHaveBeenCalled()
     expect(queueRepository.initialize).not.toHaveBeenCalled()
     expect(sessionSet).toHaveBeenCalledWith(
       expect.objectContaining({
         initFailed: true,
-        error: expect.stringContaining("Retained state could not be migrated"),
+        error: "Unsupported retained state",
       })
     )
 
     // The failure is sticky: later phases reject without retrying the reset.
     await expect(kernel.ensure("runtime-ready")).rejects.toThrow(
-      "Retained state could not be migrated"
+      "Unsupported retained state"
     )
     expect(mocks.stateInitialize).not.toHaveBeenCalled()
     expect(queueRepository.initialize).not.toHaveBeenCalled()
+  })
+
+  it.each(["get", "set", "remove"] as const)(
+    "recovers initialization after a temporary migration %s failure",
+    async (operation) => {
+      const local: Record<string, unknown> = { stateSchemaEpoch: 2 }
+      const storage = {
+        get: vi.fn(async () => structuredClone(local)),
+        set: vi.fn(async (values: Record<string, unknown>) => {
+          Object.assign(local, structuredClone(values))
+        }),
+        remove: vi.fn(async (keys: string | string[]) => {
+          for (const key of [keys].flat()) delete local[key]
+        }),
+      }
+      Object.assign(chrome.storage, { local: storage })
+      const cause = new Error(`temporary migration ${operation} failure`)
+      storage[operation].mockRejectedValueOnce(cause)
+      const migration = vi.fn(migrateDurableStateForCurrentSchema)
+      const { kernel, queueRepository, ensureLivenessAlarm } = createKernel({
+        awaitSchemaMigration: migration,
+      })
+
+      kernel.start()
+      await vi.waitFor(() => expect(ensureLivenessAlarm).toHaveBeenCalledOnce())
+      expect(sessionSet).toHaveBeenCalledWith({
+        initFailed: true,
+        error: cause.message,
+      })
+      expect(mocks.stateInitialize).not.toHaveBeenCalled()
+      expect(queueRepository.initialize).not.toHaveBeenCalled()
+      expect(migration).toHaveBeenCalledOnce()
+
+      await Promise.all([
+        kernel.ensure("queue-hydrated"),
+        kernel.ensure("runtime-ready"),
+      ])
+      expect(migration).toHaveBeenCalledTimes(2)
+      expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
+      expect(local).not.toHaveProperty("stateSchemaMigrationJournal")
+      expect(mocks.stateInitialize).toHaveBeenCalledOnce()
+      expect(queueRepository.initialize).toHaveBeenCalledOnce()
+      expect(sessionSet).toHaveBeenLastCalledWith({
+        initFailed: false,
+        error: null,
+      })
+    }
+  )
+
+  it("retains successful migration when later state hydration must retry", async () => {
+    const migration = vi.fn(async () => undefined)
+    mocks.stateInitialize.mockRejectedValueOnce(
+      new Error("session unavailable")
+    )
+    const { kernel } = createKernel({ awaitSchemaMigration: migration })
+
+    await expect(kernel.ensure("runtime-ready")).rejects.toMatchObject({
+      fatal: false,
+    })
+    await kernel.ensure("runtime-ready")
+
+    expect(migration).toHaveBeenCalledOnce()
+    expect(mocks.stateInitialize).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    { stateSchemaEpoch: CURRENT_STATE_SCHEMA_EPOCH + 1 },
+    { downloadQueue: { malformed: true } },
+    { stateSchemaMigrationJournal: { malformed: true } },
+  ])("fails closed for invalid retained state: %j", async (local) => {
+    const get = vi.fn(async () => structuredClone(local))
+    const set = vi.fn()
+    const remove = vi.fn()
+    Object.assign(chrome.storage, { local: { get, set, remove } })
+    const { kernel, queueRepository, ensureLivenessAlarm } = createKernel({
+      awaitSchemaMigration: migrateDurableStateForCurrentSchema,
+    })
+
+    const first = await kernel.ensure("runtime-ready").catch((error) => error)
+    const second = await kernel.ensure("queue-hydrated").catch((error) => error)
+    expect(first).toBeInstanceOf(RuntimePhaseError)
+    expect(first).toMatchObject({
+      phase: "schema-migrated",
+      fatal: true,
+      cause: expect.any(InvalidDurableStateError),
+    })
+    expect(second).toBe(first)
+    expect(get).toHaveBeenCalledOnce()
+    expect(set).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+    expect(mocks.stateInitialize).not.toHaveBeenCalled()
+    expect(queueRepository.initialize).not.toHaveBeenCalled()
+    expect(ensureLivenessAlarm).not.toHaveBeenCalled()
+    expect(sessionSet).toHaveBeenLastCalledWith({
+      initFailed: true,
+      error: first.message,
+    })
   })
 
   it("routes each readiness label to its exact minimum DAG phase", async () => {

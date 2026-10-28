@@ -1,4 +1,5 @@
 import logger from "@/src/runtime/logger"
+import { isFatalRuntimeInitializationError } from "@/src/runtime/runtime-phase-errors"
 import {
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
   type SiteIntegrationEnablementService,
@@ -275,6 +276,7 @@ export class SiteIntegrationSessionRuleManager {
 
   private async runRequestedReconciliations(): Promise<void> {
     try {
+      await this.awaitSchemaMigration()
       while (true) {
         while (this.successfulRevision < this.requestedRevision) {
           const targetRevision = this.requestedRevision
@@ -300,6 +302,7 @@ export class SiteIntegrationSessionRuleManager {
       }
     } catch (error) {
       this.reconciliationDirty = true
+      if (isFatalRuntimeInitializationError(error)) throw error
       try {
         await this.scheduleRetryAlarm()
       } catch (alarmError) {
@@ -313,12 +316,10 @@ export class SiteIntegrationSessionRuleManager {
 
   /**
    * Serialize and coalesce DNR updates so storage, permission, alarm, and
-   * dispatch-time readiness requests cannot race. Waits for the destructive
-   * schema reset so enablement reads and continuation state never touch
-   * pre-reset storage.
+   * dispatch-time readiness requests cannot race. Schema migration completes
+   * before enablement reads and continuation state access retained storage.
    */
   async reconcile(enablement?: SiteIntegrationEnablementMap): Promise<void> {
-    await this.awaitSchemaMigration()
     this.requestedRevision += 1
     this.requestedEnablement = enablement
     this.reconciliationDirty = true

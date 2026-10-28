@@ -31,6 +31,7 @@ import {
 import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
 import type { DestinationIssue } from "@/src/domain/queue/state"
 import logger from "@/src/runtime/logger"
+import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { PersistentErrorsSchema } from "@/src/runtime/persistent-error-schema"
 import {
   ActiveDispatchLeaseSchema,
@@ -1238,21 +1239,31 @@ async function replayMigrationJournal(
 export async function migrateDurableStateForCurrentSchema(): Promise<void> {
   try {
     const stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
-    const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
-    const journal = parseMigrationJournal(stored[MIGRATION_JOURNAL_STORAGE_KEY])
-    if (journal) {
-      validateMigrationJournalAgainstStoredState(journal, stored, epoch)
-      if (epoch === CURRENT_STATE_SCHEMA_EPOCH) {
-        if (journal.phase !== "obsolete-removed") {
+    let plan: MigrationJournal
+    let journal: MigrationJournal | null
+    try {
+      const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
+      journal = parseMigrationJournal(stored[MIGRATION_JOURNAL_STORAGE_KEY])
+      if (journal) {
+        validateMigrationJournalAgainstStoredState(journal, stored, epoch)
+        if (
+          epoch === CURRENT_STATE_SCHEMA_EPOCH &&
+          journal.phase !== "obsolete-removed"
+        ) {
           throw new Error(
             "State migration journal phase is inconsistent with the current epoch"
           )
         }
       }
+      if (epoch === CURRENT_STATE_SCHEMA_EPOCH && journal === null) return
+      plan = journal ?? buildMigrationJournal(stored, epoch)
+    } catch (cause) {
+      throw new InvalidDurableStateError(
+        cause instanceof Error ? cause.message : "Invalid retained state",
+        { cause }
+      )
     }
-    if (epoch === CURRENT_STATE_SCHEMA_EPOCH && journal === null) return
 
-    const plan = journal ?? buildMigrationJournal(stored, epoch)
     if (journal === null) await persistMigrationJournal(plan)
     logger.info(
       `[Init] Migrating durable state schema from ${String(plan.sourceEpoch)} to ${CURRENT_STATE_SCHEMA_EPOCH}`
