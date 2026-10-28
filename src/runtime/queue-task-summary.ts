@@ -1,3 +1,4 @@
+import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import {
   getCompletedOutputDestination,
   hasUncertainNativeOutput,
@@ -27,12 +28,16 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     }
   }
 
+  const failureChapter = firstUnsuccessfulChapter(task.chapters)
   const failureCategory =
-    task.errorCategory ??
-    task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
-    (task.status === "failed" || task.status === "partial_success"
-      ? "unknown"
-      : undefined)
+    task.status === "completed"
+      ? undefined
+      : failureChapter
+        ? (failureChapter.errorCategory ?? "unknown")
+        : (task.errorCategory ??
+          (task.status === "failed" || task.status === "partial_success"
+            ? "unknown"
+            : undefined))
 
   return {
     id: task.id,

@@ -28,6 +28,15 @@ export interface ChapterDispatchOutcome {
   imagesFailed?: number
 }
 
+export function firstUnsuccessfulChapter<T extends Pick<TaskChapter, "status">>(
+  chapters: readonly T[]
+): T | undefined {
+  return chapters.find(
+    (chapter) =>
+      chapter.status === "failed" || chapter.status === "partial_success"
+  )
+}
+
 export function isTerminalDownloadTask(
   task: Pick<DownloadTaskState, "status">
 ): boolean {
@@ -139,6 +148,8 @@ export function normalizeInterruptedTask(
     normalizedChapters.length > 0 &&
     normalizedChapters.every((chapter) => chapter.status === "completed")
 
+  const failureChapter = firstUnsuccessfulChapter(normalizedChapters)
+
   return {
     ...task,
     status: allChaptersCompleted
@@ -148,8 +159,12 @@ export function normalizeInterruptedTask(
         : "failed",
     activeBlock: undefined,
     destinationIssue: undefined,
-    errorMessage: allChaptersCompleted ? undefined : errorMessage,
-    errorCategory: allChaptersCompleted ? undefined : "unknown",
+    errorMessage: allChaptersCompleted
+      ? undefined
+      : (failureChapter?.errorMessage ?? errorMessage),
+    errorCategory: allChaptersCompleted
+      ? undefined
+      : (failureChapter?.errorCategory ?? "unknown"),
     completed: task.completed ?? now,
     chapters: normalizedChapters,
   }

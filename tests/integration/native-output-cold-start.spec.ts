@@ -371,8 +371,7 @@ describe("native output cold-start recovery", () => {
       )
       await reloaded.initialize()
       const settled = await reloaded.getTask(jobIdentity.taskId)
-      const expectedFailure =
-        finalStatus === "completed" ? earlierFailure : finalFailure
+      const expectedFailure = earlierFailure
       expect(settled).toMatchObject({
         status: finalStatus === "completed" ? "partial_success" : "failed",
         ...expectedFailure,
@@ -384,6 +383,73 @@ describe("native output cold-start recovery", () => {
       expect(toQueueTaskSummary(settled!)).toMatchObject({
         failureCategory: expectedFailure.errorCategory,
       })
+    }
+  )
+
+  it.each([
+    { firstFailureIndex: 0, firstFailureStatus: "partial_success" },
+    { firstFailureIndex: 1, firstFailureStatus: "failed" },
+    { firstFailureIndex: 2, firstFailureStatus: "partial_success" },
+    { firstFailureIndex: -1, firstFailureStatus: "failed" },
+  ] as const)(
+    "keeps the task-order cause after general finalization and cold hydration at index $firstFailureIndex",
+    async ({ firstFailureIndex, firstFailureStatus }) => {
+      const initial = activeTask()
+      initial.errorMessage = "Stale final-chapter error"
+      initial.errorCategory = "provider_changed"
+      initial.chapters = Array.from({ length: 3 }, (_, index) => ({
+        ...initial.chapters[0]!,
+        id: `chapter-${index + 1}`,
+        title: `Chapter ${index + 1}`,
+        index,
+        status:
+          index === firstFailureIndex
+            ? firstFailureStatus
+            : firstFailureIndex >= 0 && index > firstFailureIndex
+              ? "failed"
+              : "completed",
+        ...(index === firstFailureIndex
+          ? {
+              errorMessage: "Original folder write failed",
+              errorCategory: "folder_write_failed" as const,
+            }
+          : firstFailureIndex >= 0 && index > firstFailureIndex
+            ? {
+                errorMessage: "Later provider failure",
+                errorCategory: "network_unavailable" as const,
+              }
+            : {}),
+      }))
+      local[LOCAL_STORAGE_KEYS.downloadQueue] = [initial]
+      local[LOCAL_STORAGE_KEYS.activeDispatchLease] = null
+      const runtime = createRuntime()
+      await runtime.queueRepository.initialize()
+      expect(
+        await runtime.queueRepository.finalizeDownloadTask({
+          taskId: initial.id,
+          chapterOutcomesByIndex: initial.chapters.map((chapter) => ({
+            chapterId: chapter.id,
+            status: chapter.status as
+              "completed" | "partial_success" | "failed",
+            errorMessage: chapter.errorMessage,
+            errorCategory: chapter.errorCategory,
+          })),
+          completedAt: 500,
+        })
+      ).toMatchObject({ outcome: "applied" })
+      const reloaded = createRuntime()
+      await reloaded.queueRepository.initialize()
+      const settled = await reloaded.queueRepository.getTask(initial.id)
+      expect(settled).toMatchObject({
+        status: firstFailureIndex < 0 ? "completed" : "partial_success",
+        errorMessage:
+          firstFailureIndex < 0 ? undefined : "Original folder write failed",
+        errorCategory:
+          firstFailureIndex < 0 ? undefined : "folder_write_failed",
+      })
+      expect(toQueueTaskSummary(settled!).failureCategory).toBe(
+        firstFailureIndex < 0 ? undefined : "folder_write_failed"
+      )
     }
   )
 

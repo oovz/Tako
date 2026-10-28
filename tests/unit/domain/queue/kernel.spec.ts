@@ -1437,6 +1437,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
       chapters: [
         createChapter("chapter-1", "completed"),
         createChapter("chapter-2", "failed", {
+          errorMessage: "Chapter fetch failed",
           errorCategory: "network_unavailable",
         }),
       ],
@@ -1450,6 +1451,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
         {
           chapterId: "chapter-2",
           status: "failed",
+          errorMessage: "Chapter fetch failed",
           errorCategory: "network_unavailable",
         },
       ],
@@ -1464,7 +1466,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
       completed: 500,
       activeBlock: undefined,
       nextChapterDispatchAt: undefined,
-      errorMessage: "Some chapters failed (1/2)",
+      errorMessage: "Chapter fetch failed",
       errorCategory: "network_unavailable",
     })
     expect(finalized.result).toMatchObject({

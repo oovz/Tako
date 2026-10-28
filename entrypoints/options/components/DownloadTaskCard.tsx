@@ -1,3 +1,4 @@
+import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import { useId, useState } from "react"
 import {
   ChevronDown,
@@ -82,8 +83,13 @@ export function DownloadTaskCard({
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
   const isRetried = task.isRetried ?? false
   const acceptanceUncertain = hasUncertainNativeOutput(task.chapters)
+  const failureChapter = firstUnsuccessfulChapter(task.chapters)
   const failureMessage = getDownloadFailureMessage(
-    task.errorCategory,
+    task.status === "completed"
+      ? undefined
+      : failureChapter
+        ? (failureChapter.errorCategory ?? "unknown")
+        : task.errorCategory,
     acceptanceUncertain
   )
   const cancelPresentation = getDownloadCancelPresentation()

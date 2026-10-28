@@ -39,6 +39,15 @@ describe("DownloadTaskCard error presentation", () => {
           },
           lastUpdated: 2,
         },
+        {
+          id: "chapter-2",
+          url: "https://example.com/chapter-2",
+          title: "Chapter 2",
+          index: 1,
+          status: "failed",
+          errorCategory: "network_unavailable",
+          lastUpdated: 2,
+        },
       ],
       settingsSnapshot: createTaskSettingsSnapshot(
         DEFAULT_SETTINGS,
@@ -58,7 +67,8 @@ describe("DownloadTaskCard error presentation", () => {
       "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
     )
     expect(html).toContain("Retry all chapters (may create duplicates)")
-    expect(html).toContain("The network connection is unavailable.")
+    expect(html).toContain("Tako could not create the archive.")
+    expect(html).not.toContain("The network connection is unavailable.")
   })
 
   it.each([
@@ -148,7 +158,8 @@ describe("DownloadTaskCard error presentation", () => {
       })
     )
 
-    expect(html).toContain("The selected folder is no longer available.")
+    expect(html).toContain("Chrome could not accept the output.")
+    expect(html).not.toContain("The selected folder is no longer available.")
     expect(html).not.toContain("ERR_FILE_ACCESS_DENIED")
     expect(html).not.toContain("task-secret")
     expect(html).not.toContain("chapter-secret")

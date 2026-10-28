@@ -297,6 +297,34 @@ describe("queue task lifecycle formulas", () => {
     }
   )
 
+  it("retains the first unsuccessful chapter cause when later work is interrupted", () => {
+    const normalized = normalizeInterruptedTask(
+      createTask({
+        status: "downloading",
+        errorCategory: "network_unavailable",
+        chapters: [
+          createChapter("partial_success", {
+            errorMessage: "Closing the first file failed",
+            errorCategory: "folder_write_failed",
+            outputs: { requested: 2, committed: 1, failed: 1 },
+          }),
+          createChapter("downloading"),
+        ],
+      }),
+      "Worker stopped",
+      500
+    )
+    expect(normalized).toMatchObject({
+      status: "partial_success",
+      errorMessage: "Closing the first file failed",
+      errorCategory: "folder_write_failed",
+      chapters: [
+        { status: "partial_success", errorCategory: "folder_write_failed" },
+        { status: "failed", errorMessage: "Worker stopped" },
+      ],
+    })
+  })
+
   it("preserves an existing task completion timestamp during interruption normalization", () => {
     const normalized = normalizeInterruptedTask(
       createTask({ status: "downloading", completed: 77 }),

@@ -10,6 +10,7 @@ import {
 } from "./pending-undo"
 import {
   cancelDownloadingTask,
+  firstUnsuccessfulChapter,
   isExecutingDownloadTask,
   isRunnableQueuedTask,
   isTerminalChapterStatus,
@@ -1121,13 +1122,7 @@ export function applyNativeOutputSettlement(
       : successfulChapterCount > 0
         ? "partial_success"
         : "failed"
-  const failureChapter = succeeded
-    ? chapters.find(
-        (candidate) =>
-          candidate.status === "failed" ||
-          candidate.status === "partial_success"
-      )
-    : updatedChapter
+  const failureChapter = firstUnsuccessfulChapter(chapters)
   const updatedTask: DownloadTaskState = {
     ...task,
     chapters,
@@ -1144,13 +1139,11 @@ export function applyNativeOutputSettlement(
           errorMessage:
             terminalStatus === "completed"
               ? undefined
-              : (failureChapter?.errorMessage ?? task.errorMessage),
+              : failureChapter?.errorMessage,
           errorCategory:
             terminalStatus === "completed"
               ? undefined
-              : (failureChapter?.errorCategory ??
-                task.errorCategory ??
-                "unknown"),
+              : (failureChapter?.errorCategory ?? "unknown"),
         }
       : {}),
   }
@@ -1705,22 +1698,14 @@ export function finalizeDownloadTask(
   const completedCount = chapterOutcomes.filter(
     (outcome) => outcome.status === "completed"
   ).length
-  const failedCount = chapterOutcomes.filter(
-    (outcome) => outcome.status === "failed"
-  ).length
   const finalStatus = resolveFinalDownloadTaskStatus(chapterOutcomes)
-  const firstFailed = chapterOutcomes.find(
-    (outcome) => outcome.status === "failed"
-  )
+  const firstFailed = firstUnsuccessfulChapter(chapterOutcomes)
   const updatedTask = normalizeDownloadTaskExecutionState({
     ...task,
     status: finalStatus,
     completed: input.completedAt,
     nextChapterDispatchAt: undefined,
-    errorMessage:
-      failedCount > 0
-        ? `Some chapters failed (${completedCount}/${chapterOutcomes.length})`
-        : undefined,
+    errorMessage: firstFailed?.errorMessage,
     errorCategory:
       firstFailed?.errorCategory ??
       (finalStatus === "failed" || finalStatus === "partial_success"

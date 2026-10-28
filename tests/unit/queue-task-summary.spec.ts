@@ -189,6 +189,26 @@ describe("toQueueTaskSummary", () => {
     ).toBe(false)
   })
 
+  it("uses the first unsuccessful chapter before stale task or successful-chapter errors", () => {
+    const task = makeTask({
+      status: "partial_success",
+      errorCategory: "network_unavailable",
+      chapters: [
+        makeChapter("c1", "completed", { errorCategory: "provider_changed" }),
+        makeChapter("c2", "partial_success", {
+          errorCategory: "folder_write_failed",
+        }),
+        makeChapter("c3", "failed", { errorCategory: "network_unavailable" }),
+      ],
+    })
+    expect(toQueueTaskSummary(task).failureCategory).toBe("folder_write_failed")
+    task.chapters[1].errorCategory = undefined
+    expect(toQueueTaskSummary(task).failureCategory).toBe("unknown")
+    task.status = "completed"
+    task.chapters = [makeChapter("c1", "completed")]
+    expect(toQueueTaskSummary(task).failureCategory).toBeUndefined()
+  })
+
   it("projects only shared completed destination evidence", () => {
     const chromeChapter = makeChapter("c1", "completed", {
       outputDestination: "downloads-api",
