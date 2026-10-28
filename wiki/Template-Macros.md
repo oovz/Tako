@@ -1,138 +1,81 @@
 # Template Macros
 
-Macros are placeholders in directory and filename templates, written in angle brackets like `<SERIES_TITLE>`. Tako resolves them at download time to build the output path for each chapter.
+[English](Template-Macros) · [日本語](Template-Macros.ja) · [简体中文](Template-Macros.zh-CN) · [繁體中文](Template-Macros.zh-TW) · [한국어](Template-Macros.ko)
 
-## How templates work
+Templates choose the folders and names Tako uses for downloaded chapters. A macro is a placeholder such as `<SERIES_TITLE>` that Tako replaces with information about the manga.
 
-Tako resolves two templates per chapter:
+## Start with the defaults
 
-- **Directory template** (`pathTemplate`) — Resolves to a folder path.
-- **Filename template** (`fileNameTemplate`) — Resolves to the chapter archive name, or the loose-image chapter folder name when the format is `none`.
+Open **Options → Storage & Files**. The two template fields are:
 
-Default directory template:
+| Field                       | Default              | What it controls                                                      |
+| --------------------------- | -------------------- | --------------------------------------------------------------------- |
+| **Directory Path Template** | `TMD/<SERIES_TITLE>` | Folders beneath your download location                                |
+| **Filename Template**       | `<CHAPTER_TITLE>`    | The chapter archive name, or the chapter folder for individual images |
 
-```text
-TMD/<SERIES_TITLE>
-```
-
-Result with default filename template and CBZ format:
+For a series called _Example Manga_ and a chapter called _Chapter 1_, the defaults produce:
 
 ```text
-TMD/Hunter x Hunter/Departure.cbz
+TMD/Example Manga/Chapter 1.cbz
 ```
 
-## Macro reference
+Choose the format separately. Tako adds `.cbz` or `.zip` automatically. With **No Archive**, the chapter name becomes a folder containing the images.
+
+Use `/` between folders in the directory field. Putting `.cbz` in that field creates a folder with that suffix.
+
+## Patterns to try
+
+| Goal                       | Directory template                  | Filename template                            |
+| -------------------------- | ----------------------------------- | -------------------------------------------- |
+| Group by series            | `TMD/<SERIES_TITLE>`                | `<CHAPTER_TITLE>`                            |
+| Group by site, then series | `<INTEGRATION_NAME>/<SERIES_TITLE>` | `<CHAPTER_TITLE>`                            |
+| Group by month downloaded  | `<YYYY>/<MM>/<SERIES_TITLE>`        | `<CHAPTER_TITLE>`                            |
+| Add chapter numbers        | `TMD/<SERIES_TITLE>`                | `Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>` |
+
+Numbered names depend on the site providing a chapter number. Use the title-based default if it doesn't.
+
+## Available macros
 
 ### Date macros
 
-Always available. Uses the user's local date at download time.
+These use your local date when the task is created. Retry and Restart keep the original requested path, even on another day.
 
-| Macro    | Description                | Example | Guaranteed |
-| -------- | -------------------------- | ------- | ---------- |
-| `<YYYY>` | Current year, 4 digits     | `2026`  | Yes        |
-| `<MM>`   | Current month, zero-padded | `05`    | Yes        |
-| `<DD>`   | Current day, zero-padded   | `12`    | Yes        |
+| Macro    | Meaning         | Example |
+| -------- | --------------- | ------- |
+| `<YYYY>` | Four-digit year | `2026`  |
+| `<MM>`   | Two-digit month | `05`    |
+| `<DD>`   | Two-digit day   | `12`    |
 
-### Site macros
+### Site and series macros
 
-| Macro                | Description                                    | Example              | Guaranteed |
-| -------------------- | ---------------------------------------------- | -------------------- | ---------- |
-| `<INTEGRATION_NAME>` | Site integration identifier                    | `mangadex`           | Yes        |
-| `<PUBLISHER>`        | Publisher name, if the integration provides it | `Weekly Shonen Jump` | No         |
+| Macro                | Meaning                             | Availability                   |
+| -------------------- | ----------------------------------- | ------------------------------ |
+| `<INTEGRATION_NAME>` | Site identifier, such as `mangadex` | Available for queued downloads |
+| `<SERIES_TITLE>`     | Manga or series title               | Available for queued downloads |
+| `<PUBLISHER>`        | Publisher name                      | Depends on the site's metadata |
 
-### Series macros
+### Chapter and volume macros
 
-| Macro            | Description           | Example           | Guaranteed |
-| ---------------- | --------------------- | ----------------- | ---------- |
-| `<SERIES_TITLE>` | Series or manga title | `Hunter x Hunter` | Yes        |
+| Macro                   | Meaning                                        | Example                             |
+| ----------------------- | ---------------------------------------------- | ----------------------------------- |
+| `<CHAPTER_TITLE>`       | Chapter title                                  | `Chapter 1`                         |
+| `<CHAPTER_NUMBER>`      | Chapter number                                 | `15.5`                              |
+| `<CHAPTER_NUMBER_PAD2>` | Chapter number padded to at least two digits   | `01`                                |
+| `<CHAPTER_NUMBER_PAD3>` | Chapter number padded to at least three digits | `001`                               |
+| `<VOLUME_NUMBER>`       | Volume number                                  | `5`                                 |
+| `<VOLUME_NUMBER_PAD2>`  | Volume number padded to at least two digits    | `05`                                |
+| `<VOLUME_TITLE>`        | Volume label                                   | Currently empty in queued downloads |
 
-### Chapter macros
-
-| Macro                   | Description                                          | Example     | Guaranteed               |
-| ----------------------- | ---------------------------------------------------- | ----------- | ------------------------ |
-| `<CHAPTER_TITLE>`       | Chapter title used for the final file or folder name | `Departure` | Yes for queued downloads |
-| `<CHAPTER_NUMBER>`      | Raw chapter number (may be decimal like `15.5`)      | `15.5`      | No                       |
-| `<CHAPTER_NUMBER_PAD2>` | Numeric chapter number padded to 2 digits            | `01`        | No                       |
-| `<CHAPTER_NUMBER_PAD3>` | Numeric chapter number padded to 3 digits            | `001`       | No                       |
-
-### Volume macros
-
-| Macro                  | Description                                         | Example    | Guaranteed |
-| ---------------------- | --------------------------------------------------- | ---------- | ---------- |
-| `<VOLUME_TITLE>`       | Site-visible volume or category label, if available | `Volume 1` | No         |
-| `<VOLUME_NUMBER>`      | Raw volume number                                   | `5`        | No         |
-| `<VOLUME_NUMBER_PAD2>` | Numeric volume number padded to 2 digits            | `05`       | No         |
-
-`<VOLUME_TITLE>` comes from the preserved volume or category label (`Volume.title`, `Volume.label`, or `Chapter.volumeLabel`). Use `<VOLUME_NUMBER>` or `<VOLUME_NUMBER_PAD2>` when the site integration provides parsed numeric `volumeNumber` metadata.
+Chapter titles are available for queued downloads. Chapter and volume numbers depend on the site's metadata. The template editor recognizes `<VOLUME_TITLE>`, but queued downloads currently leave it empty; use numeric volume macros when available.
 
 ## Missing values
 
-When an optional macro is unavailable, it resolves to an empty string. Empty directory segments are discarded, but empty pieces inside a filename remain.
+An unavailable value becomes empty text. Tako drops empty folder segments, but surrounding filename text remains. For example, `Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>` can become `Ch. - Chapter 1` when there is no chapter number.
 
-Example filename template:
+The preview uses sample data; actual values depend on the site’s metadata.
 
-```text
-Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
-```
+## Saving your changes
 
-If the site does not provide a numeric chapter number, the filename begins with `Ch. - ...`.
+Click **Save Changes** after editing a template. Your changes apply to new tasks; queued tasks, Retry, and Restart keep their recorded requested paths. Chrome's save dialog or the existing-file setting can still affect the final filename.
 
-Use numeric macros only for integrations and page types known to provide numeric chapter or volume metadata.
-
-## Recommended patterns
-
-### Default directory
-
-```text
-TMD/<SERIES_TITLE>
-```
-
-### Default filename
-
-```text
-<CHAPTER_TITLE>
-```
-
-### Site-grouped directory
-
-```text
-<INTEGRATION_NAME>/<SERIES_TITLE>
-```
-
-### Date-grouped directory
-
-```text
-<YYYY>/<MM>/<SERIES_TITLE>
-```
-
-### Numbered filename when chapter numbers are reliable
-
-```text
-Ch.<CHAPTER_NUMBER_PAD3> - <CHAPTER_TITLE>
-```
-
-## Directory vs filename semantics
-
-`pathTemplate` is directory-only. If a directory template contains an extension-like suffix such as `.cbz`, Tako treats it as part of the folder name, not the final archive filename.
-
-Use `fileNameTemplate` for the final chapter name. Tako appends `.cbz` or `.zip` for archive formats. For `none`, the filename template becomes the chapter folder under the resolved directory.
-
-## Invalid characters
-
-Tako automatically sanitizes path components for cross-platform filesystem compatibility. The following characters are replaced with underscores:
-
-```text
-< > : " / \ | ? *
-```
-
-Control characters, Windows reserved names, and trailing Windows-incompatible dots or spaces are also sanitized.
-
-## Validation
-
-The extension validates templates before saving:
-
-- Unknown macros produce an error.
-- Empty templates are not allowed.
-- Resolved paths must be valid relative filesystem paths.
-
-The Options page preview uses sample data to display the resolved directory and filename.
+Tako replaces characters that cannot be used in filenames with underscores and handles reserved names, control characters, and incompatible trailing dots or spaces. Unknown macros, empty templates, and unusable paths produce an error.

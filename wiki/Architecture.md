@@ -1,215 +1,152 @@
 # Architecture
 
-Tako is a WXT Manifest V3 extension targeting Chrome 150. It separates durable control from long-running data work so Service Worker suspension cannot silently lose or duplicate a download.
+[English](Architecture) · [日本語](Architecture.ja) · [简体中文](Architecture.zh-CN) · [繁體中文](Architecture.zh-TW) · [한국어](Architecture.ko)
+
+This page is for contributors. For download and folder help, see [Quick Start](Quick-Start) and [Troubleshooting](Troubleshooting).
+
+Tako is a WXT Manifest V3 extension for Chrome 150 or newer. The background service worker owns durable coordination; an offscreen document processes images and produces files.
 
 ## Runtime boundaries
 
 ```mermaid
 flowchart TD
-  UI["Side Panel / Options"]
-  SW["Service Worker — durable control plane"]
-  OS["Offscreen document — data plane"]
-  WK["Bundled workers"]
-  PAGE["Supported page — optional one-shot probe"]
-  CHROME["Chrome Downloads"]
-  FSA["File System Access"]
+  UI[Side Panel and Options]
+  SW[Background service worker]
+  OS[Offscreen document and workers]
+  SITE[Supported sites]
+  CHROME[Chrome Downloads]
+  FOLDER[Selected local folder]
 
-  UI -->|"idempotent commands"| SW
-  SW -->|"session projections + active-progress Port"| UI
-  SW -->|"jobId + attempt"| OS
-  OS -->|"accepted / heartbeat / progress / output"| SW
-  OS --> WK
-  SW -->|"executeScript only when needed"| PAGE
-  OS -->|"Blob output"| SW
+  UI -->|Commands| SW
+  SW -->|Queue and context views| UI
+  SW -->|Chapter jobs| OS
+  OS -->|Progress and output results| SW
+  SW -->|Series information| SITE
+  OS -->|Chapter images| SITE
   SW --> CHROME
-  OS --> FSA
+  OS --> FOLDER
 ```
 
 ### Side Panel and Options
 
-- Present data and forms; never mutate durable queue state directly.
-- Read queue, context, destination issues, and recovery state from `chrome.storage.session` projections.
-- Open a named `runtime.Port` only for high-frequency active-task progress; reconnects fall back to the latest session snapshot.
-- Include `windowId`, `tabId`, request/command identity, and expected revision where applicable.
-- Keep the current Side Panel layout: inline chapter selector, unified nonterminal queue with the active task first, and separate recent history.
+The UI presents chapter selection, the queue, history, and settings. It sends validated commands to the background, which owns durable writes. Session-storage projections keep views current; a runtime Port carries frequent active-task progress.
+
+Series context and chapter selections belong to a particular window, tab, and revision. The background reconstructs download input from its own series snapshot and the selected chapter IDs.
 
 ### Service Worker
 
-- Registers Chrome event listeners synchronously at module load.
-- Serializes commands and is the only durable queue/task-state mutator.
-- Persists intent before effects: queue transitions, dispatch lease, pending native output, destination issues, Undo actions, and provider dispatch deadline.
-- Owns privileged Chrome APIs: downloads, permissions, alarms, notifications, badge, scripting, and offscreen lifecycle.
-- Resolves safe series metadata through provider APIs or fetched HTML when the provider declares background dispatch capability.
-- Reconciles current offscreen job and native downloads on every initialization.
+The background registers Chrome listeners synchronously, then completes schema upgrades and hydration behind readiness. It owns scheduling, task commands, Chrome Downloads, permissions, notifications, and the offscreen document's lifetime.
+
+Queue transitions are defined in the domain kernel, committed by storage repositories, and followed by coordinator effects. Intent and ownership are persisted before external effects so startup can reconcile interrupted work.
 
 ### Offscreen document
 
-- Owns chapter/image requests, offscreen-only provider parsing, per-origin scheduling, retry timers, transforms/descrambling, archive creation, FSA writes, and Blob URLs.
-- Communicates through `chrome.runtime`; other extension APIs remain in the Service Worker.
-- Emits job acceptance and a dedicated heartbeat independent from progress.
-- Uses bundled workers for CPU-heavy compression/transforms when appropriate.
-- Renderer-heavy provider transforms share an abortable weighted pixel budget; network fetches remain outside that admission and the existing per-image decoded-pixel limit remains the budget envelope.
-- Stays alive while Chrome still reads a Blob-backed output.
+The offscreen document resolves chapter images, applies provider transforms, creates archives, and writes to selected folders. It reports acceptance, heartbeats, progress, and output results through runtime messages. Bundled workers handle suitable compression and image work.
+
+Resource ledgers bound live image buffers, render surfaces, and retained output. Blob dependencies remain alive while Chrome may still read them.
+
+### Request scheduling
+
+The shared HTTP client, timed image transport, and Bottleneck scheduling apply provider endpoint policies, request spacing, concurrency, cancellation, and retries. Each service instance shares initialization for concurrent first requests. Tasks use their captured policy snapshot.
 
 ### Page probe
 
-There is no resident content script by default. Active-tab context resolves in this order:
-
-1. URL parsing.
-2. Provider API.
-3. Fetched provider HTML parsed in extension/offscreen context.
-4. A bundled, read-only, isolated-world one-shot `chrome.scripting.executeScript` probe only for live DOM or page-owned storage.
-
-The probe returns schema-validated plain data, accepts no remote code/selectors, installs no listener/timer, and cannot write extension storage or operate the queue. Main-world execution requires an integration-specific reason.
+Series resolution uses URL data, provider APIs, or fetched HTML. Integrations that need live page state can declare a bundled one-shot probe. Probes return validated plain data from a bounded read, then release their resources. Isolated-world execution is the default.
 
 ## Durable job protocol
 
-Every chapter attempt has a stable `jobId` and monotonic `attempt`.
+The queue is profile-wide, with one active task and one chapter pipeline. A chapter attempt has a job identity and attempt number.
 
 ```text
-SW persists dispatch lease
-  → SW sends START_JOB
-  → offscreen sends JOB_ACCEPTED
-  → offscreen sends HEARTBEAT and phase progress
-  → offscreen prepares/writes requested outputs
-  → SW/offscreen commit destination results
-  → SW persists chapter/task outcome
-  → SW clears lease and dispatches next eligible work
+Persist dispatch ownership
+  → start offscreen job
+  → observe acceptance, heartbeats, and progress
+  → produce and save files
+  → commit chapter and task results
+  → release ownership and schedule the next chapter
 ```
 
-The offscreen document rejects duplicate/stale jobs. Duplicate UI commands and output handoffs return their prior result. On Service Worker wake:
-
-1. Hydrate durable state.
-2. Check `chrome.offscreen.hasDocument()`.
-3. Query its current job.
-4. Reconcile `jobId`/`attempt`, pending native output, and lease.
-5. Resume observation, replay idempotently, or mark only unrecoverable work interrupted.
-
-The watchdog alarm uses `persistAcrossSessions: true` and is verified/recreated at initialization. It is armed for executing offscreen work or an active offscreen dispatch lease, not merely for a Chrome-owned download. Multiple missed heartbeats trigger `QUERY_JOB` before any recovery teardown. Native download completion is event-driven through `downloads.onChanged`. Startup-after-worker-loss reconciles missed events and prepared handoffs; live repair revisits only ambiguous acceptance or explicit cleanup/accounting work. Known long-running Chrome downloads are not age-failed by the watchdog.
+Startup compares durable records with the current offscreen job and Chrome downloads. Surviving work is reconciled; work that cannot be recovered is recorded as interrupted or unconfirmed. An uncertain save requires a manual retry so the user can check for existing files first.
 
 ## Output transaction
 
-“Completed” means usable output exists at the requested destination.
+A chapter succeeds when all required output has confirmed saving. An archive or Blob being ready is an intermediate step.
 
 ### Chrome Downloads
 
-1. Offscreen creates a Blob URL and sends `OUTPUT_READY` with task, chapter, job, attempt, and output identity.
-2. Service Worker persists a prepared output record, then durably records `handoffStartedAt` immediately before calling `chrome.downloads.download()`.
-3. A numeric `downloadId` means Chrome successfully started the download. Tako keeps that ID observable even if the following local-storage write fails; the prepared record and handoff marker remain restart-reconcilable by Blob URL.
-4. Service Worker observes `downloads.onChanged` and reconciles the durable ID with `chrome.downloads.search()` after startup or a transient storage failure.
-5. `complete` commits the output; `interrupted` records a typed output failure.
-6. Service Worker tells offscreen to revoke the Blob URL after terminal state.
+Before calling `chrome.downloads.download()`, the background persists the output identity and initiation state. It then records the native download ID and observes terminal results through Chrome events and recovery queries.
 
-Native reconciliation returns identity-bound settlement effects. Outer coordinators continue the queue after the task and native gates have been released. A sealed manifest remains replayable until continuation is acknowledged, including startup, surrender and transient continuation failures.
+An accepted transfer can remain pending while Chrome waits on a save dialog or a paused download. Every required file must reach `complete` for success. When the result cannot be established, the task exposes manual recovery with a possible-duplicate warning.
 
-The durable output states are:
-
-| State                                | Meaning                                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `prepared`                           | The output record exists before the Chrome download handoff is attempted.                                                         |
-| `acceptance_unknown`                 | The handoff may have reached Chrome, but Tako does not have a confirmed numeric download ID; the Blob remains owned for recovery. |
-| `waiting` with `downloadId`          | Chrome accepted the handoff and completion is still pending.                                                                      |
-| `waiting` with `erasedAt`            | Chrome removed the history entry before a terminal observation; the transfer outcome remains unknown and requires user action.    |
-| `complete`                           | Chrome reported a positive terminal transfer result.                                                                              |
-| `interrupted`                        | Chrome reported an interrupted terminal transfer result, with `error` when available.                                             |
-| `surrendered`                        | The user explicitly forgot an unobservable output; Tako releases ownership without asserting a transfer result.                   |
-| `accountingDisposition: "accounted"` | The terminal result has been projected into queue accounting.                                                                     |
-| `blobReleasedAt` set                 | The offscreen Blob dependency has been released.                                                                                  |
-| `dependencyReleasedAt` set           | All durable native-output dependencies for this record have been released.                                                        |
-
-`downloads.onErased` only means that Chrome removed the download from history; it is not a transfer outcome. Tako records that the native result is currently unobservable (`erasedAt` on a `waiting` output), keeps the chapter and output identity pending, and keeps the offscreen Blob owner alive. A later `complete`/`interrupted` observation is authoritative and is projected into output accounting; erasure alone never determines success or failure. The task is durably blocked with `activeBlock: "native_output_action_required"` and the `browser_download_unobservable` category, so the queue stops dispatching it and the Side Panel renders the browser-download-unobservable message. The user-facing cancel confirmation becomes an explicit task-wide “forget all pending downloads” action in this state (`FORGET_UNOBSERVABLE_OUTPUTS`); it surrenders every waiting output whose Chrome history entry was erased, revokes every pending Blob owned by the affected job(s), releases queue accounting without claiming Chrome completion or interruption, and lets the queue continue. Canceling such a task performs this surrender as part of its best-effort cleanup routine.
-
-A pending native download is a durable wait state, not a liveness failure. Tako does not poll known long-running Chrome downloads with the offscreen watchdog, and it stops arming the liveness alarm for erased downloads once the task block is in place: the durable `native_output_action_required` block is itself the recovery marker after a Service Worker restart.
+Queue settlement and resource release have separate records. A Blob is released only when the browser no longer needs it; retained bytes remain part of resource accounting.
 
 ### Cancellation, cleanup, and restart recovery
 
-Native settlement continuation runs outside the task/native gates. A sealed manifest remains replayable until its continuation is acknowledged. Released tracked-output records are durable accounting evidence even after queue history is removed; replay schedules current work and retires that exact manifest. Task-specific continuation checks the settlement identity again after asynchronous history work so a same-ID replacement is not resumed by an old effect. Retry and Restart create fresh chapter accounting while preserving the original task's history.
+Cancellation commits the task outcome before stopping the producer and future chapter dispatch. Downloads already accepted by Chrome continue under Chrome's control.
 
-Canceling a task durably records its canceled status in storage to prevent further chapter dispatch and uncommitted pipeline work. It does not cancel native downloads already accepted by Chrome.
-
-Following durable cancellation, resource cleanup proceeds on a best-effort basis:
-
-1. **Producer cancellation** — Tako instructs the offscreen document to abort in-flight image fetches and compression. If the producer cannot converge immediately (e.g. during an MV3 messaging boundary transition), the active lease is quarantined and watchdog alarms remain armed so the worker can retry or recover cleanly.
-2. **Native output cleanup** — Tako seals open output manifests, surrenders unobservable erased outputs, and revokes owned Blob URLs. Transient errors during native output cleanup are logged for later reconciliation and do not block the task's terminal cancellation state.
-3. **Restart recovery** — Any residual leases, unrevoked Blobs, or unobservable outputs are safely swept and reconciled during Service Worker startup or subsequent watchdog alarms.
-
-For an unobservable history entry, the explicit task-wide forget action provides the user-directed recovery path; it releases Tako's Blob ownership for every pending sibling in the affected job and forgets that job rather than asserting a Chrome transfer result.
+Unconfirmed producer cancellation retains its recovery lease. Startup and recovery alarms revisit outstanding ownership and cleanup. Continuation effects run after task and native-output gates are released, and are bound to the attempt they settle.
 
 ### File System Access
 
-The task's destination is snapshotted at enqueue. Before promotion, Tako checks capability, handle presence, and `queryPermission({mode:'readwrite'})`. A write commits only after the writable stream closes successfully.
+Task creation captures a destination, its folder-handle ID when applicable, and each chapter's requested path. Options changes defaults for new tasks. Retry, Restart, and Undo retain the task's effective destination and requested paths.
 
-Unsupported, prompt/denied, missing-folder, write, or disk-full failures persist `destinationIssue` inside the blocked queue task and show repair actions. The block and its repair details share the queue document commit; session projection and notification follow it. Early preflight, late dispatch preflight and offscreen write failures use that transition. The user can re-grant, reselect, continue that task in Downloads, or cancel.
+A folder-handle ID always refers to one directory. Choosing a replacement creates a new default reference; renewing access for an existing task addresses its original folder. Handles remain retained while defaults, accepted saves, tasks, Undo, or active leases need them.
 
-Both destinations use one `uniquify | overwrite` collision policy; `uniquify` is the default.
+Folder success requires all required writes and stream closures. A saving error ends the task as failed or partially successful and skips remaining chapters. Saved output and the original cause are retained.
+
+Automatic Chrome fallback requires consent captured with the task and is off by default. It is eligible only before the first filesystem mutation. Selecting fallback persists the effective destination and dispatches a fresh attempt. Chrome's final transfer result then determines success.
 
 ## Task and chapter outcomes
 
-```typescript
-type TaskStatus =
-  | "queued"
-  | "downloading"
-  | "completed"
-  | "partial_success"
-  | "failed"
-  | "canceled"
+| Outcome           | Meaning                                                                   |
+| ----------------- | ------------------------------------------------------------------------- |
+| `completed`       | All required files have confirmed saves                                   |
+| `partial_success` | Some output was saved, but the request is incomplete                      |
+| `failed`          | The task ended without confirmed saved output                             |
+| `canceled`        | The user stopped remaining work                                           |
+| `skipped`         | A chapter was not processed after cancellation or a terminal folder error |
 
-type ChapterStatus =
-  | "queued"
-  | "downloading"
-  | "completed"
-  | "partial_success"
-  | "failed"
-  | "canceled"
-  | "skipped"
-```
-
-- `completed`: every requested output committed.
-- `partial_success`: some usable requested output committed, but the request is incomplete. Partially saved loose images count even if no whole chapter did.
-- `failed`: no usable requested output committed.
-- On cancellation, the active uncommitted chapter becomes `canceled`, remaining queued chapters become `skipped`, and terminal chapter outcomes remain.
-
-There is no Pause state. A destination prerequisite is an external action-required block, not Pause.
+The UI shows **Saved** or **Saved to folder** after the destination confirms saving. Older records with an unknown final save result appear as **Previously processed**. A fresh retry has fresh output accounting.
 
 ## Progress
 
-Offscreen reports resolving, downloading, transforming, archiving, and saving stages. Live updates use the Side Panel Port; session storage keeps a bounded-cadence latest snapshot for reconnect.
-
-Overall percentage is weighted by locally learned phase duration using provider, transform type, bytes/pixels, archive format, and destination. It is monotonic, does not fabricate progress from elapsed time alone, and remains below 100% until destination commit.
+Progress follows chapter phases: resolution, downloading, transformation, archiving, and saving. Loose-file writes can overlap image downloading; that downloading phase continues until the image batch finishes. Completion waits for the destination result.
 
 ## Storage ownership
 
-| Store                    | Canonical data                                                                                                                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chrome.storage.local`   | queue/history, settings, dispatch lease, pending native output identity, embedded destination issues, pending Undo actions, diagnostics, timing estimates and migration epoch/journal |
-| `chrome.storage.session` | current queue/history/context/progress recovery snapshots                                                                                                                             |
-| IndexedDB                | selected `FileSystemDirectoryHandle` only                                                                                                                                             |
-| Runtime Port             | high-frequency active-task progress only                                                                                                                                              |
-| React state              | component/view state and chapter selection drafts for current UI interactions                                                                                                         |
+| Store                    | Purpose                                                                    |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `chrome.storage.local`   | Durable settings, queue, history, ownership, output, and migration records |
+| `chrome.storage.session` | Rebuildable UI and progress projections                                    |
+| IndexedDB                | Local folder handles and retention records                                 |
+| React state              | View state and current selection drafts                                    |
 
-Large Blobs are never stored in Chrome storage.
+The background owns Chrome-storage mutations through repositories. Live Blob data stays in offscreen memory. Chapter history is independent of task history: removing a task preserves chapter records, while explicit history clearing records its own cutoff.
 
-`QueueRepository` owns queue, lease and Undo mutations; `NativeOutputRepository` owns native-output records; `HistoryRepository` owns history. Settings and provider repositories own individual configuration documents, and `OptionsConfigurationRepository` persists full configuration replacements coordinated by the Options service. Persistent diagnostics and timing estimates have storage-layer owners. The architecture check rejects direct durable mutations outside that layer, with explicit exceptions for composition wiring, schema migration and isolated E2E seeding.
-
-Before hydration, the schema boundary converts supported released documents to epoch 3. Epoch-2 conversion preserves dispatch, settlement, cancellation and Undo fields, embeds destination repair details and removes unsafe optional cover URLs. A validated journal records canonical writes, obsolete-key removals and phase progress; the epoch marker is written last. Interrupted phases replay on startup. Future epochs and invalid journals preserve their stored data and reject hydration.
-
-Long series parsing uses a live offscreen reservation. Admission releases the lifecycle gate before pagination finishes; idle-close checks include reservations, and completion, failure or document teardown releases them.
+Ordered schema migrations run before hydration. A durable journal lets an interrupted step finish under its recorded contract before advancing. The migration layer converts historical schemas to the current schema used by repositories.
 
 ## Site integrations
 
-Each provider `definition.json` declares identity, contributors, version, shipped/default state, match patterns, required/optional origins, page-probe mode, capabilities, rate/timeout policies, endpoint policies, DNR session referer rules, fixtures, and custom settings. The JSON is validated against `definition.schema.json` and emitted into generated catalogs and context-specific registries.
+Each site's `definition.json` declares identity, shipped and enabled state, origins, matching rules, capabilities, policies, and settings. The generator validates these definitions and emits context-specific registries and manifest permissions.
 
-The current bundled integrations are MangaDex, Pixiv Comic, Shonen Jump+, Manhuagui, Comic Nettai, and MangaMillion. MangaDex is disabled by default and declares optional `https://*/*` access for its site/API and MangaDex@Home nodes. Disabled fixed-origin providers receive generated exact optional grants. Cleanup uses the loaded manifest and retains required permissions and optional grants still used by enabled providers. Runtime endpoint policy remains independently enforced.
+Integration source lives in `src/site-integrations/<id>/`; captured pages and protocol vectors live in `tests/fixtures/site-integrations/<id>/`. Optional integration `README.md` files explain site-specific implementation details for contributors. Tests own their input paths; live workflows own verification records.
 
-Provider request paths use the shared HTTP client with declared credential, origin and retry policies. It checks HTTPS/public hosts, rejects redirects before follow, validates response URL/MIME/size and cancels bodies rejected before handoff. Image adapters require timed transport and a live-resource ledger. MangaMillion accounts for encrypted/decrypted overlap and converts AVIF through bounded metadata, renderer and output admission; bitmap and buffer ownership is released on completion or failure. Filename sanitization and structured error classification apply at their respective boundaries.
+Background integrations resolve series and dispatch context. Offscreen integrations resolve chapter plans, download images, and apply transforms. See the [Site Integration Guide](Site-Integration-Guide) for the implementation steps.
 
 ## Error and diagnostic boundary
 
-The UI shows localized plain-language categories. It never displays raw browser errors, stack traces, signed URLs, headers, or provider bodies. Technical detail goes to redacted extension console diagnostics. `runtime.lastError.message` is not parsed because Chrome does not define it as a stable machine-readable API.
+The UI presents localized error categories. Redacted technical details go to extension diagnostics. Provider URLs, credentials, headers, response bodies, and local paths require care when sharing logs or test artifacts.
 
-Diagnostic redaction runs before console output, buffered logging and custom live-test error formatting. It handles nested errors, URL credentials/query/fragment data, sensitive fields, headers and local paths. Automatic live-site Playwright tracing is disabled because its network snapshots bypass application redaction. CI exports failure artifacts from `test-results` and `.output`; effective retention and access remain repository/organization settings.
+## Source map
 
-Bounded serialized diagnostics are parsed before field-aware redaction. Ambiguous object dumps and recognized opaque credential/header text are omitted. Extension console collectors inspect structured arguments; provider and unattributed console/error payloads are omitted, retaining event and transport metadata. These controls do not establish that arbitrary free text is non-sensitive.
+| Area                             | Starting point                                                                                                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime ownership                | [`entrypoints/background/`](https://github.com/oovz/Tako/tree/main/entrypoints/background) and [`entrypoints/offscreen/`](https://github.com/oovz/Tako/tree/main/entrypoints/offscreen) |
+| Queue transitions                | [`src/domain/queue/`](https://github.com/oovz/Tako/tree/main/src/domain/queue)                                                                                                          |
+| Durable writes                   | [`src/storage/`](https://github.com/oovz/Tako/tree/main/src/storage)                                                                                                                    |
+| Message contracts and migrations | [`src/runtime/`](https://github.com/oovz/Tako/tree/main/src/runtime)                                                                                                                    |
+| Provider interfaces              | [`src/types/site-integrations.ts`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)                                                                               |
+| Validation                       | [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing)                                                                                                          |
 
 ## References
 

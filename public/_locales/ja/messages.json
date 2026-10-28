@@ -3,7 +3,7 @@
     "message": "Tako 漫画ダウンローダー"
   },
   "extDescription": {
-    "message": "MangaDex、Pixiv Comic、少年ジャンプ+などから漫画章を一括ダウンロード。Chromeのサイドパネルからキュー、リトライ、CBZ/ZIP書き出しが可能。"
+    "message": "Chrome のサイドパネルで話を選び、ダウンロードをキューに追加して進捗を確認。ダウンロードは Tako に任せて、そのまま閲覧を続けられます。"
   },
   "common_all": {
     "message": "すべて"

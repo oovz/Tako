@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: September 14, 2026
+Last updated: October 22, 2026
 
 Tako Manga Downloader is a browser extension for saving chapters from supported manga sites for offline reading. Download controls are available in Chrome's Side Panel.
 
@@ -19,9 +19,9 @@ While you use the extension, Tako may access:
 The extension stores the following data locally:
 
 - Extension settings
-- Queue state and recent task history
+- Queue state and task history, including requested output paths and destination references
 - Site-specific preferences and overrides
-- Optional custom-folder permission handles when the user enables that feature
+- Directory handles for chosen folders, retained while saved defaults, tasks, Undo or active work need them
 
 ## What Tako sends over the network
 
@@ -49,7 +49,7 @@ You can:
 - Remove the extension at any time
 - Clear local history stored by the extension
 - Disable supported-site integrations
-- Revoke or replace a custom-folder permission by changing browser or extension settings
+- Change the default save folder for new tasks in Options; existing tasks retain their captured folder references
 
 ## Contact
 

@@ -3,7 +3,7 @@
     "message": "Tako Manga Downloader"
   },
   "extDescription": {
-    "message": "Batch-download manga from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP from the Side Panel."
+    "message": "Select chapters, queue downloads, and track progress from Chrome’s side panel. Keep browsing while Tako handles the downloads."
   },
   "common_all": {
     "message": "All"

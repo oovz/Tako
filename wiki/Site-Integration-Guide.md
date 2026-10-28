@@ -1,295 +1,109 @@
 # Contributing a Site Integration
 
-This guide explains how to add or maintain a manga, comic, manhwa, or manhua integration in Tako's WXT Manifest V3 extension.
+[English](Site-Integration-Guide) · [日本語](Site-Integration-Guide.ja) · [简体中文](Site-Integration-Guide.zh-CN) · [繁體中文](Site-Integration-Guide.zh-TW) · [한국어](Site-Integration-Guide.ko)
 
-> **Important (Chrome Web Store Remote-Code Policy):** Chrome Web Store Manifest V3 policies prohibit runtime-loaded integration scripts, remote code execution, dynamic plugins, and user-supplied code evaluation (`eval()`). Write integrations in TypeScript, compile them into the extension bundle, and verify them with the repository's build and test checks.
+This guide is for contributors adding or maintaining a supported site. To request a site without writing code, [open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md).
+
+Read [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md) for setup and [Architecture](Architecture) for runtime ownership. Integrations are TypeScript modules packaged with the extension.
 
 ## What an integration owns
 
-An integration owns:
+A site integration identifies supported pages, resolves series and chapter information, downloads images, and handles any site-specific image transformation. Its definition declares origins, request policy, and settings.
 
-1. URL matching and required provider/asset origins.
-2. Series/chapter context resolution.
-3. Chapter image resolution, validation, download behavior, and any descrambling.
-4. Provider rate/timeout policy and optional localized settings.
-5. Deterministic fixtures plus live smoke evidence.
+Keep provider details inside the integration. Shared queue and message contracts use `siteIntegrationId` and generic integration context.
 
-Use the term **site integration** and the field `siteIntegrationId` consistently. Provider-specific fields must not leak into shared queue/message contracts.
+## Add a site
 
-## Fast track: Minimum Viable Integration (MVI)
-
-Start with the smallest working implementation: parse URLs or fetch simple API/HTML data in the background, then download chapters and images in offscreen.
-
-### 1. Scaffold the integration
-
-Run the scaffolding tool:
+### 1. Create the scaffold
 
 ```powershell
-pnpm new:site-integration <id> --name "Site Name"
+pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
-This creates `src/site-integrations/<id>/` with defaults that keep the integration out of shipped builds:
+The command creates source files and a test-data seed:
 
-- `definition.json` (`shipped: false`)
-- `offscreen-runtime.ts` (typed adapter stub)
-- `contracts/index.ts` (contract definitions)
-- `fixtures/contract.json` (deterministic fixture seed)
-- `README.md` (Approach, Endpoints, States covered, Live smoke)
+| File                                                  | Purpose                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------- |
+| `src/site-integrations/<id>/definition.json`          | Identity, URL matching, origins, capabilities, policies, and settings |
+| `src/site-integrations/<id>/background-runtime.ts`    | Series and chapter-list resolution                                    |
+| `src/site-integrations/<id>/offscreen-runtime.ts`     | Chapter plans and image downloading                                   |
+| `src/site-integrations/<id>/contracts/index.ts`       | Provider contracts                                                    |
+| `tests/fixtures/site-integrations/<id>/contract.json` | Deterministic test-data seed                                          |
 
-The default `shipped: false` value lets the scaffold pass generator checks without adding unfinished stubs to the build bundle.
+The scaffold starts with `shipped: false` and `enabledByDefault: false`. Set `shipped: true` when the implementation and tests are ready for release. For isolated scaffolding, `--out-dir` selects the source destination and `--fixtures-dir` selects the test-data destination.
 
-### 2. Configure `definition.json`
+### 2. Declare the site's contract
 
-Update URL patterns, required origins, endpoint policies, and rate limits:
+Edit `definition.json` using the [definition schema](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json) and a comparable existing integration as references.
 
-```json
-{
-  "schemaVersion": 1,
-  "id": "mysite",
-  "name": "My Site",
-  "contributors": ["YourName"],
-  "version": "1.0.0",
-  "shipped": false,
-  "enabledByDefault": false,
-  "patterns": {
-    "domains": ["mysite.example.com"],
-    "seriesMatches": ["/series/*"]
-  },
-  "requiredOrigins": ["https://mysite.example.com/*"],
-  "optionalOrigins": [],
-  "policyDefaults": {
-    "image": { "concurrency": 2, "delayMs": 500 },
-    "chapter": { "concurrency": 1, "delayMs": 1000 }
-  },
-  "retryOwner": "platform",
-  "pageProbe": "none",
-  "runtimes": {
-    "background": true,
-    "offscreen": true,
-    "dispatchContext": { "mode": "none" }
-  },
-  "imageTransform": {
-    "kind": "none",
-    "estimatedCostMs": 0
-  },
-  "endpointPolicies": [
-    {
-      "id": "mysite-series-page",
-      "purpose": "My Site series HTML and catalog",
-      "origins": ["https://mysite.example.com/*"],
-      "originKind": "fixed",
-      "credentials": "omit",
-      "redirect": "error",
-      "responseType": "html",
-      "maxResponseBytes": 10000000
-    },
-    {
-      "id": "mysite-image",
-      "purpose": "My Site chapter images",
-      "origins": ["https://mysite.example.com/*"],
-      "originKind": "fixed",
-      "credentials": "omit",
-      "redirect": "error",
-      "responseType": "bytes",
-      "maxResponseBytes": 50000000
-    }
-  ],
-  "sessionRefererRules": [],
-  "customSettings": [],
-  "fixtures": {
-    "paths": ["src/site-integrations/mysite/fixtures/contract.json"],
-    "liveFreshnessDays": 30
-  }
-}
+Set `name` to the site’s native display name and `englishName` to its English name. Use a stable identifier for `id` and the integration directory; alternative domains belong in the matching rules.
+
+Define the pages Tako should recognize, fixed and optional origins, endpoint purposes, credentials, response types and limits, request spacing, retry ownership, and required runtime capabilities. Declare only access the integration needs.
+
+### 3. Resolve the series in the background
+
+Implement `resolveSeriesData` in `background-runtime.ts`, following [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
+
+Resolve the series title, metadata, chapter IDs, chapter URLs, and availability from URL data, the provider API, or fetched HTML. Use `integrationHttpClient` for requests and validate provider data before returning it. Add dispatch-context preparation only when chapter processing needs it.
+
+### 4. Resolve and download chapter images offscreen
+
+Implement `resolveChapterPlan` and `downloadImage` in `offscreen-runtime.ts`, following [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
+
+Use the shared chapter-plan schemas and `fetchImageWithStallDetection`. Carry the provided cancellation signal, rate policy, byte-progress callback, and live-resource ledger through the request. Return each image's bytes, filename, MIME type, and resource lease. Follow an existing integration's scheduling ownership so each request is scheduled once.
+
+Validate response sizes, image dimensions, page counts, and provider-issued URLs before allocation or privileged use. Transformations must reserve their required resources and release them on success, failure, or cancellation.
+
+### 5. Document and test the integration
+
+Put captured HTML, protocol vectors, and controlled image inputs in `tests/fixtures/site-integrations/<id>/`. The generator checks the canonical `contract.json` envelope: `schemaVersion: 1`, the integration's `providerId`, and an object in `data`. Keep fixture provenance beside the data so contributors can distinguish captured fields from synthetic controls.
+
+Add focused unit coverage and mocked browser coverage for UI-visible behavior. Check page ordering and transformed image content, along with successful decoding.
+
+An integration `README.md` is optional. Add one when it gives contributors practical information beyond the code, types, fixture notes, and shared guides. Keep it focused on that information. Reader instructions belong in [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting). Live checks run from `tests/live/`; shared work URLs are defined in `tests/e2e/fixtures/test-domains-constants.ts`.
+
+### 6. Generate and verify
+
+While developing, run focused tests and these checks:
+
+```powershell
+pnpm generate:site-integrations
+pnpm check:site-integrations
+pnpm type-check
+pnpm lint
+pnpm test:unit
 ```
 
-### 3. Implement Background Series Resolution
+When resolvers and fixtures are ready, set `shipped: true` and regenerate the catalogs. Run the applicable integration and browser checks from [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing), then build the production extension with `pnpm build`.
 
-Implement `resolveSeriesData` in `background-runtime.ts`. Use `integrationHttpClient` for network requests; raw `fetch()` is not allowed in this path:
+Live-provider checks are opt-in. Use the [live chapter validation guide](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation) to inspect an actual saved chapter and compare transformed pages with the site's reader. Record the work, chapter, date, save result, and visual inspection from the live run. Deterministic fixtures cover the retained protocol and failure cases.
 
-```typescript
-import type {
-  BackgroundSiteAdapter,
-  SeriesDataResolutionInput,
-  SeriesDataResolutionResult,
-  ServiceWorkerIntegration,
-} from "@/src/types/site-integrations"
+## Optional capabilities
 
-async function resolveSeriesData(
-  input: SeriesDataResolutionInput
-): Promise<SeriesDataResolutionResult> {
-  // Parse series URL or fetch HTML/API metadata
-  return {
-    seriesId: "123",
-    seriesMetadata: {
-      title: "Sample Manga",
-      description: "...",
-      author: "Author Name",
-    },
-    chapterList: [
-      {
-        id: "ch-1",
-        url: "https://mysite.example.com/chapter/1",
-        title: "Chapter 1",
-        chapterNumber: 1,
-        chapterLabel: "1",
-        locked: false,
-        comicInfo: {
-          Title: "Chapter 1",
-        },
-      },
-    ],
-  }
-}
+### One-shot page probes
 
-const background: ServiceWorkerIntegration = {
-  name: "My Site Background",
-  series: { resolveSeriesData },
-}
+If live page state is necessary, declare `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Use bounded read-only probes that return validated plain data and release their resources when finished. Use the isolated world unless there is a documented reason to use the main world.
 
-export const backgroundSiteAdapter: BackgroundSiteAdapter = {
-  background,
-}
-```
+### Request headers
 
-### 4. Implement Offscreen Chapter & Image Resolution
+Declare required referer rules in `sessionRefererRules`. Use the managed ID range `41000`–`41999` and declared provider domains and origins. Rules remain scoped to extension requests.
 
-In `offscreen-runtime.ts`, implement `resolveChapterPlan` and `downloadImage`:
+### Image transformations
 
-```typescript
-import type {
-  OffscreenIntegration,
-  OffscreenSiteAdapter,
-} from "@/src/types/site-integrations"
-import { ChapterImagePlanSchema } from "../chapter-plan"
-import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
+Declare the image-transform capability and implement it in the offscreen runtime. Reuse the shared image transport and resource accounting. Add deterministic fixtures that detect incorrect panel, tile, or page order.
 
-const offscreen: OffscreenIntegration = {
-  name: "My Site Offscreen",
-  chapter: {
-    async resolveChapterPlan(chapter, input) {
-      // Resolve image URLs for the chapter
-      const urls = ["https://mysite.example.com/images/1.jpg"]
-      return ChapterImagePlanSchema.parse({ imageUrls: urls })
-    },
-    async downloadImage(imageUrl, opts) {
-      const image = await fetchImageWithStallDetection(imageUrl, {
-        integrationId: "mysite",
-        endpointId: "mysite-image",
-        signal: opts.signal,
-        rateLimitService: opts.runtime.rateLimitService,
-        rateLimitPolicy: opts.runtime.rateLimitSettings.image,
-        liveResourceLedger: opts.liveResourceLedger,
-        onBytesReceived: opts.onBytesReceived,
-        skipRateLimit: true, // The chapter image batch owns scheduling.
-      })
-      return {
-        ...image,
-        filename: "001.jpg",
-      }
-    },
-  },
-}
+### Provider-issued image servers
 
-export const offscreenSiteAdapter: OffscreenSiteAdapter = {
-  offscreen,
-}
-```
+For dynamically selected image hosts, declare `originKind: "provider-issued"` and validate URLs where the provider supplies them. Fixed endpoint origins belong in `requiredOrigins`; optional host patterns belong in `optionalOrigins`. The generator handles optional grants for disabled shipped providers.
 
-### 5. Document in `README.md`
+### Localized settings
 
-Document the integration in `src/site-integrations/<id>/README.md`:
-
-- **Approach:** How the site is handled (API vs DOM parsing, session requirements).
-- **Endpoints:** All endpoint IDs and their purpose.
-- **States covered:** Free chapters, locked/paywalled chapters, deleted series handling.
-- **Live smoke:** Live verification notes and sample URLs.
-
-### 6. Verify and Ship
-
-1. Run initial verification while developing:
-   `pnpm check:site-integrations && pnpm type-check && pnpm test:unit`.
-2. After the resolvers and fixtures are complete, set `"shipped": true` in `src/site-integrations/<id>/definition.json`.
-3. Re-run code generation to compile your adapter into the runtime bundle registries:
-   ```powershell
-   pnpm generate:site-integrations
-   ```
-4. Re-run the full verification suite:
-   ```powershell
-   pnpm check:site-integrations
-   pnpm type-check
-   pnpm test:unit
-   ```
-
----
-
-## Advanced capabilities (opt-in)
-
-### 1. One-shot page probes
-
-Set `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Probes run via `chrome.scripting.executeScript`:
-
-- Must be read-only and return plain, schema-validated JSON data.
-- Must not install persistent listeners, timers, or unbounded DOM observers.
-- Run in isolated world by default (`world: 'MAIN'` only with documented need).
-
-### 2. Declarative Net Request (DNR) session rules
-
-When a site requires custom referer headers for images or viewer sessions, declare `sessionRefererRules` in `definition.json`:
-
-- IDs must be in the extension-managed range `41000`–`41999`.
-- Domains and referers must match declared site patterns and required origins.
-
-### 3. Image transformations and descramblers
-
-When chapter pages are scrambled or split into tiles:
-
-- Set `imageTransform: { "kind": "integrated-descramble", "estimatedCostMs": 3000 }`.
-- Implement canvas descrambling in offscreen runtime.
-- Add deterministic pixel-tested fixtures covering tile reconstruction.
-- Image adapters use a live-resource ledger and pass each lease with the image bytes. Transformations reserve all required buffers and surfaces before allocation and release them when processing completes, fails, or is canceled.
-- MangaMillion AVIF uses bounded metadata preflight, the renderer budget, and JPEG conversion. Its encoded transport also supports encrypted octet-stream payloads; other image requests keep their declared MIME contract.
-
-### 4. Provider-issued origins
-
-When image CDNs or storage nodes are issued dynamically (e.g. MangaDex At-Home nodes):
-
-- Declare provider-issued CDN endpoints with `originKind: "provider-issued"`; validate each URL at the provider resolver that discovered it with the endpoint policy and public-HTTPS rules.
-- Declare fixed endpoint origins in `requiredOrigins` and provider-selected patterns in `optionalOrigins`. Disabled shipped providers have their required origins emitted as optional manifest grants automatically.
-
-### 5. Custom settings and i18n localization
-
-When an integration exposes user-configurable settings in Options:
-
-- Add typed fields to `customSettings` in `definition.json`.
-- Every field's `labelKey` (and optional `descriptionKey` or option `labelKey`) **must exist in all four locale catalogs**: `en`, `ja`, `zh_CN`, `zh_TW` under `public/_locales/*/messages.json`.
-- `generate:site-integrations` enforces complete localization and fails if any key is missing.
-
----
+Declare typed settings in `customSettings`. Their labels, descriptions, and option labels must exist in all five locale catalogs: `en`, `ja`, `zh_CN`, `zh_TW`, and `ko`. The generator checks that the required keys are present.
 
 ## Shared request security
 
-Provider request paths use the shared HTTP client (`integrationHttpClient`). It enforces:
+Provider requests use `integrationHttpClient` and the shared endpoint policy. These boundaries enforce declared origins and credentials, HTTPS and public-host validation, redirect policy, bounded responses, and cancellation. Image transport also validates MIME types and byte limits.
 
-- HTTPS by default;
-- integration-specific origin allowlists;
-- redirect rejection before following, plus final-URL validation;
-- private, link-local, and loopback rejection;
-- credential modes declared per endpoint (`omit` or `include`);
-- response-size limits and AbortSignal cancellation;
-- metadata/HTML response bodies capped at 10 MiB before parsing;
-- raw image response `Content-Type` MIME and byte size validation;
-- sanitized filenames;
-- redacted logging of query values, credentials, headers, and bodies.
+Package executable integration code with the extension and parse remote responses as data. Diagnostics contain redacted technical details; credentials and raw responses stay at the request boundary.
 
-## Validation commands
-
-```powershell
-pnpm generate:site-integrations # Regenerates catalogs and registries
-pnpm check:site-integrations # Verifies generated files are in sync
-pnpm type-check # Verifies TypeScript types
-pnpm lint # Lints TypeScript and architectural boundaries
-pnpm test:unit # Runs full unit test suite
-```
-
-Related: [Architecture](Architecture), [Permissions](Permissions), and [Template Macros](Template-Macros).
+Related: [Architecture](Architecture), [Permissions](Permissions), and [Supported Sites](Supported-Sites).

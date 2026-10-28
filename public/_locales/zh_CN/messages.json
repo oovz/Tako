@@ -3,7 +3,7 @@
     "message": "Tako 漫画下载器"
   },
   "extDescription": {
-    "message": "从 MangaDex、Pixiv Comic、少年 Jump+ 等网站批量下载漫画章节。在 Chrome 侧边栏中排队、重试并导出 CBZ/ZIP 文件。"
+    "message": "在 Chrome 侧边栏选择章节、加入下载队列，并查看进度。继续浏览，下载交给 Tako。"
   },
   "common_all": {
     "message": "全部"
