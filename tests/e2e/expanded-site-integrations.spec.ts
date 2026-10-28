@@ -23,9 +23,11 @@ import {
 import { manganatoFixture } from "./fixtures/mock-data/site-integrations/manganato/routes"
 import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
 
+import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
+
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
-const fixtures = [manganatoFixture, mangakakalotFixture]
+const fixtures = [manganatoFixture, mangakakalotFixture, dm5Fixture]
 
 test.describe("site downloads through the chapter selector", () => {
   test.describe.configure({ timeout: 120_000 })
@@ -172,6 +174,11 @@ const refererCases = [
     id: "mangakakalot",
     rule: 41012,
     url: "https://img-mangakakalove.2xstorage.com/mangakakalove/1.png",
+  },
+  {
+    id: "animemangahouse",
+    rule: 41120,
+    url: "https://manhua1032zjcdn26.cdndm5.com/browser/1.png",
   },
 ]
 

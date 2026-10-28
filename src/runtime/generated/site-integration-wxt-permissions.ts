@@ -8,6 +8,7 @@ export interface SiteIntegrationWxtPermissions {
 export const siteIntegrationWxtPermissions = {
   "requiredOrigins": [
     "https://*.2xstorage.com/*",
+    "https://*.cdndm5.com/*",
     "https://*.hamreus.com/*",
     "https://*.pximg.net/*",
     "https://api.mangamillion.shueisha.co.jp/*",
@@ -27,6 +28,7 @@ export const siteIntegrationWxtPermissions = {
     "https://shonenjumpplus.com/*",
     "https://storage.waitst.com/*",
     "https://www.comicnettai.com/*",
+    "https://www.dm5.com/*",
     "https://www.mangakakalove.com/*",
     "https://www.manganato.gg/*",
     "https://www.manhuagui.com/*"

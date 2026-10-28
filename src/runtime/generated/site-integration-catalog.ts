@@ -5,6 +5,108 @@ import type { SiteIntegrationDefinition } from '@/src/site-integrations/definiti
 export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
+    "id": "animemangahouse",
+    "name": "动漫屋",
+    "englishName": "Anime Manga House",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.dm5.com"
+      ],
+      "seriesMatches": [
+        "/manhua-*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.dm5.com/*",
+      "https://*.cdndm5.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "animemangahouse-page",
+        "purpose": "DM5 series and reader HTML",
+        "origins": [
+          "https://www.dm5.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "animemangahouse-signed-images",
+        "purpose": "DM5 signed reader response",
+        "origins": [
+          "https://www.dm5.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 1048576
+      },
+      {
+        "id": "animemangahouse-image",
+        "purpose": "DM5 chapter and cover images",
+        "origins": [
+          "https://*.cdndm5.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41120,
+        "requestDomains": [
+          "www.dm5.com",
+          "cdndm5.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.dm5.com/m1/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "comicnettai",
     "name": "Comic Nettai",
     "englishName": "Comic Nettai",

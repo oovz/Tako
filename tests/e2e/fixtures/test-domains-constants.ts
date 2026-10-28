@@ -83,6 +83,8 @@ export const LIVE_MANGANATO_REFERENCE_URL =
   "https://www.manganato.gg/manga/hunter-x-hunter"
 export const LIVE_MANGAKAKALOT_REFERENCE_URL =
   "https://www.mangakakalove.com/manga/hunter-x-hunter"
+export const LIVE_DM5_REFERENCE_URL =
+  "https://www.dm5.com/manhua-shanhainizhan1/"
 
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`

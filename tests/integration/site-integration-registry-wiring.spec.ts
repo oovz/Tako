@@ -53,6 +53,8 @@ vi.mock("@/src/storage/site-integration-settings-service", () => ({
 
 const enabledDefinitions = siteIntegrationCatalog.filter((m) => m.shipped)
 const seriesUrls: Readonly<Record<string, string>> = {
+  animemangahouse: "https://www.dm5.com/manhua-shanhainizhan1/",
+
   comicnettai: "https://www.comicnettai.com/book/9",
 
   mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",

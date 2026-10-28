@@ -28,6 +28,8 @@ import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integr
 import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrations/manganato/routes"
 import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"
 
+import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
+
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
 import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
@@ -457,6 +459,7 @@ async function setupExtensionContext(
         ...registerMangaMillionLocalServerHandlers(localMockServer),
         ...registerManganatoLocalServerHandlers(localMockServer),
         ...registerMangakakalotLocalServerHandlers(localMockServer),
+        ...registerDm5LocalServerHandlers(localMockServer),
       ]
     }
 
