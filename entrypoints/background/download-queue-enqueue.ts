@@ -89,6 +89,9 @@ export function buildStartDownloadTask(input: {
   }))
 
   const task = {
+    ...(settingsSnapshot.allowChromeFallback
+      ? { fsaFallbackEligible: true as const }
+      : {}),
     id: taskId,
     siteIntegrationId: context.siteIntegrationId,
     mangaId: context.mangaId,

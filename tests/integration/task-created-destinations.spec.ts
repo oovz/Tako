@@ -567,9 +567,11 @@ describe("task-created destinations through durable queue boundaries", () => {
     }
     const settings = structuredClone(DEFAULT_SETTINGS)
     settings.downloads.customDirectoryHandleId = "replacement"
+    const downloads = { ...settings.downloads }
+    Reflect.deleteProperty(downloads, "allowChromeFallback")
     const stored: Record<string, unknown> = {
       stateSchemaEpoch: 5,
-      [LOCAL_STORAGE_KEYS.settings]: settings,
+      [LOCAL_STORAGE_KEYS.settings]: { ...settings, downloads },
       [LOCAL_STORAGE_KEYS.downloadQueue]: [source],
       [LOCAL_STORAGE_KEYS.pendingUndoActions]: [],
     }

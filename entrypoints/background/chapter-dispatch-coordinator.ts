@@ -1,3 +1,4 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import logger from "@/src/runtime/logger"
 import { runDestinationAccessExclusive } from "./destination-access"
 import type {
@@ -114,7 +115,7 @@ export class ChapterDispatchCoordinator {
           return undefined
         }
 
-        const destination = latestTask.settingsSnapshot.destination
+        const destination = getEffectiveTaskDestination(latestTask)
         const saveMode: RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]["saveMode"] =
           destination.kind === "file-system-access" ? "fsa" : "downloads-api"
         lastDownloadMode =
@@ -194,7 +195,7 @@ export class ChapterDispatchCoordinator {
               )?.language ?? chapter.comicInfo?.LanguageISO,
             resolvedPath: chapter.resolvedPath || chapter.title,
           },
-          settingsSnapshot: { ...settingsSnapshot },
+          settingsSnapshot: { ...settingsSnapshot, destination },
           saveMode,
           directoryHandleId:
             destination.kind === "file-system-access"

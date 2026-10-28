@@ -1,4 +1,9 @@
 import {
+  beginFsaWrite as decideFsaWrite,
+  selectChromeFallback as decideChromeFallback,
+} from "@/src/domain/queue/kernel"
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
+import {
   applyNativeOutputSettlement as decideNativeOutputSettlement,
   bindDispatchLeaseIncarnation as decideLeaseIncarnationBinding,
   beginChapterDispatch as decideChapterDispatch,
@@ -257,12 +262,13 @@ export class QueueRepository {
         [
           ...state.queue,
           ...state.pendingUndoActions.map((action) => action.taskSnapshot),
-        ].flatMap((task) =>
-          task.settingsSnapshot.destination.kind === "file-system-access" &&
-          task.settingsSnapshot.destination.handleId
-            ? [task.settingsSnapshot.destination.handleId]
+        ].flatMap((task) => {
+          const destination = getEffectiveTaskDestination(task)
+          return destination.kind === "file-system-access" &&
+            destination.handleId
+            ? [destination.handleId]
             : []
-        )
+        })
       )
       if (state.lease?.destinationHandleId)
         ids.add(state.lease.destinationHandleId)
@@ -273,6 +279,22 @@ export class QueueRepository {
   async getTask(taskId: string): Promise<DownloadTaskState | undefined> {
     const queue = await this.getQueue()
     return queue.find((task) => task.id === taskId)
+  }
+
+  async beginFsaWrite(input: Parameters<typeof decideFsaWrite>[1]) {
+    const detachedInput = structuredClone(input)
+    return await this.executeDecision((state) =>
+      decideFsaWrite(state, detachedInput)
+    )
+  }
+
+  async selectChromeFallback(
+    input: Parameters<typeof decideChromeFallback>[1]
+  ) {
+    const detachedInput = structuredClone(input)
+    return await this.executeDecision((state) =>
+      decideChromeFallback(state, detachedInput)
+    )
   }
 
   async getActiveDispatchLease(): Promise<ActiveDispatchLease | null> {

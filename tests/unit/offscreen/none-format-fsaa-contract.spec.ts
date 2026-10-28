@@ -62,9 +62,8 @@ vi.mock("@/entrypoints/offscreen/image-processor", () => ({
     getQueueLength() {
       return 0
     }
-    clear() {
-      // no-op
-    }
+    clear() {}
+    cancelPending() {}
   },
   withRetries: async (fn: () => Promise<unknown>) => fn(),
   withTimeout: async (fn: () => Promise<unknown>) => fn(),
@@ -182,6 +181,202 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it.each([
+    "permit",
+    "lost acknowledgement",
+    "cancel",
+    "background rejection",
+  ] as const)(
+    "coalesces consenting parallel writers and handles %s before writing",
+    async (result) => {
+      vi.mocked(loadDownloadRootHandle).mockResolvedValue({
+        name: "Captured",
+      } as FileSystemDirectoryHandle)
+      vi.mocked(queryFsaPermission).mockResolvedValue("granted")
+      const dispatch = {
+        jobId: "consenting-job",
+        attempt: 1,
+        taskId: "consenting-task",
+        seriesKey: "test-site:series",
+        book: { siteIntegrationId: "test-site", seriesTitle: "Book" },
+        chapter: {
+          id: "chapter",
+          title: "Chapter",
+          url: "https://example.test/chapter",
+          index: 1,
+          resolvedPath: "Book/Chapter",
+        },
+        settingsSnapshot: {
+          ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+          destination: {
+            kind: "file-system-access" as const,
+            handleId: "selected",
+          },
+          allowChromeFallback: true as const,
+          archiveFormat: "none" as const,
+          includeCoverImage: false,
+          includeComicInfo: true,
+        },
+        saveMode: "fsa" as const,
+        directoryHandleId: "selected",
+      }
+      const payload = {
+        ...dispatch,
+        fingerprint: await createOffscreenDispatchFingerprint(dispatch),
+      }
+      let release!: (value: unknown) => void
+      let reject!: (reason: Error) => void
+      const receipt = new Promise((resolve, fail) => {
+        release = resolve
+        reject = fail
+      })
+      const send = vi.mocked(chrome.runtime.sendMessage)
+      const original = send.getMockImplementation()!
+      send.mockImplementation(((...args: unknown[]) => {
+        const message = args[0] as { type: string }
+        if (message.type === "OFFSCREEN_BEGIN_FSA_WRITE") return receipt
+        return Reflect.apply(original, chrome.runtime, args)
+      }) as typeof original)
+      try {
+        await worker.processDownloadChapter(payload)
+        await vi.waitFor(() =>
+          expect(
+            send.mock.calls.filter(
+              (call) =>
+                (call[0] as unknown as { type?: string })?.type ===
+                "OFFSCREEN_BEGIN_FSA_WRITE"
+            )
+          ).toHaveLength(1)
+        )
+        expect(writeBlobToPath).not.toHaveBeenCalled()
+        const identity = {
+          jobId: payload.jobId,
+          attempt: payload.attempt,
+          taskId: payload.taskId,
+          chapterId: payload.chapter.id,
+          fingerprint: payload.fingerprint,
+          documentInstanceId: worker.documentInstanceId,
+        }
+        if (result === "cancel") worker.cancelJob(identity)
+        if (result === "lost acknowledgement")
+          reject(new Error("response lost"))
+        else if (result === "background rejection")
+          release({
+            success: false,
+            error: "Receipt storage write was rejected",
+          })
+        else release({ success: true, permitted: true })
+        await vi.waitFor(() =>
+          expect(worker.getJobState(identity)?.status).toBe(
+            result === "cancel" ? "canceled" : "terminal"
+          )
+        )
+        if (result === "background rejection") {
+          expect(worker.getJobState(identity)?.outcome).toMatchObject({
+            status: "failed",
+            errorCategory: "folder_write_failed",
+            errorMessage: "Receipt storage write was rejected",
+            outputsCommitted: 0,
+          })
+          expect(worker.getJobState(identity)?.outcome).not.toHaveProperty(
+            "destinationUnavailable"
+          )
+          await vi.waitFor(() =>
+            expect(send).toHaveBeenCalledWith(
+              expect.objectContaining({
+                type: "OFFSCREEN_JOB_TERMINAL",
+                payload: expect.objectContaining({
+                  outcome: expect.objectContaining({
+                    errorCategory: "folder_write_failed",
+                    errorMessage: "Receipt storage write was rejected",
+                  }),
+                }),
+              })
+            )
+          )
+        }
+        if (result === "permit")
+          expect(writeBlobToPath).toHaveBeenCalledTimes(3)
+        else expect(writeBlobToPath).not.toHaveBeenCalled()
+        expect(
+          send.mock.calls.filter(
+            (call) =>
+              (call[0] as unknown as { type?: string })?.type ===
+              "OFFSCREEN_BEGIN_FSA_WRITE"
+          )
+        ).toHaveLength(1)
+      } finally {
+        release({ success: true, permitted: false })
+        send.mockImplementation(original)
+      }
+    }
+  )
+
+  it("marks a lost captured folder as a destination-resolution failure before provider work", async () => {
+    vi.mocked(loadDownloadRootHandle).mockResolvedValue(undefined)
+    const dispatch = {
+      jobId: "lost-folder-job",
+      attempt: 1,
+      taskId: "lost-folder-task",
+      seriesKey: "test-site:series",
+      book: { siteIntegrationId: "test-site", seriesTitle: "Book" },
+      chapter: {
+        id: "chapter",
+        title: "Chapter",
+        url: "https://example.test/chapter",
+        index: 1,
+        resolvedPath: "Book/Chapter",
+      },
+      settingsSnapshot: {
+        ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+        destination: {
+          kind: "file-system-access" as const,
+          handleId: "selected",
+        },
+        allowChromeFallback: true as const,
+        archiveFormat: "none" as const,
+      },
+      saveMode: "fsa" as const,
+      directoryHandleId: "selected",
+    }
+    const payload = {
+      ...dispatch,
+      fingerprint: await createOffscreenDispatchFingerprint(dispatch),
+    }
+    await worker.processDownloadChapter(payload)
+    await vi.waitFor(() =>
+      expect(
+        worker.getJobState({
+          jobId: payload.jobId,
+          attempt: payload.attempt,
+          taskId: payload.taskId,
+          chapterId: payload.chapter.id,
+          fingerprint: payload.fingerprint,
+          documentInstanceId: worker.documentInstanceId,
+        })
+      ).toMatchObject({
+        status: "terminal",
+        outcome: {
+          destinationUnavailable: true,
+          status: "failed",
+          outputsRequested: 0,
+          outputsCommitted: 0,
+        },
+      })
+    )
+    expect(mockResolveChapterPlan).not.toHaveBeenCalled()
+    expect(writeBlobToPath).not.toHaveBeenCalled()
+    expect(
+      vi
+        .mocked(chrome.runtime.sendMessage)
+        .mock.calls.some(
+          (call) =>
+            (call[0] as unknown as { type?: string })?.type ===
+            "OFFSCREEN_BEGIN_FSA_WRITE"
+        )
+    ).toBe(false)
   })
 
   it("captures the folder before acknowledging duplicate dispatches and retains it during chapter resolution", async () => {

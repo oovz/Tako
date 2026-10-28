@@ -6,6 +6,7 @@ export function createDefaultSettings(
 ): ExtensionSettings {
   return {
     downloads: {
+      allowChromeFallback: false,
       destination: "downloads-api",
       customDirectoryHandleId: null,
       pathTemplate: "TMD/<SERIES_TITLE>",

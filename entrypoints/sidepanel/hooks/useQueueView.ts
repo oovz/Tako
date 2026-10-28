@@ -31,6 +31,7 @@ const QueueTaskSummaryStorageSchema = z.object({
     }),
   ]),
   requestedPath: z.string().nullable().optional(),
+  useChromeFallback: z.literal(true).optional(),
   targetUnavailable: z.literal(true).optional(),
   outputMode: z.enum(["downloads-api", "fsa"]).optional(),
   activeBlock: z
@@ -72,6 +73,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
     outputDestination: data.outputDestination,
     saveConfirmedAt: data.saveConfirmedAt,
     outputMode: data.outputMode,
+    useChromeFallback: data.useChromeFallback,
     targetUnavailable: data.targetUnavailable,
     destination: data.destination,
     requestedPath: data.requestedPath,

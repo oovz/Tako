@@ -1868,5 +1868,14 @@
   },
   "status_skipped": {
     "message": "已略過"
+  },
+  "options_allowChromeFallback": {
+    "message": "資料夾無法使用時使用 Chrome 下載"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "適用於新工作。僅在工作首次嘗試寫入所選資料夾之前自動切換。"
+  },
+  "destination_chromeFallback": {
+    "message": "已切換至 Chrome 下載"
   }
 }

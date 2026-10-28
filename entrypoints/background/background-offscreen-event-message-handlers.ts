@@ -8,6 +8,7 @@ import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-ta
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
 
 type OffscreenEventMessageType =
+  | "OFFSCREEN_BEGIN_FSA_WRITE"
   | "OFFSCREEN_JOB_ACCEPTED"
   | "OFFSCREEN_JOB_HEARTBEAT"
   | "OFFSCREEN_JOB_TERMINAL"
@@ -19,6 +20,19 @@ export function createBackgroundOffscreenEventMessageHandlers(
   deps: BackgroundRuntimeHandlerDependencies
 ): Pick<RuntimeMessageHandlerMap<"background">, OffscreenEventMessageType> {
   return {
+    OFFSCREEN_BEGIN_FSA_WRITE: async (message, sender) => {
+      if (!(await isCurrentOffscreenSender(sender)))
+        return { success: true, permitted: false }
+      return await runTaskSideEffectExclusive(
+        message.payload.taskId,
+        async () => {
+          const result = await deps.queueRepository.beginFsaWrite(
+            message.payload
+          )
+          return { success: true, permitted: result.outcome !== "rejected" }
+        }
+      )
+    },
     OFFSCREEN_JOB_ACCEPTED: async (message, sender) => {
       if (!(await isCurrentOffscreenSender(sender))) {
         return { success: true, disposition: "lease_not_current" }

@@ -220,7 +220,15 @@ describe("destination configuration commit", () => {
       await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow(
         "storage unavailable"
       )
-      expect((await harness.readPair()).folder).toBe(harness.oldFolder)
+      const retained = await harness.storage.get()
+      const retainedSettings = retained[SETTINGS_STORAGE_KEY] as {
+        downloads: { customDirectoryHandleId: string }
+      }
+      expect(
+        await loadDownloadRootHandle(
+          retainedSettings.downloads.customDirectoryHandleId
+        )
+      ).toBe(harness.oldFolder)
 
       await migrateDurableStateForCurrentSchema()
       const history = new HistoryRepository()

@@ -137,6 +137,7 @@ export async function processNoneFormatChapter(
       if (writableRoot) {
         await onProgress(10, "saving cover")
         await writeFsaOutput({
+          beginFsaWrite: runtime.beginFsaWrite,
           dir: writableRoot,
           path: coverPath,
           blob: coverBlob,
@@ -224,6 +225,7 @@ export async function processNoneFormatChapter(
           // Loose-file writes overlap the image pipeline's downloading phase.
           await onProgress(10, "saving images")
           await writeFsaOutput({
+            beginFsaWrite: runtime.beginFsaWrite,
             dir: writableRoot,
             path: filePath,
             blob,
@@ -305,6 +307,7 @@ export async function processNoneFormatChapter(
       if (writableRoot) {
         await onArchiveProgress(98, "saving metadata")
         await writeFsaOutput({
+          beginFsaWrite: runtime.beginFsaWrite,
           dir: writableRoot,
           path: comicInfoPath,
           blob: comicInfoBlob,
@@ -600,6 +603,7 @@ export async function processArchiveFormatChapter(
       try {
         await onArchiveProgress(96, "saving")
         await writeFsaOutput({
+          beginFsaWrite: runtime.beginFsaWrite,
           dir: writableRoot,
           path: finalPath,
           blob,

@@ -270,6 +270,54 @@ describe("destination recovery", () => {
     }))
   })
 
+  it("selects Chrome only for captured consent before the first folder attempt", async () => {
+    const task = createTask()
+    task.settingsSnapshot.allowChromeFallback = true
+    task.fsaFallbackEligible = true
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = [task]
+    permissionResults = ["prompt"]
+    const runtime = createRuntime()
+    expect(await runtime.executor.execute(itemId)).toBe("queue-continuation")
+    expect(await runtime.queueRepository.getTask(itemId)).toMatchObject({
+      status: "queued",
+      useChromeFallback: true,
+      settingsSnapshot: {
+        destination: { kind: "file-system-access", handleId: "selected-id" },
+      },
+    })
+    expect(
+      (await runtime.queueRepository.getTask(itemId))?.fsaFallbackEligible
+    ).toBeUndefined()
+    expect(await runtime.executor.execute(itemId)).toBe("active")
+    expect(mocks.sendRuntimeMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "OFFSCREEN_DOWNLOAD_CHAPTER",
+        payload: expect.objectContaining({
+          saveMode: "downloads-api",
+          directoryHandleId: undefined,
+          settingsSnapshot: expect.objectContaining({
+            allowChromeFallback: true,
+            destination: { kind: "downloads-api" },
+          }),
+        }),
+      })
+    )
+  })
+
+  it("keeps consumed folder consent terminal even when no output committed", async () => {
+    const task = createTask()
+    task.settingsSnapshot.allowChromeFallback = true
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = [task]
+    permissionResults = ["prompt"]
+    const runtime = createRuntime()
+    expect(await runtime.executor.execute(itemId)).toBe("queue-continuation")
+    expect(await runtime.queueRepository.getTask(itemId)).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+    })
+    expect(mocks.sendRuntimeMessage).not.toHaveBeenCalled()
+  })
+
   it("ends unavailable-folder work and restarts a fresh attempt at the same destination", async () => {
     permissionResults = ["prompt"]
     const first = createRuntime()

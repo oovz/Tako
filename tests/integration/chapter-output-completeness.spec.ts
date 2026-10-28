@@ -106,6 +106,7 @@ function fixture(
     rateLimitService,
     withImageRetries: (fn, hooks, signal) =>
       withRetries(fn, retries, 0, hooks, signal),
+    beginFsaWrite: async () => {},
     resolveWritableDownloadRoot: async () => directory(),
     requestBrowserBlobDownload: async ({ filename, blob }) => {
       handoffs.push({ filename, blob })

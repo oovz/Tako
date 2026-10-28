@@ -80,6 +80,28 @@ describe("captured task destination presentation", () => {
       )
     ).toBe(true)
   })
+  it("presents the effective Chrome target after fallback without loading the old folder", async () => {
+    const selected = task("captured")
+    selected.settingsSnapshot.allowChromeFallback = true
+    selected.useChromeFallback = true
+    await act(async () =>
+      root.render(
+        React.createElement(DownloadTaskCard, {
+          task: selected,
+          onCancel: vi.fn(async () => ({ success: true as const })),
+          onRetry: vi.fn(async () => undefined),
+          onRestart: vi.fn(async () => undefined),
+          onRemove: vi.fn(async () => undefined),
+        })
+      )
+    )
+    expect(load).not.toHaveBeenCalled()
+    expect(
+      container.querySelector("[data-task-destination]")?.textContent
+    ).toContain("Chrome Downloads/Captured/Chapter.cbz")
+    expect(container.textContent).toContain("Switched to Chrome Downloads")
+    expect(container.textContent).not.toContain("Grant access")
+  })
   it("explains an unrecoverable historical target and keeps removal available", async () => {
     await render(null)
     expect(load).not.toHaveBeenCalled()

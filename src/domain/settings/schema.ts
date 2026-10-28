@@ -36,6 +36,7 @@ const RateScopePolicySchema = z.strictObject({
 
 export const ExtensionSettingsSchema = z.strictObject({
   downloads: z.strictObject({
+    allowChromeFallback: z.boolean(),
     destination: DownloadDestinationSchema,
     customDirectoryHandleId: z.string().min(1).nullable(),
     pathTemplate: z.string().min(1),

@@ -150,6 +150,7 @@ const RateLimitSnapshotSchema = z.strictObject({
 })
 
 export const OffscreenChapterSettingsSnapshotSchema = z.strictObject({
+  allowChromeFallback: z.literal(true).optional(),
   archiveFormat: ArchiveFormatSchema,
   destination: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("downloads-api") }),
@@ -632,6 +633,21 @@ export const runtimeMessageRegistry = {
     kind: "command",
     allowedSenders: ["sidepanel"],
     readiness: "control-ready",
+  }),
+  OFFSCREEN_BEGIN_FSA_WRITE: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("OFFSCREEN_BEGIN_FSA_WRITE"),
+      payload: OffscreenJobIncarnationSchema,
+    }),
+    response: z.union([
+      z.strictObject({ success: z.literal(true), permitted: z.boolean() }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["offscreen"],
+    readiness: "queue-hydrated",
   }),
   OFFSCREEN_JOB_ACCEPTED: defineRuntimeMessage({
     request: z.strictObject({

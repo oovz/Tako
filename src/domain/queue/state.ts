@@ -102,6 +102,8 @@ export interface TaskChapter {
 }
 
 export interface DownloadTaskState {
+  fsaFallbackEligible?: true
+  useChromeFallback?: true
   id: string
   siteIntegrationId: string
   mangaId: string
@@ -152,6 +154,7 @@ export interface QueueAggregateState {
 }
 
 export interface QueueTaskSummary {
+  useChromeFallback?: true
   id: string
   seriesKey: string
   seriesTitle: string

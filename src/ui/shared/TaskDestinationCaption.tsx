@@ -6,7 +6,9 @@ import { t } from "@/src/runtime/i18n"
 export function TaskDestinationCaption({
   destination,
   requestedPath,
+  useChromeFallback,
 }: {
+  useChromeFallback?: true
   destination: TaskDestination
   requestedPath?: string | null
 }) {
@@ -42,6 +44,7 @@ export function TaskDestinationCaption({
       title={label}
     >
       {label}
+      {useChromeFallback ? ` · ${t("destination_chromeFallback")}` : ""}
     </p>
   )
 }

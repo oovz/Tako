@@ -1880,5 +1880,14 @@
   },
   "status_skipped": {
     "message": "Skipped"
+  },
+  "options_allowChromeFallback": {
+    "message": "Use Chrome Downloads if the folder is unavailable"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "Applies to new tasks. Switches automatically only before the task first attempts to write to its selected folder."
+  },
+  "destination_chromeFallback": {
+    "message": "Switched to Chrome Downloads"
   }
 }

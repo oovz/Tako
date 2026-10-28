@@ -1,3 +1,8 @@
+import { parseSettingsDocument as parseCurrentSettingsDocument } from "@/src/domain/settings/schema"
+import {
+  DownloadTaskStateSchema as FallbackTaskSchema,
+  PendingUndoActionSchema as FallbackUndoSchema,
+} from "./queue-state-schemas"
 import { buildTerminalSaveWrites } from "./state-schema-migration-terminal-saves"
 import {
   DownloadTaskStateSchema as TerminalTaskSchema,
@@ -47,7 +52,6 @@ import {
   parseSettingsDocument,
   SETTINGS_LIMITS,
 } from "./state-schema-migration-settings-schema"
-import type { ExtensionSettings } from "@/src/domain/settings/types"
 import {
   SiteOverrideRecordSchema,
   type SiteOverrideRecord,
@@ -108,7 +112,7 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 8
+export const CURRENT_STATE_SCHEMA_EPOCH = 9
 type DownloadTaskState = z.infer<typeof DownloadTaskStateSchema>
 type PendingUndoAction = z.infer<typeof PendingUndoActionSchema>
 const normalizeDownloadErrorCategory = (raw: unknown) =>
@@ -179,7 +183,9 @@ function nonemptyString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback
 }
 
-function canonicalizeSettings(raw: unknown): ExtensionSettings | undefined {
+function canonicalizeSettings(
+  raw: unknown
+): ReturnType<typeof parseSettingsDocument> | undefined {
   if (raw === undefined) return undefined
   if (!isRecord(raw)) throw new Error("Stored settings are not an object")
 
@@ -231,7 +237,7 @@ function canonicalizeSettings(raw: unknown): ExtensionSettings | undefined {
         ? DOWNLOAD_ROOT_HANDLE_ID
         : defaults.downloads.customDirectoryHandleId
 
-  const settings: ExtensionSettings = {
+  const settings: ReturnType<typeof parseSettingsDocument> = {
     downloads: {
       destination,
       customDirectoryHandleId: handleId,
@@ -1120,15 +1126,17 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(
-      journal.targetEpoch === 8
-        ? TerminalTaskSchema
-        : journal.targetEpoch === 7
-          ? CurrentDownloadTaskStateSchema
-          : journal.targetEpoch === 6
-            ? CurrentTaskSchema
-            : journal.targetEpoch === 5
-              ? Epoch5DownloadTaskStateSchema
-              : DownloadTaskStateSchema
+      journal.targetEpoch === 9
+        ? FallbackTaskSchema
+        : journal.targetEpoch === 8
+          ? TerminalTaskSchema
+          : journal.targetEpoch === 7
+            ? CurrentDownloadTaskStateSchema
+            : journal.targetEpoch === 6
+              ? CurrentTaskSchema
+              : journal.targetEpoch === 5
+                ? Epoch5DownloadTaskStateSchema
+                : DownloadTaskStateSchema
     ).parse(
       journal.targetEpoch === 3
         ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
@@ -1139,15 +1147,17 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(
-      journal.targetEpoch === 8
-        ? TerminalUndoSchema
-        : journal.targetEpoch === 7
-          ? CurrentPendingUndoActionSchema
-          : journal.targetEpoch === 6
-            ? CurrentUndoSchema
-            : journal.targetEpoch === 5
-              ? Epoch5PendingUndoActionSchema
-              : PendingUndoActionSchema
+      journal.targetEpoch === 9
+        ? FallbackUndoSchema
+        : journal.targetEpoch === 8
+          ? TerminalUndoSchema
+          : journal.targetEpoch === 7
+            ? CurrentPendingUndoActionSchema
+            : journal.targetEpoch === 6
+              ? CurrentUndoSchema
+              : journal.targetEpoch === 5
+                ? Epoch5PendingUndoActionSchema
+                : PendingUndoActionSchema
     ).parse(
       journal.targetEpoch === 3
         ? (
@@ -1157,7 +1167,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     )
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.settings)) {
-    parseSettingsDocument(journal.writes[LOCAL_STORAGE_KEYS.settings])
+    const parseSettings =
+      journal.targetEpoch === 9
+        ? parseCurrentSettingsDocument
+        : parseSettingsDocument
+    parseSettings(journal.writes[LOCAL_STORAGE_KEYS.settings])
   }
   if (Object.hasOwn(journal.writes, SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)) {
     parseSiteIntegrationEnablementDocument(
@@ -1422,6 +1436,52 @@ const MIGRATION_STEPS = [
         targetEpoch: 8,
         phase: "prepared",
         writes: buildTerminalSaveWrites(stored),
+        obsoleteKeys: [],
+      })
+      validateMigrationJournal(journal)
+      return journal
+    },
+  },
+  {
+    targetEpoch: 9,
+    prepare: (
+      stored: Record<string, unknown>,
+      sourceEpoch: number | null
+    ): MigrationJournal => {
+      const source = stored[LOCAL_STORAGE_KEYS.settings]
+      const settings =
+        source === undefined ? undefined : parseSettingsDocument(source)
+      const journal = MigrationJournalSchema.parse({
+        sourceEpoch,
+        targetEpoch: 9,
+        phase: "prepared",
+        writes: {
+          [LOCAL_STORAGE_KEYS.downloadQueue]: z
+            .array(TerminalTaskSchema)
+            .parse(
+              stored[LOCAL_STORAGE_KEYS.downloadQueue] === undefined
+                ? []
+                : stored[LOCAL_STORAGE_KEYS.downloadQueue]
+            ),
+          [LOCAL_STORAGE_KEYS.pendingUndoActions]: z
+            .array(TerminalUndoSchema)
+            .parse(
+              stored[LOCAL_STORAGE_KEYS.pendingUndoActions] === undefined
+                ? []
+                : stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
+            ),
+          ...(settings
+            ? {
+                [LOCAL_STORAGE_KEYS.settings]: parseCurrentSettingsDocument({
+                  ...settings,
+                  downloads: {
+                    ...settings.downloads,
+                    allowChromeFallback: false,
+                  },
+                }),
+              }
+            : {}),
+        },
         obsoleteKeys: [],
       })
       validateMigrationJournal(journal)

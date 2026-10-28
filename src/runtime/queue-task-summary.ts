@@ -1,3 +1,4 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import {
   getCompletedOutputDestination,
@@ -14,6 +15,7 @@ export function composeSeriesKey(siteId: string, seriesId: string): string {
 }
 
 export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
+  const destination = getEffectiveTaskDestination(task)
   const totalChapters = task.chapters.length
   let completedChapters = 0
   let unsuccessfulChapters = 0
@@ -48,7 +50,8 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     coverUrl: task.seriesCoverUrl,
     status: task.status,
     activeBlock: task.activeBlock,
-    destination: task.settingsSnapshot.destination,
+    destination,
+    useChromeFallback: task.useChromeFallback,
     requestedPath: (
       failureChapter ??
       task.chapters.find((chapter) => chapter.status === "queued") ??
@@ -56,16 +59,14 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     )?.requestedPath,
     targetUnavailable:
       task.chapters.some((chapter) => chapter.requestedPath === null) ||
-      (task.settingsSnapshot.destination.kind === "file-system-access" &&
-        task.settingsSnapshot.destination.handleId === null)
+      (destination.kind === "file-system-access" &&
+        destination.handleId === null)
         ? true
         : undefined,
     outputDestination: getCompletedOutputDestination(task.chapters),
     saveConfirmedAt: getCompletedSaveConfirmedAt(task.chapters),
     outputMode:
-      task.settingsSnapshot.destination.kind === "file-system-access"
-        ? "fsa"
-        : "downloads-api",
+      destination.kind === "file-system-access" ? "fsa" : "downloads-api",
     chapters: {
       total: totalChapters,
       completed: completedChapters,

@@ -68,7 +68,11 @@ function profile(blobReleased: boolean, dependencyReleased = false) {
   delete task.chapters[0]!.nativeOutputSettlement.documentInstanceId
   return {
     stateSchemaEpoch: 3,
-    "settings:global": structuredClone(DEFAULT_SETTINGS),
+    "settings:global": (() => {
+      const downloads = { ...DEFAULT_SETTINGS.downloads }
+      Reflect.deleteProperty(downloads, "allowChromeFallback")
+      return { ...structuredClone(DEFAULT_SETTINGS), downloads }
+    })(),
     downloadQueue: [task],
     pendingUndoActions: [
       {

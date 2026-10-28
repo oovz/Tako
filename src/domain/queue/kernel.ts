@@ -1,3 +1,7 @@
+import {
+  getEffectiveTaskDestination,
+  freshTaskFallbackState,
+} from "./task-destination"
 import { OFFSCREEN_JOB_LEASE_MS } from "@/src/constants/timeouts"
 import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 import type { ChapterStatus } from "@/src/types/chapter"
@@ -1613,10 +1617,10 @@ export function retryFailedChapters(
       },
     }
   }
+  const destination = getEffectiveTaskDestination(original)
   if (
     original.chapters.some((chapter) => chapter.requestedPath === null) ||
-    (original.settingsSnapshot.destination.kind === "file-system-access" &&
-      original.settingsSnapshot.destination.handleId === null)
+    (destination.kind === "file-system-access" && destination.handleId === null)
   ) {
     return {
       next: state,
@@ -1651,6 +1655,7 @@ export function retryFailedChapters(
 
   const originalTask = { ...original, isRetried: true }
   const retryTask: DownloadTaskState = {
+    ...freshTaskFallbackState(original),
     id: input.retryTaskId,
     siteIntegrationId: original.siteIntegrationId,
     mangaId: original.mangaId,
@@ -1738,10 +1743,10 @@ export function restartDownloadTask(
       },
     }
   }
+  const destination = getEffectiveTaskDestination(original)
   if (
     original.chapters.some((chapter) => chapter.requestedPath === null) ||
-    (original.settingsSnapshot.destination.kind === "file-system-access" &&
-      original.settingsSnapshot.destination.handleId === null)
+    (destination.kind === "file-system-access" && destination.handleId === null)
   ) {
     return {
       next: state,
@@ -1764,6 +1769,8 @@ export function restartDownloadTask(
   const originalTask = { ...original, isRetried: true }
   const restartTask: DownloadTaskState = {
     ...original,
+    fsaFallbackEligible: undefined,
+    ...freshTaskFallbackState(original),
     id: input.restartTaskId,
     chapters: original.chapters.map((chapter) => ({
       ...chapter,
@@ -2278,5 +2285,104 @@ export function reconcileExpiredPendingUndoActions(
     },
     changedKeys: queueChanged ? QUEUE_UNDO_KEYS : UNDO_KEY,
     result: { outcome: "applied", finalized, pending },
+  }
+}
+
+/** Durably close the automatic-switch window before the producer mutates a folder. */
+export function beginFsaWrite(
+  state: QueueAggregateState,
+  input: FullDispatchLeaseIdentity
+): QueueKernelDecision<Applied | Unchanged | Rejected<"lease-not-current">> {
+  const index = state.queue.findIndex((task) => task.id === input.taskId)
+  const task = state.queue[index]
+  const destination = task && getEffectiveTaskDestination(task)
+  if (
+    !task ||
+    task.status !== "downloading" ||
+    task.activeCancel ||
+    !task.chapters.some(
+      (chapter) =>
+        chapter.id === input.chapterId && chapter.status === "downloading"
+    ) ||
+    !exactLeaseMatches(state.lease, input) ||
+    state.lease?.saveMode !== "fsa" ||
+    destination?.kind !== "file-system-access" ||
+    destination.handleId !== state.lease.destinationHandleId ||
+    task.settingsSnapshot.allowChromeFallback !== true
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "lease-not-current" },
+    }
+  }
+  if (!task.fsaFallbackEligible)
+    return { next: state, changedKeys: [], result: { outcome: "unchanged" } }
+  const nextTask = { ...task }
+  delete nextTask.fsaFallbackEligible
+  return {
+    next: { ...state, queue: replaceTaskAt(state.queue, index, nextTask) },
+    changedKeys: QUEUE_KEY,
+    result: { outcome: "applied" },
+  }
+}
+
+/** Select Chrome only at a known destination failure with no admitted producer remaining. */
+export function selectChromeFallback(
+  state: QueueAggregateState,
+  input: {
+    taskId: string
+    terminalLease?: FullDispatchLeaseIdentity
+    now: number
+  }
+): QueueKernelDecision<Applied | Rejected<"fallback-unavailable">> {
+  const index = state.queue.findIndex((task) => task.id === input.taskId)
+  const task = state.queue[index]
+  const destination = task && getEffectiveTaskDestination(task)
+  if (
+    !task ||
+    (task.status !== "queued" && task.status !== "downloading") ||
+    task.activeCancel ||
+    !task.fsaFallbackEligible ||
+    task.settingsSnapshot.allowChromeFallback !== true ||
+    destination?.kind !== "file-system-access" ||
+    (input.terminalLease
+      ? task.status !== "downloading" ||
+        input.terminalLease.taskId !== task.id ||
+        !task.chapters.some(
+          (chapter) =>
+            chapter.id === input.terminalLease!.chapterId &&
+            chapter.status === "downloading"
+        ) ||
+        !exactLeaseMatches(state.lease, input.terminalLease) ||
+        state.lease?.saveMode !== "fsa" ||
+        state.lease.destinationHandleId !== destination.handleId
+      : state.lease !== null)
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "fallback-unavailable" },
+    }
+  }
+  const nextTask: DownloadTaskState = {
+    ...task,
+    useChromeFallback: true,
+    status: "queued",
+    chapters: task.chapters.map((chapter) =>
+      chapter.status === "downloading"
+        ? { ...chapter, status: "queued", lastUpdated: input.now }
+        : chapter
+    ),
+  }
+  delete nextTask.fsaFallbackEligible
+  return {
+    next: {
+      ...state,
+      queue: replaceTaskAt(state.queue, index, nextTask),
+      lease: input.terminalLease ? null : state.lease,
+    },
+    changedKeys: input.terminalLease ? QUEUE_LEASE_KEYS : QUEUE_KEY,
+    result: { outcome: "applied" },
   }
 }

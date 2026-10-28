@@ -117,7 +117,13 @@ test.describe("Queue rendering", () => {
         completed: now - 8500,
         errorCategory: "network_unavailable",
         errorMessage: "Network error",
-        chapters: [makeChapter(buildExampleUrl("/c5"), "failed")],
+        chapters: [
+          {
+            ...makeChapter(buildExampleUrl("/c5"), "failed"),
+            errorCategory: "network_unavailable",
+            errorMessage: "Network error",
+          },
+        ],
       }),
     ]
 

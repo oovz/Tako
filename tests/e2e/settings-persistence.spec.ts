@@ -20,12 +20,14 @@ let options: OptionsPageObject
 
 const SETTINGS_STORAGE_KEY = "settings:global"
 const DOWNLOAD_ROOT_DB_NAME = "tako-fs"
+const DOWNLOAD_ROOT_DB_VERSION = 2
+const MANAGED_DOWNLOAD_ROOT_STORE_NAME = "managed-handles"
 const DOWNLOAD_ROOT_STORE_NAME = "handles"
 const DOWNLOAD_ROOT_HANDLE_ID = "download-root"
 
 async function seedCustomDirectoryHandle(page: Page): Promise<string> {
   return await page.evaluate(
-    async ({ dbName, storeName, handleId }) => {
+    async ({ dbName, dbVersion, storeName, managedStoreName, handleId }) => {
       const directoryName = `settings-persistence-${Date.now()}`
       const opfsRoot = await navigator.storage.getDirectory()
       const seededDirectory = await opfsRoot.getDirectoryHandle(directoryName, {
@@ -33,11 +35,14 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
       })
 
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(dbName, 1)
+        const request = indexedDB.open(dbName, dbVersion)
         request.onupgradeneeded = () => {
           const db = request.result
           if (!db.objectStoreNames.contains(storeName)) {
             db.createObjectStore(storeName)
+          }
+          if (!db.objectStoreNames.contains(managedStoreName)) {
+            db.createObjectStore(managedStoreName)
           }
         }
         request.onsuccess = () => resolve(request.result)
@@ -47,22 +52,28 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
           )
       })
 
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction(storeName, "readwrite")
-        const store = transaction.objectStore(storeName)
-        store.put(seededDirectory, handleId)
-        transaction.oncomplete = () => resolve()
-        transaction.onerror = () =>
-          reject(
-            transaction.error ??
-              new Error("Failed to seed persisted folder handle")
-          )
-      })
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const transaction = database.transaction(storeName, "readwrite")
+          const store = transaction.objectStore(storeName)
+          store.put(seededDirectory, handleId)
+          transaction.oncomplete = () => resolve()
+          transaction.onabort = transaction.onerror = () =>
+            reject(
+              transaction.error ??
+                new Error("Failed to seed persisted folder handle")
+            )
+        })
+      } finally {
+        database.close()
+      }
 
       return directoryName
     },
     {
       dbName: DOWNLOAD_ROOT_DB_NAME,
+      dbVersion: DOWNLOAD_ROOT_DB_VERSION,
+      managedStoreName: MANAGED_DOWNLOAD_ROOT_STORE_NAME,
       storeName: DOWNLOAD_ROOT_STORE_NAME,
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
     }
@@ -71,7 +82,7 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
 
 async function readPersistedDirectoryName(page: Page): Promise<string | null> {
   return await page.evaluate(
-    async ({ dbName, storeName }) => {
+    async ({ dbName, dbVersion, storeName, managedStoreName }) => {
       const stored = await chrome.storage.local.get("settings:global")
       const handleId = (
         stored["settings:global"] as {
@@ -80,11 +91,14 @@ async function readPersistedDirectoryName(page: Page): Promise<string | null> {
       ).downloads.customDirectoryHandleId
       if (handleId === null) return null
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(dbName, 1)
+        const request = indexedDB.open(dbName, dbVersion)
         request.onupgradeneeded = () => {
           const db = request.result
           if (!db.objectStoreNames.contains(storeName)) {
             db.createObjectStore(storeName)
+          }
+          if (!db.objectStoreNames.contains(managedStoreName)) {
+            db.createObjectStore(managedStoreName)
           }
         }
         request.onsuccess = () => resolve(request.result)
@@ -94,24 +108,29 @@ async function readPersistedDirectoryName(page: Page): Promise<string | null> {
           )
       })
 
-      const handle = await new Promise<FileSystemDirectoryHandle | undefined>(
-        (resolve, reject) => {
-          const transaction = database.transaction(storeName, "readonly")
-          const request = transaction.objectStore(storeName).get(handleId)
-          request.onsuccess = () =>
-            resolve(request.result as FileSystemDirectoryHandle | undefined)
-          request.onerror = () =>
-            reject(
-              request.error ??
-                new Error("Failed to read persisted folder handle")
-            )
-        }
-      )
-
-      return handle?.name ?? null
+      try {
+        const handle = await new Promise<FileSystemDirectoryHandle | undefined>(
+          (resolve, reject) => {
+            const transaction = database.transaction(storeName, "readonly")
+            const request = transaction.objectStore(storeName).get(handleId)
+            request.onsuccess = () =>
+              resolve(request.result as FileSystemDirectoryHandle | undefined)
+            request.onerror = () =>
+              reject(
+                request.error ??
+                  new Error("Failed to read persisted folder handle")
+              )
+          }
+        )
+        return handle?.name ?? null
+      } finally {
+        database.close()
+      }
     },
     {
       dbName: DOWNLOAD_ROOT_DB_NAME,
+      dbVersion: DOWNLOAD_ROOT_DB_VERSION,
+      managedStoreName: MANAGED_DOWNLOAD_ROOT_STORE_NAME,
       storeName: DOWNLOAD_ROOT_STORE_NAME,
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
     }

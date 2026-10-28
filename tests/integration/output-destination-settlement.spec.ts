@@ -1,3 +1,7 @@
+import { writeFsaOutput } from "@/entrypoints/offscreen/chapter-processing-fsa"
+import { classifyOffscreenErrorCategory } from "@/entrypoints/offscreen/error-categories"
+import { progressTimingEstimatesRepository } from "@/src/storage/progress-timing-estimates-repository"
+import { selectChromeFallback } from "@/src/domain/queue/kernel"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { DownloadTaskExecutor } from "@/entrypoints/background/download-task-executor"
@@ -27,12 +31,14 @@ const identity = {
 async function fixture(
   count: number,
   mode: "downloads-api" | "fsa" = "downloads-api",
-  chapterCount = 1
+  chapterCount = 1,
+  fallback = false
 ) {
   const settings = structuredClone(DEFAULT_SETTINGS)
   settings.downloads.destination = mode === "fsa" ? "file-system-access" : mode
   settings.downloads.customDirectoryHandleId =
     mode === "fsa" ? "captured-folder" : null
+  settings.downloads.allowChromeFallback = fallback
   settings.notifications = false
   const task: DownloadTaskState = {
     id: identity.taskId,
@@ -42,6 +48,7 @@ async function fixture(
     status: "downloading",
     created: 1,
     started: 2,
+    ...(fallback ? { fsaFallbackEligible: true as const } : {}),
     settingsSnapshot: createTaskSettingsSnapshot(settings, "mangadex"),
     chapters: [
       {
@@ -70,7 +77,12 @@ async function fixture(
     [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
     [LOCAL_STORAGE_KEYS.pendingUndoActions]: [],
     [LOCAL_STORAGE_KEYS.activeDispatchLease]: {
-      ...createDispatchLease({ ...identity, saveMode: mode, now: 2 }),
+      ...createDispatchLease({
+        ...identity,
+        saveMode: mode,
+        destinationHandleId: mode === "fsa" ? "captured-folder" : undefined,
+        now: 2,
+      }),
       documentInstanceId: identity.documentInstanceId,
     },
   }
@@ -190,6 +202,296 @@ async function fixture(
 afterEach(() => vi.unstubAllGlobals())
 
 describe("output destination settlement", () => {
+  it.each(["persistence-rejected", "acknowledgement-lost"] as const)(
+    "finishes the folder task and advances other work when its required write receipt is %s",
+    async (boundary) => {
+      const f = await fixture(1, "fsa", 2, true)
+      const task = (await f.queue.getTask(identity.taskId))!
+      await f.queue.enqueueDownloadTask({
+        ...task,
+        id: "other-task",
+        status: "queued",
+        chapters: task.chapters.map((chapter) => ({
+          ...chapter,
+          status: "queued",
+          dispatchAttempt: undefined,
+        })),
+      })
+      const originalCause = new Error(
+        boundary === "persistence-rejected"
+          ? "Receipt storage unavailable"
+          : "Receipt response lost"
+      )
+      const getDirectoryHandle = vi.fn()
+      const dir = { getDirectoryHandle } as unknown as FileSystemDirectoryHandle
+      const writing = writeFsaOutput({
+        beginFsaWrite: async () => {
+          if (boundary === "persistence-rejected")
+            f.storageSet.mockRejectedValueOnce(originalCause)
+          await f.queue.beginFsaWrite(identity)
+          throw originalCause
+        },
+        dir,
+        path: "Series/Chapter.cbz",
+        blob: new Blob(["archive"]),
+        collisionPolicy: "overwrite",
+      })
+      const failure: unknown = await writing.catch((error) => error)
+      expect(failure).toMatchObject({
+        category: "folder_write_failed",
+        message: originalCause.message,
+        cause: originalCause,
+      })
+      expect(getDirectoryHandle).not.toHaveBeenCalled()
+      await f.terminal.handle(
+        f.terminalPayload({
+          status: "failed",
+          errorMessage: (failure as Error).message,
+          errorCategory: classifyOffscreenErrorCategory(failure),
+          outputsRequested: 0,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+        })
+      )
+      expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+        status: "failed",
+        errorCategory: "folder_write_failed",
+        errorMessage: originalCause.message,
+        chapters: [
+          {
+            status: "failed",
+            errorCategory: "folder_write_failed",
+            errorMessage: originalCause.message,
+          },
+          { id: "next-chapter", status: "skipped" },
+        ],
+      })
+      expect(
+        (await f.queue.getTask(identity.taskId))?.useChromeFallback
+      ).toBeUndefined()
+      expect(await f.queue.getActiveDispatchLease()).toBeNull()
+      await vi.waitFor(() =>
+        expect(f.execute).toHaveBeenCalledExactlyOnceWith("other-task")
+      )
+    }
+  )
+
+  it("rejects terminal fallback authority from another task or a non-downloading chapter", async () => {
+    const f = await fixture(0, "fsa", 1, true)
+    const current = (await f.queue.getTask(identity.taskId))!
+    const lease = (await f.queue.getActiveDispatchLease())!
+    const other = { ...current, id: "another-task" }
+    const state = { queue: [current, other], lease, pendingUndoActions: [] }
+    expect(
+      selectChromeFallback(state, {
+        taskId: other.id,
+        terminalLease: identity,
+        now: 10,
+      }).result
+    ).toMatchObject({ outcome: "rejected" })
+    expect(
+      selectChromeFallback(
+        {
+          ...state,
+          queue: [
+            {
+              ...current,
+              chapters: current.chapters.map((chapter) => ({
+                ...chapter,
+                status: "queued" as const,
+              })),
+            },
+          ],
+        },
+        { taskId: current.id, terminalLease: identity, now: 10 }
+      ).result
+    ).toMatchObject({ outcome: "rejected" })
+    expect(
+      selectChromeFallback(
+        { ...state, lease: { ...lease, destinationHandleId: "other-folder" } },
+        { taskId: current.id, terminalLease: identity, now: 10 }
+      ).result
+    ).toMatchObject({ outcome: "rejected" })
+    expect(
+      selectChromeFallback(state, {
+        taskId: current.id,
+        terminalLease: identity,
+        now: 10,
+      }).result
+    ).toMatchObject({ outcome: "applied" })
+  })
+
+  it("continues the committed fallback when progress storage fails", async () => {
+    const f = await fixture(0, "fsa", 1, true)
+    await progressTimingEstimatesRepository.observe({
+      jobId: identity.jobId,
+      stage: "resolving",
+      context: {
+        integrationId: "mangadex",
+        archiveFormat: "cbz",
+        destination: "file-system-access",
+      },
+      now: 1,
+    })
+    vi.mocked(chrome.storage.session.set).mockRejectedValue(
+      new Error("session unavailable")
+    )
+    let timingWriteFailed = false
+    f.storageSet.mockImplementation(async (values) => {
+      if (LOCAL_STORAGE_KEYS.progressTimingEstimates in values) {
+        timingWriteFailed = true
+        throw new Error("timing storage unavailable")
+      }
+      Object.assign(f.local, structuredClone(values))
+    })
+    await f.terminal.handle(
+      f.terminalPayload({
+        status: "failed",
+        destinationUnavailable: true,
+        errorCategory: "folder_unavailable",
+        outputsRequested: 0,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+      })
+    )
+    await vi.waitFor(() => expect(f.execute).toHaveBeenCalled())
+    expect(timingWriteFailed).toBe(true)
+    expect(chrome.storage.session.set).toHaveBeenCalledWith(
+      expect.objectContaining({ activeTaskProgress: null })
+    )
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "queued",
+      useChromeFallback: true,
+    })
+  })
+
+  it("persists the first-write barrier, rejects stale owners, and restores it only for fresh folder retries", async () => {
+    const f = await fixture(0, "fsa", 1, true)
+    expect(
+      await f.queue.beginFsaWrite({ ...identity, documentInstanceId: "stale" })
+    ).toMatchObject({ outcome: "rejected" })
+    f.storageSet.mockRejectedValueOnce(new Error("storage unavailable"))
+    await expect(f.queue.beginFsaWrite(identity)).rejects.toThrow(
+      "storage unavailable"
+    )
+    expect(
+      (await f.runtime().queue.getTask(identity.taskId))?.fsaFallbackEligible
+    ).toBe(true)
+    expect(await f.queue.beginFsaWrite(identity)).toMatchObject({
+      outcome: "applied",
+    })
+    const writes = f.storageSet.mock.calls.length
+    expect(await f.queue.beginFsaWrite(identity)).toMatchObject({
+      outcome: "unchanged",
+    })
+    expect(f.storageSet).toHaveBeenCalledTimes(writes)
+    const cold = f.runtime()
+    expect(
+      (await cold.queue.getTask(identity.taskId))?.fsaFallbackEligible
+    ).toBeUndefined()
+    await cold.terminal.handle(
+      f.terminalPayload({
+        status: "failed",
+        destinationUnavailable: true,
+        errorCategory: "folder_unavailable",
+        outputsRequested: 0,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+      })
+    )
+    expect(await cold.queue.getTask(identity.taskId)).toMatchObject({
+      status: "failed",
+    })
+    const retry = await cold.queue.restartDownloadTask({
+      taskId: identity.taskId,
+      restartTaskId: "fresh-folder",
+      now: 20,
+    })
+    expect(retry).toMatchObject({
+      outcome: "applied",
+      restartTask: { fsaFallbackEligible: true },
+    })
+  })
+
+  it("switches only explicit pre-write root failures and retains Chrome on a fresh retry", async () => {
+    const f = await fixture(0, "fsa", 1, true)
+    await f.terminal.handle(
+      f.terminalPayload({
+        status: "failed",
+        destinationUnavailable: true,
+        errorCategory: "folder_unavailable",
+        outputsRequested: 0,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+      })
+    )
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "queued",
+      useChromeFallback: true,
+      chapters: [{ status: "queued", dispatchAttempt: 1 }],
+    })
+    expect(await f.queue.getActiveDispatchLease()).toBeNull()
+    expect(await f.queue.getRetainedHandleIds()).toEqual(new Set())
+    await f.queue.interruptDownloadTask({
+      taskId: identity.taskId,
+      now: 15,
+      errorMessage: "later Chrome failure",
+    })
+    const retry = await f.queue.restartDownloadTask({
+      taskId: identity.taskId,
+      restartTaskId: "fresh-chrome",
+      now: 20,
+    })
+    expect(retry).toMatchObject({
+      outcome: "applied",
+      restartTask: { useChromeFallback: true },
+    })
+    if (retry.outcome === "applied")
+      expect(retry.restartTask.fsaFallbackEligible).toBeUndefined()
+  })
+
+  it.each([0, 1])(
+    "does not switch for a folder write failure after the barrier with %i committed outputs",
+    async (committed) => {
+      const f = await fixture(2, "fsa", 1, true)
+      await f.queue.beginFsaWrite(identity)
+      await f.terminal.handle(
+        f.terminalPayload({
+          status: committed ? "partial_success" : "failed",
+          errorCategory: "folder_write_failed",
+          outputsRequested: 2,
+          outputsCommitted: committed,
+          outputsFailedBeforeHandoff: 2 - committed,
+        })
+      )
+      expect(
+        (await f.queue.getTask(identity.taskId))?.useChromeFallback
+      ).toBeUndefined()
+      expect((await f.queue.getTask(identity.taskId))?.status).toBe(
+        committed ? "partial_success" : "failed"
+      )
+    }
+  )
+
+  it("does not infer root unavailability from provider errors with a folder category", async () => {
+    const f = await fixture(0, "fsa", 1, true)
+    await f.terminal.handle(
+      f.terminalPayload({
+        status: "failed",
+        errorCategory: "folder_unavailable",
+        outputsRequested: 0,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+      })
+    )
+    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
+      status: "failed",
+    })
+    expect(
+      (await f.queue.getTask(identity.taskId))?.useChromeFallback
+    ).toBeUndefined()
+  })
+
   it("requires every final save and recovers the missing initiation receipt after restart", async () => {
     const f = await fixture(2)
     await f.native.handleOutputReady(f.ready(0))

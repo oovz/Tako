@@ -1,3 +1,4 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import logger from "@/src/runtime/logger"
 import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -180,7 +181,7 @@ async function runDownloadTask(
 
     const taskDestinationContext = {
       taskId,
-      destination: task.settingsSnapshot.destination,
+      destination: getEffectiveTaskDestination(task),
     } as const
     if (
       !canReuseEntryLease &&
@@ -302,6 +303,14 @@ async function runDownloadTask(
     return "queue-continuation"
   } catch (error) {
     if (error instanceof DestinationPreflightError) {
+      const fallback = await stateManager.selectChromeFallback({
+        taskId,
+        now: Date.now(),
+      })
+      if (fallback.outcome === "applied") {
+        await clearActiveTaskProgress()
+        return "queue-continuation"
+      }
       const failure = await cancellationCoordinator.failTaskForSave({
         taskId,
         chapterId: error.context.chapterId,

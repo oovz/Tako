@@ -1868,5 +1868,14 @@
   },
   "status_skipped": {
     "message": "已跳过"
+  },
+  "options_allowChromeFallback": {
+    "message": "文件夹不可用时使用 Chrome 下载"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "适用于新任务。仅在任务首次尝试写入所选文件夹之前自动切换。"
+  },
+  "destination_chromeFallback": {
+    "message": "已切换到 Chrome 下载"
   }
 }

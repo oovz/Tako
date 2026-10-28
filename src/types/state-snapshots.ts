@@ -19,6 +19,7 @@ export type TaskDestination =
 
 export interface TaskSettingsSnapshot {
   archiveFormat: ArchiveFormat
+  allowChromeFallback?: true
   destination: TaskDestination
   conflictPolicy: ConflictPolicy
   pathTemplate: string

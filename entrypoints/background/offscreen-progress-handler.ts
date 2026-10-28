@@ -1,3 +1,4 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import logger from "@/src/runtime/logger"
 import { isRecord } from "@/src/shared/type-guards"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -378,7 +379,7 @@ export async function handleOffscreenDownloadProgress(
         outputsExpectedToCommit > 0 &&
         outputsCommitted >= outputsExpectedToCommit
       const effectiveDestination =
-        taskBeforeUpdate.settingsSnapshot.destination.kind
+        getEffectiveTaskDestination(taskBeforeUpdate).kind
       const awaitingNativeDestinationCommit =
         isTerminalProgress &&
         effectiveDestination === "downloads-api" &&

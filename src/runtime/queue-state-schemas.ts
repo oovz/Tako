@@ -48,6 +48,7 @@ const chapterRatePolicySchema = z
 
 const taskSettingsSnapshotSchema = z
   .object({
+    allowChromeFallback: z.literal(true).optional(),
     archiveFormat: ArchiveFormatSchema,
     destination: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("downloads-api") }),
@@ -139,6 +140,8 @@ const taskChapterSchema = z
   .strict()
 
 const downloadTaskStateShape = {
+  fsaFallbackEligible: z.literal(true).optional(),
+  useChromeFallback: z.literal(true).optional(),
   id: nonemptyString,
   siteIntegrationId: nonemptyString,
   mangaId: nonemptyString,
@@ -181,6 +184,17 @@ export const DownloadTaskStateDocumentSchema = z
 
 export const DownloadTaskStateSchema =
   DownloadTaskStateDocumentSchema.superRefine((task, ctx) => {
+    if (
+      (task.fsaFallbackEligible || task.useChromeFallback) &&
+      (task.settingsSnapshot.allowChromeFallback !== true ||
+        task.settingsSnapshot.destination.kind !== "file-system-access" ||
+        (task.fsaFallbackEligible && task.useChromeFallback))
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Fallback state requires captured folder consent and one effective target",
+      })
     if (
       (task.status === "queued" || task.status === "downloading") &&
       task.settingsSnapshot.destination.kind === "file-system-access" &&

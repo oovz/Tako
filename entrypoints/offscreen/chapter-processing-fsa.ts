@@ -17,6 +17,7 @@ export function getConflictPolicy(
 }
 
 export async function writeFsaOutput(input: {
+  beginFsaWrite: () => Promise<void>
   dir: FileSystemDirectoryHandle
   path: string
   blob: Blob
@@ -25,6 +26,7 @@ export async function writeFsaOutput(input: {
   onBytesWritten?: (bytesWritten: number) => void | Promise<void>
 }): Promise<WriteBlobToPathResult> {
   try {
+    await input.beginFsaWrite()
     return await writeBlobToPath(
       input.dir,
       input.path,

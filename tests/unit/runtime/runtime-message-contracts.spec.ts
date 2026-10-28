@@ -21,6 +21,7 @@ const EXACT_JOB_IDENTITY = {
 }
 
 const EXPECTED_RUNTIME_MESSAGES = {
+  OFFSCREEN_BEGIN_FSA_WRITE: "background|command|offscreen|queue-hydrated",
   REQUEST_TAB_CONTEXT_REFRESH:
     "background|command|sidepanel|integrations-ready",
   GET_SITE_INTEGRATION_ENABLEMENT: "background|query|offscreen|control-ready",
@@ -71,7 +72,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(32)
+    expect(Object.keys(actual)).toHaveLength(33)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {

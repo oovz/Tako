@@ -28,6 +28,7 @@ export const OffscreenJobIncarnationSchema = OffscreenJobIdentitySchema.extend({
 
 export const OffscreenJobOutcomeSchema = z
   .strictObject({
+    destinationUnavailable: z.literal(true).optional(),
     status: z.enum(["completed", "partial_success", "failed"]),
     errorMessage: z.string().optional(),
     errorCategory: DownloadErrorCategorySchema.optional(),
@@ -37,6 +38,19 @@ export const OffscreenJobOutcomeSchema = z
     outputsCommitted: z.number().int().nonnegative(),
   })
   .superRefine((value, context) => {
+    if (
+      value.destinationUnavailable &&
+      (value.status !== "failed" ||
+        value.outputsRequested !== 0 ||
+        value.outputsCommitted !== 0 ||
+        value.outputsFailedBeforeHandoff !== 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["destinationUnavailable"],
+        message: "Captured destination failures precede output production",
+      })
+    }
     if (value.outputsFailedBeforeHandoff > value.outputsRequested) {
       context.addIssue({
         code: "custom",

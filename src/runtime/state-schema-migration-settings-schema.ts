@@ -1,4 +1,4 @@
-/** Settings contract retained by schema epochs 3 and 4. */
+/** Settings contract retained by schema epochs 3 through 8. */
 import { z } from "zod"
 
 import {

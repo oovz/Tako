@@ -145,6 +145,65 @@ describe("migrateDurableStateForCurrentSchema", () => {
     } as unknown as typeof chrome)
   })
 
+  it.each(["downloadQueue", "pendingUndoActions"])(
+    "preserves explicit null %s as malformed at the current upgrade boundary",
+    async (key) => {
+      local = {
+        stateSchemaEpoch: 8,
+        downloadQueue: [],
+        pendingUndoActions: [],
+        [key]: null,
+      }
+      await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow()
+      expect(local.stateSchemaEpoch).toBe(8)
+      expect(local[key]).toBeNull()
+      expect(chrome.storage.local.set).not.toHaveBeenCalled()
+    }
+  )
+
+  it("adds a disabled global fallback default without authorizing historical tasks or Undo", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS)
+    const downloads = { ...settings.downloads }
+    Reflect.deleteProperty(downloads, "allowChromeFallback")
+    const source = {
+      ...epoch2Task(),
+      status: "queued",
+      activeBlock: undefined,
+      destinationBlockRevision: undefined,
+      destinationResume: undefined,
+      activeCancel: undefined,
+    }
+    local = {
+      stateSchemaEpoch: 2,
+      [SETTINGS_KEY]: { ...settings, downloads },
+      downloadQueue: [source],
+      pendingUndoActions: [
+        {
+          token: "undo",
+          type: "cancel_queued",
+          taskSnapshot: { ...source, id: "undo-task" },
+          previousQueuePosition: 1,
+          createdAt: 1,
+          expiresAt: 20,
+        },
+      ],
+    }
+    await migrateDurableStateForCurrentSchema()
+    expect(local[SETTINGS_KEY]).toMatchObject({
+      downloads: { allowChromeFallback: false },
+    })
+    for (const task of [
+      ...(local.downloadQueue as object[]),
+      ...(local.pendingUndoActions as { taskSnapshot: object }[]).map(
+        (action) => action.taskSnapshot
+      ),
+    ]) {
+      expect(task).not.toHaveProperty("fsaFallbackEligible")
+      expect(task).not.toHaveProperty("useChromeFallback")
+      expect(task).not.toHaveProperty("settingsSnapshot.allowChromeFallback")
+    }
+  })
+
   it("migrates released durable state without clearing local data or FSA handles", async () => {
     local = {
       unrelatedUserState: { keep: true },
@@ -255,6 +314,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "documents",
       "journal",
       "remove",
+      "journal",
+      "marker",
+      "remove",
+      "journal",
+      "documents",
+      "journal",
       "journal",
       "marker",
       "remove",
@@ -997,7 +1062,7 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4, 5, 6, 7, 8])
+    ).toEqual([3, 4, 5, 6, 7, 8, 9])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,

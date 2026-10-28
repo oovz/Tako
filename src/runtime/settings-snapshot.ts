@@ -43,6 +43,10 @@ export function createTaskSettingsSnapshot(
   }
 
   return {
+    ...(canonicalSettings.downloads.destination === "file-system-access" &&
+    canonicalSettings.downloads.allowChromeFallback
+      ? { allowChromeFallback: true as const }
+      : {}),
     archiveFormat:
       canonicalSiteOverride?.outputFormat ??
       canonicalSettings.downloads.defaultFormat,

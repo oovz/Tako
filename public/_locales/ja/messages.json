@@ -1868,5 +1868,14 @@
   },
   "status_skipped": {
     "message": "スキップ済み"
+  },
+  "options_allowChromeFallback": {
+    "message": "フォルダーが使用できない場合は Chrome ダウンロードを使う"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "新しいタスクに適用されます。選択したフォルダーへの最初の書き込みを試みる前に限り、自動で切り替わります。"
+  },
+  "destination_chromeFallback": {
+    "message": "Chrome ダウンロードに切り替え済み"
   }
 }

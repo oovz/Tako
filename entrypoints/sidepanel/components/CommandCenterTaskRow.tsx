@@ -225,6 +225,7 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
               )}
 
             <TaskDestinationCaption
+              useChromeFallback={task.useChromeFallback}
               destination={task.destination}
               requestedPath={task.requestedPath}
             />

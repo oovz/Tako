@@ -1,3 +1,4 @@
+import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 /**
  * Offscreen document runtime for archive creation, image processing,
  * and background-assisted downloads.
@@ -451,6 +452,7 @@ export class OffscreenWorker {
       this.releaseTaskController(request.taskId, taskControllerEntry.controller)
     }
 
+    let destinationUnavailable = false
     try {
       if (record.status !== "active" || record.controller.signal.aborted) {
         return (
@@ -467,8 +469,10 @@ export class OffscreenWorker {
       this.startJobHeartbeat(record)
       await this.waitForNotBefore(record)
       const captured = await record.writableRoot
-      if (captured?.status === "failed")
+      if (captured?.status === "failed") {
+        destinationUnavailable = true
         throw new FsaWriteError("folder_unavailable", captured.error)
+      }
 
       const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
       if (!isEnabled(request.book.siteIntegrationId, currentEnablement)) {
@@ -536,7 +540,8 @@ export class OffscreenWorker {
         streamingOptions,
         job,
         rateLimitService,
-        record.writableRoot
+        record.writableRoot,
+        () => this.beginFsaWrite(record)
       )
 
       if (taskControllerEntry.controller.signal.aborted) {
@@ -556,6 +561,9 @@ export class OffscreenWorker {
       return outcome
     } catch (error) {
       const outcome: ChapterOutcome = {
+        ...(destinationUnavailable
+          ? { destinationUnavailable: true as const }
+          : {}),
         status: "failed",
         errorMessage:
           error instanceof Error ? error.message : "Failed to process chapter",
@@ -581,6 +589,25 @@ export class OffscreenWorker {
       this.stopJobHeartbeat(record)
       releaseTaskControllerOnce()
     }
+  }
+
+  private async beginFsaWrite(record: OffscreenJobRecord): Promise<void> {
+    if (record.request.settingsSnapshot.allowChromeFallback !== true) return
+    record.fsaWritePermit ??= (async () => {
+      const response = await sendRuntimeMessage({
+        target: "background",
+        type: "OFFSCREEN_BEGIN_FSA_WRITE",
+        payload: this.jobIncarnation(record),
+      })
+      if (!response.success) throw new Error(response.error)
+      if (!response.permitted)
+        throw new Error("FSA write receipt no longer owns the active job")
+    })()
+    await awaitWithTimeoutAndSignal(
+      record.fsaWritePermit,
+      DEFAULT_FETCH_TIMEOUT_MS,
+      record.controller.signal
+    )
   }
 
   private jobIncarnation(record: OffscreenJobRecord): OffscreenJobIncarnation {
@@ -709,7 +736,8 @@ export class OffscreenWorker {
     opts: ProcessChapterStreamingOptions,
     job: JobExecutionContext,
     rateLimitService: RateLimitService,
-    writableRoot: OffscreenJobRecord["writableRoot"]
+    writableRoot: OffscreenJobRecord["writableRoot"],
+    beginFsaWrite: () => Promise<void>
   ): Promise<ChapterOutcome> {
     const { chapter, abortSignal, onProgress } = opts
     const normalizeSettings: ArchiveNormalizationSettings = {
@@ -793,6 +821,7 @@ export class OffscreenWorker {
       await onProgress(10, "ready", { current: 0, total: urls.length })
 
       const chapterProcessingRuntime: ChapterProcessingRuntime = {
+        beginFsaWrite,
         liveResourceLedger: this.liveResourceLedger,
         rateLimitService,
         withImageRetries: <T>(

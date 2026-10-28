@@ -161,6 +161,23 @@ export function DownloadDestinationSection({
           />
         }
       />
+      {isFsaActive && (
+        <SettingsRow
+          title={t("options_allowChromeFallback")}
+          description={t("options_allowChromeFallbackHelp")}
+          htmlFor="allow-chrome-fallback"
+          control={
+            <Switch
+              id="allow-chrome-fallback"
+              checked={downloads.allowChromeFallback}
+              disabled={isSaving}
+              onCheckedChange={(allowChromeFallback) =>
+                onDownloadsChange({ allowChromeFallback })
+              }
+            />
+          }
+        />
+      )}
       {/* Suppress Save As Dialog Row (Browser Downloads only) */}
       <SettingsRow
         icon={FileDigit}

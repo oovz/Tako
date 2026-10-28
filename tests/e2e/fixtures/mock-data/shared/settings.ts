@@ -21,6 +21,7 @@ import type { ExtensionSettings } from "@/src/domain/settings/types"
  */
 export const BASE_DEFAULT_SETTINGS: ExtensionSettings = {
   downloads: {
+    allowChromeFallback: false,
     destination: "downloads-api",
     customDirectoryHandleId: null,
     pathTemplate: "<SERIES_TITLE>/<VOLUME_LABEL>",

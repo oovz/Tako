@@ -1,3 +1,4 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import { toast } from "sonner"
 import { OptionsFsaController } from "../controllers/options-fsa-controller"
 import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
@@ -86,10 +87,10 @@ export function DownloadTaskCard({
   const totalChapters = task.chapters.length
   const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
+  const destination = getEffectiveTaskDestination(task)
   const targetUnavailable =
     task.chapters.some((chapter) => chapter.requestedPath === null) ||
-    (task.settingsSnapshot.destination.kind === "file-system-access" &&
-      task.settingsSnapshot.destination.handleId === null)
+    (destination.kind === "file-system-access" && destination.handleId === null)
   const isRetried = task.isRetried ?? false
   const outputUncertain = hasUncertainNativeOutput(task.chapters)
   const failureChapter = firstUnsuccessfulChapter(task.chapters)
@@ -103,7 +104,7 @@ export function DownloadTaskCard({
   )
   const cancelPresentation = getDownloadCancelPresentation()
   const permissionFailure =
-    task.settingsSnapshot.destination.kind === "file-system-access" &&
+    destination.kind === "file-system-access" &&
     !targetUnavailable &&
     (task.status === "failed" || task.status === "partial_success") &&
     task.chapters.some(
@@ -313,7 +314,8 @@ export function DownloadTaskCard({
         </div>
 
         <TaskDestinationCaption
-          destination={task.settingsSnapshot.destination}
+          useChromeFallback={task.useChromeFallback}
+          destination={getEffectiveTaskDestination(task)}
           requestedPath={
             (
               failureChapter ??
@@ -338,7 +340,7 @@ export function DownloadTaskCard({
             disabled={pendingAction !== null}
             onClick={() =>
               void runTaskAction("grant", async () => {
-                const target = task.settingsSnapshot.destination
+                const target = getEffectiveTaskDestination(task)
                 if (target.kind !== "file-system-access") return
                 try {
                   const access =

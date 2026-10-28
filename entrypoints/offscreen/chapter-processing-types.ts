@@ -15,6 +15,7 @@ export type ChapterOutcomeStatus = "completed" | "partial_success" | "failed"
 export type ErrorCategory = DownloadErrorCategory
 
 export type ChapterOutcome = {
+  destinationUnavailable?: true
   status: ChapterOutcomeStatus
   errorMessage?: string
   errorCategory?: ErrorCategory
@@ -110,6 +111,7 @@ export type BrowserBlobDownloadResponse =
   RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY"> | undefined
 
 export interface ChapterProcessingRuntime {
+  beginFsaWrite: () => Promise<void>
   liveResourceLedger: OffscreenLiveResourceLedger
   rateLimitService: RateLimitService
   withImageRetries: <T>(

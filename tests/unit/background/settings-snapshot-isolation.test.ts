@@ -124,6 +124,38 @@ describe("settings snapshot isolation (behavior-based)", () => {
     settingsMocks.getSettings.mockReset()
   })
 
+  it("captures affirmative fallback consent only for new folder tasks", async () => {
+    expect(DEFAULT_SETTINGS.downloads.allowChromeFallback).toBe(false)
+    const settingsRef = {
+      current: makeSettings({
+        downloads: {
+          destination: "file-system-access",
+          customDirectoryHandleId: "captured-folder",
+        },
+      }),
+    }
+    const enqueue = vi.fn(async (task: unknown) => ({
+      outcome: "applied",
+      task,
+    }))
+    const queue = createQueueRepository(settingsRef, enqueue)
+    await buildAndEnqueue(queue, START_CONTEXT, 1)
+    settingsRef.current.downloads.allowChromeFallback = true
+    await buildAndEnqueue(queue, START_CONTEXT, 2)
+    settingsRef.current.downloads.destination = "downloads-api"
+    await buildAndEnqueue(queue, START_CONTEXT, 3)
+    const tasks = enqueue.mock.calls.map(
+      ([task]) => task as import("@/src/domain/queue/state").DownloadTaskState
+    )
+    expect(tasks[0]?.settingsSnapshot).not.toHaveProperty("allowChromeFallback")
+    expect(tasks[0]).not.toHaveProperty("fsaFallbackEligible")
+    expect(tasks[1]).toMatchObject({
+      fsaFallbackEligible: true,
+      settingsSnapshot: { allowChromeFallback: true },
+    })
+    expect(tasks[2]?.settingsSnapshot).not.toHaveProperty("allowChromeFallback")
+  })
+
   it("captures enqueue-time task settings snapshot for created task", async () => {
     const settingsRef = {
       current: makeSettings({

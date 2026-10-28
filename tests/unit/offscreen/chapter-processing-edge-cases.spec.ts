@@ -126,6 +126,7 @@ function createRuntime(): ChapterProcessingRuntime {
     liveResourceLedger: new OffscreenLiveResourceLedger(),
     rateLimitService,
     withImageRetries: async (fn) => fn(),
+    beginFsaWrite: async () => {},
     resolveWritableDownloadRoot: vi.fn(),
     requestBrowserBlobDownload: vi.fn(
       async () =>

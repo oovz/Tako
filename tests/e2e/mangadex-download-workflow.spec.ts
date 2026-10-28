@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import { unzipSync } from "fflate"
 /**
  * @file mangadex-download-workflow.spec.ts
  * @description Download-workflow coverage for the MangaDex
@@ -35,12 +37,147 @@ import {
   seedCustomDirectoryHandle,
   seedMangadexSessionPreferences,
   startSingleChapterDownload,
+  waitForBrowserDownloadArtifact,
   waitForCbzArtifact,
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
 
 test.describe("MangaDex download workflow (mocked)", () => {
   test.describe.configure({ timeout: 120_000 })
+
+  test("saves through Chrome when an opted-in task has no folder capability before writing", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    const series = Mangadex.BASIC_SERIES.series
+    await page.goto(
+      `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`
+    )
+    const tabId = await getTabId(page, context)
+    const state = await waitForTabStateById(
+      page,
+      context,
+      tabId,
+      (state) => Array.isArray(state.chapters) && state.chapters.length > 0
+    )
+    const chapter = state.chapters.find((chapter) => chapter.locked !== true)
+    if (!chapter) throw new Error("No downloadable chapter in fixture")
+    const options = await openOptionsPage(context, extensionId)
+    try {
+      const cdp = await context.newCDPSession(options)
+      await cdp.send("Browser.setDownloadBehavior", {
+        behavior: "default",
+        eventsEnabled: true,
+      })
+      await seedMangadexSessionPreferences(options, series.seriesId)
+      await seedCustomDirectoryHandle(options)
+      await persistCustomModeDownloadSettings(options, {
+        mangadex: { autoReadMangaDexSettings: true, imageQuality: "data" },
+      })
+      await options.evaluate(async (command) => {
+        const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+          await chrome.runtime.sendMessage({
+            target: "background",
+            type: "GET_OPTIONS_CONFIGURATION",
+          })
+        if (!current.success) throw new Error(current.error)
+        const configuration = current.data.configuration
+        configuration.settings.downloads.allowChromeFallback = true
+        const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+          await chrome.runtime.sendMessage({
+            target: "background",
+            type: "SAVE_OPTIONS_CONFIGURATION",
+            ...command,
+            payload: { configuration },
+          })
+        if (!saved.success) throw new Error(saved.error)
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("tako-fs")
+          request.onsuccess = () => resolve(request.result)
+          request.onerror = () => reject(request.error)
+        })
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction("handles", "readwrite")
+            tx.objectStore("handles").delete("download-root")
+            tx.oncomplete = () => resolve()
+            tx.onabort = tx.onerror = () => reject(tx.error)
+          })
+        } finally {
+          db.close()
+        }
+      }, createCommandEnvelope())
+      const taskId = await startSingleChapterDownload(options, {
+        sourceTabId: tabId,
+        siteIntegrationId: "mangadex",
+        mangaId: series.seriesId,
+        seriesTitle: series.seriesTitle,
+        chapter,
+      })
+      const task = await waitForTerminalTask(context, taskId)
+      expect(task).toMatchObject({
+        status: "completed",
+        useChromeFallback: true,
+        settingsSnapshot: {
+          allowChromeFallback: true,
+          destination: {
+            kind: "file-system-access",
+            handleId: "download-root",
+          },
+        },
+        chapters: [
+          {
+            outputDestination: "downloads-api",
+            saveConfirmedAt: expect.any(Number),
+            outputs: { requested: 1, committed: 1, failed: 0 },
+          },
+        ],
+      })
+      const artifact = await waitForBrowserDownloadArtifact(
+        options,
+        task.lastSuccessfulDownloadId!
+      )
+      expect(artifact.fileSize).toBeGreaterThan(0)
+      const contents = unzipSync(
+        new Uint8Array(await readFile(artifact.filename))
+      )
+      expect(
+        Object.entries(contents).some(
+          ([name, bytes]) =>
+            /\.(png|jpe?g|webp)$/i.test(name) && bytes.length > 0
+        )
+      ).toBe(true)
+      await options
+        .getByRole("button", { name: "Activity & History", exact: true })
+        .click()
+      await expect(
+        options.getByText("Switched to Chrome Downloads", { exact: false })
+      ).toBeVisible()
+      await expect(
+        options.getByText("Saved", { exact: true }).first()
+      ).toBeVisible()
+      await expect
+        .poll(() =>
+          options.evaluate(async (chapterId) => {
+            const { downloadedChapters } =
+              await chrome.storage.local.get("downloadedChapters")
+            return Array.isArray(downloadedChapters)
+              ? downloadedChapters.find(
+                  (record: { chapterId: string }) =>
+                    record.chapterId === chapterId
+                )
+              : undefined
+          }, chapter.id)
+        )
+        .toMatchObject({
+          outputDestination: "downloads-api",
+          saveConfirmedAt: expect.any(Number),
+        })
+    } finally {
+      await options.close()
+    }
+  })
 
   for (const change of ["replace-folder", "downloads-api"] as const) {
     test(`keeps the admitted folder when settings ${change} during chapter resolution`, async ({

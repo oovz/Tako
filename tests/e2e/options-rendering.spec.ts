@@ -115,11 +115,19 @@ test.describe("Options Page", () => {
     await page.waitForLoadState("domcontentloaded")
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText("Download Location")).toHaveCount(0)
+    await expect(
+      page.getByRole("heading", {
+        name: "Download defaults for new tasks",
+        exact: true,
+      })
+    ).toHaveCount(0)
 
     await page.getByRole("button", { name: /Storage/i }).click()
     await expect(
-      page.getByText("Download destination", { exact: true })
+      page.getByRole("heading", {
+        name: "Download defaults for new tasks",
+        exact: true,
+      })
     ).toBeVisible()
   })
 

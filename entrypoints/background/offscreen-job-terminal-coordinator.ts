@@ -33,6 +33,7 @@ export type OffscreenTerminalSettlement =
   | "chapter-settled"
   | "task-save-failed"
   | "terminal-owner-released"
+  | "chrome-fallback-selected"
 
 function ownsNativeSettlement(
   task: DownloadTaskState | undefined,
@@ -101,7 +102,10 @@ export class OffscreenJobTerminalCoordinator {
       await this.continueTask(taskId)
       return
     }
-    if (settlement === "terminal-owner-released") {
+    if (
+      settlement === "terminal-owner-released" ||
+      settlement === "chrome-fallback-selected"
+    ) {
       this.queueScheduler.requestContinuation()
     }
   }
@@ -195,6 +199,18 @@ export class OffscreenJobTerminalCoordinator {
       return "terminal-owner-released"
     }
 
+    if (payload.outcome.destinationUnavailable) {
+      const fallback = await this.queueRepository.selectChromeFallback({
+        taskId: payload.taskId,
+        terminalLease: payload,
+        now: payload.terminalAt,
+      })
+      if (fallback.outcome === "applied") {
+        await clearActiveTaskProgress()
+        await progressTimingEstimator.finish(payload.jobId)
+        return "chrome-fallback-selected"
+      }
+    }
     const requested = payload.outcome.outputsRequested
     const committed = payload.outcome.outputsCommitted
     const failed = Math.max(
