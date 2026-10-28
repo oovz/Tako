@@ -1,40 +1,25 @@
 /**
- * @file image-fixtures.ts
- * @description MangaDex at-home server response builder + image host
- * configuration used by download-workflow mocks.
- *
- * The production MangaDex chapter-image pipeline looks up
- * `GET https://api.mangadex.org/at-home/server/{chapterId}` which returns:
- *
- * ```
- * {
- *   baseUrl: 'https://uploads.mangadex.org',
- *   chapter: {
- *     hash: '<chapter-hash>',
- *     data: ['1-abc.jpg', '2-def.jpg', ...],
- *     dataSaver: ['1-abc.jpg', ...]
- *   }
- * }
- * ```
- *
- * We route the JSON via `registerMangadexRoutes` and map every candidate
- * filename to the shared 1x1 PNG fixture. The chapter-hash is deterministic
- * per chapter id so tests can assert against stable URLs if needed.
+ * Captured at-home manifest for the representative reader. Other chapters use
+ * controlled filenames and bytes, with page counts from the captured feed.
  */
+
+import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
 
 import type { SiteIntegrationChapterData } from "../../types"
 import { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"
 import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
 import { CUSTOM_MANGADEX_SERIES_FIXTURES } from "./api-fixtures"
 
+export const MANGADEX_CAPTURED_READER_ID =
+  "86a76ac5-9ea9-4fec-bc23-0720d1ac6f32"
+export const MANGADEX_CAPTURED_IMAGE_DOMAIN = new URL(
+  captured.data.atHome.baseUrl
+).hostname
+
 export const MANGADEX_UPLOADS_DOMAIN = "uploads.mangadex.org"
 export const MANGADEX_UPLOADS_BASE_URL = `https://${MANGADEX_UPLOADS_DOMAIN}`
 
-/**
- * One image per chapter keeps the mock pipeline negligible; the real
- * pipeline handles many (50-200) pages per chapter but the state machine
- * is identical regardless of page count.
- */
+/** Page count for explicit synthetic UI/stress variants. */
 export const MOCK_IMAGES_PER_CHAPTER = 1
 
 /**
@@ -74,10 +59,18 @@ export interface MockAtHomeResponse {
 
 export function buildAtHomeServerResponse(
   chapterId: string,
-  count: number = MOCK_IMAGES_PER_CHAPTER
+  count?: number
 ): MockAtHomeResponse {
+  if (chapterId === MANGADEX_CAPTURED_READER_ID && count === undefined) {
+    return structuredClone(captured.data.atHome)
+  }
+  const capturedChapter = captured.data.feed.data.find(
+    (entry) => entry.id === chapterId
+  )
+  const pageCount =
+    count ?? capturedChapter?.attributes.pages ?? MOCK_IMAGES_PER_CHAPTER
   const hash = buildMangadexChapterHash(chapterId)
-  const files = buildMangadexChapterImageFilenames(chapterId, count)
+  const files = buildMangadexChapterImageFilenames(chapterId, pageCount)
   return {
     baseUrl: MANGADEX_UPLOADS_BASE_URL,
     chapter: {

@@ -2,10 +2,17 @@ import { readFile } from "node:fs/promises"
 import { unzipSync } from "fflate"
 
 import { test, expect } from "./fixtures/extension"
-import { getTabId, waitForTabStateById } from "./fixtures/state-helpers"
+import {
+  getTabId,
+  waitForTabStateById,
+  waitForTabSeriesTitle,
+} from "./fixtures/state-helpers"
 import { MANGADEX_BASE_URL } from "./fixtures/test-domains-constants"
 import { Mangadex } from "./fixtures/mock-data"
-import { MOCK_IMAGES_PER_CHAPTER } from "./fixtures/mock-data/site-integrations/mangadex/image-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_READER_ID,
+} from "./fixtures/mock-data/site-integrations/mangadex/image-fixtures"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import {
   openOptionsPage,
@@ -27,13 +34,15 @@ for (const outcome of ["complete", "interrupted"] as const) {
       `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`
     )
     const tabId = await getTabId(page, context)
-    const state = await waitForTabStateById(
-      page,
-      context,
-      tabId,
-      (state) => Array.isArray(state.chapters) && state.chapters.length > 0
+    await waitForTabSeriesTitle(context, tabId, series.seriesTitle)
+    const state = await waitForTabStateById(page, context, tabId, (state) =>
+      state.chapters.some(
+        (chapter) => chapter.id === MANGADEX_CAPTURED_READER_ID
+      )
     )
-    const chapter = state.chapters.find((chapter) => chapter.locked !== true)
+    const chapter = state.chapters.find(
+      (chapter) => chapter.id === MANGADEX_CAPTURED_READER_ID
+    )
     if (!chapter) throw new Error("No downloadable chapter in fixture")
     const options = await openOptionsPage(context, extensionId)
     try {
@@ -42,7 +51,7 @@ for (const outcome of ["complete", "interrupted"] as const) {
         behavior: "default",
         eventsEnabled: true,
       })
-      await seedMangadexSessionPreferences(options, series.seriesId)
+      await seedMangadexSessionPreferences(options, series.seriesId, ["es-la"])
       await persistBrowserModeDownloadSettings(options, {
         mangadex: { autoReadMangaDexSettings: true, imageQuality: "data" },
       })
@@ -83,7 +92,12 @@ for (const outcome of ["complete", "interrupted"] as const) {
             window as unknown as { heldDownloadIds: () => number[] }
           ).heldDownloadIds()
         )
-      await expect.poll(async () => (await heldIds()).length).toBe(1)
+      // Chrome receives the archive after all declared pages are processed.
+      await expect
+        .poll(async () => (await heldIds()).length, {
+          timeout: test.info().timeout,
+        })
+        .toBe(1)
       const id = (await heldIds())[0]!
       const accepted = await options.evaluate(
         async (id) => (await chrome.downloads.search({ id }))[0],
@@ -153,7 +167,7 @@ for (const outcome of ["complete", "interrupted"] as const) {
           /\.(png|jpe?g|webp)$/i.test(name)
         )
         expect(images).toHaveLength(
-          MOCK_IMAGES_PER_CHAPTER +
+          buildAtHomeServerResponse(chapter.id).chapter.data.length +
             Number(task.settingsSnapshot.includeCoverImage)
         )
         expect(images.every(([, bytes]) => bytes.byteLength > 0)).toBe(true)

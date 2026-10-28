@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "mangadex",
-  "name": "MangaDex API",
+  "name": "MangaDex",
   "englishName": "MangaDex",
   "contributors": ["TMD Team"],
   "version": "1.1.0",

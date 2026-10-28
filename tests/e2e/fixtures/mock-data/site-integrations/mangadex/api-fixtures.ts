@@ -6,6 +6,8 @@
  * pulling Playwright's BrowserContext into their bundle.
  */
 
+import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
+
 import {
   EXAMPLE_BASE_URL,
   MANGADEX_GROUPED_COLLAPSE_SERIES_ID,
@@ -205,6 +207,9 @@ export function buildMangadexFeedResponse(
 export function buildMangadexSeriesResponse(
   mangaId: string
 ): Record<string, unknown> {
+  if (mangaId === BASIC_SERIES.series.seriesId) {
+    return structuredClone(captured.data.metadata)
+  }
   const customFixture = CUSTOM_MANGADEX_SERIES_FIXTURES[mangaId]
 
   const meta = customFixture
@@ -215,11 +220,9 @@ export function buildMangadexSeriesResponse(
         author: "Test Author",
         coverUrl: `https://uploads.mangadex.org/covers/${mangaId}/cover.jpg`,
       }
-    : mangaId === BASIC_SERIES.series.seriesId
-      ? BASIC_SERIES.series
-      : mangaId === MINIMAL_SERIES.series.seriesId
-        ? MINIMAL_SERIES.series
-        : { siteId: "mangadex", seriesId: mangaId, seriesTitle: "Unknown" }
+    : mangaId === MINIMAL_SERIES.series.seriesId
+      ? MINIMAL_SERIES.series
+      : { siteId: "mangadex", seriesId: mangaId, seriesTitle: "Unknown" }
 
   const coverFileName = (() => {
     if (typeof meta.coverUrl !== "string") return "cover.jpg"
@@ -299,4 +302,21 @@ export function resolveMangadexChapterDataset(
   }
 
   return []
+}
+
+/** Replay the captured feed window; explicit UI variants use generated responses. */
+export function buildMangadexSeriesFeedResponse(
+  mangaId: string
+): Record<string, unknown> {
+  return mangaId === BASIC_SERIES.series.seriesId
+    ? structuredClone(captured.data.feed)
+    : buildMangadexFeedResponse(resolveMangadexChapterDataset(mangaId))
+}
+
+export function buildMangadexStatisticsResponse(
+  mangaId: string
+): Record<string, unknown> {
+  return mangaId === BASIC_SERIES.series.seriesId
+    ? structuredClone(captured.data.statistics)
+    : { result: "ok", statistics: {} }
 }

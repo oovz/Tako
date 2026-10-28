@@ -20,11 +20,11 @@ import {
 } from "./fixtures/mock-data"
 
 test.describe("Site integration chapter metadata contracts (mocked)", () => {
-  test("MangaDex keeps chapter titles and API volume fields separate", async ({
+  test("MangaDex keeps chapter titles and API volume fields separate in a numbered control", async ({
     context,
     page,
   }) => {
-    const series = Mangadex.BASIC_SERIES.series
+    const series = Mangadex.MINIMAL_SERIES.series
     await page.goto(
       `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`,
       { waitUntil: "domcontentloaded" }
@@ -54,9 +54,39 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
     expect(state.volumes).toEqual(
       expect.arrayContaining([
         { id: "mangadex-volume-1", title: "Vol. 1", label: "Vol. 1" },
-        { id: "mangadex-volume-2", title: "Vol. 2", label: "Vol. 2" },
       ])
     )
+  })
+
+  test("MangaDex preserves the captured chapter without inventing volume metadata", async ({
+    context,
+    page,
+  }) => {
+    const series = Mangadex.BASIC_SERIES.series
+    await page.goto(
+      `${MANGADEX_BASE_URL}/title/${series.seriesId}/hunter-x-hunter`,
+      { waitUntil: "domcontentloaded" }
+    )
+    const tabId = await getTabId(page, context)
+    await waitForTabSeriesTitle(context, tabId, series.seriesTitle)
+    const state = await waitForTabStateById(page, context, tabId, (candidate) =>
+      candidate.chapters.some(
+        (chapter) => chapter.id === Mangadex.MANGADEX_CAPTURED_READER_ID
+      )
+    )
+    const chapter = state.chapters.find(
+      (chapter) => chapter.id === Mangadex.MANGADEX_CAPTURED_READER_ID
+    )
+    expect(chapter).toMatchObject({
+      title: "Encuentro",
+      chapterLabel: "420",
+      chapterNumber: 420,
+      language: "es-la",
+    })
+    expect(chapter?.volumeId).toBeUndefined()
+    expect(chapter?.volumeLabel).toBeUndefined()
+    expect(chapter?.volumeNumber).toBeUndefined()
+    expect(state.volumes).toEqual([])
   })
 
   test("Pixiv Comic composes numbering and subtitle once without synthetic volumes", async ({

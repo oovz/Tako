@@ -32,6 +32,8 @@ export {
   MANGADEX_API_DOMAIN,
   CUSTOM_MANGADEX_SERIES_FIXTURES,
   buildMangadexFeedResponse,
+  buildMangadexSeriesFeedResponse,
+  buildMangadexStatisticsResponse,
   buildMangadexSeriesResponse,
   resolveMangadexChapterDataset,
 } from "./api-fixtures"
@@ -39,6 +41,8 @@ export {
 // Image fixtures
 export {
   MANGADEX_UPLOADS_DOMAIN,
+  MANGADEX_CAPTURED_IMAGE_DOMAIN,
+  MANGADEX_CAPTURED_READER_ID,
   MANGADEX_UPLOADS_BASE_URL,
   MOCK_IMAGES_PER_CHAPTER,
   buildMangadexChapterHash,

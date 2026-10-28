@@ -761,7 +761,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "mangadex",
-    "name": "MangaDex API",
+    "name": "MangaDex",
     "englishName": "MangaDex",
     "contributors": [
       "TMD Team"

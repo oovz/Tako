@@ -29,11 +29,14 @@ import type { RouteRegistrar } from "../../types"
 import { MANGADEX_TEST_DOMAIN } from "../../../test-domains-constants"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 import {
-  buildMangadexFeedResponse,
+  buildMangadexSeriesFeedResponse,
+  buildMangadexStatisticsResponse,
   buildMangadexSeriesResponse,
-  resolveMangadexChapterDataset,
 } from "./api-fixtures"
-import { buildAtHomeServerResponse } from "./image-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_IMAGE_DOMAIN,
+} from "./image-fixtures"
 import { CHAPTER_PAGE_HTML, SERIES_PAGE_HTML } from "./html-fixtures"
 
 const MANGADEX_API_DOMAIN = "api.mangadex.org"
@@ -68,7 +71,7 @@ async function handleMangadexApiFetch(route: Route): Promise<void> {
     parts[1] === "manga" &&
     typeof parts[2] === "string"
   ) {
-    await fulfillJson(route, { result: "ok", statistics: {} })
+    await fulfillJson(route, buildMangadexStatisticsResponse(parts[2]))
     return
   }
 
@@ -76,10 +79,7 @@ async function handleMangadexApiFetch(route: Route): Promise<void> {
     const mangaId = parts[1]
     const isFeed = parts.length >= 3 && parts[2] === "feed"
     if (isFeed) {
-      await fulfillJson(
-        route,
-        buildMangadexFeedResponse(resolveMangadexChapterDataset(mangaId))
-      )
+      await fulfillJson(route, buildMangadexSeriesFeedResponse(mangaId))
       return
     }
     await fulfillJson(route, buildMangadexSeriesResponse(mangaId))
@@ -144,14 +144,16 @@ export const registerMangadexRoutes: RouteRegistrar = async (
     }
   )
 
-  await context.route(
-    `https://${MANGADEX_UPLOADS_DOMAIN}/**`,
-    async (route: Route) => {
+  for (const imageDomain of [
+    MANGADEX_UPLOADS_DOMAIN,
+    MANGADEX_CAPTURED_IMAGE_DOMAIN,
+  ]) {
+    await context.route(`https://${imageDomain}/**`, async (route: Route) => {
       await route.fulfill({
         status: 200,
         contentType: SMALL_PNG_MIME_TYPE,
         body: Buffer.from(cloneSmallPngBytes()),
       })
-    }
-  )
+    })
+  }
 }

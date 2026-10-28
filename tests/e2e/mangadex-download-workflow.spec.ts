@@ -29,7 +29,10 @@ import { Mangadex } from "./fixtures/mock-data"
 import { createCommandEnvelope } from "@/src/runtime/command-envelope"
 import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
 import { MANGADEX_LOCAL_API_PREFIX } from "./fixtures/mock-data/site-integrations/mangadex/local-server"
-import { buildAtHomeServerResponse } from "./fixtures/mock-data/site-integrations/mangadex/image-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_READER_ID,
+} from "./fixtures/mock-data/site-integrations/mangadex/image-fixtures"
 import {
   assertTaskSucceeded,
   openOptionsPage,
@@ -61,7 +64,9 @@ test.describe("MangaDex download workflow (mocked)", () => {
       tabId,
       (state) => Array.isArray(state.chapters) && state.chapters.length > 0
     )
-    const chapter = state.chapters.find((chapter) => chapter.locked !== true)
+    const chapter = state.chapters.find(
+      (chapter) => chapter.id === MANGADEX_CAPTURED_READER_ID
+    )
     if (!chapter) throw new Error("No downloadable chapter in fixture")
     const options = await openOptionsPage(context, extensionId)
     try {
@@ -70,7 +75,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
         behavior: "default",
         eventsEnabled: true,
       })
-      await seedMangadexSessionPreferences(options, series.seriesId)
+      await seedMangadexSessionPreferences(options, series.seriesId, ["es-la"])
       await seedCustomDirectoryHandle(options)
       await persistCustomModeDownloadSettings(options, {
         mangadex: { autoReadMangaDexSettings: true, imageQuality: "data" },
@@ -203,7 +208,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
       )
 
       const firstChapter = tabState.chapters.find(
-        (chapter) => chapter.locked !== true
+        (chapter) => chapter.id === MANGADEX_CAPTURED_READER_ID
       )
       if (!firstChapter) {
         throw new Error(
@@ -234,7 +239,9 @@ test.describe("MangaDex download workflow (mocked)", () => {
         }
       )
       try {
-        await seedMangadexSessionPreferences(optionsPage, series.seriesId)
+        await seedMangadexSessionPreferences(optionsPage, series.seriesId, [
+          "es-la",
+        ])
         const seededDirectoryName = await seedCustomDirectoryHandle(optionsPage)
         await persistCustomModeDownloadSettings(optionsPage, {
           mangadex: {
@@ -391,7 +398,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
             .getByRole("button", { name: /Select Chapters/i })
             .click()
           const completedRow = sidepanel
-            .getByRole("checkbox", { name: firstChapter.title })
+            .locator(`[role="checkbox"][id="${firstChapter.id}"]`)
             .locator("..")
           await expect(
             completedRow.locator("[data-downloaded-marker]")
@@ -411,7 +418,7 @@ test.describe("MangaDex download workflow (mocked)", () => {
             .getByRole("button", { name: /Select Chapters/i })
             .click()
           const rehydratedCompletedRow = sidepanel
-            .getByRole("checkbox", { name: firstChapter.title })
+            .locator(`[role="checkbox"][id="${firstChapter.id}"]`)
             .locator("..")
           await expect(
             rehydratedCompletedRow.locator("[data-downloaded-marker]")
