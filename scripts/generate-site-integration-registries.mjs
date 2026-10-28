@@ -9,7 +9,7 @@ const schemaPath = path.join(integrationsDir, "definition.schema.json")
 const generatedDir = path.join(root, "src/runtime/generated")
 const localesDir = path.join(root, "public/_locales")
 const fixturesDir = path.join(root, "tests/fixtures/site-integrations")
-const supportedLocales = ["en", "ja", "zh_CN", "zh_TW"]
+const supportedLocales = ["en", "ja", "ko", "zh_CN", "zh_TW"]
 const checkOnly = process.argv.includes("--check")
 
 function fail(message) {

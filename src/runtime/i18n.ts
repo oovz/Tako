@@ -194,6 +194,8 @@ export function getLocaleDisplayName(locale: string): string {
       return "繁體中文"
     case "ja":
       return "日本語"
+    case "ko":
+      return "한국어"
     default:
       return locale
   }
