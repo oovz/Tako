@@ -24,6 +24,8 @@ import { SettingsRow } from "./primitives/SettingsRow"
 interface DownloadDestinationSectionProps {
   downloads: ExtensionSettings["downloads"]
   selectedFolderName: string | null
+  folderAccessRequired: boolean
+  onGrantFolderAccess: () => Promise<boolean>
   isPickingFolder: boolean
   isSaving: boolean
   onDownloadsChange: (updates: Partial<ExtensionSettings["downloads"]>) => void
@@ -33,6 +35,8 @@ interface DownloadDestinationSectionProps {
 export function DownloadDestinationSection({
   downloads,
   selectedFolderName,
+  folderAccessRequired,
+  onGrantFolderAccess,
   isPickingFolder,
   isSaving,
   onDownloadsChange,
@@ -106,6 +110,21 @@ export function DownloadDestinationSection({
               <p className="text-xs text-destructive">
                 {t("options_fsaUnsupported")}
               </p>
+            )}
+
+            {isFsaActive && folderAccessRequired && selectedFolderName && (
+              <div role="alert" className="text-xs text-destructive">
+                <p>{t("options_savedFolderRepairRequired")}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSaving || isPickingFolder}
+                  onClick={() => void onGrantFolderAccess()}
+                >
+                  {t("destinationIssue_grantAccess")}
+                </Button>
+              </div>
             )}
 
             {/* FSA Active but No Folder Warning */}

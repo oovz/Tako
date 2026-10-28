@@ -719,6 +719,9 @@
   "options_fsaUnsupported": {
     "message": "Custom folders are unavailable in this browser. Browser Downloads remain available."
   },
+  "options_savedFolderRepairRequired": {
+    "message": "The saved folder needs access. Grant access again or select a folder."
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "No download folder selected"
   },

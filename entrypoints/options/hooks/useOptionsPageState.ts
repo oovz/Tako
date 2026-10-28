@@ -81,14 +81,10 @@ export function useOptionsPageState() {
     fsaController,
     isSavingRef,
     settingsBuffer,
+    savedHandleId: settings?.downloads.customDirectoryHandleId ?? null,
     onSettingsChange: handleFolderSettingsChange,
   })
   const { setHistoryStats, setHistorySeries } = history
-  const {
-    setSavedFolderHandle,
-    setPendingFolderHandle,
-    getFolderDraftRevision,
-  } = folder
   const externalChangeController = useMemo(
     () => new OptionsExternalChangeController(configurationClient),
     [configurationClient]
@@ -114,9 +110,7 @@ export function useOptionsPageState() {
       ))
   useEffect(() => {
     let canceled = false
-    const folderRevisionAtStart = getFolderDraftRevision()
     const draftRevisionAtStart = draftRevisionRef.current
-    const fsaRevisionAtStart = fsaController.revision
 
     dispatchConfiguration({ type: "load-start" })
 
@@ -153,39 +147,16 @@ export function useOptionsPageState() {
         toast.error(t("options_toastLoadFailed"))
       })
 
-    void fsaController
-      .loadSaved()
-      .then((handle) => {
-        if (canceled) return
-        if (fsaController.revision !== fsaRevisionAtStart) return
-        setSavedFolderHandle(handle ?? null)
-        if (getFolderDraftRevision() === folderRevisionAtStart) {
-          setPendingFolderHandle(null)
-        }
-      })
-      .catch((error) => {
-        if (canceled) return
-        setSavedFolderHandle(null)
-        if (getFolderDraftRevision() === folderRevisionAtStart) {
-          setPendingFolderHandle(null)
-        }
-        logger.error("[OPTIONS] Failed to load custom folder handle:", error)
-      })
-
     return () => {
       canceled = true
     }
   }, [
     configurationClient,
     externalChangeController,
-    fsaController,
-    getFolderDraftRevision,
     hostPermissionController,
     loadAttempt,
     setHistorySeries,
     setHistoryStats,
-    setPendingFolderHandle,
-    setSavedFolderHandle,
   ])
 
   useEffect(() => {
@@ -282,10 +253,21 @@ export function useOptionsPageState() {
       return
     }
 
-    let fsaMutationRevision: number | null = null
     let saveSucceeded = false
     const submittedConfiguration = {
-      settings: settingsBuffer,
+      settings: {
+        ...settingsBuffer,
+        downloads: {
+          ...settingsBuffer.downloads,
+          customDirectoryHandleId:
+            settingsBuffer.downloads.destination === "file-system-access" &&
+            folder.pendingFolderHandle
+              ? crypto.randomUUID()
+              : settingsBuffer.downloads.destination === "file-system-access"
+                ? settings.downloads.customDirectoryHandleId
+                : null,
+        },
+      },
       overrides,
       enablement: siteIntegrationEnablement,
       integrationSettings: siteIntegrationSettingsByIntegration,
@@ -323,25 +305,11 @@ export function useOptionsPageState() {
         )
       }
 
-      if (wantsCustomFolder && handleToPersist) {
-        try {
-          fsaMutationRevision = await fsaController.save(handleToPersist)
-        } catch (error) {
-          fsaMutationRevision = fsaController.revision
-          throw error
-        }
-      }
-
-      if (
-        !wantsCustomFolder &&
-        (folder.savedFolderHandle || folder.pendingFolderHandle)
-      ) {
-        try {
-          fsaMutationRevision = await fsaController.clear()
-        } catch (error) {
-          fsaMutationRevision = fsaController.revision
-          throw error
-        }
+      if (wantsCustomFolder && folder.pendingFolderHandle) {
+        await fsaController.stage(
+          folder.pendingFolderHandle,
+          submittedConfiguration.settings.downloads.customDirectoryHandleId!
+        )
       }
       const response = await configurationClient.save({
         ...submittedConfiguration,
@@ -368,19 +336,6 @@ export function useOptionsPageState() {
       saveSucceeded = true
       toast.success(t("options_toastSavedSuccessfully"))
     } catch (error) {
-      if (fsaMutationRevision !== null) {
-        try {
-          await fsaController.restore(
-            folder.savedFolderHandle,
-            fsaMutationRevision
-          )
-        } catch (rollbackError) {
-          logger.error(
-            "[OPTIONS] Failed to restore saved folder handle after save error:",
-            rollbackError
-          )
-        }
-      }
       logger.error("[OPTIONS] Failed to save settings:", error)
       const description =
         error instanceof Error && error.message
@@ -578,6 +533,7 @@ export function useOptionsPageState() {
     historyStats: history.historyStats,
     historySeries: history.historySeries,
     selectedFolderName,
+    folderAccessRequired: folder.folderAccessRequired,
     isLoading,
     loadFailed,
     isSaving,

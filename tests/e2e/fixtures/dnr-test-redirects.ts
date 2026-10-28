@@ -241,7 +241,9 @@ export async function installDnrRedirectRules(
  * teardown so later tests (or a later spec file) start from a clean slate
  * if the same browser context is reused.
  */
-export async function clearDnrRedirectRules(swWorker: Worker): Promise<void> {
+export async function clearDnrRedirectRules(
+  swWorker: Pick<Worker, "evaluate">
+): Promise<void> {
   await swWorker.evaluate(
     async ({ minId, maxId }: { minId: number; maxId: number }) => {
       const existing = await chrome.declarativeNetRequest.getSessionRules()

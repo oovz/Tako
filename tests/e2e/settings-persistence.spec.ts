@@ -71,7 +71,14 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
 
 async function readPersistedDirectoryName(page: Page): Promise<string | null> {
   return await page.evaluate(
-    async ({ dbName, storeName, handleId }) => {
+    async ({ dbName, storeName }) => {
+      const stored = await chrome.storage.local.get("settings:global")
+      const handleId = (
+        stored["settings:global"] as {
+          downloads: { customDirectoryHandleId: string | null }
+        }
+      ).downloads.customDirectoryHandleId
+      if (handleId === null) return null
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(dbName, 1)
         request.onupgradeneeded = () => {
@@ -259,6 +266,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -294,7 +302,7 @@ test.describe("Settings Persistence and Usage", () => {
         .toBe(directoryName)
     })
 
-    test("saving browser mode clears the persisted custom folder handle", async () => {
+    test("saving browser mode clears the selected custom folder capability", async () => {
       await options.navigate()
       await options.ensureInitialized()
 
@@ -307,6 +315,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -411,6 +420,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -432,6 +442,14 @@ test.describe("Settings Persistence and Usage", () => {
       await expect(
         optionsPage.getByText("No download folder selected")
       ).toHaveCount(0)
+      await switchLocator.click()
+      await switchLocator.click()
+      await options.saveSettings()
+      await options.waitForSaveSuccess()
+      await expect(
+        optionsPage.getByText(`Current folder: ${directoryName}`)
+      ).toBeVisible()
+      expect(await readPersistedDirectoryName(optionsPage)).toBe(directoryName)
     })
 
     test("saving custom folder destination when the underlying folder was deleted fails with folder deleted error", async () => {
@@ -447,6 +465,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -588,4 +607,103 @@ test.describe("Settings Cross-Page Consistency", () => {
     await page1.close()
     await page2.close()
   })
+})
+
+test.describe("Destination saves across Options closure", () => {
+  for (const boundary of ["before-commit", "after-commit"] as const) {
+    test(`recovers the matching saved folder ${boundary}`, async ({
+      page,
+      context,
+      extensionId,
+    }) => {
+      const initialOptions = new OptionsPageObject(page, extensionId)
+      await initialOptions.navigate()
+      await initialOptions.ensureInitialized()
+      const oldName = await seedCustomDirectoryHandle(page)
+      await page.evaluate(
+        async (settings) => {
+          await chrome.storage.local.set({ "settings:global": settings })
+        },
+        {
+          ...DEFAULT_SETTINGS,
+          uiLanguage: "en",
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            destination: "file-system-access",
+            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+          },
+        }
+      )
+      await initialOptions.navigate()
+      await initialOptions.ensureInitialized()
+      await initialOptions.switchToSection("Downloads")
+      await expect(page.getByText(`Current folder: ${oldName}`)).toBeVisible()
+      const newName = await page.evaluate(async (boundary) => {
+        const name = `new-folder-${crypto.randomUUID()}`
+        const root = await navigator.storage.getDirectory()
+        const handle = await root.getDirectoryHandle(name, { create: true })
+        Object.defineProperty(window, "showDirectoryPicker", {
+          configurable: true,
+          value: async () => handle,
+        })
+        const send = chrome.runtime.sendMessage.bind(chrome.runtime)
+        chrome.runtime.sendMessage = ((message: {
+          type?: string
+          payload?: { configuration?: unknown }
+        }) => {
+          if (message.type !== "SAVE_OPTIONS_CONFIGURATION")
+            return send(message)
+          Object.assign(window, {
+            submittedConfiguration: message.payload?.configuration,
+          })
+          if (boundary === "before-commit") return new Promise(() => {})
+          return send(message).then(() => new Promise(() => {}))
+        }) as typeof chrome.runtime.sendMessage
+        return name
+      }, boundary)
+      await page.getByRole("button", { name: "Change folder" }).click()
+      await expect(page.getByText(`Current folder: ${newName}`)).toBeVisible()
+      await page.getByRole("button", { name: "Save Changes" }).click()
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Boolean(
+              (window as unknown as { submittedConfiguration?: unknown })
+                .submittedConfiguration
+            )
+          )
+        )
+        .toBe(true)
+
+      const observer = await context.newPage()
+      const reopened = new OptionsPageObject(observer, extensionId)
+      await reopened.navigate()
+      await reopened.ensureInitialized()
+      const expectedName = boundary === "before-commit" ? oldName : newName
+      await expect
+        .poll(() => readPersistedDirectoryName(observer))
+        .toBe(expectedName)
+      await page.close()
+
+      const session = await context.newCDPSession(observer)
+      const { targetInfos } = await session.send("Target.getTargets")
+      const worker = targetInfos.find(
+        (target) =>
+          target.type === "service_worker" &&
+          target.url === `chrome-extension://${extensionId}/background.js`
+      )
+      expect(worker).toBeDefined()
+      await session.send("Target.closeTarget", { targetId: worker!.targetId })
+      await session.detach()
+
+      await reopened.navigate()
+      await reopened.ensureInitialized()
+      await reopened.switchToSection("Downloads")
+      await expect(
+        observer.getByText(`Current folder: ${expectedName}`)
+      ).toBeVisible()
+      expect(await readPersistedDirectoryName(observer)).toBe(expectedName)
+      await observer.close()
+    })
+  }
 })

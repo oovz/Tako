@@ -719,6 +719,9 @@
   "options_fsaUnsupported": {
     "message": "このブラウザーではカスタムフォルダーを利用できません。ブラウザーのダウンロードは引き続き利用できます。"
   },
+  "options_savedFolderRepairRequired": {
+    "message": "保存先フォルダーへのアクセスが必要です。再度アクセスを許可するか、フォルダーを選択してください。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "ダウンロードフォルダーが選択されていません"
   },

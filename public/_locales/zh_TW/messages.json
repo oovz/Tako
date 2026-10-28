@@ -719,6 +719,9 @@
   "options_fsaUnsupported": {
     "message": "此瀏覽器不支援自訂資料夾。仍可使用瀏覽器下載。"
   },
+  "options_savedFolderRepairRequired": {
+    "message": "已儲存的資料夾需要存取權限。請重新授權或選擇資料夾。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未選擇下載資料夾"
   },

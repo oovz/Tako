@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest"
+import {
+  DirectoryNotFoundError,
+  PermissionExpiredError,
+} from "@/src/types/errors"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   OptionsConfigurationService,
@@ -13,6 +17,23 @@ import { SETTINGS_STORAGE_KEY } from "@/src/storage/settings-repository"
 import { SITE_OVERRIDES_STORAGE_KEY } from "@/src/storage/site-overrides-service"
 import { SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY } from "@/src/storage/site-integration-enablement-service"
 import { SITE_INTEGRATION_SETTINGS_STORAGE_KEY } from "@/src/storage/site-integration-settings-service"
+
+const folders = vi.hoisted(() => ({
+  load: vi.fn(),
+  check: vi.fn(),
+  prune: vi.fn(async () => undefined),
+}))
+vi.mock("@/src/storage/fs-access", () => ({
+  loadDownloadRootHandle: folders.load,
+  checkPermissionBeforeWrite: folders.check,
+  removeUnusedDownloadRootHandles: folders.prune,
+}))
+
+beforeEach(() => {
+  folders.load.mockReset()
+  folders.check.mockReset()
+  folders.check.mockResolvedValue(undefined)
+})
 
 function configuration(
   overrides: Partial<OptionsConfigurationSnapshot> = {}
@@ -89,6 +110,80 @@ function storedConfiguration(
 }
 
 describe("OptionsConfigurationService", () => {
+  it.each([
+    [
+      new PermissionExpiredError({ component: "options", operation: "save" }),
+      "Permission was denied for the selected folder. Choose another folder or grant access.",
+    ],
+    [
+      new DirectoryNotFoundError("Folder", {
+        component: "options",
+        operation: "save",
+      }),
+      "The selected download folder does not exist or was deleted. Please select a valid folder.",
+    ],
+    [
+      new Error("browser-internal details"),
+      "The saved folder needs access. Grant access again or select a folder.",
+    ],
+  ])("localizes late capability failures", async (failure, message) => {
+    const next = configuration()
+    next.settings.downloads.destination = "file-system-access"
+    next.settings.downloads.customDirectoryHandleId = "folder-new"
+    folders.load.mockResolvedValue({ kind: "directory", name: "New" })
+    folders.check.mockRejectedValueOnce(failure)
+    const storage = {
+      get: vi.fn(async () => storedConfiguration()),
+      set: vi.fn(),
+    }
+    const service = new OptionsConfigurationService(createDependencies(storage))
+    await expect(service.saveConfiguration(next)).rejects.toThrow(message)
+    expect(storage.set).not.toHaveBeenCalled()
+  })
+
+  it("commits the staged folder reference after verifying its capability", async () => {
+    const next = configuration()
+    next.settings.downloads.destination = "file-system-access"
+    next.settings.downloads.customDirectoryHandleId = "folder-new"
+    const handle = { kind: "directory", name: "New folder" }
+    folders.load.mockResolvedValue(handle)
+    const storage = {
+      get: vi.fn(async () => storedConfiguration()),
+      set: vi.fn(async () => undefined),
+    }
+    const service = new OptionsConfigurationService(createDependencies(storage))
+
+    await expect(service.saveConfiguration(next)).resolves.toEqual(next)
+    expect(folders.load).toHaveBeenCalledWith("folder-new")
+    expect(folders.check).toHaveBeenCalledWith(handle)
+    expect(storage.set).toHaveBeenCalledWith(storedConfiguration(next))
+  })
+
+  it.each(["missing", "revoked"])(
+    "preserves the saved configuration when the staged capability is %s",
+    async (failure) => {
+      const next = configuration()
+      next.settings.downloads.destination = "file-system-access"
+      next.settings.downloads.customDirectoryHandleId = "folder-new"
+      folders.load.mockResolvedValue(
+        failure === "missing" ? undefined : { kind: "directory", name: "New" }
+      )
+      if (failure === "revoked")
+        folders.check.mockRejectedValue(new Error("Permission required"))
+      const storage = {
+        get: vi.fn(async () => storedConfiguration()),
+        set: vi.fn(async () => undefined),
+      }
+      const service = new OptionsConfigurationService(
+        createDependencies(storage)
+      )
+
+      await expect(service.saveConfiguration(next)).rejects.toThrow()
+      expect(storage.set).not.toHaveBeenCalled()
+      await expect(service.getConfiguration()).resolves.toEqual(configuration())
+    }
+  )
+
   it("serializes reads behind a save and returns one untorn snapshot", async () => {
     const initial = storedConfiguration()
     const next = configuration({
@@ -117,12 +212,12 @@ describe("OptionsConfigurationService", () => {
     const saving = service.saveConfiguration(next)
     await setReady
     const reading = service.getConfiguration()
-    expect(storage.get).not.toHaveBeenCalled()
+    expect(storage.get).toHaveBeenCalledTimes(1)
 
     releaseSet()
     await expect(saving).resolves.toEqual(next)
     await expect(reading).resolves.toEqual(next)
-    expect(storage.get).toHaveBeenCalledTimes(1)
+    expect(storage.get).toHaveBeenCalledTimes(3)
     expect(storage.set).toHaveBeenCalledTimes(1)
   })
 

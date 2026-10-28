@@ -12,7 +12,6 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { OptionsConfigurationData } from "@/src/runtime/runtime-message-contracts"
 
 vi.mock("@/src/storage/fs-access", () => ({
-  clearDownloadRootHandle: vi.fn(),
   loadDownloadRootHandle: vi.fn(),
   saveDownloadRootHandle: vi.fn(),
   verifyPermission: vi.fn(),
@@ -541,44 +540,25 @@ describe("Options host-permission and FSA controllers", () => {
       status: "granted",
       handle,
     })
-    await controller.save(handle as never)
-    expect(saveDownloadRootHandle).toHaveBeenCalledWith(handle)
+    await controller.stage(handle, "staged-folder")
+    expect(saveDownloadRootHandle).toHaveBeenCalledWith(handle, "staged-folder")
   })
 
-  it("serializes mutations and skips a stale rollback after a newer repair", async () => {
-    const { saveDownloadRootHandle, clearDownloadRootHandle } =
-      await import("@/src/storage/fs-access")
-    const oldHandle = { name: "old" } as unknown as FileSystemDirectoryHandle
-    const repairedHandle = {
-      name: "repaired",
-    } as unknown as FileSystemDirectoryHandle
+  it("stages independent capabilities without overwriting the saved folder", async () => {
+    const { saveDownloadRootHandle } = await import("@/src/storage/fs-access")
     vi.mocked(saveDownloadRootHandle).mockClear()
-    vi.mocked(clearDownloadRootHandle).mockClear()
-    let releaseOlderSave!: () => void
-    const olderSaveGate = new Promise<void>((resolve) => {
-      releaseOlderSave = resolve
-    })
-    vi.mocked(saveDownloadRootHandle)
-      .mockImplementationOnce(async () => {
-        await olderSaveGate
-      })
-      .mockResolvedValue(undefined)
-    vi.mocked(clearDownloadRootHandle).mockResolvedValue(undefined)
-
+    const first = { name: "first" } as FileSystemDirectoryHandle
+    const second = { name: "second" } as FileSystemDirectoryHandle
     const controller = new OptionsFsaController()
-    const olderSave = controller.save(oldHandle as never)
-    await Promise.resolve()
-    const oldRevision = controller.revision
-    const newerRepair = controller.save(repairedHandle as never)
 
-    await expect(
-      controller.restore(oldHandle as never, oldRevision)
-    ).resolves.toBe(false)
-    releaseOlderSave()
-    await olderSave
-    await newerRepair
-    expect(saveDownloadRootHandle).toHaveBeenCalledTimes(2)
-    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(2, repairedHandle)
-    expect(clearDownloadRootHandle).not.toHaveBeenCalled()
+    await controller.stage(first, "first-id")
+    await controller.stage(second, "second-id")
+
+    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(1, first, "first-id")
+    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(
+      2,
+      second,
+      "second-id"
+    )
   })
 })

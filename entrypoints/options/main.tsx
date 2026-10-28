@@ -101,6 +101,7 @@ function OptionsPage() {
     historyStats,
     historySeries,
     selectedFolderName,
+    folderAccessRequired,
     isLoading,
     loadFailed,
     isSaving,
@@ -311,6 +312,8 @@ function OptionsPage() {
                   settings={settingsBuffer}
                   onChange={handleSettingsChange}
                   selectedFolderName={selectedFolderName}
+                  folderAccessRequired={folderAccessRequired}
+                  onGrantFolderAccess={grantDownloadFolderAccess}
                   onPickFolder={pickDownloadFolder}
                   isPickingFolder={isPickingFolder}
                   isSaving={isSaving}

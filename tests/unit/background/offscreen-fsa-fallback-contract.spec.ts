@@ -4,7 +4,6 @@ import {
   DestinationService,
   type DestinationBlockResult,
 } from "@/entrypoints/background/destination"
-import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 const mocks = vi.hoisted(() => ({
@@ -117,7 +116,7 @@ describe("DestinationService explicit destination contract", () => {
       })
     ).resolves.toEqual({
       kind: "custom",
-      handleId: DOWNLOAD_ROOT_HANDLE_ID,
+
       handle,
     })
   })

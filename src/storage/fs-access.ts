@@ -1,3 +1,7 @@
+import {
+  DirectoryNotFoundError,
+  PermissionExpiredError,
+} from "@/src/types/errors"
 /*
   File System Access helpers for selecting a download root and writing files.
   - Stores FileSystemDirectoryHandle in IndexedDB (structured clone via IDB allowed).
@@ -5,6 +9,8 @@
   - No implicit fallbacks: callers must surface errors (permission denied, missing handle) explicitly.
 */
 
+import { parseSettingsDocument } from "@/src/domain/settings/schema"
+import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import logger from "@/src/runtime/logger"
 import type { ConflictPolicy } from "@/src/shared/download-contract"
 
@@ -168,25 +174,43 @@ async function idbSet(key: string, value: unknown): Promise<void> {
   )
 }
 
-async function idbDelete(key: string): Promise<void> {
+// A settings save stages a fresh ID, then commits that ID with the complete
+// configuration. The selected capability is already durable at commit, so
+// reopening Options or restarting the worker only needs to read the saved ID.
+export async function saveDownloadRootHandle(
+  handle: DirHandle,
+  handleId: string
+): Promise<void> {
+  await idbSet(handleId, handle)
+}
+
+/** Remove capabilities known to belong to settled saves. */
+export async function removeUnusedDownloadRootHandles(
+  candidates: ReadonlySet<string>,
+  retainedIds: ReadonlySet<string>
+): Promise<void> {
+  const unused = [...candidates].filter((id) => !retainedIds.has(id))
+  if (unused.length === 0) return
   await runTransaction(
     "readwrite",
-    (store) => store.delete(key),
+    (store) => {
+      const requests = unused.map((id) => store.delete(id))
+      return requests[requests.length - 1]
+    },
     () => undefined
   )
 }
 
-export async function saveDownloadRootHandle(handle: DirHandle): Promise<void> {
-  // FileSystem handles are serializable via structured cloning into IndexedDB
-  await idbSet(DOWNLOAD_ROOT_HANDLE_ID, handle)
-}
-
-export async function loadDownloadRootHandle(): Promise<DirHandle | undefined> {
-  return idbGet<DirHandle>(DOWNLOAD_ROOT_HANDLE_ID)
-}
-
-export async function clearDownloadRootHandle(): Promise<void> {
-  await idbDelete(DOWNLOAD_ROOT_HANDLE_ID)
+export async function loadDownloadRootHandle(
+  handleId?: string | null
+): Promise<DirHandle | undefined> {
+  if (handleId === undefined) {
+    const stored = await chrome.storage.local.get(SETTINGS_STORAGE_KEYS.global)
+    handleId = parseSettingsDocument(stored[SETTINGS_STORAGE_KEYS.global])
+      .downloads.customDirectoryHandleId
+  }
+  if (handleId === null) return undefined
+  return idbGet<DirHandle>(handleId)
 }
 
 export async function verifyPermission(
@@ -256,10 +280,6 @@ async function ensureSubdir(
 export async function checkPermissionBeforeWrite(
   dir: DirHandle
 ): Promise<void> {
-  // Import error types dynamically to avoid circular dependency
-  const { PermissionExpiredError, DirectoryNotFoundError } =
-    await import("@/src/types/errors")
-
   try {
     // Directory enumeration itself is permission-gated. Query the stored
     // handle first so revoked access is not misreported as a missing folder.

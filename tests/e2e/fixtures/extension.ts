@@ -337,9 +337,19 @@ export async function teardownExtensionResources(
     dnrRulesToInstall,
   } = resources
 
-  if (dnrRulesToInstall.length > 0 && backgroundWorker) {
+  if (dnrRulesToInstall.length > 0 && context && backgroundWorker) {
     try {
-      await clearDnrRedirectRules(backgroundWorker)
+      // A restarted worker invalidates its Playwright execution handle. Use a
+      // fresh extension document for privileged cleanup of this temp profile.
+      const cleanupPage = await context.newPage()
+      try {
+        await cleanupPage.goto(
+          new URL("/options.html", backgroundWorker.url()).href
+        )
+        await clearDnrRedirectRules(cleanupPage)
+      } finally {
+        await cleanupPage.close()
+      }
     } catch (error) {
       errors.push(error as Error)
       console.warn(

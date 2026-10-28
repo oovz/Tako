@@ -513,6 +513,14 @@ describe("migrateDurableStateForCurrentSchema", () => {
     async (failurePoint) => {
       local = {
         stateSchemaEpoch: 2,
+        [SETTINGS_KEY]: {
+          ...structuredClone(DEFAULT_SETTINGS),
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            destination: "file-system-access",
+            customDirectoryHandleId: "selected-capability",
+          },
+        },
         commandResults: { old: true },
         downloadQueue: [epoch2Task()],
         unrelatedUserState: { keep: true },
@@ -600,6 +608,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
         }),
       ])
       expect(local.unrelatedUserState).toEqual({ keep: true })
+      expect(local[SETTINGS_KEY]).toMatchObject({
+        downloads: {
+          destination: "file-system-access",
+          customDirectoryHandleId: "selected-capability",
+        },
+      })
     }
   )
 

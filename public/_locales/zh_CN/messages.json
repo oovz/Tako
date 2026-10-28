@@ -719,6 +719,9 @@
   "options_fsaUnsupported": {
     "message": "此浏览器不支持自定义文件夹。仍可使用浏览器下载。"
   },
+  "options_savedFolderRepairRequired": {
+    "message": "已保存的文件夹需要访问权限。请重新授权或选择文件夹。"
+  },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未选择下载文件夹"
   },

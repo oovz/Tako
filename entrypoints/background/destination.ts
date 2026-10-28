@@ -1,5 +1,4 @@
 import {
-  DOWNLOAD_ROOT_HANDLE_ID,
   loadDownloadRootHandle,
   queryFsaPermission,
 } from "@/src/storage/fs-access"
@@ -15,8 +14,7 @@ import type { DownloadDestination } from "@/src/shared/download-contract"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 
 type EffectiveDestination =
-  | { kind: "custom"; handleId: string; handle: FileSystemDirectoryHandle }
-  | { kind: "downloads" }
+  { kind: "custom"; handle: FileSystemDirectoryHandle } | { kind: "downloads" }
 
 export interface DestinationContext {
   taskId: string
@@ -202,7 +200,6 @@ export class DestinationService {
 
     return {
       kind: "custom",
-      handleId: DOWNLOAD_ROOT_HANDLE_ID,
       handle,
     }
   }

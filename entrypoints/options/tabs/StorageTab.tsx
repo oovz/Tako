@@ -25,6 +25,8 @@ interface StorageTabProps {
   settings: ExtensionSettings
   onChange: (updates: Partial<ExtensionSettings>) => void
   selectedFolderName: string | null
+  folderAccessRequired: boolean
+  onGrantFolderAccess: () => Promise<boolean>
   onPickFolder: () => Promise<void>
   isPickingFolder: boolean
   isSaving: boolean
@@ -50,6 +52,8 @@ export function StorageTab({
   settings,
   onChange,
   selectedFolderName,
+  folderAccessRequired,
+  onGrantFolderAccess,
   onPickFolder,
   isPickingFolder,
   isSaving,
@@ -97,6 +101,8 @@ export function StorageTab({
       <DownloadDestinationSection
         downloads={settings.downloads}
         selectedFolderName={selectedFolderName}
+        folderAccessRequired={folderAccessRequired}
+        onGrantFolderAccess={onGrantFolderAccess}
         isPickingFolder={isPickingFolder}
         isSaving={isSaving}
         onDownloadsChange={updateDownloads}

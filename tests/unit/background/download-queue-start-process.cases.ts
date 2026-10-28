@@ -369,7 +369,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
-        handleId: "root",
         handle: {} as FileSystemDirectoryHandle,
       })
       const finalization = vi
@@ -485,7 +484,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
-        handleId: "root",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(
@@ -608,7 +606,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
-        handleId: "root",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(
@@ -669,7 +666,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
-        handleId: "root",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(

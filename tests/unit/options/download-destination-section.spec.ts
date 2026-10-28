@@ -16,6 +16,27 @@ vi.mock("@/src/storage/fs-access", () => ({
 }))
 
 describe("DownloadDestinationSection", () => {
+  it("shows a repair action for a saved folder whose permission was revoked", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DownloadDestinationSection, {
+        downloads: {
+          ...DEFAULT_SETTINGS.downloads,
+          destination: "file-system-access",
+        },
+        selectedFolderName: "Saved folder",
+        folderAccessRequired: true,
+        onGrantFolderAccess: vi.fn(),
+        isPickingFolder: false,
+        isSaving: false,
+        onDownloadsChange: vi.fn(),
+        onPickFolder: vi.fn(),
+      })
+    )
+    expect(markup).toContain("The saved folder needs access.")
+    expect(markup).toContain("Grant access again")
+    expect(markup).toContain('role="alert"')
+  })
+
   it("renders default browser download message when destination is downloads-api and no folder selected", () => {
     const markup = renderToStaticMarkup(
       createElement(DownloadDestinationSection, {
@@ -23,6 +44,8 @@ describe("DownloadDestinationSection", () => {
           ...DEFAULT_SETTINGS.downloads,
           destination: "downloads-api",
         },
+        folderAccessRequired: false,
+        onGrantFolderAccess: vi.fn(),
         selectedFolderName: null,
         isPickingFolder: false,
         isSaving: false,
@@ -44,6 +67,8 @@ describe("DownloadDestinationSection", () => {
           ...DEFAULT_SETTINGS.downloads,
           destination: "file-system-access",
         },
+        folderAccessRequired: false,
+        onGrantFolderAccess: vi.fn(),
         selectedFolderName: "MangaFolder",
         isPickingFolder: false,
         isSaving: false,
@@ -63,6 +88,8 @@ describe("DownloadDestinationSection", () => {
           ...DEFAULT_SETTINGS.downloads,
           destination: "file-system-access",
         },
+        folderAccessRequired: false,
+        onGrantFolderAccess: vi.fn(),
         selectedFolderName: null,
         isPickingFolder: false,
         isSaving: false,
@@ -89,6 +116,8 @@ describe("DownloadDestinationSection", () => {
           destination: "downloads-api",
           suppressSaveAsDialog: true,
         },
+        folderAccessRequired: false,
+        onGrantFolderAccess: vi.fn(),
         selectedFolderName: null,
         isPickingFolder: false,
         isSaving: false,
@@ -111,6 +140,8 @@ describe("DownloadDestinationSection", () => {
           destination: "file-system-access",
           suppressSaveAsDialog: true,
         },
+        folderAccessRequired: false,
+        onGrantFolderAccess: vi.fn(),
         selectedFolderName: "MangaFolder",
         isPickingFolder: false,
         isSaving: false,
