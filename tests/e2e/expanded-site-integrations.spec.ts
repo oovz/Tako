@@ -24,6 +24,7 @@ import { manganatoFixture } from "./fixtures/mock-data/site-integrations/mangana
 import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
 import { boyloveFixture } from "./fixtures/mock-data/site-integrations/boylove/routes"
 
+import { mycomicFixture } from "./fixtures/mock-data/site-integrations/mycomic/routes"
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 import { zaimanhuaFixture } from "./fixtures/mock-data/site-integrations/mangaagain/routes"
@@ -37,6 +38,7 @@ const fixtures = [
   manganatoFixture,
   mangakakalotFixture,
   boyloveFixture,
+  mycomicFixture,
   dm5Fixture,
   mangabzFixture,
   zaimanhuaFixture,
@@ -200,6 +202,11 @@ const refererCases = [
     id: "mangabz",
     rule: 41121,
     url: "https://image.mangabz.com/browser/1.png",
+  },
+  {
+    id: "mycomic",
+    rule: 41015,
+    url: "https://biccam.com/chapters/492177/1-fixture.png",
   },
 ]
 

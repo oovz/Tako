@@ -31,6 +31,7 @@ import { registerManganatoRoutes } from "./mock-data/site-integrations/manganato
 import { registerMangakakalotRoutes } from "./mock-data/site-integrations/mangakakalot/routes"
 import { registerBoyloveRoutes } from "./mock-data/site-integrations/boylove/routes"
 
+import { registerMycomicRoutes } from "./mock-data/site-integrations/mycomic/routes"
 import { registerDm5Routes } from "./mock-data/site-integrations/animemangahouse/routes"
 import { registerMangabzRoutes } from "./mock-data/site-integrations/mangabz/routes"
 import { registerZaimanhuaRoutes } from "./mock-data/site-integrations/mangaagain/routes"
@@ -53,6 +54,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerManganatoRoutes,
   registerMangakakalotRoutes,
   registerBoyloveRoutes,
+  registerMycomicRoutes,
   registerDm5Routes,
   registerMangabzRoutes,
   registerZaimanhuaRoutes,

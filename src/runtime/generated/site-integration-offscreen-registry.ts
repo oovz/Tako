@@ -14,6 +14,7 @@ import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site
 import { offscreenSiteAdapter as manganatoOffscreenAdapter } from '@/src/site-integrations/manganato/offscreen-runtime'
 import { offscreenSiteAdapter as mangaplusOffscreenAdapter } from '@/src/site-integrations/mangaplus/offscreen-runtime'
 import { offscreenSiteAdapter as manhuaguiOffscreenAdapter } from '@/src/site-integrations/manhuagui/offscreen-runtime'
+import { offscreenSiteAdapter as mycomicOffscreenAdapter } from '@/src/site-integrations/mycomic/offscreen-runtime'
 import { offscreenSiteAdapter as pixiv_comicOffscreenAdapter } from '@/src/site-integrations/pixiv-comic/offscreen-runtime'
 import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/site-integrations/shonenjumpplus/offscreen-runtime'
 
@@ -31,6 +32,7 @@ export const offscreenSiteAdapters = [
   manganatoOffscreenAdapter,
   mangaplusOffscreenAdapter,
   manhuaguiOffscreenAdapter,
+  mycomicOffscreenAdapter,
   pixiv_comicOffscreenAdapter,
   shonenjumpplusOffscreenAdapter,
 ] as const satisfies readonly OffscreenSiteAdapter[]
@@ -49,6 +51,7 @@ export const offscreenSiteAdaptersById = {
   "manganato": manganatoOffscreenAdapter,
   "mangaplus": mangaplusOffscreenAdapter,
   "manhuagui": manhuaguiOffscreenAdapter,
+  "mycomic": mycomicOffscreenAdapter,
   "pixiv-comic": pixiv_comicOffscreenAdapter,
   "shonenjumpplus": shonenjumpplusOffscreenAdapter,
 } as Readonly<Record<string, OffscreenSiteAdapter>>

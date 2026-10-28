@@ -1313,6 +1313,96 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "mycomic",
+    "name": "MYCOMIC",
+    "englishName": "MYCOMIC",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mycomic.com"
+      ],
+      "seriesMatches": [
+        "/comics/*",
+        "/cn/comics/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://mycomic.com/*",
+      "https://biccam.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mycomic-page",
+        "purpose": "Series metadata, complete chapter catalogs and reader pages",
+        "origins": [
+          "https://mycomic.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "mycomic-image",
+        "purpose": "Chapter images and covers",
+        "origins": [
+          "https://biccam.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41015,
+        "requestDomains": [
+          "biccam.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://mycomic.com/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "pixiv-comic",
     "name": "Pixiv Comic",
     "englishName": "pixiv Comic",

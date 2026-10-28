@@ -68,7 +68,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
   mangamillion: "https://mangamillion.shueisha.co.jp/en/title/1",
   manganato: "https://www.manganato.gg/manga/hunter-x-hunter",
   mangaplus: "https://mangaplus.shueisha.co.jp/titles/100467",
-
+  mycomic: "https://mycomic.com/cn/comics/35937",
   "pixiv-comic": "https://comic.pixiv.net/works/12345",
   manhuagui: "https://www.manhuagui.com/comic/28004/",
   shonenjumpplus: "https://shonenjumpplus.com/episode/3269754496649675702",

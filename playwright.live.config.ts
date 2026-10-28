@@ -106,6 +106,7 @@ export default defineConfig({
       "mangaplus",
       "animemangahouse",
       "mangaagain",
+      "mycomic",
       "mangabz",
     ].map((name) => ({
       name,

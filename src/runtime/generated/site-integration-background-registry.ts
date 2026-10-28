@@ -14,6 +14,7 @@ import { backgroundSiteAdapter as mangamillionBackgroundAdapter } from '@/src/si
 import { backgroundSiteAdapter as manganatoBackgroundAdapter } from '@/src/site-integrations/manganato/background-runtime'
 import { backgroundSiteAdapter as mangaplusBackgroundAdapter } from '@/src/site-integrations/mangaplus/background-runtime'
 import { backgroundSiteAdapter as manhuaguiBackgroundAdapter } from '@/src/site-integrations/manhuagui/background-runtime'
+import { backgroundSiteAdapter as mycomicBackgroundAdapter } from '@/src/site-integrations/mycomic/background-runtime'
 import { backgroundSiteAdapter as pixiv_comicBackgroundAdapter } from '@/src/site-integrations/pixiv-comic/background-runtime'
 import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/site-integrations/shonenjumpplus/background-runtime'
 
@@ -31,6 +32,7 @@ export const backgroundSiteAdapters = [
   manganatoBackgroundAdapter,
   mangaplusBackgroundAdapter,
   manhuaguiBackgroundAdapter,
+  mycomicBackgroundAdapter,
   pixiv_comicBackgroundAdapter,
   shonenjumpplusBackgroundAdapter,
 ] as const satisfies readonly BackgroundSiteAdapter[]
@@ -49,6 +51,7 @@ export const backgroundSiteAdaptersById = {
   "manganato": manganatoBackgroundAdapter,
   "mangaplus": mangaplusBackgroundAdapter,
   "manhuagui": manhuaguiBackgroundAdapter,
+  "mycomic": mycomicBackgroundAdapter,
   "pixiv-comic": pixiv_comicBackgroundAdapter,
   "shonenjumpplus": shonenjumpplusBackgroundAdapter,
 } as Readonly<Record<string, BackgroundSiteAdapter>>
