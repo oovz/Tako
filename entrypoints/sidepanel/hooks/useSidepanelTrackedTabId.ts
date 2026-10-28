@@ -44,7 +44,7 @@ export function createTrackedTabRefreshCoordinator(input: {
   }
 }
 
-export function useSidepanelTrackedTabId(): {
+export function useSidepanelTrackedTabId(windowId: number | undefined): {
   tabId: number | undefined
   activeUrl: string | undefined
 } {
@@ -75,16 +75,19 @@ export function useSidepanelTrackedTabId(): {
   )
 
   useEffect(() => {
+    if (windowId === undefined) return
+
     logger.debug("[sidepanel] Initializing tracked-tab hook")
     const coordinator = createTrackedTabRefreshCoordinator({
-      queryActiveTab: () =>
-        chrome.tabs.query({ currentWindow: true, active: true }),
+      queryActiveTab: () => chrome.tabs.query({ windowId, active: true }),
       commit: commitTrackedTab,
     })
     const handleActivated = (activeInfo: {
       tabId: number
       windowId: number
     }) => {
+      if (activeInfo.windowId !== windowId) return
+
       logger.debug("[sidepanel] Active tab changed", {
         reason: "tabs.onActivated",
         tabId: activeInfo.tabId,
@@ -100,7 +103,7 @@ export function useSidepanelTrackedTabId(): {
       changeInfo: chrome.tabs.OnUpdatedInfo,
       tab: chrome.tabs.Tab
     ) => {
-      if (!changeInfo.url || !tab.active) return
+      if (!changeInfo.url || !tab.active || tab.windowId !== windowId) return
       if (tabIdRef.current !== undefined && tabIdRef.current !== updatedTabId)
         return
 
@@ -116,7 +119,7 @@ export function useSidepanelTrackedTabId(): {
       chrome.tabs.onActivated.removeListener(handleActivated)
       chrome.tabs.onUpdated.removeListener(handleUpdated)
     }
-  }, [commitTrackedTab])
+  }, [commitTrackedTab, windowId])
 
   return trackedTab
 }

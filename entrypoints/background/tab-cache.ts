@@ -289,10 +289,10 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     return undefined
   }
 
-  const syncFromActiveTabs = async (): Promise<void> => {
+  const syncFromActiveTabs = async (updatedTabId?: number): Promise<void> => {
     const activeTabs = await dependencies.queryActiveTabs()
 
-    if (activeTabs.length === 0) {
+    if (activeTabs.length === 0 && updatedTabId === undefined) {
       await projectionMutations.run(async () => {
         await dependencies.writeSession({
           [SESSION_STORAGE_KEYS.activeTabContextByWindow]: {},
@@ -303,7 +303,10 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
 
     for (const activeTab of activeTabs) {
       const tabId = activeTab.id
-      if (typeof tabId !== "number") {
+      if (
+        typeof tabId !== "number" ||
+        (updatedTabId !== undefined && tabId !== updatedTabId)
+      ) {
         continue
       }
 
@@ -588,7 +591,7 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
       // reproject immediately so stale/unsupported UI cannot survive a
       // navigation.
       if (changeInfo.url) {
-        await syncFromActiveTabs()
+        await syncFromActiveTabs(tabId)
       }
     },
 

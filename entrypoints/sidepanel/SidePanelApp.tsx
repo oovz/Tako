@@ -68,6 +68,7 @@ export function SidePanelApp() {
     document.title = t("extName")
   }, [locale])
 
+  const seriesData: SidepanelSeriesContextData = useSidepanelSeriesContext()
   const {
     chapterSelectionsBySeries,
     setChapterSelectionsBySeries,
@@ -75,7 +76,7 @@ export function SidePanelApp() {
     setPresentationBySeries,
     isInlineSelectionOpen,
     setInlineSelectionOpen,
-  } = useInlineSelectionState()
+  } = useInlineSelectionState(seriesData)
   const [isInlineSelectionPresent, setInlineSelectionPresent] = useState(
     isInlineSelectionOpen
   )
@@ -129,7 +130,6 @@ export function SidePanelApp() {
     openFullHistory,
   } = useCommandCenterActions()
 
-  const seriesData: SidepanelSeriesContextData = useSidepanelSeriesContext()
   const { queueView, historyTasks, activeCount, queuedCount, isLoading } =
     useQueueView()
   const { progress: activeTaskProgress } = useActiveTaskProgress()

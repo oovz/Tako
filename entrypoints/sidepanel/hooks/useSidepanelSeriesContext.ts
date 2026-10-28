@@ -196,8 +196,8 @@ export function createSeriesContextRecoveryCoordinator(input: {
 }
 
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
-  const { tabId, activeUrl } = useSidepanelTrackedTabId()
   const windowId = useCurrentWindowId()
+  const { tabId, activeUrl } = useSidepanelTrackedTabId(windowId)
   const recoveryCoordinator = useMemo(
     () =>
       createSeriesContextRecoveryCoordinator({

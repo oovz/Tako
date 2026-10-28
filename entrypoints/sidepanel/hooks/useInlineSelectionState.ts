@@ -1,60 +1,47 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 
 import type { ChapterSelectionsBySeries } from "@/entrypoints/sidepanel/hooks/useChapterSelections"
 import type { InlineSelectionPresentationBySeries } from "@/entrypoints/sidepanel/types"
-import logger from "@/src/runtime/logger"
+import type { SidepanelSeriesContextData } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
 
-export function useInlineSelectionState() {
+export function useInlineSelectionState({
+  windowId,
+  tabId,
+  seriesRevision,
+}: Pick<SidepanelSeriesContextData, "windowId" | "tabId" | "seriesRevision">) {
   const [chapterSelectionsBySeries, setChapterSelectionsBySeries] =
     useState<ChapterSelectionsBySeries>({})
   const [presentationBySeries, setPresentationBySeries] =
     useState<InlineSelectionPresentationBySeries>({})
-  const [isInlineSelectionOpen, setIsInlineSelectionOpen] = useState(false)
+  const [selectionContext, setSelectionContext] = useState({
+    windowId,
+    tabId,
+    seriesRevision,
+    isOpen: false,
+  })
+  const contextChanged =
+    selectionContext.windowId !== windowId ||
+    selectionContext.tabId !== tabId ||
+    selectionContext.seriesRevision !== seriesRevision
+
+  if (contextChanged) {
+    setSelectionContext({ windowId, tabId, seriesRevision, isOpen: false })
+  }
 
   const closeInlineSelection = useCallback(() => {
-    setIsInlineSelectionOpen(false)
+    setSelectionContext((previous) => ({ ...previous, isOpen: false }))
   }, [])
 
-  const setInlineSelectionOpen = useCallback((open: boolean) => {
-    setIsInlineSelectionOpen(open)
+  const setInlineSelectionOpen = useCallback((isOpen: boolean) => {
+    setSelectionContext((previous) => ({ ...previous, isOpen }))
   }, [])
-
-  useEffect(() => {
-    const handleActivated = () => {
-      closeInlineSelection()
-    }
-
-    const handleUpdated = (
-      _tabId: number,
-      changeInfo: chrome.tabs.OnUpdatedInfo
-    ) => {
-      if (!changeInfo.url) return
-
-      closeInlineSelection()
-    }
-    try {
-      chrome.tabs.onActivated.addListener(handleActivated)
-      chrome.tabs.onUpdated.addListener(handleUpdated)
-    } catch (error) {
-      logger.error("[CommandCenter] Failed to attach tab listeners:", error)
-    }
-
-    return () => {
-      try {
-        chrome.tabs.onActivated.removeListener(handleActivated)
-        chrome.tabs.onUpdated.removeListener(handleUpdated)
-      } catch {
-        // ignore cleanup errors
-      }
-    }
-  }, [closeInlineSelection])
 
   return {
     chapterSelectionsBySeries,
     setChapterSelectionsBySeries,
     presentationBySeries,
     setPresentationBySeries,
-    isInlineSelectionOpen,
+    isInlineSelectionOpen: !contextChanged && selectionContext.isOpen,
     closeInlineSelection,
     setInlineSelectionOpen,
   }
