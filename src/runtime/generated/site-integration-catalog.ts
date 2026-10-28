@@ -287,6 +287,108 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "coolmic",
+    "name": "Coolmic",
+    "englishName": "Coolmic",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "coolmic.me"
+      ],
+      "seriesMatches": [
+        "/titles/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://coolmic.me/*",
+      "https://en-contents.coolmic.me/*",
+      "https://en-img.coolmic.me/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "coolmic-page",
+        "purpose": "Coolmic website title bootstrap",
+        "origins": [
+          "https://coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "coolmic-viewer",
+        "purpose": "Coolmic accessible episode image metadata",
+        "origins": [
+          "https://coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "coolmic-image",
+        "purpose": "Coolmic episode content CDN",
+        "origins": [
+          "https://en-contents.coolmic.me/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      },
+      {
+        "id": "coolmic-cover",
+        "purpose": "Coolmic cover images",
+        "origins": [
+          "https://en-img.coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangabz",
     "name": "Māngabz",
     "englishName": "Māngabz",

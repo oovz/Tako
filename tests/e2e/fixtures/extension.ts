@@ -33,6 +33,7 @@ import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/an
 import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
 
 import { registerMangagoLocalServerHandlers } from "./mock-data/site-integrations/mangago/routes"
+import { registerCoolmicLocalServerHandlers } from "./mock-data/site-integrations/coolmic/routes"
 
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
@@ -467,6 +468,7 @@ async function setupExtensionContext(
         ...registerDm5LocalServerHandlers(localMockServer),
         ...registerMangabzLocalServerHandlers(localMockServer),
         ...registerMangagoLocalServerHandlers(localMockServer),
+        ...registerCoolmicLocalServerHandlers(localMockServer),
       ]
     }
 

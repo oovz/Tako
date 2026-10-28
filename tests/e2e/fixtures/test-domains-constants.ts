@@ -91,6 +91,8 @@ export const LIVE_DM5_REFERENCE_URL =
   "https://www.dm5.com/manhua-shanhainizhan1/"
 export const LIVE_MANGABZ_REFERENCE_URL = "https://www.mangabz.com/139bz/"
 
+export const LIVE_COOLMIC_REFERENCE_URL = "https://coolmic.me/titles/5101"
+
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return new URL(normalized, MANGADEX_BASE_URL).toString()

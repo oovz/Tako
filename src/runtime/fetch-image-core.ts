@@ -30,9 +30,8 @@ export interface FetchImageWithStallDetectionCoreOptions {
   onBytesReceived?: (bytesReceived: number) => void | Promise<void>
   liveResourceLedger?: OffscreenLiveResourceLedger
   /**
-   * MangaMillion's image endpoint can return encrypted bytes as
-   * application/octet-stream and may return AVIF. Other integrations keep the
-   * normal raster-only MIME contract.
+   * Reader endpoints may return encrypted images or a binary MIME type.
+   * Opted-in integrations validate the resulting raster before output.
    */
   allowEncodedImageMimeType?: boolean
 }

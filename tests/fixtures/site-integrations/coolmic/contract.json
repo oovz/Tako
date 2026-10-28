@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "providerId": "coolmic",
+  "source": "https://coolmic.me/titles/5101",
+  "data": {
+    "viewer": {
+      "image_data": [
+        {
+          "num": 0,
+          "height": "1549",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-001.jpg"
+        },
+        {
+          "num": 1,
+          "height": "1781",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-002.jpg"
+        },
+        {
+          "num": 2,
+          "height": "1684",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-003.jpg"
+        },
+        {
+          "num": 3,
+          "height": "1684",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-004.jpg"
+        },
+        {
+          "num": 4,
+          "height": "1370",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-005.jpg"
+        },
+        {
+          "num": 5,
+          "height": "1251",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-006.jpg"
+        },
+        {
+          "num": 6,
+          "height": "1721",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-007.jpg"
+        },
+        {
+          "num": 7,
+          "height": "2517",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-008.jpg"
+        },
+        {
+          "num": 8,
+          "height": "2516",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-009.jpg"
+        },
+        {
+          "num": 9,
+          "height": "1313",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-010.jpg"
+        },
+        {
+          "num": 10,
+          "height": "2187",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-011.jpg"
+        },
+        {
+          "num": 11,
+          "height": "1144",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-012.jpg"
+        },
+        {
+          "num": 12,
+          "height": "1304",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-013.jpg"
+        },
+        {
+          "num": 13,
+          "height": "1742",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-014.jpg"
+        },
+        {
+          "num": 14,
+          "height": "1526",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-015.jpg"
+        },
+        {
+          "num": 15,
+          "height": "1525",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-016.jpg"
+        },
+        {
+          "num": 16,
+          "height": "1236",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-017.jpg"
+        },
+        {
+          "num": 17,
+          "height": "2279",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-018.jpg"
+        },
+        {
+          "num": 18,
+          "height": "2168",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-019.jpg"
+        },
+        {
+          "num": 19,
+          "height": "2168",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-020.jpg"
+        },
+        {
+          "num": 20,
+          "height": "2166",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-021.jpg"
+        },
+        {
+          "num": 21,
+          "height": "1670",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-022.jpg"
+        },
+        {
+          "num": 22,
+          "height": "1322",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-023.jpg"
+        },
+        {
+          "num": 23,
+          "height": "1573",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-024.jpg"
+        },
+        {
+          "num": 24,
+          "height": "1573",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-025.jpg"
+        },
+        {
+          "num": 25,
+          "height": "1891",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-026.jpg"
+        },
+        {
+          "num": 26,
+          "height": "1991",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-027.jpg"
+        },
+        {
+          "num": 27,
+          "height": "1660",
+          "width": "1380",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-028.jpg"
+        },
+        {
+          "num": 28,
+          "height": "1237",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-029.jpg"
+        },
+        {
+          "num": 29,
+          "height": "1185",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-030.jpg"
+        },
+        {
+          "num": 30,
+          "height": "2793",
+          "width": "1080",
+          "path": "https://en-contents.coolmic.me/episodes/000/000130/000130687/000130687-031.jpg"
+        }
+      ],
+      "signed_cookie": {
+        "CloudFront-Policy": "eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9lbi1jb250ZW50cy5jb29sbWljLm1lL2VwaXNvZGVzLzAwMC8wMDAxMzAvMDAwMTMwNjg3LyoiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjQxMDI0NDQ4MDB9fX1dfQ__",
+        "CloudFront-Signature": "synthetic-signature",
+        "CloudFront-Key-Pair-Id": "synthetic-key"
+      }
+    }
+  }
+}

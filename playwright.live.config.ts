@@ -102,6 +102,7 @@ export default defineConfig({
       "mangago",
       "manganato",
       "mangakakalot",
+      "coolmic",
       "animemangahouse",
       "mangabz",
     ].map((name) => ({

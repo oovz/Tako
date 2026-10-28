@@ -58,6 +58,17 @@ describe("site integration utils", () => {
   })
 
   describe("normalizeAllowedImageMimeType", () => {
+    it("accepts the CDN binary alias only for explicitly encoded image transport", () => {
+      expect(() =>
+        normalizeAllowedImageMimeType("binary/octet-stream")
+      ).toThrow("Unsupported MIME type")
+      expect(
+        normalizeAllowedImageMimeType("binary/octet-stream", {
+          allowEncodedImageMimeType: true,
+        })
+      ).toBe("binary/octet-stream")
+    })
+
     it("accepts image/png and returns it lowercased", () => {
       expect(normalizeAllowedImageMimeType("image/png")).toBe("image/png")
       expect(normalizeAllowedImageMimeType("IMAGE/PNG")).toBe("image/png")

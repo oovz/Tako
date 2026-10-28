@@ -61,7 +61,9 @@ export function normalizeAllowedImageMimeType(
     !ALLOWED_RASTER_IMAGE_MIME_TYPES.has(mimeType) &&
     !(
       options.allowEncodedImageMimeType &&
-      (mimeType === "image/avif" || mimeType === "application/octet-stream")
+      (mimeType === "image/avif" ||
+        mimeType === "application/octet-stream" ||
+        mimeType === "binary/octet-stream")
     )
   ) {
     throw new NonRetryableDownloadError(

@@ -83,6 +83,7 @@ function assertResponseType(
             contentType === "application/x-javascript"
           : contentType.startsWith("image/") ||
             contentType === "application/octet-stream" ||
+            contentType === "binary/octet-stream" ||
             contentType === "application/protobuf" ||
             contentType === "application/x-protobuf"
   if (!accepted) {

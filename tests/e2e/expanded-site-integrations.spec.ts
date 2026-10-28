@@ -28,6 +28,7 @@ import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahou
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 
 import { mangagoFixture } from "./fixtures/mock-data/site-integrations/mangago/routes"
+import { coolmicFixture } from "./fixtures/mock-data/site-integrations/coolmic/routes"
 
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
@@ -38,6 +39,7 @@ const fixtures = [
   dm5Fixture,
   mangabzFixture,
   mangagoFixture,
+  coolmicFixture,
 ]
 
 test.describe("site downloads through the chapter selector", () => {

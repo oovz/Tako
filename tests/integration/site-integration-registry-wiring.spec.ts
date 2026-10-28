@@ -56,6 +56,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
   animemangahouse: "https://www.dm5.com/manhua-shanhainizhan1/",
   boylove: "https://boylove.cc/home/book/index/id/34260",
   comicnettai: "https://www.comicnettai.com/book/9",
+  coolmic: "https://coolmic.me/titles/5101",
 
   mangabz: "https://www.mangabz.com/139bz/",
   mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",
