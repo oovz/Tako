@@ -7,8 +7,8 @@ import {
 import {
   BASIC_SERIES,
   BASIC_SERIES_PAGE_HTML,
-} from "./fixtures/mock-data/site-integrations/manhuagui"
-import { MANHUAGUI_LOCAL_PREFIX } from "./fixtures/mock-data/site-integrations/manhuagui/local-server"
+} from "./fixtures/mock-data/site-integrations/readmanga"
+import { MANHUAGUI_LOCAL_PREFIX } from "./fixtures/mock-data/site-integrations/readmanga/local-server"
 import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 
 for (const recovery of ["automatic", "user retry"] as const) {

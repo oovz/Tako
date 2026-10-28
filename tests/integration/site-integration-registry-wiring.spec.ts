@@ -55,7 +55,7 @@ const enabledDefinitions = siteIntegrationCatalog.filter((m) => m.shipped)
 const seriesUrls: Readonly<Record<string, string>> = {
   animemangahouse: "https://www.dm5.com/manhua-shanhainizhan1/",
   boylove: "https://boylove.cc/home/book/index/id/34260",
-  comicnettai: "https://www.comicnettai.com/book/9",
+  comictropics: "https://www.comicnettai.com/book/9",
   coolmic: "https://coolmic.me/titles/5101",
   copymanga: "https://www.copy3000.com/comic/dianjuren",
   lovemanga: "https://www.aimanhua.org/comic/416895",
@@ -71,7 +71,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
   mangaplus: "https://mangaplus.shueisha.co.jp/titles/100467",
   mycomic: "https://mycomic.com/cn/comics/35937",
   "pixiv-comic": "https://comic.pixiv.net/works/12345",
-  manhuagui: "https://www.manhuagui.com/comic/28004/",
+  readmanga: "https://www.manhuagui.com/comic/28004/",
   shonenjumpplus: "https://shonenjumpplus.com/episode/3269754496649675702",
 }
 const rateLimitService = {

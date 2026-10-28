@@ -184,7 +184,7 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
-    "id": "comicnettai",
+    "id": "comictropics",
     "name": "Comic Nettai",
     "englishName": "Comic Nettai",
     "contributors": [
@@ -234,7 +234,7 @@ export const siteIntegrationCatalog = [
     },
     "endpointPolicies": [
       {
-        "id": "comicnettai-viewer-page",
+        "id": "comictropics-viewer-page",
         "purpose": "Comic Nettai viewer session",
         "origins": [
           "https://www.comicnettai.com/*"
@@ -246,7 +246,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 15000000
       },
       {
-        "id": "comicnettai-viewer-api",
+        "id": "comictropics-viewer-api",
         "purpose": "Comic Nettai viewer protocol",
         "origins": [
           "https://www.comicnettai.com/*"
@@ -258,7 +258,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 10000000
       },
       {
-        "id": "comicnettai-cdn-config",
+        "id": "comictropics-cdn-config",
         "purpose": "Comic Nettai CDN configuration",
         "origins": [
           "https://cdn.comicnettai.com/*"
@@ -270,7 +270,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 10000000
       },
       {
-        "id": "comicnettai-cdn-image",
+        "id": "comictropics-cdn-image",
         "purpose": "Comic Nettai CDN images",
         "origins": [
           "https://cdn.comicnettai.com/*"
@@ -1477,123 +1477,6 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
-    "id": "manhuagui",
-    "name": "Manhuagui",
-    "englishName": "Manhuagui",
-    "contributors": [
-      "TMD Team"
-    ],
-    "version": "1.1.0",
-    "shipped": true,
-    "enabledByDefault": true,
-    "patterns": {
-      "domains": [
-        "www.manhuagui.com",
-        "manhuagui.com"
-      ],
-      "seriesMatches": [
-        "/comic/*"
-      ],
-      "excludeMatches": [
-        "/comic/*/*.html"
-      ]
-    },
-    "requiredOrigins": [
-      "https://www.manhuagui.com/*",
-      "https://manhuagui.com/*",
-      "https://cf.mhgui.com/*",
-      "https://hamreus.com/*",
-      "https://*.hamreus.com/*"
-    ],
-    "optionalOrigins": [],
-    "policyDefaults": {
-      "image": {
-        "concurrency": 2,
-        "delayMs": 1000
-      },
-      "chapter": {
-        "concurrency": 1,
-        "delayMs": 1000
-      }
-    },
-    "retryOwner": "platform",
-    "pageProbe": "optional",
-    "runtimes": {
-      "background": true,
-      "offscreen": true,
-      "dispatchContext": {
-        "mode": "none"
-      }
-    },
-    "imageTransform": {
-      "kind": "none",
-      "estimatedCostMs": 0
-    },
-    "endpointPolicies": [
-      {
-        "id": "manhuagui-series-html",
-        "purpose": "Manhuagui series page HTML",
-        "origins": [
-          "https://www.manhuagui.com/*",
-          "https://manhuagui.com/*"
-        ],
-        "originKind": "fixed",
-        "credentials": "include",
-        "redirect": "error",
-        "responseType": "html",
-        "maxResponseBytes": 15000000
-      },
-      {
-        "id": "manhuagui-reader-config",
-        "purpose": "Manhuagui reader configuration",
-        "origins": [
-          "https://cf.mhgui.com/*"
-        ],
-        "originKind": "provider-issued",
-        "credentials": "omit",
-        "redirect": "error",
-        "responseType": "text",
-        "maxResponseBytes": 5000000
-      },
-      {
-        "id": "manhuagui-image-cdn",
-        "purpose": "Manhuagui image CDN",
-        "origins": [
-          "https://hamreus.com/*",
-          "https://*.hamreus.com/*"
-        ],
-        "originKind": "provider-issued",
-        "credentials": "omit",
-        "redirect": "error",
-        "responseType": "bytes",
-        "maxResponseBytes": 50000000
-      }
-    ],
-    "sessionRefererRules": [
-      {
-        "id": 41002,
-        "priority": 1,
-        "requestDomains": [
-          "i.hamreus.com",
-          "eu.hamreus.com",
-          "eu1.hamreus.com",
-          "eu2.hamreus.com",
-          "us.hamreus.com",
-          "us1.hamreus.com",
-          "us2.hamreus.com",
-          "us3.hamreus.com"
-        ],
-        "resourceTypes": [
-          "xmlhttprequest",
-          "other"
-        ],
-        "referer": "https://www.manhuagui.com/"
-      }
-    ],
-    "customSettings": []
-  },
-  {
-    "schemaVersion": 1,
     "id": "mycomic",
     "name": "MYCOMIC",
     "englishName": "MYCOMIC",
@@ -1795,6 +1678,123 @@ export const siteIntegrationCatalog = [
           "other"
         ],
         "referer": "https://comic.pixiv.net/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "readmanga",
+    "name": "Manhuagui",
+    "englishName": "Manhuagui",
+    "contributors": [
+      "TMD Team"
+    ],
+    "version": "1.1.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.manhuagui.com",
+        "manhuagui.com"
+      ],
+      "seriesMatches": [
+        "/comic/*"
+      ],
+      "excludeMatches": [
+        "/comic/*/*.html"
+      ]
+    },
+    "requiredOrigins": [
+      "https://www.manhuagui.com/*",
+      "https://manhuagui.com/*",
+      "https://cf.mhgui.com/*",
+      "https://hamreus.com/*",
+      "https://*.hamreus.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "optional",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "readmanga-series-html",
+        "purpose": "Manhuagui series page HTML",
+        "origins": [
+          "https://www.manhuagui.com/*",
+          "https://manhuagui.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 15000000
+      },
+      {
+        "id": "readmanga-reader-config",
+        "purpose": "Manhuagui reader configuration",
+        "origins": [
+          "https://cf.mhgui.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "readmanga-image-cdn",
+        "purpose": "Manhuagui image CDN",
+        "origins": [
+          "https://hamreus.com/*",
+          "https://*.hamreus.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41002,
+        "priority": 1,
+        "requestDomains": [
+          "i.hamreus.com",
+          "eu.hamreus.com",
+          "eu1.hamreus.com",
+          "eu2.hamreus.com",
+          "us.hamreus.com",
+          "us1.hamreus.com",
+          "us2.hamreus.com",
+          "us3.hamreus.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.manhuagui.com/"
       }
     ],
     "customSettings": []

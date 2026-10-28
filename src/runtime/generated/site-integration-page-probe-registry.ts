@@ -2,14 +2,14 @@
 // Do not edit it directly.
 import type { SiteIntegrationPageProbe } from '@/src/site-integrations/page-probe-contract'
 import { pageProbe as mangadexPageProbe } from '@/src/site-integrations/mangadex/probe'
-import { pageProbe as manhuaguiPageProbe } from '@/src/site-integrations/manhuagui/probe'
+import { pageProbe as readmangaPageProbe } from '@/src/site-integrations/readmanga/probe'
 
 export const siteIntegrationPageProbes = [
   mangadexPageProbe,
-  manhuaguiPageProbe,
+  readmangaPageProbe,
 ] as const satisfies readonly SiteIntegrationPageProbe[]
 
 export const siteIntegrationPageProbesById = {
   "mangadex": mangadexPageProbe,
-  "manhuagui": manhuaguiPageProbe,
+  "readmanga": readmangaPageProbe,
 } as Readonly<Record<string, SiteIntegrationPageProbe>>

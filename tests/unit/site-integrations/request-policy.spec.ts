@@ -33,10 +33,10 @@ describe("site integration request policy", () => {
       "shonenjumpplus-image-cdn",
       "https://cdn-ak-img.shonenjumpplus.com/public/page/1.jpg",
     ],
-    ["manhuagui", "manhuagui-image-cdn", "https://i.hamreus.com/ps3/1.jpg"],
+    ["readmanga", "readmanga-image-cdn", "https://i.hamreus.com/ps3/1.jpg"],
     [
-      "comicnettai",
-      "comicnettai-cdn-image",
+      "comictropics",
+      "comictropics-cdn-image",
       "https://cdn.comicnettai.com/123/page.jpeg",
     ],
   ])(
@@ -65,13 +65,13 @@ describe("site integration request policy", () => {
       "https://cdn-ak-img.shonenjumpplus.com.attacker.example/public/page/1.jpg",
     ],
     [
-      "manhuagui",
-      "manhuagui-image-cdn",
+      "readmanga",
+      "readmanga-image-cdn",
       "https://hamreus.com.attacker.example/page.jpg",
     ],
     [
-      "comicnettai",
-      "comicnettai-cdn-image",
+      "comictropics",
+      "comictropics-cdn-image",
       "https://cdn.comicnettai.com.attacker.example/page.jpeg",
     ],
   ])(

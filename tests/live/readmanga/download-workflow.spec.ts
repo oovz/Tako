@@ -30,7 +30,7 @@ test.describe("Manhuagui download workflows (live)", () => {
       context,
       extensionId,
       page,
-      "manhuagui",
+      "readmanga",
       { diagnosticEvents }
     )
 

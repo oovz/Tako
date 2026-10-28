@@ -14,7 +14,7 @@ import {
   MANHUAGUI_CONFIG_HOST,
   MANHUAGUI_IMAGE_HOST_NAMES,
   MANHUAGUI_PAGE_HOST_NAMES,
-} from "../../../src/site-integrations/manhuagui/policy"
+} from "../../../src/site-integrations/readmanga/policy"
 
 export const EXAMPLE_TEST_DOMAIN = "example.com"
 export const EXAMPLE_BASE_URL = `https://${EXAMPLE_TEST_DOMAIN}`

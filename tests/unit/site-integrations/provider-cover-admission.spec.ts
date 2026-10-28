@@ -4,7 +4,7 @@ import {
   SeriesMetadataSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
-import { extractComicNettaiSeriesMetadataFromDocument } from "@/src/site-integrations/comicnettai/series-dom"
+import { extractComicNettaiSeriesMetadataFromDocument } from "@/src/site-integrations/comictropics/series-dom"
 import { backgroundSiteAdapter as mangaMillionBackgroundAdapter } from "@/src/site-integrations/mangamillion/background-runtime"
 import * as mangaMillionApi from "@/src/site-integrations/mangamillion/api"
 import { readEpisodeJsonSeriesMetadataFromHtml } from "@/src/site-integrations/shonenjumpplus/episode-json"

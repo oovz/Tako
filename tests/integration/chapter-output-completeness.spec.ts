@@ -12,7 +12,7 @@ import {
   type ZipWorkerRuntimeScope,
 } from "@/entrypoints/offscreen/zip.worker"
 import { withRetries } from "@/entrypoints/offscreen/image-processor"
-import { downloadManhuaguiChapterImage } from "@/src/site-integrations/manhuagui/chapter-api"
+import { downloadManhuaguiChapterImage } from "@/src/site-integrations/readmanga/chapter-api"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import { RateLimitService } from "@/src/runtime/rate-limit"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -147,7 +147,7 @@ function fixture(
     onProgress: async () => undefined,
     onArchiveProgress: async () => undefined,
     settingsSnapshot: {
-      ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "manhuagui"),
+      ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "readmanga"),
       conflictPolicy: "overwrite",
       rateLimitSettings: {
         image: { concurrency, delayMs: 0 },
@@ -160,7 +160,7 @@ function fixture(
   const process = (imageFn = downloadImage, urls = URLS) => {
     const input = {
       urls,
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       downloadImage: imageFn,
       normalizeSettings: {
         normalizeImageFilenames: true,

@@ -93,7 +93,7 @@ describe("URL Pattern Matching", () => {
 
     it("matches manhuagui series pages", () => {
       expectMatchedUrl("https://www.manhuagui.com/comic/28004/", {
-        integrationId: "manhuagui",
+        integrationId: "readmanga",
         role: "series",
       })
     })

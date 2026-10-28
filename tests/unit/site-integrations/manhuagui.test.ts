@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { decompressFromBase64 } from "@/src/site-integrations/manhuagui/lz-string"
+import { decompressFromBase64 } from "@/src/site-integrations/readmanga/lz-string"
 import {
   MANHUAGUI_BASE_URL,
   MANHUAGUI_IMAGE_HOSTS,
@@ -8,8 +8,8 @@ import {
   parseChapterIdFromUrl,
   parseSeriesIdFromPath,
   toAbsoluteUrl,
-} from "@/src/site-integrations/manhuagui/shared"
-import { selectReaderHost } from "@/src/site-integrations/manhuagui/reader-config"
+} from "@/src/site-integrations/readmanga/shared"
+import { selectReaderHost } from "@/src/site-integrations/readmanga/reader-config"
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
@@ -161,7 +161,7 @@ describe("Manhuagui site integration", () => {
   describe("reader-config", () => {
     it("fetches the reader config through the URL limiter without nesting the chapter scheduler", async () => {
       const { fetchReaderConfig } =
-        await import("@/src/site-integrations/manhuagui/reader-config")
+        await import("@/src/site-integrations/readmanga/reader-config")
       const fetchForIntegration = vi.mocked(integrationHttpClient.request)
 
       fetchForIntegration.mockResolvedValueOnce({
@@ -184,8 +184,8 @@ describe("Manhuagui site integration", () => {
 
       expect(fetchForIntegration).toHaveBeenCalledWith(
         expect.objectContaining({
-          integrationId: "manhuagui",
-          endpointId: "manhuagui-reader-config",
+          integrationId: "readmanga",
+          endpointId: "readmanga-reader-config",
           url: "https://cf.mhgui.com/scripts/config_16.js",
           scope: "chapter",
           init: { credentials: "omit" },
@@ -247,7 +247,7 @@ describe("Manhuagui site integration", () => {
         buildManhuaguiChapterPathSegment,
         buildManhuaguiChapterSlMetadata,
       } =
-        await import("@/tests/e2e/fixtures/mock-data/site-integrations/manhuagui/api-fixtures")
+        await import("@/tests/e2e/fixtures/mock-data/site-integrations/readmanga/api-fixtures")
 
       const imgData = {
         path: buildManhuaguiChapterPathSegment(SERIES_ID, CHAPTER_ID),
@@ -258,7 +258,7 @@ describe("Manhuagui site integration", () => {
       const chapterHtml = `<!DOCTYPE html><html><head><script src="https://cf.mhgui.com/scripts/config_16.js"></script></head><body><script>${packedScript}</script></body></html>`
 
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
       const fetchForIntegration = vi.mocked(integrationHttpClient.request)
 
       fetchForIntegration.mockResolvedValueOnce({
@@ -295,7 +295,7 @@ describe("Manhuagui site integration", () => {
         buildManhuaguiChapterPathSegment,
         buildManhuaguiChapterSlMetadata,
       } =
-        await import("@/tests/e2e/fixtures/mock-data/site-integrations/manhuagui/api-fixtures")
+        await import("@/tests/e2e/fixtures/mock-data/site-integrations/readmanga/api-fixtures")
       const packedScript = buildManhuaguiPackedPayloadScript({
         path: buildManhuaguiChapterPathSegment(SERIES_ID, CHAPTER_ID),
         files: ["page1.jpg", "   ", "page3.jpg"],
@@ -303,7 +303,7 @@ describe("Manhuagui site integration", () => {
       })
       const chapterHtml = `<!DOCTYPE html><html><head><script src="https://cf.mhgui.com/scripts/config_16.js"></script></head><body><script>${packedScript}</script></body></html>`
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
       vi.mocked(integrationHttpClient.request).mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -327,7 +327,7 @@ describe("Manhuagui site integration", () => {
         <script>window["eval"](function(p,a,c,k,e,d){return p;}('SMH.imgData({"path":});',2,1,'${rawKeys}'['split']('|'),0,{}))</script>
       `
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
       const fetchForIntegration = vi.mocked(integrationHttpClient.request)
 
       fetchForIntegration.mockResolvedValueOnce({
@@ -355,7 +355,7 @@ describe("Manhuagui site integration", () => {
         '<html><body><div id="checkAdult"><p>本漫画包含敏感内容</p></div></body></html>'
 
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
 
       await expect(
         buildManhuaguiChapterImageUrlsFromHtml(html, rateLimitService)
@@ -366,7 +366,7 @@ describe("Manhuagui site integration", () => {
       const html = "<html><body><div>no scripts here</div></body></html>"
 
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
 
       await expect(
         buildManhuaguiChapterImageUrlsFromHtml(html, rateLimitService)
@@ -381,7 +381,7 @@ describe("Manhuagui site integration", () => {
       const rawKeys = compressToBase64("one|two")
       const html = `<script>window["eval"](function(p,a,c,k,e,d){return p;}('SMH.imgData({});',1,2,'${rawKeys}'['split']('|'),0,{}))</script>`
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
 
       await expect(
         buildManhuaguiChapterImageUrlsFromHtml(html, rateLimitService)
@@ -394,14 +394,14 @@ describe("Manhuagui site integration", () => {
         buildManhuaguiChapterPathSegment,
         buildManhuaguiChapterSlMetadata,
       } =
-        await import("@/tests/e2e/fixtures/mock-data/site-integrations/manhuagui/api-fixtures")
+        await import("@/tests/e2e/fixtures/mock-data/site-integrations/readmanga/api-fixtures")
       const packedScript = buildManhuaguiPackedPayloadScript({
         path: buildManhuaguiChapterPathSegment(SERIES_ID, CHAPTER_ID),
         files: ["page1.jpg"],
         sl: buildManhuaguiChapterSlMetadata(CHAPTER_ID),
       })
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
 
       await expect(
         buildManhuaguiChapterImageUrlsFromHtml(
@@ -421,7 +421,7 @@ describe("Manhuagui site integration", () => {
         buildManhuaguiChapterPathSegment,
         buildManhuaguiChapterSlMetadata,
       } =
-        await import("@/tests/e2e/fixtures/mock-data/site-integrations/manhuagui/api-fixtures")
+        await import("@/tests/e2e/fixtures/mock-data/site-integrations/readmanga/api-fixtures")
       const packedScript = buildManhuaguiPackedPayloadScript({
         path: buildManhuaguiChapterPathSegment(SERIES_ID, CHAPTER_ID),
         files: ["page1.jpg"],
@@ -429,7 +429,7 @@ describe("Manhuagui site integration", () => {
       })
       const html = `<script src="https://attacker.example/scripts/config_16.js"></script><script>${packedScript}</script>`
       const { buildManhuaguiChapterImageUrlsFromHtml } =
-        await import("@/src/site-integrations/manhuagui/chapter-viewer")
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
 
       await expect(
         buildManhuaguiChapterImageUrlsFromHtml(html, rateLimitService)
@@ -451,7 +451,7 @@ describe("Manhuagui site integration", () => {
 
     it("offscreen image downloads use the outer image scheduler without re-entering the URL limiter", async () => {
       const { offscreenSiteAdapter } =
-        await import("@/src/site-integrations/manhuagui/offscreen-runtime")
+        await import("@/src/site-integrations/readmanga/offscreen-runtime")
       const fetchForIntegration = vi.mocked(integrationHttpClient.request)
       const payload = new Uint8Array([1, 2, 3, 4]).buffer
       fetchForIntegration.mockReset().mockResolvedValue(
@@ -475,8 +475,8 @@ describe("Manhuagui site integration", () => {
       expect(image.mimeType).toBe("image/webp")
       expect(fetchForIntegration).toHaveBeenCalledWith(
         expect.objectContaining({
-          integrationId: "manhuagui",
-          endpointId: "manhuagui-image-cdn",
+          integrationId: "readmanga",
+          endpointId: "readmanga-image-cdn",
           url: "https://i.hamreus.com/ps1/f/page1.jpg?e=1&m=sig",
           scope: "image",
           skipRateLimit: true,

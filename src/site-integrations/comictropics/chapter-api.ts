@@ -33,8 +33,8 @@ import { ProviderContractError } from "../provider-contract-error"
 export { buildPublusImageUrlsFromConfig } from "./publus-config"
 
 const assertComicNettaiImageUrl = createIntegrationEndpointUrlAssertion(
-  "comicnettai",
-  "comicnettai-cdn-image"
+  "comictropics",
+  "comictropics-cdn-image"
 )
 
 type ComicNettaiViewerContentResponse = {
@@ -86,8 +86,8 @@ async function fetchJson(
   signal?: AbortSignal
 ): Promise<unknown> {
   const response = await integrationHttpClient.request({
-    integrationId: "comicnettai",
-    endpointId: "comicnettai-viewer-api",
+    integrationId: "comictropics",
+    endpointId: "comictropics-viewer-api",
     url,
     scope: "chapter",
     init: {
@@ -133,8 +133,8 @@ export async function resolveComicNettaiChapterImageUrls(
     contentBaseUrl
   ).toString()
   const configResponse = await integrationHttpClient.request({
-    integrationId: "comicnettai",
-    endpointId: "comicnettai-cdn-config",
+    integrationId: "comictropics",
+    endpointId: "comictropics-cdn-config",
     url: configUrl,
     scope: "chapter",
     init: {
@@ -209,8 +209,8 @@ export async function downloadComicNettaiChapterImage(
     mimeType,
     liveResourceLease,
   } = await fetchImageWithStallDetection(trustedSourceUrl, {
-    integrationId: "comicnettai",
-    endpointId: "comicnettai-cdn-image",
+    integrationId: "comictropics",
+    endpointId: "comictropics-cdn-image",
     signal: opts.signal,
     init: { credentials: "omit" },
     rateLimitPolicy: opts.runtime.rateLimitSettings.image,
@@ -259,8 +259,8 @@ export async function downloadComicNettaiCoverImage(
   ).toString()
   const { data, mimeType, liveResourceLease } =
     await fetchImageWithStallDetection(trustedUrl, {
-      integrationId: "comicnettai",
-      endpointId: "comicnettai-cdn-image",
+      integrationId: "comictropics",
+      endpointId: "comictropics-cdn-image",
       signal: opts.signal,
       rateLimitService: opts.runtime.rateLimitService,
       init: { credentials: "omit" },

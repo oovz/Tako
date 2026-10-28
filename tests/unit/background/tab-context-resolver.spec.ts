@@ -920,7 +920,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -960,7 +960,7 @@ describe("tab context resolver", () => {
         tabId: 9,
         windowId: 3,
         requestId: 4,
-        integrationId: "manhuagui",
+        integrationId: "readmanga",
         stage: "page-probe",
         url: "https://www.manhuagui.com/comic/21243/",
         documentUrlAtStart: "https://www.manhuagui.com/comic/21243/",
@@ -1016,7 +1016,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -1101,7 +1101,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -1128,7 +1128,7 @@ describe("tab context resolver", () => {
     await resolver.resolveTabContext(9)
 
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith({
-      siteIntegrationId: "manhuagui",
+      siteIntegrationId: "readmanga",
       seriesUrl: "https://www.manhuagui.com/comic/21243/",
       pageProbeData: {
         adultGatePresent: false,

@@ -20,10 +20,10 @@ import {
   type LocalMockServerHandle,
 } from "./local-mock-server"
 import { registerMangadexLocalServerHandlers } from "./mock-data/site-integrations/mangadex/local-server"
-import { registerManhuaguiLocalServerHandlers } from "./mock-data/site-integrations/manhuagui/local-server"
+import { registerManhuaguiLocalServerHandlers } from "./mock-data/site-integrations/readmanga/local-server"
 import { registerPixivComicLocalServerHandlers } from "./mock-data/site-integrations/pixiv-comic/local-server"
 import { registerShonenJumpPlusLocalServerHandlers } from "./mock-data/site-integrations/shonenjumpplus/local-server"
-import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comicnettai/local-server"
+import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comictropics/local-server"
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
 import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrations/manganato/routes"
 import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"

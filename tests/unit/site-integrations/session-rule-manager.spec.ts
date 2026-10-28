@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { assertValidSessionRefererRuleDeclaration } from "@/src/site-integrations/definition-validation"
 import { siteIntegrationCatalog } from "@/src/runtime/generated/site-integration-catalog"
-import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/manhuagui/shared"
+import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/readmanga/shared"
 import { normalizePixivImageUrl } from "@/src/site-integrations/pixiv-comic/shared"
 import { assertIntegrationEndpointRequestUrl } from "@/src/site-integrations/request-policy"
 
 const otherIntegrationsDisabled = Object.fromEntries(
   siteIntegrationCatalog
-    .filter(({ id }) => id !== "pixiv-comic" && id !== "manhuagui")
+    .filter(({ id }) => id !== "pixiv-comic" && id !== "readmanga")
     .map(({ id }) => [id, false])
 )
 const managedRuleIds = siteIntegrationCatalog
@@ -260,7 +260,7 @@ describe("site integration session-rule manager", () => {
       for (const rule of definition.sessionRefererRules ?? []) {
         for (const domain of rule.requestDomains) {
           const imageUrl = `https://${domain}/contract-test-image.jpg`
-          if (definition.id === "manhuagui") {
+          if (definition.id === "readmanga") {
             expect(isAllowedManhuaguiImageUrl(imageUrl)).toBe(true)
           } else if (definition.id === "pixiv-comic") {
             expect(() => normalizePixivImageUrl(imageUrl)).not.toThrow()
@@ -292,7 +292,7 @@ describe("site integration session-rule manager", () => {
     await reconcileSiteIntegrationSessionRules(
       {
         "pixiv-comic": false,
-        manhuagui: true,
+        readmanga: true,
       },
       testEnablementService
     )
@@ -320,7 +320,7 @@ describe("site integration session-rule manager", () => {
     await reconcileSiteIntegrationSessionRules(
       {
         "pixiv-comic": true,
-        manhuagui: true,
+        readmanga: true,
       },
       testEnablementService
     )
@@ -346,7 +346,7 @@ describe("site integration session-rule manager", () => {
       reconcileSiteIntegrationSessionRules(
         {
           "pixiv-comic": true,
-          manhuagui: true,
+          readmanga: true,
         },
         testEnablementService
       )
@@ -370,7 +370,7 @@ describe("site integration session-rule manager", () => {
       reconcileSiteIntegrationSessionRules(
         {
           "pixiv-comic": true,
-          manhuagui: true,
+          readmanga: true,
         },
         testEnablementService
       )
@@ -701,7 +701,7 @@ describe("site integration session-rule manager", () => {
           newValue: {
             ...otherIntegrationsDisabled,
             "pixiv-comic": false,
-            manhuagui: true,
+            readmanga: true,
           },
         },
       },
@@ -757,7 +757,7 @@ describe("site integration session-rule manager", () => {
     })
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(1))
     storageChangeListeners[0](
-      { siteIntegrationEnablement: { newValue: { manhuagui: true } } },
+      { siteIntegrationEnablement: { newValue: { readmanga: true } } },
       "local"
     )
     permissionAddedListeners[0]({ origins: ["https://comic.pixiv.net/*"] })
@@ -783,7 +783,7 @@ describe("site integration session-rule manager", () => {
     })
     let manhuaguiReady = false
     const dependentReadiness = ensureSiteIntegrationNetworkReady(
-      "manhuagui",
+      "readmanga",
       testEnablementService
     ).then(() => {
       manhuaguiReady = true
@@ -802,7 +802,7 @@ describe("site integration session-rule manager", () => {
   })
 
   it("re-reads enablement when a provider is enabled immediately before dispatch", async () => {
-    const storedEnablement = { manhuagui: false }
+    const storedEnablement = { readmanga: false }
     const { updateSessionRules } = installChromeMock({ storedEnablement })
     const {
       ensureSiteIntegrationNetworkReady,
@@ -817,8 +817,8 @@ describe("site integration session-rule manager", () => {
       addRules: [expect.objectContaining({ id: 41001 })],
     })
 
-    storedEnablement.manhuagui = true
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+    storedEnablement.readmanga = true
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenLastCalledWith({
       removeRuleIds: managedRuleIds,
@@ -831,7 +831,7 @@ describe("site integration session-rule manager", () => {
 
   it("does not rewrite an already-current managed rule set for each dependent task", async () => {
     const { updateSessionRules } = installChromeMock({
-      storedEnablement: { manhuagui: true },
+      storedEnablement: { readmanga: true },
     })
     const {
       ensureSiteIntegrationNetworkReady,
@@ -841,8 +841,8 @@ describe("site integration session-rule manager", () => {
     await initializeSiteIntegrationSessionRuleManager({
       service: testEnablementService,
     })
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenCalledTimes(1)
   })
@@ -850,7 +850,7 @@ describe("site integration session-rule manager", () => {
   it("classifies transient reconciliation failure separately from host-access denial", async () => {
     let shouldThrow = true
     const { updateSessionRules } = installChromeMock({
-      storedEnablement: { manhuagui: true },
+      storedEnablement: { readmanga: true },
       updateSessionRules: async () => {
         if (shouldThrow) throw new Error("temporary DNR failure")
       },
@@ -868,7 +868,7 @@ describe("site integration session-rule manager", () => {
       })
     ).rejects.toThrow("temporary DNR failure")
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+      ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyPendingError)
 
     shouldThrow = false
@@ -878,7 +878,7 @@ describe("site integration session-rule manager", () => {
       ) => Promise<boolean>
     ).mockResolvedValue(false)
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+      ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyActionRequiredError)
     expect(updateSessionRules).toHaveBeenCalled()
   })

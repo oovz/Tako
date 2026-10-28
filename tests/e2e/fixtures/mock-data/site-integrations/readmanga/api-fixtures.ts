@@ -41,7 +41,7 @@ export const MANHUAGUI_MOCK_IMAGE_DOMAIN = `${MANHUAGUI_MOCK_IMAGE_HOST}.hamreus
 
 /**
  * Minimal reader-config script. The parser in
- * `src/site-integrations/manhuagui/reader-config.ts` only reads three
+ * `src/site-integrations/readmanga/reader-config.ts` only reads three
  * tokens from the response: `picserv`-style `{name,hosts}` blocks,
  * `curServ:N`, and `curHost:N`. Everything else is free-form — so we ship
  * a one-line IIFE that assigns the shape the parser expects.

@@ -39,8 +39,8 @@ async function resolveComicNettaiSeriesData(input: {
   }
 
   const response = await integrationHttpClient.request({
-    integrationId: "comicnettai",
-    endpointId: "comicnettai-viewer-page",
+    integrationId: "comictropics",
+    endpointId: "comictropics-viewer-page",
     url: input.seriesUrl,
     scope: "chapter",
     rateLimitService: input.rateLimitService,
@@ -58,7 +58,7 @@ async function resolveComicNettaiSeriesData(input: {
 
   const { html } = await decodeHtmlResponse(response)
   const resolved = await resolveSeriesDataViaOffscreen({
-    siteIntegrationId: "comicnettai",
+    siteIntegrationId: "comictropics",
     seriesUrl: input.seriesUrl,
     html,
     language: input.language,

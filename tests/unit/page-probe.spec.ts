@@ -13,7 +13,7 @@ vi.mock("@/src/runtime/generated/site-integration-page-probe-registry", () => ({
 
 import { executeApprovedPageProbe } from "@/src/site-integrations/page-probe"
 import { pageProbe as mangadexPageProbe } from "@/src/site-integrations/mangadex/probe"
-import { pageProbe as manhuaguiPageProbe } from "@/src/site-integrations/manhuagui/probe"
+import { pageProbe as manhuaguiPageProbe } from "@/src/site-integrations/readmanga/probe"
 
 describe("approved one-shot page probe", () => {
   const executeScript = vi.fn()

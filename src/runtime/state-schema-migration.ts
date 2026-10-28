@@ -5,6 +5,11 @@ import {
 } from "./queue-state-schemas"
 import { buildTerminalSaveWrites } from "./state-schema-migration-terminal-saves"
 import {
+  buildIntegrationIdWrites,
+  currentIntegrationMapForValidation,
+  getHistoricalIntegrationDefinition,
+} from "./state-schema-migration-integration-ids"
+import {
   DownloadTaskStateSchema as TerminalTaskSchema,
   PendingUndoActionSchema as TerminalUndoSchema,
 } from "./state-schema-migration-terminal-save-schemas"
@@ -93,10 +98,7 @@ import {
 } from "@/src/shared/rate-policy-limits"
 import { UI_LANGUAGE_PREFERENCES } from "@/src/shared/ui-language"
 import { isRecord } from "@/src/shared/type-guards"
-import {
-  assertValidSettingsFieldValue,
-  getDefinition,
-} from "@/src/site-integrations/catalog"
+import { assertValidSettingsFieldValue } from "@/src/site-integrations/catalog"
 import { assertSafePublicHttpsUrl } from "@/src/site-integrations/request-policy"
 import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 import {
@@ -112,7 +114,7 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 9
+export const CURRENT_STATE_SCHEMA_EPOCH = 10
 type DownloadTaskState = z.infer<typeof DownloadTaskStateSchema>
 type PendingUndoAction = z.infer<typeof PendingUndoActionSchema>
 const normalizeDownloadErrorCategory = (raw: unknown) =>
@@ -826,13 +828,19 @@ function migrateEnablement(raw: unknown): Record<string, boolean> | undefined {
     throw new Error("Stored site-integration enablement is not an object")
   const migrated: Record<string, boolean> = {}
   for (const [siteIntegrationId, enabled] of Object.entries(raw)) {
-    if (!getDefinition(siteIntegrationId) || typeof enabled !== "boolean") {
+    if (
+      !getHistoricalIntegrationDefinition(siteIntegrationId) ||
+      typeof enabled !== "boolean"
+    ) {
       warnDroppedProviderEntry("enablement", siteIntegrationId)
       continue
     }
     migrated[siteIntegrationId] = enabled
   }
-  return parseSiteIntegrationEnablementDocument(migrated)
+  parseSiteIntegrationEnablementDocument(
+    currentIntegrationMapForValidation(migrated)
+  )
+  return migrated
 }
 
 function migrateSiteSettings(
@@ -843,7 +851,7 @@ function migrateSiteSettings(
     throw new Error("Stored site-integration settings are not an object")
   const migrated: Record<string, Record<string, unknown>> = {}
   for (const [siteIntegrationId, settings] of Object.entries(raw)) {
-    const definition = getDefinition(siteIntegrationId)
+    const definition = getHistoricalIntegrationDefinition(siteIntegrationId)
     if (!definition || !isRecord(settings)) {
       warnDroppedProviderEntry("settings", siteIntegrationId)
       continue
@@ -864,7 +872,10 @@ function migrateSiteSettings(
     }
     migrated[siteIntegrationId] = current
   }
-  return parseSiteIntegrationSettingsDocument(migrated)
+  parseSiteIntegrationSettingsDocument(
+    currentIntegrationMapForValidation(migrated)
+  )
+  return migrated
 }
 
 function migrateSiteOverrides(
@@ -874,7 +885,10 @@ function migrateSiteOverrides(
   if (!isRecord(raw)) throw new Error("Stored site overrides are not an object")
   const migrated: Record<string, SiteOverrideRecord> = {}
   for (const [siteIntegrationId, override] of Object.entries(raw)) {
-    if (!getDefinition(siteIntegrationId) || !isRecord(override)) {
+    if (
+      !getHistoricalIntegrationDefinition(siteIntegrationId) ||
+      !isRecord(override)
+    ) {
       warnDroppedProviderEntry("overrides", siteIntegrationId)
       continue
     }
@@ -947,7 +961,8 @@ function migrateSiteOverrides(
     }
     migrated[siteIntegrationId] = SiteOverrideRecordSchema.parse(candidate)
   }
-  return parseSiteOverridesDocument(migrated)
+  parseSiteOverridesDocument(currentIntegrationMapForValidation(migrated))
+  return migrated
 }
 
 function migratePersistentErrors(raw: unknown, now: number): unknown {
@@ -1098,6 +1113,10 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     if (
       !MIGRATION_WRITE_KEYS.has(key) &&
       !(
+        journal.targetEpoch === 10 &&
+        key === LOCAL_STORAGE_KEYS.progressTimingEstimates
+      ) &&
+      !(
         (journal.targetEpoch === 4 || journal.targetEpoch === 7) &&
         (key === nativeStorageKeys.index ||
           key.startsWith(nativeStorageKeys.manifestPrefix) ||
@@ -1126,7 +1145,7 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(
-      journal.targetEpoch === 9
+      journal.targetEpoch === 10 || journal.targetEpoch === 9
         ? FallbackTaskSchema
         : journal.targetEpoch === 8
           ? TerminalTaskSchema
@@ -1147,7 +1166,7 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(
-      journal.targetEpoch === 9
+      journal.targetEpoch === 10 || journal.targetEpoch === 9
         ? FallbackUndoSchema
         : journal.targetEpoch === 8
           ? TerminalUndoSchema
@@ -1168,23 +1187,34 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.settings)) {
     const parseSettings =
-      journal.targetEpoch === 9
+      journal.targetEpoch === 10 || journal.targetEpoch === 9
         ? parseCurrentSettingsDocument
         : parseSettingsDocument
     parseSettings(journal.writes[LOCAL_STORAGE_KEYS.settings])
   }
+  const providerDocument = (key: string) =>
+    journal.targetEpoch <= 9
+      ? currentIntegrationMapForValidation(journal.writes[key])
+      : journal.writes[key]
   if (Object.hasOwn(journal.writes, SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)) {
     parseSiteIntegrationEnablementDocument(
-      journal.writes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
+      providerDocument(SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)
     )
   }
   if (Object.hasOwn(journal.writes, SITE_INTEGRATION_SETTINGS_STORAGE_KEY)) {
     parseSiteIntegrationSettingsDocument(
-      journal.writes[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
+      providerDocument(SITE_INTEGRATION_SETTINGS_STORAGE_KEY)
     )
   }
   if (Object.hasOwn(journal.writes, SITE_OVERRIDES_STORAGE_KEY)) {
-    parseSiteOverridesDocument(journal.writes[SITE_OVERRIDES_STORAGE_KEY])
+    parseSiteOverridesDocument(providerDocument(SITE_OVERRIDES_STORAGE_KEY))
+  }
+  if (
+    Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.progressTimingEstimates)
+  ) {
+    z.record(z.string(), z.unknown()).parse(
+      journal.writes[LOCAL_STORAGE_KEYS.progressTimingEstimates]
+    )
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.persistentErrors)) {
     PersistentErrorsSchema.parse(
@@ -1482,6 +1512,23 @@ const MIGRATION_STEPS = [
               }
             : {}),
         },
+        obsoleteKeys: [],
+      })
+      validateMigrationJournal(journal)
+      return journal
+    },
+  },
+  {
+    targetEpoch: 10,
+    prepare: (
+      stored: Record<string, unknown>,
+      sourceEpoch: number | null
+    ): MigrationJournal => {
+      const journal = MigrationJournalSchema.parse({
+        sourceEpoch,
+        targetEpoch: 10,
+        phase: "prepared",
+        writes: buildIntegrationIdWrites(stored),
         obsoleteKeys: [],
       })
       validateMigrationJournal(journal)

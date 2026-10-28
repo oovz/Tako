@@ -353,6 +353,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -1062,7 +1068,7 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4, 5, 6, 7, 8, 9])
+    ).toEqual([3, 4, 5, 6, 7, 8, 9, 10])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,

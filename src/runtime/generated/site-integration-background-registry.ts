@@ -3,7 +3,7 @@
 import type { BackgroundSiteAdapter } from '@/src/types/site-integrations'
 import { backgroundSiteAdapter as animemangahouseBackgroundAdapter } from '@/src/site-integrations/animemangahouse/background-runtime'
 import { backgroundSiteAdapter as boyloveBackgroundAdapter } from '@/src/site-integrations/boylove/background-runtime'
-import { backgroundSiteAdapter as comicnettaiBackgroundAdapter } from '@/src/site-integrations/comicnettai/background-runtime'
+import { backgroundSiteAdapter as comictropicsBackgroundAdapter } from '@/src/site-integrations/comictropics/background-runtime'
 import { backgroundSiteAdapter as coolmicBackgroundAdapter } from '@/src/site-integrations/coolmic/background-runtime'
 import { backgroundSiteAdapter as copymangaBackgroundAdapter } from '@/src/site-integrations/copymanga/background-runtime'
 import { backgroundSiteAdapter as lovemangaBackgroundAdapter } from '@/src/site-integrations/lovemanga/background-runtime'
@@ -16,15 +16,15 @@ import { backgroundSiteAdapter as mangakakalotBackgroundAdapter } from '@/src/si
 import { backgroundSiteAdapter as mangamillionBackgroundAdapter } from '@/src/site-integrations/mangamillion/background-runtime'
 import { backgroundSiteAdapter as manganatoBackgroundAdapter } from '@/src/site-integrations/manganato/background-runtime'
 import { backgroundSiteAdapter as mangaplusBackgroundAdapter } from '@/src/site-integrations/mangaplus/background-runtime'
-import { backgroundSiteAdapter as manhuaguiBackgroundAdapter } from '@/src/site-integrations/manhuagui/background-runtime'
 import { backgroundSiteAdapter as mycomicBackgroundAdapter } from '@/src/site-integrations/mycomic/background-runtime'
 import { backgroundSiteAdapter as pixiv_comicBackgroundAdapter } from '@/src/site-integrations/pixiv-comic/background-runtime'
+import { backgroundSiteAdapter as readmangaBackgroundAdapter } from '@/src/site-integrations/readmanga/background-runtime'
 import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/site-integrations/shonenjumpplus/background-runtime'
 
 export const backgroundSiteAdapters = [
   animemangahouseBackgroundAdapter,
   boyloveBackgroundAdapter,
-  comicnettaiBackgroundAdapter,
+  comictropicsBackgroundAdapter,
   coolmicBackgroundAdapter,
   copymangaBackgroundAdapter,
   lovemangaBackgroundAdapter,
@@ -37,16 +37,16 @@ export const backgroundSiteAdapters = [
   mangamillionBackgroundAdapter,
   manganatoBackgroundAdapter,
   mangaplusBackgroundAdapter,
-  manhuaguiBackgroundAdapter,
   mycomicBackgroundAdapter,
   pixiv_comicBackgroundAdapter,
+  readmangaBackgroundAdapter,
   shonenjumpplusBackgroundAdapter,
 ] as const satisfies readonly BackgroundSiteAdapter[]
 
 export const backgroundSiteAdaptersById = {
   "animemangahouse": animemangahouseBackgroundAdapter,
   "boylove": boyloveBackgroundAdapter,
-  "comicnettai": comicnettaiBackgroundAdapter,
+  "comictropics": comictropicsBackgroundAdapter,
   "coolmic": coolmicBackgroundAdapter,
   "copymanga": copymangaBackgroundAdapter,
   "lovemanga": lovemangaBackgroundAdapter,
@@ -59,8 +59,8 @@ export const backgroundSiteAdaptersById = {
   "mangamillion": mangamillionBackgroundAdapter,
   "manganato": manganatoBackgroundAdapter,
   "mangaplus": mangaplusBackgroundAdapter,
-  "manhuagui": manhuaguiBackgroundAdapter,
   "mycomic": mycomicBackgroundAdapter,
   "pixiv-comic": pixiv_comicBackgroundAdapter,
+  "readmanga": readmangaBackgroundAdapter,
   "shonenjumpplus": shonenjumpplusBackgroundAdapter,
 } as Readonly<Record<string, BackgroundSiteAdapter>>

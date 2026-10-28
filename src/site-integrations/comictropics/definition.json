@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "comicnettai",
+  "id": "comictropics",
   "name": "Comic Nettai",
   "englishName": "Comic Nettai",
   "contributors": ["TMD Team"],
@@ -42,7 +42,7 @@
   },
   "endpointPolicies": [
     {
-      "id": "comicnettai-viewer-page",
+      "id": "comictropics-viewer-page",
       "purpose": "Comic Nettai viewer session",
       "origins": ["https://www.comicnettai.com/*"],
       "originKind": "fixed",
@@ -52,7 +52,7 @@
       "maxResponseBytes": 15000000
     },
     {
-      "id": "comicnettai-viewer-api",
+      "id": "comictropics-viewer-api",
       "purpose": "Comic Nettai viewer protocol",
       "origins": ["https://www.comicnettai.com/*"],
       "originKind": "fixed",
@@ -62,7 +62,7 @@
       "maxResponseBytes": 10000000
     },
     {
-      "id": "comicnettai-cdn-config",
+      "id": "comictropics-cdn-config",
       "purpose": "Comic Nettai CDN configuration",
       "origins": ["https://cdn.comicnettai.com/*"],
       "originKind": "provider-issued",
@@ -72,7 +72,7 @@
       "maxResponseBytes": 10000000
     },
     {
-      "id": "comicnettai-cdn-image",
+      "id": "comictropics-cdn-image",
       "purpose": "Comic Nettai CDN images",
       "origins": ["https://cdn.comicnettai.com/*"],
       "originKind": "provider-issued",

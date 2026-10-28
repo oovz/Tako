@@ -16,7 +16,7 @@ test.describe("Comic Nettai metadata extraction (live)", () => {
       context,
       extensionId,
       page,
-      "comicnettai"
+      "comictropics"
     )
     const expiredChapter = (state.chapters ?? []).find(
       (chapter) => chapter.id === "829"

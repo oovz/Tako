@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "manhuagui",
+  "id": "readmanga",
   "name": "Manhuagui",
   "englishName": "Manhuagui",
   "contributors": ["TMD Team"],
@@ -45,7 +45,7 @@
   },
   "endpointPolicies": [
     {
-      "id": "manhuagui-series-html",
+      "id": "readmanga-series-html",
       "purpose": "Manhuagui series page HTML",
       "origins": ["https://www.manhuagui.com/*", "https://manhuagui.com/*"],
       "originKind": "fixed",
@@ -55,7 +55,7 @@
       "maxResponseBytes": 15000000
     },
     {
-      "id": "manhuagui-reader-config",
+      "id": "readmanga-reader-config",
       "purpose": "Manhuagui reader configuration",
       "origins": ["https://cf.mhgui.com/*"],
       "originKind": "provider-issued",
@@ -65,7 +65,7 @@
       "maxResponseBytes": 5000000
     },
     {
-      "id": "manhuagui-image-cdn",
+      "id": "readmanga-image-cdn",
       "purpose": "Manhuagui image CDN",
       "origins": ["https://hamreus.com/*", "https://*.hamreus.com/*"],
       "originKind": "provider-issued",

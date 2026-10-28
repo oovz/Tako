@@ -16,9 +16,9 @@ test.describe("Manhuagui metadata extraction (live)", () => {
       context,
       extensionId,
       page,
-      "manhuagui"
+      "readmanga"
     )
-    expect(state.siteIntegrationId).toBe("manhuagui")
+    expect(state.siteIntegrationId).toBe("readmanga")
     expect(Array.isArray(state.chapters)).toBe(true)
     expect(Array.isArray(state.volumes)).toBe(true)
 

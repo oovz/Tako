@@ -48,7 +48,7 @@ export default defineConfig({
         // Comic Nettai browser/live workflows using real transport data. It is
         // intentionally outside the unit gate because synthetic unit vectors
         // would duplicate the site algorithm rather than independently test it.
-        "src/site-integrations/comicnettai/publus-config.ts",
+        "src/site-integrations/comictropics/publus-config.ts",
         "**/node_modules/**",
         // UI components (.tsx) are exercised end-to-end via Playwright; they
         // are intentionally excluded from the unit/integration coverage gate.

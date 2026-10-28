@@ -78,8 +78,8 @@ function normalizeComicNettaiCoverUrl(
   }
 
   return assertIntegrationEndpointRequestUrl(
-    "comicnettai",
-    "comicnettai-cdn-image",
+    "comictropics",
+    "comictropics-cdn-image",
     absoluteUrl
   ).href
 }
@@ -272,8 +272,8 @@ export async function loadComicNettaiPaginationDocument(
 
   try {
     const response = await integrationHttpClient.request({
-      integrationId: "comicnettai",
-      endpointId: "comicnettai-viewer-page",
+      integrationId: "comictropics",
+      endpointId: "comictropics-viewer-page",
       url,
       scope: "chapter",
       init: {

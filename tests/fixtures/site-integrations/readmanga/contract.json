@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "providerId": "manhuagui",
+  "providerId": "readmanga",
   "data": {
     "pageProbe": {
       "chapterHtml": "<section id=\"chapter-list\"></section>",

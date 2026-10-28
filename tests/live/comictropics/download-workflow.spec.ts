@@ -30,7 +30,7 @@ test.describe("Comic Nettai download workflows (live)", () => {
       context,
       extensionId,
       page,
-      "comicnettai",
+      "comictropics",
       {
         expectedMangaId: "9",
         expectedSeriesTitle: "煙たい話",

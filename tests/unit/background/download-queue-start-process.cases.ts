@@ -145,7 +145,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockEnsureSiteIntegrationNetworkReady.mockReturnValue(readiness)
         const task = makeTask({
           id: `task-network-ready-${String(resumeExistingTask)}`,
-          siteIntegrationId: "manhuagui",
+          siteIntegrationId: "readmanga",
           status: resumeExistingTask ? "downloading" : "queued",
         })
         mockGlobalState.downloadQueue = [task]
@@ -158,7 +158,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         )
         await vi.waitFor(() =>
           expect(mockEnsureSiteIntegrationNetworkReady).toHaveBeenCalledWith(
-            "manhuagui"
+            "readmanga"
           )
         )
 
@@ -177,7 +177,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     it("atomically unblocks every pending provider task and schedules the queue once", async () => {
       const firstTask = makeTask({
         id: "task-provider-policy-resume-1",
-        siteIntegrationId: "manhuagui",
+        siteIntegrationId: "readmanga",
         status: "queued",
         activeBlock: "provider_network_policy_pending",
       })
@@ -225,7 +225,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         ).toBeGreaterThanOrEqual(2)
       )
       expect(mockEnsureSiteIntegrationNetworkReady).toHaveBeenCalledWith(
-        "manhuagui"
+        "readmanga"
       )
       expect(mockEnsureOffscreenReady).toHaveBeenCalled()
       expect(
@@ -289,13 +289,13 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     it("returns a transient provider-policy failure to a blocked queued state", async () => {
       const task = makeTask({
         id: "task-provider-network-policy-pending",
-        siteIntegrationId: "manhuagui",
+        siteIntegrationId: "readmanga",
         status: "queued",
       })
       mockGlobalState.downloadQueue = [task]
       mockEnsureSiteIntegrationNetworkReady.mockRejectedValueOnce(
         new ProviderNetworkPolicyPendingError(
-          "manhuagui",
+          "readmanga",
           new Error("DNR temporarily unavailable")
         )
       )
@@ -322,13 +322,13 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     it("terminalizes a definitive provider host-access denial", async () => {
       const task = makeTask({
         id: "task-provider-network-policy-action",
-        siteIntegrationId: "manhuagui",
+        siteIntegrationId: "readmanga",
         status: "queued",
       })
       mockGlobalState.downloadQueue = [task]
       mockEnsureSiteIntegrationNetworkReady.mockRejectedValueOnce(
         new ProviderNetworkPolicyActionRequiredError(
-          "manhuagui",
+          "readmanga",
           "host_permission_denied"
         )
       )

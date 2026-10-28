@@ -49,7 +49,7 @@ async function loadManhuaguiState(
         )
         if (
           state &&
-          state.siteIntegrationId === "manhuagui" &&
+          state.siteIntegrationId === "readmanga" &&
           state.mangaId === expectedMangaId &&
           Array.isArray(state.chapters) &&
           (expectedChapterAvailability === "empty"

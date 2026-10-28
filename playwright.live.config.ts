@@ -74,16 +74,16 @@ export default defineConfig({
       },
     },
     {
-      name: "manhuagui",
-      testDir: path.resolve(__dirname, "tests/live/manhuagui"),
+      name: "readmanga",
+      testDir: path.resolve(__dirname, "tests/live/readmanga"),
       use: {
         ...devices["Desktop Chrome"],
         channel: "chromium-tip-of-tree",
       },
     },
     {
-      name: "comicnettai",
-      testDir: path.resolve(__dirname, "tests/live/comicnettai"),
+      name: "comictropics",
+      testDir: path.resolve(__dirname, "tests/live/comictropics"),
       use: {
         ...devices["Desktop Chrome"],
         channel: "chromium-tip-of-tree",

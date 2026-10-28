@@ -40,13 +40,13 @@ describe("Options external-change reconciliation", () => {
 
     draft.settings.downloads.pathTemplate = "Local/<SERIES_TITLE>"
     latest.settings.motionPreference = "reduce"
-    latest.enablement.manhuagui = false
+    latest.enablement.readmanga = false
 
     const merged = mergeOptionsDraftOntoLatest(baseline, draft, latest)
 
     expect(merged.settings.downloads.pathTemplate).toBe("Local/<SERIES_TITLE>")
     expect(merged.settings.motionPreference).toBe("reduce")
-    expect(merged.enablement.manhuagui).toBe(false)
+    expect(merged.enablement.readmanga).toBe(false)
   })
 
   it("keeps the local value when both sides edit the same field", () => {

@@ -15,7 +15,7 @@ export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
   id: "MANHUAGUI_BASIC_SERIES",
   description: "Basic Manhuagui series with full metadata (no adult gate)",
   series: {
-    siteId: "manhuagui",
+    siteId: "readmanga",
     seriesId: "55555",
     seriesTitle: "テスト漫画",
     author: "测试作者",
@@ -31,7 +31,7 @@ export const ADULT_SERIES: SiteIntegrationSeriesDataset = {
   description:
     "Adult-gated Manhuagui series (chapter list is lz-string-compressed in #__VIEWSTATE)",
   series: {
-    siteId: "manhuagui",
+    siteId: "readmanga",
     seriesId: "77777",
     seriesTitle: "Gated Series",
     author: "测试作者",
@@ -46,7 +46,7 @@ export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
   id: "MANHUAGUI_MINIMAL_SERIES",
   description: "Manhuagui series with a single chapter",
   series: {
-    siteId: "manhuagui",
+    siteId: "readmanga",
     seriesId: "66666",
     seriesTitle: "Minimal Series",
     status: "连载中",
@@ -59,7 +59,7 @@ export const CATEGORY_SERIES: SiteIntegrationSeriesDataset = {
   description:
     "Manhuagui reference series with single issues, extras, and chapters category headings",
   series: {
-    siteId: "manhuagui",
+    siteId: "readmanga",
     seriesId: "21243",
     seriesTitle: "八田百田",
     author: "はやみねかおる",
@@ -76,7 +76,7 @@ export const KIMETSU_SERIES: SiteIntegrationSeriesDataset = {
   description:
     "Manhuagui 19430 reference series with single-book, single-chapter, and extra category headings",
   series: {
-    siteId: "manhuagui",
+    siteId: "readmanga",
     seriesId: "19430",
     seriesTitle: "鬼灭之刃",
     author: "吾峠呼世晴",
@@ -92,7 +92,7 @@ export function createManhuaguiSeries(
   overrides: Partial<SiteIntegrationSeriesData>
 ): SiteIntegrationSeriesData {
   return {
-    siteId: overrides.siteId || "manhuagui",
+    siteId: overrides.siteId || "readmanga",
     seriesId: overrides.seriesId || BASIC_SERIES.series.seriesId,
     seriesTitle: overrides.seriesTitle || "テスト漫画",
     author: overrides.author,

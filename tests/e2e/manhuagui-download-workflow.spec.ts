@@ -103,7 +103,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
     await setIntegrationEnabledFromWorker(
       context,
       extensionId,
-      "manhuagui",
+      "readmanga",
       false
     )
     await expect
@@ -150,7 +150,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
 
       const taskId = await startSingleChapterDownload(optionsPage, {
         sourceTabId: tabId,
-        siteIntegrationId: "manhuagui",
+        siteIntegrationId: "readmanga",
         mangaId: series.seriesId,
         seriesTitle: series.seriesTitle,
         chapter: {

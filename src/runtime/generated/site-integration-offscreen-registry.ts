@@ -3,7 +3,7 @@
 import type { OffscreenSiteAdapter } from '@/src/types/site-integrations'
 import { offscreenSiteAdapter as animemangahouseOffscreenAdapter } from '@/src/site-integrations/animemangahouse/offscreen-runtime'
 import { offscreenSiteAdapter as boyloveOffscreenAdapter } from '@/src/site-integrations/boylove/offscreen-runtime'
-import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
+import { offscreenSiteAdapter as comictropicsOffscreenAdapter } from '@/src/site-integrations/comictropics/offscreen-runtime'
 import { offscreenSiteAdapter as coolmicOffscreenAdapter } from '@/src/site-integrations/coolmic/offscreen-runtime'
 import { offscreenSiteAdapter as copymangaOffscreenAdapter } from '@/src/site-integrations/copymanga/offscreen-runtime'
 import { offscreenSiteAdapter as lovemangaOffscreenAdapter } from '@/src/site-integrations/lovemanga/offscreen-runtime'
@@ -16,15 +16,15 @@ import { offscreenSiteAdapter as mangakakalotOffscreenAdapter } from '@/src/site
 import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site-integrations/mangamillion/offscreen-runtime'
 import { offscreenSiteAdapter as manganatoOffscreenAdapter } from '@/src/site-integrations/manganato/offscreen-runtime'
 import { offscreenSiteAdapter as mangaplusOffscreenAdapter } from '@/src/site-integrations/mangaplus/offscreen-runtime'
-import { offscreenSiteAdapter as manhuaguiOffscreenAdapter } from '@/src/site-integrations/manhuagui/offscreen-runtime'
 import { offscreenSiteAdapter as mycomicOffscreenAdapter } from '@/src/site-integrations/mycomic/offscreen-runtime'
 import { offscreenSiteAdapter as pixiv_comicOffscreenAdapter } from '@/src/site-integrations/pixiv-comic/offscreen-runtime'
+import { offscreenSiteAdapter as readmangaOffscreenAdapter } from '@/src/site-integrations/readmanga/offscreen-runtime'
 import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/site-integrations/shonenjumpplus/offscreen-runtime'
 
 export const offscreenSiteAdapters = [
   animemangahouseOffscreenAdapter,
   boyloveOffscreenAdapter,
-  comicnettaiOffscreenAdapter,
+  comictropicsOffscreenAdapter,
   coolmicOffscreenAdapter,
   copymangaOffscreenAdapter,
   lovemangaOffscreenAdapter,
@@ -37,16 +37,16 @@ export const offscreenSiteAdapters = [
   mangamillionOffscreenAdapter,
   manganatoOffscreenAdapter,
   mangaplusOffscreenAdapter,
-  manhuaguiOffscreenAdapter,
   mycomicOffscreenAdapter,
   pixiv_comicOffscreenAdapter,
+  readmangaOffscreenAdapter,
   shonenjumpplusOffscreenAdapter,
 ] as const satisfies readonly OffscreenSiteAdapter[]
 
 export const offscreenSiteAdaptersById = {
   "animemangahouse": animemangahouseOffscreenAdapter,
   "boylove": boyloveOffscreenAdapter,
-  "comicnettai": comicnettaiOffscreenAdapter,
+  "comictropics": comictropicsOffscreenAdapter,
   "coolmic": coolmicOffscreenAdapter,
   "copymanga": copymangaOffscreenAdapter,
   "lovemanga": lovemangaOffscreenAdapter,
@@ -59,8 +59,8 @@ export const offscreenSiteAdaptersById = {
   "mangamillion": mangamillionOffscreenAdapter,
   "manganato": manganatoOffscreenAdapter,
   "mangaplus": mangaplusOffscreenAdapter,
-  "manhuagui": manhuaguiOffscreenAdapter,
   "mycomic": mycomicOffscreenAdapter,
   "pixiv-comic": pixiv_comicOffscreenAdapter,
+  "readmanga": readmangaOffscreenAdapter,
   "shonenjumpplus": shonenjumpplusOffscreenAdapter,
 } as Readonly<Record<string, OffscreenSiteAdapter>>

@@ -168,8 +168,8 @@ export async function fetchReaderConfig(
   }
 
   const response = await integrationHttpClient.request({
-    integrationId: "manhuagui",
-    endpointId: "manhuagui-reader-config",
+    integrationId: "readmanga",
+    endpointId: "readmanga-reader-config",
     url: configScriptUrl,
     scope: "chapter",
     init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.configuration, signal },

@@ -111,12 +111,12 @@ export function registerComicNettaiLocalServerHandlers(
   return [
     {
       id: COMICNETTAI_SITE_RULE_ID,
-      regexFilter: "^https?://www\\.comicnettai\\.com/(.*)$",
+      regexFilter: "^https?://www\\.comictropics\\.com/(.*)$",
       regexSubstitution: `${base}${COMICNETTAI_LOCAL_SITE_PREFIX}/\\1`,
     },
     {
       id: COMICNETTAI_CDN_RULE_ID,
-      regexFilter: "^https?://cdn\\.comicnettai\\.com/(.*)$",
+      regexFilter: "^https?://cdn\\.comictropics\\.com/(.*)$",
       regexSubstitution: `${base}${COMICNETTAI_LOCAL_CDN_PREFIX}/\\1`,
     },
   ]

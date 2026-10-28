@@ -18,7 +18,7 @@ vi.mock("@/src/runtime/resolve-series-data-offscreen", () => ({
   resolveSeriesDataViaOffscreen: mocks.resolveSeriesDataViaOffscreen,
 }))
 
-import { backgroundSiteAdapter } from "@/src/site-integrations/manhuagui/background-runtime"
+import { backgroundSiteAdapter } from "@/src/site-integrations/readmanga/background-runtime"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 
@@ -87,7 +87,7 @@ describe("Manhuagui live page context", () => {
     })
 
     expect(mocks.resolveSeriesDataViaOffscreen).toHaveBeenNthCalledWith(1, {
-      siteIntegrationId: "manhuagui",
+      siteIntegrationId: "readmanga",
       seriesUrl,
       html: "<html>server page</html>",
       language: undefined,
@@ -95,7 +95,7 @@ describe("Manhuagui live page context", () => {
       signal: undefined,
     })
     expect(mocks.resolveSeriesDataViaOffscreen).toHaveBeenNthCalledWith(2, {
-      siteIntegrationId: "manhuagui",
+      siteIntegrationId: "readmanga",
       seriesUrl,
       html: '<div class="chapter"><div class="chapter-list"><a href="/comic/21243/900001.html">Chapter 1</a></div></div>',
       language: undefined,

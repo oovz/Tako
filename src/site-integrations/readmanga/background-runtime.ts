@@ -66,8 +66,8 @@ async function resolveManhuaguiSeriesData(input: {
   })
 
   const response = await integrationHttpClient.request({
-    integrationId: "manhuagui",
-    endpointId: "manhuagui-series-html",
+    integrationId: "readmanga",
+    endpointId: "readmanga-series-html",
     url: input.seriesUrl,
     scope: "chapter",
     init: {
@@ -89,7 +89,7 @@ async function resolveManhuaguiSeriesData(input: {
   const { html } = await decodeHtmlResponse(response)
   logger.debug("[manhuagui] Parsing fetched series HTML", { seriesId })
   const resolved = await resolveSeriesDataViaOffscreen({
-    siteIntegrationId: "manhuagui",
+    siteIntegrationId: "readmanga",
     seriesUrl: input.seriesUrl,
     html,
     language: input.language,
@@ -114,7 +114,7 @@ async function resolveManhuaguiSeriesData(input: {
   // server-rendered chapter list with chapter elements the user can already
   // see after completing Manhuagui's own adult gate.
   const liveResolved = await resolveSeriesDataViaOffscreen({
-    siteIntegrationId: "manhuagui",
+    siteIntegrationId: "readmanga",
     seriesUrl: input.seriesUrl,
     html: liveChapterHtml,
     language: input.language,

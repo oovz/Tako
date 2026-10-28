@@ -5,7 +5,7 @@ export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
   id: "COMICNETTAI_BASIC_SERIES",
   description: "Comic Nettai reference series for mocked e2e coverage",
   series: {
-    siteId: "comicnettai",
+    siteId: "comictropics",
     seriesId: "9",
     seriesTitle: "煙たい話",
     author: "林史也",

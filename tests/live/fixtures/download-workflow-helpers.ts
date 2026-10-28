@@ -351,7 +351,7 @@ export async function startSingleChapterDownload(
   )
   const chapter =
     state.siteIntegrationId === "mangadex" ||
-    state.siteIntegrationId === "manhuagui"
+    state.siteIntegrationId === "readmanga"
       ? downloadableChapters.at(-1)
       : downloadableChapters[0]
   if (!chapter) {

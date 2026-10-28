@@ -23,8 +23,8 @@ import type {
 import type { ChapterRuntimeData } from "@/src/types/site-integrations"
 
 const assertManhuaguiImageUrl = createIntegrationEndpointUrlAssertion(
-  "manhuagui",
-  "manhuagui-image-cdn"
+  "readmanga",
+  "readmanga-image-cdn"
 )
 
 /**
@@ -43,8 +43,8 @@ export async function resolveManhuaguiChapterImageUrls(
     "chapter"
   )
   const response = await integrationHttpClient.request({
-    integrationId: "manhuagui",
-    endpointId: "manhuagui-series-html",
+    integrationId: "readmanga",
+    endpointId: "readmanga-series-html",
     url: chapter.url,
     scope: "chapter",
     init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.pageHtml, signal },
@@ -98,8 +98,8 @@ export async function downloadManhuaguiChapterImage(
 
   const { data, mimeType, liveResourceLease } =
     await fetchImageWithStallDetection(imageUrl, {
-      integrationId: "manhuagui",
-      endpointId: "manhuagui-image-cdn",
+      integrationId: "readmanga",
+      endpointId: "readmanga-image-cdn",
       signal: opts.signal,
       rateLimitPolicy: opts.runtime.rateLimitSettings.image,
       rateLimitService: opts.runtime.rateLimitService,
@@ -137,8 +137,8 @@ export async function downloadManhuaguiCoverImage(
   }
   const { data, mimeType, liveResourceLease } =
     await fetchImageWithStallDetection(imageUrl, {
-      integrationId: "manhuagui",
-      endpointId: "manhuagui-image-cdn",
+      integrationId: "readmanga",
+      endpointId: "readmanga-image-cdn",
       signal: opts.signal,
       rateLimitService: opts.runtime.rateLimitService,
       skipRateLimit: opts.skipRateLimit,
