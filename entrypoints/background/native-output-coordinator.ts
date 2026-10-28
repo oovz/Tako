@@ -1,6 +1,6 @@
 import logger from "@/src/runtime/logger"
 import {
-  isNativeOutputAcceptanceProvenAbsent,
+  canReleaseNativeOutputBlob,
   isNativeOutputLive,
   isNativeOutputTerminal,
   isNativeOutputUnobservable,
@@ -142,8 +142,7 @@ export class NativeOutputCoordinator {
   /**
    * True while any native-output record or manifest is still live. Erased
    * downloads awaiting a user decision REMAIN live: the offscreen document
-   * owns their Blob URL and must not be closed before terminal state or
-   * explicit surrender.
+   * remains alive until each Blob release is proven and accounting is resolved.
    */
   async hasLiveDependencies(): Promise<boolean> {
     return await this.deps.repository.hasLiveDependencies()
@@ -189,7 +188,7 @@ export class NativeOutputCoordinator {
     return [
       ...new Set(
         Object.values(snapshot.manifestsByJobId)
-          .filter((manifest) => manifest.dependencyReleasedAt === undefined)
+          .filter((manifest) => manifest.settlementAcknowledgedAt === undefined)
           .map((manifest) => manifest.taskId)
       ),
     ].sort((left, right) => left.localeCompare(right))
@@ -480,15 +479,21 @@ export class NativeOutputCoordinator {
       const result = await this.deps.repository.observeErased({
         downloadId,
         now: Date.now(),
+        confirmedByBrowser: true,
       })
       if (result.outcome === "rejected") return { handled: false, effects }
       const record = await this.deps.repository.getByOutputId(
         result.record.outputId
       )
       if (record) {
+        await this.releaseJobBlobsLocked([record])
         const blocked = await this.blockTaskForUnobservableLocked(record)
         addSettlementEffects(effects, blocked.effects)
       }
+      addSettlementEffects(
+        effects,
+        await this.reconcileJobLocked(current.jobId)
+      )
       return { handled: true, effects }
     })
   }
@@ -513,8 +518,12 @@ export class NativeOutputCoordinator {
         return
       }
 
-      // Released native dependencies are durable proof of resolved accounting.
-      // Queue history may have been removed after the continuation was emitted.
+      const acknowledged = await this.deps.repository.acknowledgeSettlement({
+        jobId: effect.jobId,
+        now: Date.now(),
+      })
+      if (acknowledged.outcome === "rejected") return
+
       const allTrackedDependenciesReleased = manifestTrackedOutputIds(
         manifest
       ).every((outputId) => {
@@ -616,8 +625,8 @@ export class NativeOutputCoordinator {
       if (!canceledJob) {
         // The queue task is already durably canceled. Erased downloads that
         // were waiting for the user's forget confirmation cannot settle on
-        // their own: surrender them so Blob ownership and queue accounting
-        // are released instead of leaking for the task's lifetime.
+        // their own: surrender their queue accounting. Resource release follows
+        // browser consumption evidence.
         try {
           const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
           addSettlementEffects(effects, surrendered.effects)
@@ -661,7 +670,7 @@ export class NativeOutputCoordinator {
    * Task-wide FORGET_UNOBSERVABLE_OUTPUTS command. Surrenders every waiting
    * output whose Chrome download was erased, releases the task's
    * action-required block so the queue can continue, and reconciles each
-   * affected job (Blob revocation, settlement, dependency release). A replay
+   * affected job's accounting and independently eligible resource release. A replay
    * after an already-applied forget converges with `surrendered: 0`.
    */
   async forgetTaskUnobservableOutputs(
@@ -684,8 +693,7 @@ export class NativeOutputCoordinator {
   /**
    * Set the durable action-required block on the record's task so the queue
    * stops and the UI can offer the forget/cancel decision. When the task is
-   * already terminal (or gone) there is nobody to ask, so the unobservable
-   * output is surrendered immediately instead of leaking forever.
+   * already terminal (or gone), surrender resolves its queue accounting.
    *
    * Returns true when the block is durably in place (reconciliation can stop
    * arming the liveness alarm for this record).
@@ -919,7 +927,12 @@ export class NativeOutputCoordinator {
       return effects
     }
 
-    if (current.phase === "waiting" && current.downloadId !== undefined) {
+    if (
+      (current.phase === "waiting" ||
+        (current.phase === "surrendered" &&
+          !canReleaseNativeOutputBlob(current))) &&
+      current.downloadId !== undefined
+    ) {
       const items = await chrome.downloads.search({ id: current.downloadId })
       const item = items.find(
         (candidate) => candidate.id === current.downloadId
@@ -930,9 +943,11 @@ export class NativeOutputCoordinator {
           await this.observeDownloadItemLocked(current, item)
         )
       } else {
+        if (current.phase === "surrendered") return effects
         const erased = await this.deps.repository.observeErased({
           downloadId: current.downloadId,
           now: Date.now(),
+          confirmedByBrowser: false,
         })
         if (erased.outcome !== "rejected") {
           const record = await this.deps.repository.getByOutputId(
@@ -1002,10 +1017,17 @@ export class NativeOutputCoordinator {
       return record ? [record] : []
     })
     const effects: NativeOutputSettlementEffect[] = []
-    let settlementResolved = false
+    let settlementResolved =
+      manifest.settlementAcknowledgedAt !== undefined ||
+      (records.length === outputIds.length &&
+        records.length > 0 &&
+        records.every((record) => record.accountingDisposition !== "pending"))
+
+    await this.releaseJobBlobsLocked(records)
 
     if (
       manifest.phase === "sealed" &&
+      !settlementResolved &&
       records.length === outputIds.length &&
       records.every(
         (record) =>
@@ -1044,7 +1066,6 @@ export class NativeOutputCoordinator {
             now: Date.now(),
           })
         }
-        addSettlementEffect(effects, settlementEffect(manifest))
       } else {
         await this.armLivenessLocked()
       }
@@ -1060,28 +1081,6 @@ export class NativeOutputCoordinator {
       return record ? [record] : []
     })
     for (const record of refreshedRecords) {
-      const canRelease =
-        (record.phase !== "prepared" &&
-          isNativeOutputAcceptanceProvenAbsent(record)) ||
-        (isNativeOutputTerminal(record) &&
-          record.accountingDisposition !== "pending")
-      if (!canRelease) continue
-      if (record.blobReleasedAt === undefined) {
-        try {
-          await this.deps.requestBlobRevocation(record)
-          await this.deps.repository.markBlobReleased({
-            outputId: record.outputId,
-            now: Date.now(),
-          })
-        } catch (error) {
-          logger.warn("Native output Blob release will be retried", {
-            outputId: record.outputId,
-            error,
-          })
-          await this.armLivenessLocked()
-          continue
-        }
-      }
       const released = await this.deps.repository.getByOutputId(record.outputId)
       if (
         released &&
@@ -1107,6 +1106,15 @@ export class NativeOutputCoordinator {
       const record = finalState.outputsByOutputId[outputId]
       return record === undefined || record.dependencyReleasedAt !== undefined
     })
+    if (finalManifest?.settlementAcknowledgedAt !== undefined) {
+      if (allTrackedDependenciesReleased) {
+        await this.deps.repository.markJobDependencyReleased({
+          jobId,
+          now: Date.now(),
+        })
+      }
+      return effects
+    }
     const chapterSettlement = await this.deps.queueRepository
       .getTask(manifest.taskId)
       .then(
@@ -1132,6 +1140,36 @@ export class NativeOutputCoordinator {
       addSettlementEffect(effects, settlementEffect(finalManifest))
     }
     return effects
+  }
+
+  private async releaseJobBlobsLocked(
+    records: NativeOutputRecord[]
+  ): Promise<void> {
+    for (const record of records) {
+      if (
+        record.blobReleasedAt !== undefined ||
+        !canReleaseNativeOutputBlob(record)
+      )
+        continue
+      try {
+        await this.deps.requestBlobRevocation(record)
+        const released = await this.deps.repository.markBlobReleased({
+          outputId: record.outputId,
+          now: Date.now(),
+        })
+        if (released.outcome === "rejected") {
+          throw new Error(
+            `Native output Blob release rejected: ${released.reason}`
+          )
+        }
+      } catch (error) {
+        logger.warn("Native output Blob release will be retried", {
+          outputId: record.outputId,
+          error,
+        })
+        await this.armLivenessLocked()
+      }
+    }
   }
 
   private async armLivenessLocked(): Promise<void> {

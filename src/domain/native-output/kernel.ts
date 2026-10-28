@@ -1,5 +1,5 @@
 import {
-  isNativeOutputAcceptanceProvenAbsent,
+  canReleaseNativeOutputBlob,
   isNativeOutputTerminal,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
@@ -379,6 +379,13 @@ export function markNativeDownloadTerminal(
     (record) => record.downloadId === input.downloadId
   )
   if (!current) return rejected(state, "download-not-found")
+  if (current.phase === "surrendered") {
+    if (current.terminalAt !== undefined) {
+      return unchanged(state, { record: current })
+    }
+    const record = { ...current, terminalAt: input.now }
+    return applied(replaceOutput(state, record), { record })
+  }
   if (isNativeOutputTerminal(current)) {
     return current.phase === input.phase
       ? unchanged(state, { record: current })
@@ -398,7 +405,7 @@ export function markNativeDownloadTerminal(
 
 export function observeNativeDownloadErased(
   state: NativeOutputState,
-  input: { downloadId: number; now: number }
+  input: { downloadId: number; now: number; confirmedByBrowser: boolean }
 ): NativeOutputKernelDecision<
   | NativeOutputApplied<{ record: NativeOutputRecord }>
   | NativeOutputUnchanged<{ record: NativeOutputRecord }>
@@ -408,10 +415,17 @@ export function observeNativeDownloadErased(
     (record) => record.downloadId === input.downloadId
   )
   if (!current) return rejected(state, "download-not-found")
-  if (current.erasedAt !== undefined) {
+  if (
+    current.erasedAt !== undefined &&
+    (!input.confirmedByBrowser || current.erasedByBrowserAt !== undefined)
+  ) {
     return unchanged(state, { record: current })
   }
-  const record = { ...current, erasedAt: input.now }
+  const record = {
+    ...current,
+    erasedAt: current.erasedAt ?? input.now,
+    ...(input.confirmedByBrowser ? { erasedByBrowserAt: input.now } : {}),
+  }
   return applied(replaceOutput(state, record), { record })
 }
 
@@ -420,7 +434,8 @@ export function observeNativeDownloadErased(
  * Only waiting records whose download was erased from Chrome history qualify:
  * their result can never be observed again, and the user has accepted that
  * fact. Surrender does not claim complete or interrupted — the outcome stays
- * unknown — but it does release the queue block and later the Blob ownership.
+ * unknown — and it releases the queue block. Blob ownership follows browser
+ * consumption evidence independently.
  */
 export function markNativeOutputSurrendered(
   state: NativeOutputState,
@@ -493,11 +508,7 @@ export function markNativeOutputBlobReleased(
   if (current.blobReleasedAt !== undefined) {
     return unchanged(state, { record: current })
   }
-  if (
-    !isNativeOutputAcceptanceProvenAbsent(current) &&
-    (!isNativeOutputTerminal(current) ||
-      current.accountingDisposition === "pending")
-  ) {
+  if (!canReleaseNativeOutputBlob(current)) {
     return rejected(state, "invalid-transition")
   }
   const record = { ...current, blobReleasedAt: input.now }
@@ -547,6 +558,7 @@ export function markNativeOutputJobDependencyReleased(
   )
   if (
     manifest.phase !== "sealed" ||
+    manifest.settlementAcknowledgedAt === undefined ||
     trackedOutputIds.some((outputId) => {
       const record = state.outputsByOutputId[outputId]
       return record !== undefined && record.dependencyReleasedAt === undefined
@@ -556,4 +568,34 @@ export function markNativeOutputJobDependencyReleased(
   }
   const released = { ...manifest, dependencyReleasedAt: input.now }
   return applied(replaceManifest(state, released), { manifest: released })
+}
+
+export function acknowledgeNativeOutputSettlement(
+  state: NativeOutputState,
+  input: { jobId: string; now: number }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ manifest: NativeOutputManifest }>
+  | NativeOutputUnchanged<{ manifest: NativeOutputManifest }>
+  | NativeOutputRejected<"manifest-not-found" | "invalid-transition">
+> {
+  const manifest = state.manifestsByJobId[input.jobId]
+  if (!manifest) return rejected(state, "manifest-not-found")
+  if (manifest.settlementAcknowledgedAt !== undefined) {
+    return unchanged(state, { manifest })
+  }
+  if (
+    manifest.phase !== "sealed" ||
+    manifest.slots.some((slot) => {
+      if (slot?.disposition !== "tracked") return false
+      return (
+        state.outputsByOutputId[slot.outputId]?.accountingDisposition ===
+        "pending"
+      )
+    })
+  )
+    return rejected(state, "invalid-transition")
+  const acknowledged = { ...manifest, settlementAcknowledgedAt: input.now }
+  return applied(replaceManifest(state, acknowledged), {
+    manifest: acknowledged,
+  })
 }

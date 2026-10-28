@@ -181,6 +181,7 @@ describe("native output kernel", () => {
     }).next
 
     const erased = observeNativeDownloadErased(state, {
+      confirmedByBrowser: true,
       downloadId: 42,
       now: 12,
     })
@@ -242,6 +243,7 @@ describe("native output kernel", () => {
     ).toEqual({ outcome: "rejected", reason: "invalid-transition" })
 
     state = observeNativeDownloadErased(state, {
+      confirmedByBrowser: true,
       downloadId: 42,
       now: 13,
     }).next
@@ -282,6 +284,7 @@ describe("native output kernel", () => {
       downloadId: 42,
     }).next
     state = observeNativeDownloadErased(state, {
+      confirmedByBrowser: true,
       downloadId: 42,
       now: 12,
     }).next

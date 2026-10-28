@@ -33,6 +33,7 @@ export interface NativeOutputManifest extends NativeOutputJobIdentity {
   slots: Array<NativeOutputManifestSlot | null>
   createdAt: number
   sealedAt?: number
+  settlementAcknowledgedAt?: number
   dependencyReleasedAt?: number
 }
 
@@ -55,6 +56,8 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   terminalAt?: number
   error?: string
   erasedAt?: number
+  /** Exact Chrome erasure confirms that its underlying download was canceled. */
+  erasedByBrowserAt?: number
   /** Set when the user surrenders observation of an erased download (FORGET). */
   surrenderedAt?: number
   accountingDisposition: NativeOutputAccountingDisposition
@@ -108,13 +111,14 @@ export function isNativeOutputTerminal(record: NativeOutputRecord): boolean {
   return record.phase === "complete" || record.phase === "interrupted"
 }
 
-export function isNativeOutputAcceptanceProvenAbsent(
+/** Browser consumption determines Blob lifetime independently of accounting. */
+export function canReleaseNativeOutputBlob(
   record: NativeOutputRecord
 ): boolean {
-  if (record.phase === "surrendered") return true
   return (
-    record.downloadId === undefined &&
-    (record.phase === "prepared" || record.phase === "interrupted")
+    isNativeOutputTerminal(record) ||
+    (record.phase === "surrendered" && record.terminalAt !== undefined) ||
+    record.erasedByBrowserAt !== undefined
   )
 }
 

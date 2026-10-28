@@ -129,6 +129,7 @@ describe("NativeOutputRepository", () => {
     })
     await expect(repository.hasLiveDependencies()).resolves.toBe(true)
 
+    await repository.acknowledgeSettlement({ jobId: identity.jobId, now: 12 })
     await repository.markJobDependencyReleased({
       jobId: identity.jobId,
       now: 12,
@@ -184,6 +185,7 @@ describe("NativeOutputRepository", () => {
     })
     expect(local["pendingOutputs:output:output-1"]).toBeUndefined()
 
+    await repository.acknowledgeSettlement({ jobId: identity.jobId, now: 17 })
     await repository.markJobDependencyReleased({
       jobId: identity.jobId,
       now: 17,

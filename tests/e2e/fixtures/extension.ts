@@ -27,6 +27,8 @@ import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integra
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
 import {
   redactDiagnostic,
   redactDiagnosticText,
@@ -240,6 +242,31 @@ async function initializeDeterministicMockProfile(
           "success" in response &&
           response.success === true
         ) {
+          // UI assertions use English; Chrome's macOS UI locale follows the host.
+          await probePage.evaluate(async (command) => {
+            const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+              await chrome.runtime.sendMessage({
+                target: "background",
+                type: "GET_OPTIONS_CONFIGURATION",
+              })
+            if (!current.success) throw new Error(current.error)
+            const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+              await chrome.runtime.sendMessage({
+                target: "background",
+                type: "SAVE_OPTIONS_CONFIGURATION",
+                ...command,
+                payload: {
+                  configuration: {
+                    ...current.data.configuration,
+                    settings: {
+                      ...current.data.configuration.settings,
+                      uiLanguage: "en",
+                    },
+                  },
+                },
+              })
+            if (!saved.success) throw new Error(saved.error)
+          }, createCommandEnvelope())
           return
         }
 

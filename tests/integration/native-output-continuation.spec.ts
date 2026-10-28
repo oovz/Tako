@@ -7,6 +7,8 @@ import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscr
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-task-side-effect-gate"
+import { BrowserBlobLeaseRegistry } from "@/entrypoints/offscreen/browser-blob-lease-registry"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import type {
   ActiveDispatchLease,
   DownloadTaskState,
@@ -112,6 +114,9 @@ describe("native output continuation boundaries", () => {
   let taskState: DownloadTaskState
   let search: ReturnType<typeof vi.fn>
   let taskGateAcquired: ReturnType<typeof vi.fn<() => void>>
+  let blobs: BrowserBlobLeaseRegistry
+  let resources: OffscreenLiveResourceLedger
+  let revokeObjectURL: ReturnType<typeof vi.fn<(url: string) => void>>
 
   beforeEach(async () => {
     taskState = task()
@@ -158,6 +163,24 @@ describe("native output continuation boundaries", () => {
 
     queueRepository = new QueueRepository(new QueueProjectionService())
     nativeRepository = new NativeOutputRepository()
+    resources = new OffscreenLiveResourceLedger(6)
+    revokeObjectURL = vi.fn()
+    blobs = new BrowserBlobLeaseRegistry(
+      { maxCount: 2, maxBytes: 6 },
+      {
+        createObjectURL: vi
+          .fn()
+          .mockReturnValueOnce(output.blobUrl)
+          .mockReturnValue("blob:later-output"),
+        revokeObjectURL,
+      },
+      resources
+    )
+    blobs.retain({
+      ...output,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "prepared output"),
+    })
     const settingsRepository = new SettingsRepository("warn")
     vi.spyOn(settingsRepository, "getSettings").mockResolvedValue(
       DEFAULT_SETTINGS
@@ -187,7 +210,9 @@ describe("native output continuation boundaries", () => {
         stage: "saving" as const,
         lastSequence: 1,
       })),
-      requestBlobRevocation: vi.fn(async () => undefined),
+      requestBlobRevocation: async (record) => {
+        if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+      },
       ensureLivenessAlarm: vi.fn(async () => undefined),
     })
     terminalCoordinator = new OffscreenJobTerminalCoordinator(
@@ -258,6 +283,267 @@ describe("native output continuation boundaries", () => {
       reason: "lease-conflict",
     })
     expect(activeLease).not.toBeNull()
+  })
+
+  it("releases terminal Blob bytes while the producer still owns queue accounting", async () => {
+    expect(
+      await nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).toEqual({ handled: true, effects: [] })
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    expect(resources.getUsedBytes()).toBe(0)
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        phase: "complete",
+        accountingDisposition: "pending",
+        blobReleasedAt: expect.any(Number),
+      }
+    )
+    expect(await queueRepository.getActiveDispatchLease()).not.toBeNull()
+    expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+      chapters: [{ status: "downloading" }, { status: "queued" }],
+    })
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+  })
+
+  it("keeps canceled output bounded across task removal and cold recovery until Chrome stops consuming it", async () => {
+    await queueRepository.cancelDownloadTask({
+      taskId: identity.taskId,
+      commandId: "cancel-with-retained-output",
+      now: 7,
+    })
+    await nativeCoordinator.cancelTask(identity.taskId, identity)
+    await queueRepository.clearTerminalHistory()
+    expect(await queueRepository.getTask(identity.taskId)).toBeUndefined()
+
+    const later = { ...output, jobId: "later-job", outputId: "later-output" }
+    const laterBlob = blobs.retain({
+      ...later,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "later output"),
+    })
+    expect(blobs.getRetainedCount()).toBe(2)
+    expect(blobs.getRetainedBytes()).toBe(6)
+    expect(() => resources.reserve(1, "overflow")).toThrow("resource cap")
+    expect(() =>
+      blobs.retain({
+        ...later,
+        outputId: "overflow",
+        blob: new Blob([]),
+      })
+    ).toThrow("count limit")
+
+    const coldRepository = new NativeOutputRepository()
+    const coldQueue = new QueueRepository(new QueueProjectionService())
+    const cold = new NativeOutputCoordinator({
+      settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
+      repository: coldRepository,
+      queueRepository: coldQueue,
+      queryOffscreenJob: async () => null,
+      requestBlobRevocation: async (record) => {
+        if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+      },
+      ensureLivenessAlarm: async () => undefined,
+    })
+    await cold.initialize()
+    expect(resources.getUsedBytes()).toBe(6)
+    expect(await cold.hasLiveDependencies()).toBe(true)
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+
+    const { effects } = await cold.handleDownloadChanged({
+      id: 42,
+      state: { current: "interrupted" },
+      error: { current: "USER_CANCELED" },
+    })
+    for (const effect of effects) await cold.acknowledgeSettlement(effect)
+    await cold.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(await cold.hasLiveDependencies()).toBe(false)
+    expect(blobs.revoke({ ...laterBlob, attempt: 2 })).toBe(false)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(blobs.revoke(laterBlob)).toBe(true)
+    expect(blobs.revoke(laterBlob)).toBe(true)
+    expect(resources.getUsedBytes()).toBe(0)
+  })
+
+  it("releases terminal bytes before a queue-accounting write fails and recovers accounting durably", async () => {
+    await terminalCoordinator.settle(terminalPayload())
+    vi.spyOn(
+      queueRepository,
+      "applyNativeOutputSettlement"
+    ).mockRejectedValueOnce(new Error("queue storage unavailable"))
+    await expect(
+      nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).rejects.toThrow("queue storage unavailable")
+    expect(resources.getUsedBytes()).toBe(0)
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        accountingDisposition: "pending",
+        blobReleasedAt: expect.any(Number),
+      }
+    )
+    const effects = await nativeCoordinator.reconcile()
+    await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
+    expect(
+      await nativeRepository.getByOutputId(output.outputId)
+    ).toBeUndefined()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+  })
+
+  it.each(["complete", "interrupted", "erased"] as const)(
+    "retains missing Chrome output after surrender and cold recovery until Chrome reports %s",
+    async (observation) => {
+      await terminalCoordinator.settle(terminalPayload())
+      search.mockResolvedValue([])
+      await nativeCoordinator.reconcile()
+      const { effects } = await nativeCoordinator.forgetTaskUnobservableOutputs(
+        identity.taskId
+      )
+      for (const effect of effects)
+        await nativeCoordinator.acknowledgeSettlement(effect)
+      expect(resources.getUsedBytes()).toBe(3)
+      expect(revokeObjectURL).not.toHaveBeenCalled()
+      expect(
+        await nativeRepository.getByOutputId(output.outputId)
+      ).toMatchObject({
+        phase: "surrendered",
+        accountingDisposition: "accounted",
+      })
+      const coldRepository = new NativeOutputRepository()
+      const cold = new NativeOutputCoordinator({
+        settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
+        repository: coldRepository,
+        queueRepository: new QueueRepository(new QueueProjectionService()),
+        queryOffscreenJob: async () => null,
+        requestBlobRevocation: async (record) => {
+          if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+        },
+        ensureLivenessAlarm: async () => undefined,
+      })
+      await cold.initialize()
+      expect(await cold.getLiveTaskIds()).toEqual([])
+      expect(resources.getUsedBytes()).toBe(3)
+      if (observation === "erased") {
+        await cold.handleDownloadErased(42)
+      } else {
+        await cold.handleDownloadChanged({
+          id: 42,
+          state: { current: observation },
+        })
+      }
+      expect(resources.getUsedBytes()).toBe(0)
+      expect(revokeObjectURL).toHaveBeenCalledOnce()
+      expect(await cold.hasLiveDependencies()).toBe(false)
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        chapters: [
+          { nativeOutputSettlement: { surrendered: 1, completed: 0 } },
+          {},
+        ],
+      })
+    }
+  )
+
+  it("bounds multiple retained outputs while acceptance is uncertain and recovers an exact browser match", async () => {
+    const uncertain = {
+      ...output,
+      jobId: "uncertain-job",
+      outputId: "uncertain-output",
+      blobUrl: "blob:later-output",
+    }
+    blobs.retain({
+      ...uncertain,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "uncertain output"),
+    })
+    await nativeRepository.prepare({ ...uncertain, now: 5 })
+    await nativeRepository.markAcceptanceUnknown({
+      outputId: uncertain.outputId,
+      now: 6,
+    })
+    search.mockImplementation(async (query) =>
+      query.id === 42 ? [downloadItem("in_progress")] : []
+    )
+    await nativeCoordinator.reconcile()
+    expect(blobs.getRetainedCount()).toBe(2)
+    expect(blobs.getRetainedBytes()).toBe(6)
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+    expect(() => resources.reserve(1, "later allocation")).toThrow(
+      "resource cap"
+    )
+
+    search.mockImplementation(async (query) =>
+      query.id === 42
+        ? [downloadItem("in_progress")]
+        : [{ ...downloadItem("complete"), id: 43, url: uncertain.blobUrl }]
+    )
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(uncertain.blobUrl)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(
+      await nativeRepository.getByOutputId(uncertain.outputId)
+    ).toMatchObject({
+      phase: "complete",
+      downloadId: 43,
+      accountingDisposition: "pending",
+      blobReleasedAt: expect.any(Number),
+    })
+  })
+
+  it("replays lost Blob-release persistence without releasing the allocation twice", async () => {
+    const persist = chrome.storage.local.set
+    await nativeRepository.markTerminal({
+      downloadId: 42,
+      phase: "complete",
+      now: 5,
+    })
+    vi.mocked(persist).mockImplementationOnce(async () => {
+      throw new Error("release receipt unavailable")
+    })
+    await nativeCoordinator.reconcile()
+    expect(resources.getUsedBytes()).toBe(0)
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        blobReleasedAt: expect.any(Number),
+        accountingDisposition: "pending",
+      }
+    )
+  })
+
+  it("recovers an unobservable queue block after browser erasure releases the Blob and its queue write fails", async () => {
+    await terminalCoordinator.settle(terminalPayload())
+    vi.spyOn(
+      queueRepository,
+      "blockTaskForNativeOutputAction"
+    ).mockRejectedValueOnce(new Error("queue block storage unavailable"))
+    await expect(nativeCoordinator.handleDownloadErased(42)).rejects.toThrow(
+      "queue block storage unavailable"
+    )
+    expect(resources.getUsedBytes()).toBe(0)
+    search.mockResolvedValue([])
+    const coldQueue = new QueueRepository(new QueueProjectionService())
+    const cold = new NativeOutputCoordinator({
+      settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
+      repository: new NativeOutputRepository(),
+      queueRepository: coldQueue,
+      queryOffscreenJob: async () => null,
+      requestBlobRevocation: async (record) => {
+        if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+      },
+      ensureLivenessAlarm: async () => undefined,
+    })
+    await cold.initialize()
+    expect(await coldQueue.getTask(identity.taskId)).toMatchObject({
+      activeBlock: "native_output_action_required",
+    })
   })
 
   it("continues after a terminal native completion without holding the task gate", async () => {

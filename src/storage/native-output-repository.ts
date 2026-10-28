@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import {
+  acknowledgeNativeOutputSettlement,
   attachNativeDownload,
   ensureNativeOutputManifest,
   interruptNativeOutputBeforeAcceptance,
@@ -18,6 +19,7 @@ import {
 } from "@/src/domain/native-output/kernel"
 import {
   createEmptyNativeOutputState,
+  canReleaseNativeOutputBlob,
   isNativeOutputLive,
   type NativeOutputManifest,
   type NativeOutputRecord,
@@ -32,15 +34,16 @@ import { StorageMutationQueue } from "./storage-mutation-queue"
  * Live work is stored as one manifest key per job and one output key per
  * output, plus a small index mapping live IDs and download IDs. Fully
  * released records and manifests are pruned from storage, so startup
- * hydration and every transition touch only the currently active job instead
- * of an ever-growing whole-history document.
+ * hydration and transitions touch current accounting and retained resources
+ * across jobs.
  *
  *   pendingOutputs:index            -> { jobIds, outputIds, downloadIdToOutputId }
  *   pendingOutputs:manifest:<jobId> -> NativeOutputManifest
  *   pendingOutputs:output:<outputId>-> NativeOutputRecord
  *
  * A fully released output has `dependencyReleasedAt` set; once every tracked
- * output of a job is released (or pruned), the manifest is pruned as well.
+ * output of a job is released (or pruned) and settlement is acknowledged, the
+ * manifest is pruned as well.
  * Absence of a record therefore means it was fully released, never that it
  * was lost: the queue task keeps the terminal accounting.
  */
@@ -99,6 +102,7 @@ const manifestSchema: z.ZodType<NativeOutputManifest> = z
     slots: z.array(manifestSlotSchema.nullable()),
     createdAt: nonnegativeFiniteNumber,
     sealedAt: nonnegativeFiniteNumber.optional(),
+    settlementAcknowledgedAt: nonnegativeFiniteNumber.optional(),
     dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
   })
   .superRefine((manifest, context) => {
@@ -122,6 +126,7 @@ const manifestSchema: z.ZodType<NativeOutputManifest> = z
     if (manifest.phase === "open") {
       if (
         manifest.sealedAt !== undefined ||
+        manifest.settlementAcknowledgedAt !== undefined ||
         manifest.dependencyReleasedAt !== undefined ||
         manifest.outputsFailedBeforeHandoff !== 0 ||
         untrackedCount !== 0
@@ -147,14 +152,26 @@ const manifestSchema: z.ZodType<NativeOutputManifest> = z
       }
     }
     if (
-      manifest.dependencyReleasedAt !== undefined &&
+      manifest.settlementAcknowledgedAt !== undefined &&
       (manifest.sealedAt === undefined ||
-        manifest.dependencyReleasedAt < manifest.sealedAt)
+        manifest.settlementAcknowledgedAt < manifest.sealedAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["settlementAcknowledgedAt"],
+        message:
+          "settlement acknowledgement requires a monotonic sealed manifest",
+      })
+    }
+    if (
+      manifest.dependencyReleasedAt !== undefined &&
+      (manifest.settlementAcknowledgedAt === undefined ||
+        manifest.dependencyReleasedAt < manifest.settlementAcknowledgedAt)
     ) {
       context.addIssue({
         code: "custom",
         path: ["dependencyReleasedAt"],
-        message: "job dependency cannot precede manifest sealing",
+        message: "job dependency requires settlement acknowledgement",
       })
     }
   })
@@ -187,6 +204,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     terminalAt: nonnegativeFiniteNumber.optional(),
     error: z.string().optional(),
     erasedAt: nonnegativeFiniteNumber.optional(),
+    erasedByBrowserAt: nonnegativeFiniteNumber.optional(),
     surrenderedAt: nonnegativeFiniteNumber.optional(),
     accountingDisposition: z.enum(["pending", "accounted", "not_owner"]),
     accountingDispositionAt: nonnegativeFiniteNumber.optional(),
@@ -250,7 +268,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       })
     }
     if (
-      isTerminal &&
+      (isTerminal || record.terminalAt !== undefined) &&
       (record.terminalAt === undefined ||
         record.terminalAt < record.createdAt ||
         (record.acceptanceStartedAt !== undefined &&
@@ -267,6 +285,17 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
         code: "custom",
         path: ["erasedAt"],
         message: "erased observation requires downloadId",
+      })
+    }
+    if (
+      record.erasedByBrowserAt !== undefined &&
+      (record.erasedAt === undefined ||
+        record.erasedByBrowserAt < record.erasedAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["erasedByBrowserAt"],
+        message: "browser erasure requires a monotonic erased observation",
       })
     }
     if (
@@ -301,12 +330,14 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     }
     if (
       record.blobReleasedAt !== undefined &&
-      record.blobReleasedAt < record.createdAt
+      (record.blobReleasedAt < record.createdAt ||
+        !canReleaseNativeOutputBlob(record))
     ) {
       context.addIssue({
         code: "custom",
         path: ["blobReleasedAt"],
-        message: "Blob release cannot precede preparation",
+        message:
+          "Blob release requires browser consumption evidence after preparation",
       })
     }
     if (
@@ -371,6 +402,8 @@ const nativeOutputStateSchema: z.ZodType<NativeOutputState> = z
           record.attempt !== manifest.attempt ||
           record.taskId !== manifest.taskId ||
           record.chapterId !== manifest.chapterId ||
+          record.fingerprint !== manifest.fingerprint ||
+          record.documentInstanceId !== manifest.documentInstanceId ||
           record.outputCount !== manifest.outputsRequested ||
           record.outputIndex !== outputIndex
         ) {
@@ -381,6 +414,22 @@ const nativeOutputStateSchema: z.ZodType<NativeOutputState> = z
           })
         }
       })
+      if (
+        manifest.settlementAcknowledgedAt !== undefined &&
+        manifest.slots.some(
+          (slot) =>
+            slot?.disposition === "tracked" &&
+            state.outputsByOutputId[slot.outputId]?.accountingDisposition ===
+              "pending"
+        )
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["manifestsByJobId", jobKey, "settlementAcknowledgedAt"],
+          message:
+            "settlement acknowledgement requires resolved output accounting",
+        })
+      }
       if (manifest.dependencyReleasedAt !== undefined) {
         const tracked = manifest.slots.flatMap((slot) =>
           slot?.disposition === "tracked" ? [slot.outputId] : []
@@ -853,6 +902,15 @@ export class NativeOutputRepository {
     const detached = structuredClone(input)
     return await this.execute((state) =>
       markNativeOutputJobDependencyReleased(state, detached)
+    )
+  }
+
+  async acknowledgeSettlement(
+    input: Parameters<typeof acknowledgeNativeOutputSettlement>[1]
+  ): Promise<ReturnType<typeof acknowledgeNativeOutputSettlement>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      acknowledgeNativeOutputSettlement(state, detached)
     )
   }
 }
