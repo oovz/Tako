@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { decompressFromBase64 } from "@/src/site-integrations/readmanga/lz-string"
@@ -241,6 +242,34 @@ describe("Manhuagui site integration", () => {
   })
 
   describe("chapter-viewer packed payload extraction", () => {
+    it("decodes all eight pages from the captured appendix reader dictionary", async () => {
+      const { buildManhuaguiChapterImageUrlsFromHtml } =
+        await import("@/src/site-integrations/readmanga/chapter-viewer")
+      vi.mocked(integrationHttpClient.request).mockResolvedValueOnce(
+        new Response(
+          'var c={curServ:0,curHost:0,picserv:[{name:"auto",hosts:[{h:"i",w:1}]}]};',
+          { headers: { "content-type": "application/javascript" } }
+        )
+      )
+      const urls = await buildManhuaguiChapterImageUrlsFromHtml(
+        readFileSync(
+          "tests/fixtures/site-integrations/readmanga/reader.html",
+          "utf8"
+        ),
+        rateLimitService
+      )
+      expect(urls).toHaveLength(8)
+      expect(new URL(urls[0]!).pathname).toBe(
+        "/ps4/g/gmzr_wkhsq/20%E5%8D%B7%E9%99%84%E5%BD%95/1_4760.jpg.webp"
+      )
+      expect(new URL(urls.at(-1)!).pathname).toBe(
+        "/ps4/g/gmzr_wkhsq/20%E5%8D%B7%E9%99%84%E5%BD%95/8_9775.jpg.webp"
+      )
+      expect(new URL(urls[0]!).searchParams.get("m")).toBe(
+        "synthetic-signature"
+      )
+    })
+
     it("extracts image URLs from a packed chapter HTML page", async () => {
       const {
         buildManhuaguiPackedPayloadScript,

@@ -74,15 +74,14 @@ export const CATEGORY_SERIES: SiteIntegrationSeriesDataset = {
 export const KIMETSU_SERIES: SiteIntegrationSeriesDataset = {
   id: "MANHUAGUI_KIMETSU_SERIES",
   description:
-    "Manhuagui 19430 reference series with single-book, single-chapter, and extra category headings",
+    "Captured 看漫画 catalog with single-book, single-chapter, and extra category headings",
   series: {
     siteId: "readmanga",
     seriesId: "19430",
     seriesTitle: "鬼灭之刃",
     author: "吾峠呼世晴",
-    description:
-      "Reference-style Manhuagui fixture matching https://www.manhuagui.com/comic/19430/.",
-    coverUrl: "https://cf.mhgui.com/cpic/b/19430.jpg",
+    description: "充满了鬼才的，血雨剑戟冒险谭，正式开幕。",
+    coverUrl: "https://cf.mhgui.com/cpic/h/19430.jpg",
     status: "已完结",
   },
   chapterDatasetId: "MANHUAGUI_KIMETSU",

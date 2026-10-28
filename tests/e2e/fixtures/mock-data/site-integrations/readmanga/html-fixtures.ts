@@ -17,6 +17,8 @@
  * that wraps the image URLs with `eval(function(p,a,c,k,e,d){…})(…)`.
  */
 
+import { readFileSync } from "node:fs"
+
 import { compressToBase64 } from "../../../../../shared/manhuagui-compress"
 import {
   MANHUAGUI_CONFIG_SCRIPT_URL,
@@ -29,7 +31,6 @@ import {
   ADULT_CHAPTERS,
   BASIC_CHAPTERS,
   CATEGORY_CHAPTERS,
-  KIMETSU_CHAPTERS,
   SMALL_SERIES,
 } from "./chapter-data"
 import { buildManhuaguiImageFilenames } from "./image-fixtures"
@@ -37,7 +38,6 @@ import {
   ADULT_SERIES,
   BASIC_SERIES,
   CATEGORY_SERIES,
-  KIMETSU_SERIES,
   MINIMAL_SERIES,
 } from "./series-data"
 
@@ -231,51 +231,15 @@ export const CATEGORY_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
   groups: groupChaptersByVolume(CATEGORY_CHAPTERS.chapters),
 })
 
-export const KIMETSU_SERIES_PAGE_HTML = buildManhuaguiSeriesPageHtml({
-  seriesId: KIMETSU_SERIES.series.seriesId,
-  seriesTitle: KIMETSU_SERIES.series.seriesTitle,
-  author: KIMETSU_SERIES.series.author,
-  description: KIMETSU_SERIES.series.description,
-  coverUrl: KIMETSU_SERIES.series.coverUrl,
-  status: KIMETSU_SERIES.series.status,
-  groups: [
-    {
-      volumeLabel: "单行本",
-      chapters: [
-        {
-          id: "585094",
-          url: KIMETSU_CHAPTERS.chapters[0]!.url,
-          title: "第01卷",
-          displayTitle: "第01卷<i>190p</i>",
-        },
-      ],
-    },
-    {
-      volumeLabel: "单话",
-      beforeListHtml:
-        '<div class="chapter-page cf mt10"><a>1-26</a><a>27-116</a><a>117-206</a></div>',
-      chapters: [
-        {
-          id: "219425",
-          url: KIMETSU_CHAPTERS.chapters[1]!.url,
-          title: "第01回",
-          displayTitle: "第01回<i>54p</i>",
-        },
-      ],
-    },
-    {
-      volumeLabel: "番外篇",
-      chapters: [
-        {
-          id: "494877",
-          url: KIMETSU_CHAPTERS.chapters[2]!.url,
-          title: "20卷附录",
-          displayTitle: "20卷附录<i>8p</i>",
-        },
-      ],
-    },
-  ],
-})
+export const KIMETSU_SERIES_PAGE_HTML = readFileSync(
+  "tests/fixtures/site-integrations/readmanga/series.html",
+  "utf8"
+)
+
+export const KIMETSU_EXTRA_READER_HTML = readFileSync(
+  "tests/fixtures/site-integrations/readmanga/reader.html",
+  "utf8"
+)
 
 export const HOME_PAGE_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -309,6 +273,13 @@ interface BuildChapterPageHtmlOptions {
 export function buildManhuaguiChapterPageHtml(
   options: BuildChapterPageHtmlOptions
 ): string {
+  if (
+    options.seriesId === "19430" &&
+    options.chapterId === "494877" &&
+    !options.files
+  ) {
+    return KIMETSU_EXTRA_READER_HTML
+  }
   const files = options.files ?? buildManhuaguiImageFilenames()
   const imgData: ManhuaguiPackedImageData = {
     path: buildManhuaguiChapterPathSegment(options.seriesId, options.chapterId),

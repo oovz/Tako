@@ -117,7 +117,7 @@
     "message": "No chapters found"
   },
   "sidepanel_adultConsentRequired": {
-    "message": "Accept Manhuagui’s adult-content prompt, then reload this page."
+    "message": "Accept 看漫画’s adult-content prompt, then reload this page."
   },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "The selected chapters are no longer available."

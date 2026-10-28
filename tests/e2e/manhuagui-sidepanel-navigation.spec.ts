@@ -92,7 +92,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     expect(state?.chapterListNotice).toBe("adult-consent-required")
     await expect(
       sp.getByText(
-        "Accept Manhuagui’s adult-content prompt, then reload this page."
+        "Accept 看漫画’s adult-content prompt, then reload this page."
       )
     ).toBeVisible()
 
@@ -138,7 +138,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     await expect(page.locator("#checkAdult")).toHaveCount(0)
     await expect(
       sp.getByText(
-        "Accept Manhuagui’s adult-content prompt, then reload this page."
+        "Accept 看漫画’s adult-content prompt, then reload this page."
       )
     ).toHaveCount(0)
 

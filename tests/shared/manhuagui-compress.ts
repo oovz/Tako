@@ -3,7 +3,7 @@
  * @description lz-string compressor used to synthesize Manhuagui
  * `__VIEWSTATE` payloads and packed image data for both unit tests
  * (`tests/unit/integrations/manhuagui-test-setup.ts`) and e2e fixtures
- * (`tests/e2e/fixtures/mock-data/site-integrations/readmanga`).
+ * (`tests/e2e/fixtures/mock-data/site-integrations/manhuagui`).
  *
  * This is the forward counterpart of
  * `@/src/site-integrations/readmanga/lz-string.ts`'s `decompressFromBase64`.

@@ -187,7 +187,7 @@ export const CATEGORY_CHAPTERS: SiteIntegrationChapterDataset = {
 export const KIMETSU_CHAPTERS: SiteIntegrationChapterDataset = {
   id: "MANHUAGUI_KIMETSU",
   description:
-    "Manhuagui 19430-style page with category headings, pagination controls, and visible page counts",
+    "Three representative chapter references from the captured 235-entry catalog",
   chapters: [
     {
       id: "585094",

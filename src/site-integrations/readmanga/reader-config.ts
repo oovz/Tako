@@ -43,11 +43,6 @@ export type ReaderConfig = {
   services: ReaderServiceConfig[]
 }
 
-/**
- * Fallback reader config used when the external `config_*.js` script cannot be
- * fetched or parsed. Derived from Manhuagui's shipped defaults so that at least
- * one host candidate is always available for URL construction.
- */
 const CONFIG_SCRIPT_URL_REGEX =
   /<script[^>]+src=["']([^"'<>]*\/scripts\/config_[^"'<>]+\.js)["'][^>]*>/i
 
@@ -91,9 +86,8 @@ function parseHostWeight(value: string): number {
 }
 
 /**
- * Parse the inline JavaScript in `config_*.js` to extract the picserv service
- * list. Schema is brittle on purpose: we pin the exact `{name:"…",hosts:[…]}`
- * literal so we fail loudly if Manhuagui changes its config format.
+ * Read the picserv service list from the `{name:"…",hosts:[…]}` literals in
+ * `config_*.js`.
  */
 function parseReaderConfigScript(scriptText: string): ReaderConfig {
   const serviceMatches = [

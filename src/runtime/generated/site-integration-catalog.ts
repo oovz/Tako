@@ -1685,7 +1685,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "readmanga",
-    "name": "Manhuagui",
+    "name": "看漫画",
     "englishName": "Manhuagui",
     "contributors": [
       "TMD Team"

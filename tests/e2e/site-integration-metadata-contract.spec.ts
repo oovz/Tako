@@ -180,6 +180,7 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
       { id: "manhuagui-volume-3", title: "番外篇", label: "番外篇" },
     ])
 
+    expect(state.chapters).toHaveLength(235)
     expect(
       state.chapters.map((chapter) => ({
         id: chapter.id,
@@ -188,29 +189,31 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
         volumeLabel: chapter.volumeLabel,
         volumeNumber: chapter.volumeNumber,
       }))
-    ).toEqual([
-      {
-        id: "585094",
-        title: "第01卷",
-        volumeId: "manhuagui-volume-1",
-        volumeLabel: "单行本",
-        volumeNumber: undefined,
-      },
-      {
-        id: "219425",
-        title: "第01回",
-        volumeId: "manhuagui-volume-2",
-        volumeLabel: "单话",
-        volumeNumber: undefined,
-      },
-      {
-        id: "494877",
-        title: "20卷附录",
-        volumeId: "manhuagui-volume-3",
-        volumeLabel: "番外篇",
-        volumeNumber: undefined,
-      },
-    ])
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          id: "585094",
+          title: "第01卷",
+          volumeId: "manhuagui-volume-1",
+          volumeLabel: "单行本",
+          volumeNumber: undefined,
+        },
+        {
+          id: "219425",
+          title: "第01回",
+          volumeId: "manhuagui-volume-2",
+          volumeLabel: "单话",
+          volumeNumber: undefined,
+        },
+        {
+          id: "494877",
+          title: "20卷附录",
+          volumeId: "manhuagui-volume-3",
+          volumeLabel: "番外篇",
+          volumeNumber: undefined,
+        },
+      ])
+    )
   })
 
   test("MangaMillion extracts chapter titles, labels, and numbers correctly", async ({

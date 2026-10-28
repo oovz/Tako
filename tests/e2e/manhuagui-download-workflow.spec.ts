@@ -120,7 +120,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
     extensionId,
     page,
   }) => {
-    const series = Manhuagui.BASIC_SERIES.series
+    const series = Manhuagui.KIMETSU_SERIES.series
     const seriesUrl = `${MANHUAGUI_BASE_URL}/comic/${series.seriesId}/`
 
     await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
@@ -135,7 +135,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
     )
 
     const firstChapter = tabState.chapters.find(
-      (chapter) => chapter.locked !== true
+      (chapter) => chapter.id === "494877"
     )
     if (!firstChapter) {
       throw new Error(
