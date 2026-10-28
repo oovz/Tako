@@ -24,6 +24,9 @@ vi.mock("@/entrypoints/offscreen/archive-worker-factory", () => ({
   default: () => new RuntimeZipWorker(),
 }))
 
+const workers: RuntimeZipWorker[] = []
+let archiveByteLimit: number | undefined
+
 // Replace only the worker transport; the archive protocol and fflate run intact.
 class RuntimeZipWorker {
   onmessage: ((event: MessageEvent) => void) | null = null
@@ -35,18 +38,25 @@ class RuntimeZipWorker {
   }
 
   constructor() {
+    workers.push(this)
     installZipWorkerRuntime(this.scope)
   }
 
-  postMessage(data: unknown, transfer: Transferable[] = []) {
-    this.scope.onmessage?.({
-      data: structuredClone(data, { transfer }),
-    } as MessageEvent)
+  postMessage(data: Record<string, unknown>, transfer: Transferable[] = []) {
+    const message = structuredClone(data, { transfer })
+    if (message.type === "init" && archiveByteLimit !== undefined) {
+      message.maxArchiveBytes = archiveByteLimit
+    }
+    this.scope.onmessage?.({ data: message } as MessageEvent)
   }
 
-  terminate() {
-    this.scope.onmessage = null
+  fail(error: Error) {
+    this.onerror?.({ error } as ErrorEvent)
   }
+
+  terminate = vi.fn(() => {
+    this.scope.onmessage = null
+  })
 }
 
 const PAGE = new Uint8Array(SHONEN_JUMP_PLUS_SCRAMBLED_PNG)
@@ -58,13 +68,14 @@ const services: RateLimitService[] = []
 function fixture(
   format: "cbz" | "none",
   downloadMode: "browser" | "custom",
-  retries = 0
+  retries = 0,
+  concurrency = 1
 ) {
   const files = new Map<string, Uint8Array>()
   const handoffs: Array<{ filename: string; blob: Blob }> = []
   const ledger = new OffscreenLiveResourceLedger()
   const rateLimitService = new RateLimitService({
-    resolveEffectivePolicy: async () => ({ concurrency: 1, delayMs: 0 }),
+    resolveEffectivePolicy: async () => ({ concurrency, delayMs: 0 }),
   })
   services.push(rateLimitService)
   const directory = (prefix = ""): FileSystemDirectoryHandle =>
@@ -91,7 +102,8 @@ function fixture(
   const runtime: ChapterProcessingRuntime = {
     liveResourceLedger: ledger,
     rateLimitService,
-    withImageRetries: (fn, hooks) => withRetries(fn, retries, 0, hooks),
+    withImageRetries: (fn, hooks, signal) =>
+      withRetries(fn, retries, 0, hooks, signal),
     resolveWritableDownloadRoot: async () => directory(),
     requestBrowserBlobDownload: async ({ filename, blob }) => {
       handoffs.push({ filename, blob })
@@ -122,16 +134,16 @@ function fixture(
       ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "manhuagui"),
       conflictPolicy: "overwrite",
       rateLimitSettings: {
-        image: { concurrency: 1, delayMs: 0 },
+        image: { concurrency, delayMs: 0 },
         chapter: { concurrency: 1, delayMs: 0 },
       },
     },
   }
   const downloadImage: ChapterDownloadImageFn = (url, options) =>
     downloadManhuaguiChapterImage(url, { ...options, skipRateLimit: true })
-  const process = (imageFn = downloadImage) => {
+  const process = (imageFn = downloadImage, urls = URLS) => {
     const input = {
-      urls: URLS,
+      urls,
       integrationId: "manhuagui",
       downloadImage: imageFn,
       normalizeSettings: {
@@ -186,9 +198,166 @@ function network(emptyResponses: number) {
 afterEach(() => {
   services.splice(0).forEach((service) => service.cleanupRateLimiters())
   vi.unstubAllGlobals()
+  workers.length = 0
+  archiveByteLimit = undefined
 })
 
 describe("complete chapter output", () => {
+  it.each(["browser", "custom"] as const)(
+    "stops chapter production on worker failure before %s output and permits later work",
+    async (mode) => {
+      const f = fixture("cbz", mode, 1, 2)
+      const urls = Array.from({ length: 6 }, (_, i) => `${URLS[0]}?page=${i}`)
+      const signals: AbortSignal[] = []
+      const releases: Array<() => void> = []
+      const started = Promise.withResolvers<void>()
+      const error = new Error("archive compression failed")
+      const imageFn: ChapterDownloadImageFn = async (_url, options) => {
+        const lease = f.ledger.reserve(PAGE.byteLength, "in-flight page")
+        const signal = options!.signal!
+        signals.push(signal)
+        if (signals.length === 2) started.resolve()
+        const page = Promise.withResolvers<void>()
+        releases.push(page.resolve)
+        const onAbort = () => page.resolve()
+        signal.addEventListener("abort", onAbort, { once: true })
+        try {
+          await page.promise
+        } finally {
+          signal.removeEventListener("abort", onAbort)
+        }
+        // A transport can finish returning its buffer as cancellation arrives.
+        return {
+          data: PAGE.slice().buffer,
+          filename: "page.png",
+          mimeType: "image/png",
+          liveResourceLease: lease,
+        }
+      }
+      const result = f.process(imageFn, urls).catch((reason: unknown) => reason)
+      await started.promise
+      const worker = workers[0]
+      try {
+        worker.fail(error)
+        expect(signals.every((signal) => signal.aborted)).toBe(true)
+      } finally {
+        releases.forEach((release) => release())
+      }
+      expect(await result).toBe(error)
+      expect(signals).toHaveLength(2)
+      expect(f.opts.abortSignal?.aborted).toBe(false)
+      expect(await f.outputBytes()).toEqual([])
+      expect(f.ledger.getUsedBytes()).toBe(0)
+      expect(worker.terminate).toHaveBeenCalledOnce()
+
+      network(0)
+      expect(await f.process()).toMatchObject({ status: "completed" })
+      expect(f.ledger.getUsedBytes()).toBe(0)
+    }
+  )
+
+  it.each(["browser", "custom"] as const)(
+    "preserves a streaming archive budget failure while canceling remaining %s pages",
+    async (mode) => {
+      archiveByteLimit = 1
+      const f = fixture("cbz", mode, 1, 2)
+      const urls = Array.from({ length: 6 }, (_, i) => `${URLS[0]}?page=${i}`)
+      const started: string[] = []
+      const signals: AbortSignal[] = []
+      const twoStarted = Promise.withResolvers<void>()
+      const remainingPage = Promise.withResolvers<void>()
+      const imageFn: ChapterDownloadImageFn = async (url, options) => {
+        started.push(url)
+        const signal = options!.signal!
+        signals.push(signal)
+        const lease = f.ledger.reserve(PAGE.byteLength, "page buffer")
+        if (url === urls[0]) {
+          await twoStarted.promise
+        } else if (url === urls[1]) {
+          twoStarted.resolve()
+          const onAbort = () => remainingPage.resolve()
+          signal.addEventListener("abort", onAbort, { once: true })
+          try {
+            await remainingPage.promise
+          } finally {
+            signal.removeEventListener("abort", onAbort)
+          }
+        }
+        return {
+          data: PAGE.slice().buffer,
+          filename: "page.png",
+          mimeType: "image/png",
+          liveResourceLease: lease,
+        }
+      }
+      const result = f.process(imageFn, urls).catch((reason: unknown) => reason)
+      try {
+        await vi.waitFor(() => {
+          expect(signals).toHaveLength(2)
+          expect(signals.every((signal) => signal.aborted)).toBe(true)
+        })
+      } finally {
+        remainingPage.resolve()
+      }
+      const failure = await result
+      expect(failure).toBeInstanceOf(Error)
+      expect(failure).toMatchObject({
+        message: expect.stringContaining("Archive size exceeds 1 byte limit"),
+      })
+      expect(started).toEqual(urls.slice(0, 2))
+      expect(f.opts.abortSignal?.aborted).toBe(false)
+      expect(await f.outputBytes()).toEqual([])
+      expect(f.ledger.getUsedBytes()).toBe(0)
+      expect(workers[0].terminate).toHaveBeenCalledOnce()
+    }
+  )
+
+  it("interrupts retry backoff when its archive worker fails", async () => {
+    vi.useFakeTimers()
+    const f = fixture("cbz", "browser", 10, 2)
+    const error = new Error("archive worker stopped during image retry")
+    const started: string[] = []
+    const activePage = Promise.withResolvers<void>()
+    f.runtime.withImageRetries = (fn, hooks, signal) =>
+      withRetries(fn, 10, 60_000, hooks, signal)
+    const imageFn: ChapterDownloadImageFn = async (url, options) => {
+      started.push(url)
+      if (url === URLS[0]) throw new Error("temporary image failure")
+      const lease = f.ledger.reserve(PAGE.byteLength, "active page")
+      const signal = options!.signal!
+      const onAbort = () => activePage.resolve()
+      signal.addEventListener("abort", onAbort, { once: true })
+      try {
+        await activePage.promise
+      } finally {
+        signal.removeEventListener("abort", onAbort)
+      }
+      return {
+        data: PAGE.slice().buffer,
+        filename: "page.png",
+        mimeType: "image/png",
+        liveResourceLease: lease,
+      }
+    }
+    const result = f.process(imageFn).catch((reason: unknown) => reason)
+    const settled = vi.fn()
+    void result.then(settled)
+    try {
+      await vi.waitFor(() => expect(started).toEqual(URLS.slice(0, 2)))
+      workers[0].fail(error)
+      await vi.waitFor(() => expect(settled).toHaveBeenCalledWith(error))
+      expect(started).toEqual(URLS.slice(0, 2))
+      expect(f.opts.abortSignal?.aborted).toBe(false)
+      expect(f.ledger.getUsedBytes()).toBe(0)
+      expect(await f.outputBytes()).toEqual([])
+    } finally {
+      activePage.resolve()
+      await vi.advanceTimersByTimeAsync(60_000)
+      await result
+      vi.useRealTimers()
+    }
+  })
+
   it.each(["cbz", "none"] as const)(
     "rejects an empty included cover before %s page production",
     async (format) => {

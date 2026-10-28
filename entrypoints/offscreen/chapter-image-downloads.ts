@@ -126,7 +126,7 @@ export async function downloadChapterImages(
     downloadQueue.cancelPending(reason)
   }
 
-  const onAbort = () => cancelPendingDownloads()
+  const onAbort = () => cancelPendingDownloads(abortSignal?.reason)
 
   const emitInFlightProgress = async (): Promise<void> => {
     try {
@@ -230,8 +230,10 @@ export async function downloadChapterImages(
                     if (attempt > 1) releaseImageBytes(imageByteState)
                     await emitInFlightProgress()
                   },
-                }
+                },
+                chapterController.signal
               )
+            chapterController.signal.throwIfAborted()
             if (resourceLimitMessage) {
               throw new ChapterResourceLimitError(resourceLimitMessage)
             }

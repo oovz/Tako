@@ -47,7 +47,7 @@ export class ArchiveWorkerSession {
   private resolveResult: ((result: WorkerZipResult) => void) | undefined
   private rejectResult: ((error: unknown) => void) | undefined
   private result: Promise<WorkerZipResult> | undefined
-  private settledError: unknown
+  private readonly failureController = new AbortController()
   private readonly inputLeases = new Map<string, OffscreenLiveResourceLease>()
 
   constructor(
@@ -105,11 +105,16 @@ export class ArchiveWorkerSession {
     return this.state
   }
 
+  get failureSignal(): AbortSignal {
+    return this.failureController.signal
+  }
+
   post(
     message: ArchiveWorkerMessage,
     transfer?: Transferable[],
     inputLease?: OffscreenLiveResourceLease
   ): void {
+    this.failureSignal.throwIfAborted()
     if (this.state !== "collecting") {
       throw new Error("Archive worker is not collecting")
     }
@@ -136,21 +141,13 @@ export class ArchiveWorkerSession {
     try {
       this.worker.postMessage(message, transfer ?? [])
     } catch (error) {
-      if (inputId) this.releaseInput(inputId)
+      this.reject(error)
       throw error
     }
   }
 
-  finalize(): Promise<WorkerZipResult> {
-    if (this.state === "settled" && this.settledError !== undefined) {
-      return Promise.reject(
-        this.settledError instanceof Error
-          ? this.settledError
-          : new Error("Archive worker failed before finalization", {
-              cause: this.settledError,
-            })
-      )
-    }
+  async finalize(): Promise<WorkerZipResult> {
+    this.failureSignal.throwIfAborted()
     if (this.state !== "collecting") {
       throw new Error(
         "Archive worker cannot be finalized from its current state"
@@ -162,31 +159,20 @@ export class ArchiveWorkerSession {
       this.rejectResult = reject
     })
     this.timeoutId = setTimeout(() => {
-      this.settle(() => {
-        this.releaseOwnedResources()
-        this.rejectResult?.(new Error("Zip worker timed out"))
-      })
+      this.reject(new Error("Zip worker timed out"))
     }, this.finalizationTimeoutMs)
     try {
       this.worker.postMessage({ type: "finalize" })
     } catch (error) {
-      this.settle(() => {
-        this.releaseOwnedResources()
-        this.rejectResult?.(error)
-      })
+      this.reject(error)
     }
     return this.result
   }
 
   reject(error: unknown): void {
-    if (this.state === "collecting") {
-      this.releaseOwnedResources()
-      this.state = "settled"
-      this.settledError = error
-      return
-    }
     this.settle(() => {
       this.releaseOwnedResources()
+      this.failureController.abort(error)
       this.rejectResult?.(error)
     })
   }

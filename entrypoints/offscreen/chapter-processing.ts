@@ -425,6 +425,9 @@ export async function processArchiveFormatChapter(
     archiveAllowance.release()
     throw error
   }
+  const productionSignal = abortSignal
+    ? AbortSignal.any([abortSignal, session.failureSignal])
+    : session.failureSignal
   const archivePageCount = urls.length + (coverImage ? 1 : 0)
   let archiveResultLease: OffscreenLiveResourceLease | undefined
   let archiveBlobLease: OffscreenLiveResourceLease | undefined
@@ -463,7 +466,7 @@ export async function processArchiveFormatChapter(
         integrationContext: opts.integrationContext,
         rateLimitSettings: opts.settingsSnapshot.rateLimitSettings,
         rateLimitService: runtime.rateLimitService,
-        abortSignal,
+        abortSignal: productionSignal,
         onProgress,
         onImageDownloaded: opts.onImageDownloaded,
         downloadImage,
@@ -492,8 +495,12 @@ export async function processArchiveFormatChapter(
             error
           )
         },
+      }).catch((error: unknown) => {
+        session.failureSignal.throwIfAborted()
+        throw error
       })
 
+    session.failureSignal.throwIfAborted()
     await onArchiveProgress(90, "finalizing")
     if (abortSignal?.aborted) throw new Error("job-cancelled")
 

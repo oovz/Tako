@@ -79,7 +79,16 @@ describe("Offscreen resource lifecycles", () => {
     )
 
     expect(session.getState()).toBe("settled")
-    await expect(session.finalize()).rejects.toThrow(failure)
+    expect(session.failureSignal.reason).toBe(failure)
+    worker.onmessage?.call(
+      worker as unknown as Worker,
+      {
+        data: { success: false, error: "later worker failure" },
+      } as MessageEvent
+    )
+    expect(() => session.post({ type: "addImage" })).toThrow(failure)
+    expect(session.failureSignal.reason).toBe(failure)
+    await expect(session.finalize()).rejects.toBe(failure)
     session.dispose()
     expect(worker.terminate).toHaveBeenCalledOnce()
   })

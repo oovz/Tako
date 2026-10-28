@@ -785,10 +785,13 @@ export class OffscreenWorker {
         rateLimitService,
         withImageRetries: <T>(
           fn: () => Promise<T>,
-          hooks?: {
-            onAttemptStart?: (attempt: number) => void | Promise<void>
-          }
-        ) => this.withImageRetries(job, fn, hooks, abortSignal),
+          hooks:
+            | {
+                onAttemptStart?: (attempt: number) => void | Promise<void>
+              }
+            | undefined,
+          signal: AbortSignal
+        ) => this.withImageRetries(job, fn, hooks, signal),
         resolveWritableDownloadRoot: (input) =>
           this.resolveWritableDownloadRoot(input),
         requestBrowserBlobDownload: (input) =>

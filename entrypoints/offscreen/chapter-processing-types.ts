@@ -113,7 +113,10 @@ export interface ChapterProcessingRuntime {
   rateLimitService: RateLimitService
   withImageRetries: <T>(
     fn: () => Promise<T>,
-    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> }
+    hooks:
+      | { onAttemptStart?: (attempt: number) => void | Promise<void> }
+      | undefined,
+    signal: AbortSignal
   ) => Promise<T>
   resolveWritableDownloadRoot: (input: {
     taskId: string
