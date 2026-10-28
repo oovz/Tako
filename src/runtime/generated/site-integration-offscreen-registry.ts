@@ -6,6 +6,7 @@ import { offscreenSiteAdapter as boyloveOffscreenAdapter } from '@/src/site-inte
 import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
 import { offscreenSiteAdapter as mangabzOffscreenAdapter } from '@/src/site-integrations/mangabz/offscreen-runtime'
 import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-integrations/mangadex/offscreen-runtime'
+import { offscreenSiteAdapter as mangagoOffscreenAdapter } from '@/src/site-integrations/mangago/offscreen-runtime'
 import { offscreenSiteAdapter as mangakakalotOffscreenAdapter } from '@/src/site-integrations/mangakakalot/offscreen-runtime'
 import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site-integrations/mangamillion/offscreen-runtime'
 import { offscreenSiteAdapter as manganatoOffscreenAdapter } from '@/src/site-integrations/manganato/offscreen-runtime'
@@ -19,6 +20,7 @@ export const offscreenSiteAdapters = [
   comicnettaiOffscreenAdapter,
   mangabzOffscreenAdapter,
   mangadexOffscreenAdapter,
+  mangagoOffscreenAdapter,
   mangakakalotOffscreenAdapter,
   mangamillionOffscreenAdapter,
   manganatoOffscreenAdapter,
@@ -33,6 +35,7 @@ export const offscreenSiteAdaptersById = {
   "comicnettai": comicnettaiOffscreenAdapter,
   "mangabz": mangabzOffscreenAdapter,
   "mangadex": mangadexOffscreenAdapter,
+  "mangago": mangagoOffscreenAdapter,
   "mangakakalot": mangakakalotOffscreenAdapter,
   "mangamillion": mangamillionOffscreenAdapter,
   "manganato": manganatoOffscreenAdapter,

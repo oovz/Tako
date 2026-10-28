@@ -99,6 +99,7 @@ export default defineConfig({
     },
     ...[
       "boylove",
+      "mangago",
       "manganato",
       "mangakakalot",
       "animemangahouse",

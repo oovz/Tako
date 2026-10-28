@@ -32,6 +32,8 @@ import { registerBoyloveLocalServerHandlers } from "./mock-data/site-integration
 import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
 import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
 
+import { registerMangagoLocalServerHandlers } from "./mock-data/site-integrations/mangago/routes"
+
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
 import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
@@ -464,6 +466,7 @@ async function setupExtensionContext(
         ...registerBoyloveLocalServerHandlers(localMockServer),
         ...registerDm5LocalServerHandlers(localMockServer),
         ...registerMangabzLocalServerHandlers(localMockServer),
+        ...registerMangagoLocalServerHandlers(localMockServer),
       ]
     }
 

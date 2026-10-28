@@ -81,7 +81,8 @@ export const LIVE_MANGAMILLION_CHAPTER_URL =
 
 export const LIVE_BOYLOVE_REFERENCE_URL =
   "https://boylove.cc/home/book/index/id/34260"
-
+export const LIVE_MANGAGO_REFERENCE_URL =
+  "https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/"
 export const LIVE_MANGANATO_REFERENCE_URL =
   "https://www.manganato.gg/manga/hunter-x-hunter"
 export const LIVE_MANGAKAKALOT_REFERENCE_URL =

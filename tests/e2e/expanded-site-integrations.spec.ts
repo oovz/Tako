@@ -27,6 +27,8 @@ import { boyloveFixture } from "./fixtures/mock-data/site-integrations/boylove/r
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 
+import { mangagoFixture } from "./fixtures/mock-data/site-integrations/mangago/routes"
+
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
 const fixtures = [
@@ -35,6 +37,7 @@ const fixtures = [
   boyloveFixture,
   dm5Fixture,
   mangabzFixture,
+  mangagoFixture,
 ]
 
 test.describe("site downloads through the chapter selector", () => {

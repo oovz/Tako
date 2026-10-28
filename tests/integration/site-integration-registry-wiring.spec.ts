@@ -59,6 +59,8 @@ const seriesUrls: Readonly<Record<string, string>> = {
 
   mangabz: "https://www.mangabz.com/139bz/",
   mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",
+  mangago:
+    "https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/",
 
   mangakakalot: "https://www.mangakakalove.com/manga/hunter-x-hunter",
   mangamillion: "https://mangamillion.shueisha.co.jp/en/title/1",

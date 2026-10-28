@@ -539,6 +539,101 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "mangago",
+    "name": "Mangago",
+    "englishName": "Mangago",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mangago.me",
+        "www.mangago.me"
+      ],
+      "seriesMatches": [
+        "/read-manga/*"
+      ],
+      "excludeMatches": [
+        "/read-manga/*/*/*"
+      ]
+    },
+    "requiredOrigins": [
+      "https://mangago.me/*",
+      "https://www.mangago.me/*",
+      "https://pic1.mangapicgallery.com/*",
+      "https://*.mangapicgallery.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 500
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangago-page",
+        "purpose": "Series metadata, complete chapter catalog and reader data",
+        "origins": [
+          "https://mangago.me/*",
+          "https://www.mangago.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "mangago-script",
+        "purpose": "Current public reader image protocol",
+        "origins": [
+          "https://pic1.mangapicgallery.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 2000000
+      },
+      {
+        "id": "mangago-image",
+        "purpose": "Chapter images and series covers",
+        "origins": [
+          "https://*.mangapicgallery.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangakakalot",
     "name": "MangaKakalot",
     "englishName": "MangaKakalot",

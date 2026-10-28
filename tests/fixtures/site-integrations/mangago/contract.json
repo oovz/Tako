@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangago",
+  "data": {
+    "seriesUrl": "https://www.mangago.me/read-manga/hunter_x_hunter/",
+    "seriesId": "hunter_x_hunter",
+    "readerUrl": "https://www.mangago.me/read-manga/hunter_x_hunter/an/nml_chapter-420/pg-1/",
+    "protocolScript": "['sojson.v4'][\"\\x66\\x69\\x6c\\x74\\x65\\x72\"][\"\\x63\\x6f\\x6e\\x73\\x74\\x72\\x75\\x63\\x74\\x6f\\x72\"](String.fromCharCode.apply(null,\"118A97k114A32k107A101k121A32k61A32k67A114k121A112k116A111k74A83k46A101k110A99k46A72k101A120k46A112k97A114k115A101k40A34k101A49k49A97k100A99k51A57k52A57k98A97k53A57k97A98k98A101k53A54k101A48k53A55k102A50k48A102k56A56k51A101k34A41k59A32k118A97k114A32k105A118k32A61k32A67k114A121k112A116k111A74k83A46k101A110k99A46k72A101k120A46k112A97k114A115k101A40k34A49k50A51k52A53k54A55k56A57k48A97k98A99k100A101k102A49k50A51k52A53k54A55k56A57k48A97k98A99k100A101k102A34k41A59k32A118k97A114k32A36k107A101k121A32k61A32k36A115k116A114k46A99k104A97k114A65k116A40k49A57k41A43k36A115k116A114k46A99k104A97k114A65k116A40k50A51k41A43k36A115k116A114k46A99k104A97k114A65k116A40k51A49k41A43k36A115k116A114k46A99k104A97k114A65k116A40k51A57k41A59k32A118k97A114k32A114k101A110k73A109k103A32k61A32k102A117k110A99k116A105k111A110k40A105k109A103k44A119k105A100k116A104k44A104k101A105k103A104k116A44k105A100k41A123k32A118k97A114k32A107k101A121k32A61k32A34k49A56k97A55k50A97k54A57k97A54k52A97k49A51k97A49k97A52k51A97k51A97k97A52k50A97k50A51k97A54k54A97k50A54k97A49k57A97k53A49k97A53k52A97k55A56k97A51k52A97k49A55k97A51k49A97k51A53k97A49k53A97k53A56k97A50k57A97k54A49k97A52k56A97k55A51k97A55k52A97k52A52k97A53k50A97k54A48k97A50k52A97k54A51k97A50k48A97k51A50k97A55k97A52k53A97k53A51k97A55k53A97k53A53k97A54k50A97k53A57k97A52k49A97k55A54k97A54k56A97k50A97k51A54k97A50k49A97k49A48k97A51k56A97k51A51k97A55k49A97k52A48k97A54k55A97k50A50k97A52k97A53k48A97k56A48k97A54k53A97k50A55k97A51k55A97k52A55k97A55k48A97k49A52k97A50k56A97k49A54k97A54k97A53k54A97k51A48k97A53k55A97k53A97k49A49k97A55k57A97k57A97k55A55k97A52k54A97k51A57k97A50k53A97k52A57k97A56k97A49k50A34k59A32k107A101k121A61k107A101k121A46k115A112k108A105k116A40k34A97k34A41k59A32k118A97k114A32k119A105k100A116k104A110k117A109k61A104k101A105k103A104k116A110k117A109k61A57k59A125k59A\".split(/[a-zA-Z]{1,}/)));",
+    "firstImage": "https://iweb_9.mangapicgallery.com/r/newpiclink/hunter_x_hunter/427/53efbbcd3d991cfd3136fab58921ad11.png",
+    "lastImage": "https://iweb_9.mangapicgallery.com/r/newpiclink/hunter_x_hunter/427/724cb4396f521f5197f48d1f52cef7e0.png",
+    "chapterCount": 423,
+    "source": {
+      "observedAt": "2026-10-25",
+      "seriesHtml": "series.html",
+      "readerHtml": "reader.html",
+      "note": "Public fields projected from the supplied saved HTML. Both supplied series files contain the same complete 423-link catalog. The retained public chapter.js?895 parser vector decodes the real encrypted 19-page list; its first two URLs match the two lazy-loaded reader DOM images. The supplied HAR contains no chapter.js response. Browser image responses are generated PNG controls."
+    },
+    "pageCount": 19,
+    "secondary": {
+      "seriesUrl": "https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/",
+      "seriesId": "kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo",
+      "readerUrl": "https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/nbt/br_chapter-454512/pg-1/",
+      "firstImage": "https://iweb_9.mangapicgallery.com/r/newpiclink/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/454512/454512_60475413.jpg",
+      "lastImage": "https://iweb_9.mangapicgallery.com/r/newpiclink/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/454512/454512_60475453.jpg",
+      "chapterCount": 74,
+      "pageCount": 35,
+      "seriesHtml": "series-kenshi.html",
+      "readerHtml": "reader-kenshi.html",
+      "observedAt": "2026-10-25"
+    }
+  }
+}
