@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "mangahere",
+  "name": "MangaHere",
+  "englishName": "MangaHere",
+  "contributors": ["Otaro"],
+  "version": "1.0.0",
+  "shipped": true,
+  "enabledByDefault": true,
+  "patterns": {
+    "domains": ["newm.mangahere.cc"],
+    "seriesMatches": ["/manga/*"],
+    "excludeMatches": ["/manga/*/c*", "/manga/*/v*/c*"]
+  },
+  "requiredOrigins": [
+    "https://newm.mangahere.cc/*",
+    "https://zjcdn.mangahere.org/*",
+    "https://fmcdn.mangahere.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": {
+      "mode": "none"
+    }
+  },
+  "imageTransform": {
+    "kind": "none",
+    "estimatedCostMs": 0
+  },
+  "endpointPolicies": [
+    {
+      "id": "mangahere-page",
+      "purpose": "MangaHere series and reader HTML",
+      "origins": ["https://newm.mangahere.cc/*"],
+      "originKind": "fixed",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "mangahere-image",
+      "purpose": "MangaHere chapter and cover images",
+      "origins": [
+        "https://zjcdn.mangahere.org/*",
+        "https://fmcdn.mangahere.com/*"
+      ],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "sessionRefererRules": [
+    {
+      "id": 41013,
+      "priority": 1,
+      "requestDomains": ["zjcdn.mangahere.org", "fmcdn.mangahere.com"],
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "referer": "https://newm.mangahere.cc/"
+    }
+  ],
+  "customSettings": []
+}

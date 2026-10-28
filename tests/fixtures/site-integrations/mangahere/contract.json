@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangahere",
+  "data": {
+    "seriesUrl": "https://newm.mangahere.cc/manga/hunter_x_hunter/",
+    "seriesTitle": "Hunter X Hunter",
+    "seriesId": "hunter_x_hunter",
+    "chapterCount": 425,
+    "chapterId": "hunter_x_hunter/v01/c001",
+    "readerUrl": "https://newm.mangahere.cc/manga/hunter_x_hunter/v01/c001/1.html",
+    "readerVariants": ["packed-image-list"],
+    "pageCount": 33
+  }
+}

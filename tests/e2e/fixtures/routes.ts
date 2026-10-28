@@ -36,6 +36,7 @@ import { registerDm5Routes } from "./mock-data/site-integrations/animemangahouse
 import { registerMangabzRoutes } from "./mock-data/site-integrations/mangabz/routes"
 import { registerZaimanhuaRoutes } from "./mock-data/site-integrations/mangaagain/routes"
 
+import { registerMangahereRoutes } from "./mock-data/site-integrations/mangahere/routes"
 import { registerMangagoRoutes } from "./mock-data/site-integrations/mangago/routes"
 import { registerCoolmicRoutes } from "./mock-data/site-integrations/coolmic/routes"
 import { registerMangaplusRoutes } from "./mock-data/site-integrations/mangaplus/routes"
@@ -59,6 +60,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerDm5Routes,
   registerMangabzRoutes,
   registerZaimanhuaRoutes,
+  registerMangahereRoutes,
   registerMangagoRoutes,
   registerCoolmicRoutes,
   registerMangaplusRoutes,

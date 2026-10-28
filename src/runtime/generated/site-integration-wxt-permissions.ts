@@ -24,6 +24,7 @@ export const siteIntegrationWxtPermissions = {
     "https://cover.mangabz.com/*",
     "https://en-contents.coolmic.me/*",
     "https://en-img.coolmic.me/*",
+    "https://fmcdn.mangahere.com/*",
     "https://hamreus.com/*",
     "https://image.mangabz.com/*",
     "https://images.zaimanhua.com/*",
@@ -41,6 +42,7 @@ export const siteIntegrationWxtPermissions = {
     "https://manhua.zaimanhua.com/*",
     "https://manhuagui.com/*",
     "https://mycomic.com/*",
+    "https://newm.mangahere.cc/*",
     "https://pic1.mangapicgallery.com/*",
     "https://pximg.net/*",
     "https://sd.mangafunb.fun/*",
@@ -56,7 +58,8 @@ export const siteIntegrationWxtPermissions = {
     "https://www.mangakakalove.com/*",
     "https://www.manganato.gg/*",
     "https://www.manhuagui.com/*",
-    "https://www.zaimanhua.com/*"
+    "https://www.zaimanhua.com/*",
+    "https://zjcdn.mangahere.org/*"
   ],
   "optionalOrigins": [
     "https://*/*"

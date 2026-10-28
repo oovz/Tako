@@ -109,6 +109,7 @@ export default defineConfig({
       "copymanga",
       "mycomic",
       "mangabz",
+      "mangahere",
     ].map((name) => ({
       name,
       testDir: path.resolve(__dirname, `tests/live/${name}`),

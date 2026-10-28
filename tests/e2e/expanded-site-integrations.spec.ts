@@ -29,6 +29,7 @@ import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahou
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 import { zaimanhuaFixture } from "./fixtures/mock-data/site-integrations/mangaagain/routes"
 
+import { mangahereFixture } from "./fixtures/mock-data/site-integrations/mangahere/routes"
 import { mangagoFixture } from "./fixtures/mock-data/site-integrations/mangago/routes"
 import { coolmicFixture } from "./fixtures/mock-data/site-integrations/coolmic/routes"
 import { mangaplusFixture } from "./fixtures/mock-data/site-integrations/mangaplus/routes"
@@ -43,6 +44,7 @@ const fixtures = [
   dm5Fixture,
   mangabzFixture,
   zaimanhuaFixture,
+  mangahereFixture,
   mangagoFixture,
   coolmicFixture,
   mangaplusFixture,

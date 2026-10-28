@@ -10,6 +10,7 @@ import { backgroundSiteAdapter as mangaagainBackgroundAdapter } from '@/src/site
 import { backgroundSiteAdapter as mangabzBackgroundAdapter } from '@/src/site-integrations/mangabz/background-runtime'
 import { backgroundSiteAdapter as mangadexBackgroundAdapter } from '@/src/site-integrations/mangadex/background-runtime'
 import { backgroundSiteAdapter as mangagoBackgroundAdapter } from '@/src/site-integrations/mangago/background-runtime'
+import { backgroundSiteAdapter as mangahereBackgroundAdapter } from '@/src/site-integrations/mangahere/background-runtime'
 import { backgroundSiteAdapter as mangakakalotBackgroundAdapter } from '@/src/site-integrations/mangakakalot/background-runtime'
 import { backgroundSiteAdapter as mangamillionBackgroundAdapter } from '@/src/site-integrations/mangamillion/background-runtime'
 import { backgroundSiteAdapter as manganatoBackgroundAdapter } from '@/src/site-integrations/manganato/background-runtime'
@@ -29,6 +30,7 @@ export const backgroundSiteAdapters = [
   mangabzBackgroundAdapter,
   mangadexBackgroundAdapter,
   mangagoBackgroundAdapter,
+  mangahereBackgroundAdapter,
   mangakakalotBackgroundAdapter,
   mangamillionBackgroundAdapter,
   manganatoBackgroundAdapter,
@@ -49,6 +51,7 @@ export const backgroundSiteAdaptersById = {
   "mangabz": mangabzBackgroundAdapter,
   "mangadex": mangadexBackgroundAdapter,
   "mangago": mangagoBackgroundAdapter,
+  "mangahere": mangahereBackgroundAdapter,
   "mangakakalot": mangakakalotBackgroundAdapter,
   "mangamillion": mangamillionBackgroundAdapter,
   "manganato": manganatoBackgroundAdapter,
