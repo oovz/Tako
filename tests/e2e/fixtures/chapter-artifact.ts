@@ -1,14 +1,13 @@
 import { unzipSync } from "fflate"
 import type { Page } from "@playwright/test"
 
-export function readChapterArchive(
-  bytes: Uint8Array,
+type ArchiveImage = { name: string; bytes: Uint8Array }
+
+function readImages(
+  archiveEntries: Record<string, Uint8Array>,
   expectedPageCount: number
-): Array<{ name: string; bytes: Uint8Array }> {
-  if (!Number.isSafeInteger(expectedPageCount) || expectedPageCount <= 0) {
-    throw new Error("Expected a positive chapter page count")
-  }
-  const entries = Object.entries(unzipSync(bytes)).sort(([a], [b]) =>
+): ArchiveImage[] {
+  const entries = Object.entries(archiveEntries).sort(([a], [b]) =>
     a.localeCompare(b, undefined, { numeric: true })
   )
   if (entries.length !== expectedPageCount) {
@@ -21,11 +20,57 @@ export function readChapterArchive(
     if (!new RegExp(`^${page}\\.(jpg|png|webp|gif|avif)$`).test(name)) {
       throw new Error(`Expected numbered chapter image ${page}, found ${name}`)
     }
-    if (data.byteLength === 0) {
-      throw new Error(`Empty chapter image: ${name}`)
-    }
+    if (data.byteLength === 0) throw new Error(`Empty chapter image: ${name}`)
     return { name, bytes: data }
   })
+}
+
+export function readChapterArchive(
+  bytes: Uint8Array,
+  expectedPageCount: number
+): Array<{ name: string; bytes: Uint8Array }> {
+  if (!Number.isSafeInteger(expectedPageCount) || expectedPageCount <= 0) {
+    throw new Error("Expected a positive chapter page count")
+  }
+  return readImages(unzipSync(bytes), expectedPageCount)
+}
+
+export function readChapterArchiveWithComicInfo(
+  bytes: Uint8Array,
+  expectedPageCount: number
+): { images: ArchiveImage[]; comicInfoXml: string } {
+  if (!Number.isSafeInteger(expectedPageCount) || expectedPageCount <= 0)
+    throw new Error("Expected a positive chapter page count")
+  const entries = unzipSync(bytes)
+  const metadata = entries["ComicInfo.xml"]
+  if (!metadata?.byteLength) throw new Error("Missing ComicInfo.xml")
+  delete entries["ComicInfo.xml"]
+  return {
+    images: readImages(entries, expectedPageCount),
+    comicInfoXml: new TextDecoder("utf-8", { fatal: true }).decode(metadata),
+  }
+}
+
+export async function inspectComicInfo(
+  page: Page,
+  xml: string
+): Promise<Record<string, string>> {
+  return page.evaluate((source) => {
+    const document = new DOMParser().parseFromString(source, "application/xml")
+    if (
+      document.querySelector("parsererror") ||
+      document.documentElement.tagName !== "ComicInfo"
+    )
+      throw new Error("Invalid ComicInfo.xml")
+    const fields: Record<string, string> = {}
+    for (const node of document.documentElement.children) {
+      if (node.tagName === "Pages") continue
+      if (Object.hasOwn(fields, node.tagName))
+        throw new Error(`Duplicate ComicInfo field: ${node.tagName}`)
+      fields[node.tagName] = node.textContent ?? ""
+    }
+    return fields
+  }, xml)
 }
 
 /** Decode saved bytes through Chromium, independently of extension processing. */
@@ -36,7 +81,18 @@ export async function inspectChapterArchive(
 ): Promise<
   Array<{ name: string; width: number; height: number; preview?: string }>
 > {
-  const images = readChapterArchive(bytes, expectedPageCount)
+  return inspectChapterImages(
+    page,
+    readChapterArchive(bytes, expectedPageCount)
+  )
+}
+
+export async function inspectChapterImages(
+  page: Page,
+  images: ArchiveImage[]
+): Promise<
+  Array<{ name: string; width: number; height: number; preview?: string }>
+> {
   const inspected: Array<{
     name: string
     width: number

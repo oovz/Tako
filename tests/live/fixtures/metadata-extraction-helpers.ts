@@ -3,6 +3,7 @@ import { expect } from "@playwright/test"
 import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import { resolveCandidateTabIds } from "./download-workflow-helpers"
 import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
+import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 
 export type LiveChapter = {
   id: string
@@ -30,7 +31,7 @@ export type LiveTabState = {
   seriesTitle?: string
   chapters?: LiveChapter[]
   volumes?: LiveVolume[]
-  metadata?: { coverUrl?: string }
+  metadata?: SeriesMetadataSnapshot
 }
 
 export function extractNumericValue(

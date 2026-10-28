@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import type { BrowserContext, Page, TestInfo } from "@playwright/test"
-import { expect } from "@playwright/test"
+import { expect, test } from "@playwright/test"
 import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { MangaPageState } from "@/src/types/tab-state"
@@ -11,7 +11,13 @@ import {
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
 import type { LiveChapter } from "./metadata-extraction-helpers"
-import { inspectChapterArchive } from "../../e2e/fixtures/chapter-artifact"
+import {
+  inspectChapterArchive,
+  inspectChapterImages,
+  inspectComicInfo,
+  readChapterArchiveWithComicInfo,
+} from "../../e2e/fixtures/chapter-artifact"
+import { assertLiveSeriesMetadata } from "./series-metadata-helpers"
 import { startSingleChapterDownload as dispatchSingleChapterDownload } from "../../e2e/fixtures/download-workflow-helpers"
 import packageJson from "../../../package.json" with { type: "json" }
 import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
@@ -229,6 +235,7 @@ export async function loadLiveDownloadState(
         (!options.expectedSeriesTitle ||
           state.seriesTitle === options.expectedSeriesTitle)
       ) {
+        await assertLiveSeriesMetadata(page, state, test.info())
         return { optionsPage, tabId, state }
       }
     }
@@ -302,7 +309,7 @@ export async function persistDownloadSettings(
           ...baseSettings.downloads,
           ...patch,
           includeCoverImage: false,
-          includeComicInfo: false,
+          includeComicInfo: true,
           normalizeImageFilenames: true,
           imagePaddingDigits: 3,
         },
@@ -577,11 +584,47 @@ export async function expectSavedChapterArchive(
   expect(task.chapters).toHaveLength(1)
   const chapter = task.chapters[0]
   expect(chapter.totalImages).toBeGreaterThan(0)
-  const images = await inspectChapterArchive(
-    optionsPage,
-    bytes,
-    chapter.totalImages!
-  )
+  let comicInfo: Record<string, string> | undefined
+  let images
+  if (task.settingsSnapshot.includeComicInfo) {
+    const archive = readChapterArchiveWithComicInfo(bytes, chapter.totalImages!)
+    comicInfo = await inspectComicInfo(optionsPage, archive.comicInfoXml)
+    const metadata = task.settingsSnapshot.comicInfo
+    const expected = {
+      Series: task.seriesTitle,
+      Title: chapter.title,
+      Number: chapter.chapterLabel ?? chapter.chapterNumber?.toString(),
+      Volume: chapter.volumeNumber,
+      Writer: metadata?.author,
+      Penciller: metadata?.artist,
+      Summary: metadata?.description,
+      Genre: metadata?.genres?.length ? metadata.genres.join(", ") : undefined,
+      Year: metadata?.year,
+      LanguageISO: chapter.language ?? metadata?.language,
+      Publisher: metadata?.publisher,
+      Web: chapter.url,
+      PageCount: chapter.totalImages,
+    }
+    for (const [field, value] of Object.entries(expected)) {
+      if (value !== undefined)
+        expect(comicInfo[field], field).toBe(String(value).trim())
+    }
+    if (expected.Volume === undefined) expect(comicInfo.Volume).toBeUndefined()
+    if (expected.Number === undefined) expect(comicInfo.Number).toBeUndefined()
+    await retainArtifact(
+      testInfo,
+      "ComicInfo.xml",
+      archive.comicInfoXml,
+      "application/xml"
+    )
+    images = await inspectChapterImages(optionsPage, archive.images)
+  } else {
+    images = await inspectChapterArchive(
+      optionsPage,
+      bytes,
+      chapter.totalImages!
+    )
+  }
   await retainArtifact(
     testInfo,
     "chapter-artifact-inspection.json",
@@ -595,6 +638,7 @@ export async function expectSavedChapterArchive(
         seriesTitle: task.seriesTitle,
         chapter: { id: chapter.id, url: chapter.url, title: chapter.title },
         resolvedPageCount: chapter.totalImages,
+        comicInfo,
         images: images.map(({ name, width, height }) => ({
           name,
           width,

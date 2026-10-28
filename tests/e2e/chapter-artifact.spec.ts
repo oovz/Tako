@@ -1,12 +1,16 @@
 import { zipSync } from "fflate"
 import { readFile } from "node:fs/promises"
 import { test, expect } from "./fixtures/extension"
-import { inspectChapterArchive } from "./fixtures/chapter-artifact"
+import {
+  inspectChapterArchive,
+  inspectComicInfo,
+} from "./fixtures/chapter-artifact"
 import { SMALL_PNG_BYTES } from "./fixtures/mock-data/shared/pixel-png"
 import { SHONEN_JUMP_PLUS_SCRAMBLED_PNG } from "./fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
 import { expectSavedChapterArchive } from "../live/fixtures/download-workflow-helpers"
 import { createTaskSettingsSnapshot } from "../../src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
+import { assertLiveSeriesMetadata } from "../live/fixtures/series-metadata-helpers"
 
 test("saved archive checker decodes real images and rejects corrupt page content", async ({
   page,
@@ -46,7 +50,12 @@ test("saved archive checker decodes real images and rejects corrupt page content
 test("retains the complete saved chapter and inspection receipt for visual review", async ({
   page,
 }, testInfo) => {
-  const bytes = zipSync({ "001.png": SHONEN_JUMP_PLUS_SCRAMBLED_PNG })
+  const bytes = zipSync({
+    "001.png": SHONEN_JUMP_PLUS_SCRAMBLED_PNG,
+    "ComicInfo.xml": new TextEncoder().encode(
+      "<ComicInfo><Series>Artifact fixture</Series><Title>Chapter 1</Title><Writer>Author &amp; Artist</Writer><Summary>A full synopsis.</Summary><Genre>Adventure, Fantasy</Genre><Web>https://example.test/chapter/1</Web><PageCount>1</PageCount></ComicInfo>"
+    ),
+  })
   await expectSavedChapterArchive(
     page,
     bytes,
@@ -59,7 +68,14 @@ test("retains the complete saved chapter and inspection receipt for visual revie
       created: 1,
       settingsSnapshot: createTaskSettingsSnapshot(
         DEFAULT_SETTINGS,
-        "shonenjumpplus"
+        "shonenjumpplus",
+        {
+          comicInfo: {
+            author: "Author & Artist",
+            description: "A full synopsis.",
+            genres: ["Adventure", "Fantasy"],
+          },
+        }
       ),
       chapters: [
         {
@@ -91,6 +107,92 @@ test("retains the complete saved chapter and inspection receipt for visual revie
     browser: expect.any(String),
     workUrl: "https://example.test/work/1",
     chapter: { id: "artifact-chapter" },
+    comicInfo: {
+      Writer: "Author & Artist",
+      Summary: "A full synopsis.",
+      Genre: "Adventure, Fantasy",
+      PageCount: "1",
+    },
     images: [{ name: "001.png", width: 32, height: 32 }],
   })
+})
+
+test("ComicInfo inspection parses escaped text and rejects malformed metadata", async ({
+  page,
+}) => {
+  expect(
+    await inspectComicInfo(
+      page,
+      "<ComicInfo><Writer>A &amp; B</Writer><Summary>作品</Summary></ComicInfo>"
+    )
+  ).toEqual({ Writer: "A & B", Summary: "作品" })
+  for (const xml of [
+    "<ComicInfo>",
+    "<html/>",
+    "<ComicInfo><Writer>A</Writer><Writer>B</Writer></ComicInfo>",
+  ]) {
+    await expect(inspectComicInfo(page, xml)).rejects.toThrow()
+  }
+})
+
+test("live metadata checks require a real synopsis source and matching extracted text", async ({
+  page,
+}, testInfo) => {
+  const credits =
+    '<div class="banner_detail_form"><p class="subtitle"><a>Author</a></p><p class="tip"><a>Adventure</a></p>'
+  const state = {
+    siteIntegrationId: "animemangahouse",
+    mangaId: "1",
+    seriesTitle: "A work",
+    chapters: [],
+    metadata: {
+      language: "zh",
+      author: "Author",
+      genres: ["Adventure"],
+      description: "A full synopsis.",
+    },
+  }
+  await page.setContent(`${credits}</div>`)
+  await expect(
+    assertLiveSeriesMetadata(page, state, testInfo)
+  ).rejects.toThrow()
+  await page.setContent(
+    `${credits}<p class="content">A full synopsis.</p></div>`
+  )
+  await assertLiveSeriesMetadata(page, state, testInfo)
+  await expect(
+    assertLiveSeriesMetadata(
+      page,
+      {
+        ...state,
+        metadata: { ...state.metadata, description: "An incorrect synopsis." },
+      },
+      testInfo
+    )
+  ).rejects.toThrow()
+})
+
+test("live synopsis comparison excludes Mangago's browser-added expansion control", async ({
+  page,
+}, testInfo) => {
+  await page.setContent(
+    '<h1>A work</h1><div class="manga_right"><table><tr><td><label>Author:</label><a>Author</a>1998 released.</td></tr><tr><td><a href="/genre/Adventure/">Adventure</a></td></tr></table></div><div class="manga_summary">A full synopsis.<div class="transform comment_rname expand" title="Expand">+</div></div>'
+  )
+  await assertLiveSeriesMetadata(
+    page,
+    {
+      siteIntegrationId: "mangago",
+      mangaId: "a-work",
+      seriesTitle: "A work",
+      chapters: [],
+      metadata: {
+        language: "en",
+        author: "Author",
+        genres: ["Adventure"],
+        year: 1998,
+        description: "A full synopsis.",
+      },
+    },
+    testInfo
+  )
 })

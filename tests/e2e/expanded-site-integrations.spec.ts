@@ -1,6 +1,11 @@
 import { test, expect } from "./fixtures/extension"
 import { readFile } from "node:fs/promises"
-import { inspectChapterArchive } from "./fixtures/chapter-artifact"
+import {
+  inspectChapterImages,
+  readChapterArchiveWithComicInfo,
+} from "./fixtures/chapter-artifact"
+import { expectSavedChapterArchive } from "../live/fixtures/download-workflow-helpers"
+import { assertLiveSeriesMetadata } from "../live/fixtures/series-metadata-helpers"
 import {
   getTabId,
   openSidepanelHarness,
@@ -60,7 +65,7 @@ test.describe("site downloads through the chapter selector", () => {
         context,
         extensionId,
         page,
-      }) => {
+      }, testInfo) => {
         await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
         const tabId = await getTabId(page, context)
         await waitForTabSeriesTitle(context, tabId, fixture.title)
@@ -75,6 +80,7 @@ test.describe("site downloads through the chapter selector", () => {
         )
         expect(state.siteIntegrationId).toBe(fixture.id)
         expect(state.mangaId).toBe(fixture.seriesId)
+        await assertLiveSeriesMetadata(page, state, testInfo)
         const chapter = state.chapters.find(
           (candidate) => candidate.id === fixture.chapterId
         )!
@@ -87,7 +93,7 @@ test.describe("site downloads through the chapter selector", () => {
           defaultFormat: "cbz",
           conflictPolicy: "overwrite",
           includeCoverImage: false,
-          includeComicInfo: false,
+          includeComicInfo: true,
           normalizeImageFilenames: true,
           imagePaddingDigits: 3,
         })
@@ -97,6 +103,30 @@ test.describe("site downloads through the chapter selector", () => {
             panel.getByText(fixture.title, { exact: true }).first()
           ).toBeVisible()
           await panel.getByRole("button", { name: /Select Chapters/i }).click()
+          if (fixture.id === "copymanga" || fixture.id === "mycomic") {
+            expect(state.volumes.length).toBeGreaterThanOrEqual(3)
+            const expanded = panel.locator(
+              '[data-kind="volume"] button[aria-expanded="true"]:enabled'
+            )
+            while (await expanded.count()) {
+              const label = await expanded.first().getAttribute("aria-label")
+              const toggle = panel.getByRole("button", {
+                name: label!,
+                exact: true,
+              })
+              await toggle.click()
+              await expect(toggle).toHaveAttribute("aria-expanded", "false")
+            }
+            for (const volume of state.volumes) {
+              if (state.chapters.some((item) => item.volumeId === volume.id))
+                continue
+              const row = panel.locator('[data-kind="volume"]').filter({
+                has: panel.getByText(volume.title!, { exact: true }),
+              })
+              await expect(row.getByRole("button")).toBeDisabled()
+              await expect(row.getByRole("checkbox")).toBeDisabled()
+            }
+          }
           const allChapters = panel.getByRole("radio", {
             name: /All chapters/i,
           })
@@ -139,11 +169,19 @@ test.describe("site downloads through the chapter selector", () => {
           )
           expect(output.state).toBe("complete")
           expect(output.fileSize).toBeGreaterThan(0)
+          const archiveBytes = await readFile(output.filename)
+          await expectSavedChapterArchive(
+            optionsPage,
+            archiveBytes,
+            task,
+            seriesUrl,
+            testInfo
+          )
           if (fixture.id === "coolmic") {
-            const images = await inspectChapterArchive(
+            const images = await inspectChapterImages(
               optionsPage,
-              await readFile(output.filename),
-              fixture.pageCount
+              readChapterArchiveWithComicInfo(archiveBytes, fixture.pageCount)
+                .images
             )
             expect(
               images.map(({ width, height }) => ({ width, height }))
