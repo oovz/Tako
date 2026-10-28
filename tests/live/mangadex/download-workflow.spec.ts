@@ -1,5 +1,6 @@
 import { installPageDiagnostics } from "../../e2e/fixtures/diagnostics"
 import { test, expect } from "../../e2e/fixtures/extension"
+import { readSeededDirectoryFile } from "../../e2e/fixtures/download-workflow-helpers"
 import { LIVE_MANGADEX_REFERENCE_URL } from "../../e2e/fixtures/test-domains-constants"
 import {
   loadLiveDownloadState,
@@ -7,8 +8,8 @@ import {
   startSingleChapterDownload,
   waitForTerminalTask,
   assertTaskSucceeded,
-  waitForBrowserDownload,
-  expectZipArchiveFile,
+  expectBrowserChapterArchive,
+  expectSavedChapterArchive,
   seedCustomDirectoryHandle,
   listSeededDirectoryFiles,
   seedMangadexWebsitePreferences,
@@ -22,7 +23,7 @@ test.describe("MangaDex download workflows (live)", () => {
   test("completes a browser-mode live single-chapter download for MangaDex", async ({
     context,
     extensionId,
-  }) => {
+  }, testInfo) => {
     const page = await context.newPage()
     const { diagnosticEvents, recordDiagnostic } =
       createDiagnosticEventRecorder()
@@ -70,15 +71,12 @@ test.describe("MangaDex download workflows (live)", () => {
       const task = await waitForTerminalTask(optionsPage, taskId)
 
       assertTaskSucceeded(task)
-      expect(typeof task.lastSuccessfulDownloadId).toBe("number")
-
-      const downloadItem = await waitForBrowserDownload(
+      await expectBrowserChapterArchive(
         optionsPage,
-        task.lastSuccessfulDownloadId as number
+        task,
+        LIVE_MANGADEX_REFERENCE_URL,
+        testInfo
       )
-      expect(downloadItem.state).toBe("complete")
-      expect(downloadItem.exists).toBe(true)
-      await expectZipArchiveFile(downloadItem.filename)
     } finally {
       await optionsPage.close()
       await page.close()
@@ -88,7 +86,7 @@ test.describe("MangaDex download workflows (live)", () => {
   test("writes a live MangaDex single-chapter download through the custom-folder pipeline", async ({
     context,
     extensionId,
-  }) => {
+  }, testInfo) => {
     const page = await context.newPage()
     await page.goto(LIVE_MANGADEX_REFERENCE_URL, {
       waitUntil: "domcontentloaded",
@@ -138,6 +136,18 @@ test.describe("MangaDex download workflows (live)", () => {
       const cbzFile = seededFiles.find((file) => file.path.endsWith(".cbz"))
       expect(cbzFile).toBeTruthy()
       expect(cbzFile?.size).toBeGreaterThan(0)
+      const bytes = await readSeededDirectoryFile(
+        optionsPage,
+        seededDirectoryName,
+        cbzFile!.path
+      )
+      await expectSavedChapterArchive(
+        optionsPage,
+        bytes,
+        task,
+        LIVE_MANGADEX_REFERENCE_URL,
+        testInfo
+      )
     } finally {
       await optionsPage.close()
       await page.close()

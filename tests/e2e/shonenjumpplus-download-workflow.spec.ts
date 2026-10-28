@@ -113,12 +113,12 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
         archive!.path
       )
       const archiveEntries = unzipSync(archiveBytes)
-      const imageEntry = Object.entries(archiveEntries).find(([path]) =>
-        path.toLowerCase().endsWith(".png")
-      )
+      // The normalized cover occupies page 1. Inspect a chapter page, which
+      // passes through the integration's tile reconstruction.
+      const imageEntry = archiveEntries["2.png"]
       expect(imageEntry).toBeDefined()
 
-      const image = decodeRgbaPng(imageEntry![1])
+      const image = decodeRgbaPng(imageEntry!)
       expect([image.width, image.height]).toEqual([32, 32])
       for (const expectedTile of SHONEN_JUMP_PLUS_EXPECTED_TILE_COLORS) {
         const sampleX = expectedTile.x * 8 + 4

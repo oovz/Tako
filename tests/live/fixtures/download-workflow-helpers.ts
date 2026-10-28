@@ -1,5 +1,5 @@
 import fs from "node:fs/promises"
-import type { BrowserContext, Page } from "@playwright/test"
+import type { BrowserContext, Page, TestInfo } from "@playwright/test"
 import { expect } from "@playwright/test"
 import {
   focusTab,
@@ -16,6 +16,8 @@ import {
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
 import type { LiveChapter } from "./metadata-extraction-helpers"
+import { inspectChapterArchive } from "../../e2e/fixtures/chapter-artifact"
+import packageJson from "../../../package.json" with { type: "json" }
 
 export type { LiveChapter }
 
@@ -303,6 +305,10 @@ export async function persistDownloadSettings(
         downloads: {
           ...baseSettings.downloads,
           ...patch,
+          includeCoverImage: false,
+          includeComicInfo: false,
+          normalizeImageFilenames: true,
+          imagePaddingDigits: 3,
         },
       }
 
@@ -636,20 +642,98 @@ export async function waitForBrowserDownload(
   )
 }
 
-export async function expectZipArchiveFile(
-  filePath: string | undefined
+async function retainArtifact(
+  testInfo: TestInfo,
+  name: string,
+  content: string | Uint8Array,
+  contentType: string
 ): Promise<void> {
-  expect(typeof filePath).toBe("string")
-  const handle = await fs.open(filePath as string, "r")
+  const path = testInfo.outputPath(name)
+  await fs.writeFile(path, content)
+  await testInfo.attach(name, { path, contentType })
+}
 
-  try {
-    const signature = Buffer.alloc(4)
-    const { bytesRead } = await handle.read(signature, 0, signature.length, 0)
-    expect(bytesRead).toBe(4)
-    expect(signature.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))).toBe(true)
-  } finally {
-    await handle.close()
+export async function expectSavedChapterArchive(
+  optionsPage: Page,
+  bytes: Uint8Array,
+  task: DownloadTaskState,
+  workUrl: string,
+  testInfo: TestInfo
+): Promise<void> {
+  await retainArtifact(
+    testInfo,
+    "saved-chapter.cbz",
+    bytes,
+    "application/vnd.comicbook+zip"
+  )
+  expect(task.chapters).toHaveLength(1)
+  const chapter = task.chapters[0]
+  expect(chapter.totalImages).toBeGreaterThan(0)
+  const images = await inspectChapterArchive(
+    optionsPage,
+    bytes,
+    chapter.totalImages!
+  )
+  await retainArtifact(
+    testInfo,
+    "chapter-artifact-inspection.json",
+    JSON.stringify(
+      {
+        inspectedAt: new Date().toISOString(),
+        takoVersion: packageJson.version,
+        browser: await optionsPage.evaluate(() => navigator.userAgent),
+        integrationId: task.siteIntegrationId,
+        workUrl,
+        seriesTitle: task.seriesTitle,
+        chapter: { id: chapter.id, url: chapter.url, title: chapter.title },
+        resolvedPageCount: chapter.totalImages,
+        images: images.map(({ name, width, height }) => ({
+          name,
+          width,
+          height,
+        })),
+        visualReview:
+          "Compare saved pages with the site's reader before recording visual correctness.",
+      },
+      null,
+      2
+    ),
+    "application/json"
+  )
+  for (const image of images) {
+    expect(image.width).toBeGreaterThan(1)
+    expect(image.height).toBeGreaterThan(1)
+    if (image.preview) {
+      await retainArtifact(
+        testInfo,
+        `saved-page-${image.name}.png`,
+        Buffer.from(image.preview.split(",")[1], "base64"),
+        "image/png"
+      )
+    }
   }
+}
+
+export async function expectBrowserChapterArchive(
+  optionsPage: Page,
+  task: DownloadTaskState,
+  workUrl: string,
+  testInfo: TestInfo
+): Promise<void> {
+  expect(typeof task.lastSuccessfulDownloadId).toBe("number")
+  const item = await waitForBrowserDownload(
+    optionsPage,
+    task.lastSuccessfulDownloadId!
+  )
+  expect(item.state).toBe("complete")
+  expect(item.exists).toBe(true)
+  await expectSavedChapterArchive(
+    optionsPage,
+    await fs.readFile(item.filename!),
+    task,
+    workUrl,
+    testInfo
+  )
 }
 
 export async function seedCustomDirectoryHandle(

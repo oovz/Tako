@@ -21,6 +21,8 @@ export const SHONEN_JUMP_PLUS_SCRAMBLED_PNG_MIME_TYPE = "image/png"
 
 export const SHONEN_JUMP_PLUS_EXPECTED_TILE_COLORS = [
   { x: 0, y: 0, rgba: [220, 38, 38, 255] },
+  { x: 1, y: 0, rgba: [37, 99, 235, 255] },
+  { x: 0, y: 1, rgba: [147, 51, 234, 255] },
   { x: 1, y: 1, rgba: [6, 182, 212, 255] },
   { x: 3, y: 3, rgba: [113, 63, 18, 255] },
 ] as const
