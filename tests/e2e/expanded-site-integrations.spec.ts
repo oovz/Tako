@@ -24,10 +24,16 @@ import { manganatoFixture } from "./fixtures/mock-data/site-integrations/mangana
 import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
 
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
+import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
 
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
-const fixtures = [manganatoFixture, mangakakalotFixture, dm5Fixture]
+const fixtures = [
+  manganatoFixture,
+  mangakakalotFixture,
+  dm5Fixture,
+  mangabzFixture,
+]
 
 test.describe("site downloads through the chapter selector", () => {
   test.describe.configure({ timeout: 120_000 })
@@ -179,6 +185,11 @@ const refererCases = [
     id: "animemangahouse",
     rule: 41120,
     url: "https://manhua1032zjcdn26.cdndm5.com/browser/1.png",
+  },
+  {
+    id: "mangabz",
+    rule: 41121,
+    url: "https://image.mangabz.com/browser/1.png",
   },
 ]
 

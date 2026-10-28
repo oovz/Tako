@@ -3,6 +3,7 @@
 import type { BackgroundSiteAdapter } from '@/src/types/site-integrations'
 import { backgroundSiteAdapter as animemangahouseBackgroundAdapter } from '@/src/site-integrations/animemangahouse/background-runtime'
 import { backgroundSiteAdapter as comicnettaiBackgroundAdapter } from '@/src/site-integrations/comicnettai/background-runtime'
+import { backgroundSiteAdapter as mangabzBackgroundAdapter } from '@/src/site-integrations/mangabz/background-runtime'
 import { backgroundSiteAdapter as mangadexBackgroundAdapter } from '@/src/site-integrations/mangadex/background-runtime'
 import { backgroundSiteAdapter as mangakakalotBackgroundAdapter } from '@/src/site-integrations/mangakakalot/background-runtime'
 import { backgroundSiteAdapter as mangamillionBackgroundAdapter } from '@/src/site-integrations/mangamillion/background-runtime'
@@ -14,6 +15,7 @@ import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/
 export const backgroundSiteAdapters = [
   animemangahouseBackgroundAdapter,
   comicnettaiBackgroundAdapter,
+  mangabzBackgroundAdapter,
   mangadexBackgroundAdapter,
   mangakakalotBackgroundAdapter,
   mangamillionBackgroundAdapter,
@@ -26,6 +28,7 @@ export const backgroundSiteAdapters = [
 export const backgroundSiteAdaptersById = {
   "animemangahouse": animemangahouseBackgroundAdapter,
   "comicnettai": comicnettaiBackgroundAdapter,
+  "mangabz": mangabzBackgroundAdapter,
   "mangadex": mangadexBackgroundAdapter,
   "mangakakalot": mangakakalotBackgroundAdapter,
   "mangamillion": mangamillionBackgroundAdapter,

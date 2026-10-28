@@ -31,6 +31,7 @@ import { registerManganatoRoutes } from "./mock-data/site-integrations/manganato
 import { registerMangakakalotRoutes } from "./mock-data/site-integrations/mangakakalot/routes"
 
 import { registerDm5Routes } from "./mock-data/site-integrations/animemangahouse/routes"
+import { registerMangabzRoutes } from "./mock-data/site-integrations/mangabz/routes"
 
 import { EXAMPLE_TEST_DOMAIN } from "./test-domains-constants"
 
@@ -47,6 +48,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerManganatoRoutes,
   registerMangakakalotRoutes,
   registerDm5Routes,
+  registerMangabzRoutes,
 ]
 
 export function shouldBlockUnmatchedRequest(

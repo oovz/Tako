@@ -17,7 +17,9 @@ export const siteIntegrationWxtPermissions = {
     "https://cdn.comicnettai.com/*",
     "https://cf.mhgui.com/*",
     "https://comic.pixiv.net/*",
+    "https://cover.mangabz.com/*",
     "https://hamreus.com/*",
+    "https://image.mangabz.com/*",
     "https://img-comic.pximg.net/*",
     "https://img.mangamillion.shueisha.co.jp/*",
     "https://mangakakalove.com/*",
@@ -29,6 +31,7 @@ export const siteIntegrationWxtPermissions = {
     "https://storage.waitst.com/*",
     "https://www.comicnettai.com/*",
     "https://www.dm5.com/*",
+    "https://www.mangabz.com/*",
     "https://www.mangakakalove.com/*",
     "https://www.manganato.gg/*",
     "https://www.manhuagui.com/*"

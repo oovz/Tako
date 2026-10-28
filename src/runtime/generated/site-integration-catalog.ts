@@ -210,6 +210,111 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "mangabz",
+    "name": "Māngabz",
+    "englishName": "Māngabz",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.mangabz.com"
+      ],
+      "seriesMatches": [
+        "/*bz"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.mangabz.com/*",
+      "https://image.mangabz.com/*",
+      "https://cover.mangabz.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangabz-page",
+        "purpose": "Mangabz series and reader HTML",
+        "origins": [
+          "https://www.mangabz.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangabz-signed-images",
+        "purpose": "Mangabz signed reader response",
+        "origins": [
+          "https://www.mangabz.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 1048576
+      },
+      {
+        "id": "mangabz-image",
+        "purpose": "Mangabz chapter and cover images",
+        "origins": [
+          "https://image.mangabz.com/*",
+          "https://cover.mangabz.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41121,
+        "requestDomains": [
+          "www.mangabz.com",
+          "image.mangabz.com",
+          "cover.mangabz.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.mangabz.com/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangadex",
     "name": "MangaDex API",
     "englishName": "MangaDex",

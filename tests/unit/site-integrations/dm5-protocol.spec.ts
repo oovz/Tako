@@ -2,9 +2,10 @@
 import { readFileSync } from "node:fs"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { offscreenSiteAdapter as dm5 } from "@/src/site-integrations/animemangahouse/offscreen-runtime"
+import { offscreenSiteAdapter as mangabz } from "@/src/site-integrations/mangabz/offscreen-runtime"
 
 import dm5Fixture from "@/tests/fixtures/site-integrations/animemangahouse/contract.json"
-
+import mangabzFixture from "@/tests/fixtures/site-integrations/mangabz/contract.json"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 afterEach(() => vi.unstubAllGlobals())
@@ -21,6 +22,15 @@ const documents = [
       <a href="/m9999/">Advertisement</a>`,
     ids: ["521974", "521975"],
     title: "山海逆战",
+  },
+  {
+    adapter: mangabz,
+    url: "https://www.mangabz.com/139bz/",
+    html: `<script>var MANGABZ_COMIC_MID=139;var MANGABZ_COMIC_SORT=2;</script>
+      <p class="detail-info-title">海賊王</p><p class="detail-info-tip"><a>尾田榮一郎</a></p>
+      <div id="chapterlistload"><a href="/m200/" class="detail-list-form-item">第2話 Two<span>（2P）</span></a><a href="/m100/" class="detail-list-form-item">第1話 One<span>（2P）</span></a></div>`,
+    ids: ["100", "200"],
+    title: "海賊王",
   },
 ]
 
@@ -62,6 +72,16 @@ describe("captured signed-reader catalogs", () => {
       count: 1022,
       firstIds: ["521974", "521971", "521976"],
       lastId: "1419280",
+    },
+    {
+      adapter: mangabz,
+      provider: "mangabz",
+      url: "https://www.mangabz.com/139bz/",
+      title: "海賊王",
+      author: "尾田榮一郎",
+      count: 978,
+      firstIds: ["29397", "29398", "13866"],
+      lastId: "418076",
     },
   ])(
     "resolves $provider metadata and the complete rendered catalog",
@@ -148,6 +168,20 @@ const readers = [
     expected: [
       "https://manhua1032zjcdn26.cdndm5.com/34/33991/521974/2_4711.jpg?cid=521974&key=synthetic-signature",
       "https://manhua1032zjcdn26.cdndm5.com/34/33991/521974/3_3844.jpg?cid=521974&key=synthetic-signature",
+    ],
+  },
+  {
+    adapter: mangabz,
+    id: "mangabz",
+    prefix: "MANGABZ",
+    origin: "https://www.mangabz.com",
+    chapterId: "29397",
+    mid: "139",
+    endpoint: "chapterimage.ashx",
+    body: mangabzFixture.data.signedResponse,
+    expected: [
+      "https://image.mangabz.com/1/139/29397/1_5790.jpg?cid=29397&key=synthetic-signature&uk=",
+      "https://image.mangabz.com/1/139/29397/2_7019.jpg?cid=29397&key=synthetic-signature&uk=",
     ],
   },
 ]
@@ -291,7 +325,10 @@ describe.each(readers)("$id signed chapter plan", (fixture) => {
 })
 
 describe("signed-reader public series recognition", () => {
-  it.each([["https://www.dm5.com/manhua-shanhainizhan1/", "animemangahouse"]])(
+  it.each([
+    ["https://www.dm5.com/manhua-shanhainizhan1/", "animemangahouse"],
+    ["https://www.mangabz.com/139bz/", "mangabz"],
+  ])(
     "recognizes %s through the production URL matcher",
     (url, integrationId) => {
       expect(matchUrl(url)).toEqual({ integrationId, role: "series" })

@@ -3,6 +3,7 @@
 import type { OffscreenSiteAdapter } from '@/src/types/site-integrations'
 import { offscreenSiteAdapter as animemangahouseOffscreenAdapter } from '@/src/site-integrations/animemangahouse/offscreen-runtime'
 import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
+import { offscreenSiteAdapter as mangabzOffscreenAdapter } from '@/src/site-integrations/mangabz/offscreen-runtime'
 import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-integrations/mangadex/offscreen-runtime'
 import { offscreenSiteAdapter as mangakakalotOffscreenAdapter } from '@/src/site-integrations/mangakakalot/offscreen-runtime'
 import { offscreenSiteAdapter as mangamillionOffscreenAdapter } from '@/src/site-integrations/mangamillion/offscreen-runtime'
@@ -14,6 +15,7 @@ import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/si
 export const offscreenSiteAdapters = [
   animemangahouseOffscreenAdapter,
   comicnettaiOffscreenAdapter,
+  mangabzOffscreenAdapter,
   mangadexOffscreenAdapter,
   mangakakalotOffscreenAdapter,
   mangamillionOffscreenAdapter,
@@ -26,6 +28,7 @@ export const offscreenSiteAdapters = [
 export const offscreenSiteAdaptersById = {
   "animemangahouse": animemangahouseOffscreenAdapter,
   "comicnettai": comicnettaiOffscreenAdapter,
+  "mangabz": mangabzOffscreenAdapter,
   "mangadex": mangadexOffscreenAdapter,
   "mangakakalot": mangakakalotOffscreenAdapter,
   "mangamillion": mangamillionOffscreenAdapter,

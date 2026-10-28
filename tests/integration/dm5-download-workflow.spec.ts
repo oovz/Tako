@@ -12,12 +12,12 @@ import { RateLimitService } from "@/src/runtime/rate-limit"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { backgroundSiteAdapter as dm5Background } from "@/src/site-integrations/animemangahouse/background-runtime"
-
+import { backgroundSiteAdapter as mangabzBackground } from "@/src/site-integrations/mangabz/background-runtime"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { offscreenSiteAdapter as dm5 } from "@/src/site-integrations/animemangahouse/offscreen-runtime"
-
+import { offscreenSiteAdapter as mangabz } from "@/src/site-integrations/mangabz/offscreen-runtime"
 import dm5Fixture from "@/tests/fixtures/site-integrations/animemangahouse/contract.json"
-
+import mangabzFixture from "@/tests/fixtures/site-integrations/mangabz/contract.json"
 import { SHONEN_JUMP_PLUS_SCRAMBLED_PNG } from "@/tests/e2e/fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
 
 const services: RateLimitService[] = []
@@ -37,7 +37,72 @@ describe.each([
     endpoint: "chapterfun.ashx",
     signed: dm5Fixture.data.signedResponse,
   },
+  {
+    id: "mangabz",
+    adapter: mangabz,
+    prefix: "MANGABZ",
+    origin: "https://www.mangabz.com",
+    cid: "29397",
+    mid: "139",
+    endpoint: "chapterimage.ashx",
+    signed: mangabzFixture.data.signedResponse,
+  },
 ])("$id chapter production", (site) => {
+  it("preserves series identity across the background and offscreen message boundary", async () => {
+    const rateLimitService = new RateLimitService({
+      resolveEffectivePolicy: async () => ({ concurrency: 1, delayMs: 0 }),
+    })
+    services.push(rateLimitService)
+    const seriesUrl =
+      site.origin +
+      (site.id === "animemangahouse" ? "/manhua-shanhainizhan1/" : "/139bz/")
+    const html = readFileSync(
+      `tests/fixtures/site-integrations/${site.id}/series.html`,
+      "utf8"
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (value: string) => {
+        const response = new Response(html, {
+          headers: { "content-type": "text/html" },
+        })
+        Object.defineProperty(response, "url", { value })
+        return response
+      })
+    )
+    configureSeriesDataOffscreenLifecycle((operation) =>
+      operation({ reserveSeriesResolution: () => ({ release: () => {} }) })
+    )
+    const resolver = new OffscreenSeriesResolver(() => rateLimitService)
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: (message: RuntimeMessage) => {
+          if (message.type === "GET_SITE_INTEGRATION_ENABLEMENT")
+            return Promise.resolve({ success: true, enablement: {} })
+          if (message.type === "OFFSCREEN_PARSE_SERIES_HTML")
+            return resolver.parseSeriesHtml(message.payload)
+          throw new Error(`Unexpected runtime message ${message.type}`)
+        },
+      },
+    })
+    const adapter =
+      site.id === "animemangahouse" ? dm5Background : mangabzBackground
+    const result = await adapter.background.series!.resolveSeriesData({
+      seriesUrl,
+      rateLimitService,
+      siteIntegrationSettingsReader: {
+        getAll: async () => ({}),
+        getForSite: async () => ({}),
+      },
+    })
+    expect(result.seriesId).toBe(site.mid)
+    expect(result.seriesMetadata?.title).toBe(
+      site.id === "animemangahouse" ? "山海逆战" : "海賊王"
+    )
+    expect(result.chapterList).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: site.cid })])
+    )
+  })
   it("passes the signed pages through the real serial image pipeline and retains native completion ownership", async () => {
     const rateLimitService = new RateLimitService({
       resolveEffectivePolicy: async () => ({ concurrency: 1, delayMs: 0 }),

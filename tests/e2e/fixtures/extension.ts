@@ -29,6 +29,7 @@ import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrati
 import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"
 
 import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
+import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
 
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
@@ -460,6 +461,7 @@ async function setupExtensionContext(
         ...registerManganatoLocalServerHandlers(localMockServer),
         ...registerMangakakalotLocalServerHandlers(localMockServer),
         ...registerDm5LocalServerHandlers(localMockServer),
+        ...registerMangabzLocalServerHandlers(localMockServer),
       ]
     }
 
