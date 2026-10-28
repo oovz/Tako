@@ -219,7 +219,7 @@ for (const response of [
   })
 }
 
-test("queue and task history share decoded covers while removal and panel reopening retain the correct ownership", async ({
+test("shares covers across queue and history rows and reloads them when the panel reopens", async ({
   context,
   extensionId,
   page,

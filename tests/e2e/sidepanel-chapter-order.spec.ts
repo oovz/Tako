@@ -580,7 +580,7 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.close()
   })
 
-  test("switches between grouped and flat chapter views without crashing the side panel", async ({
+  test("switches between volume groups and individual chapters", async ({
     context,
     extensionId,
     page,
@@ -655,7 +655,7 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.close()
   })
 
-  test("survives repeated grouped-flat selector toggles on virtualized chapter lists without React depth errors", async ({
+  test("keeps a virtualized selector usable through repeated view changes", async ({
     context,
     extensionId,
     page,
@@ -727,21 +727,13 @@ test.describe("Side Panel chapter/volume order", () => {
 
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByRole("radio", { name: /All chapters/i })).toBeVisible()
-    expect(
-      pageErrors.some((message) =>
-        message.includes("Maximum update depth exceeded")
-      )
-    ).toBe(false)
-    expect(
-      consoleErrors.some((message) =>
-        message.includes("Maximum update depth exceeded")
-      )
-    ).toBe(false)
+    expect(pageErrors).toEqual([])
+    expect(consoleErrors).toEqual([])
 
     await sp.close()
   })
 
-  test("auto-collapses the grouped selector after successfully starting a download", async ({
+  test("closes the grouped selector and restores focus after starting a download", async ({
     context,
     extensionId,
     page,

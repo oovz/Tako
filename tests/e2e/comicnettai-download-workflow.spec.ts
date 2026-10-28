@@ -18,10 +18,10 @@ import {
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
 
-test.describe("Comic Nettai download workflow (mocked)", () => {
+test.describe("Comic Nettai downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
-  test("completes a single-chapter download through the PUBLUS configuration pipeline", async ({
+  test("saves a complete chapter in the selected folder", async ({
     context,
     extensionId,
     page,

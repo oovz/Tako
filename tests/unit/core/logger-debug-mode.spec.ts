@@ -1,10 +1,3 @@
-/**
- * Regression tests for Bug #1: Log level controls debug visibility
- *
- * Simplified: logLevel='debug' shows debug logs, other levels filter them.
- * No separate debugMode flag - just use the log level directly.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import {
   computeLoggerConfig,

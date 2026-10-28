@@ -11,7 +11,7 @@ import {
   createDiagnosticEventRecorder,
 } from "../fixtures/download-workflow-helpers"
 
-test("completes a browser-mode live single-chapter download for Aimanhua", async ({
+test("saves a LoveManga chapter through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

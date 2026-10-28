@@ -1,13 +1,3 @@
-/**
- * @file url-matcher.test.ts
- * @description Unit tests for URL pattern matching logic
- *
- * Tests:
- * - Basic URL pattern matching
- * - Wildcard patterns (* and **)
- * - Exclude pattern enforcement
- */
-
 import { beforeEach, describe, it, expect, afterEach } from "vitest"
 import {
   getAllPatternMetadata,

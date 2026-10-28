@@ -26,7 +26,7 @@ function documentFor(html: string): Document {
   return window.document as unknown as Document
 }
 
-describe("MyComic content contracts", () => {
+describe("MYCOMIC reader", () => {
   it("resolves all captured chapter groups without executing page scripts", async () => {
     const html = `${fixture.seriesHtml}<a href="/cn/chapters/999">Advertisement</a>`
     const result =

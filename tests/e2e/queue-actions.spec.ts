@@ -18,7 +18,7 @@ const exampleRootUrl = buildExampleUrl("/")
 test.describe("Queue actions and cross-window behavior", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("hybrid settings: no advanced config in Side Panel and Options link opens Options page", async ({
+  test("opens Options from the panel for download configuration", async ({
     context,
     extensionId,
     page,
@@ -59,7 +59,7 @@ test.describe("Queue actions and cross-window behavior", () => {
     await sp.close()
   })
 
-  test("multi-window: queue updates are reflected across windows", async ({
+  test("updates the queue across windows", async ({
     context,
     extensionId,
     page,
@@ -83,12 +83,13 @@ test.describe("Queue actions and cross-window behavior", () => {
 
     const worker = await getExtensionWorker(context)
 
-    await worker.evaluate(async (url: string) => {
-      await chrome.windows.create({ url, type: "normal" })
-    }, exampleRootUrl)
+    const page2Promise = context.waitForEvent("page")
+    await worker.evaluate(async () => {
+      await chrome.windows.create({ url: "about:blank", type: "normal" })
+    })
 
-    const page2 = await context.waitForEvent("page")
-    await page2.waitForLoadState("domcontentloaded")
+    const page2 = await page2Promise
+    await page2.goto(exampleRootUrl, { waitUntil: "domcontentloaded" })
     await getTabId(page2, context)
 
     const sp1 = await context.newPage()
@@ -198,8 +199,8 @@ test.describe("Queue actions and cross-window behavior", () => {
     await seriesPage.close()
   })
 
-  test.describe("unlimited queue behavior", () => {
-    test("allows more than 5 tasks in queue without capacity error", async ({
+  test.describe("Queue admission", () => {
+    test("shows one active task and nine queued tasks", async ({
       context,
       extensionId,
       page,
@@ -207,8 +208,7 @@ test.describe("Queue actions and cross-window behavior", () => {
       await page.goto(exampleRootUrl, { waitUntil: "domcontentloaded" })
 
       const now = Date.now()
-      // Create 10 non-terminal tasks (1 active + 9 queued) to verify the queue no longer enforces
-      // the 5-task capacity limit while avoiding auto-resume of synthetic queued tasks.
+      // Keep one task active so the nine synthetic queued tasks do not resume.
       const tasks: DownloadTaskState[] = Array.from({ length: 10 }, (_, i) =>
         makeTask({
           id: `task-${i}`,
@@ -251,8 +251,8 @@ test.describe("Queue actions and cross-window behavior", () => {
         sp.getByRole("heading", { name: "Series 1", exact: true })
       ).toBeVisible({ timeout: 15000 })
 
-      await expect(sp.getByText(/\d+\s*active/)).toBeVisible()
-      await expect(sp.getByText(/\d+\s*queued/)).toBeVisible()
+      await expect(sp.getByText(/1\s*active/)).toBeVisible()
+      await expect(sp.getByText(/9\s*queued/)).toBeVisible()
 
       await sp.close()
     })

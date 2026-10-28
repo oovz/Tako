@@ -1,11 +1,3 @@
-/**
- * @file chapter-data.ts
- * @description MangaDex chapter mock data with realistic URLs
- *
- * Chapter URLs follow pattern: https://mangadex.test/chapter/[chapter-uuid]
- * Series URLs follow pattern: https://mangadex.test/title/[series-uuid]/[slug]
- */
-
 import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
 
 import type {

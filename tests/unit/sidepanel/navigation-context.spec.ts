@@ -1,8 +1,3 @@
-/**
- * Tests side panel navigation state, URL classification, chapter grouping,
- * and downloaded chapter markers.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { isInternalUrl } from "@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers"
 import {

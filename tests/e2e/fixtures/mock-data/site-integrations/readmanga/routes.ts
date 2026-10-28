@@ -1,14 +1,4 @@
-/**
- * @file routes.ts
- * @description Playwright route registrar for the Manhuagui integration.
- *
- * Mocked hosts:
- * - `www.manhuagui.com` — series HTML (normal + adult-gated) and chapter
- *   viewer HTML with a real packed-payload script.
- * - `cf.mhgui.com` — reader-config script (`/scripts/config_*.js`).
- * - `*.hamreus.com` — chapter image host (serves the shared 1x1 PNG for
- *   any signed `?e={expiry}&m={signature}` request).
- */
+/** Playwright routes for Manhuagui pages, reader configuration, and chapter images. */
 
 import type { Route } from "@playwright/test"
 import type { RouteRegistrar } from "../../types"

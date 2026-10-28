@@ -127,7 +127,7 @@ global.window = global as unknown as Window & typeof globalThis
 global.HTMLElement = class {} as unknown as typeof HTMLElement
 global.HTMLDivElement = class {} as unknown as typeof HTMLDivElement
 
-describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
+describe("loose image saves to a custom folder", () => {
   let worker: InstanceType<
     typeof import("@/entrypoints/offscreen/main").OffscreenWorker
   >

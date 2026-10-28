@@ -13,8 +13,8 @@ import { ProviderContractError } from "@/src/site-integrations/provider-contract
 
 const fixture = contractFixture.data
 
-describe("Copy public reader contract", () => {
-  it("rejects an empty catalog instead of reporting a successfully loaded series", () => {
+describe("CopyManga reader", () => {
+  it("rejects empty catalogs", () => {
     expect(() =>
       parseCopyChapterCatalog(
         {

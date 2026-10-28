@@ -118,7 +118,7 @@ async function buildAndEnqueue(
   return await queueRepository.enqueueDownloadTask(task)
 }
 
-describe("settings snapshot isolation (behavior-based)", () => {
+describe("queued settings isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     settingsMocks.getSettings.mockReset()

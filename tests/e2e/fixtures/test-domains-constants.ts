@@ -1,12 +1,6 @@
 /**
- * @file test-domains-constants.ts
- * @description Pure URL/domain constants used by e2e mock fixtures and specs.
- *
- * This file MUST NOT import from `mock-data/` (or any module that imports
- * from it). Every integration's `routes.ts` / `api-fixtures.ts` reads from
- * here so the fixture graph stays acyclic. Import these values directly from
- * this module; route registration belongs to `routes.ts` and integration
- * mock-data modules own their integration-specific exports.
+ * Shared URL constants. Keep this module independent of `mock-data/` so route
+ * registrars and fixture builders can import it without creating cycles.
  */
 
 import {

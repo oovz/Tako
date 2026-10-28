@@ -10,24 +10,20 @@ process.env.TMD_TEST_E2E_LIVE = "true"
 
 export default defineConfig({
   testDir: path.resolve(__dirname, "tests/live"),
-  fullyParallel: false, // Run sequentially within each site project to avoid rate limiting
+  fullyParallel: false, // Limit concurrent requests to each provider.
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 3 : 0, // Retry up to 3 times in CI for transient network failures
-  workers: process.env.CI ? 3 : 6, // 1 worker per site group concurrently
+  retries: process.env.CI ? 3 : 0,
+  workers: process.env.CI ? 3 : 6,
   reporter: [["list"]],
-  // Heavy download cases may legitimately wait through the 150s application
-  // hard timeout plus diagnostics. Keep the enclosing test timeout larger.
+  // Allow the 150-second download timeout to finish and collect diagnostics.
   timeout: 240_000,
   expect: { timeout: 10_000 },
   use: {
     locale: "en-US",
-    // Live browser extraction needs the same headed extension context as the
-    // deterministic suite. CI supplies Xvfb.
+    // CI supplies Xvfb for extension contexts.
     headless: false,
-    // Playwright traces retain network URLs/headers outside our diagnostic
-    // redactor. Live runs use redacted failure diagnostics for CI output.
+    // Live traces can retain unredacted request URLs and headers.
     trace: "off",
-    // Prevent browser windows from grabbing focus during tests
     launchOptions: {
       args: [
         "--no-focus-on-launch",
@@ -38,7 +34,6 @@ export default defineConfig({
       ],
     },
   },
-  // Ensure the extension is built before running live tests
   globalSetup: path.resolve(__dirname, "tests/e2e/global-setup.ts"),
   projects: [
     {

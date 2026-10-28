@@ -1,21 +1,4 @@
-/**
- * @file html-fixtures.ts
- * @description HTML fixtures for Manhuagui routes.
- *
- * Two fixture shapes:
- *
- * - Normal series page: chapters rendered inline via `<div class="chapter-list">`
- *   blocks. The content script reads `.book-cont .book-title h1`,
- *   `.detail-list span` items, and every `.chapter-list li > a`.
- * - Adult-gated series page: chapter list replaced by `<div id="checkAdult">`
- *   and an opaque `__VIEWSTATE` payload. The extension deliberately leaves
- *   that site-owned state untouched and waits for the user to consent and
- *   reload the page.
- *
- * Chapter-viewer HTML (packed image payload) is NOT synthesized in metadata fixtures.
- * Download-workflow tests extend this module with a `buildManhuaguiChapterPageHtml` helper
- * that wraps the image URLs with `eval(function(p,a,c,k,e,d){…})(…)`.
- */
+/** Normal and adult-gated Manhuagui series pages, plus chapter-reader HTML. */
 
 import { readFileSync } from "node:fs"
 
@@ -253,23 +236,7 @@ interface BuildChapterPageHtmlOptions {
   files?: string[]
 }
 
-/**
- * Emit a chapter-viewer HTML page the production `chapter-viewer` module
- * can unpack end-to-end.
- *
- * Two scripts are included:
- *
- * 1. A `<script src=".../scripts/config_*.js">` tag so `fetchReaderConfig`
- *    issues a fetch that the route registrar mocks with a minimal picserv.
- * 2. An inline script containing a packed
- *    `window["eval"](function(p,a,c,k,e,d){...}('TEMPLATE',10,0,''['split']('|'),0,{}))`
- *    invocation. The template already contains the fully-resolved
- *    `SMH.imgData({...})` call (see `buildManhuaguiPackedPayloadScript`).
- *
- * The extractor requires a `<script>` block that matches the packed-regex
- * anywhere in the HTML. We keep the rest of the document lightweight so
- * HTML decoding stays fast.
- */
+/** Return the captured representative reader or build one with packed image data. */
 export function buildManhuaguiChapterPageHtml(
   options: BuildChapterPageHtmlOptions
 ): string {
@@ -301,9 +268,3 @@ export function buildManhuaguiChapterPageHtml(
 </body>
 </html>`
 }
-
-/** Alias retained for existing metadata-fixture call sites. */
-export const CHAPTER_PAGE_PLACEHOLDER_HTML = buildManhuaguiChapterPageHtml({
-  seriesId: BASIC_SERIES.series.seriesId,
-  chapterId: BASIC_CHAPTERS.chapters[0]!.id,
-})

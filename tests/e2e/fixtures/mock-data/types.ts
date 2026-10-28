@@ -1,18 +1,5 @@
-/**
- * @file types.ts
- * @description Type definitions for site-specific mock data architecture
- *
- * This file defines types for organizing mock data by site integration (site-specific)
- * and shared generic data (download tasks, settings).
- */
-
 import type { BrowserContext } from "@playwright/test"
 import type { ChapterState } from "@/src/types/tab-state"
-import type { ExtensionSettings } from "@/src/domain/settings/types"
-
-// ============================================================================
-// Site-Specific Integration Mock Data Types
-// ============================================================================
 
 /**
  * Mock chapter data for a specific site integration
@@ -75,70 +62,6 @@ export interface HTMLFixtures {
   /** Optional chapter page HTML (for testing chapter scraping) */
   chapterPageHtml?: string
 }
-
-/**
- * Complete mock data package for a site integration
- */
-export interface SiteIntegrationMockData {
-  /** Site integration ID */
-  integrationId: string
-  /** Chapter datasets */
-  chapters: Record<string, SiteIntegrationChapterDataset>
-  /** Series datasets */
-  series: Record<string, SiteIntegrationSeriesDataset>
-  /** HTML fixtures for route mocking */
-  html: HTMLFixtures
-}
-
-// ============================================================================
-// Shared Generic Mock Data Types
-// ============================================================================
-
-/**
- * Factory options for creating mock MangaPageState
- */
-export interface MockMangaPageStateOptions {
-  siteId: string
-  seriesId: string
-  seriesTitle: string
-  chapters: ChapterState[]
-  author?: string
-  artist?: string
-  status?: string
-  description?: string
-  coverUrl?: string
-}
-
-/**
- * Preset settings configurations
- */
-export interface MockSettingsPreset {
-  id: string
-  description: string
-  settings: ExtensionSettings
-}
-
-// ============================================================================
-// Helper Types
-// ============================================================================
-
-/**
- * Utility type for partial overrides
- */
-export type DeepPartial<T> = T extends object
-  ? {
-      [P in keyof T]?: DeepPartial<T[P]>
-    }
-  : T
-
-/**
- * Factory function type for creating mock data with overrides
- */
-export type MockDataFactory<T> = (overrides?: DeepPartial<T>) => T
-
-// ============================================================================
-// Route Registrar Contract (Per-Integration E2E Mocks)
-// ============================================================================
 
 /**
  * Options passed to every site-integration route registrar.

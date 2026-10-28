@@ -10,7 +10,7 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test("saves one freely accessible Coolmic website episode with confirmed native completion", async ({
+test("saves a free Coolmic episode through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

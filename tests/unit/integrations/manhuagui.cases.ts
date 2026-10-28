@@ -783,7 +783,7 @@ export function registerManhuaguiCases(): void {
       )
     })
 
-    it("relies on DNR rather than ineffective Fetch referrer options for Hamreus images", async () => {
+    it("leaves Hamreus image referrers to the network rules", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,
         headers: {

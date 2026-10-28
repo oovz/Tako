@@ -256,7 +256,7 @@ describe("BoyLove protocol failures", () => {
     }
   )
 
-  it("surfaces a missing catalog rather than reporting an empty success", async () => {
+  it("reports a missing catalog", async () => {
     await expect(
       offscreenSiteAdapter.offscreen.series!.resolveSeriesData({
         requestId: "series",

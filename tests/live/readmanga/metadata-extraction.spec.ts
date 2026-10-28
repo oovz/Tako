@@ -3,7 +3,7 @@ import { LIVE_MANHUAGUI_REFERENCE_URL } from "../../e2e/fixtures/test-domains-co
 import { loadLiveTabState } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Manhuagui metadata extraction (live)", () => {
-  test("preserves Manhuagui category headings as explicit live volumes", async ({
+  test("preserves category headings as volumes", async ({
     context,
     extensionId,
   }) => {

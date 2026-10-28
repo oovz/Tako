@@ -30,9 +30,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      // Include source and executable extension runtime modules in the gate.
-      // Browser UI components and React hooks are covered by Playwright E2E and
-      // excluded below.
+      // Executable source and extension runtime modules.
       include: [
         "src/**/*.ts",
         "entrypoints/background/**/*.ts",
@@ -44,30 +42,24 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/types/**",
         "src/runtime/generated/**", // Generated registries (tested via E2E)
-        // Reverse-engineered PUBLUS configuration decoding is validated by
-        // Comic Nettai browser/live workflows using real transport data. It is
-        // intentionally outside the unit gate because synthetic unit vectors
-        // would duplicate the site algorithm rather than independently test it.
+        // PUBLUS decoding is checked by browser and live workflows.
         "src/site-integrations/comictropics/publus-config.ts",
         "**/node_modules/**",
-        // UI components (.tsx) are exercised end-to-end via Playwright; they
-        // are intentionally excluded from the unit/integration coverage gate.
+        // Browser-tested UI components.
         "entrypoints/**/*.tsx",
         "components/**/*.tsx",
-        // Entry points that only wire the extension lifecycle and are
-        // exercised by WXT/E2E rather than unit tests.
+        // Lifecycle entrypoints exercised by browser tests.
         "entrypoints/background/index.ts",
-        // Compiled and registered only in deterministic mocked E2E builds.
+        // Isolated browser-test state setup.
         "entrypoints/background/e2e-state-seed.ts",
         "entrypoints/offscreen/main.ts",
         "entrypoints/offscreen/zip.worker.ts",
         "entrypoints/options/main.tsx",
         "entrypoints/sidepanel/main.tsx",
-        // Pure type definition modules (no executable logic to cover).
+        // Type-only modules.
         "entrypoints/offscreen/chapter-processing-types.ts",
         "entrypoints/sidepanel/types.ts",
-        // UI hook coverage is owned by the browser suite; selected hooks also
-        // have focused happy-dom unit tests.
+        // UI hooks exercised by browser tests.
         "entrypoints/options/hooks/useOptionsPageState.ts",
         "entrypoints/options/hooks/useOptionsFolderManagement.ts",
         "entrypoints/options/hooks/useOptionsHistory.ts",

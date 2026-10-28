@@ -1,6 +1,3 @@
-/**
- * Download queue scheduling and chapter-delay behavior.
- */
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { QueueRepository } from "@/src/storage/queue-repository"

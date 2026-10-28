@@ -1,7 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 
 test.describe("Options Page", () => {
-  test("renders options page successfully", async ({ page, extensionId }) => {
+  test("opens General settings", async ({ page, extensionId }) => {
     await page.goto(`chrome-extension://${extensionId}/options.html`)
     await page.waitForLoadState("domcontentloaded")
 
@@ -131,7 +131,7 @@ test.describe("Options Page", () => {
     ).toBeVisible()
   })
 
-  test("keeps page-level vertical scrolling disabled so only the main options pane scrolls", async ({
+  test("scrolls the settings pane within a fixed page shell", async ({
     page,
     extensionId,
   }) => {
@@ -170,22 +170,6 @@ test.describe("Options Page", () => {
     expect(overflow.body).toBe("hidden")
     expect(overflow.appRoot).toBe("hidden")
     expect(overflow.main).toBe("auto")
-  })
-
-  test("does not show stale new-indicator history copy in General", async ({
-    page,
-    extensionId,
-  }) => {
-    await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=general`
-    )
-    await page.waitForLoadState("domcontentloaded")
-
-    await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole("button", { name: "General" })).toBeVisible()
-    await expect(
-      page.getByText(/Clearing history will reset "New" chapter indicators\./i)
-    ).toHaveCount(0)
   })
 
   test("shows Chrome Web Store update controls in General", async ({

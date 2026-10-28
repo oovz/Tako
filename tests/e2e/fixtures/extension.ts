@@ -53,10 +53,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
 const shouldAllowNetwork = process.env.TMD_TEST_E2E_ALLOW_NETWORK === "true"
 const shouldEnableLiveIntegrations = process.env.TMD_TEST_E2E_LIVE === "true"
-// CI uses Playwright's Chromium 151 canary because the extension requires
-// Chrome 150+. Developers can select a compatible installed browser channel
-// through TMD_TEST_E2E_BROWSER_CHANNEL when their environment cannot use the
-// Playwright-managed channel.
+// Use a channel compatible with the extension’s Chrome 150 minimum.
 const e2eBrowserChannel =
   process.env.TMD_TEST_E2E_BROWSER_CHANNEL ?? "chromium-tip-of-tree"
 const pathToExtension = path.resolve(
@@ -309,12 +306,7 @@ async function initializeDeterministicMockProfile(
   }
 }
 
-/**
- * Shared context + fixture state for a single test. Fixtures hand
- * instances of this down through `context`/`extensionId` so teardown can
- * run in reverse setup order (DNR rules cleared → local server closed →
- * Chromium closed → user-data dir removed).
- */
+/** Per-test browser, worker, mock server, and disposable profile resources. */
 interface ExtensionContextState {
   context: BrowserContext
   extensionId: string
@@ -407,7 +399,12 @@ export async function teardownExtensionResources(
   }
 
   try {
-    await fs.rm(userDataDir, { recursive: true, force: true })
+    await fs.rm(userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    })
   } catch (error) {
     errors.push(error as Error)
     console.warn(
@@ -482,10 +479,6 @@ async function setupExtensionContext(
     }
 
     const context = await chromium.launchPersistentContext(userDataDir, {
-      // The extension manifest targets Chrome 150+. Playwright 1.61's default
-      // Chromium is 149, so use its hermetic tip-of-tree channel (currently
-      // Chrome for Testing 151) by default instead of waiting for an
-      // incompatible browser to time out while attempting to load the extension.
       channel: e2eBrowserChannel,
       headless: testInfoHeadless,
       args: [
@@ -497,20 +490,8 @@ async function setupExtensionContext(
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
         "--disable-backgrounding-occluded-windows",
-        // Chromium 142+ enforces Local Network Access (LNA): fetches
-        // from public origins (e.g. mangadex.org, comic.pixiv.net) to
-        // loopback/private addresses (127.0.0.1) are blocked with
-        // "Permission was denied for this request to access the
-        // `loopback` address space" unless the user grants an
-        // interactive prompt. DNR rules in the test fixtures redirect
-        // public URLs to the local mock server on 127.0.0.1, and the
-        // prompt can't be auto-accepted in a persistent context, so we
-        // disable the enforcement feature (and the earlier PNA features
-        // it replaced, for older Chrome channels).
-        //
-        // See https://developer.chrome.com/blog/local-network-access
-        // and https://chromestatus.com/feature/5085655327047680 for the
-        // feature definitions.
+        // Permit fixture redirects to loopback without an interactive LNA prompt.
+        // See https://developer.chrome.com/blog/local-network-access.
         "--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests",
       ],
     })
@@ -618,10 +599,7 @@ export const test = base.extend<{
 }>({
   // eslint-disable-next-line no-empty-pattern
   _extensionContextState: async ({}, use, testInfo) => {
-    // Chromium does not expose a loadable MV3 extension worker through the
-    // headless shell used by this test channel. E2E configurations therefore
-    // default to headed mode (CI supplies Xvfb); callers can still opt in to
-    // headed explicitly without changing fixture behavior.
+    // Use a headed extension context; CI supplies Xvfb.
     const headless = testInfo.project.use.headless ?? false
     const state = await setupExtensionContext(headless)
     try {
@@ -640,8 +618,7 @@ export const test = base.extend<{
   },
 
   page: async ({ context }, use) => {
-    // Reuse the first page that launchPersistentContext creates
-    // This prevents creating unnecessary tabs (launchPersistentContext already opens one tab)
+    // Reuse the tab created with the persistent context.
     const page = context.pages()[0] || (await context.newPage())
 
     await use(page)

@@ -9,9 +9,9 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test.describe("Zaimanhua downloads (live)", () => {
+test.describe("Manga Again downloads (live)", () => {
   test.describe.configure({ timeout: 240_000 })
-  test("saves one freely accessible chapter with confirmed browser completion", async ({
+  test("saves a free chapter through Chrome Downloads", async ({
     context,
     extensionId,
   }, testInfo) => {

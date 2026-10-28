@@ -1,22 +1,3 @@
-/**
- * @file shonenjumpplus-download-workflow.spec.ts
- * @description Download-workflow coverage for the Shonen Jump+
- * integration.
- *
- * Exercises the pipeline end-to-end without live network:
- *
- *   series/episode page -> tab state -> episode-json script parsing
- *       -> pageStructure.pages[] -> cdn-ak-img.shonenjumpplus.com
- *       -> offscreen archive -> OPFS cbz
- *
- * Regression targets:
- * - `extractImageUrlsFromEpisodeJsonScript` (HTML attribute decoding).
- * - the integration endpoint client fetching chapter HTML with an
- *   embedded episode-json script (not a separate JSON endpoint).
- * - Tile-based image reconstruction through `descrambleGigaviewerImage`.
- * - Archive output pixel integrity, not merely creation of a non-empty CBZ.
- */
-
 import { unzipSync } from "fflate"
 
 import { test, expect } from "./fixtures/extension"
@@ -40,10 +21,10 @@ import {
 import { decodeRgbaPng } from "./fixtures/png-decoder"
 import { SHONEN_JUMP_PLUS_EXPECTED_TILE_COLORS } from "./fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
 
-test.describe("Shonen Jump+ download workflow (mocked)", () => {
+test.describe("Shonen Jump+ downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
-  test("completes a single-chapter download through the episode-json pipeline", async ({
+  test("reconstructs chapter images and saves a complete CBZ", async ({
     context,
     extensionId,
     page,

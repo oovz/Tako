@@ -18,10 +18,10 @@ import {
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
 
-test.describe("MangaMillion download workflow (mocked)", () => {
+test.describe("MangaMillion downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
-  test("completes a single-chapter download through the Protobuf and AES-256-CBC decryption pipeline", async ({
+  test("decrypts and saves a complete chapter in the selected folder", async ({
     context,
     extensionId,
     page,

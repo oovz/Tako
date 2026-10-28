@@ -151,7 +151,7 @@ test.describe("Manhuagui adult-gate cookie behavior (live)", () => {
     expect(state.chapters).toEqual([])
   })
 
-  test("adult comic exposes chapters when the harness grants consent", async ({
+  test("adult comic exposes chapters with adult consent", async ({
     context,
     extensionId,
     page,

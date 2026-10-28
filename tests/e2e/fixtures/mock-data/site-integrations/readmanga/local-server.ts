@@ -1,28 +1,4 @@
-/**
- * @file local-server.ts
- * @description Local-mock-server handlers + DNR redirect rules for the
- * Manhuagui integration.
- *
- * Offscreen-initiated fetches for Manhuagui cover three hosts:
- *
- *   1. `www.manhuagui.com/comic/{seriesId}/{chapterId}.html` — chapter
- *      viewer HTML. Offscreen's chapter-plan resolver reads the packed
- *      payload from this page.
- *   2. `cf.mhgui.com/scripts/config_*.js` — reader-config script that
- *      selects an image host for the chapter. Offscreen fetches it
- *      while decoding the packed payload.
- *   3. `*.hamreus.com/...` — the image host where chapter pages are
- *      actually downloaded from (the only relevant host here is
- *      `i.hamreus.com` because `buildManhuaguiReaderConfigScript` only
- *      resolves to that one).
- *
- * We also redirect the series-page URL so a direct `page.goto` to a
- * series URL resolves even if Playwright's context.route racing ever
- * misses it. Playwright routes for www.manhuagui.com continue to exist
- * and will still take precedence for page-context fetches — DNR only
- * kicks in for fetches Playwright didn't answer (which, empirically,
- * is offscreen).
- */
+/** Local handlers for Manhuagui pages, reader configuration, and chapter images. */
 
 import type { DnrRedirectRule } from "../../../dnr-test-redirects"
 import type {

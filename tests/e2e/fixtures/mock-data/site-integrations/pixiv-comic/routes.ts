@@ -1,10 +1,4 @@
-/**
- * @file routes.ts
- * @description Playwright route registrar for the Pixiv Comic integration.
- *
- * Context-resolution coverage: the page host (`comic.pixiv.net`) serves HTML, work
- * metadata, and episode lists. Extension fetches use the local-server DNR routes.
- */
+/** Mock Pixiv Comic page HTML, work metadata, and episode lists. */
 
 import type { Route } from "@playwright/test"
 import type { RouteRegistrar } from "../../types"

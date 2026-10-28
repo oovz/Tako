@@ -274,7 +274,7 @@ describe("NativeOutputRepository", () => {
     ).resolves.toBeUndefined()
   })
 
-  it("rejects an invalid current schema instead of hydrating an empty state", async () => {
+  it("rejects invalid stored state", async () => {
     local["pendingOutputs:index"] = {
       jobIds: [],
       outputIds: ["orphan"],

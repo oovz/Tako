@@ -32,14 +32,6 @@ export type LiveDownloadState = Pick<
   chapters: LiveChapter[]
 }
 
-export type BrowserWorkflowCase = {
-  name: string
-  integrationId: string
-  url: string
-  expectedMangaId?: string
-  expectedSeriesTitle?: string
-}
-
 export function createDiagnosticEventRecorder(maxEvents = 20): {
   diagnosticEvents: string[]
   recordDiagnostic: (message: unknown) => void
@@ -98,7 +90,7 @@ export function isLiveDownloadState(
 }
 
 /**
- * Resolve candidate tab IDs for content-script reinjection.
+ * Find tabs matching the live series page.
  */
 export async function resolveCandidateTabIds(
   optionsPage: Page,

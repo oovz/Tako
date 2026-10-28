@@ -318,7 +318,7 @@ describe("Manhuagui site integration", () => {
       expect(urls[1]).toContain("page2.jpg")
     })
 
-    it("rejects a mixed image list instead of omitting an invalid filename", async () => {
+    it("rejects image lists with invalid filenames", async () => {
       const {
         buildManhuaguiPackedPayloadScript,
         buildManhuaguiChapterPathSegment,
@@ -467,7 +467,7 @@ describe("Manhuagui site integration", () => {
   })
 
   describe("chapter-api", () => {
-    it("rejects malformed chapter plans instead of filtering provider output", () => {
+    it("rejects malformed chapter plans", () => {
       expect(() =>
         ChapterImagePlanSchema.parse({
           imageUrls: [

@@ -1,8 +1,3 @@
-/**
- * @file index.ts
- * @description Central export for Manhuagui mock data
- */
-
 // Chapter data
 export {
   BASIC_CHAPTERS,
@@ -30,7 +25,6 @@ export {
   CATEGORY_SERIES_PAGE_HTML,
   KIMETSU_SERIES_PAGE_HTML,
   HOME_PAGE_HTML,
-  CHAPTER_PAGE_PLACEHOLDER_HTML,
   buildManhuaguiChapterPageHtml,
   buildManhuaguiSeriesPageHtml,
   buildManhuaguiAdultSeriesPageHtml,

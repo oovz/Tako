@@ -1,23 +1,3 @@
-/**
- * @file manhuagui-download-workflow.spec.ts
- * @description Download-workflow coverage for the Manhuagui
- * integration.
- *
- * This spec exercises the production chapter pipeline end-to-end without
- * live network:
- *
- *   series page -> tab state -> chapter viewer HTML (packed payload)
- *       -> config_*.js on cf.mhgui.com (picserv → host=`i`)
- *       -> i.hamreus.com image bytes -> offscreen archive -> OPFS cbz
- *
- * Regression targets:
- * - P.A.C.K.E.R. unpacker + `imgData` JSON parsing (chapter-viewer.ts).
- * - Reader-config fetch + host selection (reader-config.ts).
- * - Signed-URL construction (`?e=...&m=...`) for hamreus.com.
- * - Adult-gate cookie priming fix (covered by unit tests; this spec keeps
- *   the happy path green so regressions don't lurk behind the gate).
- */
-
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
@@ -42,7 +22,7 @@ import {
   testExtensionSessionRuleMatch,
 } from "./fixtures/session-rule-helpers"
 
-test.describe("Manhuagui download workflow (mocked)", () => {
+test.describe("Manhuagui downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
   test("installs the Hamreus image referer rewrite needed by extension-context downloads", async ({
@@ -115,7 +95,7 @@ test.describe("Manhuagui download workflow (mocked)", () => {
       .not.toContain(41002)
   })
 
-  test("completes a single-chapter download through the packed-payload pipeline", async ({
+  test("saves a complete chapter from packed reader data", async ({
     context,
     extensionId,
     page,

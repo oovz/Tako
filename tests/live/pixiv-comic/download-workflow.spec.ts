@@ -14,7 +14,7 @@ import {
 test.describe("Pixiv Comic download workflows (live)", () => {
   test.describe.configure({ timeout: 240_000 })
 
-  test("completes a browser-mode live single-chapter download for Pixiv Comic", async ({
+  test("saves a chapter through Chrome Downloads", async ({
     context,
     extensionId,
   }, testInfo) => {

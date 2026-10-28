@@ -20,7 +20,7 @@ import {
 test.describe("MangaDex download workflows (live)", () => {
   test.describe.configure({ timeout: 240_000 })
 
-  test("completes a browser-mode live single-chapter download for MangaDex", async ({
+  test("saves a chapter through Chrome Downloads", async ({
     context,
     extensionId,
   }, testInfo) => {
@@ -83,7 +83,7 @@ test.describe("MangaDex download workflows (live)", () => {
     }
   })
 
-  test("writes a live MangaDex single-chapter download through the custom-folder pipeline", async ({
+  test("saves a chapter to a custom folder", async ({
     context,
     extensionId,
   }, testInfo) => {
@@ -108,6 +108,7 @@ test.describe("MangaDex download workflows (live)", () => {
         optionsPage,
         {
           destination: "file-system-access",
+          customDirectoryHandleId: "download-root",
           defaultFormat: "cbz",
           conflictPolicy: "overwrite",
         },

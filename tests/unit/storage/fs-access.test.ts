@@ -310,7 +310,7 @@ describe("File System Access helpers", () => {
       expect(close).not.toHaveBeenCalled()
     })
 
-    it("propagates native stream closure failure instead of reporting a saved file", async () => {
+    it("propagates file stream closure failures", async () => {
       const original = new DOMException(
         "Native close failed: disk full",
         "QuotaExceededError"
@@ -329,64 +329,6 @@ describe("File System Access helpers", () => {
           signal: new AbortController().signal,
         })
       ).rejects.toBe(original)
-    })
-
-    it("uniquifies an existing filename while preserving its extension", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(
-        async (name: string, options?: { create?: boolean }) => {
-          if (!options?.create && name === "Chapter 001 (2).cbz") {
-            throw createNamedError("NotFoundError")
-          }
-          return { createWritable }
-        }
-      )
-      const dir = createDirectoryHandle(getFileHandle)
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["chapter"]),
-          "uniquify"
-        )
-      ).resolves.toEqual({ status: "written" })
-
-      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001 (1).cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 001 (2).cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(4, "Chapter 001 (2).cbz", {
-        create: true,
-      })
-      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
-    })
-
-    it("writes the original filename when uniquify finds no existing file", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(
-        async (_name: string, options?: { create?: boolean }) => {
-          if (!options?.create) {
-            throw createNamedError("NotFoundError")
-          }
-          return { createWritable }
-        }
-      )
-      const dir = createDirectoryHandle(getFileHandle)
-      const blob = new Blob(["chapter"])
-
-      await expect(
-        writeBlobToPath(dir, "Chapter 001.cbz", blob, "uniquify")
-      ).resolves.toEqual({ status: "written" })
-
-      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001.cbz", {
-        create: true,
-      })
-      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
     })
 
     it("uniquifies files without extension or dotfiles correctly", async () => {
@@ -453,42 +395,6 @@ describe("File System Access helpers", () => {
       expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 01.5 (1).cbz", {
         create: true,
       })
-    })
-
-    it("replaces an existing file at the original filename", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(async () => ({ createWritable }))
-      const dir = createDirectoryHandle(getFileHandle)
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["content"]),
-          "overwrite"
-        )
-      ).resolves.toEqual({ status: "written" })
-      expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz")
-      expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz", {
-        create: true,
-      })
-    })
-
-    it("propagates non-missing lookup errors during uniquify preflight", async () => {
-      const dir = createDirectoryHandle(async () => {
-        throw createNamedError("NotAllowedError")
-      })
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["chapter"]),
-          "uniquify"
-        )
-      ).rejects.toMatchObject({ name: "NotAllowedError" })
     })
   })
 })

@@ -1,27 +1,3 @@
-/**
- * @file download-workflow-helpers.ts
- * @description Shared helpers for `{integration}-download-workflow.spec.ts`.
- *
- * Every mocked download-workflow spec follows the same template:
- *
- * 1. Navigate a page to the series URL and wait for tab state.
- * 2. Open the extension options page so privileged Chrome APIs are
- *    reachable from a real page context.
- * 3. Seed an OPFS directory + `tako-fs/handles[download-root]` IndexedDB
- *    handle so custom-folder downloads land in a test-scoped sandbox
- *    instead of the user's Downloads.
- * 4. Apply custom-mode settings (defaultFormat `cbz`)
- *    so the archive writer goes through the OPFS path.
- * 5. Dispatch `START_DOWNLOAD` for one chapter and wait for the task to
- *    reach a terminal state.
- * 6. Assert success and verify at least one non-empty file appeared in the
- *    seeded OPFS directory.
- *
- * Shaping these as shared helpers keeps each spec focused on integration
- * specifics (URL, chapter dataset, preferences) without duplicating the
- * 100-line plumbing.
- */
-
 import type { BrowserContext, Page } from "@playwright/test"
 import { expect } from "@playwright/test"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
@@ -61,11 +37,7 @@ export interface StartDownloadInput {
   chapter: DownloadChapterSelection
 }
 
-/**
- * Open the extension options page in a fresh tab. Returned page has access
- * to privileged `chrome.*` APIs (storage, runtime.sendMessage) identical to
- * the extension's own pages. Specs MUST close this page in a `finally`.
- */
+/** Open a privileged Options page. The caller must close it in `finally`. */
 export async function openOptionsPage(
   context: BrowserContext,
   extensionId: string
@@ -77,16 +49,7 @@ export async function openOptionsPage(
   return page
 }
 
-/**
- * Seed a throwaway OPFS directory + `tako-fs/handles[download-root]`
- * IndexedDB entry so custom-folder downloads land in a spec-scoped
- * sandbox. Returns the directory name so the spec can inspect the
- * contents afterwards.
- *
- * Lifted from the live download-workflow spec to keep both paths
- * identical; if the production OPFS bootstrap changes, both live and
- * mocked e2e coverage break together.
- */
+/** Seed an isolated OPFS destination and return its directory name for inspection. */
 export async function seedCustomDirectoryHandle(
   optionsPage: Page
 ): Promise<string> {
@@ -162,11 +125,7 @@ export async function listSeededDirectoryFiles(
   }, directoryName)
 }
 
-/**
- * Read a file from a seeded OPFS directory. This is intentionally limited to
- * test fixtures so download-workflow specs can validate archive contents
- * rather than treating a non-empty output file alone as a correct result.
- */
+/** Read saved bytes from the test destination for artifact validation. */
 export async function readSeededDirectoryFile(
   optionsPage: Page,
   directoryName: string,
@@ -528,12 +487,7 @@ export async function waitForTerminalTask(
   return task
 }
 
-/**
- * Assert the task reached a successful terminal state. Raises with a
- * diagnostic error body on failure so the spec failure message includes
- * chapter-level status, which usually points at the broken stage
- * (fetch / parse / descramble / archive).
- */
+/** Assert success with chapter-level diagnostics on failure. */
 export function assertTaskSucceeded(task: DownloadTaskState): void {
   const hasOnlyCompletedOutput = task.chapters.every((chapter) => {
     if (chapter.status !== "completed" || (chapter.imagesFailed ?? 0) > 0) {

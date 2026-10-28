@@ -302,7 +302,7 @@ export function registerPixivComicBackgroundImageCases(): void {
       ])
     })
 
-    it("rejects a mixed page list instead of omitting a page without an image URL", async () => {
+    it("rejects page lists with missing image URLs", async () => {
       mockRateLimitedFetch
         .mockResolvedValueOnce(
           makeHtmlResponse(
@@ -399,21 +399,6 @@ export function registerPixivComicBackgroundImageCases(): void {
           { dispatchContext: { taskId: "task-104" } }
         )
       ).rejects.toThrow("Untrusted Pixiv image URL")
-    })
-
-    it("logs debug details when image descrambling is applied during download", async () => {
-      mockRateLimitedFetch.mockResolvedValue({
-        ok: true,
-        headers: {
-          get: (name: string) =>
-            name === "content-type" ? "image/webp" : null,
-        },
-        arrayBuffer: async () => makePngHeader(),
-      })
-
-      await offscreenSiteAdapter.offscreen.chapter.downloadImage(
-        "https://img-comic.pximg.net/a/b/c/page01.webp#tmdPixivKey=azE%3D"
-      )
     })
 
     it("returns the MIME type produced by Pixiv descrambling", async () => {
@@ -791,7 +776,7 @@ export function registerPixivComicBackgroundImageCases(): void {
       expect(actualHash).toBe(expectedHash)
     })
 
-    it("fails explicitly when Web Crypto is unavailable instead of sending an invalid raw hash", async () => {
+    it("rejects signed requests when Web Crypto is unavailable", async () => {
       mockRateLimitedFetch
         .mockResolvedValueOnce(
           makeHtmlResponse(

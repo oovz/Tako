@@ -1,8 +1,3 @@
-/**
- * Unit tests for site-overrides-service.ts
- * Tests CRUD operations, chrome.storage.local persistence, and override structure validation.
- */
-
 import { beforeEach, describe } from "vitest"
 import { registerSiteOverridesCrudCases } from "./site-overrides-service-crud.cases"
 import { registerSiteOverridesEdgeCases } from "./site-overrides-service-edge-cases.cases"

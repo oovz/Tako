@@ -89,26 +89,6 @@ export function registerChapterMetadataIntegrityCases(): void {
     })
 
     describe("Edge cases", () => {
-      it("handles missing comicInfoBase", () => {
-        const book: Book = {
-          siteId: "test-site",
-          seriesTitle: "Test Manga",
-          seriesId: "test-manga",
-          comicInfoBase: {},
-        }
-
-        const input: ChapterInput = {
-          id: "ch-1",
-          url: "https://example.com/chapter/1",
-          title: "Chapter 1",
-        }
-
-        const result = composeChapterMetadata(book, input)
-
-        expect(result.comicInfo.Series).toBe("Test Manga")
-        expect(result.comicInfo.Title).toBe("Chapter 1")
-      })
-
       it("handles empty comicInfoBase", () => {
         const book: Book = {
           siteId: "test-site",

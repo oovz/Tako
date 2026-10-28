@@ -9,7 +9,7 @@ import {
 import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 import { Manhuagui } from "./fixtures/mock-data"
 
-test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
+test.describe("Manhuagui navigation", () => {
   test("front page -> series page initializes tab state", async ({
     context,
     extensionId,

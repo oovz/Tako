@@ -72,7 +72,7 @@ describe("terminal offscreen progress", () => {
 })
 
 describe("streaming offscreen progress", () => {
-  it("reports cover retrieval as resolving rather than archiving", async () => {
+  it("reports cover retrieval during chapter resolution", async () => {
     const emitted: unknown[] = []
     const handlers = createStreamingProgressHandlers({
       taskId: "task-1",

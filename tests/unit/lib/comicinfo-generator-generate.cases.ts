@@ -463,7 +463,7 @@ export function registerComicInfoGenerateCases(): void {
         expect(result).toContain("<Summary>Epic battle 💥</Summary>")
       })
 
-      it("enforces minimum metadata contract: Series is always present", () => {
+      it("always includes the series name", () => {
         const metadata: ComicInfoV2 = {
           Title: "Chapter 1",
         }
@@ -473,7 +473,7 @@ export function registerComicInfoGenerateCases(): void {
         expect(result).toContain("<Series>Unknown Series</Series>")
       })
 
-      it("enforces minimum metadata contract: LanguageISO is omitted when no language is determined", () => {
+      it("omits LanguageISO when the language is unknown", () => {
         const metadata: ComicInfoV2 = {
           Title: "Chapter 1",
           Series: "Test Series",
@@ -484,7 +484,7 @@ export function registerComicInfoGenerateCases(): void {
         expect(result).not.toContain("<LanguageISO>")
       })
 
-      it("enforces minimum metadata contract: Manga direction for japanese language", () => {
+      it("marks Japanese titles as manga", () => {
         const metadata: ComicInfoV2 = {
           Title: "Chapter 1",
           Series: "Test Series",

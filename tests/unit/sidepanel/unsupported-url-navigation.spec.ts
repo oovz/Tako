@@ -1,11 +1,3 @@
-/**
- * @file unsupported-url-navigation.spec.ts
- * @description Tests side panel helper behavior for unsupported navigation.
- *
- * The cases cover URL classification and chapter grouping used by navigation
- * state updates.
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { isInternalUrl } from "@/entrypoints/sidepanel/hooks/sidepanelActiveTabHelpers"
 import { groupChapters } from "@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers"

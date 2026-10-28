@@ -139,7 +139,7 @@ export function registerNormalizeImageFilenameCases(): void {
         )
       })
 
-      it("rejects unsupported MIME types instead of defaulting to JPEG", () => {
+      it("rejects unsupported MIME types", () => {
         expect(() =>
           normalizeImageFilename(0, 10, "image/avif", "auto")
         ).toThrow("Unsupported image MIME type")

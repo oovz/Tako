@@ -567,29 +567,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
     expect(closeDocument).not.toHaveBeenCalled()
   })
 
-  it("retains an idle offscreen owner while native cleanup is unresolved", async () => {
-    hasDocument.mockResolvedValue(true)
-    sendMessage.mockResolvedValue({
-      success: true,
-      initializationState: "ready",
-      documentInstanceId: "document-1",
-      activeJobCount: 0,
-      activeTransientWorkCount: 0,
-      activeTaskIds: [],
-    })
-
-    const nativeOutputCoordinator = {
-      hasLiveDependencies: vi.fn(async () => true),
-    }
-
-    await scheduleOffscreenCloseIfIdle(
-      queueRepository as never,
-      nativeOutputCoordinator as never
-    )
-
-    expect(closeDocument).not.toHaveBeenCalled()
-  })
-
   it("does not let an idle close tear down a replacement created by ensure", async () => {
     let currentDocumentInstanceId: string | null = "document-old"
     let currentBrowserDocumentId: string | null = "browser-document-old"

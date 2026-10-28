@@ -66,7 +66,7 @@ describe("Aimanhua runtime transport", () => {
       "/42a02a53c3246551a99d539f2f0f451c.webp"
     )
   })
-  it("rejects an access failure instead of an empty successful plan", async () => {
+  it("reports reader access failures", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("Access denied", { status: 403 }))

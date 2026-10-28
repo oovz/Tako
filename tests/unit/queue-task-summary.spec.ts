@@ -61,7 +61,7 @@ function makeTask(
 }
 
 describe("toQueueTaskSummary", () => {
-  it("projects basic fields and preserves canonical queued status", () => {
+  it("projects the queued task summary", () => {
     const task = makeTask({
       id: "abc",
       siteIntegrationId: "integration-x",
@@ -90,7 +90,7 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("originTabId")
   })
 
-  it("maps canonical task statuses", () => {
+  it("preserves each task status", () => {
     const queued = toQueueTaskSummary(makeTask({ status: "queued" }))
     const downloading = toQueueTaskSummary(makeTask({ status: "downloading" }))
     const completed = toQueueTaskSummary(makeTask({ status: "completed" }))
@@ -143,7 +143,7 @@ describe("toQueueTaskSummary", () => {
     })
   })
 
-  it("carries completed timestamp and structured failure category only", () => {
+  it("projects the completion time and error category", () => {
     const task = makeTask({
       status: "failed",
       started: 100,
@@ -288,7 +288,7 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("totalImagesInChapter")
   })
 
-  it("projects lastSuccessfulDownloadId instead of downloadId", () => {
+  it("projects the last successful download ID", () => {
     const task = {
       ...makeTask({
         status: "completed",

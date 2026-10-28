@@ -11,6 +11,7 @@ import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { writeBlobToPath } from "@/src/storage/fs-access"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import { ZIP_WORKER_FINALIZATION_TIMEOUT_MS } from "@/src/constants/timeouts"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 const workerState = vi.hoisted(() => ({
@@ -356,6 +357,36 @@ describe("archive chapter edge cases", () => {
     expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
   })
 
+  it("stops a stalled archive at the finalization deadline", async () => {
+    vi.useFakeTimers()
+    workerState.finalizeBehavior = "silent"
+    const runtime = createRuntime()
+    try {
+      const pending = processArchiveFormatChapter(
+        runtime,
+        archiveInput(createOptions("cbz"))
+      )
+      const outcome = expect(pending).rejects.toThrow("Zip worker timed out")
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(workerState.instances[0]?.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: { type: "finalize" } }),
+        ])
+      )
+      await vi.advanceTimersByTimeAsync(ZIP_WORKER_FINALIZATION_TIMEOUT_MS - 1)
+      expect(workerState.instances[0]?.terminate).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+
+      await outcome
+      expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
+      expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+      expect(runtime.liveResourceLedger.getUsedBytes()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("rejects an unsuccessful archive result after consulting memory statistics", async () => {
     workerState.finalizeBehavior = "failure"
     const runtime = createRuntime()
@@ -404,7 +435,7 @@ describe("archive chapter edge cases", () => {
     expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
   })
 
-  it("treats a malformed downloaded image as a failed image instead of finalizing", async () => {
+  it("rejects malformed images before archive finalization", async () => {
     const malformedDownload = vi.fn(
       async () => null
     ) as unknown as ChapterDownloadImageFn

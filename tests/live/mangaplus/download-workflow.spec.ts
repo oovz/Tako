@@ -10,7 +10,7 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test("saves one freely accessible MANGA Plus website chapter with confirmed native completion", async ({
+test("saves a free MANGA Plus chapter through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

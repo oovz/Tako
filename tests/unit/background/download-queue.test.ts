@@ -1,10 +1,3 @@
-/**
- * Unit Tests: Download Queue Manager
- *
- * Tests task orchestration, queue processing with global single-active-task
- * semantics, same-tab/same-series queuing behavior, and state transitions.
- */
-
 import { beforeEach, describe, vi } from "vitest"
 import { registerDownloadQueueBehaviorCases } from "./download-queue-queue-behavior.cases"
 import { registerDownloadQueueStartAndProcessCases } from "./download-queue-start-process.cases"

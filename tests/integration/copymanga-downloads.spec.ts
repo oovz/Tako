@@ -182,7 +182,7 @@ describe("Copy adapter workflow", () => {
     }
   )
 
-  it("rejects failed dynamic catalog requests instead of reporting empty success", async () => {
+  it("reports catalog request failures", async () => {
     const input = setup("www.copy3000.com")
     vi.stubGlobal(
       "fetch",

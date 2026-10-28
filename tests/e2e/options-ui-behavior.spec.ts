@@ -57,7 +57,7 @@ function makeTask(
 test.describe("Options UI behavior", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("Activity tab confirms active cancellation and cancels queued tasks immediately", async ({
+  test("keeps active work when cancellation is declined and offers undo for queued cancellation", async ({
     page,
     extensionId,
   }) => {
@@ -126,7 +126,7 @@ test.describe("Options UI behavior", () => {
       .toEqual({ queuedTaskPresent: false, hasQueuedCancellationUndo: true })
   })
 
-  test("Activity tab confirms active cancellation and records its terminal timestamp", async ({
+  test("records active cancellation time without offering undo", async ({
     page,
     extensionId,
   }) => {
@@ -184,7 +184,7 @@ test.describe("Options UI behavior", () => {
       .toEqual({ taskStatus: "canceled", hasActiveCancellationUndo: false })
   })
 
-  test("Activity tab shows retried badge and terminal timestamp labels for restarted tasks", async ({
+  test("shows retry badges and completion times for restarted tasks", async ({
     page,
     extensionId,
   }) => {
@@ -248,10 +248,7 @@ test.describe("Options UI behavior", () => {
     ).toHaveCount(0)
   })
 
-  test("Site Integrations tab renders integrations and search filters the list", async ({
-    page,
-    extensionId,
-  }) => {
+  test("filters site integrations by name", async ({ page, extensionId }) => {
     await page.goto(
       `chrome-extension://${extensionId}/options.html?tab=integrations`,
       {
@@ -283,10 +280,7 @@ test.describe("Options UI behavior", () => {
     await expect(page.getByText("No integrations found")).toBeVisible()
   })
 
-  test("Network tab persists log level changes", async ({
-    page,
-    extensionId,
-  }) => {
+  test("persists log level changes", async ({ page, extensionId }) => {
     await page.goto(
       `chrome-extension://${extensionId}/options.html?tab=network`,
       {

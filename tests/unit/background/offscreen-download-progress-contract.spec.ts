@@ -40,7 +40,7 @@ function makeTask(
   }
 }
 
-describe("OFFSCREEN_DOWNLOAD_PROGRESS contracts (behavior-based)", () => {
+describe("offscreen download progress messages", () => {
   const notificationsCreate = vi.fn()
 
   beforeEach(() => {

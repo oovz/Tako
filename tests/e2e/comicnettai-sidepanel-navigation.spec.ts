@@ -8,7 +8,7 @@ import {
 import { COMICNETTAI_BASE_URL } from "./fixtures/test-domains-constants"
 import { ComicNettai } from "./fixtures/mock-data"
 
-test.describe("Comic Nettai side panel navigation workflows (mocked)", () => {
+test.describe("Comic Nettai navigation", () => {
   test("front page -> book page initializes tab state", async ({
     context,
     extensionId,

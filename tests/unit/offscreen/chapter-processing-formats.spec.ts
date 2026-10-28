@@ -501,7 +501,7 @@ describe("chapter processing format contracts", () => {
     expect(writeBlobToPath).toHaveBeenCalledTimes(2)
   })
 
-  it("returns a structured generic FSA write failure instead of losing output counts", async () => {
+  it("preserves output counts after a folder write failure", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
       {} as FileSystemDirectoryHandle

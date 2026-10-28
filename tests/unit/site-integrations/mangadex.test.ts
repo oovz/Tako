@@ -1,17 +1,3 @@
-/**
- * MangaDex Site Integration Tests
- *
- * Tests for the MangaDex API site integration including:
- * - Chapter list extraction
- * - External chapter filtering
- * - Pagination limit warning
- * - Series metadata extraction
- * - X-RateLimit-Retry-After header parsing
- * - Rate limit 429 response handling
- * - User preferences reading
- * - PageCount extraction
- */
-
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   buildMangadexSeriesResponse,
@@ -1846,7 +1832,7 @@ describe("MangaDex site integration", () => {
       expect(logger.default.error).toHaveBeenCalled()
     })
 
-    it("rejects malformed chapter plans instead of filtering provider output", () => {
+    it("rejects malformed chapter plans", () => {
       expect(() =>
         ChapterImagePlanSchema.parse({
           imageUrls: [

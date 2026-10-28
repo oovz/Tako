@@ -8,7 +8,7 @@ import {
 
 const fixture = contract.data
 
-describe("Zaimanhua public reader contract", () => {
+describe("Manga Again reader", () => {
   it("retains complete catalogs and their shared identity across both API variants", () => {
     const first = parseZaimanhuaSeries(
       fixture.series,

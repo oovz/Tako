@@ -1,10 +1,4 @@
-/**
- * @file api-fixtures.ts
- * @description Custom MangaDex series fixtures + API response builders used
- * by the MangaDex route registrar. Kept separate from `routes.ts` so specs
- * can import the fixture metadata (series IDs, chapter shapes) without
- * pulling Playwright's BrowserContext into their bundle.
- */
+/** MangaDex response builders shared by page routes and the local server. */
 
 import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
 

@@ -66,7 +66,7 @@ describe("Mangago registered reader workflow", () => {
       expect(plan.imageUrls[18]).toBe(contract.data.lastImage)
     }
   )
-  it("surfaces access failure instead of creating an empty successful plan", async () => {
+  it("reports reader access failures", async () => {
     vi.stubGlobal("DOMParser", window.DOMParser)
     vi.stubGlobal(
       "fetch",

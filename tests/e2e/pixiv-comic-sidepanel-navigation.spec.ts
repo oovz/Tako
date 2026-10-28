@@ -8,7 +8,7 @@ import {
 import { PIXIV_COMIC_BASE_URL } from "./fixtures/test-domains-constants"
 import { PixivComic } from "./fixtures/mock-data"
 
-test.describe("Pixiv Comic side panel navigation workflows (mocked)", () => {
+test.describe("Pixiv Comic navigation", () => {
   test("front page -> work page initializes tab state", async ({
     context,
     extensionId,

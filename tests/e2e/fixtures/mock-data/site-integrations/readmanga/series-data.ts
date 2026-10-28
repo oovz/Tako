@@ -1,11 +1,3 @@
-/**
- * @file series-data.ts
- * @description Manhuagui series metadata mock data.
- *
- * Series URLs follow: https://www.manhuagui.com/comic/{seriesId}/
- * Chapter URLs follow: https://www.manhuagui.com/comic/{seriesId}/{chapterId}.html
- */
-
 import type {
   SiteIntegrationSeriesData,
   SiteIntegrationSeriesDataset,

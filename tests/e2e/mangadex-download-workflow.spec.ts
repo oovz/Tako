@@ -1,21 +1,5 @@
 import { readFile } from "node:fs/promises"
 import { unzipSync } from "fflate"
-/**
- * @file mangadex-download-workflow.spec.ts
- * @description Download-workflow coverage for the MangaDex
- * integration.
- *
- * Exercises the full pipeline end-to-end without live network:
- *
- *   series page -> tab state -> chapter-feed -> at-home server
- *                     -> image bytes -> offscreen archive -> OPFS cbz
- *
- * Assertions target the canonical success signals the live spec checks:
- * task reaches `completed`/`partial_success`, and at least one non-empty
- * `.cbz` artifact appears in the seeded OPFS directory. A regression in
- * MangaDex chapter-image URL resolution, at-home retry logic, or archive
- * assembly will flip this spec red before it reaches production.
- */
 
 import { test, expect } from "./fixtures/extension"
 import {
@@ -45,7 +29,7 @@ import {
   waitForTerminalTask,
 } from "./fixtures/download-workflow-helpers"
 
-test.describe("MangaDex download workflow (mocked)", () => {
+test.describe("MangaDex downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
   test("saves through Chrome when an opted-in task has no folder capability before writing", async ({

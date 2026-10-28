@@ -8,7 +8,7 @@ import {
 import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains-constants"
 import { ShonenJumpPlus } from "./fixtures/mock-data"
 
-test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
+test.describe("Shonen Jump+ navigation", () => {
   test("front page -> episode page initializes tab state", async ({
     context,
     extensionId,

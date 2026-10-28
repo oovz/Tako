@@ -1,11 +1,3 @@
-/**
- * Unit tests for Activity task UI components
- *
- * Tests for:
- * - Task status summary label generation
- * - Chapter status badge class mapping
- */
-
 import { describe, it, expect } from "vitest"
 import {
   chapterStatusBadgeClass,

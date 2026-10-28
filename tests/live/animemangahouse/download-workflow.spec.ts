@@ -9,7 +9,7 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test("saves one accessible DM5 chapter after native completion", async ({
+test("saves a DM5 chapter through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

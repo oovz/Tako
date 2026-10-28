@@ -64,7 +64,7 @@ function makePngHeader(width: number, height: number): ArrayBuffer {
   return bytes.buffer
 }
 
-describe("Shonen Jump+ hardening contracts", () => {
+describe("Shonen Jump+ reader validation", () => {
   it("parses episode-json regardless of script attribute order", () => {
     const dataValue = encodeAttributeJson({
       readableProduct: {

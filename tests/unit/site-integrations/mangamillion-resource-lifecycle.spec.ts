@@ -360,7 +360,7 @@ describe("MangaMillion image resource ownership", () => {
     expect(ledger.getUsedBytes()).toBe(0)
   })
 
-  it("rejects chapter bytes without a supported signature instead of assuming WebP", async () => {
+  it("rejects unsupported chapter image signatures", async () => {
     const ledger = new OffscreenLiveResourceLedger()
     vi.spyOn(integrationHttpClient, "request").mockResolvedValue(
       makeResponse(Uint8Array.of(1, 2, 3).buffer, "application/octet-stream")

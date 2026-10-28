@@ -1,8 +1,3 @@
-/**
- * @file index.ts
- * @description Central export for Pixiv Comic mock data.
- */
-
 export { BASIC_CHAPTERS, SMALL_SERIES } from "./chapter-data"
 
 export {

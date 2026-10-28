@@ -10,7 +10,7 @@ import {
 } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Pixiv Comic metadata extraction (live)", () => {
-  test("extracts chapter numbers and preserves absent volume numbers from live Pixiv Comic state", async ({
+  test("extracts chapter numbers without adding volume numbers", async ({
     context,
     extensionId,
   }) => {
@@ -36,7 +36,7 @@ test.describe("Pixiv Comic metadata extraction (live)", () => {
     await page.close()
   })
 
-  test("preserves duplicate Pixiv chapter titles as separate live chapters across arcs", async ({
+  test("keeps chapters with matching titles separate across arcs", async ({
     context,
     extensionId,
   }) => {
@@ -67,7 +67,7 @@ test.describe("Pixiv Comic metadata extraction (live)", () => {
     await page.close()
   })
 
-  test("combines Pixiv numbering and subtitle while extracting full-width live chapter numerals", async ({
+  test("combines chapter numbers and subtitles and parses full-width numerals", async ({
     context,
     extensionId,
   }) => {

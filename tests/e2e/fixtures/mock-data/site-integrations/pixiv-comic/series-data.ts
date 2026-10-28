@@ -1,10 +1,3 @@
-/**
- * @file series-data.ts
- * @description Pixiv Comic series/work metadata mock data.
- *
- * Series URLs follow the pattern: https://comic.pixiv.net/works/{workId}
- */
-
 import type {
   SiteIntegrationSeriesData,
   SiteIntegrationSeriesDataset,

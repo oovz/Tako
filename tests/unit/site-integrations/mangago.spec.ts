@@ -204,7 +204,7 @@ describe("Mangago content contracts", () => {
     expect(pages[0]).toBe(fixture.secondary.firstImage)
     expect(pages.at(-1)).toBe(fixture.secondary.lastImage)
   })
-  it("rejects malformed reader and protocol responses instead of producing empty success", async () => {
+  it("rejects malformed reader responses", async () => {
     expect(() =>
       parseMangagoReader(documentFor("<h1>Unavailable</h1>"), fixture.readerUrl)
     ).toThrow()

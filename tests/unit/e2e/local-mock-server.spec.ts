@@ -57,7 +57,7 @@ describe("browser-facing mock server", () => {
     const intercepted = vi
       .spyOn(http.Server.prototype, "listen")
       .mockImplementation(function (this: http.Server, ...args: unknown[]) {
-        // Reproduce the observed Windows allocation: listen(0) selected 6667.
+        // Simulate allocation of browser-blocked port 6667.
         if (args[0] === 0) args[0] = 6667
         return Reflect.apply(listen, this, args)
       })

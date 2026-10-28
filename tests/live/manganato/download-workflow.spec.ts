@@ -9,7 +9,7 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test("completes one freely accessible MangaNato chapter with native confirmation", async ({
+test("saves a free MangaNato chapter through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

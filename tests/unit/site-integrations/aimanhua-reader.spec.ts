@@ -10,7 +10,7 @@ const documentFor = (html: string) => {
   return document as unknown as Document
 }
 
-describe("Aimanhua reader contracts", () => {
+describe("Love Manga reader", () => {
   it("admits the current reader's upload3 media directory", async () => {
     const images = await decodeAimanhuaImages(
       readFileSync(

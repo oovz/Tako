@@ -1,13 +1,4 @@
-/**
- * @file image-fixtures.ts
- * @description Manhuagui image-host metadata used by download-workflow
- * download-workflow mocks.
- *
- * Images themselves are the shared 1x1 PNG; this module only centralizes
- * the filename and chapter-layout helpers so `routes.ts` + spec code use
- * the same source of truth when wiring up packed payloads vs. the image
- * host route.
- */
+/** Manhuagui filenames and chapter layouts shared by reader and image routes. */
 
 /**
  * One image per chapter keeps the mocked download pipeline negligible.

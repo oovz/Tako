@@ -9,7 +9,7 @@ import {
   expectBrowserChapterArchive,
 } from "../fixtures/download-workflow-helpers"
 
-test("saves one accessible Mangabz chapter after native completion", async ({
+test("saves a Mangabz chapter through Chrome Downloads", async ({
   context,
   extensionId,
 }, testInfo) => {

@@ -1,8 +1,3 @@
-/**
- * @file index.ts
- * @description Central export for mangadex mock data
- */
-
 // Chapter data
 export {
   BASIC_CHAPTERS,

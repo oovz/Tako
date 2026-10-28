@@ -11,9 +11,9 @@ import {
   createDiagnosticEventRecorder,
 } from "../fixtures/download-workflow-helpers"
 
-test.describe("Copy downloads (live)", () => {
+test.describe("CopyManga downloads (live)", () => {
   test.describe.configure({ timeout: 240_000 })
-  test("saves one freely accessible chapter with confirmed browser completion", async ({
+  test("saves a free chapter through Chrome Downloads", async ({
     context,
     extensionId,
   }, testInfo) => {

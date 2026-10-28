@@ -19,7 +19,7 @@ import {
   ShonenJumpPlus,
 } from "./fixtures/mock-data"
 
-test.describe("Site integration chapter metadata contracts (mocked)", () => {
+test.describe("Site integration chapter metadata", () => {
   test("MangaDex keeps chapter titles and API volume fields separate in a numbered control", async ({
     context,
     page,

@@ -13,7 +13,7 @@ import {
 } from "../fixtures/download-workflow-helpers"
 
 test.describe("MyComic download workflow (live)", () => {
-  test("completes the selected public chapter through native browser saving", async ({
+  test("saves the selected free chapter through Chrome Downloads", async ({
     context,
     extensionId,
   }, testInfo) => {

@@ -1,10 +1,3 @@
-/**
- * @file series-data.ts
- * @description MangaDex series/manga metadata mock data
- *
- * Series URLs follow pattern: https://mangadex.test/title/[series-uuid]/[slug]
- */
-
 import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
 
 import type {

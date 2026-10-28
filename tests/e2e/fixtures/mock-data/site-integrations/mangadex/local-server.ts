@@ -1,29 +1,7 @@
 /**
- * @file local-server.ts
- * @description Local-mock-server handlers + DNR redirect rules for the
- * MangaDex integration.
- *
- * MangaDex's download pipeline runs entirely in extension contexts
- * (background service worker + offscreen document), and Playwright's
- * `context.route` does not intercept offscreen fetches. To keep the
- * E2E mocks deterministic for offscreen-initiated fetches we DNR-redirect
- * the API and image hosts the production code calls into the local
- * Node HTTP mock server:
- *
- *   1. `api.mangadex.org/*` — JSON endpoints:
- *      - `GET /manga/{id}` (series metadata)
- *      - `GET /manga/{id}/feed` (chapter feed)
- *      - `GET /statistics/manga/{id}` (optional rating data)
- *      - `GET /at-home/server/{id}` (image pipeline bootstrap)
- *   2. `api.mangadex.network/report` — telemetry, returns 204.
- *   3. `uploads.mangadex.org/*` — images + covers. Every response is
- *      the shared 1x1 PNG regardless of the exact path shape.
- *   4. The captured at-home node — controlled bytes for all 18 reader pages.
- *
- * Main-frame navigations to `mangadex.org/title/{id}` and
- * `mangadex.org/chapter/{id}` are intentionally **not** redirected
- * (see `dnr-test-redirects.ts` for why main_frame is excluded) and are
- * still handled by the Playwright route registrar in `routes.ts`.
+ * Redirect MangaDex API, telemetry, and image requests from extension contexts
+ * to the local server. Page navigations keep their original host and use
+ * Playwright routes.
  */
 
 import type { DnrRedirectRule } from "../../../dnr-test-redirects"

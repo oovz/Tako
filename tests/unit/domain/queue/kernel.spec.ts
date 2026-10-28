@@ -593,6 +593,13 @@ describe("queue aggregate kernel", () => {
           expectedPreviousLease: state.lease,
           now: 500,
         }),
+        beginChapterDispatch(state, {
+          taskId: "task-1",
+          chapterId: active.chapters[0].url,
+          lease: createLease({ chapterId: active.chapters[0].url }),
+          expectedPreviousLease: state.lease,
+          now: 500,
+        }),
         beginChapterDispatch(
           createState([
             createTask("task-1", "downloading", {

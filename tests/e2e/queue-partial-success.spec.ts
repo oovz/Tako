@@ -13,7 +13,7 @@ const exampleRootUrl = buildExampleUrl("/")
 test.describe("Partial-success and aborted task history", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("displays partial_success task in history with distinct styling", async ({
+  test("shows partially completed tasks in recent history", async ({
     context,
     extensionId,
     page,
@@ -45,9 +45,11 @@ test.describe("Partial-success and aborted task history", () => {
     })
 
     await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByText("Partial Success Series")).toBeVisible()
-    // partial_success should appear in history section
-    await expect(sp.getByText("Recent history")).toBeVisible()
+    await expect(
+      sp
+        .getByRole("region", { name: "Recent history" })
+        .getByText("Partial Success Series")
+    ).toBeVisible()
   })
 
   test("uses safe generic copy for unknown aborted-task failures", async ({

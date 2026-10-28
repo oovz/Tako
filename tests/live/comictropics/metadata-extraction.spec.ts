@@ -3,7 +3,7 @@ import { LIVE_COMICNETTAI_REFERENCE_URL } from "../../e2e/fixtures/test-domains-
 import { loadLiveTabState } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Comic Nettai metadata extraction (live)", () => {
-  test("retains structurally closed live Comic Nettai chapters as locked", async ({
+  test("marks unavailable chapters as locked", async ({
     context,
     extensionId,
   }) => {
