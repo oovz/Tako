@@ -37,7 +37,7 @@ async function resolveMangaMillionSeriesData(
   }
 
   const { titleId } = parsedUrl
-  const language = input.language || parsedUrl.language || "en"
+  const language = parsedUrl.language
 
   const titleDetail = await fetchTitleDetail(
     titleId,

@@ -1,3 +1,6 @@
+import capturedChapters from "@/tests/fixtures/site-integrations/mangamillion/captured-chapters.json" with { type: "json" }
+import capturedTitle from "@/tests/fixtures/site-integrations/mangamillion/captured-title.json" with { type: "json" }
+
 function encodeVarint(val: number): number[] {
   let v = val
   const bytes: number[] = []
@@ -55,13 +58,10 @@ export interface BuildTitleDetailOptions {
 export function buildMangaMillionTitleDetailResponse(
   options: BuildTitleDetailOptions = {}
 ): Buffer {
-  const title = options.title ?? "One Piece"
-  const author = options.author ?? "Eiichiro Oda"
-  const coverUrl =
-    options.coverUrl ??
-    "https://img.mangamillion.shueisha.co.jp/jpn/image/original_title_cover/1.webp"
-  const description =
-    options.description ?? "The story of Monkey D. Luffy and his pirate crew."
+  const title = options.title ?? capturedTitle.serviceTitleName
+  const author = options.author ?? capturedTitle.authorName
+  const coverUrl = options.coverUrl ?? capturedTitle.coverUrl
+  const description = options.description ?? capturedTitle.description
 
   const serviceTitleBytes = [
     ...encodeString(1, coverUrl),
@@ -91,23 +91,7 @@ export interface MockChapterGroupItem {
 }
 
 export function buildMangaMillionChapterListResponse(
-  input: MockChapterItem[] | MockChapterGroupItem[] = [
-    {
-      number: "#001",
-      name: "Chapter 1:Romance Dawn",
-      translatedChapterId: 6736,
-    },
-    {
-      number: "#002",
-      name: "Chapter 2:They Call Him “Straw Hat Luffy”",
-      translatedChapterId: 6739,
-    },
-    {
-      number: "#003",
-      name: "Chapter 3:Enter Zolo: Pirate Hunter",
-      translatedChapterId: 6742,
-    },
-  ]
+  input: MockChapterItem[] | MockChapterGroupItem[] = capturedChapters
 ): Buffer {
   const isGroupList =
     input.length > 0 &&

@@ -1209,7 +1209,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "mangamillion",
-    "name": "MangaMillion",
+    "name": "MANGA MILLION",
     "englishName": "MANGA MILLION",
     "contributors": [
       "TMD Team"

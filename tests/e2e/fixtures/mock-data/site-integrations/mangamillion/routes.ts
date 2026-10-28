@@ -41,7 +41,13 @@ export const registerMangaMillionRoutes: RouteRegistrar = async (
         return html(HOME_PAGE_HTML)
       }
 
-      return html(BASIC_SERIES_PAGE_HTML)
+      // Controlled language and unavailable-chapter scenario used by the
+      // navigation tests, separate from the captured One Piece baseline.
+      if (/^\/en\/title\/10\/?$/.test(url.pathname)) {
+        return html(BASIC_SERIES_PAGE_HTML)
+      }
+
+      return route.fulfill({ status: 404, body: "" })
     }
   )
 }
