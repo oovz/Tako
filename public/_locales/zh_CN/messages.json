@@ -459,9 +459,6 @@
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome 未能接收输出文件。"
   },
-  "downloadError_browserDownloadUnobservable": {
-    "message": "下载历史已删除，无法确认浏览器下载结果。"
-  },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 无法创建压缩包。"
   },

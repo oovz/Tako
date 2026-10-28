@@ -163,6 +163,32 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("completedAt")
   })
 
+  it("projects uncertain handoff independently of the producer failure category", () => {
+    const chapter = makeChapter("chapter-1", "failed", {
+      errorCategory: "archive_creation_failed",
+      nativeOutputSettlement: {
+        jobId: "job-1",
+        attempt: 1,
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        requested: 1,
+        completed: 0,
+        interrupted: 1,
+        acceptanceUncertain: true,
+        appliedAt: 10,
+      },
+    })
+    expect(
+      toQueueTaskSummary(makeTask({ status: "failed", chapters: [chapter] }))
+    ).toMatchObject({
+      failureCategory: "archive_creation_failed",
+      acceptanceUncertain: true,
+    })
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [] })).acceptanceUncertain
+    ).toBe(false)
+  })
+
   it("projects only shared completed destination evidence", () => {
     const chromeChapter = makeChapter("c1", "completed", {
       outputDestination: "downloads-api",

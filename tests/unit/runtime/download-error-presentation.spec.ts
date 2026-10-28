@@ -28,10 +28,6 @@ describe("download error presentation", () => {
       "browser_download_interrupted",
       "downloadError_browserDownloadInterrupted",
     ],
-    [
-      "browser_download_unobservable",
-      "downloadError_browserDownloadUnobservable",
-    ],
     ["archive_creation_failed", "downloadError_archiveCreationFailed"],
     ["unknown", "downloadError_unknown"],
   ] as const)("maps %s to packaged copy", (category, expectedKey) => {

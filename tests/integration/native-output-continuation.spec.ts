@@ -495,10 +495,7 @@ describe("native output continuation boundaries", () => {
       expect(revokeObjectURL).toHaveBeenCalledOnce()
       expect(await cold.hasLiveDependencies()).toBe(false)
       expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
-        chapters: [
-          { nativeOutputSettlement: { surrendered: 0, completed: 1 } },
-          {},
-        ],
+        chapters: [{ nativeOutputSettlement: { completed: 1 } }, {}],
       })
     }
   )

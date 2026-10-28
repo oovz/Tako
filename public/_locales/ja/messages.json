@@ -459,9 +459,6 @@
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome が出力ファイルを受け付けませんでした。"
   },
-  "downloadError_browserDownloadUnobservable": {
-    "message": "履歴が削除されたため、ブラウザーのダウンロードを確認できませんでした。"
-  },
   "downloadError_archiveCreationFailed": {
     "message": "アーカイブを作成できませんでした。"
   },

@@ -261,7 +261,6 @@ describe("QueueRepository", () => {
           requested: 2,
           completed: 1,
           interrupted: 1,
-          surrendered: 0,
           appliedAt: 200,
         },
       }

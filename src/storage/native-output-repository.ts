@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { DownloadErrorCategorySchema } from "@/src/shared/download-contract"
+
 import {
   acknowledgeNativeOutputSettlement,
   attachNativeDownload,
@@ -102,6 +104,8 @@ const manifestSchema: z.ZodType<NativeOutputManifest> = z
     outputsFailedBeforeHandoff: nonnegativeInteger,
     slots: z.array(manifestSlotSchema.nullable()),
     createdAt: nonnegativeFiniteNumber,
+    errorMessage: z.string().optional(),
+    errorCategory: DownloadErrorCategorySchema.optional(),
     sealedAt: nonnegativeFiniteNumber.optional(),
     settlementAcknowledgedAt: nonnegativeFiniteNumber.optional(),
     dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
@@ -126,6 +130,8 @@ const manifestSchema: z.ZodType<NativeOutputManifest> = z
     ).length
     if (manifest.phase === "open") {
       if (
+        manifest.errorMessage !== undefined ||
+        manifest.errorCategory !== undefined ||
         manifest.sealedAt !== undefined ||
         manifest.settlementAcknowledgedAt !== undefined ||
         manifest.dependencyReleasedAt !== undefined ||
@@ -198,7 +204,6 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       "waiting",
       "complete",
       "interrupted",
-      "surrendered",
     ]),
     createdAt: nonnegativeFiniteNumber,
     acceptanceStartedAt: nonnegativeFiniteNumber.optional(),
@@ -207,7 +212,6 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     error: z.string().optional(),
     erasedAt: nonnegativeFiniteNumber.optional(),
     erasedByBrowserAt: nonnegativeFiniteNumber.optional(),
-    surrenderedAt: nonnegativeFiniteNumber.optional(),
     accountingDisposition: z.enum(["pending", "accounted", "not_owner"]),
     accountingDispositionAt: nonnegativeFiniteNumber.optional(),
     blobReleasedAt: nonnegativeFiniteNumber.optional(),
@@ -221,7 +225,6 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       record.phase === "handoff_interrupted" ||
       record.phase === "waiting" ||
       record.phase === "complete" ||
-      record.phase === "surrendered" ||
       (record.phase === "interrupted" &&
         record.acceptanceStartedAt !== undefined)
     if (record.outputIndex >= record.outputCount) {
@@ -300,16 +303,6 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
         code: "custom",
         path: ["erasedByBrowserAt"],
         message: "browser erasure requires a monotonic erased observation",
-      })
-    }
-    if (
-      record.surrenderedAt !== undefined &&
-      (record.erasedAt === undefined || record.phase !== "surrendered")
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["surrenderedAt"],
-        message: "surrender requires an erased observation",
       })
     }
     if (

@@ -15,6 +15,7 @@ import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
 import { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import { QueueRepository } from "@/src/storage/queue-repository"
@@ -186,6 +187,205 @@ describe("native output cold-start recovery", () => {
       historyRepository: {} as never,
     }
   }
+
+  it.each([0, 1, 2])(
+    "retains the producer cause across a cold settlement with %i requested outputs",
+    async (requested) => {
+      const first = createRuntime()
+      await first.queueRepository.initialize()
+      const hasUncertainOutput = requested === 2
+      await seedOpenManifest(first, requested, hasUncertainOutput ? [0] : [])
+      if (hasUncertainOutput) {
+        await first.repository.markAcceptanceUnknown({
+          outputId: "output-0",
+          now: 210,
+        })
+      }
+      const terminal = new OffscreenJobTerminalCoordinator(
+        first.queueRepository,
+        first.coordinator,
+        queueScheduler,
+        destinationService,
+        finalizationDependencies()
+      )
+      const producerError = {
+        errorMessage: hasUncertainOutput
+          ? "Image fetch failed"
+          : "Archive size exceeds byte limit",
+        errorCategory: hasUncertainOutput
+          ? ("network_unavailable" as const)
+          : ("archive_creation_failed" as const),
+      }
+      await terminal.settle({
+        ...jobIdentity,
+        sequence: 2,
+        stage: "archiving",
+        terminalAt: 300,
+        outcome: {
+          status: "failed",
+          outputsRequested: requested,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: hasUncertainOutput ? 1 : requested,
+          ...producerError,
+        },
+      })
+      expect(
+        await first.repository.getManifest(jobIdentity.jobId)
+      ).toMatchObject({ phase: "sealed", ...producerError })
+
+      const cold = createRuntime()
+      await cold.queueRepository.initialize()
+      const effects = await cold.coordinator.initialize()
+      const failed = await cold.queueRepository.getTask(jobIdentity.taskId)
+      expect(failed).toMatchObject({
+        status: "failed",
+        ...producerError,
+        chapters: [
+          {
+            status: "failed",
+            ...producerError,
+            ...(hasUncertainOutput
+              ? { nativeOutputSettlement: { acceptanceUncertain: true } }
+              : {}),
+          },
+        ],
+      })
+      expect(download).not.toHaveBeenCalled()
+      expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+      for (const effect of effects)
+        await cold.coordinator.acknowledgeSettlement(effect)
+      await cold.coordinator.reconcile()
+      const reloaded = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
+      await reloaded.initialize()
+      expect(await reloaded.getTask(jobIdentity.taskId)).toEqual(failed)
+    }
+  )
+
+  it.each(["completed", "failed"] as const)(
+    "retains chapter failure causes when the final chapter is %s across a cold read",
+    async (finalStatus) => {
+      const initial = activeTask()
+      initial.chapters.push({
+        ...initial.chapters[0],
+        id: "chapter-2",
+        title: "Chapter 2",
+        index: 1,
+        status: "queued",
+        dispatchAttempt: undefined,
+      })
+      local[LOCAL_STORAGE_KEYS.downloadQueue] = [initial]
+      const runtime = createRuntime()
+      await runtime.queueRepository.initialize()
+      const terminal = new OffscreenJobTerminalCoordinator(
+        runtime.queueRepository,
+        runtime.coordinator,
+        queueScheduler,
+        destinationService,
+        finalizationDependencies()
+      )
+      const earlierFailure = {
+        errorMessage: "Archive size exceeds byte limit",
+        errorCategory: "archive_creation_failed" as const,
+      }
+      await terminal.settle({
+        ...jobIdentity,
+        sequence: 2,
+        stage: "archiving",
+        terminalAt: 300,
+        outcome: {
+          status: "failed",
+          outputsRequested: 0,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          ...earlierFailure,
+        },
+      })
+      const firstEffects = await runtime.coordinator.reconcile()
+      for (const effect of firstEffects)
+        await runtime.coordinator.acknowledgeSettlement(effect)
+      expect(
+        await runtime.queueRepository.getTask(jobIdentity.taskId)
+      ).toMatchObject({
+        status: "downloading",
+        chapters: [
+          { status: "failed", ...earlierFailure },
+          { status: "queued" },
+        ],
+      })
+
+      const lastIdentity = {
+        ...jobIdentity,
+        jobId: "job-2",
+        chapterId: "chapter-2",
+      }
+      const lease = {
+        ...createDispatchLease({
+          ...lastIdentity,
+          saveMode: "downloads-api",
+          now: 400,
+        }),
+        documentInstanceId: lastIdentity.documentInstanceId,
+      }
+      expect(
+        await runtime.queueRepository.beginChapterDispatch({
+          taskId: lastIdentity.taskId,
+          chapterId: lastIdentity.chapterId,
+          lease,
+          expectedPreviousLease: null,
+          now: 400,
+        })
+      ).toMatchObject({ outcome: "applied" })
+      const finalFailure = {
+        errorMessage: "The provider became unavailable",
+        errorCategory: "network_unavailable" as const,
+      }
+      if (finalStatus === "completed") {
+        await runtime.coordinator.handleOutputReady({
+          ...output,
+          ...lastIdentity,
+          outputId: "output-2",
+        })
+      }
+      await terminal.settle({
+        ...lastIdentity,
+        sequence: 2,
+        stage: "saving",
+        terminalAt: 500,
+        outcome: {
+          status: finalStatus,
+          outputsRequested: finalStatus === "completed" ? 1 : 0,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          ...(finalStatus === "failed" ? finalFailure : {}),
+        },
+      })
+      const cold = createRuntime()
+      await cold.queueRepository.initialize()
+      await cold.coordinator.initialize()
+      const reloaded = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
+      await reloaded.initialize()
+      const settled = await reloaded.getTask(jobIdentity.taskId)
+      const expectedFailure =
+        finalStatus === "completed" ? earlierFailure : finalFailure
+      expect(settled).toMatchObject({
+        status: finalStatus === "completed" ? "partial_success" : "failed",
+        ...expectedFailure,
+        chapters: [
+          { status: "failed", ...earlierFailure },
+          { status: finalStatus },
+        ],
+      })
+      expect(toQueueTaskSummary(settled!)).toMatchObject({
+        failureCategory: expectedFailure.errorCategory,
+      })
+    }
+  )
 
   it("seals an exact canceled manifest after the coordinator dies at a failed seal write", async () => {
     const identity = jobIdentity

@@ -1,4 +1,5 @@
 import logger from "@/src/runtime/logger"
+import { runDestinationAccessExclusive } from "./destination-access"
 import type {
   DispatchLeaseAuthority,
   DownloadTaskState,
@@ -58,6 +59,15 @@ export class ChapterDispatchCoordinator {
   ) {}
 
   async dispatch(
+    session: ChapterDispatchSession,
+    chapterIndex: number
+  ): Promise<DispatchLeaseAuthority | undefined> {
+    return runDestinationAccessExclusive(() =>
+      this.dispatchChapter(session, chapterIndex)
+    )
+  }
+
+  private async dispatchChapter(
     session: ChapterDispatchSession,
     chapterIndex: number
   ): Promise<DispatchLeaseAuthority | undefined> {

@@ -76,7 +76,6 @@ function epoch2Task(id = "task-epoch-2") {
           requested: 2,
           completed: 2,
           interrupted: 0,
-          surrendered: 0,
           appliedAt: 30,
         },
         dispatchAttempt: 2,

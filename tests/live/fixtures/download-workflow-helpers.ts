@@ -1,12 +1,7 @@
 import fs from "node:fs/promises"
 import type { BrowserContext, Page, TestInfo } from "@playwright/test"
 import { expect } from "@playwright/test"
-import {
-  focusTab,
-  getSessionState,
-  getTabId,
-  openSidepanelHarness,
-} from "../../e2e/fixtures/state-helpers"
+import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { MangaPageState } from "@/src/types/tab-state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
@@ -17,6 +12,7 @@ import {
 } from "@/src/runtime/storage-keys"
 import type { LiveChapter } from "./metadata-extraction-helpers"
 import { inspectChapterArchive } from "../../e2e/fixtures/chapter-artifact"
+import { startSingleChapterDownload as dispatchSingleChapterDownload } from "../../e2e/fixtures/download-workflow-helpers"
 import packageJson from "../../../package.json" with { type: "json" }
 
 export type { LiveChapter }
@@ -354,112 +350,14 @@ export async function startSingleChapterDownload(
       `No downloadable chapter found for ${state.siteIntegrationId}:${state.mangaId}`
     )
   }
-  const extensionId = optionsPage.url().split("/")[2]
-  const sidepanelPage = await openSidepanelHarness(
-    optionsPage.context(),
-    extensionId,
-    optionsPage
-  )
-  try {
-    await focusTab(optionsPage.context(), tabId)
-
-    let snapshotIdentity:
-      | {
-          sourceWindowId: number
-          sourceTabId: number
-          sourceUrl: string
-          siteIntegrationId: string
-          seriesId: string
-          seriesRevision: number
-        }
-      | undefined
-    await expect
-      .poll(
-        async () => {
-          const snapshot = await optionsPage.evaluate(async (sourceTabId) => {
-            const tab = await chrome.tabs.get(sourceTabId)
-            const stored = await chrome.storage.session.get(
-              "activeTabContextByWindow"
-            )
-            const projection = (
-              stored.activeTabContextByWindow as
-                | Record<
-                    string,
-                    {
-                      activeTabId?: number
-                      revision?: number
-                      context?: {
-                        sourceUrl?: string
-                        siteIntegrationId?: string
-                        mangaId?: string
-                        chaptersLoading?: boolean
-                      }
-                    }
-                  >
-                | undefined
-            )?.[String(tab.windowId)]
-            if (
-              tab.active !== true ||
-              projection?.activeTabId !== sourceTabId ||
-              typeof projection.revision !== "number" ||
-              typeof projection.context?.sourceUrl !== "string" ||
-              typeof projection.context.siteIntegrationId !== "string" ||
-              typeof projection.context.mangaId !== "string" ||
-              projection.context.chaptersLoading === true
-            ) {
-              return null
-            }
-            return {
-              sourceWindowId: tab.windowId,
-              sourceTabId,
-              sourceUrl: projection.context.sourceUrl,
-              siteIntegrationId: projection.context.siteIntegrationId,
-              seriesId: projection.context.mangaId,
-              seriesRevision: projection.revision,
-            }
-          }, tabId)
-          if (snapshot) {
-            snapshotIdentity = snapshot
-            return true
-          }
-          return false
-        },
-        { timeout: 15_000, intervals: [100] }
-      )
-      .toBe(true)
-    if (!snapshotIdentity) {
-      throw new Error(`No current series context snapshot for tab ${tabId}`)
-    }
-    const response = await sidepanelPage.evaluate(
-      async (payload) => {
-        const issuedAt = Date.now()
-        return (await chrome.runtime.sendMessage({
-          target: "background",
-          type: "START_DOWNLOAD",
-          commandId: crypto.randomUUID(),
-          issuedAt,
-          payload: {
-            ...payload.snapshotIdentity,
-            selectedChapterIds: [payload.selectedChapter.id],
-          },
-        })) as { success?: boolean; taskId?: string; error?: string }
-      },
-      { selectedChapter: chapter, snapshotIdentity }
-    )
-
-    expect(
-      response?.success,
-      redactDiagnosticText(response?.error ?? response)
-    ).toBe(true)
-    expect(typeof response?.taskId).toBe("string")
-
-    return {
-      taskId: response.taskId as string,
-      chapter,
-    }
-  } finally {
-    await sidepanelPage.close()
-  }
+  const taskId = await dispatchSingleChapterDownload(optionsPage, {
+    sourceTabId: tabId,
+    siteIntegrationId: state.siteIntegrationId,
+    mangaId: state.mangaId,
+    seriesTitle: state.seriesTitle,
+    chapter,
+  })
+  return { taskId, chapter }
 }
 
 export async function readGlobalStateFromExtensionPage(

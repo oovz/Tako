@@ -33,7 +33,6 @@ export type ActiveTaskBlock =
   | "destination_action_required"
   | "provider_network_policy_pending"
   | "provider_network_policy_action_required"
-  | "native_output_action_required"
 
 export type OffscreenJobStage =
   | "dispatching"
@@ -87,8 +86,8 @@ export interface NativeOutputSettlement {
   completed: number
   interrupted: number
   acceptanceUncertain?: true
-  /** Retained accounting evidence for surrendered output observations. */
-  surrendered: number
+  errorMessage?: string
+  errorCategory?: DownloadErrorCategory
   lastSuccessfulDownloadId?: number
   appliedAt: number
 }
@@ -193,6 +192,7 @@ export interface QueueTaskSummary {
     created: number
     completed?: number
   }
+  acceptanceUncertain?: boolean
   failureCategory?: DownloadErrorCategory
   isRetried?: boolean
   isRetryTask?: boolean

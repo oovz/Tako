@@ -28,7 +28,6 @@ const QueueTaskSummaryStorageSchema = z.object({
       "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
-      "native_output_action_required",
     ])
     .optional(),
   chapters: z.object({
@@ -40,6 +39,7 @@ const QueueTaskSummaryStorageSchema = z.object({
     created: z.number(),
     completed: z.number().optional(),
   }),
+  acceptanceUncertain: z.boolean().optional(),
   failureCategory: z.unknown().optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
@@ -70,6 +70,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
       created: data.timestamps.created,
       completed: data.timestamps.completed,
     },
+    acceptanceUncertain: data.acceptanceUncertain,
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:

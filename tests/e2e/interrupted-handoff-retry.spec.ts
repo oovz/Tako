@@ -17,13 +17,13 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
     id: "interrupted-handoff",
     seriesTitle: "Interrupted chapter",
     status: "failed",
-    errorCategory: "browser_handoff_interrupted",
+    errorCategory: "archive_creation_failed",
     created: now - 1000,
     completed: now,
     chapters: [
       {
         ...makeChapter(buildExampleUrl("/uncertain-chapter"), "failed"),
-        errorCategory: "browser_handoff_interrupted",
+        errorCategory: "archive_creation_failed",
         outputs: { requested: 1, committed: 0, failed: 1 },
         nativeOutputSettlement: {
           jobId: "interrupted-job",
@@ -33,7 +33,6 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
           requested: 1,
           completed: 0,
           interrupted: 1,
-          surrendered: 0,
           acceptanceUncertain: true,
           appliedAt: now,
         },
@@ -58,6 +57,9 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
     "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
   await expect(page.getByText(warning, { exact: false })).toBeVisible()
   await expect(
+    page.getByText("Tako could not create the archive.", { exact: false })
+  ).toBeVisible()
+  await expect(
     page.getByRole("button", {
       name: "Retry all chapters (may create duplicates)",
       exact: true,
@@ -67,7 +69,7 @@ test("offers an interrupted handoff retry with a duplicate warning and fresh acc
   const sidepanel = await context.newPage()
   await sidepanel.setViewportSize({ width: 360, height: 720 })
   await sidepanel.goto(`chrome-extension://${extensionId}/sidepanel.html`)
-  await expect(sidepanel.getByText(warning, { exact: true })).toBeVisible()
+  await expect(sidepanel.getByText(warning, { exact: false })).toBeVisible()
   await sidepanel
     .getByRole("button", {
       name: "Retry all chapters (may create duplicates)",

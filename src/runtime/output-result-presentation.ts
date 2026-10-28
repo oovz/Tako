@@ -19,3 +19,11 @@ export function getOutputResultLabel(
   if (destination === "fsa") return t("status_savedToFolder")
   return t("status_completed")
 }
+
+export function hasUncertainNativeOutput(
+  chapters: readonly Pick<TaskChapter, "nativeOutputSettlement">[]
+): boolean {
+  return chapters.some(
+    (chapter) => chapter.nativeOutputSettlement?.acceptanceUncertain === true
+  )
+}

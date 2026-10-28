@@ -1,3 +1,5 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+
 import logger from "@/src/runtime/logger"
 import {
   canReleaseNativeOutputBlob,
@@ -370,6 +372,8 @@ export class NativeOutputCoordinator {
     input: NativeOutputJobIdentity & {
       outputsRequested: number
       outputsFailedBeforeHandoff: number
+      errorMessage?: string
+      errorCategory?: DownloadErrorCategory
     }
   ): Promise<void> {
     await this.serialized(async () => await this.sealManifestLocked(input))
@@ -379,6 +383,8 @@ export class NativeOutputCoordinator {
     input: NativeOutputJobIdentity & {
       outputsRequested: number
       outputsFailedBeforeHandoff: number
+      errorMessage?: string
+      errorCategory?: DownloadErrorCategory
     }
   ): Promise<void> {
     const result = await this.deps.repository.sealManifest({
@@ -552,6 +558,8 @@ export class NativeOutputCoordinator {
           identity: manifest,
           error:
             "Offscreen producer stopped before every output was handed off",
+          errorMessage: input.offscreenJob.outcome?.errorMessage,
+          errorCategory: input.offscreenJob.outcome?.errorCategory,
         })
         addSettlementEffects(effects, sealed.effects)
         return { observedJobSealed: sealed.sealed, effects }
@@ -601,6 +609,8 @@ export class NativeOutputCoordinator {
   private async sealStoppedOpenManifestLocked(input: {
     identity: NativeOutputJobIdentity
     error: string
+    errorMessage?: string
+    errorCategory?: DownloadErrorCategory
   }): Promise<{
     sealed: boolean
     effects: NativeOutputSettlementEffects
@@ -637,6 +647,8 @@ export class NativeOutputCoordinator {
       outputsFailedBeforeHandoff: nullSlotCount,
       now: Date.now(),
       error: input.error,
+      errorMessage: input.errorMessage,
+      errorCategory: input.errorCategory,
     })
     if (sealed.outcome === "rejected") {
       throw new Error(`Native output manifest rejected: ${sealed.reason}`)
@@ -697,6 +709,8 @@ export class NativeOutputCoordinator {
         const sealed = await this.sealStoppedOpenManifestLocked({
           identity,
           error,
+          errorMessage: observedJob?.outcome?.errorMessage,
+          errorCategory: observedJob?.outcome?.errorCategory,
         })
         addSettlementEffects(effects, sealed.effects)
       } catch (sealError) {
@@ -784,12 +798,7 @@ export class NativeOutputCoordinator {
       return effects
     }
 
-    if (
-      (current.phase === "waiting" ||
-        (current.phase === "surrendered" &&
-          !canReleaseNativeOutputBlob(current))) &&
-      current.downloadId !== undefined
-    ) {
+    if (current.phase === "waiting" && current.downloadId !== undefined) {
       const items = await chrome.downloads.search({ id: current.downloadId })
       const item = items.find(
         (candidate) => candidate.id === current.downloadId
@@ -800,7 +809,6 @@ export class NativeOutputCoordinator {
           await this.observeDownloadItemLocked(current, item)
         )
       } else {
-        if (current.phase === "surrendered") return effects
         const erased = await this.deps.repository.observeErased({
           downloadId: current.downloadId,
           now: Date.now(),
@@ -893,7 +901,9 @@ export class NativeOutputCoordinator {
       chapterSettlement.attempt === manifest.attempt &&
       chapterSettlement.taskId === manifest.taskId &&
       chapterSettlement.chapterId === manifest.chapterId &&
-      chapterSettlement.requested === manifest.outputsRequested
+      chapterSettlement.requested === manifest.outputsRequested &&
+      chapterSettlement.errorMessage === manifest.errorMessage &&
+      chapterSettlement.errorCategory === manifest.errorCategory
 
     if (
       manifest.phase === "sealed" &&
@@ -919,6 +929,8 @@ export class NativeOutputCoordinator {
             completed,
             interrupted,
             acceptanceUncertain: acceptanceUncertain || undefined,
+            errorMessage: manifest.errorMessage,
+            errorCategory: manifest.errorCategory,
             lastSuccessfulDownloadId,
             now: Date.now(),
           })

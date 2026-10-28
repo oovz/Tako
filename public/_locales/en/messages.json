@@ -459,9 +459,6 @@
   "downloadError_browserDownloadInterrupted": {
     "message": "Chrome could not accept the output."
   },
-  "downloadError_browserDownloadUnobservable": {
-    "message": "The browser download could not be confirmed after its history was erased."
-  },
   "downloadError_archiveCreationFailed": {
     "message": "Tako could not create the archive."
   },

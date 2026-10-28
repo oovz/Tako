@@ -15,7 +15,6 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   disk_full: "downloadError_diskFull",
   browser_download_interrupted: "downloadError_browserDownloadInterrupted",
   browser_handoff_interrupted: "downloadError_browserHandoffInterrupted",
-  browser_download_unobservable: "downloadError_browserDownloadUnobservable",
   archive_creation_failed: "downloadError_archiveCreationFailed",
   unknown: "downloadError_unknown",
 }
@@ -27,6 +26,19 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
 export function getDownloadErrorMessage(category: unknown): string {
   const normalized = normalizeDownloadErrorCategory(category) ?? "unknown"
   return t(DOWNLOAD_ERROR_MESSAGE_KEYS[normalized])
+}
+
+export function getDownloadFailureMessage(
+  category: DownloadErrorCategory | undefined,
+  acceptanceUncertain: boolean
+): string | undefined {
+  const message = category ? getDownloadErrorMessage(category) : undefined
+  if (!acceptanceUncertain || category === "browser_handoff_interrupted") {
+    return message
+  }
+  return [message, getDownloadErrorMessage("browser_handoff_interrupted")]
+    .filter(Boolean)
+    .join(" ")
 }
 
 export interface DownloadCancelPresentation {

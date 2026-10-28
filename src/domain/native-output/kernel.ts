@@ -1,3 +1,5 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+
 import {
   canReleaseNativeOutputBlob,
   canAccountNativeOutput,
@@ -229,6 +231,8 @@ export function sealNativeOutputManifest(
   input: NativeOutputJobIdentity & {
     outputsRequested: number
     outputsFailedBeforeHandoff: number
+    errorMessage?: string
+    errorCategory?: DownloadErrorCategory
     now: number
     error: string
   }
@@ -247,7 +251,10 @@ export function sealNativeOutputManifest(
   const manifest = ensured.result.manifest
   if (manifest.phase === "sealed") {
     if (
-      manifest.outputsFailedBeforeHandoff !== input.outputsFailedBeforeHandoff
+      manifest.outputsFailedBeforeHandoff !==
+        input.outputsFailedBeforeHandoff ||
+      manifest.errorMessage !== input.errorMessage ||
+      manifest.errorCategory !== input.errorCategory
     ) {
       return rejected(state, "manifest-conflict")
     }
@@ -269,6 +276,8 @@ export function sealNativeOutputManifest(
   const sealed: NativeOutputManifest = {
     ...manifest,
     phase: "sealed",
+    errorMessage: input.errorMessage,
+    errorCategory: input.errorCategory,
     outputsFailedBeforeHandoff: input.outputsFailedBeforeHandoff,
     slots,
     sealedAt: input.now,
@@ -408,13 +417,6 @@ export function markNativeDownloadTerminal(
     (record) => record.downloadId === input.downloadId
   )
   if (!current) return rejected(state, "download-not-found")
-  if (current.phase === "surrendered") {
-    if (current.terminalAt !== undefined) {
-      return unchanged(state, { record: current })
-    }
-    const record = { ...current, terminalAt: input.now }
-    return applied(replaceOutput(state, record), { record })
-  }
   if (isNativeOutputTerminal(current)) {
     return current.phase === input.phase
       ? unchanged(state, { record: current })

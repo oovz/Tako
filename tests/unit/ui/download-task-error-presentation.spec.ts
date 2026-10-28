@@ -25,7 +25,18 @@ describe("DownloadTaskCard error presentation", () => {
           title: "Chapter 1",
           index: 0,
           status: "failed",
-          errorCategory: "browser_handoff_interrupted",
+          errorCategory: "archive_creation_failed",
+          nativeOutputSettlement: {
+            jobId: "job-1",
+            attempt: 1,
+            taskId: "uncertain-task",
+            chapterId: "chapter-1",
+            requested: 1,
+            completed: 0,
+            interrupted: 1,
+            acceptanceUncertain: true,
+            appliedAt: 2,
+          },
           lastUpdated: 2,
         },
       ],
@@ -47,6 +58,7 @@ describe("DownloadTaskCard error presentation", () => {
       "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
     )
     expect(html).toContain("Retry all chapters (may create duplicates)")
+    expect(html).toContain("The network connection is unavailable.")
   })
 
   it.each([

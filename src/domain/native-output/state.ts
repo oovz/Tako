@@ -1,3 +1,5 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+
 export type NativeOutputKind = "archive" | "image"
 
 export interface NativeOutputJobIdentity {
@@ -32,6 +34,8 @@ export interface NativeOutputManifest extends NativeOutputJobIdentity {
   outputsFailedBeforeHandoff: number
   slots: Array<NativeOutputManifestSlot | null>
   createdAt: number
+  errorMessage?: string
+  errorCategory?: DownloadErrorCategory
   sealedAt?: number
   settlementAcknowledgedAt?: number
   dependencyReleasedAt?: number
@@ -45,7 +49,6 @@ export type NativeOutputPhase =
   | "waiting"
   | "complete"
   | "interrupted"
-  | "surrendered"
 
 export type NativeOutputAccountingDisposition =
   "pending" | "accounted" | "not_owner"
@@ -60,8 +63,6 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   erasedAt?: number
   /** Exact Chrome erasure confirms that its underlying download was canceled. */
   erasedByBrowserAt?: number
-  /** Recorded surrender of an erased download’s observation. */
-  surrenderedAt?: number
   accountingDisposition: NativeOutputAccountingDisposition
   accountingDispositionAt?: number
   blobReleasedAt?: number
@@ -126,9 +127,7 @@ export function canReleaseNativeOutputBlob(
   record: NativeOutputRecord
 ): boolean {
   return (
-    isNativeOutputTerminal(record) ||
-    (record.phase === "surrendered" && record.terminalAt !== undefined) ||
-    record.erasedByBrowserAt !== undefined
+    isNativeOutputTerminal(record) || record.erasedByBrowserAt !== undefined
   )
 }
 

@@ -74,14 +74,6 @@ describe("CommandCenterQueue action hierarchy", () => {
     expect(shouldConfirmTaskCancellation(makeTask({ status: "queued" }))).toBe(
       false
     )
-    expect(
-      shouldConfirmTaskCancellation(
-        makeTask({
-          status: "queued",
-          activeBlock: "native_output_action_required",
-        })
-      )
-    ).toBe(false)
   })
 
   it("keeps active cancel visible as the only inline action", () => {

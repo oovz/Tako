@@ -237,12 +237,6 @@ export class OffscreenWorker {
     return withRetries(fn, job.retries.image, 1000, hooks, signal)
   }
 
-  private async resolveWritableDownloadRoot(
-    directoryHandleId: string
-  ): Promise<FileSystemDirectoryHandle> {
-    return await resolveWritableDownloadRoot(directoryHandleId)
-  }
-
   private async requestBrowserBlobDownload(input: {
     jobId: string
     attempt: number
@@ -372,6 +366,7 @@ export class OffscreenWorker {
       ) {
         throw new Error("Job identity collision")
       }
+      await existing.writableRoot
       return this.createDispatchAck(existing)
     }
 
@@ -397,6 +392,16 @@ export class OffscreenWorker {
     const record: OffscreenJobRecord = {
       request,
       integrationContext,
+      // Capture the capability before acknowledging admission. Settings may
+      // reclaim its stored ID once the background receives this acknowledgement.
+      // Execution reports access failures through the normal terminal outcome.
+      writableRoot:
+        request.saveMode === "fsa"
+          ? resolveWritableDownloadRoot(request.directoryHandleId!).then(
+              (handle) => ({ status: "ready" as const, handle }),
+              (error: unknown) => ({ status: "failed" as const, error })
+            )
+          : undefined,
       controller: taskControllerEntry.controller,
       stage: "dispatching",
       sequence: 0,
@@ -412,12 +417,13 @@ export class OffscreenWorker {
       updatedAt: Date.now(),
     }
     this.jobs.set(request.jobId, record)
-    record.promise = new Promise<void>((resolve) =>
-      setTimeout(resolve, 0)
-    ).then(() => this.executeDownloadChapter(record, taskControllerEntry))
+    record.promise = Promise.resolve(record.writableRoot)
+      .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+      .then(() => this.executeDownloadChapter(record, taskControllerEntry))
     void record.promise.catch((error) => {
       logger.error("Offscreen chapter execution failed", error)
     })
+    await record.writableRoot
     return this.createDispatchAck(record)
   }
 
@@ -523,7 +529,8 @@ export class OffscreenWorker {
       const outcome = await this.processChapterStreaming(
         streamingOptions,
         job,
-        rateLimitService
+        rateLimitService,
+        record.writableRoot
       )
 
       if (taskControllerEntry.controller.signal.aborted) {
@@ -564,6 +571,7 @@ export class OffscreenWorker {
       this.pruneTerminalJobs()
       return outcome
     } finally {
+      record.writableRoot = undefined
       this.stopJobHeartbeat(record)
       releaseTaskControllerOnce()
     }
@@ -694,7 +702,8 @@ export class OffscreenWorker {
   private async processChapterStreaming(
     opts: ProcessChapterStreamingOptions,
     job: JobExecutionContext,
-    rateLimitService: RateLimitService
+    rateLimitService: RateLimitService,
+    writableRoot: OffscreenJobRecord["writableRoot"]
   ): Promise<ChapterOutcome> {
     const { chapter, abortSignal, onProgress } = opts
     const normalizeSettings: ArchiveNormalizationSettings = {
@@ -789,8 +798,12 @@ export class OffscreenWorker {
             | undefined,
           signal: AbortSignal
         ) => this.withImageRetries(job, fn, hooks, signal),
-        resolveWritableDownloadRoot: (input) =>
-          this.resolveWritableDownloadRoot(input),
+        resolveWritableDownloadRoot: async () => {
+          const captured = await writableRoot
+          if (!captured) throw new Error("Custom folder is not configured")
+          if (captured.status === "failed") throw captured.error
+          return captured.handle
+        },
         requestBrowserBlobDownload: (input) =>
           this.requestBrowserBlobDownload(input),
         getMemoryStats: () => this.getMemoryStats(),

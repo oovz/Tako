@@ -62,14 +62,15 @@ function renderQueueRegion(
 }
 
 describe("SidePanelQueueRegion unified queue layout", () => {
-  it("offers manual recovery for an interrupted handoff with a duplicate warning", () => {
+  it("preserves the producer error and offers manual recovery when handoff is uncertain", () => {
     const html = renderQueueRegion({
       ...commonProps,
       queueTasks: [],
       historyTasks: [
         {
           ...makeTask("uncertain", "failed"),
-          failureCategory: "browser_handoff_interrupted",
+          failureCategory: "archive_creation_failed",
+          acceptanceUncertain: true,
           chapters: { total: 1, completed: 0, unsuccessful: 1 },
         },
       ],
@@ -80,7 +81,7 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     expect(html).toContain(
       'aria-label="Retry all chapters (may create duplicates)"'
     )
-    expect(html).not.toContain("Chrome could not accept the output.")
+    expect(html).toContain("Tako could not create the archive.")
   })
 
   it("shows an unavailable view with a retry action", () => {
@@ -107,7 +108,6 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     })
     expect(html).toContain("Sent to Chrome")
     expect(html).toContain("Check Chrome Downloads for progress and results.")
-    expect(html).not.toContain("Forget all downloads")
   })
 
   it("labels retained tasks as stale after a failed refresh", () => {

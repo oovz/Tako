@@ -146,6 +146,8 @@ export class OffscreenJobTerminalCoordinator {
         documentInstanceId: payload.documentInstanceId,
         outputsRequested: payload.outcome.outputsRequested,
         outputsFailedBeforeHandoff: payload.outcome.outputsFailedBeforeHandoff,
+        errorMessage: payload.outcome.errorMessage,
+        errorCategory: payload.outcome.errorCategory,
       })
       const clearing = await this.queueRepository.clearDispatchLease(payload)
       if (clearing.outcome !== "applied") {

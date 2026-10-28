@@ -82,7 +82,7 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
       const taskId = await startSingleChapterDownload(optionsPage, {
         sourceTabId: tabId,
         siteIntegrationId: "shonenjumpplus",
-        mangaId: series.seriesId,
+        mangaId: tabState.mangaId,
         seriesTitle: series.seriesTitle,
         chapter: {
           id: firstChapter.id,

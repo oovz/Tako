@@ -1845,48 +1845,6 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     )
   })
 
-  it("cancels retained native-output ownership without Undo", () => {
-    const task = createTask("task-1", "queued", {
-      activeBlock: "native_output_action_required",
-      errorCategory: "browser_download_unobservable",
-    })
-    const state = createState([task])
-    const before = structuredClone(state)
-    const canceled = cancelDownloadTask(state, {
-      taskId: "task-1",
-      commandId: "cancel-native",
-      now: 500,
-    })
-
-    expectApplied(canceled, state, before, ["queue"])
-    expect(canceled.next.pendingUndoActions).toEqual([])
-    expect(canceled.next.queue[0]).toMatchObject({
-      status: "canceled",
-      completed: 500,
-    })
-    expect(canceled.result).toMatchObject({
-      outcome: "applied",
-      canceledLease: null,
-      undo: null,
-    })
-
-    const lease = createLease()
-    const canceledWithLease = cancelDownloadTask(
-      { ...state, lease },
-      {
-        taskId: "task-1",
-        commandId: "cancel-native",
-        now: 600,
-      }
-    )
-    expect(canceledWithLease.result).toMatchObject({
-      outcome: "applied",
-      canceledLease: lease,
-      undo: null,
-      task: { activeCancel: { commandId: "cancel-native" } },
-    })
-  })
-
   it("converges cancellation replays while rejecting mismatched and inactive tasks", () => {
     const action = createUndoAction({ token: "cancel:duplicate" })
     const state = createState([createTask()], null, [action])

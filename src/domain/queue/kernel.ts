@@ -923,6 +923,8 @@ export function applyNativeOutputSettlement(
     completed: number
     interrupted: number
     acceptanceUncertain?: true
+    errorMessage?: string
+    errorCategory?: DownloadErrorCategory
     lastSuccessfulDownloadId?: number
     now: number
   }
@@ -996,7 +998,8 @@ export function applyNativeOutputSettlement(
       existing.completed === input.completed &&
       existing.interrupted === input.interrupted &&
       existing.acceptanceUncertain === input.acceptanceUncertain &&
-      existing.surrendered === 0 &&
+      existing.errorMessage === input.errorMessage &&
+      existing.errorCategory === input.errorCategory &&
       existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
     return {
       next: state,
@@ -1054,7 +1057,8 @@ export function applyNativeOutputSettlement(
     completed: input.completed,
     interrupted: input.interrupted,
     ...(input.acceptanceUncertain ? { acceptanceUncertain: true } : {}),
-    surrendered: 0,
+    errorMessage: input.errorMessage,
+    errorCategory: input.errorCategory,
     lastSuccessfulDownloadId: input.lastSuccessfulDownloadId,
     appliedAt: input.now,
   }
@@ -1065,20 +1069,25 @@ export function applyNativeOutputSettlement(
       : input.completed > 0
         ? `${input.interrupted} output file(s) were not sent to Chrome.`
         : "Output could not be sent to Chrome."
+  const succeeded = input.requested > 0 && input.completed === input.requested
   const updatedChapter: TaskChapter = {
     ...chapter,
-    status:
-      input.requested > 0 && input.completed === input.requested
-        ? "completed"
-        : input.completed > 0
-          ? "partial_success"
-          : "failed",
-    errorMessage: interruptionMessage,
-    errorCategory: input.acceptanceUncertain
-      ? "browser_handoff_interrupted"
-      : input.interrupted > 0
-        ? "browser_download_interrupted"
-        : undefined,
+    status: succeeded
+      ? "completed"
+      : input.completed > 0
+        ? "partial_success"
+        : "failed",
+    errorMessage: succeeded
+      ? undefined
+      : (input.errorMessage ?? interruptionMessage),
+    errorCategory: succeeded
+      ? undefined
+      : (input.errorCategory ??
+        (input.acceptanceUncertain
+          ? "browser_handoff_interrupted"
+          : input.interrupted > 0
+            ? "browser_download_interrupted"
+            : undefined)),
     outputs: {
       requested: input.requested,
       committed: input.completed,
@@ -1112,17 +1121,17 @@ export function applyNativeOutputSettlement(
       : successfulChapterCount > 0
         ? "partial_success"
         : "failed"
+  const failureChapter = succeeded
+    ? chapters.find(
+        (candidate) =>
+          candidate.status === "failed" ||
+          candidate.status === "partial_success"
+      )
+    : updatedChapter
   const updatedTask: DownloadTaskState = {
     ...task,
     chapters,
     lastSuccessfulDownloadId,
-    ...(task.activeBlock === "native_output_action_required"
-      ? {
-          activeBlock: undefined,
-          errorMessage: undefined,
-          errorCategory: undefined,
-        }
-      : {}),
     nextChapterDispatchAt: allChaptersTerminal
       ? undefined
       : task.nextChapterDispatchAt,
@@ -1135,11 +1144,11 @@ export function applyNativeOutputSettlement(
           errorMessage:
             terminalStatus === "completed"
               ? undefined
-              : (updatedChapter.errorMessage ?? task.errorMessage),
+              : (failureChapter?.errorMessage ?? task.errorMessage),
           errorCategory:
             terminalStatus === "completed"
               ? undefined
-              : (updatedChapter.errorCategory ??
+              : (failureChapter?.errorCategory ??
                 task.errorCategory ??
                 "unknown"),
         }
@@ -2117,28 +2126,6 @@ export function cancelDownloadTask(
   }
 
   if (task.status === "queued") {
-    if (task.activeBlock === "native_output_action_required") {
-      // Retained native output still owns external resources, so cancellation
-      // releases that owner through the coordinator.
-      const canceledTask = {
-        ...cancelDownloadingTask(task, input.now),
-        activeCancel: { commandId: input.commandId },
-      }
-      const canceledLease = state.lease?.taskId === task.id ? state.lease : null
-      return {
-        next: {
-          ...state,
-          queue: replaceTaskAt(state.queue, taskIndex, canceledTask),
-        },
-        changedKeys: QUEUE_KEY,
-        result: {
-          outcome: "applied",
-          task: canceledTask,
-          canceledLease,
-          undo: null,
-        },
-      }
-    }
     const action = createPendingUndoAction({
       token: undoToken,
       type: "cancel_queued",

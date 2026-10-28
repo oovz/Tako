@@ -1,8 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { OptionsConfigurationService } from "@/entrypoints/background/options-configuration-service"
 import { OptionsFsaController } from "@/entrypoints/options/controllers/options-fsa-controller"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
+import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { HistoryRepository } from "@/src/storage/history-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
+import { QueueRepository } from "@/src/storage/queue-repository"
 import { OptionsConfigurationRepository } from "@/src/storage/options-configuration-repository"
 import { SETTINGS_STORAGE_KEY } from "@/src/storage/settings-repository"
 import {
@@ -47,6 +54,9 @@ function createHarness() {
     get: vi.fn(async () => structuredClone(stored)),
     set: vi.fn(async (values: Record<string, unknown>) => {
       Object.assign(stored, structuredClone(values))
+    }),
+    remove: vi.fn(async (keys: string | string[]) => {
+      for (const key of [keys].flat()) delete stored[key]
     }),
   }
   const effects = vi.fn(async () => undefined)
@@ -97,7 +107,83 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+afterEach(() => vi.unstubAllGlobals())
+
 describe("destination configuration commit", () => {
+  it.each(["get", "set", "remove"] as const)(
+    "preserves folder settings and intentional history clearing through a migration %s failure",
+    async (operation) => {
+      const harness = createHarness()
+      const submitted = await harness.prepare()
+      const task: DownloadTaskState = {
+        id: "retained-task",
+        siteIntegrationId: "mangadex",
+        mangaId: "series",
+        seriesTitle: "Series",
+        status: "completed",
+        created: 1,
+        completed: 20,
+        settingsSnapshot: createTaskSettingsSnapshot(
+          DEFAULT_SETTINGS,
+          "mangadex"
+        ),
+        chapters: [5, 20].map((lastUpdated) => ({
+          id: `chapter-${lastUpdated}`,
+          url: `https://mangadex.org/chapter/chapter-${lastUpdated}`,
+          title: `Chapter ${lastUpdated}`,
+          index: lastUpdated === 5 ? 0 : 1,
+          status: "completed",
+          lastUpdated,
+          outputs: { requested: 1, committed: 1, failed: 0 },
+        })),
+      }
+      await harness.storage.set({
+        stateSchemaEpoch: 2,
+        [LOCAL_STORAGE_KEYS.downloadQueue]: [task],
+        [LOCAL_STORAGE_KEYS.downloadedChapters]: [],
+        [LOCAL_STORAGE_KEYS.seriesDownloadHistory]: {},
+        [LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs]: {
+          allBefore: 10,
+          bySeries: {},
+          byChapter: {},
+        },
+      })
+      vi.stubGlobal("chrome", {
+        storage: {
+          local: harness.storage,
+          session: { set: vi.fn(async () => undefined) },
+        },
+      })
+      harness.storage[operation].mockRejectedValueOnce(
+        new Error("storage unavailable")
+      )
+      await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow(
+        "storage unavailable"
+      )
+      expect((await harness.readPair()).folder).toBe(harness.oldFolder)
+
+      await migrateDurableStateForCurrentSchema()
+      const history = new HistoryRepository()
+      const queue = new QueueRepository(new QueueProjectionService(), history)
+      await queue.initialize()
+      expect((await queue.getTask(task.id))?.chapters).toHaveLength(2)
+      await queue.clearTerminalHistory()
+      expect(await queue.getQueue()).toEqual([])
+      expect(await history.getDownloadedChapters()).toMatchObject([
+        { chapterId: "chapter-20", downloadedAt: 20 },
+      ])
+      expect((await history.getAggregate()).clearCutoffs.allBefore).toBe(10)
+
+      await harness.freshRuntime().saveConfiguration(submitted)
+      const recovered = await harness.readPair()
+      expect(recovered.configuration).toEqual(submitted)
+      expect(recovered.folder).toBe(harness.newFolder)
+      expect(
+        await new HistoryRepository().getDownloadedChapters()
+      ).toMatchObject([{ chapterId: "chapter-20", downloadedAt: 20 }])
+    }
+  )
+
   it("preserves the saved pair when staging fails", async () => {
     const harness = createHarness()
     vi.mocked(saveDownloadRootHandle).mockRejectedValueOnce(

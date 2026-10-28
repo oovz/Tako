@@ -186,6 +186,99 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     vi.restoreAllMocks()
   })
 
+  it("captures the folder before acknowledging duplicate dispatches and retains it during chapter resolution", async () => {
+    const handle = { name: "Dispatched folder" } as FileSystemDirectoryHandle
+    let supplyHandle!: (handle: FileSystemDirectoryHandle) => void
+    const pendingHandle = new Promise<FileSystemDirectoryHandle>((resolve) => {
+      supplyHandle = resolve
+    })
+    vi.mocked(loadDownloadRootHandle).mockReturnValueOnce(pendingHandle)
+    vi.mocked(queryFsaPermission).mockResolvedValue("granted")
+    let supplyPlan!: (plan: { imageUrls: string[] }) => void
+    const pendingPlan = new Promise<{ imageUrls: string[] }>((resolve) => {
+      supplyPlan = resolve
+    })
+    const resolveChapterPlan = vi.fn(() => pendingPlan)
+    const integration = offscreenSiteAdaptersById["test-site"] as {
+      offscreen: OffscreenIntegration
+    }
+    integration.offscreen.chapter.resolveChapterPlan = resolveChapterPlan
+    const dispatch = {
+      jobId: "captured-folder-job",
+      attempt: 1,
+      taskId: "captured-folder-task",
+      seriesKey: "test-site:series-1",
+      book: { siteIntegrationId: "test-site", seriesTitle: "Test Book" },
+      chapter: {
+        id: "c1",
+        title: "Chapter 1",
+        url: "https://example.test/c1",
+        index: 1,
+        resolvedPath: "Chapter 1",
+      },
+      settingsSnapshot: {
+        ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+        archiveFormat: "none",
+        includeCoverImage: false,
+        includeComicInfo: false,
+      },
+      saveMode: "fsa",
+      directoryHandleId: "selected-id",
+    } satisfies Omit<
+      RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"],
+      "fingerprint"
+    >
+    const payload = {
+      ...dispatch,
+      fingerprint: await createOffscreenDispatchFingerprint(dispatch),
+    }
+    let acknowledged = false
+    const first = worker.processDownloadChapter(payload).then((ack) => {
+      acknowledged = true
+      return ack
+    })
+    await vi.waitFor(() =>
+      expect(loadDownloadRootHandle).toHaveBeenCalledOnce()
+    )
+    let duplicateAcknowledged = false
+    const duplicate = worker.processDownloadChapter(payload).then((ack) => {
+      duplicateAcknowledged = true
+      return ack
+    })
+    try {
+      await vi.waitFor(() => expect(worker.getActiveJobCount()).toBe(1))
+      expect(acknowledged).toBe(false)
+      expect(duplicateAcknowledged).toBe(false)
+      expect(resolveChapterPlan).not.toHaveBeenCalled()
+      supplyHandle(handle)
+      expect(await duplicate).toEqual(await first)
+      await vi.waitFor(() => expect(resolveChapterPlan).toHaveBeenCalledOnce())
+      vi.mocked(loadDownloadRootHandle).mockResolvedValue(undefined)
+      supplyPlan({ imageUrls: ["https://example.test/img1.jpg"] })
+      await vi.waitFor(() =>
+        expect(
+          worker.getJobState({
+            jobId: dispatch.jobId,
+            attempt: dispatch.attempt,
+            taskId: dispatch.taskId,
+            chapterId: dispatch.chapter.id,
+            fingerprint: payload.fingerprint,
+            documentInstanceId: worker.documentInstanceId,
+          })
+        ).toMatchObject({
+          status: "terminal",
+          outcome: { status: "completed" },
+        })
+      )
+      expect(loadDownloadRootHandle).toHaveBeenCalledOnce()
+      expect(writeBlobToPath).toHaveBeenCalledOnce()
+      expect(vi.mocked(writeBlobToPath).mock.calls[0][0]).toBe(handle)
+    } finally {
+      supplyHandle(handle)
+      supplyPlan({ imageUrls: [] })
+    }
+  })
+
   it("writes images and ComicInfo.xml through FS Access when custom folder permission is granted", async () => {
     vi.mocked(loadDownloadRootHandle).mockResolvedValue(
       {} as FileSystemDirectoryHandle

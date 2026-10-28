@@ -43,9 +43,14 @@ describe("useQueueView normalizeQueueView", () => {
           ...makeQueueTask("native", "completed", "Series A"),
           outputDestination: "downloads-api",
           outputMode: "fsa",
+          acceptanceUncertain: true,
         },
       ])[0]
-    ).toMatchObject({ outputDestination: "downloads-api", outputMode: "fsa" })
+    ).toMatchObject({
+      outputDestination: "downloads-api",
+      outputMode: "fsa",
+      acceptanceUncertain: true,
+    })
     expect(
       normalizeQueueView([makeQueueTask("old", "completed", "Series A")])[0]
         .outputDestination

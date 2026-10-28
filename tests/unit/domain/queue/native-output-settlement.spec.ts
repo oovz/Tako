@@ -87,6 +87,57 @@ describe("applyNativeOutputSettlement", () => {
     expect(replayed.next).toBe(applied.next)
   })
 
+  it("fences producer failures during settlement replay", () => {
+    const failure = {
+      ...settlement,
+      acceptanceUncertain: true as const,
+      errorMessage: "Archive worker failed",
+      errorCategory: "archive_creation_failed" as const,
+    }
+    const applied = applyNativeOutputSettlement(state(), failure)
+    expect(applied.result).toMatchObject({
+      outcome: "applied",
+      chapter: {
+        status: "partial_success",
+        errorMessage: failure.errorMessage,
+        errorCategory: failure.errorCategory,
+        nativeOutputSettlement: { acceptanceUncertain: true },
+      },
+    })
+    expect(
+      applyNativeOutputSettlement(applied.next, failure).result.outcome
+    ).toBe("already_applied")
+    expect(
+      applyNativeOutputSettlement(applied.next, {
+        ...failure,
+        errorMessage: "A later cleanup error",
+      }).result
+    ).toEqual({ outcome: "conflict", reason: "settlement-conflict" })
+  })
+
+  it("clears earlier chapter and task failures after every handoff succeeds", () => {
+    const active = task({
+      errorMessage: "Old failure",
+      errorCategory: "unknown",
+    })
+    active.chapters[0] = {
+      ...active.chapters[0],
+      errorMessage: "Old failure",
+      errorCategory: "unknown",
+    }
+    const applied = applyNativeOutputSettlement(state([active]), {
+      ...settlement,
+      completed: 3,
+      interrupted: 0,
+    })
+    expect(applied.result.outcome).toBe("applied")
+    expect(applied.next.queue[0].status).toBe("completed")
+    expect(applied.next.queue[0].errorMessage).toBeUndefined()
+    expect(applied.next.queue[0].errorCategory).toBeUndefined()
+    expect(applied.next.queue[0].chapters[0].errorMessage).toBeUndefined()
+    expect(applied.next.queue[0].chapters[0].errorCategory).toBeUndefined()
+  })
+
   it("rejects invalid totals and conflicting replays without mutation", () => {
     expect(
       applyNativeOutputSettlement(state(), {

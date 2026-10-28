@@ -99,14 +99,14 @@ const nativeOutputSettlementSchema = z
     completed: nonnegativeInteger,
     interrupted: nonnegativeInteger,
     acceptanceUncertain: z.literal(true).optional(),
-    surrendered: nonnegativeInteger,
+    errorMessage: z.string().optional(),
+    errorCategory: DownloadErrorCategorySchema.optional(),
     lastSuccessfulDownloadId: nonnegativeInteger.optional(),
     appliedAt: finiteNumber.nonnegative(),
   })
   .refine(
     (settlement) =>
-      settlement.completed + settlement.interrupted + settlement.surrendered ===
-      settlement.requested,
+      settlement.completed + settlement.interrupted === settlement.requested,
     { message: "native output settlement totals must equal requested" }
   )
 
@@ -151,7 +151,6 @@ const downloadTaskStateShape = {
       "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
-      "native_output_action_required",
     ])
     .optional(),
   destinationIssue: DestinationIssueSchema.optional(),

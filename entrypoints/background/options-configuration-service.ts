@@ -1,4 +1,5 @@
 import logger from "@/src/runtime/logger"
+import { runDestinationAccessExclusive } from "./destination-access"
 import {
   DirectoryNotFoundError,
   PermissionExpiredError,
@@ -96,69 +97,74 @@ export class OptionsConfigurationService {
     const submittedHandleId =
       submitted.settings.downloads.customDirectoryHandleId
     if (submittedHandleId) this.unsettledHandleCleanup.add(submittedHandleId)
-    return this.mutations.run(async () => {
-      try {
-        if (submitted.settings.downloads.destination === "file-system-access") {
-          let handle: FileSystemDirectoryHandle | undefined
+    return this.mutations.run(() =>
+      runDestinationAccessExclusive(async () => {
+        try {
+          if (
+            submitted.settings.downloads.destination === "file-system-access"
+          ) {
+            let handle: FileSystemDirectoryHandle | undefined
+            try {
+              handle = await loadDownloadRootHandle(
+                submitted.settings.downloads.customDirectoryHandleId
+              )
+              if (handle && handle.kind === "directory")
+                await checkPermissionBeforeWrite(handle)
+            } catch (error) {
+              logger.warn(
+                "[OPTIONS] Saved folder capability validation failed",
+                error
+              )
+              const message =
+                error instanceof PermissionExpiredError
+                  ? "settings_customFolderPermissionDenied"
+                  : error instanceof DirectoryNotFoundError
+                    ? "settings_customFolderNotFound"
+                    : "options_savedFolderRepairRequired"
+              throw new Error(t(message), { cause: error })
+            }
+            if (!handle || handle.kind !== "directory")
+              throw new Error(t("settings_customFolderRequired"))
+          }
+          const previous = await this.deps.configurationRepository.get()
+          for (const configuration of [previous, submitted]) {
+            const id = configuration.settings.downloads.customDirectoryHandleId
+            if (id) this.unsettledHandleCleanup.add(id)
+          }
+          const saved = await this.deps.configurationRepository.save(submitted)
+
+          // Publish the committed configuration after its capability is durable.
+          this.deps.settingsRepository.acceptExternalDocument(saved.settings)
+          await this.deps.applySettingsSideEffects(saved.settings)
+          this.deps.cleanupRateLimiters()
+          return saved
+        } finally {
+          this.pendingSaves.delete(submitted)
+          // A failed acknowledgement can follow a committed write. Read durable
+          // authority before reclaiming either the previous or staged capability.
           try {
-            handle = await loadDownloadRootHandle(
-              submitted.settings.downloads.customDirectoryHandleId
+            const current = await this.deps.configurationRepository.get()
+            const retainedIds = new Set<string>()
+            for (const configuration of [current, ...this.pendingSaves]) {
+              const id =
+                configuration.settings.downloads.customDirectoryHandleId
+              if (id) retainedIds.add(id)
+            }
+            await removeUnusedDownloadRootHandles(
+              this.unsettledHandleCleanup,
+              retainedIds
             )
-            if (handle && handle.kind === "directory")
-              await checkPermissionBeforeWrite(handle)
+            for (const id of this.unsettledHandleCleanup) {
+              if (!retainedIds.has(id)) this.unsettledHandleCleanup.delete(id)
+            }
           } catch (error) {
             logger.warn(
-              "[OPTIONS] Saved folder capability validation failed",
+              "[OPTIONS] Could not reclaim unused folder capabilities",
               error
             )
-            const message =
-              error instanceof PermissionExpiredError
-                ? "settings_customFolderPermissionDenied"
-                : error instanceof DirectoryNotFoundError
-                  ? "settings_customFolderNotFound"
-                  : "options_savedFolderRepairRequired"
-            throw new Error(t(message), { cause: error })
           }
-          if (!handle || handle.kind !== "directory")
-            throw new Error(t("settings_customFolderRequired"))
         }
-        const previous = await this.deps.configurationRepository.get()
-        for (const configuration of [previous, submitted]) {
-          const id = configuration.settings.downloads.customDirectoryHandleId
-          if (id) this.unsettledHandleCleanup.add(id)
-        }
-        const saved = await this.deps.configurationRepository.save(submitted)
-
-        // Publish the committed configuration after its capability is durable.
-        this.deps.settingsRepository.acceptExternalDocument(saved.settings)
-        await this.deps.applySettingsSideEffects(saved.settings)
-        this.deps.cleanupRateLimiters()
-        return saved
-      } finally {
-        this.pendingSaves.delete(submitted)
-        // A failed acknowledgement can follow a committed write. Read durable
-        // authority before reclaiming either the previous or staged capability.
-        try {
-          const current = await this.deps.configurationRepository.get()
-          const retainedIds = new Set<string>()
-          for (const configuration of [current, ...this.pendingSaves]) {
-            const id = configuration.settings.downloads.customDirectoryHandleId
-            if (id) retainedIds.add(id)
-          }
-          await removeUnusedDownloadRootHandles(
-            this.unsettledHandleCleanup,
-            retainedIds
-          )
-          for (const id of this.unsettledHandleCleanup) {
-            if (!retainedIds.has(id)) this.unsettledHandleCleanup.delete(id)
-          }
-        } catch (error) {
-          logger.warn(
-            "[OPTIONS] Could not reclaim unused folder capabilities",
-            error
-          )
-        }
-      }
-    })
+      })
+    )
   }
 }

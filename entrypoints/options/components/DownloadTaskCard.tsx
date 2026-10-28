@@ -13,11 +13,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InlineConfirmation } from "@/src/ui/shared/components/InlineConfirmation"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
-import { getCompletedOutputDestination } from "@/src/runtime/output-result-presentation"
+import {
+  getCompletedOutputDestination,
+  hasUncertainNativeOutput,
+} from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 import {
   getDownloadCancelPresentation,
   getDownloadErrorMessage,
+  getDownloadFailureMessage,
 } from "@/src/runtime/download-error-presentation"
 import {
   chapterStatusBadgeClass,
@@ -77,8 +81,10 @@ export function DownloadTaskCard({
   const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
   const isRetried = task.isRetried ?? false
-  const acceptanceUncertain = task.chapters.some(
-    (chapter) => chapter.errorCategory === "browser_handoff_interrupted"
+  const acceptanceUncertain = hasUncertainNativeOutput(task.chapters)
+  const failureMessage = getDownloadFailureMessage(
+    task.errorCategory,
+    acceptanceUncertain
   )
   const cancelPresentation = getDownloadCancelPresentation()
   const requiresCancelConfirmation = task.status === "downloading"
@@ -283,14 +289,9 @@ export function DownloadTaskCard({
           )}
         </div>
 
-        {(acceptanceUncertain || task.errorCategory) && (
+        {failureMessage && (
           <p className="text-sm text-destructive">
-            {t("common_error")}:{" "}
-            {getDownloadErrorMessage(
-              acceptanceUncertain
-                ? "browser_handoff_interrupted"
-                : task.errorCategory
-            )}
+            {t("common_error")}: {failureMessage}
           </p>
         )}
 

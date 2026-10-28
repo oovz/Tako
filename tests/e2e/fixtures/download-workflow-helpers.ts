@@ -27,11 +27,7 @@ import { expect } from "@playwright/test"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
-import {
-  focusTab,
-  type QueueTestState,
-  waitForGlobalState,
-} from "./state-helpers"
+import { type QueueTestState, waitForGlobalState } from "./state-helpers"
 
 export type StoredSiteIntegrationSettings = Record<
   string,
@@ -360,7 +356,7 @@ export async function seedMangadexSessionPreferences(
 
 /**
  * Dispatch `START_DOWNLOAD` for one chapter and return the queue task id.
- * Mirrors the live helper so spec assertions share the same oracle.
+ * Shared by deterministic and live workflows after the caller selects a chapter.
  */
 export async function startSingleChapterDownload(
   optionsPage: Page,
@@ -399,100 +395,102 @@ export async function startSingleChapterDownload(
       )
       .toBe(true)
 
-    await focusTab(optionsPage.context(), input.sourceTabId)
+    // The synthetic Side Panel is a tab. A later Playwright evaluation can
+    // activate it and invalidate the source projection. Keep source activation,
+    // resolution, snapshot capture and dispatch in this single evaluation.
+    const response = await sidepanelPage.evaluate(async (input) => {
+      const sourceTab = await chrome.tabs.get(input.sourceTabId)
+      await chrome.tabs.update(input.sourceTabId, {
+        active: true,
+      })
+      const refreshed = await chrome.runtime.sendMessage({
+        target: "background",
+        type: "REQUEST_TAB_CONTEXT_REFRESH",
+        payload: { tabId: input.sourceTabId, windowId: sourceTab.windowId },
+      })
+      if (!refreshed?.success) {
+        throw new Error("Unable to resolve source context before downloading")
+      }
 
-    // Wait for the source tab to own the window projection AND capture the
-    // dispatch snapshot in the same read. Validating and capturing in one
-    // tick removes the wait-then-reread window where a late background write
-    // (e.g. the Side Panel projection resolving after source activation)
-    // could bump the revision between the wait and the snapshot read. A
-    // write that still lands after this tick is rejected by the background's
-    // own stale_series_context validation when START_DOWNLOAD is applied.
-    let snapshotIdentity:
-      | {
-          sourceWindowId: number
-          sourceTabId: number
-          sourceUrl: string
-          siteIntegrationId: string
-          seriesId: string
-          seriesRevision: number
-        }
-      | undefined
-    await expect
-      .poll(
-        async () => {
-          const snapshot = await optionsPage.evaluate(async (sourceTabId) => {
-            const tab = await chrome.tabs.get(sourceTabId)
-            const stored = await chrome.storage.session.get(
-              "activeTabContextByWindow"
-            )
-            const projection = (
-              stored.activeTabContextByWindow as
-                | Record<
-                    string,
-                    {
-                      activeTabId?: number
-                      revision?: number
-                      context?: {
-                        sourceUrl?: string
-                        siteIntegrationId?: string
-                        mangaId?: string
-                        chaptersLoading?: boolean
-                      }
-                    }
-                  >
-                | undefined
-            )?.[String(tab.windowId)]
-            if (
-              tab.active !== true ||
-              projection?.activeTabId !== sourceTabId ||
-              typeof projection.revision !== "number" ||
-              typeof projection.context?.sourceUrl !== "string" ||
-              typeof projection.context.siteIntegrationId !== "string" ||
-              typeof projection.context.mangaId !== "string" ||
-              projection.context.chaptersLoading === true
-            ) {
-              return null
-            }
-            return {
+      const deadline = Date.now() + 15_000
+      let observed: Record<string, boolean> | undefined
+      while (Date.now() < deadline) {
+        const tab = await chrome.tabs.get(input.sourceTabId)
+        const stored = await chrome.storage.session.get(
+          "activeTabContextByWindow"
+        )
+        const projection = (
+          stored.activeTabContextByWindow as
+            | Record<
+                string,
+                {
+                  activeTabId?: number
+                  revision?: number
+                  context?: {
+                    sourceUrl?: string
+                    siteIntegrationId?: string
+                    mangaId?: string
+                    chaptersLoading?: boolean
+                    chapters?: Array<{ id: string; locked?: boolean }>
+                  }
+                }
+              >
+            | undefined
+        )?.[String(tab.windowId)]
+        const current = projection?.context
+        if (
+          tab.active === true &&
+          !tab.pendingUrl &&
+          projection?.activeTabId === input.sourceTabId &&
+          typeof projection.revision === "number" &&
+          typeof current?.sourceUrl === "string" &&
+          current.sourceUrl === tab.url &&
+          current.siteIntegrationId === input.siteIntegrationId &&
+          current.mangaId === input.mangaId &&
+          current.chaptersLoading !== true &&
+          current.chapters?.some(
+            (chapter) =>
+              chapter.id === input.chapter.id && chapter.locked !== true
+          )
+        ) {
+          return (await chrome.runtime.sendMessage({
+            target: "background",
+            type: "START_DOWNLOAD",
+            commandId: crypto.randomUUID(),
+            issuedAt: Date.now(),
+            payload: {
               sourceWindowId: tab.windowId,
-              sourceTabId,
-              sourceUrl: projection.context.sourceUrl,
-              siteIntegrationId: projection.context.siteIntegrationId,
-              seriesId: projection.context.mangaId,
+              sourceTabId: input.sourceTabId,
+              sourceUrl: current.sourceUrl,
+              siteIntegrationId: current.siteIntegrationId,
+              seriesId: current.mangaId,
               seriesRevision: projection.revision,
-            }
-          }, input.sourceTabId)
-          if (snapshot) {
-            snapshotIdentity = snapshot
-            return true
-          }
-          return false
-        },
-        { timeout: 15_000, intervals: [100] }
-      )
-      .toBe(true)
-    if (!snapshotIdentity) {
+              selectedChapterIds: [input.chapter.id],
+            },
+          })) as { success?: boolean; taskId?: string; error?: string }
+        }
+        observed = {
+          active: tab.active,
+          pendingNavigation: Boolean(tab.pendingUrl),
+          ownsProjection: projection?.activeTabId === input.sourceTabId,
+          hasRevision: typeof projection?.revision === "number",
+          urlMatches: current?.sourceUrl === tab.url,
+          integrationMatches:
+            current?.siteIntegrationId === input.siteIntegrationId,
+          seriesMatches: current?.mangaId === input.mangaId,
+          chaptersComplete: current?.chaptersLoading !== true,
+          hasChapter:
+            current?.chapters?.some(
+              (chapter) =>
+                chapter.id === input.chapter.id && chapter.locked !== true
+            ) === true,
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
       throw new Error(
-        `No current series context snapshot for tab ${input.sourceTabId}`
+        `No current series context snapshot for tab ${input.sourceTabId}: ${JSON.stringify(observed)}`
       )
-    }
-    const response = await sidepanelPage.evaluate(
-      async (payload) => {
-        const issuedAt = Date.now()
-        return (await chrome.runtime.sendMessage({
-          target: "background",
-          type: "START_DOWNLOAD",
-          commandId: crypto.randomUUID(),
-          issuedAt,
-          payload: {
-            ...payload.snapshotIdentity,
-            selectedChapterIds: [payload.chapter.id],
-          },
-        })) as { success?: boolean; taskId?: string; error?: string }
-      },
-      { chapter: input.chapter, snapshotIdentity }
-    )
+    }, input)
 
     expect(
       response?.success,

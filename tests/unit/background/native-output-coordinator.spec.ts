@@ -802,7 +802,7 @@ describe("NativeOutputCoordinator", () => {
     )
   })
 
-  it("seals a fully populated R-01 failure-cut manifest from exact terminal producer state", async () => {
+  it("preserves a stopped producer failure while sealing a fully populated manifest", async () => {
     const { coordinator, repository } = createCoordinator()
     await repository.prepare({
       ...jobIdentity,
@@ -823,6 +823,8 @@ describe("NativeOutputCoordinator", () => {
         lastSequence: 4,
         outcome: {
           status: "failed",
+          errorMessage: "Archive worker failed",
+          errorCategory: "archive_creation_failed",
           outputsRequested: 0,
           outputsFailedBeforeHandoff: 0,
           outputsCommitted: 0,
@@ -834,6 +836,12 @@ describe("NativeOutputCoordinator", () => {
       await coordinator.acknowledgeSettlement(effect)
     }
 
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorMessage: "Archive worker failed",
+        errorCategory: "archive_creation_failed",
+      })
+    )
     // The interrupted output was accounted and fully released (pruned).
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
     await expect(

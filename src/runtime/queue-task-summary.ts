@@ -1,4 +1,7 @@
-import { getCompletedOutputDestination } from "@/src/runtime/output-result-presentation"
+import {
+  getCompletedOutputDestination,
+  hasUncertainNativeOutput,
+} from "@/src/runtime/output-result-presentation"
 import type {
   DownloadTaskState,
   QueueTaskSummary,
@@ -24,15 +27,12 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     }
   }
 
-  const failureCategory = task.chapters.some(
-    (chapter) => chapter.errorCategory === "browser_handoff_interrupted"
-  )
-    ? "browser_handoff_interrupted"
-    : (task.errorCategory ??
-      task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
-      (task.status === "failed" || task.status === "partial_success"
-        ? "unknown"
-        : undefined))
+  const failureCategory =
+    task.errorCategory ??
+    task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
+    (task.status === "failed" || task.status === "partial_success"
+      ? "unknown"
+      : undefined)
 
   return {
     id: task.id,
@@ -57,6 +57,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
       created: task.created,
       completed: task.completed,
     },
+    acceptanceUncertain: hasUncertainNativeOutput(task.chapters),
     failureCategory,
     isRetried: task.isRetried ?? false,
     isRetryTask: task.isRetryTask ?? false,

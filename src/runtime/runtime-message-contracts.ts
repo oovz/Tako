@@ -722,7 +722,6 @@ export const runtimeMessageRegistry = {
           "waiting",
           "complete",
           "interrupted",
-          "surrendered",
         ]),
       }),
       z.strictObject({

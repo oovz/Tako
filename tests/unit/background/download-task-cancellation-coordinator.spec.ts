@@ -8,7 +8,7 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
 describe("DownloadTaskCancellationCoordinator", () => {
-  it("routes a native-output action-required cancellation through surrender without Undo", async () => {
+  it("cancels active native-output ownership without an attached lease", async () => {
     vi.stubGlobal("chrome", {
       storage: {
         session: {
@@ -54,8 +54,6 @@ describe("DownloadTaskCancellationCoordinator", () => {
     expect(cancelDownloadTask).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "task-1" })
     )
-    // No Undo receipt is created, so the surrender path runs with the exact
-    // identity the coordinator derived from the (absent) lease.
     expect(nativeOutputCoordinator.cancelTask).toHaveBeenCalledWith(
       "task-1",
       undefined

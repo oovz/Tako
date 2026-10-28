@@ -238,9 +238,7 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
           <CommandCenterTaskActions
             taskId={task.id}
             status={task.status}
-            acceptanceUncertain={
-              task.failureCategory === "browser_handoff_interrupted"
-            }
+            acceptanceUncertain={task.acceptanceUncertain}
             isCanceling={isCanceling}
             isRetrying={isRetrying}
             isRestarting={isRestarting}
