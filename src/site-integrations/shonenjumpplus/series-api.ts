@@ -19,12 +19,6 @@ export type PaginationInfo = {
 
 export type ProductStatus = {
   label?: string
-  is_free?: boolean
-  isFree?: boolean
-  is_readable?: boolean
-  isReadable?: boolean
-  rental_price?: number | null
-  buy_price?: number | null
 }
 
 export type PaginationProduct = {
@@ -41,21 +35,7 @@ const MAX_PAGINATION_REQUESTS = 100
 const MAX_PAGE_SIZE = 100
 
 function isExplicitlyFree(status: ProductStatus | undefined): boolean {
-  const explicit =
-    status?.is_free ??
-    status?.isFree ??
-    status?.is_readable ??
-    status?.isReadable
-  if (typeof explicit === "boolean") {
-    return explicit
-  }
-  const label = sanitizeLabel(status?.label || "").toLowerCase()
-  return (
-    label === "free" ||
-    label === "is_free" ||
-    label === "readable" ||
-    label === "is_readable"
-  )
+  return status?.label === "is_free"
 }
 
 export function mapEpisode(product: PaginationProduct): Chapter | null {

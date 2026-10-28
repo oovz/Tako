@@ -145,8 +145,8 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
       (chapter) => chapter.id === series.seriesId
     )
     expect(firstEpisode).toMatchObject({
-      title: "第1話",
-      chapterLabel: "第1話",
+      title: "1話",
+      chapterLabel: "1話",
       chapterNumber: 1,
     })
     expect(firstEpisode?.volumeId).toBeUndefined()

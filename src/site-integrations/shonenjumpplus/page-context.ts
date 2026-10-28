@@ -14,7 +14,5 @@ export function parseAggregateIdFromHtml(html: string): string | null {
     return match[1]
   }
 
-  // Fallback: search any element with data-aggregate-id that looks like a series aggregate.
-  const fallback = html.match(/\bdata-aggregate-id=["'](\d{5,})["']/i)?.[1]
-  return fallback && /^\d+$/.test(fallback) ? fallback : null
+  return null
 }

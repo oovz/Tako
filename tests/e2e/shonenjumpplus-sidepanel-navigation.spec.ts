@@ -43,10 +43,10 @@ test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
       .toBe(true)
 
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
-    const lockedChapter = sp.getByRole("checkbox", { name: /第4話/ })
+    const lockedChapter = sp.getByRole("checkbox", { name: /^140話$/ })
     await expect(lockedChapter).toBeDisabled()
-    await expect(sp.getByText("Locked", { exact: true })).toBeVisible()
-    await expect(sp.getByRole("checkbox", { name: /第1話/ })).toBeEnabled()
+    await expect(sp.getByText("Locked", { exact: true }).first()).toBeVisible()
+    await expect(sp.getByRole("checkbox", { name: /^142話$/ })).toBeEnabled()
 
     await sp.close()
   })

@@ -66,7 +66,7 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
     )
 
     const firstChapter = tabState.chapters.find(
-      (chapter) => chapter.locked !== true
+      (chapter) => chapter.id === series.seriesId
     )
     if (!firstChapter) {
       throw new Error(
@@ -115,7 +115,7 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
       const archiveEntries = unzipSync(archiveBytes)
       // The normalized cover occupies page 1. Inspect a chapter page, which
       // passes through the integration's tile reconstruction.
-      const imageEntry = archiveEntries["2.png"]
+      const imageEntry = archiveEntries["02.png"]
       expect(imageEntry).toBeDefined()
 
       const image = decodeRgbaPng(imageEntry!)

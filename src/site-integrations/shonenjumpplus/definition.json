@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "shonenjumpplus",
-  "name": "Shonen Jump+",
+  "name": "少年ジャンプ＋",
   "englishName": "Shonen Jump+",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
@@ -14,7 +14,8 @@
   "requiredOrigins": [
     "https://shonenjumpplus.com/*",
     "https://cdn-ak-img.shonenjumpplus.com/*",
-    "https://cdn-ak.shonenjumpplus.com/*"
+    "https://cdn-ak.shonenjumpplus.com/*",
+    "https://cdn-scissors.gigaviewer.com/*"
   ],
   "optionalOrigins": [],
   "policyDefaults": {
@@ -66,7 +67,8 @@
       "purpose": "Shonen Jump+ image CDN",
       "origins": [
         "https://cdn-ak-img.shonenjumpplus.com/*",
-        "https://cdn-ak.shonenjumpplus.com/*"
+        "https://cdn-ak.shonenjumpplus.com/*",
+        "https://cdn-scissors.gigaviewer.com/*"
       ],
       "originKind": "provider-issued",
       "credentials": "omit",

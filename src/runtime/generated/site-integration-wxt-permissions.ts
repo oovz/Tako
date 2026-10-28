@@ -17,6 +17,7 @@ export const siteIntegrationWxtPermissions = {
     "https://boylove.cc/*",
     "https://cdn-ak-img.shonenjumpplus.com/*",
     "https://cdn-ak.shonenjumpplus.com/*",
+    "https://cdn-scissors.gigaviewer.com/*",
     "https://cdn.comicnettai.com/*",
     "https://cf.mhgui.com/*",
     "https://comic.pixiv.net/*",

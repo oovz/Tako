@@ -29,14 +29,11 @@ function parsePayload(
   if (!value) {
     return null
   }
-  for (const candidate of [value, decodeHtmlAttributeEntities(value)]) {
-    try {
-      return parseEpisodeJsonPayload(JSON.parse(candidate))
-    } catch {
-      // Try the decoded attribute representation next.
-    }
+  try {
+    return parseEpisodeJsonPayload(JSON.parse(value))
+  } catch {
+    return null
   }
-  return null
 }
 
 export function readEpisodeJsonAttributeFromHtml(html: string): string | null {
@@ -54,7 +51,10 @@ export function readEpisodeJsonAttributeFromHtml(html: string): string | null {
   if (!scriptTag) {
     return null
   }
-  return scriptTag.match(/\bdata-value\s*=\s*(["'])([\s\S]*?)\1/i)?.[2] ?? null
+  const attribute = scriptTag.match(
+    /\bdata-value\s*=\s*(["'])([\s\S]*?)\1/i
+  )?.[2]
+  return attribute ? decodeHtmlAttributeEntities(attribute) : null
 }
 
 function normalizeEpisodeJsonSeriesMetadata(

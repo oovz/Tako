@@ -1,16 +1,3 @@
-/**
- * @file routes.ts
- * @description Playwright route registrar for the Shonen Jump+ integration.
- *
- * Mocks the single host `shonenjumpplus.com` for:
- * - `/episode/{id}` page HTML (with embedded episode-json script)
- * - `/api/viewer/readable_product_pagination_information`
- * - `/api/viewer/pagination_readable_products`
- *
- * Image hosts (`cdn-ak-img.shonenjumpplus.com` and the gigaviewer CDN) are
- * NOT mocked here — download-workflow specs cover them with pre-scrambled fixtures.
- */
-
 import type { Route } from "@playwright/test"
 import type { RouteRegistrar } from "../../types"
 import { SHONENJUMPPLUS_TEST_DOMAIN } from "../../../test-domains-constants"
@@ -18,108 +5,74 @@ import {
   BASIC_EPISODE_PAGE_HTML,
   HOME_PAGE_HTML,
   MINIMAL_EPISODE_PAGE_HTML,
-  buildShonenJumpPlusEpisodePageHtml,
 } from "./html-fixtures"
 import {
   buildPaginationReadableProductsResponse,
   buildReadableProductPaginationInfoResponse,
 } from "./api-fixtures"
-import {
-  BASIC_SERIES,
-  MINIMAL_SERIES,
-  SERIES_AGGREGATE_IDS,
-} from "./series-data"
+import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 
 export const registerShonenJumpPlusRoutes: RouteRegistrar = async (
   context,
   options
 ) => {
-  if (!options.useMocks) {
-    return
-  }
+  if (!options.useMocks) return
 
   await context.route(
     `https://${SHONENJUMPPLUS_TEST_DOMAIN}/**`,
     async (route: Route) => {
       const url = new URL(route.request().url())
-
-      const json = (body: unknown) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(body),
-        })
-
-      const html = (body: string) =>
-        route.fulfill({
-          status: 200,
-          contentType: "text/html; charset=utf-8",
-          body,
-        })
-
-      // API: /api/viewer/readable_product_pagination_information
+      const aggregateId = url.searchParams.get("aggregate_id") ?? ""
       if (
         url.pathname === "/api/viewer/readable_product_pagination_information"
       ) {
-        const aggregateId = url.searchParams.get("aggregate_id") ?? ""
-        return json(buildReadableProductPaginationInfoResponse(aggregateId))
-      }
-
-      // API: /api/viewer/pagination_readable_products
-      if (url.pathname === "/api/viewer/pagination_readable_products") {
-        const aggregateId = url.searchParams.get("aggregate_id") ?? ""
-        const offset = Number(url.searchParams.get("offset") ?? "0") || 0
-        const limit = Number(url.searchParams.get("limit") ?? "50") || 50
-        return json(
-          buildPaginationReadableProductsResponse(aggregateId, offset, limit)
-        )
-      }
-
-      // HTML: /episode/{id}
-      const episodeMatch = url.pathname.match(/^\/episode\/(\d+)\/?$/)
-      if (episodeMatch) {
-        const episodeId = episodeMatch[1]
-        if (episodeId === BASIC_SERIES.series.seriesId)
-          return html(BASIC_EPISODE_PAGE_HTML)
-        if (episodeId === MINIMAL_SERIES.series.seriesId)
-          return html(MINIMAL_EPISODE_PAGE_HTML)
-        // Synthesize a page for unknown episode ids so the content script
-        // still resolves a series id; chapter-list fetches will return empty.
-        const synthesizedAggregateId =
-          SERIES_AGGREGATE_IDS[episodeId] ?? `agg-${episodeId}`
-        return html(
-          buildShonenJumpPlusEpisodePageHtml({
-            episodeId,
-            seriesTitle: `Series ${episodeId}`,
-            aggregateId: synthesizedAggregateId,
-          })
-        )
-      }
-
-      if (url.pathname.startsWith("/api/")) {
         return route.fulfill({
-          status: 404,
+          status: 200,
           contentType: "application/json",
-          body: JSON.stringify({ error: "not_mocked", path: url.pathname }),
+          body: JSON.stringify(
+            buildReadableProductPaginationInfoResponse(aggregateId)
+          ),
         })
       }
-
-      return html(HOME_PAGE_HTML)
+      if (url.pathname === "/api/viewer/pagination_readable_products") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            buildPaginationReadableProductsResponse(
+              aggregateId,
+              Number(url.searchParams.get("offset") ?? 0),
+              Number(url.searchParams.get("limit") ?? 50)
+            )
+          ),
+        })
+      }
+      const episodeId = url.pathname.match(/^\/episode\/(\d+)\/?$/)?.[1]
+      const body =
+        episodeId === BASIC_SERIES.series.seriesId
+          ? BASIC_EPISODE_PAGE_HTML
+          : episodeId === MINIMAL_SERIES.series.seriesId
+            ? MINIMAL_EPISODE_PAGE_HTML
+            : HOME_PAGE_HTML
+      return route.fulfill({
+        status: episodeId && body === HOME_PAGE_HTML ? 404 : 200,
+        contentType: "text/html; charset=utf-8",
+        body,
+      })
     }
   )
 
-  // The series-cover URL intentionally uses Shonen Jump+'s production CDN
-  // hostname. Serve it deterministically in the context resolver
-  // tests; chapter image reconstruction remains covered by the DNR-backed
-  // local-server workflow tests.
-  await context.route(
-    "https://cdn-ak-img.shonenjumpplus.com/**",
-    async (route: Route) =>
+  for (const host of [
+    "cdn-ak-img.shonenjumpplus.com",
+    "cdn-scissors.gigaviewer.com",
+  ]) {
+    await context.route(`https://${host}/**`, async (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: SMALL_PNG_MIME_TYPE,
         body: cloneSmallPngBytes(),
       })
-  )
+    )
+  }
 }

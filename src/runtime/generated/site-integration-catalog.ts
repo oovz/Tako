@@ -1802,7 +1802,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "shonenjumpplus",
-    "name": "Shonen Jump+",
+    "name": "少年ジャンプ＋",
     "englishName": "Shonen Jump+",
     "contributors": [
       "TMD Team"
@@ -1821,7 +1821,8 @@ export const siteIntegrationCatalog = [
     "requiredOrigins": [
       "https://shonenjumpplus.com/*",
       "https://cdn-ak-img.shonenjumpplus.com/*",
-      "https://cdn-ak.shonenjumpplus.com/*"
+      "https://cdn-ak.shonenjumpplus.com/*",
+      "https://cdn-scissors.gigaviewer.com/*"
     ],
     "optionalOrigins": [],
     "policyDefaults": {
@@ -1877,7 +1878,8 @@ export const siteIntegrationCatalog = [
         "purpose": "Shonen Jump+ image CDN",
         "origins": [
           "https://cdn-ak-img.shonenjumpplus.com/*",
-          "https://cdn-ak.shonenjumpplus.com/*"
+          "https://cdn-ak.shonenjumpplus.com/*",
+          "https://cdn-scissors.gigaviewer.com/*"
         ],
         "originKind": "provider-issued",
         "credentials": "omit",

@@ -1,0 +1,464 @@
+{
+  "readableProduct": {
+    "id": "10834108156648240735",
+    "title": "[1話]SPY×FAMILY",
+    "isPublic": true,
+    "hasPurchased": false,
+    "series": {
+      "id": "10834108156648240732",
+      "thumbnailUri": "https://cdn-scissors.gigaviewer.com/image/scale/b6f34d2625999328133c849552f79f0019987196/enlarge=0;height=484;no_unsharpmask=1;quality=90;version=1;width=484/https%3A%2F%2Fcdn-ak-img.shonenjumpplus.com%2Fpublic%2Fseries-thumbnail%2F10834108156648240732-a36361f526a0f4cddeaaffcb49b901ed%3F1792733887",
+      "title": "SPY×FAMILY"
+    },
+    "pageStructure": {
+      "pages": [
+        {
+          "type": "link"
+        },
+        {
+          "type": "link"
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241044-31ea188b967b3694d8fcda5d2fba3bec",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241045-cde6916c0ddbf4d2d6cd08e7a5547a98",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241046-75dde0f6ee71e5eec542500aec83dd3e",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241047-6a49dac4c48eb48eb2726b801207829c",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241048-9e8e0a2afbe6c4d11f80be2e05e50960",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241049-7a6cba8ea5b925146a7e779fe4c03430",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241050-6e9c6c03369ccb884f4e25191cd2f8f6",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241051-d5f39d4ceabf25222e57843a68cf5767",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241052-aff0547d4045f7e4e0659800f1462670",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241053-7cd546d34938cea94cd409f18ac7e85c",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241054-6b73bbb6a261fad4de4d46d075f96079",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241055-c4ece563784c5e0e6c43779ccd5475e7",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241056-cb43e784e41c010286676e68355eb2d2",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241057-3519040ab584818da0c076969aff79d8",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241058-32ffb2a3cd336be7e38c799659cf7ade",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241059-308b456ffc3d6a6c94cd7f5629cc4502",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241060-36672f76490f7c3e7d48db8256f46f11",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241061-836f87dbe464e223fa8f5d97aa29614e",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241062-62980fe3e513bb25a2af9e9bea325eb2",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241063-c7c2d69be62f2c84aa2ce1875dd50523",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241064-cc62e0fe9ec430407a88e6cef5a29ae7",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241065-e8f3f8d7021682d698db2327191ad9b4",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241066-997b4fdc3ff35c991b4266173cd9f2bb",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241067-ed66a8c23eb8800ea5e96cf94e71ada1",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241068-40d93a7d5047d7b3a61ba0eda3e7f50a",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241069-21fc88fbb3a0849d1c78e9a513d4b4f6",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241070-7d3cf0502eaabf2eb20c32342b9d866a",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241071-013a1588e1b7f7f0f0200bdb35b88f5e",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241072-5d0be4f534a09faff84ce821b93089af",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241073-f0d96c40b08d3500cd39d1b507768923",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241074-937ca9c840aa3790858fabbf6ffc2488",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241075-4c14117b38311d25955be9ed1105b663",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241076-56bb2838fb21737f7964194c1e4e750f",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241077-42ede93ccf6d9290ee675a24884346c5",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241078-9019aabc69356c0d603313f9a46c5322",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241079-32bb1af00002036dc48c55fe7b93a7d4",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241080-6468c3d89664cd5e274a3c46627704f5",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241081-17e145723d4b45f1061ffc96cfd68dab",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241082-1487a4986fcfb19bfb8e32e715f893c7",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241083-9607d490d8808d438495d1178430ae24",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241084-a37452a54f2c006e9d972638e0adaed7",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241085-2251d40914972267c189ea86a2e56d90",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241086-1990bee9db8ab1e44d3ec921123ea556",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241087-975b681b23f22ef7f4dc35a407696f26",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241088-8a73f156f2c13dc8ec7e007b9a631a46",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241089-a3bc0e85f7bd0cd5c32347cefbb2ee3f",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241090-8fcc10d2e3d1d073c5254e3f4486fbe1",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241091-c51a95e607d5c3289edb8682982975f0",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241092-afee76abdddd7195e703790278bf24ec",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241093-ddfffa750db759e69c2059399c16e033",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241094-2c0ea6419c38351121e402a48fcc4acd",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241095-c26c8a0a54a3b184a165adc19d762e51",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241096-5c8f3e146df0bd8b5cc5a4cca9fd3e79",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241097-ee86ca8ae42f26f7c4396962c57964e8",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241098-df10380aecfa0886201d4115e18d084b",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241099-9d95a7644bcc3f4d632aca9935300b4c",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241100-cf0e9d86a5e5bf48dbec35e4f883a95f",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241101-7ab98fb8a4f12dc7cce5202353592c23",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241102-cc4f76c53f90726c2b0d6420d9861f1f",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241103-23e687cbb811d2aa8fa6115c230babbe",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241104-2a2e7eafdd498df5df17bd5e0d599970",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241105-0ce138f79d25e61dd24f8066722e4947",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241106-dd1c84d9081e98885e0bc94e40ca42f4",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241107-3aecfffdcb72a08925f397d9e764ecfa",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241108-ac010e7c6723992de4fc056fb86de002",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241109-77fe1fd38d2db9d1f728377f9d192e50",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241110-189f578f4ed61f1ce3b22f240e3eec95",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241111-59c6c61f7a439f29dd1458cb516112bd",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241112-fcd89bb69d79d7b4f881d797906e2913",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241113-c9cd72c566c996619c9a8c08f366c2db",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "height": 1200,
+          "src": "https://cdn-ak-img.shonenjumpplus.com/public/page/2/10834108156648241114-3df167533f6b69dc8d24782a87871657",
+          "type": "main",
+          "width": 764
+        },
+        {
+          "type": "link"
+        },
+        {
+          "type": "link"
+        },
+        {
+          "type": "other"
+        },
+        {
+          "type": "other"
+        },
+        {
+          "type": "backMatter"
+        }
+      ]
+    }
+  }
+}

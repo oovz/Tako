@@ -1,36 +1,28 @@
-/**
- * @file series-data.ts
- * @description Shonen Jump+ series metadata mock data.
- *
- * Shonen Jump+ series are identified by an **episode id** that appears in
- * the series URL (e.g. `/episode/3269754496649675685`). The content script
- * derives series title from the embedded `<script id="episode-json">` or
- * `.series-header-title` element.
- */
-
 import type {
   SiteIntegrationSeriesData,
   SiteIntegrationSeriesDataset,
 } from "../../types"
+import capturedEpisode from "@/tests/fixtures/site-integrations/shonenjumpplus/captured-episode.json" with { type: "json" }
 
 export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
   id: "SHONENJUMPPLUS_BASIC_SERIES",
-  description: "Basic Shonen Jump+ series with full metadata",
+  description: "Captured SPY×FAMILY episode and public guest catalog",
   series: {
     siteId: "shonenjumpplus",
-    seriesId: "3269754496649675685",
-    seriesTitle: "テスト連載",
-    author: "テスト作者",
-    description: "A Shonen Jump+ fixture series used by e2e tests.",
-    coverUrl:
-      "https://cdn-ak-img.shonenjumpplus.com/public/series-thumbnail/4401-test.jpg",
+    seriesId: capturedEpisode.readableProduct.id,
+    seriesTitle: capturedEpisode.readableProduct.series.title,
+    author: "遠藤達哉",
+    coverUrl: capturedEpisode.readableProduct.series.thumbnailUri,
   },
   chapterDatasetId: "SHONENJUMPPLUS_BASIC",
 }
 
+// Controlled second context for navigation reset coverage, derived from the
+// captured episode. This is not a second captured publication.
 export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
   id: "SHONENJUMPPLUS_MINIMAL_SERIES",
-  description: "Shonen Jump+ series with a single chapter",
+  description:
+    "Synthetic one-chapter navigation context derived from SPY×FAMILY",
   series: {
     siteId: "shonenjumpplus",
     seriesId: "3269754496649675702",
@@ -39,13 +31,8 @@ export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
   chapterDatasetId: "SHONENJUMPPLUS_SMALL",
 }
 
-/**
- * Aggregate IDs are a separate identifier embedded in the DOM via
- * `.js-readable-products-pagination[data-aggregate-id]`. The chapter-list
- * API endpoints are scoped by aggregate id, not episode id.
- */
 export const SERIES_AGGREGATE_IDS: Record<string, string> = {
-  [BASIC_SERIES.series.seriesId]: "4401",
+  [BASIC_SERIES.series.seriesId]: capturedEpisode.readableProduct.series.id,
   [MINIMAL_SERIES.series.seriesId]: "4402",
 }
 
@@ -53,9 +40,9 @@ export function createShonenJumpPlusSeries(
   overrides: Partial<SiteIntegrationSeriesData>
 ): SiteIntegrationSeriesData {
   return {
-    siteId: overrides.siteId || "shonenjumpplus",
-    seriesId: overrides.seriesId || BASIC_SERIES.series.seriesId,
-    seriesTitle: overrides.seriesTitle || "テスト連載",
+    siteId: overrides.siteId ?? "shonenjumpplus",
+    seriesId: overrides.seriesId ?? BASIC_SERIES.series.seriesId,
+    seriesTitle: overrides.seriesTitle ?? BASIC_SERIES.series.seriesTitle,
     author: overrides.author,
     description: overrides.description,
     coverUrl: overrides.coverUrl,
