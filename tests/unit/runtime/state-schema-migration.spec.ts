@@ -252,6 +252,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -731,7 +737,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
       stateSchemaEpoch: 2,
       stateSchemaMigrationJournal: {
         sourceEpoch: 2,
-        targetEpoch: CURRENT_STATE_SCHEMA_EPOCH,
+        targetEpoch: 3,
         phase: "prepared",
         writes: {
           downloadQueue: [],
@@ -749,7 +755,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
       stateSchemaEpoch: 2,
       stateSchemaMigrationJournal: {
         sourceEpoch: 2,
-        targetEpoch: CURRENT_STATE_SCHEMA_EPOCH,
+        targetEpoch: 3,
         phase: "prepared",
         writes: {
           downloadQueue: [],
@@ -839,5 +845,213 @@ describe("migrateDurableStateForCurrentSchema", () => {
     expect(local.activeDispatchLease).toEqual(
       expect.objectContaining({ jobId: "job-valid" })
     )
+  })
+})
+
+describe("ordered stored-state migration steps", () => {
+  function releasedTask() {
+    const task = epoch2Task()
+    delete (task as { seriesCoverUrl?: string }).seriesCoverUrl
+    delete (task.settingsSnapshot as { comicInfo?: unknown }).comicInfo
+    return {
+      ...task,
+      activeBlock: "native_output_action_required",
+      errorCategory: "browser_download_unobservable",
+      chapters: task.chapters.map((chapter) => ({
+        ...chapter,
+        errorCategory: "browser_download_unobservable",
+        nativeOutputSettlement: {
+          ...chapter.nativeOutputSettlement,
+          completed: 1,
+          surrendered: 1,
+        },
+      })),
+    }
+  }
+
+  function storageHarness(initial: Record<string, unknown>) {
+    const local = structuredClone(initial)
+    const storage = {
+      get: vi.fn(async (keys: string[]) =>
+        Object.fromEntries(
+          keys.flatMap((key) =>
+            key in local ? [[key, structuredClone(local[key])]] : []
+          )
+        )
+      ),
+      set: vi.fn(async (values: Record<string, unknown>) => {
+        Object.assign(local, structuredClone(values))
+      }),
+      remove: vi.fn(async (keys: string | string[]) => {
+        for (const key of [keys].flat()) delete local[key]
+      }),
+    }
+    vi.stubGlobal("chrome", { storage: { local: storage } })
+    return { local, storage }
+  }
+
+  it("converts removed settlement representations from a released epoch-2 profile", async () => {
+    const { local } = storageHarness({
+      stateSchemaEpoch: 2,
+      downloadQueue: [releasedTask()],
+      pendingUndoActions: [],
+    })
+    await migrateDurableStateForCurrentSchema()
+    expect(local.stateSchemaEpoch).toBe(4)
+    expect(local.downloadQueue).toMatchObject([
+      {
+        errorCategory: "browser_handoff_interrupted",
+        chapters: [
+          {
+            nativeOutputSettlement: {
+              completed: 1,
+              interrupted: 1,
+              acceptanceUncertain: true,
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  it("resumes an already prepared earlier journal before the next conversion", async () => {
+    const task = releasedTask()
+    const { local, storage } = storageHarness({
+      stateSchemaEpoch: 2,
+      stateSchemaMigrationJournal: {
+        sourceEpoch: 2,
+        targetEpoch: 3,
+        phase: "prepared",
+        writes: { downloadQueue: [task], pendingUndoActions: [] },
+        obsoleteKeys: [],
+      },
+    })
+    await migrateDurableStateForCurrentSchema()
+    expect(
+      storage.set.mock.calls
+        .filter(([values]) => "stateSchemaEpoch" in values)
+        .map(([values]) => values.stateSchemaEpoch)
+    ).toEqual([3, 4])
+    expect(local.downloadQueue).toMatchObject([
+      {
+        activeBlock: undefined,
+        errorCategory: "browser_handoff_interrupted",
+        chapters: [
+          {
+            nativeOutputSettlement: {
+              completed: 1,
+              interrupted: 1,
+              acceptanceUncertain: true,
+            },
+          },
+        ],
+      },
+    ])
+    expect(local.stateSchemaMigrationJournal).toBeUndefined()
+    storage.set.mockClear()
+    storage.remove.mockClear()
+    await migrateDurableStateForCurrentSchema()
+    expect(storage.set).not.toHaveBeenCalled()
+    expect(storage.remove).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    "prepared",
+    "documents",
+    "canonical-written",
+    "obsolete-removed",
+    "marker",
+    "journal-remove",
+  ])("resumes the output conversion after %s fails", async (failurePoint) => {
+    const task = releasedTask()
+    const { local, storage } = storageHarness({
+      stateSchemaEpoch: 3,
+      downloadQueue: [task],
+      pendingUndoActions: [],
+    })
+    const set = storage.set.getMockImplementation()!
+    const remove = storage.remove.getMockImplementation()!
+    storage.set.mockImplementation(async (values) => {
+      const journal = values.stateSchemaMigrationJournal as
+        { phase?: string } | undefined
+      if (
+        journal?.phase === failurePoint ||
+        (failurePoint === "documents" && "downloadQueue" in values) ||
+        (failurePoint === "marker" && "stateSchemaEpoch" in values)
+      )
+        throw new Error("Temporary storage failure")
+      await set(values)
+    })
+    storage.remove.mockImplementation(async (keys) => {
+      if (failurePoint === "journal-remove")
+        throw new Error("Temporary storage failure")
+      await remove(keys)
+    })
+    await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow(
+      "Temporary storage failure"
+    )
+    storage.set.mockImplementation(set)
+    storage.remove.mockImplementation(remove)
+    await migrateDurableStateForCurrentSchema()
+    expect(local.stateSchemaEpoch).toBe(4)
+    expect(local.stateSchemaMigrationJournal).toBeUndefined()
+    expect(local.downloadQueue).toMatchObject([
+      {
+        chapters: [
+          {
+            nativeOutputSettlement: {
+              completed: 1,
+              interrupted: 1,
+              acceptanceUncertain: true,
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  it.each(["downloadQueue", "pendingUndoActions", "pendingOutputs:index"])(
+    "preserves an explicit null %s document as invalid",
+    async (key) => {
+      const initial = {
+        stateSchemaEpoch: 3,
+        downloadQueue: [],
+        pendingUndoActions: [],
+        [key]: null,
+      }
+      const { local, storage } = storageHarness(initial)
+      await expect(migrateDurableStateForCurrentSchema()).rejects.toMatchObject(
+        {
+          name: "InvalidDurableStateError",
+          fatal: true,
+        }
+      )
+      expect(local).toEqual(initial)
+      expect(storage.set).not.toHaveBeenCalled()
+      expect(storage.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it("preserves malformed indexed native output before any writes", async () => {
+    const initial = {
+      stateSchemaEpoch: 3,
+      downloadQueue: [],
+      pendingOutputs: { retain: true },
+      "pendingOutputs:index": {
+        jobIds: ["job"],
+        outputIds: ["output"],
+        downloadIdToOutputId: {},
+      },
+      "pendingOutputs:manifest:job": { malformed: true },
+      "pendingOutputs:output:output": {
+        phase: "surrendered",
+        surrenderedAt: "invalid",
+      },
+    }
+    const { local, storage } = storageHarness(initial)
+    await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow()
+    expect(local).toEqual(initial)
+    expect(storage.set).not.toHaveBeenCalled()
+    expect(storage.remove).not.toHaveBeenCalled()
   })
 })

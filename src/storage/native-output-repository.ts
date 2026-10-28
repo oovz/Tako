@@ -329,7 +329,8 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     if (
       record.blobReleasedAt !== undefined &&
       (record.blobReleasedAt < record.createdAt ||
-        !canReleaseNativeOutputBlob(record))
+        (!canReleaseNativeOutputBlob(record) &&
+          !(record.phase === "waiting" && record.erasedAt !== undefined)))
     ) {
       context.addIssue({
         code: "custom",
@@ -340,7 +341,8 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     }
     if (
       record.dependencyReleasedAt !== undefined &&
-      (!canReleaseNativeOutputBlob(record) ||
+      ((!canReleaseNativeOutputBlob(record) &&
+        !(record.phase === "waiting" && record.erasedAt !== undefined)) ||
         record.accountingDisposition === "pending" ||
         record.blobReleasedAt === undefined ||
         record.dependencyReleasedAt < record.blobReleasedAt)

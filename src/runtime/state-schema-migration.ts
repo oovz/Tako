@@ -1,10 +1,18 @@
 import { z } from "zod"
 
+import {
+  convertStoredTask,
+  convertStoredNativeState,
+  nativeStorageKeys,
+  parseNativeStorageIndex,
+  validateNativeOutputMigrationWrites,
+} from "./state-schema-migration-output"
+
 import { rebuildSeriesHistory } from "@/src/domain/history/cleanup-policy"
 import {
   DownloadedChapterRecordSchema,
   parseHistoryAggregate,
-} from "@/src/domain/history/schema"
+} from "./state-schema-migration-history-schema"
 import {
   composeDownloadedChapterKey,
   type DownloadedChapterRecord,
@@ -22,7 +30,7 @@ import { createDefaultSettings } from "@/src/domain/settings/defaults"
 import {
   parseSettingsDocument,
   SETTINGS_LIMITS,
-} from "@/src/domain/settings/schema"
+} from "./state-schema-migration-settings-schema"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import {
   SiteOverrideRecordSchema,
@@ -39,7 +47,8 @@ import {
   Epoch2DownloadTaskStateSchema,
   Epoch2PendingUndoActionSchema,
   PendingUndoActionSchema,
-} from "@/src/runtime/queue-state-schemas"
+  taskSettingsSnapshotSchema,
+} from "./state-schema-migration-queue-schemas"
 import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -84,7 +93,8 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 3
+export const CURRENT_STATE_SCHEMA_EPOCH = 4
+const DESTINATION_PAIRING_EPOCH = 3
 
 const SCHEMA_EPOCH_STORAGE_KEY = "stateSchemaEpoch"
 const MIGRATION_JOURNAL_STORAGE_KEY = "stateSchemaMigrationJournal"
@@ -96,7 +106,7 @@ const UPDATE_INTERRUPTION_MESSAGE =
 const DestinationIssuesSchema = z.array(DestinationIssueSchema)
 const MigrationJournalSchema = z.strictObject({
   sourceEpoch: z.number().int().nonnegative().nullable(),
-  targetEpoch: z.literal(CURRENT_STATE_SCHEMA_EPOCH),
+  targetEpoch: z.number().int().positive(),
   phase: z.enum(["prepared", "canonical-written", "obsolete-removed"]),
   writes: z.record(z.string(), z.unknown()),
   obsoleteKeys: z.array(z.string().min(1)),
@@ -112,6 +122,7 @@ const MIGRATION_STORAGE_KEYS = [
   SITE_OVERRIDES_STORAGE_KEY,
   LEGACY_DESTINATION_ISSUES_STORAGE_KEY,
   OBSOLETE_COMMAND_RESULTS_KEY,
+  nativeStorageKeys.index,
 ] as const
 
 const MIGRATION_WRITE_KEYS = new Set([
@@ -350,12 +361,14 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
   const parsedSnapshot = rawSnapshot
     ? LegacyTaskSettingsSnapshotSchema.parse(rawSnapshot)
     : undefined
-  const baseSnapshot = createTaskSettingsSnapshot(
-    createDefaultSettings("warn"),
-    legacy.siteIntegrationId,
-    {
-      comicInfo: snapshotMetadata(legacy.seriesMetadata),
-    }
+  const baseSnapshot = taskSettingsSnapshotSchema.strip().parse(
+    createTaskSettingsSnapshot(
+      createDefaultSettings("warn"),
+      legacy.siteIntegrationId,
+      {
+        comicInfo: snapshotMetadata(legacy.seriesMetadata),
+      }
+    )
   )
   const imagePolicy = parsedSnapshot?.rateLimitSettings?.image
   const chapterPolicy = parsedSnapshot?.rateLimitSettings?.chapter
@@ -487,7 +500,7 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
 }
 
 function migrateEpoch2DownloadTask(raw: unknown): DownloadTaskState {
-  const parsed = Epoch2DownloadTaskStateSchema.parse(raw)
+  const parsed = Epoch2DownloadTaskStateSchema.parse(convertStoredTask(raw))
   const candidate = {
     ...parsed,
     seriesCoverUrl: migrateCoverUrl(parsed.seriesCoverUrl),
@@ -652,7 +665,7 @@ function migrateEpoch2PendingUndoActions(raw: unknown): PendingUndoAction[] {
   if (!Array.isArray(raw))
     throw new Error("Stored pending Undo actions are not an array")
   return raw.map((value) => {
-    const action = Epoch2PendingUndoActionSchema.parse(value)
+    const action = Epoch2PendingUndoActionSchema.parse(convertStoredUndo(value))
     return PendingUndoActionSchema.parse({
       ...action,
       taskSnapshot: migrateEpoch2DownloadTask(action.taskSnapshot),
@@ -974,6 +987,11 @@ function readSupportedEpoch(raw: unknown): number | null {
 }
 
 function validateMigrationJournal(journal: MigrationJournal): void {
+  if (
+    !MIGRATION_STEPS.some((step) => step.targetEpoch === journal.targetEpoch)
+  ) {
+    throw new Error("State migration journal has an unsupported target epoch")
+  }
   for (const key of [
     LOCAL_STORAGE_KEYS.downloadQueue,
     LOCAL_STORAGE_KEYS.pendingUndoActions,
@@ -985,7 +1003,15 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     }
   }
   for (const key of Object.keys(journal.writes)) {
-    if (!MIGRATION_WRITE_KEYS.has(key)) {
+    if (
+      !MIGRATION_WRITE_KEYS.has(key) &&
+      !(
+        journal.targetEpoch === 4 &&
+        (key === nativeStorageKeys.index ||
+          key.startsWith(nativeStorageKeys.manifestPrefix) ||
+          key.startsWith(nativeStorageKeys.outputPrefix))
+      )
+    ) {
       throw new Error(
         `State migration journal contains an invalid write key: ${key}`
       )
@@ -1008,12 +1034,20 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(DownloadTaskStateSchema).parse(
-      journal.writes[LOCAL_STORAGE_KEYS.downloadQueue]
+      journal.targetEpoch === 3
+        ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
+            convertStoredTask
+          )
+        : journal.writes[LOCAL_STORAGE_KEYS.downloadQueue]
     )
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(PendingUndoActionSchema).parse(
-      journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions]
+      journal.targetEpoch === 3
+        ? (
+            journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions] as unknown[]
+          ).map(convertStoredUndo)
+        : journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions]
     )
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.settings)) {
@@ -1036,6 +1070,17 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     PersistentErrorsSchema.parse(
       journal.writes[LOCAL_STORAGE_KEYS.persistentErrors]
     )
+  }
+
+  const nativeKeys = Object.keys(journal.writes).filter((key) =>
+    key.startsWith("pendingOutputs:")
+  )
+  if (nativeKeys.length > 0) {
+    if (!Object.hasOwn(journal.writes, nativeStorageKeys.index))
+      throw new Error(
+        "State migration journal is missing the native output index"
+      )
+    validateNativeOutputMigrationWrites(journal.writes)
   }
 
   const historyKeys = [
@@ -1062,7 +1107,7 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
 }
 
-function buildMigrationJournal(
+function buildDestinationPairingJournal(
   stored: Record<string, unknown>,
   sourceEpoch: number | null
 ): MigrationJournal {
@@ -1148,7 +1193,7 @@ function buildMigrationJournal(
 
   const journal = MigrationJournalSchema.parse({
     sourceEpoch,
-    targetEpoch: CURRENT_STATE_SCHEMA_EPOCH,
+    targetEpoch: DESTINATION_PAIRING_EPOCH,
     phase: "prepared",
     writes,
     obsoleteKeys,
@@ -1157,6 +1202,54 @@ function buildMigrationJournal(
   return journal
 }
 
+function convertStoredUndo(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw
+  return { ...raw, taskSnapshot: convertStoredTask(raw.taskSnapshot) }
+}
+
+function buildOutputMigrationJournal(
+  stored: Record<string, unknown>,
+  sourceEpoch: number | null
+): MigrationJournal {
+  const queue =
+    stored[LOCAL_STORAGE_KEYS.downloadQueue] === undefined
+      ? []
+      : stored[LOCAL_STORAGE_KEYS.downloadQueue]
+  const undo =
+    stored[LOCAL_STORAGE_KEYS.pendingUndoActions] === undefined
+      ? []
+      : stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
+  if (!Array.isArray(queue) || !Array.isArray(undo)) {
+    throw new Error("Stored queue and Undo documents must be arrays")
+  }
+  const writes: Record<string, unknown> = {
+    [LOCAL_STORAGE_KEYS.downloadQueue]: z
+      .array(DownloadTaskStateSchema)
+      .parse(queue.map(convertStoredTask)),
+    [LOCAL_STORAGE_KEYS.pendingUndoActions]: z
+      .array(PendingUndoActionSchema)
+      .parse(undo.map(convertStoredUndo)),
+    ...convertStoredNativeState(stored),
+  }
+  const journal = MigrationJournalSchema.parse({
+    sourceEpoch,
+    targetEpoch: 4,
+    phase: "prepared",
+    writes,
+    obsoleteKeys: [],
+  })
+  validateMigrationJournal(journal)
+  return journal
+}
+
+const MIGRATION_STEPS = [
+  {
+    targetEpoch: DESTINATION_PAIRING_EPOCH,
+    prepare: buildDestinationPairingJournal,
+  },
+  { targetEpoch: 4, prepare: buildOutputMigrationJournal },
+] as const
+
 function parseMigrationJournal(raw: unknown): MigrationJournal | null {
   if (raw === undefined) return null
   const parsed = MigrationJournalSchema.safeParse(raw)
@@ -1164,8 +1257,9 @@ function parseMigrationJournal(raw: unknown): MigrationJournal | null {
     throw new Error("Stored state schema migration journal is invalid")
   }
   if (
-    parsed.data.sourceEpoch !== null &&
-    parsed.data.sourceEpoch >= CURRENT_STATE_SCHEMA_EPOCH
+    (parsed.data.sourceEpoch !== null &&
+      parsed.data.sourceEpoch >= parsed.data.targetEpoch) ||
+    (parsed.data.targetEpoch === 4 && parsed.data.sourceEpoch !== 3)
   ) {
     throw new Error(
       "Stored state schema migration journal has an invalid source epoch"
@@ -1180,12 +1274,13 @@ function validateMigrationJournalAgainstStoredState(
   stored: Record<string, unknown>,
   epoch: number | null
 ): void {
-  if (epoch === CURRENT_STATE_SCHEMA_EPOCH) return
+  if (epoch === journal.targetEpoch) return
   if (journal.sourceEpoch !== epoch) {
     throw new Error(
       "State migration journal source epoch does not match stored epoch"
     )
   }
+  if (journal.targetEpoch !== DESTINATION_PAIRING_EPOCH) return
   for (const key of MIGRATION_OBSOLETE_KEYS) {
     const presentAndObsolete =
       key === LOCAL_STORAGE_KEYS.activeDispatchLease
@@ -1226,7 +1321,7 @@ async function replayMigrationJournal(
     await persistMigrationJournal(current)
   }
   await chrome.storage.local.set({
-    [SCHEMA_EPOCH_STORAGE_KEY]: CURRENT_STATE_SCHEMA_EPOCH,
+    [SCHEMA_EPOCH_STORAGE_KEY]: current.targetEpoch,
   })
   await chrome.storage.local.remove(MIGRATION_JOURNAL_STORAGE_KEY)
 }
@@ -1238,37 +1333,71 @@ async function replayMigrationJournal(
  */
 export async function migrateDurableStateForCurrentSchema(): Promise<void> {
   try {
-    const stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
-    let plan: MigrationJournal
-    let journal: MigrationJournal | null
-    try {
-      const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
-      journal = parseMigrationJournal(stored[MIGRATION_JOURNAL_STORAGE_KEY])
-      if (journal) {
-        validateMigrationJournalAgainstStoredState(journal, stored, epoch)
-        if (
-          epoch === CURRENT_STATE_SCHEMA_EPOCH &&
-          journal.phase !== "obsolete-removed"
-        ) {
-          throw new Error(
-            "State migration journal phase is inconsistent with the current epoch"
+    let stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
+    while (true) {
+      if (
+        stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 &&
+        stored[MIGRATION_JOURNAL_STORAGE_KEY] === undefined
+      ) {
+        let index
+        try {
+          index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
+        } catch (cause) {
+          throw new InvalidDurableStateError(
+            "Invalid durable native output index",
+            { cause }
           )
         }
+        const keys = [
+          ...index.jobIds.map((id) => nativeStorageKeys.manifestPrefix + id),
+          ...index.outputIds.map((id) => nativeStorageKeys.outputPrefix + id),
+        ]
+        if (keys.length > 0)
+          Object.assign(stored, await chrome.storage.local.get(keys))
       }
-      if (epoch === CURRENT_STATE_SCHEMA_EPOCH && journal === null) return
-      plan = journal ?? buildMigrationJournal(stored, epoch)
-    } catch (cause) {
-      throw new InvalidDurableStateError(
-        cause instanceof Error ? cause.message : "Invalid retained state",
-        { cause }
+      let plan: MigrationJournal
+      let existingJournal: MigrationJournal | null
+      try {
+        const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
+        existingJournal = parseMigrationJournal(
+          stored[MIGRATION_JOURNAL_STORAGE_KEY]
+        )
+        if (existingJournal) {
+          validateMigrationJournalAgainstStoredState(
+            existingJournal,
+            stored,
+            epoch
+          )
+          if (
+            epoch === existingJournal.targetEpoch &&
+            existingJournal.phase !== "obsolete-removed"
+          ) {
+            throw new Error(
+              "State migration journal phase is inconsistent with the current epoch"
+            )
+          }
+        }
+        if (epoch === CURRENT_STATE_SCHEMA_EPOCH && existingJournal === null)
+          return
+        const step = MIGRATION_STEPS.find(
+          (candidate) => candidate.targetEpoch > (epoch ?? -1)
+        )
+        if (!existingJournal && !step)
+          throw new Error("No supported state migration step")
+        plan = existingJournal ?? step!.prepare(stored, epoch)
+      } catch (cause) {
+        throw new InvalidDurableStateError(
+          cause instanceof Error ? cause.message : "Invalid retained state",
+          { cause }
+        )
+      }
+      if (existingJournal === null) await persistMigrationJournal(plan)
+      logger.info(
+        `[Init] Migrating durable state schema from ${String(plan.sourceEpoch)} to ${plan.targetEpoch}`
       )
+      await replayMigrationJournal(plan)
+      stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
     }
-
-    if (journal === null) await persistMigrationJournal(plan)
-    logger.info(
-      `[Init] Migrating durable state schema from ${String(plan.sourceEpoch)} to ${CURRENT_STATE_SCHEMA_EPOCH}`
-    )
-    await replayMigrationJournal(plan)
   } catch (error) {
     logger.error("Durable state schema migration failed", error)
     throw error
