@@ -123,7 +123,6 @@ function createHarness(queue: DownloadTaskState[] = []) {
     queueRepository,
     nativeOutputCoordinator,
     {} as QueueScheduler,
-    {} as never,
     {
       settingsRepository: settingsRepository as never,
       historyRepository: {} as never,

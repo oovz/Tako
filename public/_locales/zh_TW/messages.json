@@ -327,39 +327,6 @@
   "sidepanel_siteNotSupported": {
     "message": "此網站暫不受支援。"
   },
-  "destinationIssue_title": {
-    "message": "下載資料夾需要處理"
-  },
-  "destinationIssue_permissionRequired": {
-    "message": "請再次允許存取所選資料夾，以繼續此工作。"
-  },
-  "destinationIssue_folderMissing": {
-    "message": "請重新選擇下載資料夾，以繼續此工作。"
-  },
-  "destinationIssue_writeFailed": {
-    "message": "Tako 無法寫入所選下載資料夾。"
-  },
-  "destinationIssue_unsupported": {
-    "message": "此瀏覽器無法使用所選的自訂資料夾。"
-  },
-  "destinationIssue_diskFull": {
-    "message": "所選下載資料夾的可用空間不足。"
-  },
-  "destinationIssue_fixFolder": {
-    "message": "修復資料夾"
-  },
-  "destinationIssue_grantAccess": {
-    "message": "再次授權"
-  },
-  "destinationIssue_cancelTask": {
-    "message": "取消工作"
-  },
-  "destinationIssue_actionFailed": {
-    "message": "無法更新受阻工作"
-  },
-  "destinationIssue_accessGranted": {
-    "message": "已恢復資料夾存取權限"
-  },
   "sidepanel_initFailed": {
     "message": "擴充功能初始化失敗"
   },
@@ -398,9 +365,6 @@
   },
   "status_waitingBrowserDownload": {
     "message": "等待 Chrome 下載完成"
-  },
-  "status_destinationActionRequired": {
-    "message": "需要處理下載資料夾"
   },
   "status_waitingProviderPolicy": {
     "message": "等待網站存取策略"
@@ -1875,9 +1839,6 @@
       }
     }
   },
-  "destinationIssue_originalUnavailable": {
-    "message": "此任務的原始儲存位置無法使用。請建立新任務。"
-  },
   "destination_taskChrome": {
     "message": "Chrome 下載"
   },
@@ -1886,5 +1847,26 @@
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "無法確認 Chrome 是否已儲存檔案。重試可能會產生重複檔案。"
+  },
+  "taskFolder_originalUnavailable": {
+    "message": "此任務的原始儲存位置無法使用。請建立新任務。"
+  },
+  "folderAccess_grant": {
+    "message": "再次授權"
+  },
+  "folderAccess_granted": {
+    "message": "已恢復資料夾存取權限"
+  },
+  "taskFolder_accessGranted": {
+    "message": "已授予資料夾存取權限。請重試儲存。"
+  },
+  "taskFolder_accessFailed": {
+    "message": "無法重新取得此任務的資料夾存取權限。"
+  },
+  "taskFolder_openActions": {
+    "message": "開啟資料夾操作"
+  },
+  "status_skipped": {
+    "message": "已略過"
   }
 }

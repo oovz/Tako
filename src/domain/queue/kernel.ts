@@ -1139,7 +1139,6 @@ export function applyNativeOutputSettlement(
           status: terminalStatus,
           completed: input.now,
           activeBlock: undefined,
-          destinationIssue: undefined,
           errorMessage:
             terminalStatus === "completed"
               ? undefined
@@ -1163,282 +1162,6 @@ export function applyNativeOutputSettlement(
       chapter: updatedChapter,
       settlement,
     },
-  }
-}
-
-export function blockTaskForDestination(
-  state: QueueAggregateState,
-  input: {
-    taskId: string
-    now: number
-    destinationIssue: NonNullable<DownloadTaskState["destinationIssue"]>
-    errorMessage?: string
-    errorCategory?: DownloadErrorCategory
-    chapter?: {
-      chapterId: string
-      lease: DispatchLeaseAuthority
-      imagesFailed?: number
-      outputs?: OutputAccounting
-    }
-  }
-): QueueKernelDecision<
-  | Applied<{ task: DownloadTaskState }>
-  | Unchanged<{ reason: "already-blocked" }>
-  | Rejected<
-      | "task-not-found"
-      | "task-not-active"
-      | "chapter-not-found"
-      | "terminal-chapter"
-      | "lease-conflict",
-      { currentStatus?: DownloadTaskState["status"] }
-    >
-> {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-
-  let chapters = task.chapters
-  if (input.chapter) {
-    const chapterIndex = task.chapters.findIndex(
-      (chapter) => chapter.id === input.chapter?.chapterId
-    )
-    if (chapterIndex === -1) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "rejected", reason: "chapter-not-found" },
-      }
-    }
-    const chapter = task.chapters[chapterIndex]
-    if (!exactLeaseMatches(state.lease, input.chapter.lease)) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "rejected", reason: "lease-conflict" },
-      }
-    }
-    if (isTerminalChapterStatus(chapter.status)) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "rejected", reason: "terminal-chapter" },
-      }
-    }
-    chapters = [...task.chapters]
-    chapters[chapterIndex] = applyChapterUpdate(
-      chapter,
-      "queued",
-      {
-        errorMessage: input.errorMessage,
-        errorCategory: input.errorCategory,
-        imagesFailed: input.chapter.imagesFailed,
-        outputs: input.chapter.outputs,
-      },
-      input.now
-    )
-  } else if (
-    task.chapters.some((chapter) => chapter.status === "downloading")
-  ) {
-    chapters = task.chapters.map((chapter) =>
-      chapter.status === "downloading"
-        ? {
-            ...chapter,
-            status: "queued",
-            lastUpdated: input.now,
-          }
-        : chapter
-    )
-  }
-
-  if (
-    task.status === "queued" &&
-    task.activeBlock === "destination_action_required" &&
-    task.destinationIssue?.id === input.destinationIssue.id &&
-    chapters === task.chapters &&
-    task.errorMessage === input.errorMessage &&
-    task.errorCategory === input.errorCategory
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "already-blocked" },
-    }
-  }
-  const updatedTask: DownloadTaskState = {
-    ...task,
-    status: "queued",
-    activeBlock: "destination_action_required",
-    destinationIssue: input.destinationIssue,
-    destinationBlockRevision: (task.destinationBlockRevision ?? 0) + 1,
-    errorMessage: input.errorMessage ?? task.errorMessage,
-    errorCategory: input.errorCategory ?? task.errorCategory,
-    chapters,
-  }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
-}
-
-export function releaseDestinationBlock(
-  state: QueueAggregateState,
-  input: { taskId: string }
-): QueueKernelDecision<
-  | Applied<{ task: DownloadTaskState }>
-  | Unchanged<{ reason: "not-blocked" }>
-  | TaskMutationRejection
-> {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  if (task.activeBlock !== "destination_action_required") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "not-blocked" },
-    }
-  }
-  const updatedTask = {
-    ...task,
-    status: "queued" as const,
-    activeBlock: undefined,
-    destinationIssue: undefined,
-  }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
-}
-
-export function resumeDestinationTask(
-  state: QueueAggregateState,
-  input: {
-    taskId: string
-    commandId: string
-    now: number
-  }
-): QueueKernelDecision<
-  | Applied<{ task: DownloadTaskState }>
-  | Unchanged<
-      | { reason: "not-blocked" }
-      | { reason: "already-resumed"; task: DownloadTaskState }
-      | { reason: "superseded"; task: DownloadTaskState }
-    >
-  | TaskMutationRejection
-> {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  const task = state.queue[taskIndex]
-  const blockRevision = task.destinationBlockRevision ?? 0
-  if (task.destinationResume?.commandId === input.commandId) {
-    if (task.destinationResume.blockRevision < blockRevision) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "unchanged", reason: "superseded", task },
-      }
-    }
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "already-resumed", task },
-    }
-  }
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  if (task.activeBlock !== "destination_action_required") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "not-blocked" },
-    }
-  }
-  const updatedTask: DownloadTaskState = {
-    ...task,
-    status: "queued",
-    activeBlock: undefined,
-    destinationIssue: undefined,
-    destinationResume: {
-      commandId: input.commandId,
-      blockRevision,
-    },
-    errorMessage: undefined,
-    errorCategory: undefined,
-    chapters: task.chapters.map((chapter) =>
-      chapter.status === "queued" || chapter.status === "downloading"
-        ? {
-            ...chapter,
-            status: "queued",
-            errorMessage: undefined,
-            lastUpdated: input.now,
-          }
-        : chapter
-    ),
-  }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
   }
 }
 
@@ -1486,7 +1209,6 @@ export function blockTaskForProviderPolicy(
     ...task,
     status: "queued",
     activeBlock: input.block,
-    destinationIssue: undefined,
   }
   return {
     next: {
@@ -1539,7 +1261,6 @@ export function releaseProviderPolicyBlock(
   const updatedTask = {
     ...task,
     activeBlock: undefined,
-    destinationIssue: undefined,
   }
   return {
     next: {
@@ -1563,7 +1284,7 @@ export function releaseProviderPolicyBlocks(
       task.activeBlock === "provider_network_policy_pending"
     ) {
       releasedTaskIds.push(task.id)
-      return { ...task, activeBlock: undefined, destinationIssue: undefined }
+      return { ...task, activeBlock: undefined }
     }
     return task
   })
@@ -1578,6 +1299,120 @@ export function releaseProviderPolicyBlocks(
     next: { ...state, queue },
     changedKeys: QUEUE_KEY,
     result: { outcome: "applied", releasedTaskIds },
+  }
+}
+
+export function failTaskForSave(
+  state: QueueAggregateState,
+  input: {
+    taskId: string
+    chapterId?: string
+    errorMessage: string
+    errorCategory: DownloadErrorCategory
+    now: number
+    outputs?: OutputAccounting
+    imagesFailed?: number
+    clearLease?: DispatchLeaseAuthority
+  }
+): QueueKernelDecision<
+  | Applied<{
+      task: DownloadTaskState
+      clearedLease: ActiveDispatchLease | null
+    }>
+  | Rejected<
+      | "task-not-found"
+      | "task-not-active"
+      | "chapter-not-pending"
+      | "lease-conflict"
+    >
+> {
+  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
+  if (taskIndex === -1)
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "task-not-found" },
+    }
+  const task = state.queue[taskIndex]
+  if (task.status !== "queued" && task.status !== "downloading")
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "task-not-active" },
+    }
+  if (
+    input.clearLease &&
+    (!exactLeaseMatches(state.lease, input.clearLease) ||
+      input.clearLease.taskId !== task.id ||
+      input.clearLease.chapterId !== input.chapterId)
+  )
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "lease-conflict" },
+    }
+  const failing = input.chapterId
+    ? task.chapters.find((chapter) => chapter.id === input.chapterId)
+    : (task.chapters.find((chapter) => chapter.status === "downloading") ??
+      task.chapters.find((chapter) => chapter.status === "queued"))
+  if (
+    !failing ||
+    (failing.status !== "queued" && failing.status !== "downloading")
+  )
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "chapter-not-pending" },
+    }
+  const committed = Math.max(
+    failing.outputs?.committed ?? 0,
+    input.outputs?.committed ?? 0
+  )
+  const chapters = task.chapters.map((chapter) =>
+    chapter.id === failing.id
+      ? applyChapterUpdate(
+          chapter,
+          committed > 0 ? "partial_success" : "failed",
+          {
+            errorMessage: input.errorMessage,
+            errorCategory: input.errorCategory,
+            outputs: input.outputs,
+            imagesFailed: input.imagesFailed,
+            outputDestination: "fsa",
+          },
+          input.now
+        )
+      : chapter.status === "queued"
+        ? { ...chapter, status: "skipped" as const, lastUpdated: input.now }
+        : chapter
+  )
+  const failure = firstUnsuccessfulChapter(chapters)
+  const hasSavedOutput = chapters.some(
+    (chapter) =>
+      chapter.status === "completed" || (chapter.outputs?.committed ?? 0) > 0
+  )
+  const updated: DownloadTaskState = {
+    ...task,
+    chapters,
+    status: hasSavedOutput ? "partial_success" : "failed",
+    completed: input.now,
+    activeBlock: undefined,
+    nextChapterDispatchAt: undefined,
+    errorMessage: failure?.errorMessage ?? input.errorMessage,
+    errorCategory: failure?.errorCategory ?? input.errorCategory,
+  }
+  return {
+    next: {
+      ...state,
+      queue: replaceTaskAt(state.queue, taskIndex, updated),
+      lease: input.clearLease ? null : state.lease,
+    },
+    changedKeys: input.clearLease ? QUEUE_LEASE_KEYS : QUEUE_KEY,
+    result: {
+      outcome: "applied",
+      task: updated,
+      clearedLease: input.clearLease ? state.lease : null,
+    },
   }
 }
 
@@ -1802,7 +1637,9 @@ export function retryFailedChapters(
   }
   const failedChapters = original.chapters.filter(
     (chapter) =>
-      chapter.status === "failed" || chapter.status === "partial_success"
+      chapter.status === "failed" ||
+      chapter.status === "partial_success" ||
+      chapter.status === "skipped"
   )
   if (failedChapters.length === 0) {
     return {
@@ -1837,8 +1674,6 @@ export function retryFailedChapters(
     created: input.now,
     isRetried: false,
     isRetryTask: true,
-    destinationBlockRevision: undefined,
-    destinationResume: undefined,
     activeCancel: undefined,
     restoredUndo: undefined,
     settingsSnapshot: original.settingsSnapshot,
@@ -1948,7 +1783,6 @@ export function restartDownloadTask(
     errorMessage: undefined,
     errorCategory: undefined,
     activeBlock: undefined,
-    destinationIssue: undefined,
     created: input.now,
     started: undefined,
     completed: undefined,
@@ -1956,8 +1790,6 @@ export function restartDownloadTask(
     isRetryTask: true,
     lastSuccessfulDownloadId: undefined,
     nextChapterDispatchAt: undefined,
-    destinationBlockRevision: undefined,
-    destinationResume: undefined,
     activeCancel: undefined,
     restoredUndo: undefined,
   }

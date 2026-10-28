@@ -523,7 +523,7 @@ describe("archive chapter edge cases", () => {
     ).rejects.toMatchObject({
       name: "FsaWriteError",
       category: "disk_full",
-      message: "There is not enough disk space in the selected folder.",
+      message: "disk full",
     })
     expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
@@ -705,12 +705,75 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts))
     ).resolves.toMatchObject({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: 1,
       outputsRequested: 1,
       outputsCommitted: 0,
     })
+    expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+  })
+
+  it("cancels concurrent file writers on the first native saving failure", async () => {
+    const runtime = createRuntime()
+    runtime.liveResourceLedger = new OffscreenLiveResourceLedger(12)
+    vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
+      {} as FileSystemDirectoryHandle
+    )
+    const opts = {
+      ...createOptions("none"),
+      directoryHandleId: "selected-id",
+      downloadMode: "custom" as const,
+    }
+    opts.settingsSnapshot.rateLimitSettings.image.concurrency = 2
+    let secondStarted!: () => void
+    const second = new Promise<void>((resolve) => {
+      secondStarted = resolve
+    })
+    const original = new DOMException(
+      "Native file handle rejected the write",
+      "NotAllowedError"
+    )
+    const aborted = vi.fn()
+    vi.mocked(writeBlobToPath)
+      .mockImplementationOnce(async () => {
+        await second
+        throw original
+      })
+      .mockImplementationOnce(
+        async (_root, _path, _blob, _policy, writeOptions) => {
+          secondStarted()
+          await new Promise<void>((_resolve, reject) => {
+            writeOptions?.signal?.addEventListener(
+              "abort",
+              () => {
+                aborted()
+                reject(writeOptions.signal?.reason)
+              },
+              { once: true }
+            )
+          })
+          return { status: "written" }
+        }
+      )
+    const input = noneInput(opts)
+    input.urls = [
+      "https://example.com/1",
+      "https://example.com/2",
+      "https://example.com/3",
+    ]
+    const result = await processNoneFormatChapter(runtime, input)
+    expect(result).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+      errorMessage: original.message,
+      outputsCommitted: 0,
+    })
+    expect(aborted).toHaveBeenCalledOnce()
+    expect(writeBlobToPath).toHaveBeenCalledTimes(2)
+    const later = runtime.liveResourceLedger.reserve(12, "later chapter")
+    expect(later.bytes).toBe(12)
+    later.release()
     expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
 
@@ -738,7 +801,7 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts, downloadImage))
     ).resolves.toEqual({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "cover write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: 1,
       outputsRequested: 2,
@@ -819,7 +882,7 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts))
     ).resolves.toEqual({
       status: "partial_success",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "metadata write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: undefined,
       outputsRequested: 2,

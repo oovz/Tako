@@ -10,7 +10,6 @@ type QueueMessageType =
   | "CLEAR_ALL_HISTORY"
   | "REMOVE_TASK"
   | "CANCEL_TASK"
-  | "RETRY_DESTINATION"
   | "UNDO_QUEUE_ACTION"
 
 export function createBackgroundQueueMessageHandlers(
@@ -74,13 +73,6 @@ export function createBackgroundQueueMessageHandlers(
       return result.kind === "queued"
         ? { success: true, data: { undo: result.undo } }
         : { success: true }
-    },
-    RETRY_DESTINATION: async (message) => {
-      await deps.queueApplicationCommands.retryDestination(
-        message.payload.taskId,
-        message.commandId
-      )
-      return { success: true }
     },
 
     UNDO_QUEUE_ACTION: async (message) => {

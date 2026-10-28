@@ -117,11 +117,7 @@ function createRuntime(
     new HistoryRepository()
   )
 ): Runtime {
-  const destinationService = new DestinationService({
-    queueRepository,
-    settingsReader: { getSettings: async () => createSettings() },
-    notifier: { notifyDestinationActionRequired: async () => undefined },
-  })
+  const destinationService = new DestinationService()
   const cancellation = new DownloadTaskCancellationCoordinator(
     queueRepository,
     {
@@ -152,7 +148,6 @@ function createRuntime(
     async <T>(operation: () => Promise<T>) => await operation(),
     cancellation,
     sessionRuleManager,
-    destinationService,
     enablement,
     { getAll: vi.fn(async () => ({})), getForSite: vi.fn(async () => ({})) }
   )
@@ -190,16 +185,16 @@ describe("destination recovery", () => {
 
     storageSet = vi.fn(async (values: Record<string, unknown>) => {
       const queue = values[LOCAL_STORAGE_KEYS.downloadQueue]
-      const includesDestinationBlock =
+      const includesSaveFailure =
         Array.isArray(queue) &&
         queue.some(
           (entry) =>
             typeof entry === "object" &&
             entry !== null &&
-            (entry as { activeBlock?: unknown }).activeBlock ===
-              "destination_action_required"
+            (entry as { errorCategory?: unknown }).errorCategory ===
+              "folder_permission_required"
         )
-      if (blockWriteFailure && includesDestinationBlock) {
+      if (blockWriteFailure && includesSaveFailure) {
         const failure = blockWriteFailure
         blockWriteFailure = undefined
         throw failure
@@ -275,10 +270,9 @@ describe("destination recovery", () => {
     }))
   })
 
-  it("keeps the destination block repairable across a cold repository and resume", async () => {
-    permissionResults = ["granted", "prompt", "granted", "granted"]
+  it("ends unavailable-folder work and restarts a fresh attempt at the same destination", async () => {
+    permissionResults = ["prompt"]
     const first = createRuntime()
-
     await expect(first.executor.execute(itemId)).resolves.toBe(
       "queue-continuation"
     )
@@ -286,22 +280,33 @@ describe("destination recovery", () => {
       new QueueProjectionService(),
       new HistoryRepository()
     )
-    const blocked = await coldRepository.getTask(itemId)
-    expect(blocked).toMatchObject({
-      status: "queued",
-      activeBlock: "destination_action_required",
-      destinationIssue: {
-        taskId: itemId,
-        chapterId,
-        kind: "fsa_permission_required",
+    expect(await coldRepository.getTask(itemId)).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+      chapters: [
+        { status: "failed", errorCategory: "folder_permission_required" },
+      ],
+      settingsSnapshot: {
+        destination: { kind: "file-system-access", handleId: "selected-id" },
       },
     })
-
-    await coldRepository.resumeDestinationTask({
+    expect(await coldRepository.getActiveDispatchLease()).toBeNull()
+    expect(mocks.sendRuntimeMessage).not.toHaveBeenCalled()
+    const restart = await coldRepository.restartDownloadTask({
       taskId: itemId,
-      commandId: "repair-command",
+      restartTaskId: "fresh-attempt",
       now: 2,
     })
+    expect(restart).toMatchObject({
+      outcome: "applied",
+      restartTask: {
+        settingsSnapshot: {
+          destination: { kind: "file-system-access", handleId: "selected-id" },
+        },
+        chapters: [{ requestedPath: "Tako/Chapter.cbz", status: "queued" }],
+      },
+    })
+    permissionResults = ["granted"]
     const resumed = createRuntime(coldRepository)
     const scheduler = new QueueScheduler(
       coldRepository,
@@ -309,21 +314,44 @@ describe("destination recovery", () => {
       async () => undefined
     )
     await scheduler.activate()
-    await expect(coldRepository.getTask(itemId)).resolves.toMatchObject({
-      status: "downloading",
-      chapters: [{ id: chapterId, status: "downloading" }],
+    expect(await coldRepository.getActiveDispatchLease()).toMatchObject({
+      taskId: "fresh-attempt",
+      chapterId,
     })
-    await expect(coldRepository.getActiveDispatchLease()).resolves.toEqual(
-      expect.objectContaining({ taskId: itemId, chapterId })
-    )
+    expect(await coldRepository.getTask(itemId)).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+    })
   })
 
-  it("surfaces a destination block persistence failure without terminalizing the chapter", async () => {
-    permissionResults = ["granted", "prompt", "granted", "granted"]
-    const persistenceFailure = new Error("destination block persistence failed")
+  it("advances to another queued task after destination preflight fails", async () => {
+    const next = createTask()
+    next.id = "next-task"
+    next.settingsSnapshot.destination = { kind: "downloads-api" }
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = [createTask(), next]
+    permissionResults = ["prompt"]
+    const runtime = createRuntime()
+    const scheduler = new QueueScheduler(
+      runtime.queueRepository,
+      runtime.executor,
+      async () => undefined
+    )
+    await scheduler.activate()
+    expect(await runtime.queueRepository.getTask(itemId)).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+    })
+    expect(
+      await runtime.queueRepository.getActiveDispatchLease()
+    ).toMatchObject({ taskId: "next-task" })
+    expect(mocks.queryFsaPermission).toHaveBeenCalledOnce()
+  })
+
+  it("preserves recovery eligibility when terminal save-error persistence fails", async () => {
+    permissionResults = ["prompt", "granted"]
+    const persistenceFailure = new Error("save-error persistence failed")
     blockWriteFailure = persistenceFailure
     const runtime = createRuntime()
-
     await expect(runtime.executor.execute(itemId)).rejects.toBe(
       persistenceFailure
     )
@@ -331,36 +359,16 @@ describe("destination recovery", () => {
       new QueueProjectionService(),
       new HistoryRepository()
     )
-    const preserved = await coldRepository.getTask(itemId)
-    expect(preserved).toMatchObject({
+    expect(await coldRepository.getTask(itemId)).toMatchObject({
       status: "downloading",
       chapters: [{ id: chapterId, status: "queued" }],
     })
-    expect(preserved).not.toHaveProperty("activeBlock")
-    expect(preserved).not.toHaveProperty("destinationIssue")
-    expect(preserved?.chapters[0]).not.toHaveProperty("errorCategory")
     expect(runtime.interruption).not.toHaveBeenCalled()
-
-    const recovery = await coldRepository.recoverQueueAfterStartup({
-      normalizationTime: 3,
-      interruptedAt: 3,
-      observedLease: null,
-      offscreenJob: null,
-      nativeOutputTaskIds: [],
-    })
-    expect(recovery).toMatchObject({
-      outcome: "unchanged",
-      resumeTaskId: itemId,
-    })
     const resumed = createRuntime(coldRepository)
-    const scheduler = new QueueScheduler(
-      coldRepository,
-      resumed.executor,
-      async () => undefined
-    )
-    await scheduler.activateStartup({ kind: "resume-task", taskId: itemId })
-    await expect(coldRepository.getActiveDispatchLease()).resolves.toEqual(
-      expect.objectContaining({ taskId: itemId, chapterId })
-    )
+    await expect(resumed.executor.execute(itemId, true)).resolves.toBe("active")
+    expect(await coldRepository.getActiveDispatchLease()).toMatchObject({
+      taskId: itemId,
+      chapterId,
+    })
   })
 })

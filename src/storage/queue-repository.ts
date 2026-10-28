@@ -2,7 +2,6 @@ import {
   applyNativeOutputSettlement as decideNativeOutputSettlement,
   bindDispatchLeaseIncarnation as decideLeaseIncarnationBinding,
   beginChapterDispatch as decideChapterDispatch,
-  blockTaskForDestination as decideDestinationBlock,
   blockTaskForProviderPolicy as decideProviderPolicyBlock,
   cancelDownloadTask as decideTaskCancellation,
   clearDispatchLease as decideLeaseClear,
@@ -11,18 +10,17 @@ import {
   finalizeDownloadTask as decideTaskFinalization,
   finalizePendingUndoAction as decidePendingUndoFinalization,
   interruptDownloadTask as decideTaskInterruption,
+  failTaskForSave as decideSaveFailure,
   moveQueuedTaskToTop as decideMoveQueuedTaskToTop,
   reconcileExpiredPendingUndoActions as decideExpiredPendingUndoReconciliation,
   recoverQueueAfterStartup as decideStartupRecovery,
   recordTaskDispatchError as decideTaskDispatchError,
-  releaseDestinationBlock as decideDestinationBlockRelease,
   releaseProviderPolicyBlock as decideProviderPolicyBlockRelease,
   releaseProviderPolicyBlocks as decideProviderPolicyBlocksRelease,
   removeTerminalDownloadTask as decideTerminalTaskRemoval,
   renewDispatchLease as decideLeaseRenewal,
   restartDownloadTask as decideTaskRestart,
   restorePendingUndoAction as decidePendingUndoRestore,
-  resumeDestinationTask as decideDestinationResume,
   retryFailedChapters as decideFailedChapterRetry,
   setNextChapterDispatchAt as decideNextChapterDispatch,
   settleTaskChapter as decideChapterSettlement,
@@ -384,17 +382,6 @@ export class QueueRepository {
     return await this.executeDecision(decideClearTerminalHistory)
   }
 
-  async resumeDestinationTask(input: {
-    taskId: string
-    commandId: string
-    now: number
-  }): Promise<ReturnType<typeof decideDestinationResume>["result"]> {
-    const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideDestinationResume(state, detachedInput)
-    )
-  }
-
   async updateChapterProgress(input: {
     taskId: string
     chapterId: string
@@ -477,23 +464,6 @@ export class QueueRepository {
     )
   }
 
-  async blockTaskForDestination(
-    input: Parameters<typeof decideDestinationBlock>[1]
-  ): Promise<ReturnType<typeof decideDestinationBlock>["result"]> {
-    const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideDestinationBlock(state, detachedInput)
-    )
-  }
-
-  async releaseDestinationBlock(
-    taskId: string
-  ): Promise<ReturnType<typeof decideDestinationBlockRelease>["result"]> {
-    return await this.executeDecision((state) =>
-      decideDestinationBlockRelease(state, { taskId })
-    )
-  }
-
   async blockTaskForProviderPolicy(input: {
     taskId: string
     block:
@@ -511,6 +481,15 @@ export class QueueRepository {
   ): Promise<ReturnType<typeof decideProviderPolicyBlockRelease>["result"]> {
     return await this.executeDecision((state) =>
       decideProviderPolicyBlockRelease(state, { taskId })
+    )
+  }
+
+  async failTaskForSave(
+    input: Parameters<typeof decideSaveFailure>[1]
+  ): Promise<ReturnType<typeof decideSaveFailure>["result"]> {
+    const detachedInput = structuredClone(input)
+    return this.executeDecision((state) =>
+      decideSaveFailure(state, detachedInput)
     )
   }
 

@@ -58,7 +58,7 @@ describe("QueueScheduler", () => {
 
   it("starts the first runnable task and stops while it owns the slot", async () => {
     vi.mocked(queueRepository.getQueue).mockResolvedValue([
-      task("blocked", "queued", "destination_action_required"),
+      task("blocked", "queued", "provider_network_policy_action_required"),
       task("next", "queued"),
     ])
 

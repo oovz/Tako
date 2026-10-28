@@ -191,6 +191,8 @@ export function formatChapterStatusLabel(
       return t("status_downloading")
     case "queued":
       return t("status_queued")
+    case "skipped":
+      return t("status_skipped")
     default:
       return status
   }

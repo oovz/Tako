@@ -229,7 +229,6 @@ describe("native output continuation boundaries", () => {
       queueRepository,
       nativeCoordinator,
       queueScheduler,
-      {} as never,
       {
         settingsRepository,
         historyRepository,
@@ -706,7 +705,6 @@ describe("native output continuation boundaries", () => {
         }),
         requestContinuation: vi.fn(),
       } as unknown as QueueScheduler,
-      {} as never,
       {} as never
     )
     await expect(
@@ -830,7 +828,6 @@ describe("native output continuation boundaries", () => {
         replayQueue,
         replayNative,
         new QueueScheduler(replayQueue, taskExecutor, async () => undefined),
-        {} as never,
         {} as never
       )
       const continuation = coldReplay ? await replayNative.reconcile() : effects

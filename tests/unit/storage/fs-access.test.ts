@@ -283,6 +283,54 @@ describe("File System Access helpers", () => {
       expect(aborted).toEqual([])
     })
 
+    it("preserves the native write failure when abort cleanup also fails", async () => {
+      const original = new DOMException(
+        "Native write lost folder access",
+        "NotAllowedError"
+      )
+      const abort = vi.fn(async () => {
+        throw new Error("abort cleanup failed")
+      })
+      const close = vi.fn(async () => undefined)
+      const dir = createDirectoryHandle(async () => ({
+        createWritable: async () => ({
+          write: async () => {
+            throw original
+          },
+          close,
+          abort,
+        }),
+      }))
+      await expect(
+        writeBlobToPath(dir, "Chapter.cbz", new Blob(["page"]), "overwrite", {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(original)
+      expect(abort).toHaveBeenCalledOnce()
+      expect(close).not.toHaveBeenCalled()
+    })
+
+    it("propagates native stream closure failure instead of reporting a saved file", async () => {
+      const original = new DOMException(
+        "Native close failed: disk full",
+        "QuotaExceededError"
+      )
+      const dir = createDirectoryHandle(async () => ({
+        createWritable: async () => ({
+          write: async () => undefined,
+          close: async () => {
+            throw original
+          },
+          abort: async () => undefined,
+        }),
+      }))
+      await expect(
+        writeBlobToPath(dir, "Chapter.cbz", new Blob(["page"]), "overwrite", {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(original)
+    })
+
     it("uniquifies an existing filename while preserving its extension", async () => {
       const write = vi.fn(async () => undefined)
       const close = vi.fn(async () => undefined)

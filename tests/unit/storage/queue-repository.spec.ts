@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
-import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -199,52 +198,6 @@ describe("QueueRepository", () => {
       },
     } as unknown as typeof chrome)
   })
-
-  it.each([
-    "provider_network_policy_pending",
-    "provider_network_policy_action_required",
-  ] as const)(
-    "replaces destination repair state with %s durably",
-    async (block) => {
-      const repository = new QueueRepository()
-      await repository.enqueueDownloadTask(createTask())
-      const destination = await repository.blockTaskForDestination({
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: {
-          id: "issue-1",
-          taskId: "task-1",
-          kind: "fsa_folder_missing",
-          occurredAt: 500,
-        },
-      })
-      expect(destination.outcome).toBe("applied")
-      expect(
-        DownloadTaskStateSchema.safeParse((await repository.getQueue())[0])
-          .success
-      ).toBe(true)
-
-      const replaced = await repository.blockTaskForProviderPolicy({
-        taskId: "task-1",
-        block,
-      })
-      expect(replaced.outcome).toBe("applied")
-      const reloaded = await new QueueRepository().getQueue()
-      expect(reloaded[0]).toMatchObject({
-        status: "queued",
-        activeBlock: block,
-      })
-      expect(reloaded[0]?.destinationIssue).toBeUndefined()
-      expect(DownloadTaskStateSchema.safeParse(reloaded[0]).success).toBe(true)
-
-      expect(
-        (await repository.releaseProviderPolicyBlock("task-1")).outcome
-      ).toBe("applied")
-      const released = await new QueueRepository().getQueue()
-      expect(released[0]?.activeBlock).toBeUndefined()
-      expect(DownloadTaskStateSchema.safeParse(released[0]).success).toBe(true)
-    }
-  )
 
   it.each(["retry", "restart"] as const)(
     "accounts a new native job after %s without inheriting old settlement",
@@ -848,11 +801,6 @@ describe("QueueRepository", () => {
 
   it("round-trips operation-specific convergence markers through current storage", async () => {
     const markedTask = createTask({
-      destinationBlockRevision: 3,
-      destinationResume: {
-        commandId: "destination-command",
-        blockRevision: 3,
-      },
       activeCancel: { commandId: "cancel-command" },
       restoredUndo: { token: "undo-token", type: "cancel_queued" },
     })
@@ -860,11 +808,6 @@ describe("QueueRepository", () => {
 
     const repository = new QueueRepository()
     await expect(repository.getTask("task-1")).resolves.toMatchObject({
-      destinationBlockRevision: 3,
-      destinationResume: {
-        commandId: "destination-command",
-        blockRevision: 3,
-      },
       activeCancel: { commandId: "cancel-command" },
       restoredUndo: { token: "undo-token", type: "cancel_queued" },
     })

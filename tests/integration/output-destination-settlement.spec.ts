@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { DestinationService } from "@/entrypoints/background/destination"
 import type { DownloadTaskExecutor } from "@/entrypoints/background/download-task-executor"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
@@ -123,10 +122,11 @@ async function fixture(
       requestBlobRevocation: revoke,
       ensureLivenessAlarm: async () => undefined,
     })
+    const execute = vi.fn(async () => "active" as const)
     const scheduler = new QueueScheduler(
       queue,
       {
-        execute: vi.fn(async () => "active" as const),
+        execute,
         isActive: () => false,
       } as unknown as DownloadTaskExecutor,
       async () => undefined
@@ -135,14 +135,9 @@ async function fixture(
       queue,
       native,
       scheduler,
-      new DestinationService({
-        queueRepository: queue,
-        settingsReader: settingsRepository,
-        notifier: { notifyDestinationActionRequired: () => undefined },
-      }),
       { settingsRepository, historyRepository: history }
     )
-    return { queue, repository, native, terminal, history }
+    return { queue, repository, native, terminal, history, execute }
   }
   const first = runtime()
   await first.queue.initialize()
@@ -566,8 +561,8 @@ describe("output destination settlement", () => {
     ).toEqual(["next-chapter"])
   })
 
-  it("preserves folder repair and partial writes when the destination fails", async () => {
-    const f = await fixture(2, "fsa")
+  it("settles a folder write error atomically and retries all unfinished chapters", async () => {
+    const f = await fixture(2, "fsa", 2)
     await f.terminal.handle(
       f.terminalPayload({
         status: "partial_success",
@@ -578,17 +573,140 @@ describe("output destination settlement", () => {
         errorMessage: "Closing the second file failed",
       })
     )
-    expect(await f.queue.getTask(identity.taskId)).toMatchObject({
-      status: "queued",
-      activeBlock: "destination_action_required",
-      destinationIssue: { kind: "fsa_write_failed" },
+    const task = await f.queue.getTask(identity.taskId)
+    expect(task).toMatchObject({
+      status: "partial_success",
+      errorCategory: "folder_write_failed",
+      errorMessage: "Closing the second file failed",
       chapters: [
         {
+          status: "partial_success",
           outputs: { requested: 2, committed: 1, failed: 1 },
           errorMessage: "Closing the second file failed",
         },
+        { status: "skipped" },
       ],
     })
+    expect(await f.queue.getActiveDispatchLease()).toBeNull()
     expect(await f.history.getDownloadedChapters()).toEqual([])
+    const retry = await f.queue.retryFailedChapters({
+      taskId: identity.taskId,
+      retryTaskId: "fresh",
+      now: 11,
+    })
+    expect(retry).toMatchObject({
+      outcome: "applied",
+      retryTask: {
+        settingsSnapshot: { destination: task?.settingsSnapshot.destination },
+        chapters: [
+          {
+            id: identity.chapterId,
+            status: "queued",
+            outputs: { requested: 0, committed: 0, failed: 0 },
+            saveConfirmedAt: undefined,
+          },
+          { id: "next-chapter", status: "queued" },
+        ],
+      },
+    })
+  })
+
+  it("retains the original cause and lease after a failed terminal commit, then recovers cold", async () => {
+    const f = await fixture(1, "fsa")
+    const payload = f.terminalPayload({
+      status: "failed",
+      outputsRequested: 1,
+      outputsCommitted: 0,
+      outputsFailedBeforeHandoff: 0,
+      errorCategory: "disk_full",
+      errorMessage: "Native close rejected: disk full",
+    })
+    f.storageSet.mockRejectedValueOnce(new Error("Storage unavailable"))
+    await expect(f.terminal.handle(payload)).rejects.toThrow(
+      "Storage unavailable"
+    )
+    const cold = f.runtime()
+    expect(await cold.queue.getTask(identity.taskId)).toMatchObject({
+      status: "downloading",
+    })
+    expect(await cold.queue.getActiveDispatchLease()).toMatchObject(identity)
+    await cold.terminal.handle(payload)
+    expect(await cold.queue.getTask(identity.taskId)).toMatchObject({
+      status: "failed",
+      errorMessage: "Native close rejected: disk full",
+      errorCategory: "disk_full",
+    })
+    expect(await cold.queue.getActiveDispatchLease()).toBeNull()
+    expect(
+      f.storageSet.mock.calls
+        .filter(([values]) => LOCAL_STORAGE_KEYS.downloadQueue in values)
+        .every(([values]) => LOCAL_STORAGE_KEYS.activeDispatchLease in values)
+    ).toBe(true)
+  })
+
+  it.each(["removed", "read-failed"] as const)(
+    "continues after a committed folder error when its task is %s",
+    async (condition) => {
+      const f = await fixture(1, "fsa")
+      const task = (await f.queue.getTask(identity.taskId))!
+      await f.queue.enqueueDownloadTask({
+        ...task,
+        id: "next-task",
+        status: "queued",
+        chapters: task.chapters.map((chapter) => ({
+          ...chapter,
+          status: "queued",
+          dispatchAttempt: undefined,
+        })),
+      })
+      const settlement = await f.terminal.settle(
+        f.terminalPayload({
+          status: "failed",
+          outputsRequested: 1,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          errorCategory: "folder_write_failed",
+          errorMessage: "Native writer failed",
+        })
+      )
+      expect(settlement).toBe("task-save-failed")
+      if (condition === "removed") await f.queue.clearTerminalHistory()
+      else
+        vi.spyOn(f.queue, "getTask").mockRejectedValueOnce(
+          new Error("Projection read unavailable")
+        )
+      await expect(
+        f.terminal.afterSettlement(identity.taskId, settlement)
+      ).resolves.toBeUndefined()
+      await vi.waitFor(() =>
+        expect(f.execute).toHaveBeenCalledWith("next-task")
+      )
+    }
+  )
+
+  it("continues the queue after a terminal folder error", async () => {
+    const f = await fixture(1, "fsa")
+    const task = (await f.queue.getTask(identity.taskId))!
+    await f.queue.enqueueDownloadTask({
+      ...task,
+      id: "next-task",
+      status: "queued",
+      chapters: task.chapters.map((chapter) => ({
+        ...chapter,
+        status: "queued",
+        dispatchAttempt: undefined,
+      })),
+    })
+    await f.terminal.handle(
+      f.terminalPayload({
+        status: "failed",
+        outputsRequested: 1,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+        errorCategory: "folder_permission_required",
+        errorMessage: "Native write permission was revoked",
+      })
+    )
+    await vi.waitFor(() => expect(f.execute).toHaveBeenCalledWith("next-task"))
   })
 })

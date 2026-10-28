@@ -98,20 +98,6 @@ export const queueCommandClient = {
     )
   },
 
-  async retryDestination(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "RETRY_DESTINATION",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `RETRY_DESTINATION:${taskId}` }
-      )
-    )
-  },
-
   async clearTerminalHistory(): Promise<void> {
     assertSuccess(
       await sendRuntimeMessage({

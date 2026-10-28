@@ -21,7 +21,7 @@ describe("Activity task reads", () => {
   )
   const empty = {
     success: true,
-    data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+    data: { tasks: [], queueStorageBytes: 0 },
   }
   const known = {
     success: true,

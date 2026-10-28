@@ -40,7 +40,10 @@ import {
   createProcessChapterStreamingOptions,
   readProcessDownloadChapterSettingsSnapshot,
 } from "./download-request-mappers"
-import { classifyOffscreenErrorCategory } from "./error-categories"
+import {
+  classifyOffscreenErrorCategory,
+  FsaWriteError,
+} from "./error-categories"
 import { registerOffscreenRuntime } from "./runtime-bridge"
 import { createOffscreenStatusController } from "./status-ui"
 import {
@@ -463,6 +466,9 @@ export class OffscreenWorker {
       await this.sendJobAccepted(record)
       this.startJobHeartbeat(record)
       await this.waitForNotBefore(record)
+      const captured = await record.writableRoot
+      if (captured?.status === "failed")
+        throw new FsaWriteError("folder_unavailable", captured.error)
 
       const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
       if (!isEnabled(request.book.siteIntegrationId, currentEnablement)) {

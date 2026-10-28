@@ -5,7 +5,7 @@ import { LOCAL_STORAGE_KEYS } from "./storage-keys"
 import {
   DownloadTaskStateSchema,
   PendingUndoActionSchema,
-} from "./queue-state-schemas"
+} from "./state-schema-migration-final-save-schemas"
 import {
   Epoch6DownloadTaskStateSchema,
   Epoch6PendingUndoActionSchema,

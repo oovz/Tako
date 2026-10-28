@@ -116,11 +116,7 @@ const queueRepository = new QueueRepository(
   queueProjectionService,
   historyRepository
 )
-const destinationService = new DestinationService({
-  queueRepository,
-  settingsReader: settingsRepository,
-  notifier: getNotificationService(),
-})
+const destinationService = new DestinationService()
 const downloadStateQueryService = new BackgroundDownloadStateQueryService(
   queueRepository,
   historyQueryService
@@ -206,7 +202,6 @@ const chapterDispatchCoordinator = new ChapterDispatchCoordinator(
   runOffscreenDocumentAdmissionExclusive,
   cancellationCoordinator,
   siteIntegrationSessionRuleManager,
-  destinationService,
   siteIntegrationEnablementService,
   siteIntegrationSettingsService
 )
@@ -236,7 +231,6 @@ const terminalCoordinator = new OffscreenJobTerminalCoordinator(
   queueRepository,
   nativeOutputCoordinator,
   queueScheduler,
-  destinationService,
   finalizationDependencies
 )
 

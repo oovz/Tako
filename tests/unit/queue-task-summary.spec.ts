@@ -199,10 +199,15 @@ describe("toQueueTaskSummary", () => {
         makeChapter("c2", "partial_success", {
           errorCategory: "folder_write_failed",
         }),
-        makeChapter("c3", "failed", { errorCategory: "network_unavailable" }),
+        makeChapter("c3", "failed", {
+          errorCategory: "folder_permission_required",
+        }),
       ],
     })
-    expect(toQueueTaskSummary(task).failureCategory).toBe("folder_write_failed")
+    expect(toQueueTaskSummary(task)).toMatchObject({
+      failureCategory: "folder_write_failed",
+      folderAccessRequired: true,
+    })
     task.chapters[1].errorCategory = undefined
     expect(toQueueTaskSummary(task).failureCategory).toBe("unknown")
     task.status = "completed"

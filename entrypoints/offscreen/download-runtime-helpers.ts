@@ -4,10 +4,7 @@ import type {
   RateLimitPolicySnapshot,
   RateLimitService,
 } from "@/src/runtime/rate-limit"
-import {
-  loadDownloadRootHandle,
-  queryFsaPermission,
-} from "@/src/storage/fs-access"
+import { loadDownloadRootHandle } from "@/src/storage/fs-access"
 import { sendDownloadApiRequest } from "./helpers"
 import type { ChapterDownloadImageResult } from "./chapter-processing"
 import type {
@@ -150,15 +147,6 @@ export async function resolveWritableDownloadRoot(
   const dir = await loadDownloadRootHandle(directoryHandleId)
   if (!dir) {
     throw new Error("Custom folder is not configured")
-  }
-
-  const permission = await queryFsaPermission(dir, true)
-  if (permission !== "granted") {
-    throw new Error(
-      permission === "prompt"
-        ? "Custom folder permission is required"
-        : "Custom folder is unavailable"
-    )
   }
 
   return dir

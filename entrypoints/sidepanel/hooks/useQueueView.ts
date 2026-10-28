@@ -35,7 +35,6 @@ const QueueTaskSummaryStorageSchema = z.object({
   outputMode: z.enum(["downloads-api", "fsa"]).optional(),
   activeBlock: z
     .enum([
-      "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
     ])
@@ -51,6 +50,7 @@ const QueueTaskSummaryStorageSchema = z.object({
   }),
   outputUncertain: z.boolean().optional(),
   failureCategory: z.unknown().optional(),
+  folderAccessRequired: z.literal(true).optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
   lastSuccessfulDownloadId: z.unknown().optional(),
@@ -86,6 +86,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
     },
     outputUncertain: data.outputUncertain,
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
+    folderAccessRequired: data.folderAccessRequired,
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:
       typeof data.isRetryTask === "boolean" ? data.isRetryTask : undefined,

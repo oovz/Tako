@@ -1,3 +1,5 @@
+import { toast } from "sonner"
+import { OptionsFsaController } from "../controllers/options-fsa-controller"
 import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import { useId, useState } from "react"
@@ -73,7 +75,7 @@ export function DownloadTaskCard({
   const [isCanceling, setIsCanceling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<
-    "retry" | "restart" | "remove" | null
+    "retry" | "restart" | "remove" | "grant" | null
   >(null)
   const chapterListId = useId()
   const isChapterListExpanded =
@@ -100,10 +102,17 @@ export function DownloadTaskCard({
     outputUncertain
   )
   const cancelPresentation = getDownloadCancelPresentation()
+  const permissionFailure =
+    task.settingsSnapshot.destination.kind === "file-system-access" &&
+    !targetUnavailable &&
+    (task.status === "failed" || task.status === "partial_success") &&
+    task.chapters.some(
+      (chapter) => chapter.errorCategory === "folder_permission_required"
+    )
   const requiresCancelConfirmation = task.status === "downloading"
 
   const runTaskAction = async (
-    action: "retry" | "restart" | "remove",
+    action: "retry" | "restart" | "remove" | "grant",
     callback: () => Promise<void>
   ) => {
     if (pendingAction) return
@@ -314,12 +323,49 @@ export function DownloadTaskCard({
           }
         />
         {targetUnavailable && (
-          <p className="text-xs">{t("destinationIssue_originalUnavailable")}</p>
+          <p className="text-xs">{t("taskFolder_originalUnavailable")}</p>
         )}
         {failureMessage && (
           <p className="text-sm text-destructive">
             {t("common_error")}: {failureMessage}
           </p>
+        )}
+
+        {permissionFailure && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pendingAction !== null}
+            onClick={() =>
+              void runTaskAction("grant", async () => {
+                const target = task.settingsSnapshot.destination
+                if (target.kind !== "file-system-access") return
+                try {
+                  const access =
+                    await new OptionsFsaController().grantSavedAccess(
+                      target.handleId
+                    )
+                  if (access.status === "granted")
+                    toast.success(t("taskFolder_accessGranted"))
+                  else
+                    toast.error(
+                      t(
+                        access.status === "missing"
+                          ? "settings_customFolderNotFound"
+                          : "options_toastPermissionDenied"
+                      )
+                    )
+                } catch (error) {
+                  toast.error(t("taskFolder_accessFailed"), {
+                    description:
+                      error instanceof Error ? error.message : String(error),
+                  })
+                }
+              })
+            }
+          >
+            {t("folderAccess_grant")}
+          </Button>
         )}
 
         <div className="flex flex-wrap gap-2 pt-2">

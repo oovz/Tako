@@ -199,7 +199,7 @@ export async function processNoneFormatChapter(
     onImageDownloaded: opts.onImageDownloaded,
     downloadImage,
     initialAggregateBytes: coverImage?.data.byteLength ?? 0,
-    onDownloaded: async ({ index, result }) => {
+    onDownloaded: async ({ index, result, signal }) => {
       if (abortSignal?.aborted) throw new Error("job-cancelled")
       const filename = buildImageOutputFilename({
         index,
@@ -228,7 +228,7 @@ export async function processNoneFormatChapter(
             path: filePath,
             blob,
             collisionPolicy,
-            signal: abortSignal,
+            signal,
             onBytesWritten: () => onProgress(10, "saving images"),
           })
           committedFsaOutputs++

@@ -92,7 +92,9 @@ describe("queue task lifecycle formulas", () => {
     },
     {
       name: "blocked queued",
-      task: createTask({ activeBlock: "destination_action_required" }),
+      task: createTask({
+        activeBlock: "provider_network_policy_action_required",
+      }),
       blocked: true,
       runnable: false,
       executing: false,
@@ -121,7 +123,7 @@ describe("queue task lifecycle formulas", () => {
       name: "terminal with stale block",
       task: createTask({
         status: "failed",
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       }),
       blocked: false,
       runnable: false,
@@ -145,7 +147,7 @@ describe("queue task lifecycle formulas", () => {
     })
     const terminal = createTask({
       status: "failed",
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
     })
     const untouched = createTask()
 
@@ -159,7 +161,7 @@ describe("queue task lifecycle formulas", () => {
     })
     expect(normalizeDownloadTaskExecutionState(untouched)).toBe(untouched)
     expect(blocked.status).toBe("downloading")
-    expect(terminal.activeBlock).toBe("destination_action_required")
+    expect(terminal.activeBlock).toBe("provider_network_policy_action_required")
   })
 
   it.each([
@@ -281,7 +283,7 @@ describe("queue task lifecycle formulas", () => {
       const task = createTask({
         status: "downloading",
         chapters: [...chapters],
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       })
       const before = structuredClone(task)
 
@@ -350,7 +352,7 @@ describe("queue task lifecycle formulas", () => {
     const task = createTask({
       status: "downloading",
       chapters,
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
     })
     const before = structuredClone(task)
 

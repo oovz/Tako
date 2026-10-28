@@ -122,7 +122,7 @@ export function DownloadDestinationSection({
                   disabled={isSaving || isPickingFolder}
                   onClick={() => void onGrantFolderAccess()}
                 >
-                  {t("destinationIssue_grantAccess")}
+                  {t("folderAccess_grant")}
                 </Button>
               </div>
             )}

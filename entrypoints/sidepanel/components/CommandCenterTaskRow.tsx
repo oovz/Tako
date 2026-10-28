@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button"
+import { openOptionsPage } from "@/src/runtime/open-options"
 import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { memo, useEffect, useRef, useState } from "react"
 import { cn } from "@/src/shared/utils"
@@ -228,9 +230,7 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
             />
             {/* Failure message */}
             {task.targetUnavailable && (
-              <p className="text-xs">
-                {t("destinationIssue_originalUnavailable")}
-              </p>
+              <p className="text-xs">{t("taskFolder_originalUnavailable")}</p>
             )}
             {failureMessage && (
               <div className="text-[11px] text-destructive">
@@ -238,6 +238,16 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
               </div>
             )}
 
+            {task.destination.kind === "file-system-access" &&
+              task.folderAccessRequired === true && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => void openOptionsPage("activity")}
+                >
+                  {t("taskFolder_openActions")}
+                </Button>
+              )}
             {/* Retry blocked message for failed tasks */}
             {retryBlockedMessage && (
               <div className="text-[11px] text-muted-foreground">

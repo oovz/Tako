@@ -80,11 +80,10 @@ export function normalizeDownloadTaskExecutionState(
   task: DownloadTaskState
 ): DownloadTaskState {
   if (isTerminalDownloadTask(task)) {
-    if (!task.activeBlock && !task.destinationIssue) return task
+    if (!task.activeBlock) return task
     return {
       ...task,
       activeBlock: undefined,
-      destinationIssue: undefined,
     }
   }
 
@@ -158,7 +157,6 @@ export function normalizeInterruptedTask(
         ? "partial_success"
         : "failed",
     activeBlock: undefined,
-    destinationIssue: undefined,
     errorMessage: allChaptersCompleted
       ? undefined
       : (failureChapter?.errorMessage ?? errorMessage),
@@ -203,7 +201,6 @@ export function cancelDownloadingTask(
     ...task,
     status: "canceled",
     activeBlock: undefined,
-    destinationIssue: undefined,
     completed: now,
     chapters: materializeCanceledChapters(task.chapters, now),
   }

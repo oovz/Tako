@@ -1,3 +1,8 @@
+import { buildTerminalSaveWrites } from "./state-schema-migration-terminal-saves"
+import {
+  DownloadTaskStateSchema as TerminalTaskSchema,
+  PendingUndoActionSchema as TerminalUndoSchema,
+} from "./state-schema-migration-terminal-save-schemas"
 import { buildTaskDestinationWrites } from "./state-schema-migration-task-destinations"
 import {
   DownloadTaskStateSchema as CurrentTaskSchema,
@@ -8,7 +13,7 @@ import { parseCurrentNativeOutputState } from "@/src/storage/native-output-repos
 import {
   DownloadTaskStateSchema as CurrentDownloadTaskStateSchema,
   PendingUndoActionSchema as CurrentPendingUndoActionSchema,
-} from "./queue-state-schemas"
+} from "./state-schema-migration-final-save-schemas"
 import { Epoch5DownloadErrorCategorySchema } from "./state-schema-migration-native-schema"
 import { z } from "zod"
 import {
@@ -36,7 +41,7 @@ import {
   type DownloadedChapterRecord,
 } from "@/src/domain/history/types"
 import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
-import type { DestinationIssueKind } from "@/src/domain/queue/state"
+import type { DestinationIssueKind } from "./state-schema-migration-destination-issues"
 import { createDefaultSettings } from "@/src/domain/settings/defaults"
 import {
   parseSettingsDocument,
@@ -47,8 +52,8 @@ import {
   SiteOverrideRecordSchema,
   type SiteOverrideRecord,
 } from "@/src/domain/site-integrations/storage-schemas"
-import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
-import type { DestinationIssue } from "@/src/domain/queue/state"
+import { DestinationIssueSchema } from "./state-schema-migration-destination-issues"
+import type { DestinationIssue } from "./state-schema-migration-destination-issues"
 import logger from "@/src/runtime/logger"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { PersistentErrorsSchema } from "@/src/runtime/persistent-error-schema"
@@ -103,7 +108,7 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 7
+export const CURRENT_STATE_SCHEMA_EPOCH = 8
 type DownloadTaskState = z.infer<typeof DownloadTaskStateSchema>
 type PendingUndoAction = z.infer<typeof PendingUndoActionSchema>
 const normalizeDownloadErrorCategory = (raw: unknown) =>
@@ -1115,13 +1120,15 @@ function validateMigrationJournal(journal: MigrationJournal): void {
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
     z.array(
-      journal.targetEpoch === 7
-        ? CurrentDownloadTaskStateSchema
-        : journal.targetEpoch === 6
-          ? CurrentTaskSchema
-          : journal.targetEpoch === 5
-            ? Epoch5DownloadTaskStateSchema
-            : DownloadTaskStateSchema
+      journal.targetEpoch === 8
+        ? TerminalTaskSchema
+        : journal.targetEpoch === 7
+          ? CurrentDownloadTaskStateSchema
+          : journal.targetEpoch === 6
+            ? CurrentTaskSchema
+            : journal.targetEpoch === 5
+              ? Epoch5DownloadTaskStateSchema
+              : DownloadTaskStateSchema
     ).parse(
       journal.targetEpoch === 3
         ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
@@ -1132,13 +1139,15 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
     z.array(
-      journal.targetEpoch === 7
-        ? CurrentPendingUndoActionSchema
-        : journal.targetEpoch === 6
-          ? CurrentUndoSchema
-          : journal.targetEpoch === 5
-            ? Epoch5PendingUndoActionSchema
-            : PendingUndoActionSchema
+      journal.targetEpoch === 8
+        ? TerminalUndoSchema
+        : journal.targetEpoch === 7
+          ? CurrentPendingUndoActionSchema
+          : journal.targetEpoch === 6
+            ? CurrentUndoSchema
+            : journal.targetEpoch === 5
+              ? Epoch5PendingUndoActionSchema
+              : PendingUndoActionSchema
     ).parse(
       journal.targetEpoch === 3
         ? (
@@ -1396,6 +1405,23 @@ const MIGRATION_STEPS = [
         targetEpoch: 7,
         phase: "prepared",
         writes: buildFinalSaveWrites(stored),
+        obsoleteKeys: [],
+      })
+      validateMigrationJournal(journal)
+      return journal
+    },
+  },
+  {
+    targetEpoch: 8,
+    prepare: (
+      stored: Record<string, unknown>,
+      sourceEpoch: number | null
+    ): MigrationJournal => {
+      const journal = MigrationJournalSchema.parse({
+        sourceEpoch,
+        targetEpoch: 8,
+        phase: "prepared",
+        writes: buildTerminalSaveWrites(stored),
         obsoleteKeys: [],
       })
       validateMigrationJournal(journal)

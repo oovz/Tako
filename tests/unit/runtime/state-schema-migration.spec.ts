@@ -282,6 +282,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -437,7 +443,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect.objectContaining({
         id: "task-1",
         status: "partial_success",
-        destinationIssue: undefined,
+
         errorCategory: "folder_unavailable",
       }),
     ])
@@ -726,11 +732,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect.objectContaining({
         id: "task-epoch-2",
         activeBlock: undefined,
-        destinationIssue: undefined,
-        destinationBlockRevision: 7,
-        destinationResume: expect.objectContaining({
-          commandId: "destination-command",
-        }),
+
         chapters: [
           expect.objectContaining({
             nativeOutputSettlement: expect.objectContaining({
@@ -795,7 +797,6 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect.objectContaining({
         id: "task-blocked",
         activeBlock: undefined,
-        destinationIssue: undefined,
       }),
     ])
     expect(local).not.toHaveProperty("destinationIssues")
@@ -863,10 +864,6 @@ describe("migrateDurableStateForCurrentSchema", () => {
           comicInfo: { author: "Author" },
         }),
         activeBlock: "provider_network_policy_action_required",
-        destinationBlockRevision: 7,
-        destinationResume: expect.objectContaining({
-          commandId: "destination-command",
-        }),
       }),
     ])
     expect(local.pendingUndoActions).toEqual([
@@ -874,7 +871,7 @@ describe("migrateDurableStateForCurrentSchema", () => {
         taskSnapshot: expect.objectContaining({
           id: "undo-epoch-2",
           seriesCoverUrl: undefined,
-          destinationBlockRevision: 7,
+
           chapters: [
             expect.objectContaining({
               nativeOutputSettlement: expect.objectContaining({
@@ -1000,7 +997,7 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4, 5, 6, 7])
+    ).toEqual([3, 4, 5, 6, 7, 8])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,

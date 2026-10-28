@@ -327,39 +327,6 @@
   "sidepanel_siteNotSupported": {
     "message": "このサイトはまだ対応していません。"
   },
-  "destinationIssue_title": {
-    "message": "ダウンロードフォルダーを確認してください"
-  },
-  "destinationIssue_permissionRequired": {
-    "message": "このタスクを続けるには、選択したフォルダーへのアクセスを再度許可してください。"
-  },
-  "destinationIssue_folderMissing": {
-    "message": "このタスクを続けるには、ダウンロードフォルダーをもう一度選択してください。"
-  },
-  "destinationIssue_writeFailed": {
-    "message": "選択したダウンロードフォルダーに書き込めませんでした。"
-  },
-  "destinationIssue_unsupported": {
-    "message": "このブラウザーでは選択したカスタムフォルダーを使用できません。"
-  },
-  "destinationIssue_diskFull": {
-    "message": "選択したダウンロードフォルダーの空き容量が不足しています。"
-  },
-  "destinationIssue_fixFolder": {
-    "message": "フォルダーを修復"
-  },
-  "destinationIssue_grantAccess": {
-    "message": "アクセスを再許可"
-  },
-  "destinationIssue_cancelTask": {
-    "message": "タスクをキャンセル"
-  },
-  "destinationIssue_actionFailed": {
-    "message": "保留中のタスクを更新できませんでした"
-  },
-  "destinationIssue_accessGranted": {
-    "message": "フォルダーへのアクセスを復元しました"
-  },
   "sidepanel_initFailed": {
     "message": "拡張機能の初期化に失敗しました"
   },
@@ -398,9 +365,6 @@
   },
   "status_waitingBrowserDownload": {
     "message": "Chrome のダウンロード完了待ち"
-  },
-  "status_destinationActionRequired": {
-    "message": "保存先フォルダーの操作が必要"
   },
   "status_waitingProviderPolicy": {
     "message": "サイトアクセスの準備待ち"
@@ -1875,9 +1839,6 @@
       }
     }
   },
-  "destinationIssue_originalUnavailable": {
-    "message": "このタスクの元の保存先は利用できません。新しいタスクを作成してください。"
-  },
   "destination_taskChrome": {
     "message": "Chrome のダウンロード"
   },
@@ -1886,5 +1847,26 @@
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "Chrome でのファイル保存を確認できませんでした。再試行するとファイルが重複する可能性があります。"
+  },
+  "taskFolder_originalUnavailable": {
+    "message": "このタスクの元の保存先は利用できません。新しいタスクを作成してください。"
+  },
+  "folderAccess_grant": {
+    "message": "アクセスを再許可"
+  },
+  "folderAccess_granted": {
+    "message": "フォルダーへのアクセスを復元しました"
+  },
+  "taskFolder_accessGranted": {
+    "message": "フォルダーへのアクセスを許可しました。再試行で保存をやり直せます。"
+  },
+  "taskFolder_accessFailed": {
+    "message": "このタスクのフォルダーへのアクセスを更新できませんでした。"
+  },
+  "taskFolder_openActions": {
+    "message": "フォルダーの操作を開く"
+  },
+  "status_skipped": {
+    "message": "スキップ済み"
   }
 }

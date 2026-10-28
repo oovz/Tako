@@ -213,7 +213,7 @@ describe("retained native save ownership", () => {
       storage.set.mock.calls.flatMap(([values]) =>
         "stateSchemaEpoch" in values ? [values.stateSchemaEpoch] : []
       )
-    ).toEqual([6, 7])
+    ).toEqual([6, 7, 8])
     expect(local.downloadQueue).toMatchObject([
       {
         settingsSnapshot: { destination: { kind: "downloads-api" } },

@@ -30,6 +30,7 @@ type DownloadChapterImageSuccess = {
   url: string
   index: number
   result: ChapterDownloadImageResult
+  signal: AbortSignal
 }
 
 type DownloadChapterImageFailure = {
@@ -257,6 +258,7 @@ export async function downloadChapterImages(
               url,
               index: imageIndex,
               result: downloadedResult,
+              signal: chapterController.signal,
             })
             commitImageBytes(imageByteState)
             succeeded++

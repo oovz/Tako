@@ -45,18 +45,8 @@ describe("BackgroundDownloadStateQueryService", () => {
     })
   })
 
-  it("returns the full queue, current destination issue, and queue bytes for Options", async () => {
-    const issue = {
-      id: "task-1::fsa_folder_missing",
-      taskId: "task-1",
-      kind: "fsa_folder_missing" as const,
-      occurredAt: 1,
-    }
-    const task = {
-      ...createTask(),
-      activeBlock: "destination_action_required" as const,
-      destinationIssue: issue,
-    }
+  it("returns the full queue and queue bytes for Options", async () => {
+    const task = createTask()
     getQueue.mockResolvedValue([task])
 
     const service = new BackgroundDownloadStateQueryService(
@@ -66,7 +56,6 @@ describe("BackgroundDownloadStateQueryService", () => {
 
     await expect(service.getOptionsDownloadState()).resolves.toEqual({
       tasks: [task],
-      destinationIssue: issue,
       queueStorageBytes: 42,
     })
     expect(getQueue).toHaveBeenCalledOnce()
@@ -77,12 +66,10 @@ describe("BackgroundDownloadStateQueryService", () => {
     const queryService = {
       getOptionsDownloadState: vi.fn().mockResolvedValue({
         tasks: [],
-        destinationIssue: null,
         queueStorageBytes: 0,
       }),
       getSidepanelDownloadState: vi.fn().mockResolvedValue({
         downloadedChapters: [],
-        destinationIssue: null,
       }),
     }
     const handlers = createBackgroundDownloadStateMessageHandlers({
@@ -93,13 +80,13 @@ describe("BackgroundDownloadStateQueryService", () => {
       handlers.GET_OPTIONS_DOWNLOAD_STATE({} as never, {} as never)
     ).resolves.toEqual({
       success: true,
-      data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+      data: { tasks: [], queueStorageBytes: 0 },
     })
     await expect(
       handlers.GET_SIDEPANEL_DOWNLOAD_STATE({} as never, {} as never)
     ).resolves.toEqual({
       success: true,
-      data: { downloadedChapters: [], destinationIssue: null },
+      data: { downloadedChapters: [] },
     })
   })
 
@@ -108,12 +95,10 @@ describe("BackgroundDownloadStateQueryService", () => {
       downloadStateQueryService: {
         getOptionsDownloadState: vi.fn().mockResolvedValue({
           tasks: [],
-          destinationIssue: null,
           queueStorageBytes: 0,
         }),
         getSidepanelDownloadState: vi.fn().mockResolvedValue({
           downloadedChapters: [],
-          destinationIssue: null,
         }),
       },
     } as never)
@@ -135,7 +120,7 @@ describe("BackgroundDownloadStateQueryService", () => {
       )
     ).resolves.toEqual({
       success: true,
-      data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+      data: { tasks: [], queueStorageBytes: 0 },
     })
 
     await expect(
@@ -155,7 +140,7 @@ describe("BackgroundDownloadStateQueryService", () => {
     })
   })
 
-  it("returns only downloaded chapters and destination issue for Side Panel", async () => {
+  it("returns downloaded chapter results for Side Panel", async () => {
     const chapter = {
       siteIntegrationId: "mangadex",
       chapterId: "chapter-1",
@@ -175,7 +160,6 @@ describe("BackgroundDownloadStateQueryService", () => {
 
     await expect(service.getSidepanelDownloadState()).resolves.toEqual({
       downloadedChapters: [chapter],
-      destinationIssue: null,
     })
     expect(getDownloadedChapters).toHaveBeenCalledOnce()
     expect(getBytesInUse).not.toHaveBeenCalled()

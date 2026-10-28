@@ -286,7 +286,6 @@ describe("task-created destinations through durable queue boundaries", () => {
     expect(await queue.getTask(current.id)).toMatchObject({
       status: "queued",
       activeBlock: undefined,
-      destinationIssue: undefined,
       settingsSnapshot: { destination: { kind: "downloads-api" } },
     })
   })

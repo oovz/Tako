@@ -77,6 +77,11 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     },
     outputUncertain: hasUncertainNativeOutput(task.chapters),
     failureCategory,
+    folderAccessRequired: task.chapters.some(
+      (chapter) => chapter.errorCategory === "folder_permission_required"
+    )
+      ? true
+      : undefined,
     isRetried: task.isRetried ?? false,
     isRetryTask: task.isRetryTask ?? false,
     lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,

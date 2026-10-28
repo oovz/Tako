@@ -19,7 +19,6 @@ import {
   clearActiveTaskProgress,
   settleActiveTaskProgressChapter,
 } from "./active-task-progress-bus"
-import type { DestinationService } from "./destination"
 import {
   finalizeDownloadTaskAfterDispatch,
   notifyDownloadTaskCompletion,
@@ -32,7 +31,7 @@ type OffscreenTerminalPayload =
 export type OffscreenTerminalSettlement =
   | "native-output-pending"
   | "chapter-settled"
-  | "destination-blocked"
+  | "task-save-failed"
   | "terminal-owner-released"
 
 function ownsNativeSettlement(
@@ -56,7 +55,6 @@ export class OffscreenJobTerminalCoordinator {
     private readonly queueRepository: QueueRepository,
     private readonly nativeOutputCoordinator: NativeOutputCoordinator,
     private readonly queueScheduler: QueueScheduler,
-    private readonly destinationService: DestinationService,
     private readonly finalizationDependencies: DownloadQueueFinalizationDependencies
   ) {}
 
@@ -72,6 +70,31 @@ export class OffscreenJobTerminalCoordinator {
     if (settlement === "native-output-pending") {
       const effects = await this.nativeOutputCoordinator.reconcile()
       await this.continueAfterNativeOutputSettlement(effects)
+      return
+    }
+    if (settlement === "task-save-failed") {
+      try {
+        const task = await this.queueRepository.getTask(taskId)
+        if (task) {
+          await reconcileCompletedChapterHistory(
+            [task],
+            this.finalizationDependencies.historyRepository
+          )
+          await notifyTerminalDownloadTask({
+            task,
+            finalStatus: task.status,
+            completedCount: task.chapters.filter(
+              (chapter) => chapter.status === "completed"
+            ).length,
+            totalChapters: task.chapters.length,
+            settingsRepository:
+              this.finalizationDependencies.settingsRepository,
+          })
+        }
+      } catch (error) {
+        logger.warn("Could not publish the committed save failure", error)
+      }
+      this.queueScheduler.requestContinuation()
       return
     }
     if (settlement === "chapter-settled") {
@@ -178,44 +201,37 @@ export class OffscreenJobTerminalCoordinator {
       payload.outcome.outputsFailedBeforeHandoff,
       requested - committed
     )
-    const destinationIssueKind =
-      payload.outcome.errorCategory === "folder_permission_required"
-        ? "fsa_permission_required"
-        : payload.outcome.errorCategory === "folder_unavailable"
-          ? "fsa_folder_missing"
-          : payload.outcome.errorCategory === "disk_full"
-            ? "disk_full"
-            : payload.outcome.errorCategory === "folder_write_failed"
-              ? "fsa_write_failed"
-              : null
-    if (destinationIssueKind) {
-      const transition = await this.destinationService.blockForRuntimeIssue({
-        context: {
-          taskId: payload.taskId,
-          chapterId: payload.chapterId,
-          destination: currentTask.settingsSnapshot.destination,
-        },
-        kind: destinationIssueKind,
-        now: Date.now(),
-        errorMessage: payload.outcome.errorMessage,
-        errorCategory: payload.outcome.errorCategory,
-        chapter: {
-          chapterId: payload.chapterId,
-          lease: payload,
-          imagesFailed: payload.outcome.imagesFailed,
-          outputs: { requested, committed, failed },
-        },
+    const savingFailed = [
+      "folder_permission_required",
+      "folder_unavailable",
+      "disk_full",
+      "folder_write_failed",
+    ].includes(payload.outcome.errorCategory ?? "")
+    if (savingFailed) {
+      const failure = await this.queueRepository.failTaskForSave({
+        taskId: payload.taskId,
+        chapterId: payload.chapterId,
+        clearLease: payload,
+        now: payload.terminalAt,
+        errorMessage:
+          payload.outcome.errorMessage ??
+          "The selected folder could not save the chapter.",
+        errorCategory: payload.outcome.errorCategory!,
+        imagesFailed: payload.outcome.imagesFailed,
+        outputs: { requested, committed, failed },
       })
-      if (transition.outcome === "rejected") {
-        throw new Error("Destination-block terminal settlement was rejected")
+      if (failure.outcome === "rejected")
+        throw new Error("Terminal save failure settlement was rejected")
+      try {
+        await clearActiveTaskProgress()
+        await progressTimingEstimator.finish(payload.jobId)
+      } catch (error) {
+        logger.warn(
+          "Could not clear progress after terminal save failure",
+          error
+        )
       }
-      const clearing = await this.queueRepository.clearDispatchLease(payload)
-      if (clearing.outcome !== "applied") {
-        throw new Error("Destination-block terminal lease clear was rejected")
-      }
-      await clearActiveTaskProgress()
-      await progressTimingEstimator.finish(payload.jobId)
-      return "destination-blocked"
+      return "task-save-failed"
     }
 
     const settlement = await this.queueRepository.settleTaskChapter({

@@ -79,23 +79,6 @@ describe("queueCommandClient", () => {
     expect(mocks.sendRuntimeMessageWithRetry).toHaveBeenCalledOnce()
   })
 
-  it("owns the fixed destination, Undo, reorder, restart, and clear messages", async () => {
-    await queueCommandClient.retryDestination("task-1")
-    await queueCommandClient.undoQueueAction("undo-1")
-    await queueCommandClient.moveTaskToTop("task-1")
-    await queueCommandClient.restartTask("task-1")
-    await queueCommandClient.clearTerminalHistory()
-
-    expect(
-      mocks.sendRuntimeMessageWithRetry.mock.calls.map(
-        ([message]) => message.type
-      )
-    ).toEqual(["RETRY_DESTINATION", "UNDO_QUEUE_ACTION", "RESTART_TASK"])
-    expect(
-      mocks.sendRuntimeMessage.mock.calls.map(([message]) => message.type)
-    ).toEqual(["MOVE_TASK_TO_TOP", "CLEAR_ALL_HISTORY"])
-  })
-
   it("sends reorder and clear once because they can broaden on replay", async () => {
     mocks.sendRuntimeMessage
       .mockResolvedValueOnce({ success: true })

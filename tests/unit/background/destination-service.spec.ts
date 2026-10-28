@@ -1,289 +1,68 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-
 import {
   DestinationService,
-  type DestinationBlockResult,
+  DestinationPreflightError,
 } from "@/entrypoints/background/destination"
-import type { DownloadTaskState } from "@/src/domain/queue/state"
-
-const mocks = vi.hoisted(() => ({
-  loadDownloadRootHandle: vi.fn(),
-  queryFsaPermission: vi.fn(),
-  getSettings: vi.fn(),
-  notifyDestinationActionRequired: vi.fn(),
-  blockTaskForDestination: vi.fn(),
-}))
-
+const mocks = vi.hoisted(() => ({ load: vi.fn(), permission: vi.fn() }))
 vi.mock("@/src/storage/fs-access", () => ({
-  DOWNLOAD_ROOT_HANDLE_ID: "download-root",
-  loadDownloadRootHandle: mocks.loadDownloadRootHandle,
-  queryFsaPermission: mocks.queryFsaPermission,
+  loadDownloadRootHandle: mocks.load,
+  queryFsaPermission: mocks.permission,
 }))
-
-vi.mock("@/src/runtime/logger", () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
+const context = {
+  taskId: "task",
+  destination: {
+    kind: "file-system-access" as const,
+    handleId: "captured-folder",
   },
-}))
-
-describe("destination service", () => {
-  let service: DestinationService
-  let task: {
-    id: string
-    status: "queued" | "downloading"
-    activeBlock?: "destination_action_required"
-    destinationIssue?: unknown
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    task = { id: "task-1", status: "downloading" }
-    mocks.getSettings.mockResolvedValue({
-      notifications: true,
-      downloads: { customDirectoryHandleId: "selected-id" },
+}
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.load.mockResolvedValue({ name: "Folder" })
+  mocks.permission.mockResolvedValue("granted")
+})
+describe("task destination preflight", () => {
+  it("checks the captured folder once before production", async () => {
+    expect(await new DestinationService().preflight(context)).toEqual({
+      ready: true,
     })
-    mocks.blockTaskForDestination.mockImplementation(async (input) => {
-      if (
-        task.activeBlock === "destination_action_required" &&
-        (task.destinationIssue as { id?: string } | undefined)?.id ===
-          input.destinationIssue.id
-      ) {
-        return {
-          outcome: "unchanged",
-          reason: "already-blocked",
-        } satisfies DestinationBlockResult
-      }
-      task = {
-        ...task,
-        status: "queued",
-        activeBlock: "destination_action_required",
-        destinationIssue: input.destinationIssue,
-      }
-      return {
-        outcome: "applied",
-        task: task as unknown as DownloadTaskState,
-      } satisfies DestinationBlockResult
-    })
-    service = new DestinationService({
-      queueRepository: {
-        blockTaskForDestination: mocks.blockTaskForDestination,
-      },
-      settingsReader: { getSettings: mocks.getSettings },
-      notifier: {
-        notifyDestinationActionRequired: mocks.notifyDestinationActionRequired,
-      },
-    })
-    mocks.loadDownloadRootHandle.mockResolvedValue(
-      {} as FileSystemDirectoryHandle
-    )
-    mocks.queryFsaPermission.mockResolvedValue("granted")
+    expect(mocks.load).toHaveBeenCalledExactlyOnceWith("captured-folder")
+    expect(mocks.permission).toHaveBeenCalledOnce()
   })
-
-  it("resolves the selected ID and permission once for a coherent destination", async () => {
-    const handle = { name: "Selected" } as FileSystemDirectoryHandle
-    mocks.loadDownloadRootHandle.mockResolvedValueOnce(handle)
-    await expect(
-      service.getEffectiveDestination({
-        taskId: "task-1",
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "test-folder",
-        },
-      })
-    ).resolves.toEqual({ kind: "custom", handle, handleId: "test-folder" })
-    expect(mocks.getSettings).not.toHaveBeenCalled()
-    expect(mocks.loadDownloadRootHandle).toHaveBeenCalledExactlyOnceWith(
-      "test-folder"
-    )
-    expect(mocks.queryFsaPermission).toHaveBeenCalledExactlyOnceWith(
-      handle,
-      true
-    )
-  })
-
-  it("commits the repair issue through the queue transition", async () => {
-    const context = {
-      taskId: "task-1",
-      chapterId: "chapter-1",
-      destination: {
-        kind: "file-system-access" as const,
-        handleId: "test-folder",
-      },
-    }
-
-    const result = await service.blockForPreflight(context, {
-      ready: false,
-      reason: "permission_prompt",
-    })
-
-    expect(result.outcome).toBe("applied")
-    expect(task).toMatchObject({
-      status: "queued",
-      activeBlock: "destination_action_required",
-      destinationIssue: {
-        taskId: "task-1",
-        chapterId: "chapter-1",
-        kind: "fsa_permission_required",
-      },
-    })
-    expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
-  })
-
-  it("keeps repeated repair transitions idempotent", async () => {
-    const context = {
-      taskId: "task-1",
-      chapterId: "chapter-1",
-      destination: {
-        kind: "file-system-access" as const,
-        handleId: "test-folder",
-      },
-    }
-
-    await service.blockForPreflight(context, {
-      ready: false,
-      reason: "permission_prompt",
-    })
-    await service.blockForPreflight(context, {
-      ready: false,
-      reason: "permission_denied",
-    })
-
-    expect(mocks.blockTaskForDestination).toHaveBeenCalledTimes(2)
-    expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledOnce()
-  })
-
-  it("notifies after a committed runtime destination failure", async () => {
-    await service.blockForRuntimeIssue({
-      context: {
-        taskId: "task-1",
-        chapterId: "chapter-1",
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "test-folder",
-        },
-      },
-      kind: "fsa_write_failed",
-      errorCategory: "folder_write_failed",
-    })
-
-    expect(mocks.notifyDestinationActionRequired).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issue: expect.objectContaining({ kind: "fsa_write_failed" }),
-        notificationsEnabled: true,
-      })
-    )
-  })
-
-  it("retains the committed issue when notification fails", async () => {
-    mocks.notifyDestinationActionRequired.mockRejectedValueOnce(
-      new Error("notification failed")
-    )
-
-    await expect(
-      service.blockForPreflight(
-        {
-          taskId: "task-1",
-          destination: {
-            kind: "file-system-access" as const,
-            handleId: "test-folder",
-          },
-        },
-        { ready: false, reason: "not_configured" }
-      )
-    ).resolves.toMatchObject({ outcome: "applied" })
-    expect(task.destinationIssue).toEqual(
-      expect.objectContaining({ kind: "fsa_folder_missing" })
-    )
-  })
-
-  it("keeps Chrome tasks independent of folder defaults", async () => {
-    await expect(
-      service.preflight({
-        taskId: "task-1",
-        destination: { kind: "downloads-api" as const },
-      })
-    ).resolves.toEqual({ ready: true })
-    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
-  })
-
-  it("reports unsupported when the stored handle cannot expose permission state", async () => {
-    mocks.queryFsaPermission.mockResolvedValue("unsupported")
-
-    await expect(
-      service.preflight({
-        taskId: "task-1",
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "test-folder",
-        },
-      })
-    ).resolves.toEqual({ ready: false, reason: "unsupported" })
-  })
-
-  it("reports an unconfigured destination before opening handle storage", async () => {
-    mocks.getSettings.mockResolvedValueOnce({
-      notifications: true,
-      downloads: { customDirectoryHandleId: null },
-    })
-    await expect(
-      service.preflight({
-        taskId: "task-1",
-        destination: { kind: "file-system-access" as const, handleId: null },
-      })
-    ).resolves.toEqual({ ready: false, reason: "not_configured" })
-    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
-  })
-
-  it("preserves unavailable storage as unsupported", async () => {
-    mocks.loadDownloadRootHandle.mockRejectedValueOnce(
-      new Error("IndexedDB unavailable")
-    )
-    await expect(
-      service.preflight({
-        taskId: "task-1",
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "test-folder",
-        },
-      })
-    ).resolves.toEqual({ ready: false, reason: "unsupported" })
-  })
-
-  it("reports a missing custom-folder handle without requesting permission", async () => {
-    mocks.loadDownloadRootHandle.mockResolvedValue(undefined)
-
-    await expect(
-      service.preflight({
-        taskId: "task-1",
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "test-folder",
-        },
-      })
-    ).resolves.toEqual({ ready: false, reason: "not_configured" })
-    expect(mocks.queryFsaPermission).not.toHaveBeenCalled()
-  })
-
   it.each([
     ["prompt", "permission_prompt"],
     ["denied", "permission_denied"],
+    ["unsupported", "unsupported"],
+    ["error", "folder_unavailable"],
   ] as const)(
-    "preserves the %s permission state as %s action-required",
+    "reports %s without requesting permission",
     async (permission, reason) => {
-      mocks.queryFsaPermission.mockResolvedValue(permission)
-
-      await expect(
-        service.preflight({
-          taskId: "task-1",
-          destination: {
-            kind: "file-system-access" as const,
-            handleId: "test-folder",
-          },
-        })
-      ).resolves.toEqual({ ready: false, reason })
+      mocks.permission.mockResolvedValue(permission)
+      expect(await new DestinationService().preflight(context)).toEqual({
+        ready: false,
+        reason,
+      })
     }
   )
+  it("preserves a storage failure cause", async () => {
+    mocks.load.mockRejectedValue(new Error("IndexedDB read failed"))
+    const result = await new DestinationService().preflight(context)
+    expect(result).toEqual({
+      ready: false,
+      reason: "folder_unavailable",
+      message: "IndexedDB read failed",
+    })
+    if (!result.ready)
+      expect(new DestinationPreflightError(context, result).message).toBe(
+        "IndexedDB read failed"
+      )
+  })
+  it("leaves Chrome tasks independent of folder settings", async () => {
+    expect(
+      await new DestinationService().preflight({
+        taskId: "task",
+        destination: { kind: "downloads-api" },
+      })
+    ).toEqual({ ready: true })
+    expect(mocks.load).not.toHaveBeenCalled()
+  })
 })

@@ -182,7 +182,6 @@ describe("QueueApplicationCommands", () => {
     removeTerminalDownloadTask: vi.fn(),
     cancelDownloadTask: vi.fn(),
     clearDispatchLease: vi.fn(),
-    resumeDestinationTask: vi.fn(),
   } as unknown as QueueRepository
   const nativeOutputCoordinator = {
     cancelTask: vi.fn(async () => undefined),
@@ -246,10 +245,7 @@ describe("QueueApplicationCommands", () => {
       outcome: "applied",
       lease: activeLease(),
     })
-    vi.mocked(queueRepository.resumeDestinationTask).mockResolvedValue({
-      outcome: "applied",
-      task: task("task-1"),
-    })
+
     mocks.restorePendingUndo.mockResolvedValue({
       outcome: "applied",
       action: pendingAction("remove_history"),
@@ -457,45 +453,6 @@ describe("QueueApplicationCommands", () => {
     expect(queueRepository.cancelDownloadTask).toHaveBeenCalledWith(
       expect.objectContaining({ commandId: "command-cancel" })
     )
-    expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
-  })
-
-  it("re-drives destination unblock and activation for an exact replay", async () => {
-    vi.mocked(queueRepository.resumeDestinationTask)
-      .mockResolvedValueOnce({ outcome: "applied", task: task("task-1") })
-      .mockResolvedValueOnce({
-        outcome: "unchanged",
-        reason: "already-resumed",
-        task: task("task-1"),
-      })
-
-    await expect(
-      commands.retryDestination("task-1", "command-destination")
-    ).resolves.toBeUndefined()
-    await expect(
-      commands.retryDestination("task-1", "command-destination")
-    ).resolves.toBeUndefined()
-    expect(mocks.processDownloadQueue).toHaveBeenCalledTimes(2)
-    expect(queueRepository.resumeDestinationTask).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ commandId: "command-destination" })
-    )
-    expect(queueRepository.resumeDestinationTask).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ commandId: "command-destination" })
-    )
-  })
-
-  it("does not clear a newer destination issue for a delayed old replay", async () => {
-    vi.mocked(queueRepository.resumeDestinationTask).mockResolvedValue({
-      outcome: "unchanged",
-      reason: "superseded",
-      task: task("task-1"),
-    })
-
-    await expect(
-      commands.retryDestination("task-1", "old-destination-command")
-    ).resolves.toBeUndefined()
     expect(mocks.processDownloadQueue).not.toHaveBeenCalled()
   })
 
@@ -746,14 +703,6 @@ describe("QueueApplicationCommands", () => {
     await expect(
       commands.cancelTask("task-1", "command-cancel")
     ).rejects.toThrow("queue activation failed")
-  })
-
-  it("activates after destination unblock commits", async () => {
-    await expect(
-      commands.retryDestination("task-1", "command-destination")
-    ).resolves.toBeUndefined()
-    expect(queueRepository.resumeDestinationTask).toHaveBeenCalled()
-    expect(mocks.processDownloadQueue).toHaveBeenCalled()
   })
 
   it("activates after Undo only when a queued task was restored", async () => {

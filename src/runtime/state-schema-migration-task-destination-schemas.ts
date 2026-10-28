@@ -14,7 +14,7 @@ import {
   PublicHttpsUrlSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
-import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
+import { DestinationIssueSchema } from "./state-schema-migration-destination-issues"
 
 const DownloadErrorCategorySchema = z.enum([
   "network_unavailable",

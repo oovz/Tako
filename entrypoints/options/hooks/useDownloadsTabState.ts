@@ -41,7 +41,6 @@ function showOptionsUndoToast(
 
 const EMPTY_DOWNLOAD_STATE: OptionsDownloadState = {
   tasks: [],
-  destinationIssue: null,
   queueStorageBytes: 0,
 }
 
@@ -196,33 +195,16 @@ export function useDownloadsTabState() {
     }
   }, [refreshDownloadState])
 
-  const sendDestinationTaskAction = useCallback(
-    async (taskId: string) => {
-      try {
-        await queueCommandClient.retryDestination(taskId)
-        void refreshDownloadState()
-        return true
-      } catch (error) {
-        logger.error("[DOWNLOADS TAB] Destination task action failed:", error)
-        toast.error(t("destinationIssue_actionFailed"))
-        return false
-      }
-    },
-    [refreshDownloadState]
-  )
-
   return {
     tasks: downloadState.tasks,
     isLoading: readStatus === "loading",
     readStatus,
     retryRead: () => setReadAttempt((attempt) => attempt + 1),
-    destinationIssue: downloadState.destinationIssue,
     historyStorageBytes: downloadState.queueStorageBytes,
     cancelTask,
     retryTask,
     restartTask,
     removeTask,
     clearTaskHistory,
-    retryDestinationTask: (taskId: string) => sendDestinationTaskAction(taskId),
   }
 }

@@ -327,39 +327,6 @@
   "sidepanel_siteNotSupported": {
     "message": "This site is not supported yet."
   },
-  "destinationIssue_title": {
-    "message": "Download folder needs attention"
-  },
-  "destinationIssue_permissionRequired": {
-    "message": "Grant access to the selected folder to continue this task."
-  },
-  "destinationIssue_folderMissing": {
-    "message": "Choose the download folder again to continue this task."
-  },
-  "destinationIssue_writeFailed": {
-    "message": "Tako could not write to the selected download folder."
-  },
-  "destinationIssue_unsupported": {
-    "message": "This browser cannot use the selected custom folder."
-  },
-  "destinationIssue_diskFull": {
-    "message": "The selected download folder does not have enough free space."
-  },
-  "destinationIssue_fixFolder": {
-    "message": "Fix folder"
-  },
-  "destinationIssue_grantAccess": {
-    "message": "Grant access again"
-  },
-  "destinationIssue_cancelTask": {
-    "message": "Cancel task"
-  },
-  "destinationIssue_actionFailed": {
-    "message": "Could not update the blocked task"
-  },
-  "destinationIssue_accessGranted": {
-    "message": "Folder access restored"
-  },
   "sidepanel_initFailed": {
     "message": "Extension initialization failed"
   },
@@ -398,9 +365,6 @@
   },
   "status_waitingBrowserDownload": {
     "message": "Waiting for Chrome Downloads"
-  },
-  "status_destinationActionRequired": {
-    "message": "Download folder action required"
   },
   "status_waitingProviderPolicy": {
     "message": "Waiting for provider access"
@@ -1887,9 +1851,6 @@
       }
     }
   },
-  "destinationIssue_originalUnavailable": {
-    "message": "This task’s original destination is unavailable. Create a new task."
-  },
   "destination_taskChrome": {
     "message": "Chrome Downloads"
   },
@@ -1898,5 +1859,26 @@
   },
   "downloadError_browserOutputUnconfirmed": {
     "message": "Chrome file saving could not be confirmed. Retrying may create duplicate files."
+  },
+  "taskFolder_originalUnavailable": {
+    "message": "This task’s original destination is unavailable. Create a new task."
+  },
+  "folderAccess_grant": {
+    "message": "Grant access again"
+  },
+  "folderAccess_granted": {
+    "message": "Folder access restored"
+  },
+  "taskFolder_accessGranted": {
+    "message": "Folder access granted. Use Retry to try saving again."
+  },
+  "taskFolder_accessFailed": {
+    "message": "Could not renew access to this task’s folder."
+  },
+  "taskFolder_openActions": {
+    "message": "Open folder actions"
+  },
+  "status_skipped": {
+    "message": "Skipped"
   }
 }

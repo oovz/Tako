@@ -144,7 +144,7 @@ describe("pending Undo domain formulas", () => {
   it("materializes an expired queued cancellation across every chapter status", () => {
     const task = createTask("restored", {
       status: "queued",
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
       errorMessage: "stale task error",
       errorCategory: "unknown",
       completed: 99,

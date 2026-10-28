@@ -376,8 +376,6 @@ function OptionsPage() {
                   onClearSeriesHistory={clearSeriesHistory}
                   onRefreshSeries={handleRefreshHistory}
                   isClearingHistory={isClearing}
-                  isPickingFolder={isPickingFolder}
-                  isSaving={isSaving}
                 />
               </Suspense>
             </section>

@@ -185,9 +185,7 @@ describe("File System Access IndexedDB lifecycle", () => {
     harness.requests[0].onsuccess?.()
     harness.transactions[0].oncomplete?.()
     await expect(pending).resolves.toBe(handle)
-    expect(queryPermission).toHaveBeenCalledExactlyOnceWith({
-      mode: "readwrite",
-    })
+    expect(queryPermission).not.toHaveBeenCalled()
   })
 
   it("reports a missing selected capability without reading another key", async () => {

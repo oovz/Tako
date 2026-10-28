@@ -7,11 +7,7 @@ import {
 import logger from "@/src/runtime/logger"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { QueueRepository } from "@/src/storage/queue-repository"
-import type {
-  DestinationIssue,
-  DestinationIssueKind,
-  DownloadTaskState,
-} from "@/src/domain/queue/state"
+import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 interface TaskCompletionNotificationInput {
   task: DownloadTaskState
@@ -49,39 +45,6 @@ function extractTaskId(notificationId: string): string | null {
   return null
 }
 
-const DESTINATION_ISSUE_NOTIFICATION_PREFIX = "destination_issue_"
-
-function getDestinationIssueMessage(kind: DestinationIssueKind): string {
-  switch (kind) {
-    case "fsa_permission_required":
-      return "Grant access to the selected folder to continue the download."
-    case "fsa_folder_missing":
-      return "Choose the download folder again to continue."
-    case "fsa_unsupported":
-      return "This browser cannot use the selected custom folder."
-    case "disk_full":
-      return "The selected download folder does not have enough free space."
-    case "fsa_write_failed":
-      return "Tako could not write to the selected download folder."
-  }
-}
-
-async function openDownloadsOptionsPage(): Promise<void> {
-  const url = chrome.runtime.getURL("options.html?tab=activity")
-  const tabs = await chrome.tabs.query({
-    url: chrome.runtime.getURL("options.html*"),
-  })
-  const existing = tabs[0]
-  if (typeof existing?.id === "number") {
-    await chrome.tabs.update(existing.id, { active: true, url })
-    if (typeof existing.windowId === "number") {
-      await chrome.windows.update(existing.windowId, { focused: true })
-    }
-    return
-  }
-  await chrome.tabs.create({ url, active: true })
-}
-
 export class NotificationService {
   async showDownloadCompleteNotification(
     data: DownloadCompleteNotificationData
@@ -93,19 +56,6 @@ export class NotificationService {
     notificationId: string,
     queueRepository: QueueRepository
   ): Promise<void> {
-    if (notificationId.startsWith(DESTINATION_ISSUE_NOTIFICATION_PREFIX)) {
-      try {
-        await openDownloadsOptionsPage()
-      } catch (error) {
-        logger.warn(
-          "[NotificationService] Failed to open destination recovery options",
-          error
-        )
-      }
-      void chrome.notifications.clear(notificationId)
-      return
-    }
-
     const downloadId = await this.readPersistedDownloadId(
       notificationId,
       queueRepository
@@ -115,25 +65,6 @@ export class NotificationService {
     }
 
     void chrome.notifications.clear(notificationId)
-  }
-
-  notifyDestinationActionRequired(input: {
-    issue: DestinationIssue
-    notificationsEnabled: boolean
-  }): void {
-    if (!input.notificationsEnabled) return
-
-    void chrome.notifications.create(
-      `${DESTINATION_ISSUE_NOTIFICATION_PREFIX}${input.issue.id}`,
-      {
-        type: "basic",
-        iconUrl: getIconUrl(),
-        title: "Download folder needs attention",
-        message: getDestinationIssueMessage(input.issue.kind),
-        priority: 2,
-        requireInteraction: true,
-      }
-    )
   }
 
   private async readPersistedDownloadId(

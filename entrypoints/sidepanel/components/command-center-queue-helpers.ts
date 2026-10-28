@@ -61,9 +61,6 @@ export function getTaskStatusLabel(
   outputDestination?: QueueTaskSummary["outputDestination"],
   saveConfirmedAt?: number
 ): string {
-  if (activeBlock === "destination_action_required") {
-    return t("status_destinationActionRequired")
-  }
   if (activeBlock === "provider_network_policy_pending") {
     return t("status_waitingProviderPolicy")
   }

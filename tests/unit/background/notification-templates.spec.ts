@@ -1,11 +1,8 @@
-import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { NotificationService } from "@/entrypoints/background/notification-service"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
-import { QueueRepository } from "@/src/storage/queue-repository"
-import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
 const chromeI18n = chrome.i18n
@@ -92,69 +89,6 @@ describe("notification content templates", () => {
         onClicked: { addListener: onClickedAddListener },
         onClosed: { addListener: onClosedAddListener },
       },
-    })
-  })
-
-  describe("destination action notifications", () => {
-    it("shows one persistent, actionable notification when enabled", () => {
-      const service = new NotificationService()
-
-      service.notifyDestinationActionRequired({
-        issue: {
-          id: "task-1:chapter-1:fsa_permission_required",
-          taskId: "task-1",
-          chapterId: "chapter-1",
-          kind: "fsa_permission_required",
-          occurredAt: 1,
-        },
-        notificationsEnabled: true,
-      })
-
-      expect(notificationsCreate).toHaveBeenCalledWith(
-        "destination_issue_task-1:chapter-1:fsa_permission_required",
-        expect.objectContaining({
-          title: "Download folder needs attention",
-          message: expect.stringContaining("Grant access"),
-          requireInteraction: true,
-        })
-      )
-    })
-
-    it("does not show destination notifications when notifications are disabled", () => {
-      new NotificationService().notifyDestinationActionRequired({
-        issue: {
-          id: "task-1::fsa_unsupported",
-          taskId: "task-1",
-          kind: "fsa_unsupported",
-          occurredAt: 1,
-        },
-        notificationsEnabled: false,
-      })
-
-      expect(notificationsCreate).not.toHaveBeenCalled()
-    })
-
-    it("focuses an existing Downloads options page when the notification is clicked", async () => {
-      tabsQuery.mockResolvedValue([{ id: 12, windowId: 34 }])
-
-      await new NotificationService().handleNotificationClick(
-        "destination_issue_task-1::fsa_folder_missing",
-        new QueueRepository(
-          new QueueProjectionService(),
-          new HistoryRepository()
-        )
-      )
-
-      const targetUrl = "chrome-extension://test/options.html?tab=activity"
-      expect(tabsUpdate).toHaveBeenCalledWith(12, {
-        active: true,
-        url: targetUrl,
-      })
-      expect(windowsUpdate).toHaveBeenCalledWith(34, { focused: true })
-      expect(tabsCreate).not.toHaveBeenCalled()
-      expect(notificationsClear).toHaveBeenCalledWith(
-        "destination_issue_task-1::fsa_folder_missing"
-      )
     })
   })
 

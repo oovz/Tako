@@ -59,7 +59,14 @@ export class FsaWriteError extends Error {
   readonly category: FsaWriteErrorCategory
 
   constructor(category: FsaWriteErrorCategory, cause: unknown) {
-    super(getFsaWriteErrorMessage(category), { cause })
+    super(
+      cause instanceof Error
+        ? cause.message
+        : typeof cause === "string"
+          ? cause
+          : getFsaWriteErrorMessage(category),
+      { cause }
+    )
     this.name = "FsaWriteError"
     this.category = category
   }

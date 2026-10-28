@@ -14,7 +14,6 @@ import {
   PublicHttpsUrlSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
-import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
 
 const finiteNumber = z.number().finite()
 const nonnegativeInteger = z.number().int().nonnegative()
@@ -151,12 +150,10 @@ const downloadTaskStateShape = {
   errorCategory: DownloadErrorCategorySchema.optional(),
   activeBlock: z
     .enum([
-      "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
     ])
     .optional(),
-  destinationIssue: DestinationIssueSchema.optional(),
   created: finiteNumber,
   started: finiteNumber.optional(),
   completed: finiteNumber.optional(),
@@ -164,13 +161,6 @@ const downloadTaskStateShape = {
   isRetryTask: z.boolean().optional(),
   lastSuccessfulDownloadId: nonnegativeInteger.optional(),
   nextChapterDispatchAt: finiteNumber.optional(),
-  destinationBlockRevision: nonnegativeInteger.optional(),
-  destinationResume: z
-    .strictObject({
-      commandId: nonemptyString,
-      blockRevision: nonnegativeInteger,
-    })
-    .optional(),
   activeCancel: z
     .strictObject({
       commandId: nonemptyString,
@@ -215,43 +205,6 @@ export const DownloadTaskStateSchema =
         path: ["chapters"],
         message: "Active chapters require a captured requested path",
       })
-    if (task.activeBlock === "destination_action_required") {
-      if (!task.destinationIssue) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue"],
-          message: "destination blocks require a paired destination issue",
-        })
-        return
-      }
-      if (task.destinationIssue.taskId !== task.id) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue", "taskId"],
-          message: "destination issue task ID must match its task",
-        })
-      }
-      if (
-        task.destinationIssue.chapterId !== undefined &&
-        !task.chapters.some(
-          (chapter) => chapter.id === task.destinationIssue?.chapterId
-        )
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue", "chapterId"],
-          message: "destination issue chapter ID must match its task",
-        })
-      }
-      return
-    }
-    if (task.destinationIssue) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["destinationIssue"],
-        message: "destination issues require a destination block",
-      })
-    }
   })
 
 export const ActiveDispatchLeaseSchema = z

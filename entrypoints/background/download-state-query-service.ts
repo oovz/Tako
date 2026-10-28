@@ -24,27 +24,19 @@ export class BackgroundDownloadStateQueryService implements DownloadStateQuerySe
       this.queueRepository.getQueue(),
       chrome.storage.local.getBytesInUse(LOCAL_STORAGE_KEYS.downloadQueue),
     ])
-    const destinationIssue =
-      tasks.find((task) => task.destinationIssue)?.destinationIssue ?? null
 
     return OptionsDownloadStateSchema.parse({
       tasks,
-      destinationIssue,
       queueStorageBytes,
     })
   }
 
   async getSidepanelDownloadState(): Promise<SidepanelDownloadState> {
-    const [downloadedChapters, tasks] = await Promise.all([
-      this.historyQueryService.getDownloadedChapters(),
-      this.queueRepository.getQueue(),
-    ])
-    const destinationIssue =
-      tasks.find((task) => task.destinationIssue)?.destinationIssue ?? null
+    const downloadedChapters =
+      await this.historyQueryService.getDownloadedChapters()
 
     return SidepanelDownloadStateSchema.parse({
       downloadedChapters,
-      destinationIssue,
     })
   }
 }

@@ -27,9 +27,6 @@ describe("command center task status labels", () => {
   })
 
   it("surfaces nonterminal block reasons ahead of the broad task status", () => {
-    expect(getTaskStatusLabel("queued", "destination_action_required")).toBe(
-      "Download folder action required"
-    )
     expect(
       getTaskStatusLabel("queued", "provider_network_policy_pending")
     ).toBe("Waiting for provider access")

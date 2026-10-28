@@ -13,26 +13,8 @@ export const QUEUE_AGGREGATE_KEYS = [
 
 export type QueueAggregateKey = (typeof QUEUE_AGGREGATE_KEYS)[number]
 
-export type DestinationIssueKind =
-  | "fsa_permission_required"
-  | "fsa_folder_missing"
-  | "fsa_write_failed"
-  | "fsa_unsupported"
-  | "disk_full"
-
-export interface DestinationIssue {
-  id: string
-  taskId: string
-  chapterId?: string
-  kind: DestinationIssueKind
-  occurredAt: number
-  acknowledgedAt?: number
-}
-
 export type ActiveTaskBlock =
-  | "destination_action_required"
-  | "provider_network_policy_pending"
-  | "provider_network_policy_action_required"
+  "provider_network_policy_pending" | "provider_network_policy_action_required"
 
 export type OffscreenJobStage =
   | "dispatching"
@@ -130,7 +112,6 @@ export interface DownloadTaskState {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
-  destinationIssue?: DestinationIssue
   created: number
   started?: number
   completed?: number
@@ -138,11 +119,6 @@ export interface DownloadTaskState {
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number
   nextChapterDispatchAt?: number
-  destinationBlockRevision?: number
-  destinationResume?: {
-    commandId: string
-    blockRevision: number
-  }
   activeCancel?: {
     commandId: string
   }
@@ -200,6 +176,7 @@ export interface QueueTaskSummary {
   }
   outputUncertain?: boolean
   failureCategory?: DownloadErrorCategory
+  folderAccessRequired?: true
   isRetried?: boolean
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number

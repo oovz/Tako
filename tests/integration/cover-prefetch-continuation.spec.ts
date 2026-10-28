@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import { DownloadTaskCancellationCoordinator } from "@/entrypoints/background/download-task-cancellation-coordinator"
-import { DestinationService } from "@/entrypoints/background/destination"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
@@ -449,18 +448,11 @@ describe("cover prefetch and chapter processing", () => {
         nativeCoordinator,
         finalizationDependencies
       )
-      const destinationService = new DestinationService({
-        queueRepository,
-        settingsReader: settingsRepository,
-        notifier: {
-          notifyDestinationActionRequired: vi.fn(async () => undefined),
-        },
-      })
+
       const terminalCoordinator = new OffscreenJobTerminalCoordinator(
         queueRepository,
         nativeCoordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies
       )
       offscreenEventHandlers = createBackgroundOffscreenEventMessageHandlers({

@@ -98,7 +98,7 @@ describe("native output cold-start recovery", () => {
   let search: ReturnType<typeof vi.fn>
   let revoke: ReturnType<typeof vi.fn>
   let settingsRepository: SettingsRepository
-  const destinationService = {} as never
+
   const queueScheduler = {
     requestContinuation: vi.fn(),
     resumeTask: vi.fn(async () => undefined),
@@ -206,7 +206,6 @@ describe("native output cold-start recovery", () => {
         first.queueRepository,
         first.coordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies()
       )
       const producerError = {
@@ -284,7 +283,6 @@ describe("native output cold-start recovery", () => {
         runtime.queueRepository,
         runtime.coordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies()
       )
       const earlierFailure = {
@@ -494,7 +492,6 @@ describe("native output cold-start recovery", () => {
       restarted.queueRepository,
       restarted.coordinator,
       { requestContinuation } as unknown as QueueScheduler,
-      {} as never,
       finalizationDependencies()
     )
     await terminal.continueAfterNativeOutputSettlement(effects)
@@ -571,7 +568,6 @@ describe("native output cold-start recovery", () => {
       runtime.queueRepository,
       runtime.coordinator,
       queueScheduler,
-      destinationService,
       finalizationDependencies()
     )
     const result = await initializeFromStorage({
@@ -665,7 +661,6 @@ describe("native output cold-start recovery", () => {
         restarted.queueRepository,
         restarted.coordinator,
         scheduler,
-        destinationService,
         finalizationDependencies()
       )
       await terminal.continueAfterNativeOutputSettlement(effects)
@@ -902,7 +897,6 @@ describe("native output cold-start recovery", () => {
         runtime.queueRepository,
         runtime.coordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies()
       ),
       settingsRepository,
@@ -1225,7 +1219,6 @@ describe("native output cold-start recovery", () => {
           runtime.queueRepository,
           runtime.coordinator,
           queueScheduler,
-          destinationService,
           finalizationDependencies()
         ),
         settingsRepository,

@@ -1,3 +1,4 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 import logger from "@/src/runtime/logger"
 import type {
   DispatchLeaseAuthority,
@@ -98,6 +99,46 @@ export class DownloadTaskCancellationCoordinator {
         })
       }
       return { result: { kind: "active" }, queueCanContinue: true }
+    })
+  }
+
+  async failTaskForSave(input: {
+    taskId: string
+    chapterId?: string
+    errorMessage: string
+    errorCategory: DownloadErrorCategory
+  }): Promise<TaskInterruptionOutcome> {
+    return runTaskSideEffectExclusive(input.taskId, async () => {
+      const activeLease = await this.queueRepository.getActiveDispatchLease()
+      const ownedLease =
+        activeLease?.taskId === input.taskId ? activeLease : undefined
+      const failure = await this.queueRepository.failTaskForSave({
+        ...input,
+        now: Date.now(),
+      })
+      if (failure.outcome !== "applied") return "not-applied"
+      if (ownedLease && !(await this.cancelProducerAndClearLease(ownedLease))) {
+        await this.nativeOutputCoordinator.armLiveness()
+        return "quarantined"
+      }
+      try {
+        await clearActiveTaskProgress()
+      } catch (error) {
+        logger.warn(
+          "Could not clear progress after terminal save failure",
+          error
+        )
+      }
+      await notifyTerminalDownloadTask({
+        task: failure.task,
+        finalStatus: failure.task.status,
+        completedCount: failure.task.chapters.filter(
+          (chapter) => chapter.status === "completed"
+        ).length,
+        totalChapters: failure.task.chapters.length,
+        settingsRepository: this.finalizationDependencies.settingsRepository,
+      })
+      return "settled"
     })
   }
 

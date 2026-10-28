@@ -34,7 +34,6 @@ const EXPECTED_RUNTIME_MESSAGES = {
   CLEAR_ALL_HISTORY: "background|command|options|runtime-ready",
   REMOVE_TASK: "background|command|sidepanel,options|runtime-ready",
   CANCEL_TASK: "background|command|sidepanel,options|runtime-ready",
-  RETRY_DESTINATION: "background|command|options|runtime-ready",
   SAVE_OPTIONS_CONFIGURATION: "background|command|options|runtime-ready",
   GET_UI_PREFERENCES: "background|query|sidepanel,options|runtime-ready",
   GET_PERSISTENT_ERRORS: "background|query|sidepanel|control-ready",
@@ -72,7 +71,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(33)
+    expect(Object.keys(actual)).toHaveLength(32)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {
@@ -190,13 +189,13 @@ describe("runtime message registry", () => {
     expect(
       runtimeMessageRegistry.GET_OPTIONS_DOWNLOAD_STATE.response.safeParse({
         success: true,
-        data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+        data: { tasks: [], queueStorageBytes: 0 },
       }).success
     ).toBe(true)
     expect(
       runtimeMessageRegistry.GET_OPTIONS_DOWNLOAD_STATE.response.safeParse({
         success: true,
-        data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+        data: { tasks: [], queueStorageBytes: 0 },
         legacy: true,
       }).success
     ).toBe(false)

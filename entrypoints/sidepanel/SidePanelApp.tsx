@@ -20,7 +20,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { Collapsible } from "@/components/ui/collapsible"
 import { ErrorBanner } from "@/entrypoints/sidepanel/components/ErrorBanner"
-import { FsaBanner } from "@/entrypoints/sidepanel/components/FsaBanner"
 import { SidePanelHeader } from "@/entrypoints/sidepanel/components/SidePanelHeader"
 import { SidePanelQueueRegion } from "@/entrypoints/sidepanel/components/SidePanelQueueRegion"
 import { SeriesContextCard } from "@/entrypoints/sidepanel/components/SeriesContextCard"
@@ -159,9 +158,7 @@ export function SidePanelApp() {
           {t("sidepanel_skipToContent")}
         </a>
         <ErrorBanner />
-        <div className="px-2 pt-2">
-          <FsaBanner />
-        </div>
+        <div className="px-2 pt-2"></div>
         {/* Header with queue status badges - enlarged for better visibility */}
         <SidePanelHeader
           activeCount={

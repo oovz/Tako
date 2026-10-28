@@ -182,17 +182,21 @@ async function runDownloadTask(
       taskId,
       destination: task.settingsSnapshot.destination,
     } as const
-    const destinationPreflight = await destinationService.preflight(
-      taskDestinationContext
-    )
-    if (!destinationPreflight.ready) {
-      throw new DestinationPreflightError(
-        taskDestinationContext,
-        destinationPreflight
+    if (
+      !canReuseEntryLease &&
+      task.chapters.some(
+        (chapter) =>
+          chapter.status === "queued" || chapter.status === "downloading"
       )
-    }
-    if (task.activeBlock === "destination_action_required") {
-      await stateManager.releaseDestinationBlock(taskId)
+    ) {
+      const destinationPreflight = await destinationService.preflight(
+        taskDestinationContext
+      )
+      if (!destinationPreflight.ready)
+        throw new DestinationPreflightError(
+          taskDestinationContext,
+          destinationPreflight
+        )
     }
 
     await ensureOffscreenReady()
@@ -298,19 +302,13 @@ async function runDownloadTask(
     return "queue-continuation"
   } catch (error) {
     if (error instanceof DestinationPreflightError) {
-      await destinationService.blockForPreflight(error.context, error.result)
-      if (currentLeaseForTask) {
-        await cancellationCoordinator.cancelProducerAndClearLease(
-          currentLeaseForTask
-        )
-      }
-      await clearActiveTaskProgress()
-      logger.info("[Queue]", {
-        event: "DESTINATION_ACTION_REQUIRED",
+      const failure = await cancellationCoordinator.failTaskForSave({
         taskId,
-        reason: error.result.reason,
+        chapterId: error.context.chapterId,
+        errorMessage: error.message,
+        errorCategory: error.errorCategory,
       })
-      return "queue-continuation"
+      return failure === "quarantined" ? "wait" : "queue-continuation"
     }
     if (error instanceof ProviderNetworkPolicyPendingError) {
       const blockTransition = await stateManager.blockTaskForProviderPolicy({

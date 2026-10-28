@@ -9,10 +9,7 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { resolveDownloadPlan } from "./queue-helpers"
-import {
-  DestinationPreflightError,
-  type DestinationService,
-} from "./destination"
+import { DestinationPreflightError } from "./destination"
 import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { SiteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
@@ -47,7 +44,6 @@ export class ChapterDispatchCoordinator {
     ) => Promise<T>,
     private readonly cancellationCoordinator: DownloadTaskCancellationCoordinator,
     private readonly sessionRuleManager: SiteIntegrationSessionRuleManager,
-    private readonly destinationService: DestinationService,
     private readonly siteIntegrationEnablementService: Pick<
       SiteIntegrationEnablementService,
       "getAll"
@@ -118,15 +114,11 @@ export class ChapterDispatchCoordinator {
           return undefined
         }
 
-        const destination =
-          await this.destinationService.getEffectiveDestination({
-            taskId,
-            chapterId: chapter.id,
-            destination: latestTask.settingsSnapshot.destination,
-          })
+        const destination = latestTask.settingsSnapshot.destination
         const saveMode: RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]["saveMode"] =
-          destination.kind === "custom" ? "fsa" : "downloads-api"
-        lastDownloadMode = destination.kind === "custom" ? "custom" : "browser"
+          destination.kind === "file-system-access" ? "fsa" : "downloads-api"
+        lastDownloadMode =
+          destination.kind === "file-system-access" ? "custom" : "browser"
 
         const currentEnablement =
           await this.siteIntegrationEnablementService.getAll()
@@ -205,7 +197,9 @@ export class ChapterDispatchCoordinator {
           settingsSnapshot: { ...settingsSnapshot },
           saveMode,
           directoryHandleId:
-            destination.kind === "custom" ? destination.handleId : undefined,
+            destination.kind === "file-system-access"
+              ? destination.handleId!
+              : undefined,
           notBefore: latestTask.nextChapterDispatchAt,
           integrationContext,
         }
@@ -274,8 +268,8 @@ export class ChapterDispatchCoordinator {
                   fingerprint,
                   saveMode,
                   destinationHandleId:
-                    destination.kind === "custom"
-                      ? destination.handleId
+                    destination.kind === "file-system-access"
+                      ? destination.handleId!
                       : undefined,
                 }),
                 now: Date.now(),

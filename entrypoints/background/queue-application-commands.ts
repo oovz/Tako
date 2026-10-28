@@ -316,10 +316,6 @@ export class QueueApplicationCommands {
     return cancellation.result
   }
 
-  async retryDestination(taskId: string, commandId: string): Promise<void> {
-    await this.resumeDestination(taskId, commandId)
-  }
-
   async undoQueueAction(
     token: string
   ): Promise<{ restoredQueuedTask: boolean }> {
@@ -342,28 +338,6 @@ export class QueueApplicationCommands {
       "cancel_queued"
     if (restoredQueuedTask) await this.activateQueue()
     return { restoredQueuedTask }
-  }
-
-  private async resumeDestination(
-    taskId: string,
-    commandId: string
-  ): Promise<void> {
-    const result = await this.deps.queueRepository.resumeDestinationTask({
-      taskId,
-      commandId,
-      now: Date.now(),
-    })
-    if (result.outcome === "rejected") {
-      throw new Error("Download task not found.")
-    }
-    if (result.outcome === "unchanged" && result.reason === "superseded") {
-      return
-    }
-    if (result.outcome === "unchanged" && result.reason !== "already-resumed") {
-      throw new Error("This task is not waiting for download-folder action.")
-    }
-
-    await this.activateQueue()
   }
 
   /**

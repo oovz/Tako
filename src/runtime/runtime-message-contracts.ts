@@ -23,7 +23,6 @@ import {
   SeriesMetadataSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
-import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
 import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import { DownloadedChapterRecordSchema } from "@/src/domain/history/schema"
 import { ExtensionSettingsSchema } from "@/src/domain/settings/schema"
@@ -61,13 +60,11 @@ const RuntimeFailureSchema = z.strictObject({
 
 export const OptionsDownloadStateSchema = z.strictObject({
   tasks: z.array(DownloadTaskStateSchema),
-  destinationIssue: DestinationIssueSchema.nullable(),
   queueStorageBytes: z.number().int().nonnegative(),
 })
 
 export const SidepanelDownloadStateSchema = z.strictObject({
   downloadedChapters: z.array(DownloadedChapterRecordSchema),
-  destinationIssue: DestinationIssueSchema.nullable(),
 })
 
 export const OptionsConfigurationSnapshotSchema = z.strictObject({
@@ -573,19 +570,7 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
-  RETRY_DESTINATION: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("RETRY_DESTINATION"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: successOrFailure(),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["options"],
-    readiness: "runtime-ready",
-  }),
+
   UNDO_QUEUE_ACTION: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),

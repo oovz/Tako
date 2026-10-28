@@ -1,6 +1,3 @@
-import { toast } from "sonner"
-import logger from "@/src/runtime/logger"
-import { OptionsFsaController } from "../controllers/options-fsa-controller"
 import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
 import { useState } from "react"
 import { Database, Layers, Loader2, Trash2 } from "lucide-react"
@@ -24,7 +21,6 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { DownloadTaskGroups } from "../components/DownloadTaskGroups"
-import { DownloadsFsaBanner } from "../components/DownloadsFsaBanner"
 import { ClearHistoryDialog } from "../components/ClearHistoryDialog"
 import {
   formatBytes,
@@ -60,10 +56,6 @@ interface ActivityTabProps {
   ) => Promise<boolean>
   onRefreshSeries?: () => Promise<SeriesHistory[]>
   isClearingHistory?: boolean
-  onRepairFolder?: () => Promise<boolean>
-  onGrantFolderAccess?: () => Promise<boolean>
-  isPickingFolder?: boolean
-  isSaving?: boolean
 }
 export function ActivityTab({
   stats,
@@ -72,8 +64,6 @@ export function ActivityTab({
   onClearSeriesHistory,
   onRefreshSeries,
   isClearingHistory = false,
-  isPickingFolder = false,
-  isSaving = false,
 }: ActivityTabProps) {
   const [historyToClear, setHistoryToClear] = useState<
     "tasks" | "chapters" | null
@@ -81,22 +71,17 @@ export function ActivityTab({
   const [clearSeriesDialogOpen, setClearSeriesDialogOpen] = useState(false)
   const [selectedSeriesToClear, setSelectedSeriesToClear] = useState("")
   const [localSeries, setLocalSeries] = useState<SeriesHistory[]>(series)
-  const [isDestinationActionPending, setIsDestinationActionPending] =
-    useState(false)
-
   const {
     tasks,
     isLoading,
     readStatus,
     retryRead,
-    destinationIssue,
     historyStorageBytes,
     cancelTask,
     retryTask,
     restartTask,
     removeTask,
     clearTaskHistory,
-    retryDestinationTask,
   } = useDownloadsTabState()
 
   const {
@@ -107,27 +92,6 @@ export function ActivityTab({
     canceledTasks,
     terminalTasks,
   } = partitionDownloadTasks(tasks)
-
-  const destinationTask = destinationIssue
-    ? tasks.find((task) => task.id === destinationIssue.taskId)
-    : undefined
-
-  async function repairAndRetry(
-    repair?: () => Promise<boolean>
-  ): Promise<void> {
-    if (!destinationIssue || isDestinationActionPending || !repair) return
-    setIsDestinationActionPending(true)
-    try {
-      if (await repair()) {
-        await retryDestinationTask(destinationIssue.taskId)
-      }
-    } catch (error) {
-      logger.warn("Task folder permission renewal failed", error)
-      toast.error(t("destinationIssue_actionFailed"))
-    } finally {
-      setIsDestinationActionPending(false)
-    }
-  }
 
   const handleClearSeries = async () => {
     if (!selectedSeriesToClear || !onClearSeriesHistory) return
@@ -174,48 +138,6 @@ export function ActivityTab({
         title={t("options_activity")}
         description={t("options_downloadsDesc")}
       />
-
-      {/* Destination Issue Banner */}
-      {destinationIssue && (
-        <DownloadsFsaBanner
-          issue={destinationIssue}
-          taskTitle={destinationTask?.seriesTitle}
-          destination={destinationTask?.settingsSnapshot.destination}
-          requestedPath={destinationTask?.chapters[0]?.requestedPath}
-          isWorking={isSaving || isPickingFolder || isDestinationActionPending}
-          onGrantAccess={() =>
-            repairAndRetry(async () => {
-              const target = destinationTask?.settingsSnapshot.destination
-              if (
-                !target ||
-                target.kind !== "file-system-access" ||
-                !target.handleId
-              )
-                return false
-              const access = await new OptionsFsaController().grantSavedAccess(
-                target.handleId
-              )
-              if (access.status !== "granted")
-                toast.error(
-                  t(
-                    access.status === "missing"
-                      ? "settings_customFolderNotFound"
-                      : "options_toastPermissionDenied"
-                  )
-                )
-              return access.status === "granted"
-            })
-          }
-          onCancelTask={async () => {
-            setIsDestinationActionPending(true)
-            try {
-              await cancelTask(destinationIssue.taskId)
-            } finally {
-              setIsDestinationActionPending(false)
-            }
-          }}
-        />
-      )}
 
       <QueueReadNotice status={readStatus} onRetry={retryRead} />
 

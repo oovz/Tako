@@ -12,11 +12,7 @@ import type {
 } from "@/src/domain/queue/state"
 import type { ChapterState } from "@/src/types/tab-state"
 import { type Mock, vi } from "vitest"
-import {
-  createDestinationIssue,
-  issueKindForPreflight,
-  type DestinationService,
-} from "@/entrypoints/background/destination"
+import { type DestinationService } from "@/entrypoints/background/destination"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import type { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
@@ -103,15 +99,6 @@ export let mockQueueScheduler: QueueScheduler
 export let mockTerminalCoordinator: OffscreenJobTerminalCoordinator
 export let mockProviderPolicyCoordinator: ProviderPolicyQueueCoordinator
 export const mockDestinationService = {
-  blockForPreflight: vi.fn(async () => ({
-    outcome: "applied" as const,
-    task: undefined,
-  })),
-  blockForRuntimeIssue: vi.fn(async () => ({
-    outcome: "applied" as const,
-    task: undefined,
-  })),
-  getEffectiveDestination: vi.fn(async () => ({ kind: "downloads" as const })),
   preflight: vi.fn(async () => ({ ready: true as const })),
 } as unknown as DestinationService
 export const mockRateLimitService = {
@@ -208,17 +195,6 @@ export const makeTask = (
       chapterNumber: 1,
     }),
   ]
-  const destinationIssue =
-    overrides.destinationIssue ??
-    (overrides.activeBlock === "destination_action_required"
-      ? {
-          id: `${overrides.id ?? "task-1"}:${chapters[0]?.id ?? ""}:fsa_folder_missing`,
-          taskId: overrides.id ?? "task-1",
-          chapterId: chapters[0]?.id,
-          kind: "fsa_folder_missing" as const,
-          occurredAt: Date.now(),
-        }
-      : undefined)
   return {
     id: overrides.id ?? "task-1",
     siteIntegrationId,
@@ -231,7 +207,6 @@ export const makeTask = (
     started: overrides.started,
     errorMessage: overrides.errorMessage,
     activeBlock: overrides.activeBlock,
-    destinationIssue,
     lastSuccessfulDownloadId: overrides.lastSuccessfulDownloadId,
     isRetried: overrides.isRetried,
     isRetryTask: overrides.isRetryTask,
@@ -377,9 +352,6 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
   vi.mocked(mockNativeOutputCoordinator.armLiveness).mockResolvedValue(
     undefined
   )
-  vi.mocked(mockDestinationService.getEffectiveDestination).mockResolvedValue({
-    kind: "downloads",
-  })
   vi.mocked(mockDestinationService.preflight).mockResolvedValue({ ready: true })
   if (vi.isMockFunction(mockEnsureSiteIntegrationNetworkReady)) {
     mockEnsureSiteIntegrationNetworkReady.mockResolvedValue(undefined)
@@ -509,35 +481,10 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
   vi.spyOn(mockQueueRepository, "recordTaskDispatchError")
   vi.spyOn(mockQueueRepository, "setNextChapterDispatchAt")
   vi.spyOn(mockQueueRepository, "clearDispatchLease")
-  vi.spyOn(mockQueueRepository, "blockTaskForDestination")
-  vi.spyOn(mockQueueRepository, "releaseDestinationBlock")
   vi.spyOn(mockQueueRepository, "blockTaskForProviderPolicy")
   vi.spyOn(mockQueueRepository, "releaseProviderPolicyBlock")
   vi.spyOn(mockQueueRepository, "releaseProviderPolicyBlocks")
   vi.spyOn(mockQueueRepository, "interruptDownloadTask")
-  vi.mocked(mockDestinationService.blockForPreflight).mockImplementation(
-    async (context, result) =>
-      await mockQueueRepository.blockTaskForDestination({
-        taskId: context.taskId,
-        now: Date.now(),
-        destinationIssue: createDestinationIssue(
-          context,
-          issueKindForPreflight(result)
-        ),
-      })
-  )
-  vi.mocked(mockDestinationService.blockForRuntimeIssue).mockImplementation(
-    async (input) =>
-      await mockQueueRepository.blockTaskForDestination({
-        taskId: input.context.taskId,
-        now: input.now ?? Date.now(),
-        destinationIssue: createDestinationIssue(input.context, input.kind),
-        errorMessage: input.errorMessage,
-        errorCategory: input.errorCategory,
-        chapter: input.chapter,
-      })
-  )
-
   const cancellationCoordinator = new DownloadTaskCancellationCoordinator(
     mockQueueRepository,
     mockNativeOutputCoordinator,
@@ -554,7 +501,6 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
     mockRunOffscreenDocumentAdmissionExclusive,
     cancellationCoordinator,
     mockSessionRuleManager,
-    mockDestinationService,
     mockSiteIntegrationEnablementService,
     {
       getAll: vi.fn(async () => ({})),
@@ -581,7 +527,6 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
     mockQueueRepository,
     mockNativeOutputCoordinator,
     mockQueueScheduler,
-    mockDestinationService,
     finalizationDependencies
   )
 }

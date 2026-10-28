@@ -440,19 +440,15 @@ export async function recoverFromLivenessTimeout(
           outcome,
         })
     )
-    if (settlement === "native-output-pending") {
-      await terminalCoordinator.afterSettlement(
-        exactQueriedJob.taskId,
-        settlement
-      )
-    } else if (settlement === "terminal-owner-released") {
-      await queueScheduler.activate()
-    } else if (
+    if (
       settlement === "chapter-settled" &&
-      !queueScheduler.isTaskActive(exactQueriedJob.taskId)
-    ) {
-      await queueScheduler.resumeTask(exactQueriedJob.taskId)
-    }
+      queueScheduler.isTaskActive(exactQueriedJob.taskId)
+    )
+      return
+    await terminalCoordinator.afterSettlement(
+      exactQueriedJob.taskId,
+      settlement
+    )
     return
   }
 

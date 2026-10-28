@@ -77,6 +77,9 @@ vi.mock("@/src/storage/fs-access", () => ({
   writeBlobToPath: vi.fn(),
 }))
 
+const mockResolveChapterPlan = vi.fn(async () => ({
+  imageUrls: ["https://example.test/img1.jpg", "https://example.test/img2.jpg"],
+}))
 const messages: unknown[] = []
 
 global.chrome = {
@@ -159,12 +162,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
         parse: (value: unknown) => value as Record<string, unknown>,
       },
       chapter: {
-        resolveChapterPlan: async () => ({
-          imageUrls: [
-            "https://example.test/img1.jpg",
-            "https://example.test/img2.jpg",
-          ],
-        }),
+        resolveChapterPlan: mockResolveChapterPlan,
         downloadImage: mockDownloadImage,
       },
     } as unknown as OffscreenIntegration
@@ -355,7 +353,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     expect(loadDownloadRootHandle).toHaveBeenCalledExactlyOnceWith(
       "selected-id"
     )
-    expect(queryFsaPermission).toHaveBeenCalledWith(expect.anything(), true)
+    expect(queryFsaPermission).not.toHaveBeenCalled()
     expect(writeBlobToPath).toHaveBeenCalled()
     expect(
       vi
@@ -397,70 +395,90 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
     expect(comicInfoText).toContain("<Format>Web</Format>")
   })
 
-  it("blocks the chapter when custom folder permission is missing", async () => {
-    vi.mocked(loadDownloadRootHandle).mockResolvedValue(
-      {} as FileSystemDirectoryHandle
-    )
-    vi.mocked(queryFsaPermission).mockResolvedValue("prompt")
-
-    const dispatch = {
-      jobId: "job-none-custom-permission-lost",
-      attempt: 1,
-      taskId: "task-none-custom-permission-lost",
-      seriesKey: "test-site:series-1",
-      book: {
-        siteIntegrationId: "test-site",
-        seriesTitle: "Test Book",
-      },
-      chapter: {
-        id: "c1",
-        title: "Chapter 1",
-        url: "http://example.com/c1",
-        index: 1,
-        chapterNumber: 1,
-        resolvedPath: "Chapter 1",
-      },
-      settingsSnapshot: {
-        ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
-        archiveFormat: "none",
-      },
-      saveMode: "fsa",
-      directoryHandleId: "selected-id",
-      integrationContext: {
-        schemaVersion: 1,
-        data: { taskId: "task-123" },
-      },
-    } satisfies Omit<
-      RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"],
-      "fingerprint"
-    >
-    const fingerprint = await createOffscreenDispatchFingerprint(dispatch)
-    const acknowledgment = await worker.processDownloadChapter({
-      ...dispatch,
-      fingerprint,
-    })
-
-    expect(acknowledgment).toMatchObject({ accepted: true, fingerprint })
-    await vi.waitFor(() =>
-      expect(
-        worker.getJobState({
-          jobId: dispatch.jobId,
-          attempt: dispatch.attempt,
-          taskId: dispatch.taskId,
-          chapterId: dispatch.chapter.id,
-          fingerprint,
-          documentInstanceId: worker.documentInstanceId,
-        })
-      ).toMatchObject({
-        status: "terminal",
-        outcome: { status: "failed" },
-      })
-    )
-    expect(
-      messages.some(
-        (message) =>
-          (message as { type?: string }).type === "OFFSCREEN_OUTPUT_READY"
+  it.each(["write", "capture"] as const)(
+    "reports native folder %s failure without a Chrome fallback",
+    async (boundary) => {
+      vi.mocked(loadDownloadRootHandle).mockResolvedValue(
+        {} as FileSystemDirectoryHandle
       )
-    ).toBe(false)
-  })
+      const original = new DOMException(
+        "Native folder access failed",
+        "NotAllowedError"
+      )
+      mockResolveChapterPlan.mockClear()
+      if (boundary === "capture")
+        vi.mocked(loadDownloadRootHandle).mockRejectedValue(original)
+      else vi.mocked(writeBlobToPath).mockRejectedValue(original)
+
+      const dispatch = {
+        jobId: "job-none-custom-permission-lost",
+        attempt: 1,
+        taskId: "task-none-custom-permission-lost",
+        seriesKey: "test-site:series-1",
+        book: {
+          siteIntegrationId: "test-site",
+          seriesTitle: "Test Book",
+        },
+        chapter: {
+          id: "c1",
+          title: "Chapter 1",
+          url: "http://example.com/c1",
+          index: 1,
+          chapterNumber: 1,
+          resolvedPath: "Chapter 1",
+        },
+        settingsSnapshot: {
+          ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+          archiveFormat: "none",
+        },
+        saveMode: "fsa",
+        directoryHandleId: "selected-id",
+        integrationContext: {
+          schemaVersion: 1,
+          data: { taskId: "task-123" },
+        },
+      } satisfies Omit<
+        RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"],
+        "fingerprint"
+      >
+      const fingerprint = await createOffscreenDispatchFingerprint(dispatch)
+      const acknowledgment = await worker.processDownloadChapter({
+        ...dispatch,
+        fingerprint,
+      })
+
+      expect(acknowledgment).toMatchObject({ accepted: true, fingerprint })
+      await vi.waitFor(() =>
+        expect(
+          worker.getJobState({
+            jobId: dispatch.jobId,
+            attempt: dispatch.attempt,
+            taskId: dispatch.taskId,
+            chapterId: dispatch.chapter.id,
+            fingerprint,
+            documentInstanceId: worker.documentInstanceId,
+          })
+        ).toMatchObject({
+          status: "terminal",
+          outcome: {
+            status: "failed",
+            errorMessage: original.message,
+            errorCategory:
+              boundary === "capture"
+                ? "folder_unavailable"
+                : "folder_permission_required",
+          },
+        })
+      )
+      expect(mockResolveChapterPlan).toHaveBeenCalledTimes(
+        boundary === "capture" ? 0 : 1
+      )
+      expect(
+        messages.some(
+          (message) =>
+            (message as { type?: string }).type === "OFFSCREEN_OUTPUT_READY"
+        )
+      ).toBe(false)
+    }
+  )
 })

@@ -489,7 +489,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "partial_success",
-      errorMessage: "Access to the selected folder is required.",
+      errorMessage: "write rejected",
       errorCategory: "folder_permission_required",
       imagesFailed: 2,
       outputsRequested: 3,
@@ -533,7 +533,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "opaque operating system error",
       errorCategory: "folder_write_failed",
       imagesFailed: 2,
       outputsRequested: 2,
@@ -581,7 +581,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "partial_success",
-      errorMessage: "There is not enough disk space in the selected folder.",
+      errorMessage: "write rejected",
       errorCategory: "disk_full",
       imagesFailed: undefined,
       outputsRequested: 3,

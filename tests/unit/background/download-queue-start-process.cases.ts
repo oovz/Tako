@@ -28,9 +28,6 @@ import {
 } from "@/src/site-integrations/session-rule-manager"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
-import { createOffscreenDispatchFingerprint } from "@/src/runtime/offscreen-job-fingerprint"
-import { runtimeMessageRegistry } from "@/src/runtime/runtime-message-contracts"
-import { DestinationService } from "@/entrypoints/background/destination"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
@@ -350,90 +347,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
     })
 
-    it("leaves terminal event state recoverable when finalization persistence fails", async () => {
-      const fsaSettings = {
-        ...createTaskSettingsSnapshot(testSettings, "test-site"),
-        destination: {
-          kind: "file-system-access" as const,
-          handleId: "folder",
-        },
-      }
-      const interruptedTask = makeTask({
-        id: "task-finalization-failure",
-        created: 1,
-        settingsSnapshot: fsaSettings,
-      })
-      const nextTask = makeTask({
-        id: "task-after-finalization-failure",
-        mangaId: "series-2",
-        created: 2,
-        settingsSnapshot: fsaSettings,
-      })
-      mockGlobalState.downloadQueue = [interruptedTask, nextTask]
-      vi.mocked(
-        mockDestinationService.getEffectiveDestination
-      ).mockResolvedValue({
-        kind: "custom",
-        handleId: "selected-id",
-        handle: {} as FileSystemDirectoryHandle,
-      })
-      const finalization = vi
-        .spyOn(mockQueueRepository, "finalizeDownloadTask")
-        .mockRejectedValueOnce(new Error("finalization commit failed"))
-
-      try {
-        await startDownloadTask(
-          mockQueueRepository,
-          interruptedTask.id,
-          mockEnsureOffscreenReady
-        )
-
-        const dispatch = dispatchedChapters(interruptedTask.id)[0]!
-        await expect(
-          settleAcceptedDispatch(dispatch, {
-            status: "failed",
-            errorMessage: "chapter dispatch failed",
-            errorCategory: "unknown",
-            outputsRequested: 0,
-            outputsFailedBeforeHandoff: 0,
-            outputsCommitted: 0,
-          })
-        ).rejects.toThrow("finalization commit failed")
-
-        const admittedLease = vi
-          .mocked(mockQueueRepository.beginChapterDispatch)
-          .mock.calls.find(
-            ([input]) => input.taskId === interruptedTask.id
-          )?.[0].lease
-        expect(admittedLease).toBeDefined()
-        expect(
-          mockGlobalState.downloadQueue.find(
-            (task) => task.id === interruptedTask.id
-          )
-        ).toMatchObject({
-          status: "downloading",
-          chapters: [
-            expect.objectContaining({
-              status: "failed",
-              errorMessage: "chapter dispatch failed",
-            }),
-          ],
-        })
-        expect(await mockQueueRepository.getActiveDispatchLease()).toBeNull()
-        expect(mockEnsureOffscreenReady).toHaveBeenCalledTimes(1)
-        expect(
-          mockGlobalState.downloadQueue.find((task) => task.id === nextTask.id)
-        ).toMatchObject({ status: "queued" })
-        const dispatchedTaskIds = mockRuntimeSendMessage.mock.calls
-          .map(([message]) => message)
-          .filter((message) => message?.type === "OFFSCREEN_DOWNLOAD_CHAPTER")
-          .map((message) => message.payload.taskId)
-        expect(dispatchedTaskIds).toEqual([interruptedTask.id])
-      } finally {
-        finalization.mockRestore()
-      }
-    })
-
     it("leaves native chapter history to the sole settlement callback", async () => {
       const task = makeTask({ id: "task-history-write-retry" })
       mockGlobalState.downloadQueue = [task]
@@ -451,290 +364,6 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         expect.objectContaining({ status: "completed" })
       )
       expect(historyRepository.markChapterAsDownloaded).not.toHaveBeenCalled()
-    })
-
-    it("keeps the enqueue-time FSA destination frozen across every chapter", async () => {
-      const chapters = [
-        createChapter({ id: "ch1", title: "Chapter 1", index: 1 }),
-        createChapter({
-          id: "ch2",
-          url: "https://example.com/ch2",
-          title: "Chapter 2",
-          index: 2,
-        }),
-      ]
-      const task = makeTask({
-        id: "task-destination-refresh",
-        chapters,
-        settingsSnapshot: {
-          ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        },
-      })
-      mockGlobalState.downloadQueue = [task]
-      vi.mocked(resolveDownloadPlan).mockResolvedValue({
-        format: "cbz",
-        book: {
-          siteId: "test-site",
-          seriesId: "series-1",
-          seriesTitle: "Test Manga",
-          comicInfoBase: { Series: "Test Manga" },
-        },
-        chapters: chapters.map((chapter) => ({
-          ...chapter,
-          resolvedPath: `Test Manga/${chapter.title}.cbz`,
-          comicInfo: {},
-        })),
-      })
-      vi.mocked(
-        mockDestinationService.getEffectiveDestination
-      ).mockResolvedValue({
-        kind: "custom",
-        handleId: "selected-id",
-        handle: {} as FileSystemDirectoryHandle,
-      })
-      await startDownloadTask(
-        mockQueueRepository,
-        task.id,
-        mockEnsureOffscreenReady
-      )
-      await settleAllAcceptedDispatches(task.id)
-
-      const saveModes = mockRuntimeSendMessage.mock.calls
-        .filter(([message]) => message.type === "OFFSCREEN_DOWNLOAD_CHAPTER")
-        .map(([message]) => message.payload.saveMode)
-      expect(saveModes).toEqual(["fsa", "fsa"])
-      for (const message of dispatchedChapters(task.id)) {
-        expect(message.payload.directoryHandleId).toBe("selected-id")
-        expect(
-          runtimeMessageRegistry.OFFSCREEN_DOWNLOAD_CHAPTER.request.safeParse(
-            message
-          ).success
-        ).toBe(true)
-        const { fingerprint, ...unsigned } = message.payload
-        expect(fingerprint).toBe(
-          await createOffscreenDispatchFingerprint(unsigned)
-        )
-        expect(
-          await createOffscreenDispatchFingerprint({
-            ...unsigned,
-            directoryHandleId: "changed-id",
-          })
-        ).not.toBe(fingerprint)
-      }
-      expect(
-        mockDestinationService.getEffectiveDestination
-      ).toHaveBeenCalledTimes(2)
-      for (const [context] of vi.mocked(
-        mockDestinationService.getEffectiveDestination
-      ).mock.calls) {
-        expect(context).toMatchObject({
-          taskId: task.id,
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        })
-      }
-    })
-
-    it("leaves the head task queued when its custom folder needs user action", async () => {
-      const task = makeTask({
-        id: "task-folder-preflight",
-        settingsSnapshot: {
-          ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        },
-      })
-      mockGlobalState.downloadQueue = [task]
-      vi.mocked(mockDestinationService.preflight).mockResolvedValue({
-        ready: false,
-        reason: "permission_prompt",
-      })
-
-      await startDownloadTask(
-        mockQueueRepository,
-        task.id,
-        mockEnsureOffscreenReady
-      )
-
-      expect(mockGlobalState.downloadQueue[0]).toEqual(
-        expect.objectContaining({
-          status: "queued",
-          activeBlock: "destination_action_required",
-        })
-      )
-      expect(mockDestinationService.blockForPreflight).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: task.id,
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        }),
-        { ready: false, reason: "permission_prompt" }
-      )
-      expect(mockEnsureOffscreenReady).not.toHaveBeenCalled()
-      expect(mockQueueRepository.beginChapterDispatch).not.toHaveBeenCalled()
-    })
-
-    it("keeps the paired repair issue when notification delivery fails", async () => {
-      const task = makeTask({
-        id: "task-folder-notification",
-        settingsSnapshot: {
-          ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        },
-      })
-      mockGlobalState.downloadQueue = [task]
-      vi.mocked(mockDestinationService.preflight).mockResolvedValue({
-        ready: false,
-        reason: "permission_prompt",
-      })
-      const notifier = vi
-        .fn()
-        .mockRejectedValue(new Error("notification failed"))
-      const destinationService = new DestinationService({
-        queueRepository: mockQueueRepository,
-        settingsReader: {
-          getSettings: async () => ({
-            notifications: true,
-            downloads: { customDirectoryHandleId: "selected-id" },
-          }),
-        },
-        notifier: { notifyDestinationActionRequired: notifier },
-      })
-      vi.mocked(mockDestinationService.blockForPreflight).mockImplementation(
-        destinationService.blockForPreflight.bind(destinationService)
-      )
-
-      await expect(
-        startDownloadTask(
-          mockQueueRepository,
-          task.id,
-          mockEnsureOffscreenReady
-        )
-      ).resolves.toBeUndefined()
-
-      expect(mockGlobalState.downloadQueue[0]).toEqual(
-        expect.objectContaining({
-          status: "queued",
-          activeBlock: "destination_action_required",
-          destinationIssue: expect.objectContaining({
-            taskId: task.id,
-            kind: "fsa_permission_required",
-          }),
-        })
-      )
-      expect(notifier).toHaveBeenCalledOnce()
-    })
-
-    it("returns an active FSA chapter to a recoverable queued block after permission loss", async () => {
-      const task = makeTask({
-        id: "task-folder-runtime",
-        settingsSnapshot: {
-          ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        },
-      })
-      mockGlobalState.downloadQueue = [task]
-      vi.mocked(
-        mockDestinationService.getEffectiveDestination
-      ).mockResolvedValue({
-        kind: "custom",
-        handleId: "selected-id",
-        handle: {} as FileSystemDirectoryHandle,
-      })
-      await startDownloadTask(
-        mockQueueRepository,
-        task.id,
-        mockEnsureOffscreenReady
-      )
-      await settleAcceptedDispatch(dispatchedChapters(task.id)[0]!, {
-        status: "failed",
-        errorCategory: "folder_permission_required",
-        errorMessage: "Folder permission is required.",
-        imagesFailed: 1,
-        outputsRequested: 1,
-        outputsCommitted: 0,
-        outputsFailedBeforeHandoff: 1,
-      })
-
-      expect(mockGlobalState.downloadQueue[0]).toEqual(
-        expect.objectContaining({
-          status: "queued",
-          activeBlock: "destination_action_required",
-          errorCategory: "folder_permission_required",
-          destinationIssue: expect.objectContaining({
-            taskId: task.id,
-            chapterId: task.chapters[0]?.id,
-            kind: "fsa_permission_required",
-          }),
-        })
-      )
-      expect(mockGlobalState.downloadQueue[0]?.chapters[0]).toEqual(
-        expect.objectContaining({
-          status: "queued",
-          outputs: { requested: 1, committed: 0, failed: 1 },
-        })
-      )
-      expect(mockDestinationService.blockForRuntimeIssue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          context: expect.objectContaining({
-            taskId: task.id,
-            chapterId: task.chapters[0]?.id,
-            destination: {
-              kind: "file-system-access",
-              handleId: "test-folder",
-            },
-          }),
-          kind: "fsa_permission_required",
-        })
-      )
-    })
-
-    it("maps a generic FSA write category to an actionable destination issue", async () => {
-      const task = makeTask({
-        id: "task-folder-write",
-        settingsSnapshot: {
-          ...createTaskSettingsSnapshot(testSettings, "test-site"),
-          destination: { kind: "file-system-access", handleId: "test-folder" },
-        },
-      })
-      mockGlobalState.downloadQueue = [task]
-      vi.mocked(
-        mockDestinationService.getEffectiveDestination
-      ).mockResolvedValue({
-        kind: "custom",
-        handleId: "selected-id",
-        handle: {} as FileSystemDirectoryHandle,
-      })
-      await startDownloadTask(
-        mockQueueRepository,
-        task.id,
-        mockEnsureOffscreenReady
-      )
-      await settleAcceptedDispatch(dispatchedChapters(task.id)[0]!, {
-        status: "failed",
-        errorCategory: "folder_write_failed",
-        errorMessage: "Tako could not write to the selected folder.",
-        outputsRequested: 1,
-        outputsCommitted: 0,
-        outputsFailedBeforeHandoff: 0,
-      })
-
-      expect(mockGlobalState.downloadQueue[0]).toEqual(
-        expect.objectContaining({
-          status: "queued",
-          activeBlock: "destination_action_required",
-          errorCategory: "folder_write_failed",
-          destinationIssue: expect.objectContaining({
-            taskId: task.id,
-            chapterId: task.chapters[0]?.id,
-            kind: "fsa_write_failed",
-          }),
-        })
-      )
-      expect(mockDestinationService.blockForRuntimeIssue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          context: expect.objectContaining({ taskId: task.id }),
-          kind: "fsa_write_failed",
-        })
-      )
     })
 
     it("should allow multiple tasks from same tab", async () => {
@@ -1513,7 +1142,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
     })
 
     it.each([
-      "destination_action_required",
+      "provider_network_policy_action_required",
       "provider_network_policy_pending",
     ] as const)(
       "skips a queued task blocked by %s and starts the next runnable task",
@@ -1545,7 +1174,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
       }
     )
 
-    it("skips a head task that becomes destination-blocked during admission", async () => {
+    it("continues past a head task whose folder fails during admission", async () => {
       const blockedTask = makeTask({
         id: "dynamic-blocked-task",
         settingsSnapshot: {
@@ -1568,8 +1197,8 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         expect.arrayContaining([
           expect.objectContaining({
             id: blockedTask.id,
-            status: "queued",
-            activeBlock: "destination_action_required",
+            status: "failed",
+            errorCategory: "folder_permission_required",
           }),
           expect.objectContaining({
             id: runnableTask.id,
