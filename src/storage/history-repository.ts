@@ -12,10 +12,11 @@ import {
   parseHistoryAggregate,
   serializeHistoryAggregate,
 } from "@/src/domain/history/schema"
-import type {
-  DownloadedChapterRecord,
-  HistoryAggregate,
-  SeriesDownloadHistory,
+import {
+  composeDownloadedChapterKey,
+  type DownloadedChapterRecord,
+  type HistoryAggregate,
+  type SeriesDownloadHistory,
 } from "@/src/domain/history/types"
 
 export const HISTORY_STORAGE_KEYS = {
@@ -81,7 +82,22 @@ export class HistoryRepository {
     return this.mutations.run(async () => {
       const aggregate = await this.loadAggregate()
       const seriesKey = `${record.siteIntegrationId}#${record.seriesId}`
-      const chapterKey = `${record.siteIntegrationId}\u0000${record.seriesId}\u0000${record.chapterId}`
+      const chapterKey = composeDownloadedChapterKey(
+        record.siteIntegrationId,
+        record.seriesId,
+        record.chapterId
+      )
+      if (
+        aggregate.downloadedChapters.some(
+          (existing) =>
+            composeDownloadedChapterKey(
+              existing.siteIntegrationId,
+              existing.seriesId,
+              existing.chapterId
+            ) === chapterKey
+        )
+      )
+        return false
       const clearedAt = Math.max(
         aggregate.clearCutoffs.allBefore ?? 0,
         aggregate.clearCutoffs.bySeries[seriesKey] ?? 0,

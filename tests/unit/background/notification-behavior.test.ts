@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -158,7 +159,7 @@ describe("notification behavior", () => {
     // Test the handler directly.
     await service.handleNotificationClick(
       `task_complete_${task.id}`,
-      new QueueRepository(new QueueProjectionService())
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
     )
 
     await Promise.resolve()
@@ -208,7 +209,7 @@ describe("notification behavior", () => {
     // Test the handler directly.
     await service.handleNotificationClick(
       "task_complete_task-click-stale",
-      new QueueRepository(new QueueProjectionService())
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
     )
 
     await Promise.resolve()

@@ -111,7 +111,10 @@ const finalizationDependencies = {
 }
 
 const queueProjectionService = new QueueProjectionService()
-const queueRepository = new QueueRepository(queueProjectionService)
+const queueRepository = new QueueRepository(
+  queueProjectionService,
+  historyRepository
+)
 const destinationService = new DestinationService({
   queueRepository,
   settingsReader: settingsRepository,

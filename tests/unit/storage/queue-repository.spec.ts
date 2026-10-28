@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
@@ -16,7 +17,7 @@ import type {
 
 class QueueRepository extends BaseQueueRepository {
   constructor() {
-    super(new QueueProjectionService())
+    super(new QueueProjectionService(), new HistoryRepository())
   }
 }
 

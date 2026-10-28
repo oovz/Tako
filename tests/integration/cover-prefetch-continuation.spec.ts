@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
@@ -354,7 +355,10 @@ describe("cover prefetch and chapter processing", () => {
         },
       })
 
-      const queueRepository = new QueueRepository(new QueueProjectionService())
+      const queueRepository = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
       await queueRepository.initialize()
       await queueRepository.enqueueDownloadTask(
         createTask(

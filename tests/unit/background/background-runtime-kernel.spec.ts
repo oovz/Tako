@@ -83,7 +83,7 @@ vi.mock("@/entrypoints/background/initialize-from-storage", () => ({
   initializeFromStorage: mocks.initializeFromStorage,
 }))
 
-vi.mock("@/entrypoints/background/download-queue-finalization", () => ({
+vi.mock("@/src/storage/completed-chapter-history", () => ({
   reconcileCompletedChapterHistory: mocks.reconcileHistory,
 }))
 

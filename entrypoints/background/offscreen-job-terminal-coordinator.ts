@@ -1,3 +1,4 @@
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import logger from "@/src/runtime/logger"
@@ -21,7 +22,6 @@ import {
 import type { DestinationService } from "./destination"
 import {
   finalizeDownloadTaskAfterDispatch,
-  reconcileCompletedChapterHistory,
   notifyDownloadTaskCompletion,
   notifyTerminalDownloadTask,
   type DownloadQueueFinalizationDependencies,
@@ -108,7 +108,7 @@ export class OffscreenJobTerminalCoordinator {
         try {
           await reconcileCompletedChapterHistory(
             [task],
-            this.finalizationDependencies
+            this.finalizationDependencies.historyRepository
           )
         } catch (error) {
           // Queue settlement is durable. History is a repairable projection

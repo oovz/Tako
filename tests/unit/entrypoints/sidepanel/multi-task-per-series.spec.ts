@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -85,7 +86,10 @@ function createQueueRepository(
       setBadgeBackgroundColor: vi.fn(async () => undefined),
     },
   } as unknown as typeof chrome)
-  const queueRepository = new QueueRepository(new QueueProjectionService())
+  const queueRepository = new QueueRepository(
+    new QueueProjectionService(),
+    new HistoryRepository()
+  )
   const enqueueDownloadTask =
     overrides.enqueueDownloadTask ??
     vi.spyOn(queueRepository, "enqueueDownloadTask")

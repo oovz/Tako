@@ -1,9 +1,9 @@
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   finalizeDownloadTaskAfterDispatch,
   notifyDownloadTaskCompletion,
-  reconcileCompletedChapterHistory,
 } from "@/entrypoints/background/download-queue-finalization"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
@@ -102,7 +102,10 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task], finalizationDependencies)
+    await reconcileCompletedChapterHistory(
+      [task],
+      finalizationDependencies.historyRepository
+    )
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask
@@ -146,7 +149,10 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task], finalizationDependencies)
+    await reconcileCompletedChapterHistory(
+      [task],
+      finalizationDependencies.historyRepository
+    )
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask
@@ -185,7 +191,10 @@ describe("download task finalization", () => {
       ),
     } as DownloadTaskState
 
-    await reconcileCompletedChapterHistory([task], finalizationDependencies)
+    await reconcileCompletedChapterHistory(
+      [task],
+      finalizationDependencies.historyRepository
+    )
 
     expect(
       persistenceMocks.restoreChapterFromCompletedTask

@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ChapterDispatchCoordinator } from "@/entrypoints/background/chapter-dispatch-coordinator"
@@ -109,7 +110,10 @@ type Runtime = {
 }
 
 function createRuntime(
-  queueRepository = new QueueRepository(new QueueProjectionService())
+  queueRepository = new QueueRepository(
+    new QueueProjectionService(),
+    new HistoryRepository()
+  )
 ): Runtime {
   const destinationService = new DestinationService({
     queueRepository,
@@ -278,7 +282,10 @@ describe("destination recovery", () => {
     await expect(first.executor.execute(itemId)).resolves.toBe(
       "queue-continuation"
     )
-    const coldRepository = new QueueRepository(new QueueProjectionService())
+    const coldRepository = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const blocked = await coldRepository.getTask(itemId)
     expect(blocked).toMatchObject({
       status: "queued",
@@ -321,7 +328,10 @@ describe("destination recovery", () => {
     await expect(runtime.executor.execute(itemId)).rejects.toBe(
       persistenceFailure
     )
-    const coldRepository = new QueueRepository(new QueueProjectionService())
+    const coldRepository = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const preserved = await coldRepository.getTask(itemId)
     expect(preserved).toMatchObject({
       status: "downloading",

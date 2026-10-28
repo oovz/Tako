@@ -4,7 +4,6 @@ import type { QueueRepository } from "@/src/storage/queue-repository"
 import { areNotificationsEnabled } from "@/entrypoints/background/notification-preferences"
 import { getNotificationService } from "@/entrypoints/background/notification-service"
 import type { SettingsRepository } from "@/src/storage/settings-repository"
-import { composeDownloadedChapterKey } from "@/src/domain/history/types"
 import type { HistoryRepository } from "@/src/storage/history-repository"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ChapterDispatchOutcome } from "@/src/domain/queue/task-lifecycle"
@@ -51,58 +50,6 @@ export async function persistCompletedChapter(
     fileSize: 0,
     format: persistedFormat,
   })
-}
-
-/**
- * Repair the downloaded-chapter projection from the durable queue after an
- * interrupted service-worker run. This is idempotent and intentionally treats
- * only fully completed chapters as downloaded.
- */
-export async function reconcileCompletedChapterHistory(
-  tasks: DownloadTaskState[],
-  deps: DownloadQueueFinalizationDependencies
-): Promise<void> {
-  const existing = await deps.historyRepository.getDownloadedChapters()
-  const persistedKeys = new Set(
-    existing.map((record) =>
-      composeDownloadedChapterKey(
-        record.siteIntegrationId,
-        record.seriesId,
-        record.chapterId
-      )
-    )
-  )
-
-  for (const task of tasks) {
-    for (const chapter of task.chapters) {
-      if (chapter.status !== "completed") continue
-
-      const key = composeDownloadedChapterKey(
-        task.siteIntegrationId,
-        task.mangaId,
-        chapter.id
-      )
-      if (persistedKeys.has(key)) continue
-      const restored =
-        await deps.historyRepository.restoreChapterFromCompletedTask(
-          {
-            siteIntegrationId: task.siteIntegrationId,
-            chapterId: chapter.id,
-            url: chapter.url,
-            title: chapter.title,
-            seriesId: task.mangaId,
-            seriesTitle: task.seriesTitle,
-            chapterNumber: chapter.chapterNumber,
-            volumeNumber: chapter.volumeNumber,
-            downloadedAt: chapter.lastUpdated,
-            fileSize: 0,
-            format: resolvePersistedFormat(task.settingsSnapshot),
-          },
-          chapter.lastUpdated
-        )
-      if (restored) persistedKeys.add(key)
-    }
-  }
 }
 
 async function persistCompletedChapters(

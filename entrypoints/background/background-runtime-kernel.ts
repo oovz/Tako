@@ -27,7 +27,7 @@ import {
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
 import type { StartupQueueActivation } from "@/src/domain/queue/scheduler-policy"
 import { recoverPendingUndoActions } from "@/entrypoints/background/pending-undo-coordinator"
-import { reconcileCompletedChapterHistory } from "@/entrypoints/background/download-queue-finalization"
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
 interface PhaseState {
@@ -265,10 +265,10 @@ export class BackgroundRuntimeKernel {
     })
 
     try {
-      await reconcileCompletedChapterHistory(startupRecovery.queue, {
-        settingsRepository: this.input.settingsRepository,
-        historyRepository: this.input.historyRepository,
-      })
+      await reconcileCompletedChapterHistory(
+        startupRecovery.queue,
+        this.input.historyRepository
+      )
     } catch (error) {
       logger.warn(
         "Failed to reconcile completed chapter history during startup",

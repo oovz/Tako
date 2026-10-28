@@ -49,6 +49,9 @@ import {
   parseCurrentPendingUndoActions,
 } from "./queue-state-codecs"
 import logger from "@/src/runtime/logger"
+import type { HistoryRepository } from "@/src/storage/history-repository"
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
+import { composeDownloadedChapterKey } from "@/src/domain/history/types"
 
 export class QueueRepository {
   private readonly mutations = new StorageMutationQueue()
@@ -57,7 +60,10 @@ export class QueueRepository {
   private leaseCache: ActiveDispatchLease | null = null
   private pendingUndoCache: QueueAggregateState["pendingUndoActions"] = []
 
-  constructor(private readonly projectionService: QueueProjectionService) {}
+  constructor(
+    private readonly projectionService: QueueProjectionService,
+    private readonly historyRepository: HistoryRepository
+  ) {}
 
   private invalidate(): void {
     this.hydrated = false
@@ -135,6 +141,53 @@ export class QueueRepository {
       const decision = decide(state)
       if (decision.changedKeys.length === 0) {
         return { result: decision.result, queue: null }
+      }
+
+      const retainedCompletions = new Map<string, number>()
+      for (const task of [
+        ...decision.next.queue,
+        ...decision.next.pendingUndoActions.map(
+          (action) => action.taskSnapshot
+        ),
+      ]) {
+        for (const chapter of task.chapters) {
+          if (chapter.status !== "completed") continue
+          const key = composeDownloadedChapterKey(
+            task.siteIntegrationId,
+            task.mangaId,
+            chapter.id
+          )
+          retainedCompletions.set(
+            key,
+            Math.max(retainedCompletions.get(key) ?? 0, chapter.lastUpdated)
+          )
+        }
+      }
+      const lostHistorySources = [
+        ...state.queue,
+        ...state.pendingUndoActions.map((action) => action.taskSnapshot),
+      ]
+        .map((task) => ({
+          ...task,
+          chapters: task.chapters.filter((chapter) => {
+            if (chapter.status !== "completed") return false
+            const key = composeDownloadedChapterKey(
+              task.siteIntegrationId,
+              task.mangaId,
+              chapter.id
+            )
+            const retainedAt = retainedCompletions.get(key)
+            return retainedAt === undefined || retainedAt < chapter.lastUpdated
+          }),
+        }))
+        .filter((task) => task.chapters.length > 0)
+      // Store chapter history before deleting its last durable repair source.
+      // A failed history write aborts this queue/Undo mutation.
+      if (lostHistorySources.length > 0) {
+        await reconcileCompletedChapterHistory(
+          lostHistorySources,
+          this.historyRepository
+        )
       }
 
       const values: Record<string, unknown> = {}

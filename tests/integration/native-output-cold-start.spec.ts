@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -158,7 +159,10 @@ describe("native output cold-start recovery", () => {
       lastSequence: 1,
     })
   ) {
-    const queueRepository = new QueueRepository(new QueueProjectionService())
+    const queueRepository = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const repository = new NativeOutputRepository()
     const coordinator = new NativeOutputCoordinator({
       settingsRepository,

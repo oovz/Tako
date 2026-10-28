@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
@@ -104,6 +105,7 @@ function downloadItem(
 
 describe("native output continuation boundaries", () => {
   let local: Record<string, unknown>
+  let historyRepository: HistoryRepository
   let queueRepository: QueueRepository
   let nativeRepository: NativeOutputRepository
   let nativeCoordinator: NativeOutputCoordinator
@@ -141,7 +143,9 @@ describe("native output continuation boundaries", () => {
           get: vi.fn(async (keys: string | string[]) => {
             const requested = Array.isArray(keys) ? keys : [keys]
             return Object.fromEntries(
-              requested.map((key) => [key, structuredClone(local[key])])
+              requested
+                .filter((key) => key in local)
+                .map((key) => [key, structuredClone(local[key])])
             )
           }),
           set: vi.fn(async (values: Record<string, unknown>) => {
@@ -161,7 +165,11 @@ describe("native output continuation boundaries", () => {
       downloads: { search },
     } as unknown as typeof chrome)
 
-    queueRepository = new QueueRepository(new QueueProjectionService())
+    historyRepository = new HistoryRepository()
+    queueRepository = new QueueRepository(
+      new QueueProjectionService(),
+      historyRepository
+    )
     nativeRepository = new NativeOutputRepository()
     resources = new OffscreenLiveResourceLedger(6)
     revokeObjectURL = vi.fn()
@@ -222,11 +230,7 @@ describe("native output continuation boundaries", () => {
       {} as never,
       {
         settingsRepository,
-        historyRepository: {
-          getDownloadedChapters: vi.fn(async () => []),
-          restoreChapterFromCompletedTask: vi.fn(async () => true),
-          markChapterAsDownloaded: vi.fn(async () => undefined),
-        },
+        historyRepository,
       }
     )
 
@@ -318,6 +322,13 @@ describe("native output continuation boundaries", () => {
     await nativeCoordinator.cancelTask(identity.taskId, identity)
     await queueRepository.clearTerminalHistory()
     expect(await queueRepository.getTask(identity.taskId)).toBeUndefined()
+    expect(
+      await new HistoryRepository().isChapterDownloaded(
+        "mangadex",
+        "series-1",
+        identity.chapterId
+      )
+    ).toBe(false)
 
     const later = { ...output, jobId: "later-job", outputId: "later-output" }
     const laterBlob = blobs.retain({
@@ -337,7 +348,10 @@ describe("native output continuation boundaries", () => {
     ).toThrow("count limit")
 
     const coldRepository = new NativeOutputRepository()
-    const coldQueue = new QueueRepository(new QueueProjectionService())
+    const coldQueue = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const cold = new NativeOutputCoordinator({
       settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
       repository: coldRepository,
@@ -420,7 +434,10 @@ describe("native output continuation boundaries", () => {
       const cold = new NativeOutputCoordinator({
         settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
         repository: coldRepository,
-        queueRepository: new QueueRepository(new QueueProjectionService()),
+        queueRepository: new QueueRepository(
+          new QueueProjectionService(),
+          new HistoryRepository()
+        ),
         queryOffscreenJob: async () => null,
         requestBlobRevocation: async (record) => {
           if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
@@ -529,7 +546,10 @@ describe("native output continuation boundaries", () => {
     )
     expect(resources.getUsedBytes()).toBe(0)
     search.mockResolvedValue([])
-    const coldQueue = new QueueRepository(new QueueProjectionService())
+    const coldQueue = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const cold = new NativeOutputCoordinator({
       settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
       repository: new NativeOutputRepository(),
@@ -739,6 +759,16 @@ describe("native output continuation boundaries", () => {
         )
       }
       expect(await queueRepository.getTask(identity.taskId)).toBeUndefined()
+      if (removal === "remove") {
+        await queueRepository.finalizePendingUndoAction("remove-output-owner")
+      }
+      expect(
+        await new HistoryRepository().isChapterDownloaded(
+          "mangadex",
+          "series-1",
+          identity.chapterId
+        )
+      ).toBe(true)
       const nextTaskId =
         removal === "same-id-replacement" ? identity.taskId : "next-task"
       if (removal === "same-id-replacement") {
@@ -750,7 +780,10 @@ describe("native output continuation boundaries", () => {
       }
 
       const replayQueue = coldReplay
-        ? new QueueRepository(new QueueProjectionService())
+        ? new QueueRepository(
+            new QueueProjectionService(),
+            new HistoryRepository()
+          )
         : queueRepository
       const replayRepository = coldReplay
         ? new NativeOutputRepository()

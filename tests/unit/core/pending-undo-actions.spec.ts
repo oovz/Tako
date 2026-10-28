@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -11,7 +12,7 @@ import {
 
 class QueueRepository extends BaseQueueRepository {
   constructor() {
-    super(new QueueProjectionService())
+    super(new QueueProjectionService(), new HistoryRepository())
   }
 }
 

@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -132,7 +133,10 @@ describe("notification content templates", () => {
 
       await new NotificationService().handleNotificationClick(
         "destination_issue_task-1::fsa_folder_missing",
-        new QueueRepository(new QueueProjectionService())
+        new QueueRepository(
+          new QueueProjectionService(),
+          new HistoryRepository()
+        )
       )
 
       const targetUrl = "chrome-extension://test/options.html?tab=activity"

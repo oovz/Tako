@@ -495,7 +495,10 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
   vi.stubGlobal("chrome", chromeMock)
   ;(globalThis as { chrome?: unknown }).chrome = chromeMock
 
-  mockQueueRepository = new QueueRepository(new QueueProjectionService())
+  mockQueueRepository = new QueueRepository(
+    new QueueProjectionService(),
+    historyRepository
+  )
   vi.spyOn(mockQueueRepository, "getQueue")
   vi.spyOn(mockQueueRepository, "getTask")
   vi.spyOn(mockQueueRepository, "getActiveDispatchLease")
