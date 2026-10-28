@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type {
   BackgroundSiteAdapter,
   SeriesDataResolutionResult,
@@ -76,6 +77,7 @@ async function resolveManhuaguiSeriesData(input: {
     rateLimitService: input.rateLimitService,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Manhuagui series page could not be loaded (HTTP ${response.status}).`

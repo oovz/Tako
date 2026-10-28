@@ -104,6 +104,30 @@ describe("HTTP response ownership", () => {
     expect(canceled).toBe(false)
   })
 
+  it.each(["throws", "pending", "absent"] as const)(
+    "preserves the policy failure when cleanup is %s",
+    async (cleanup) => {
+      const response = new Response(
+        cleanup === "absent" ? null : new ReadableStream(),
+        { headers: { "content-type": "text/html" } }
+      )
+      const cancel = response.body
+        ? vi.spyOn(response.body, "cancel").mockImplementation(() => {
+            if (cleanup === "throws") throw new Error("cleanup failed")
+            return new Promise<void>(() => {})
+          })
+        : undefined
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response)
+      )
+      await expect(integrationHttpClient.request(request)).rejects.toThrow(
+        "does not match declared json"
+      )
+      if (cancel) expect(cancel).toHaveBeenCalledOnce()
+    }
+  )
+
   it("cancels the source when a handed-off stream exceeds its byte budget", async () => {
     let canceled = false
     const body = new ReadableStream<Uint8Array>({

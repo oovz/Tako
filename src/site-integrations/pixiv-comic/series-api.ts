@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type { Chapter } from "../../types/chapter"
 import type { SeriesMetadata } from "../../types/series-metadata"
 import type { SeriesChapterListResult } from "../../types/site-integrations"
@@ -42,6 +43,7 @@ async function fetchPixivWorkV5(
   })
 
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`Pixiv Comic works/v5 failed: HTTP ${response.status}`),
       { status: response.status }
@@ -82,6 +84,7 @@ async function fetchPixivEpisodesV2(
   })
 
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`Pixiv Comic episodes/v2 failed: HTTP ${response.status}`),
       { status: response.status }

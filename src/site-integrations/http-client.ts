@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import {
   allowsDeterministicE2eRedirect,
   shouldAcceptDeterministicE2eMockResponse,
@@ -155,7 +156,7 @@ export const integrationHttpClient = {
       } catch (error) {
         // The client owns the response until it hands the bounded body to its
         // caller. Cleanup must preserve the policy failure and its deadline.
-        void response.body?.cancel(error).catch(() => undefined)
+        cancelResponseBody(response, error)
         throw error
       }
     }

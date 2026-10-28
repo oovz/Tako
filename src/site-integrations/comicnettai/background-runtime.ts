@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type {
   BackgroundSiteAdapter,
   SeriesDataResolutionResult,
@@ -46,6 +47,7 @@ async function resolveComicNettaiSeriesData(input: {
     init: { credentials: "include", signal: input.signal },
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Comic Nettai series page could not be loaded (HTTP ${response.status}).`

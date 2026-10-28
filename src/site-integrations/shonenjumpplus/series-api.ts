@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type { Chapter } from "@/src/types/chapter"
 import type { SeriesChapterListResult } from "@/src/types/site-integrations"
 import logger from "@/src/runtime/logger"
@@ -111,6 +112,7 @@ export async function fetchPaginationInfo(
     rateLimitService,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
@@ -144,6 +146,7 @@ export async function fetchProducts(
     rateLimitService,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`

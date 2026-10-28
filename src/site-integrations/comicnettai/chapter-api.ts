@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import { getRateLimitPolicyFromSnapshot } from "@/src/runtime/rate-limit"
 import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
@@ -100,6 +101,7 @@ async function fetchJson(
     rateLimitService,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Comic Nettai content request failed (HTTP ${response.status}). The site may be unavailable.`
@@ -146,6 +148,7 @@ export async function resolveComicNettaiChapterImageUrls(
     rateLimitService,
   })
   if (!configResponse.ok) {
+    cancelResponseBody(configResponse)
     throw Object.assign(
       new Error(
         `Comic Nettai chapter configuration could not be loaded (HTTP ${configResponse.status}). The site may be unavailable.`

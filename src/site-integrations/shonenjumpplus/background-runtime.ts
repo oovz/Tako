@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type {
   BackgroundSiteAdapter,
   SeriesDataResolutionResult,
@@ -41,6 +42,7 @@ async function resolveShonenJumpPlusSeriesData(input: {
     init: { credentials: "omit", signal: input.signal },
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(
         `Shonen Jump+ episode page could not be loaded (HTTP ${response.status}).`

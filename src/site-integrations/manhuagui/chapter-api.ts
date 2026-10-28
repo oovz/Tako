@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import {
   getRateLimitPolicyFromSnapshot,
   type RateLimitService,
@@ -51,6 +52,7 @@ export async function resolveManhuaguiChapterImageUrls(
     policyOverride: chapterPolicy,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`HTTP ${response.status}: ${response.statusText}`),
       { status: response.status }

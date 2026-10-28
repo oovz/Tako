@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
 import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
@@ -18,14 +19,6 @@ type DeviceTokenRegistration = {
 }
 
 let inFlightTokenRegistration: DeviceTokenRegistration | null = null
-
-function cancelResponseBody(response: Response, reason: unknown): void {
-  try {
-    void response.body?.cancel(reason).catch(() => undefined)
-  } catch {
-    // Preserve the provider error; body cancellation is best effort.
-  }
-}
 
 function getAbortReason(signal: AbortSignal | undefined): Error {
   return signal?.reason instanceof Error

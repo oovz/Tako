@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import {
   parseChapterNumber,
   sanitizeLabel,
@@ -282,6 +283,7 @@ export async function loadComicNettaiPaginationDocument(
       rateLimitService,
     })
     if (!response.ok) {
+      cancelResponseBody(response)
       throw Object.assign(
         new Error(
           `Comic Nettai pagination request failed (HTTP ${response.status})`

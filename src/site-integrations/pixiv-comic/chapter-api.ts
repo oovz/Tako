@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import logger from "@/src/runtime/logger"
 import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
@@ -166,6 +167,7 @@ async function fetchPixivBuildId(
   })
 
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`Failed to fetch Pixiv homepage: HTTP ${response.status}`),
       { status: response.status }
@@ -200,6 +202,7 @@ async function fetchPixivSalt(
   })
 
   if (!response.ok) {
+    cancelResponseBody(response)
     const error = new Error(
       `HTTP ${response.status}: ${response.statusText}`
     ) as Error & { status?: number }
@@ -308,6 +311,7 @@ async function resolvePixivReadPages(
   })
 
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`Pixiv Comic read_v4 failed: HTTP ${response.status}`),
       { status: response.status }

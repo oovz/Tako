@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type {
   EffectivePolicy,
   RateLimitService,
@@ -176,6 +177,7 @@ export async function fetchReaderConfig(
     policyOverride: chapterPolicy,
   })
   if (!response.ok) {
+    cancelResponseBody(response)
     throw Object.assign(
       new Error(`HTTP ${response.status}: ${response.statusText}`),
       { status: response.status }

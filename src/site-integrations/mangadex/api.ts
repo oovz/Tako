@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import { z } from "zod"
 import type { AtHomeResponse } from "./image-delivery"
 import logger from "@/src/runtime/logger"
@@ -274,6 +275,7 @@ export function createMangadexHttpError(
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const contentType = response.headers?.get("content-type")
   if (contentType && !contentType.toLowerCase().includes("application/json")) {
+    cancelResponseBody(response)
     throw createMangadexHttpError(
       response,
       `MangaDex API returned non-JSON response (Content-Type: ${contentType}). The service may be blocking requests.`
@@ -411,6 +413,7 @@ async function fetchWithMangadexRetryUsingPolicy(
     logger.warn(
       `[mangadex] HTTP ${response.status}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${retryConfig.maxRetries})`
     )
+    cancelResponseBody(response)
     await waitForRetryDelay(retryDelay, options?.signal)
     return fetchWithMangadexRetryUsingPolicy(
       url,
@@ -518,6 +521,7 @@ export async function fetchMangaMetadata(
   )
 
   if (!response.ok) {
+    cancelResponseBody(response)
     if (response.status === 429) {
       throw createMangadexHttpError(
         response,
@@ -554,6 +558,7 @@ export async function fetchMangaStatistics(
   )
 
   if (!response.ok) {
+    cancelResponseBody(response)
     throw createMangadexHttpError(response)
   }
 
@@ -617,6 +622,7 @@ export async function fetchChapterFeed(
   )
 
   if (!response.ok) {
+    cancelResponseBody(response)
     if (response.status === 429) {
       throw createMangadexHttpError(
         response,
@@ -652,6 +658,7 @@ export async function fetchAtHomeServer(
   )
 
   if (!response.ok) {
+    cancelResponseBody(response)
     if (response.status === 429) {
       throw createMangadexHttpError(
         response,

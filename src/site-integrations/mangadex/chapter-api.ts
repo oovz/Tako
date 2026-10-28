@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import logger from "@/src/runtime/logger"
 import {
   buildMangadexUploadsRecoveryImageUrl,
@@ -126,6 +127,7 @@ async function reportToMangadexNetwork(
       },
       rateLimitService,
     })
+    cancelResponseBody(response)
     if (!response.ok) {
       logger.debug(
         `[mangadex] Network report rejected with HTTP ${response.status}`
