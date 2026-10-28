@@ -32,4 +32,15 @@ describe("options section URL routing", () => {
       expect(getInitialOptionsSection(new URL(url).search)).toBe(section)
     }
   })
+
+  it("uses the general section for unrecognized query values", () => {
+    expect(getInitialOptionsSection("?tab=unknown")).toBe("general")
+    expect(getInitialOptionsSection("?tab=constructor")).toBe("general")
+    expect(getInitialOptionsSection("::not-a-query")).toBe("general")
+  })
+
+  it("uses the general section when the query has no section", () => {
+    expect(getInitialOptionsSection("")).toBe("general")
+    expect(getInitialOptionsSection("?foo=bar")).toBe("general")
+  })
 })

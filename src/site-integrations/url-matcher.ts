@@ -213,10 +213,3 @@ export function getAllPatternMetadata() {
     seriesMatches: patterns.seriesMatches.map((path) => `https://*${path}`),
   }))
 }
-
-/**
- * Reset compiled patterns cache (for testing)
- */
-export function resetPatternsCache(): void {
-  compiledPatterns = null
-}

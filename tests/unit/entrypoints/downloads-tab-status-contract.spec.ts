@@ -30,7 +30,7 @@ function makeTask(status: DownloadTaskState["status"]): DownloadTaskState {
   }
 }
 
-describe("DownloadsTab status vocabulary contract (behavior-based)", () => {
+describe("queue projection status vocabulary", () => {
   it("classifies queued tasks as queued non-terminal queue items", () => {
     const projection = projectToQueueView([
       makeTask("queued"),

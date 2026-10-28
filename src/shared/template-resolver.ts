@@ -5,10 +5,7 @@
  * If the user supplies what looks like a filename (e.g. "<CHAPTER>.cbz"), it is treated as a directory name verbatim.
  */
 
-import {
-  validateTemplateMacros,
-  generateSampleMacroData,
-} from "./template-macros"
+import { validateTemplateMacros } from "./template-macros"
 import { validateResolvedPath } from "./download-path-validator"
 import { sanitizeFilename } from "./filename-sanitizer"
 
@@ -166,27 +163,4 @@ export function resolveFileName(
   }
 
   return { success: true, resolvedName }
-}
-
-/**
- * Build a sample TemplateContext from macro examples (Single Source of Truth).
- * Derives preview data from TEMPLATE_MACROS to eliminate duplication.
- */
-export function buildSampleContext(): TemplateContext {
-  const macroData = generateSampleMacroData()
-  return {
-    date: new Date(
-      parseInt(macroData["YYYY"], 10),
-      parseInt(macroData["MM"], 10) - 1,
-      parseInt(macroData["DD"], 10)
-    ),
-    publisher: macroData["PUBLISHER"],
-    integrationName: macroData["INTEGRATION_NAME"],
-    seriesTitle: macroData["SERIES_TITLE"],
-    chapterTitle: macroData["CHAPTER_TITLE"],
-    volumeTitle: macroData["VOLUME_TITLE"],
-    format: "cbz",
-    chapterNumber: parseInt(macroData["CHAPTER_NUMBER_PAD3"], 10) || undefined,
-    volumeNumber: parseInt(macroData["VOLUME_NUMBER_PAD2"], 10) || undefined,
-  }
 }

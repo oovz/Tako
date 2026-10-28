@@ -1,30 +1,18 @@
-export type OptionsSection =
-  "general" | "storage" | "network" | "integrations" | "activity"
+const OPTIONS_SECTIONS = [
+  "general",
+  "storage",
+  "network",
+  "integrations",
+  "activity",
+] as const
 
-const SECTION_ALIASES: Record<string, OptionsSection> = {
-  general: "general",
-  storage: "storage",
-  network: "network",
-  integrations: "integrations",
-  activity: "activity",
-  downloads: "activity",
-  debug: "network",
-  global: "general",
-}
+export type OptionsSection = (typeof OPTIONS_SECTIONS)[number]
 
 export function getInitialOptionsSection(search: string): OptionsSection {
-  try {
-    const params = new URLSearchParams(search)
-    const rawTab = params.get("tab")
-    if (!rawTab) {
-      return "general"
-    }
-
-    const normalized = rawTab.trim().toLowerCase()
-    return SECTION_ALIASES[normalized] ?? "general"
-  } catch {
-    return "general"
-  }
+  const section = new URLSearchParams(search).get("tab")?.trim().toLowerCase()
+  return (
+    OPTIONS_SECTIONS.find((candidate) => candidate === section) ?? "general"
+  )
 }
 
 export function getOptionsSectionUrl(

@@ -35,7 +35,3 @@ export function createDefaultSettings(
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = createDefaultSettings()
-
-export function cloneDefaultSettings(): ExtensionSettings {
-  return structuredClone(DEFAULT_SETTINGS)
-}

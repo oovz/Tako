@@ -22,8 +22,6 @@ export const MANHUAGUI_IMAGE_HOST_NAMES = [
   "us3.hamreus.com",
 ] as const
 
-export const MANHUAGUI_IMAGE_REFERER = "https://www.manhuagui.com/"
-
 export const MANHUAGUI_CREDENTIAL_POLICY = {
   pageHtml: "include",
   configuration: "omit",

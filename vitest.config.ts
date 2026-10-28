@@ -66,7 +66,8 @@ export default defineConfig({
         // Pure type definition modules (no executable logic to cover).
         "entrypoints/offscreen/chapter-processing-types.ts",
         "entrypoints/sidepanel/types.ts",
-        // React hooks require jsdom and are covered by Playwright E2E today.
+        // UI hook coverage is owned by the browser suite; selected hooks also
+        // have focused happy-dom unit tests.
         "entrypoints/options/hooks/useOptionsPageState.ts",
         "entrypoints/options/hooks/useOptionsFolderManagement.ts",
         "entrypoints/options/hooks/useOptionsHistory.ts",
@@ -85,9 +86,7 @@ export default defineConfig({
         "entrypoints/sidepanel/hooks/useActiveTaskProgress.ts",
         "src/ui/shared/hooks/useChromeStorageValue.ts",
         "src/ui/shared/hooks/useUiPreferences.ts",
-        // These runtime helpers are only reachable from the excluded pure
-        // offscreen bootstrap and do not yet have direct unit tests.
-        "entrypoints/offscreen/error-categories.ts",
+        // Status presentation is covered through the offscreen/browser runtime.
         "entrypoints/offscreen/status-ui.ts",
       ],
       thresholds: {

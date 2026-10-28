@@ -1,5 +1,5 @@
 /**
- * Unit tests for DownloadsTab UI components
+ * Unit tests for Activity task UI components
  *
  * Tests for:
  * - Task status summary label generation
@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest"
 import {
   chapterStatusBadgeClass,
   getTaskStatusSummaryLabel,
-} from "@/entrypoints/options/tabs/DownloadsTab"
+} from "@/entrypoints/options/components/downloads-tab-helpers"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
@@ -40,7 +40,7 @@ function makeTask(
   }
 }
 
-describe("DownloadsTab status summary behavior", () => {
+describe("Activity task status summary behavior", () => {
   it("renders plural completed summary when all chapters completed", () => {
     const label = getTaskStatusSummaryLabel(
       makeTask("completed", [
@@ -133,7 +133,7 @@ describe("DownloadsTab status summary behavior", () => {
   })
 })
 
-describe("DownloadsTab chapter status badge behavior", () => {
+describe("Activity task chapter status badge behavior", () => {
   it("maps chapter statuses to expected badge classes", () => {
     expect(chapterStatusBadgeClass("completed")).toBe(
       "bg-primary/10 text-primary"

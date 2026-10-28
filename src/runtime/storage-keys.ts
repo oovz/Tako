@@ -27,9 +27,3 @@ export const LOCAL_STORAGE_KEYS = {
   pendingUndoActions: "pendingUndoActions",
   progressTimingEstimates: "progressTimingEstimates",
 } as const
-
-export const STORAGE_KEYS = {
-  session: SESSION_STORAGE_KEYS,
-  local: LOCAL_STORAGE_KEYS,
-  settings: SETTINGS_STORAGE_KEYS,
-} as const

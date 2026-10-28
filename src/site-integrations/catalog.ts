@@ -34,26 +34,6 @@ export function getDefinitions(): readonly SiteIntegrationDefinition[] {
 export function getDisplayName(siteIntegrationId: string): string {
   return getDefinition(siteIntegrationId)?.name ?? siteIntegrationId
 }
-
-export function getPatterns(
-  siteIntegrationId: string
-): SiteIntegrationPatterns {
-  const definition = getDefinition(siteIntegrationId)
-  if (!definition) {
-    throw new Error(`Unknown site integration ID: ${siteIntegrationId}`)
-  }
-  return definition.patterns
-}
-
-export function getAllSupportedDomains(): string[] {
-  return [
-    ...new Set(
-      siteIntegrationCatalog
-        .filter((definition) => definition.shipped)
-        .flatMap((definition) => definition.patterns.domains)
-    ),
-  ]
-}
 /**
  * Sets the module-scoped in-memory site integration enablement map.
  *
@@ -100,12 +80,6 @@ export function requiresBroadHttpsPermission(
   return Boolean(
     definition?.shipped && definition.optionalOrigins.includes("https://*/*")
   )
-}
-
-export function getCustomSettings(
-  siteIntegrationId: string
-): readonly SiteIntegrationSettingsField[] {
-  return getDefinition(siteIntegrationId)?.customSettings ?? []
 }
 
 export function assertValidSettingsFieldValue(

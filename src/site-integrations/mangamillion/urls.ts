@@ -4,7 +4,6 @@ export const MANGAMILLION_IMG_HOST = "img.mangamillion.shueisha.co.jp"
 
 export const MANGAMILLION_ORIGIN = `https://${MANGAMILLION_HOST}`
 export const MANGAMILLION_API_ORIGIN = `https://${MANGAMILLION_API_HOST}`
-export const MANGAMILLION_IMG_ORIGIN = `https://${MANGAMILLION_IMG_HOST}`
 
 export interface ParsedMangaMillionUrl {
   titleId: number

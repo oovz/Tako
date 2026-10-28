@@ -237,7 +237,7 @@ test.describe("Side panel queue behavior", () => {
     await sp.close()
   })
 
-  test("View Full History focuses an existing options tab and deep-links to downloads", async ({
+  test("View Full History focuses an existing options tab and opens Activity", async ({
     context,
     extensionId,
     page,

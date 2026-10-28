@@ -67,10 +67,6 @@ export const SiteOverridesMapSchema = z.record(
   SiteOverrideRecordSchema
 )
 
-export function normalizeSiteOverridesMap(raw: unknown): SiteOverridesMap {
-  return raw === undefined ? {} : SiteOverridesMapSchema.parse(raw)
-}
-
 export type SiteIntegrationEnablementMap = Record<string, boolean>
 
 export const SiteIntegrationEnablementMapSchema = z.record(

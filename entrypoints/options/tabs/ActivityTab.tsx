@@ -25,9 +25,6 @@ import { ClearHistoryDialog } from "../components/ClearHistoryDialog"
 import {
   formatBytes,
   partitionDownloadTasks,
-  chapterStatusBadgeClass,
-  getTaskStatusSummaryLabel,
-  getTerminalTimestampLabel,
 } from "../components/downloads-tab-helpers"
 import { useDownloadsTabState } from "../hooks/useDownloadsTabState"
 import { runConfirmedHistoryAction } from "../hooks/history-dialog-action"
@@ -38,13 +35,6 @@ import { SettingsGroup } from "../components/primitives/SettingsGroup"
 import { SettingsRow } from "../components/primitives/SettingsRow"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
 import type { HistoryStats, SeriesHistory } from "../hooks/useOptionsHistory"
-
-export {
-  chapterStatusBadgeClass,
-  formatBytes,
-  getTaskStatusSummaryLabel,
-  getTerminalTimestampLabel,
-}
 
 interface ActivityTabProps {
   stats?: HistoryStats | null

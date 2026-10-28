@@ -57,7 +57,7 @@ function makeTask(
 test.describe("Options UI behavior", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("Downloads tab confirms active cancellation and cancels queued tasks immediately", async ({
+  test("Activity tab confirms active cancellation and cancels queued tasks immediately", async ({
     page,
     extensionId,
   }) => {
@@ -71,7 +71,7 @@ test.describe("Options UI behavior", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       {
         waitUntil: "domcontentloaded",
       }
@@ -126,12 +126,12 @@ test.describe("Options UI behavior", () => {
       .toEqual({ queuedTaskPresent: false, hasQueuedCancellationUndo: true })
   })
 
-  test("Downloads tab confirms active cancellation and records its terminal timestamp", async ({
+  test("Activity tab confirms active cancellation and records its terminal timestamp", async ({
     page,
     extensionId,
   }) => {
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       { waitUntil: "domcontentloaded" }
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
@@ -184,7 +184,7 @@ test.describe("Options UI behavior", () => {
       .toEqual({ taskStatus: "canceled", hasActiveCancellationUndo: false })
   })
 
-  test("Downloads tab shows retried badge and terminal timestamp labels for restarted tasks", async ({
+  test("Activity tab shows retried badge and terminal timestamp labels for restarted tasks", async ({
     page,
     extensionId,
   }) => {
@@ -206,7 +206,7 @@ test.describe("Options UI behavior", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       {
         waitUntil: "domcontentloaded",
       }
@@ -283,12 +283,12 @@ test.describe("Options UI behavior", () => {
     await expect(page.getByText("No integrations found")).toBeVisible()
   })
 
-  test("About / Debug tab persists log level changes", async ({
+  test("Network tab persists log level changes", async ({
     page,
     extensionId,
   }) => {
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=debug`,
+      `chrome-extension://${extensionId}/options.html?tab=network`,
       {
         waitUntil: "domcontentloaded",
       }

@@ -12,8 +12,6 @@ import type { RateLimitService } from "@/src/runtime/rate-limit"
 export const MANGADEX_API_BASE = "https://api.mangadex.org"
 export const MANGADEX_UPLOADS_BASE = "https://uploads.mangadex.org"
 export const MANGADEX_NETWORK_REPORT = "https://api.mangadex.network/report"
-export const MANGADEX_NETWORK_REPORT_HOST = new URL(MANGADEX_NETWORK_REPORT)
-  .hostname
 export const MANGADEX_NETWORK_REPORT_TIMEOUT_MS = 1500
 export const MANGADEX_IMAGE_RECOVERY_MAX_CYCLES = 5
 export const MANGADEX_IMAGE_RECOVERY_BACKOFF_MS = 250

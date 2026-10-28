@@ -297,7 +297,7 @@ test.describe("Settings Persistence and Usage", () => {
 
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -311,7 +311,7 @@ test.describe("Settings Persistence and Usage", () => {
 
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -346,7 +346,7 @@ test.describe("Settings Persistence and Usage", () => {
 
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -360,7 +360,7 @@ test.describe("Settings Persistence and Usage", () => {
 
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -372,7 +372,7 @@ test.describe("Settings Persistence and Usage", () => {
     test("toggling custom folder on without choosing a folder displays note and blocks saving with clear error message", async () => {
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       const switchLocator = optionsPage.locator("#custom-folder-switch")
       await expect(switchLocator).toHaveAttribute("aria-checked", "false")
@@ -451,7 +451,7 @@ test.describe("Settings Persistence and Usage", () => {
 
       await options.navigate()
       await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       const switchLocator = optionsPage.locator("#custom-folder-switch")
       await expect(switchLocator).toHaveAttribute("aria-checked", "true")
@@ -655,7 +655,7 @@ test.describe("Destination saves across Options closure", () => {
       )
       await initialOptions.navigate()
       await initialOptions.ensureInitialized()
-      await initialOptions.switchToSection("Downloads")
+      await initialOptions.switchToSection("storage")
       await expect(page.getByText(`Current folder: ${oldName}`)).toBeVisible()
       const newName = await page.evaluate(async (boundary) => {
         const name = `new-folder-${crypto.randomUUID()}`
@@ -717,7 +717,7 @@ test.describe("Destination saves across Options closure", () => {
 
       await reopened.navigate()
       await reopened.ensureInitialized()
-      await reopened.switchToSection("Downloads")
+      await reopened.switchToSection("storage")
       await expect(
         observer.getByText(`Current folder: ${expectedName}`)
       ).toBeVisible()

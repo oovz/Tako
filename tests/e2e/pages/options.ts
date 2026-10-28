@@ -1,4 +1,5 @@
 import { expect, Page } from "@playwright/test"
+import type { OptionsSection } from "@/entrypoints/options/tab-routing"
 
 export class OptionsPageObject {
   readonly page: Page
@@ -9,7 +10,7 @@ export class OptionsPageObject {
     this.extensionId = extensionId
   }
 
-  async navigate(tab?: string): Promise<void> {
+  async navigate(tab?: OptionsSection): Promise<void> {
     const search = tab ? `?tab=${tab}` : ""
     await this.page.goto(
       `chrome-extension://${this.extensionId}/options.html${search}`
@@ -19,18 +20,16 @@ export class OptionsPageObject {
   }
 
   // Sidebar navigation (Options page uses sidebar, not tabs)
-  async switchToSection(section: string): Promise<void> {
-    const normalized = section.toLowerCase()
-    const target =
-      normalized.includes("download") || normalized.includes("storage")
-        ? "Storage"
-        : normalized.includes("history") || normalized.includes("activity")
-          ? "Activity"
-          : normalized.includes("debug") || normalized.includes("about")
-            ? "General"
-            : section
+  async switchToSection(section: OptionsSection): Promise<void> {
+    const labels: Record<OptionsSection, string> = {
+      general: "General",
+      storage: "Storage & Files",
+      network: "Network & Speed",
+      integrations: "Site Integrations",
+      activity: "Activity & History",
+    }
     await this.page
-      .getByRole("button", { name: new RegExp(target, "i") })
+      .getByRole("button", { name: labels[section], exact: true })
       .click()
   }
   async ensureInitialized(): Promise<void> {
@@ -43,7 +42,7 @@ export class OptionsPageObject {
         .locator('[data-testid="archive-format-radiogroup"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     // RadioGroup - find checked radio button
     const radioGroup = this.page.locator(
@@ -60,7 +59,7 @@ export class OptionsPageObject {
         .locator('[data-testid="archive-format-radiogroup"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     // Click the label for the format option
     const formatLabels = {
@@ -77,7 +76,7 @@ export class OptionsPageObject {
         .locator('[data-testid="filename-template-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     return await this.page
       .locator('[data-testid="filename-template-input"]')
@@ -90,7 +89,7 @@ export class OptionsPageObject {
         .locator('[data-testid="filename-template-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     await this.page
       .locator('[data-testid="filename-template-input"]')
@@ -104,7 +103,7 @@ export class OptionsPageObject {
         .locator('[data-testid="image-concurrency-slider"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Network")
+      await this.switchToSection("network")
     }
     // Slider doesn't have inputValue - get aria-valuenow or read display text
     const slider = this.page.locator('[data-testid="image-concurrency-slider"]')
@@ -118,7 +117,7 @@ export class OptionsPageObject {
         .locator('[data-testid="request-delay-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Network")
+      await this.switchToSection("network")
     }
     const value = await this.page
       .locator('[data-testid="request-delay-input"]')
@@ -132,7 +131,7 @@ export class OptionsPageObject {
         .locator('[data-testid="request-delay-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Network")
+      await this.switchToSection("network")
     }
     await this.page
       .locator('[data-testid="request-delay-input"]')
@@ -146,7 +145,7 @@ export class OptionsPageObject {
         .getByRole("switch", { name: "Enable Notifications" })
         .count()) === 0
     ) {
-      await this.switchToSection("General")
+      await this.switchToSection("general")
     }
     const state = await this.page
       .getByRole("switch", { name: "Enable Notifications" })
@@ -160,7 +159,7 @@ export class OptionsPageObject {
         .getByRole("switch", { name: "Enable Notifications" })
         .count()) === 0
     ) {
-      await this.switchToSection("General")
+      await this.switchToSection("general")
     }
     const switchControl = this.page.getByRole("switch", {
       name: "Enable Notifications",
@@ -175,7 +174,7 @@ export class OptionsPageObject {
       (await this.page.locator('[data-testid="comicinfo-switch"]').count()) ===
       0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     const state = await this.page
       .locator('[data-testid="comicinfo-switch"]')
@@ -188,7 +187,7 @@ export class OptionsPageObject {
       (await this.page.locator('[data-testid="comicinfo-switch"]').count()) ===
       0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     await this.page.locator('[data-testid="comicinfo-switch"]').click()
   }
@@ -199,7 +198,7 @@ export class OptionsPageObject {
       (await this.page.locator('[data-testid="normalize-switch"]').count()) ===
       0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     const state = await this.page
       .locator('[data-testid="normalize-switch"]')
@@ -212,7 +211,7 @@ export class OptionsPageObject {
       (await this.page.locator('[data-testid="normalize-switch"]').count()) ===
       0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     await this.page.locator('[data-testid="normalize-switch"]').click()
   }
@@ -586,7 +585,7 @@ export class OptionsPageObject {
         .locator('[data-testid="download-path-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     await this.page
       .locator('[data-testid="download-path-input"]')
@@ -602,7 +601,7 @@ export class OptionsPageObject {
         .locator('[data-testid="download-path-input"]')
         .count()) === 0
     ) {
-      await this.switchToSection("Storage")
+      await this.switchToSection("storage")
     }
     return await this.page
       .locator('[data-testid="download-path-input"]')

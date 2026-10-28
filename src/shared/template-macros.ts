@@ -139,36 +139,6 @@ export function getImplementedMacroNames(): readonly string[] {
 }
 
 /**
- * Check if a macro name is supported
- */
-export function isSupportedMacro(macroName: string): boolean {
-  return getSupportedMacroNames().includes(macroName)
-}
-
-/**
- * Get macro information by name
- */
-export function getMacroInfo(macroName: string): TemplateMacro | undefined {
-  return TEMPLATE_MACROS.find((macro) => macro.name === macroName)
-}
-
-/**
- * Get macros grouped by category
- */
-export function getMacrosByCategory(): Record<string, TemplateMacro[]> {
-  const grouped: Record<string, TemplateMacro[]> = {}
-
-  for (const macro of TEMPLATE_MACROS) {
-    if (!grouped[macro.category]) {
-      grouped[macro.category] = []
-    }
-    grouped[macro.category].push(macro)
-  }
-
-  return grouped
-}
-
-/**
  * Generate sample data for template preview
  */
 export function generateSampleMacroData(): Record<TemplateMacroName, string> {

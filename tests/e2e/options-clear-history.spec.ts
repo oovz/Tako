@@ -140,7 +140,7 @@ test.describe("Options Downloads history management", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       { waitUntil: "domcontentloaded" }
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })

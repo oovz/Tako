@@ -1,10 +1,12 @@
+// @vitest-environment happy-dom
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 import { ArchiveFormatPicker } from "@/entrypoints/options/components/ArchiveFormatPicker"
-import { GlobalPerformanceSection } from "@/entrypoints/options/components/GlobalPerformanceSection"
-import { GlobalInterfacePreferencesSection } from "@/entrypoints/options/components/GlobalInterfacePreferencesSection"
+import { NetworkTab } from "@/entrypoints/options/tabs/NetworkTab"
+import { GeneralTab } from "@/entrypoints/options/tabs/GeneralTab"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { PathVisualization } from "@/entrypoints/options/components/PathVisualization"
 import { CustomSettingField } from "@/entrypoints/options/components/CustomSettingField"
 
@@ -61,11 +63,9 @@ describe("options control labels", () => {
 
   it("gives the image concurrency slider thumb an accessible name", () => {
     const markup = renderToStaticMarkup(
-      createElement(GlobalPerformanceSection, {
-        chapterPolicy: { concurrency: 1, delayMs: 0 },
-        imagePolicy: { concurrency: 3, delayMs: 0 },
-        onChapterPolicyChange: vi.fn(),
-        onImagePolicyChange: vi.fn(),
+      createElement(NetworkTab, {
+        settings: DEFAULT_SETTINGS,
+        onChange: vi.fn(),
       })
     )
 
@@ -94,13 +94,11 @@ describe("options control labels", () => {
     expect(folderMarkup).not.toMatch(/\.(cbz|zip)/)
   })
 
-  it("labels language and three-state motion selectors", () => {
+  it("labels the language and motion selectors", () => {
     const markup = renderToStaticMarkup(
-      createElement(GlobalInterfacePreferencesSection, {
-        motionPreference: "system",
-        uiLanguage: "auto",
-        onMotionPreferenceChange: vi.fn(),
-        onUiLanguageChange: vi.fn(),
+      createElement(GeneralTab, {
+        settings: DEFAULT_SETTINGS,
+        onChange: vi.fn(),
       })
     )
 
@@ -108,6 +106,13 @@ describe("options control labels", () => {
     expect(markup).toContain('id="ui-language"')
     expect(markup).toContain('for="motion-preference"')
     expect(markup).toContain('id="motion-preference"')
-    expect(markup).not.toContain('role="switch"')
+    const controls = document.createElement("div")
+    controls.innerHTML = markup
+    expect(controls.querySelector("#ui-language")?.getAttribute("role")).toBe(
+      "combobox"
+    )
+    expect(
+      controls.querySelector("#motion-preference")?.getAttribute("role")
+    ).toBe("combobox")
   })
 })
