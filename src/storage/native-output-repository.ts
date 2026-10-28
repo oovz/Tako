@@ -5,6 +5,7 @@ import {
   attachNativeDownload,
   ensureNativeOutputManifest,
   interruptNativeOutputBeforeAcceptance,
+  interruptNativeOutputHandoff,
   markNativeDownloadTerminal,
   markNativeOutputAcceptanceUnknown,
   markNativeOutputAccountingDisposition,
@@ -193,6 +194,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     phase: z.enum([
       "prepared",
       "acceptance_unknown",
+      "handoff_interrupted",
       "waiting",
       "complete",
       "interrupted",
@@ -216,6 +218,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       record.phase === "complete" || record.phase === "interrupted"
     const requiresAcceptance =
       record.phase === "acceptance_unknown" ||
+      record.phase === "handoff_interrupted" ||
       record.phase === "waiting" ||
       record.phase === "complete" ||
       record.phase === "surrendered" ||
@@ -240,7 +243,9 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
       })
     }
     if (
-      (record.phase === "prepared" || record.phase === "acceptance_unknown") &&
+      (record.phase === "prepared" ||
+        record.phase === "acceptance_unknown" ||
+        record.phase === "handoff_interrupted") &&
       (record.downloadId !== undefined || record.terminalAt !== undefined)
     ) {
       context.addIssue({
@@ -835,6 +840,15 @@ export class NativeOutputRepository {
     const detached = structuredClone(input)
     return await this.execute((state) =>
       interruptNativeOutputBeforeAcceptance(state, detached)
+    )
+  }
+
+  async interruptHandoff(
+    input: Parameters<typeof interruptNativeOutputHandoff>[1]
+  ): Promise<ReturnType<typeof interruptNativeOutputHandoff>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      interruptNativeOutputHandoff(state, detached)
     )
   }
 

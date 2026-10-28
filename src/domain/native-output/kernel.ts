@@ -318,7 +318,10 @@ export function attachNativeDownload(
       ? unchanged(state, { record: current })
       : rejected(state, "download-id-conflict")
   }
-  if (current.phase !== "acceptance_unknown") {
+  if (
+    current.phase !== "acceptance_unknown" &&
+    current.phase !== "handoff_interrupted"
+  ) {
     return rejected(state, "invalid-transition")
   }
   if (
@@ -332,6 +335,31 @@ export function attachNativeDownload(
     ...current,
     phase: "waiting",
     downloadId: input.downloadId,
+  }
+  return applied(replaceOutput(state, record), { record })
+}
+
+export function interruptNativeOutputHandoff(
+  state: NativeOutputState,
+  input: { outputId: string }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ record: NativeOutputRecord }>
+  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
+  | OutputNotFound
+  | InvalidTransition
+> {
+  const current = state.outputsByOutputId[input.outputId]
+  if (!current) return rejected(state, "output-not-found")
+  if (current.phase === "handoff_interrupted") {
+    return unchanged(state, { record: current })
+  }
+  if (current.phase !== "acceptance_unknown") {
+    return rejected(state, "invalid-transition")
+  }
+  const record: NativeOutputRecord = {
+    ...current,
+    phase: "handoff_interrupted",
+    error: "Chrome handoff acceptance could not be established",
   }
   return applied(replaceOutput(state, record), { record })
 }

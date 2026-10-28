@@ -222,7 +222,7 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
 
             {/* Failure message */}
             {failureMessage && (
-              <div className="text-[11px] text-destructive truncate">
+              <div className="text-[11px] text-destructive">
                 {failureMessage}
               </div>
             )}
@@ -238,6 +238,9 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
           <CommandCenterTaskActions
             taskId={task.id}
             status={task.status}
+            acceptanceUncertain={
+              task.failureCategory === "browser_handoff_interrupted"
+            }
             isCanceling={isCanceling}
             isRetrying={isRetrying}
             isRestarting={isRestarting}

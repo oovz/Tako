@@ -1839,7 +1839,9 @@
   "queue_readStale": {
     "message": "キューとタスク履歴が最新でない可能性があります。"
   },
-  "common_retry": { "message": "再試行" },
+  "common_retry": {
+    "message": "再試行"
+  },
   "status_sentToChrome": {
     "message": "Chrome に送信済み"
   },
@@ -1873,5 +1875,14 @@
         "content": "$1"
       }
     }
+  },
+  "downloadError_browserHandoffInterrupted": {
+    "message": "Chrome への引き渡しが中断されました。受け付けを確認できませんでした。再試行するとファイルが重複する可能性があります。"
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "失敗したチャプターを再試行（重複の可能性あり）"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "すべてのチャプターを再試行（重複の可能性あり）"
   }
 }

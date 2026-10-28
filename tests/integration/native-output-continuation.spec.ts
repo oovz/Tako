@@ -524,6 +524,11 @@ describe("native output continuation boundaries", () => {
       query.id === 42 ? [downloadItem("in_progress")] : []
     )
     await nativeCoordinator.reconcile()
+    expect(
+      await nativeRepository.getByOutputId(uncertain.outputId)
+    ).toMatchObject({
+      phase: "handoff_interrupted",
+    })
     expect(blobs.getRetainedCount()).toBe(2)
     expect(blobs.getRetainedBytes()).toBe(6)
     expect(revokeObjectURL).not.toHaveBeenCalled()

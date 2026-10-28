@@ -1833,9 +1833,15 @@
   "options_toastClearChapterHistoryFailed": {
     "message": "清除章节历史失败"
   },
-  "queue_readFailed": { "message": "无法加载队列和任务历史记录。" },
-  "queue_readStale": { "message": "队列和任务历史记录可能不是最新的。" },
-  "common_retry": { "message": "重试" },
+  "queue_readFailed": {
+    "message": "无法加载队列和任务历史记录。"
+  },
+  "queue_readStale": {
+    "message": "队列和任务历史记录可能不是最新的。"
+  },
+  "common_retry": {
+    "message": "重试"
+  },
   "status_sentToChrome": {
     "message": "已发送到 Chrome"
   },
@@ -1869,5 +1875,14 @@
         "content": "$1"
       }
     }
+  },
+  "downloadError_browserHandoffInterrupted": {
+    "message": "向 Chrome 移交文件的过程已中断，无法确认是否已接受。重试可能会产生重复文件。"
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "重试失败章节（可能产生重复文件）"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "重试所有章节（可能产生重复文件）"
   }
 }

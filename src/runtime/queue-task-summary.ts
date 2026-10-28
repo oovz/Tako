@@ -24,12 +24,15 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     }
   }
 
-  const failureCategory =
-    task.errorCategory ??
-    task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
-    (task.status === "failed" || task.status === "partial_success"
-      ? "unknown"
-      : undefined)
+  const failureCategory = task.chapters.some(
+    (chapter) => chapter.errorCategory === "browser_handoff_interrupted"
+  )
+    ? "browser_handoff_interrupted"
+    : (task.errorCategory ??
+      task.chapters.find((chapter) => chapter.errorCategory)?.errorCategory ??
+      (task.status === "failed" || task.status === "partial_success"
+        ? "unknown"
+        : undefined))
 
   return {
     id: task.id,

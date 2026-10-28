@@ -77,6 +77,9 @@ export function DownloadTaskCard({
   const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
   const isRetried = task.isRetried ?? false
+  const acceptanceUncertain = task.chapters.some(
+    (chapter) => chapter.errorCategory === "browser_handoff_interrupted"
+  )
   const cancelPresentation = getDownloadCancelPresentation()
   const requiresCancelConfirmation = task.status === "downloading"
 
@@ -280,9 +283,14 @@ export function DownloadTaskCard({
           )}
         </div>
 
-        {task.errorCategory && (
+        {(acceptanceUncertain || task.errorCategory) && (
           <p className="text-sm text-destructive">
-            {t("common_error")}: {getDownloadErrorMessage(task.errorCategory)}
+            {t("common_error")}:{" "}
+            {getDownloadErrorMessage(
+              acceptanceUncertain
+                ? "browser_handoff_interrupted"
+                : task.errorCategory
+            )}
           </p>
         )}
 
@@ -358,7 +366,11 @@ export function DownloadTaskCard({
                 }
               >
                 <RotateCcw data-icon="inline-start" className="size-4" />
-                {t("sidepanel_retryFailedChapters")}
+                {t(
+                  acceptanceUncertain
+                    ? "sidepanel_retryUncertainHandoff"
+                    : "sidepanel_retryFailedChapters"
+                )}
               </Button>
               <Button
                 variant="outline"
@@ -369,7 +381,11 @@ export function DownloadTaskCard({
                 }
               >
                 <RotateCcw data-icon="inline-start" className="size-4" />
-                {t("sidepanel_restartTask")}
+                {t(
+                  acceptanceUncertain
+                    ? "sidepanel_restartUncertainHandoff"
+                    : "sidepanel_restartTask"
+                )}
               </Button>
               <Button
                 variant="outline"
@@ -397,7 +413,11 @@ export function DownloadTaskCard({
                   }
                 >
                   <RotateCcw data-icon="inline-start" className="size-4" />
-                  {t("sidepanel_restartTask")}
+                  {t(
+                    acceptanceUncertain
+                      ? "sidepanel_restartUncertainHandoff"
+                      : "sidepanel_restartTask"
+                  )}
                 </Button>
               )}
               <Button

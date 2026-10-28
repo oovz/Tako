@@ -8,6 +8,47 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 describe("DownloadTaskCard error presentation", () => {
+  it("keeps the uncertain-handoff warning visible when another chapter failed later", () => {
+    const task: DownloadTaskState = {
+      id: "uncertain-task",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-1",
+      seriesTitle: "Series",
+      status: "failed",
+      errorCategory: "network_unavailable",
+      created: 1,
+      completed: 2,
+      chapters: [
+        {
+          id: "chapter-1",
+          url: "https://example.com/chapter-1",
+          title: "Chapter 1",
+          index: 0,
+          status: "failed",
+          errorCategory: "browser_handoff_interrupted",
+          lastUpdated: 2,
+        },
+      ],
+      settingsSnapshot: createTaskSettingsSnapshot(
+        DEFAULT_SETTINGS,
+        "mangadex"
+      ),
+    }
+    const html = renderToStaticMarkup(
+      React.createElement(DownloadTaskCard, {
+        task,
+        onCancel: vi.fn(async () => ({ success: true as const })),
+        onRetry: vi.fn(async () => undefined),
+        onRestart: vi.fn(async () => undefined),
+        onRemove: vi.fn(async () => undefined),
+      })
+    )
+    expect(html).toContain(
+      "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+    )
+    expect(html).toContain("Retry all chapters (may create duplicates)")
+  })
+
   it.each([
     ["downloads-api", "Sent to Chrome"],
     ["fsa", "Saved to folder"],

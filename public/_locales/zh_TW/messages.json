@@ -1833,9 +1833,15 @@
   "options_toastClearChapterHistoryFailed": {
     "message": "清除章節歷史失敗"
   },
-  "queue_readFailed": { "message": "無法載入佇列和任務歷史記錄。" },
-  "queue_readStale": { "message": "佇列和任務歷史記錄可能不是最新的。" },
-  "common_retry": { "message": "重試" },
+  "queue_readFailed": {
+    "message": "無法載入佇列和任務歷史記錄。"
+  },
+  "queue_readStale": {
+    "message": "佇列和任務歷史記錄可能不是最新的。"
+  },
+  "common_retry": {
+    "message": "重試"
+  },
   "status_sentToChrome": {
     "message": "已傳送至 Chrome"
   },
@@ -1869,5 +1875,14 @@
         "content": "$1"
       }
     }
+  },
+  "downloadError_browserHandoffInterrupted": {
+    "message": "向 Chrome 移交檔案的過程已中斷，無法確認是否已接受。重試可能會產生重複檔案。"
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "重試失敗章節（可能產生重複檔案）"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "重試所有章節（可能產生重複檔案）"
   }
 }

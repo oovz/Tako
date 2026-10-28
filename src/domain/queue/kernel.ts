@@ -922,6 +922,7 @@ export function applyNativeOutputSettlement(
     requested: number
     completed: number
     interrupted: number
+    acceptanceUncertain?: true
     lastSuccessfulDownloadId?: number
     now: number
   }
@@ -994,6 +995,7 @@ export function applyNativeOutputSettlement(
       existing.requested === input.requested &&
       existing.completed === input.completed &&
       existing.interrupted === input.interrupted &&
+      existing.acceptanceUncertain === input.acceptanceUncertain &&
       existing.surrendered === 0 &&
       existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
     return {
@@ -1051,12 +1053,14 @@ export function applyNativeOutputSettlement(
     requested: input.requested,
     completed: input.completed,
     interrupted: input.interrupted,
+    ...(input.acceptanceUncertain ? { acceptanceUncertain: true } : {}),
     surrendered: 0,
     lastSuccessfulDownloadId: input.lastSuccessfulDownloadId,
     appliedAt: input.now,
   }
-  const interruptionMessage =
-    input.interrupted === 0
+  const interruptionMessage = input.acceptanceUncertain
+    ? "Chrome handoff acceptance could not be established. Retrying may create duplicates."
+    : input.interrupted === 0
       ? undefined
       : input.completed > 0
         ? `${input.interrupted} output file(s) were not sent to Chrome.`
@@ -1070,8 +1074,11 @@ export function applyNativeOutputSettlement(
           ? "partial_success"
           : "failed",
     errorMessage: interruptionMessage,
-    errorCategory:
-      input.interrupted > 0 ? "browser_download_interrupted" : undefined,
+    errorCategory: input.acceptanceUncertain
+      ? "browser_handoff_interrupted"
+      : input.interrupted > 0
+        ? "browser_download_interrupted"
+        : undefined,
     outputs: {
       requested: input.requested,
       committed: input.completed,
@@ -1807,6 +1814,7 @@ export function retryFailedChapters(
       outputDestination: undefined,
       status: "queued",
       errorMessage: undefined,
+      errorCategory: undefined,
       totalImages: undefined,
       imagesFailed: undefined,
       outputs: { requested: 0, committed: 0, failed: 0 },
@@ -1901,6 +1909,7 @@ export function restartDownloadTask(
       outputDestination: undefined,
       status: "queued",
       errorMessage: undefined,
+      errorCategory: undefined,
       totalImages: undefined,
       imagesFailed: undefined,
       outputs: { requested: 0, committed: 0, failed: 0 },

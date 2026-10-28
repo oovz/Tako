@@ -1842,7 +1842,9 @@
   "queue_readStale": {
     "message": "Queue and task history may be out of date."
   },
-  "common_retry": { "message": "Retry" },
+  "common_retry": {
+    "message": "Retry"
+  },
   "status_sentToChrome": {
     "message": "Sent to Chrome"
   },
@@ -1882,5 +1884,14 @@
         "content": "$2"
       }
     }
+  },
+  "downloadError_browserHandoffInterrupted": {
+    "message": "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "Retry failed chapters (may create duplicates)"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "Retry all chapters (may create duplicates)"
   }
 }

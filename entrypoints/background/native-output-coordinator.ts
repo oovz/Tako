@@ -733,8 +733,24 @@ export class NativeOutputCoordinator {
     const current = await this.deps.repository.getByOutputId(record.outputId)
     if (!current) return []
 
-    if (current.phase === "acceptance_unknown") {
-      const matches = await chrome.downloads.search({ url: current.blobUrl })
+    if (
+      current.phase === "acceptance_unknown" ||
+      current.phase === "handoff_interrupted"
+    ) {
+      let matches: chrome.downloads.DownloadItem[]
+      try {
+        matches = await chrome.downloads.search({ url: current.blobUrl })
+      } catch (error) {
+        logger.warn("Chrome handoff evidence is unavailable", {
+          outputId: current.outputId,
+          error,
+        })
+        await this.deps.repository.interruptHandoff({
+          outputId: current.outputId,
+        })
+        await this.armLivenessLocked()
+        return effects
+      }
       const snapshot = await this.deps.repository.snapshot()
       const claimedIds = new Set(
         Object.values(snapshot.outputsByOutputId).flatMap((candidate) =>
@@ -760,6 +776,9 @@ export class NativeOutputCoordinator {
           )
         }
       } else {
+        await this.deps.repository.interruptHandoff({
+          outputId: current.outputId,
+        })
         await this.armLivenessLocked()
       }
       return effects
@@ -883,7 +902,12 @@ export class NativeOutputCoordinator {
       records.every(canAccountNativeOutput)
     ) {
       const stats = calculateNativeOutputSettlementStats(manifest, records)
-      const { completed, interrupted, lastSuccessfulDownloadId } = stats
+      const {
+        completed,
+        interrupted,
+        acceptanceUncertain,
+        lastSuccessfulDownloadId,
+      } = stats
       const settlement = queueSettlementProven
         ? { outcome: "already_applied" as const }
         : await this.deps.queueRepository.applyNativeOutputSettlement({
@@ -894,6 +918,7 @@ export class NativeOutputCoordinator {
             requested: manifest.outputsRequested,
             completed,
             interrupted,
+            acceptanceUncertain: acceptanceUncertain || undefined,
             lastSuccessfulDownloadId,
             now: Date.now(),
           })

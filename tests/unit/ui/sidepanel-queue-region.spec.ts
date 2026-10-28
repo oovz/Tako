@@ -62,6 +62,27 @@ function renderQueueRegion(
 }
 
 describe("SidePanelQueueRegion unified queue layout", () => {
+  it("offers manual recovery for an interrupted handoff with a duplicate warning", () => {
+    const html = renderQueueRegion({
+      ...commonProps,
+      queueTasks: [],
+      historyTasks: [
+        {
+          ...makeTask("uncertain", "failed"),
+          failureCategory: "browser_handoff_interrupted",
+          chapters: { total: 1, completed: 0, unsuccessful: 1 },
+        },
+      ],
+    })
+    expect(html).toContain(
+      "Chrome handoff interrupted. Acceptance could not be confirmed. Retrying may create duplicate files."
+    )
+    expect(html).toContain(
+      'aria-label="Retry all chapters (may create duplicates)"'
+    )
+    expect(html).not.toContain("Chrome could not accept the output.")
+  })
+
   it("shows an unavailable view with a retry action", () => {
     const html = renderQueueRegion({
       ...commonProps,

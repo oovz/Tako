@@ -14,6 +14,7 @@ const DOWNLOAD_ERROR_MESSAGE_KEYS: Record<DownloadErrorCategory, string> = {
   folder_write_failed: "downloadError_folderWriteFailed",
   disk_full: "downloadError_diskFull",
   browser_download_interrupted: "downloadError_browserDownloadInterrupted",
+  browser_handoff_interrupted: "downloadError_browserHandoffInterrupted",
   browser_download_unobservable: "downloadError_browserDownloadUnobservable",
   archive_creation_failed: "downloadError_archiveCreationFailed",
   unknown: "downloadError_unknown",

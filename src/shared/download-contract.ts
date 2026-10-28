@@ -80,6 +80,7 @@ export const DOWNLOAD_ERROR_CATEGORIES = [
   "folder_write_failed",
   "disk_full",
   "browser_download_interrupted",
+  "browser_handoff_interrupted",
   "browser_download_unobservable",
   "archive_creation_failed",
   "unknown",

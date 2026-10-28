@@ -196,7 +196,14 @@ describe("output destination settlement", () => {
       outputId: second.outputId,
       now: 5,
     })
-    await f.finish()
+    await f.terminal.settle(
+      f.terminalPayload({
+        status: "completed",
+        outputsRequested: 2,
+        outputsCommitted: 0,
+        outputsFailedBeforeHandoff: 0,
+      })
+    )
     expect((await f.queue.getTask(identity.taskId))?.status).toBe("downloading")
     expect(await f.history.getDownloadedChapters()).toEqual([])
 

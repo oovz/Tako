@@ -60,6 +60,7 @@ export function manifestTrackedOutputIds(
 export interface NativeOutputSettlementStats {
   completed: number
   interrupted: number
+  acceptanceUncertain: boolean
   lastSuccessfulDownloadId: number | undefined
 }
 
@@ -82,6 +83,9 @@ export function calculateNativeOutputSettlementStats(
   return {
     completed,
     interrupted,
+    acceptanceUncertain: records.some(
+      (record) => record.phase === "handoff_interrupted"
+    ),
     lastSuccessfulDownloadId,
   }
 }

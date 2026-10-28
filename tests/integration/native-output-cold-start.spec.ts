@@ -7,7 +7,8 @@ import {
 } from "@/entrypoints/background/native-output-coordinator"
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
-import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type { DownloadTaskExecutor } from "@/entrypoints/background/download-task-executor"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
@@ -126,14 +127,17 @@ describe("native output cold-start recovery", () => {
           get: vi.fn(async (keys: string | string[]) => {
             const requested = Array.isArray(keys) ? keys : [keys]
             return Object.fromEntries(
-              requested.map((key) => [key, structuredClone(local[key])])
+              requested
+                .filter((key) => key in local)
+                .map((key) => [key, structuredClone(local[key])])
             )
           }),
           set: vi.fn(async (values: Record<string, unknown>) => {
             Object.assign(local, structuredClone(values))
           }),
-          remove: vi.fn(async (key: string) => {
-            delete local[key]
+          remove: vi.fn(async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys])
+              delete local[key]
           }),
         },
         session: { set: vi.fn(async () => undefined) },
@@ -316,6 +320,107 @@ describe("native output cold-start recovery", () => {
     return { result, setLivenessAlarmArmed }
   }
 
+  it.each(["absent", "ambiguous", "unavailable"] as const)(
+    "interrupts a handoff with %s browser evidence after restart and releases its scheduling owner",
+    async (evidence) => {
+      const first = createRuntime()
+      await first.queueRepository.initialize()
+      await first.coordinator.initialize()
+      await seedOpenManifest(first, 1, [0])
+      await first.repository.markAcceptanceUnknown({
+        outputId: "output-0",
+        now: 210,
+      })
+      await first.coordinator.sealManifest({
+        ...jobIdentity,
+        outputsRequested: 1,
+        outputsFailedBeforeHandoff: 0,
+      })
+      await first.queueRepository.clearDispatchLease(jobIdentity)
+      await first.queueRepository.enqueueDownloadTask({
+        ...activeTask(),
+        id: "next-task",
+        status: "queued",
+        chapters: [
+          {
+            ...activeTask().chapters[0],
+            status: "queued",
+            dispatchAttempt: undefined,
+          },
+        ],
+      })
+      if (evidence === "ambiguous") {
+        search.mockResolvedValue(
+          [41, 42].map((id) => ({
+            ...completeDownloadItem(),
+            id,
+            url: "blob:output-0",
+          }))
+        )
+      } else if (evidence === "unavailable") {
+        search.mockRejectedValue(new Error("Chrome history unavailable"))
+      }
+
+      const restarted = createRuntime()
+      await restarted.queueRepository.initialize()
+      const effects = await restarted.coordinator.initialize()
+      expect(
+        await restarted.queueRepository.getTask(output.taskId)
+      ).toMatchObject({
+        status: "failed",
+        errorCategory: "browser_handoff_interrupted",
+        chapters: [
+          {
+            status: "failed",
+            outputs: { requested: 1, committed: 0, failed: 1 },
+          },
+        ],
+      })
+      const execute = vi.fn(async (taskId: string) => {
+        await restarted.queueRepository.startDownloadTask({
+          taskId,
+          now: Date.now(),
+        })
+        return "active" as const
+      })
+      const scheduler = new QueueScheduler(
+        restarted.queueRepository,
+        {
+          execute,
+          isActive: () => false,
+        } as unknown as DownloadTaskExecutor,
+        async () => undefined
+      )
+      const terminal = new OffscreenJobTerminalCoordinator(
+        restarted.queueRepository,
+        restarted.coordinator,
+        scheduler,
+        destinationService,
+        finalizationDependencies()
+      )
+      await terminal.continueAfterNativeOutputSettlement(effects)
+      await scheduler.activate()
+      expect(execute).toHaveBeenCalledExactlyOnceWith("next-task")
+      expect(
+        await restarted.queueRepository.getTask("next-task")
+      ).toMatchObject({ status: "downloading" })
+      expect(await restarted.coordinator.getLiveTaskIds()).toEqual([])
+      expect(await restarted.repository.hasLiveDependencies()).toBe(true)
+      expect(revoke).not.toHaveBeenCalled()
+      expect(download).not.toHaveBeenCalled()
+      const settled = await restarted.queueRepository.getTask(output.taskId)
+      const again = createRuntime()
+      await again.queueRepository.initialize()
+      const replayEffects = await again.coordinator.initialize()
+      expect(replayEffects).toEqual([])
+      expect(await again.queueRepository.getTask(output.taskId)).toEqual(
+        settled
+      )
+      expect(download).not.toHaveBeenCalled()
+      expect(revoke).not.toHaveBeenCalled()
+    }
+  )
+
   it("adopts a lost Chrome ID after restart without issuing a second download", async () => {
     const first = createRuntime()
     await first.queueRepository.initialize()
@@ -377,6 +482,94 @@ describe("native output cold-start recovery", () => {
       false
     )
     expect(revoke).toHaveBeenCalledOnce()
+  })
+
+  it("keeps an uncertain attempt interrupted when late acceptance is found after manual retry", async () => {
+    const first = createRuntime()
+    await first.queueRepository.initialize()
+    await first.coordinator.initialize()
+    vi.spyOn(first.repository, "attachDownload").mockRejectedValueOnce(
+      new Error("worker stopped before acknowledgement persistence")
+    )
+    await first.coordinator.handleOutputReady(output)
+    await first.coordinator.sealManifest({
+      ...jobIdentity,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+    })
+    await first.queueRepository.clearDispatchLease(jobIdentity)
+
+    const restarted = createRuntime()
+    await restarted.queueRepository.initialize()
+    const effects = await restarted.coordinator.initialize()
+    expect(effects).toHaveLength(1)
+    for (const effect of effects)
+      await restarted.coordinator.acknowledgeSettlement(effect)
+    const original = await restarted.queueRepository.getTask(output.taskId)
+    expect(original).toMatchObject({
+      status: "failed",
+      errorCategory: "browser_handoff_interrupted",
+    })
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(
+      await restarted.queueRepository.restartDownloadTask({
+        taskId: output.taskId,
+        restartTaskId: "manual-retry",
+        now: Date.now(),
+      })
+    ).toMatchObject({ outcome: "applied" })
+    const retry = await restarted.queueRepository.getTask("manual-retry")
+    expect(retry).toMatchObject({
+      status: "queued",
+      chapters: [{ status: "queued" }],
+    })
+    expect(retry?.chapters[0].nativeOutputSettlement).toBeUndefined()
+    expect(retry?.chapters[0].errorCategory).toBeUndefined()
+
+    search.mockResolvedValue([completeDownloadItem()])
+    expect(await restarted.coordinator.reconcile()).toEqual([])
+    expect(await restarted.queueRepository.getTask("manual-retry")).toEqual(
+      retry
+    )
+    expect(await restarted.queueRepository.getTask(output.taskId)).toEqual({
+      ...original,
+      isRetried: true,
+    })
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(await restarted.repository.hasLiveDependencies()).toBe(false)
+    expect(revoke).toHaveBeenCalledOnce()
+    expect(download).toHaveBeenCalledOnce()
+  })
+
+  it("recovers an open uncertain handoff and its retained dispatch lease when the producer is absent", async () => {
+    const first = createRuntime()
+    await first.queueRepository.initialize()
+    await first.coordinator.initialize()
+    await seedOpenManifest(first, 1, [0])
+    await first.repository.markAcceptanceUnknown({
+      outputId: "output-0",
+      now: 210,
+    })
+
+    const restarted = createRuntime(async () => null)
+    await restarted.queueRepository.initialize()
+    await restarted.coordinator.initialize()
+    await runStartup(restarted, null)
+
+    expect(await restarted.queueRepository.getActiveDispatchLease()).toBeNull()
+    expect(
+      await restarted.queueRepository.getTask(output.taskId)
+    ).toMatchObject({
+      status: "failed",
+      chapters: [
+        { errorCategory: "browser_handoff_interrupted", status: "failed" },
+      ],
+    })
+    expect(await restarted.coordinator.getLiveTaskIds()).toEqual([])
+    expect(await restarted.repository.hasLiveDependencies()).toBe(true)
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(download).not.toHaveBeenCalled()
+    expect(revoke).not.toHaveBeenCalled()
   })
 
   it("fails strict cold-start hydration before touching Chrome for invalid current state", async () => {

@@ -98,6 +98,7 @@ const nativeOutputSettlementSchema = z
     requested: nonnegativeInteger,
     completed: nonnegativeInteger,
     interrupted: nonnegativeInteger,
+    acceptanceUncertain: z.literal(true).optional(),
     surrendered: nonnegativeInteger,
     lastSuccessfulDownloadId: nonnegativeInteger.optional(),
     appliedAt: finiteNumber.nonnegative(),

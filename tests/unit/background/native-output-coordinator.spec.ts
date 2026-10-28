@@ -346,16 +346,16 @@ describe("NativeOutputCoordinator", () => {
 
       await coordinator.reconcile()
 
-      const quarantined = await repository.getByOutputId(payload.outputId)
+      const interrupted = await repository.getByOutputId(payload.outputId)
       expect(download).toHaveBeenCalledOnce()
       expect(applySettlement).not.toHaveBeenCalled()
       expect(revoke).not.toHaveBeenCalled()
-      expect(quarantined).toMatchObject({
-        phase: "acceptance_unknown",
+      expect(interrupted).toMatchObject({
+        phase: "handoff_interrupted",
         accountingDisposition: "pending",
       })
-      expect(quarantined?.blobReleasedAt).toBeUndefined()
-      expect(quarantined?.dependencyReleasedAt).toBeUndefined()
+      expect(interrupted?.blobReleasedAt).toBeUndefined()
+      expect(interrupted?.dependencyReleasedAt).toBeUndefined()
     }
   )
 
@@ -403,7 +403,7 @@ describe("NativeOutputCoordinator", () => {
     await coordinator.reconcile()
 
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "acceptance_unknown"
+      "handoff_interrupted"
     )
     expect(ensureLiveness).toHaveBeenCalled()
     expect(download).toHaveBeenCalledOnce()
@@ -411,7 +411,7 @@ describe("NativeOutputCoordinator", () => {
     expect(revoke).not.toHaveBeenCalled()
   })
 
-  it("keeps a sealed acceptance-unknown record quarantined after exact producer terminality", async () => {
+  it("settles an interrupted handoff after exact producer terminality while retaining its Blob", async () => {
     download.mockRejectedValueOnce(new Error("blocked by policy"))
     const { coordinator, repository } = createCoordinator()
     vi.spyOn(repository, "interruptBeforeAcceptance").mockRejectedValueOnce(
@@ -434,6 +434,7 @@ describe("NativeOutputCoordinator", () => {
       },
       activeLease: null,
     })
+    await coordinator.reconcile()
 
     expect(await repository.getManifest(payload.jobId)).toMatchObject({
       phase: "sealed",
@@ -442,12 +443,18 @@ describe("NativeOutputCoordinator", () => {
     })
     const quarantined = await repository.getByOutputId(payload.outputId)
     expect(quarantined).toMatchObject({
-      phase: "acceptance_unknown",
-      accountingDisposition: "pending",
+      phase: "handoff_interrupted",
+      accountingDisposition: "accounted",
     })
     expect(quarantined?.blobReleasedAt).toBeUndefined()
     expect(quarantined?.dependencyReleasedAt).toBeUndefined()
-    expect(applySettlement).not.toHaveBeenCalled()
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed: 0,
+        interrupted: 1,
+        acceptanceUncertain: true,
+      })
+    )
     expect(revoke).not.toHaveBeenCalled()
     expect(ensureLiveness).toHaveBeenCalled()
   })

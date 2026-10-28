@@ -30,6 +30,7 @@ import {
 interface CommandCenterTaskActionsProps {
   taskId: string
   status: QueueTaskSummary["status"]
+  acceptanceUncertain?: boolean
   isCanceling: boolean
   isRetrying?: boolean
   isRestarting?: boolean
@@ -47,7 +48,14 @@ interface CommandCenterTaskActionsProps {
   onRemoveTask?: (taskId: string) => void
 }
 
-function actionLabel(action: CommandCenterTaskActionId): string {
+function actionLabel(
+  action: CommandCenterTaskActionId,
+  acceptanceUncertain: boolean
+): string {
+  if (acceptanceUncertain) {
+    if (action === "retry-failed") return t("sidepanel_retryUncertainHandoff")
+    if (action === "restart") return t("sidepanel_restartUncertainHandoff")
+  }
   switch (action) {
     case "cancel":
       return t("sidepanel_cancelDownload")
@@ -79,6 +87,7 @@ function actionIcon(action: CommandCenterTaskActionId) {
 export function CommandCenterTaskActions({
   taskId,
   status,
+  acceptanceUncertain = false,
   isCanceling,
   isRetrying = false,
   isRestarting = false,
@@ -141,7 +150,7 @@ export function CommandCenterTaskActions({
             aria-label={
               pending && action === "cancel"
                 ? t("sidepanel_cancelingDownload")
-                : actionLabel(action)
+                : actionLabel(action, acceptanceUncertain)
             }
             variant="ghost"
             size="icon"
@@ -166,7 +175,7 @@ export function CommandCenterTaskActions({
           </Button>
         </TooltipTrigger>
         <TooltipContent side="left" className="text-xs">
-          {actionLabel(action)}
+          {actionLabel(action, acceptanceUncertain)}
         </TooltipContent>
       </Tooltip>
     )
@@ -208,7 +217,7 @@ export function CommandCenterTaskActions({
                 ) : (
                   actionIcon(action)
                 )}
-                {actionLabel(action)}
+                {actionLabel(action, acceptanceUncertain)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

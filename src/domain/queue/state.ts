@@ -86,6 +86,7 @@ export interface NativeOutputSettlement {
   requested: number
   completed: number
   interrupted: number
+  acceptanceUncertain?: true
   /** Retained accounting evidence for surrendered output observations. */
   surrendered: number
   lastSuccessfulDownloadId?: number
