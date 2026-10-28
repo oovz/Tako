@@ -22,6 +22,7 @@ import {
 } from "./fixtures/session-rule-helpers"
 import { manganatoFixture } from "./fixtures/mock-data/site-integrations/manganato/routes"
 import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
+import { boyloveFixture } from "./fixtures/mock-data/site-integrations/boylove/routes"
 
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
@@ -31,6 +32,7 @@ import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-c
 const fixtures = [
   manganatoFixture,
   mangakakalotFixture,
+  boyloveFixture,
   dm5Fixture,
   mangabzFixture,
 ]

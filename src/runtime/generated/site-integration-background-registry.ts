@@ -2,6 +2,7 @@
 // Do not edit it directly.
 import type { BackgroundSiteAdapter } from '@/src/types/site-integrations'
 import { backgroundSiteAdapter as animemangahouseBackgroundAdapter } from '@/src/site-integrations/animemangahouse/background-runtime'
+import { backgroundSiteAdapter as boyloveBackgroundAdapter } from '@/src/site-integrations/boylove/background-runtime'
 import { backgroundSiteAdapter as comicnettaiBackgroundAdapter } from '@/src/site-integrations/comicnettai/background-runtime'
 import { backgroundSiteAdapter as mangabzBackgroundAdapter } from '@/src/site-integrations/mangabz/background-runtime'
 import { backgroundSiteAdapter as mangadexBackgroundAdapter } from '@/src/site-integrations/mangadex/background-runtime'
@@ -14,6 +15,7 @@ import { backgroundSiteAdapter as shonenjumpplusBackgroundAdapter } from '@/src/
 
 export const backgroundSiteAdapters = [
   animemangahouseBackgroundAdapter,
+  boyloveBackgroundAdapter,
   comicnettaiBackgroundAdapter,
   mangabzBackgroundAdapter,
   mangadexBackgroundAdapter,
@@ -27,6 +29,7 @@ export const backgroundSiteAdapters = [
 
 export const backgroundSiteAdaptersById = {
   "animemangahouse": animemangahouseBackgroundAdapter,
+  "boylove": boyloveBackgroundAdapter,
   "comicnettai": comicnettaiBackgroundAdapter,
   "mangabz": mangabzBackgroundAdapter,
   "mangadex": mangadexBackgroundAdapter,

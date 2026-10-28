@@ -2,6 +2,7 @@
 // Do not edit it directly.
 import type { OffscreenSiteAdapter } from '@/src/types/site-integrations'
 import { offscreenSiteAdapter as animemangahouseOffscreenAdapter } from '@/src/site-integrations/animemangahouse/offscreen-runtime'
+import { offscreenSiteAdapter as boyloveOffscreenAdapter } from '@/src/site-integrations/boylove/offscreen-runtime'
 import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
 import { offscreenSiteAdapter as mangabzOffscreenAdapter } from '@/src/site-integrations/mangabz/offscreen-runtime'
 import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-integrations/mangadex/offscreen-runtime'
@@ -14,6 +15,7 @@ import { offscreenSiteAdapter as shonenjumpplusOffscreenAdapter } from '@/src/si
 
 export const offscreenSiteAdapters = [
   animemangahouseOffscreenAdapter,
+  boyloveOffscreenAdapter,
   comicnettaiOffscreenAdapter,
   mangabzOffscreenAdapter,
   mangadexOffscreenAdapter,
@@ -27,6 +29,7 @@ export const offscreenSiteAdapters = [
 
 export const offscreenSiteAdaptersById = {
   "animemangahouse": animemangahouseOffscreenAdapter,
+  "boylove": boyloveOffscreenAdapter,
   "comicnettai": comicnettaiOffscreenAdapter,
   "mangabz": mangabzOffscreenAdapter,
   "mangadex": mangadexOffscreenAdapter,

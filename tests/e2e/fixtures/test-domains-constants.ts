@@ -79,6 +79,9 @@ export const LIVE_MANGAMILLION_REFERENCE_URL =
 export const LIVE_MANGAMILLION_CHAPTER_URL =
   "https://mangamillion.shueisha.co.jp/en/title/1/chapter/6736"
 
+export const LIVE_BOYLOVE_REFERENCE_URL =
+  "https://boylove.cc/home/book/index/id/34260"
+
 export const LIVE_MANGANATO_REFERENCE_URL =
   "https://www.manganato.gg/manga/hunter-x-hunter"
 export const LIVE_MANGAKAKALOT_REFERENCE_URL =

@@ -27,6 +27,7 @@ import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integra
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
 import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrations/manganato/routes"
 import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"
+import { registerBoyloveLocalServerHandlers } from "./mock-data/site-integrations/boylove/routes"
 
 import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
 import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
@@ -460,6 +461,7 @@ async function setupExtensionContext(
         ...registerMangaMillionLocalServerHandlers(localMockServer),
         ...registerManganatoLocalServerHandlers(localMockServer),
         ...registerMangakakalotLocalServerHandlers(localMockServer),
+        ...registerBoyloveLocalServerHandlers(localMockServer),
         ...registerDm5LocalServerHandlers(localMockServer),
         ...registerMangabzLocalServerHandlers(localMockServer),
       ]

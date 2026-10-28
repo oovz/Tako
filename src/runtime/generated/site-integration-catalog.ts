@@ -107,6 +107,83 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "boylove",
+    "name": "香香腐宅BoyLove",
+    "englishName": "BoyLove",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "boylove.cc"
+      ],
+      "seriesMatches": [
+        "/home/book/index/id/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://boylove.cc/*",
+      "https://img.boylove.cc/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 1000
+    },
+    "endpointPolicies": [
+      {
+        "id": "boylove-page",
+        "purpose": "BoyLove series catalogs and chapter readers",
+        "origins": [
+          "https://boylove.cc/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "boylove-image",
+        "purpose": "BoyLove chapter and cover images",
+        "origins": [
+          "https://img.boylove.cc/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "comicnettai",
     "name": "Comic Nettai",
     "englishName": "Comic Nettai",
