@@ -41,7 +41,10 @@ describe("destination service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     task = { id: "task-1", status: "downloading" }
-    mocks.getSettings.mockResolvedValue({ notifications: true })
+    mocks.getSettings.mockResolvedValue({
+      notifications: true,
+      downloads: { customDirectoryHandleId: "selected-id" },
+    })
     mocks.blockTaskForDestination.mockImplementation(async (input) => {
       if (
         task.activeBlock === "destination_action_required" &&
@@ -77,6 +80,25 @@ describe("destination service", () => {
       {} as FileSystemDirectoryHandle
     )
     mocks.queryFsaPermission.mockResolvedValue("granted")
+  })
+
+  it("resolves the selected ID and permission once for a coherent destination", async () => {
+    const handle = { name: "Selected" } as FileSystemDirectoryHandle
+    mocks.loadDownloadRootHandle.mockResolvedValueOnce(handle)
+    await expect(
+      service.getEffectiveDestination({
+        taskId: "task-1",
+        destination: "file-system-access",
+      })
+    ).resolves.toEqual({ kind: "custom", handle, handleId: "selected-id" })
+    expect(mocks.getSettings).toHaveBeenCalledOnce()
+    expect(mocks.loadDownloadRootHandle).toHaveBeenCalledExactlyOnceWith(
+      "selected-id"
+    )
+    expect(mocks.queryFsaPermission).toHaveBeenCalledExactlyOnceWith(
+      handle,
+      true
+    )
   })
 
   it("commits the repair issue through the queue transition", async () => {
@@ -178,6 +200,26 @@ describe("destination service", () => {
         taskId: "task-1",
         destination: "file-system-access",
       })
+    ).resolves.toEqual({ ready: false, reason: "unsupported" })
+  })
+
+  it("reports an unconfigured destination before opening handle storage", async () => {
+    mocks.getSettings.mockResolvedValueOnce({
+      notifications: true,
+      downloads: { customDirectoryHandleId: null },
+    })
+    await expect(
+      service.preflight({ taskId: "task-1", destination: "file-system-access" })
+    ).resolves.toEqual({ ready: false, reason: "not_configured" })
+    expect(mocks.loadDownloadRootHandle).not.toHaveBeenCalled()
+  })
+
+  it("preserves unavailable storage as unsupported", async () => {
+    mocks.loadDownloadRootHandle.mockRejectedValueOnce(
+      new Error("IndexedDB unavailable")
+    )
+    await expect(
+      service.preflight({ taskId: "task-1", destination: "file-system-access" })
     ).resolves.toEqual({ ready: false, reason: "unsupported" })
   })
 

@@ -31,19 +31,16 @@ interface CommandCenterTaskActionsProps {
   taskId: string
   status: QueueTaskSummary["status"]
   isCanceling: boolean
-  isForgettingUnobservable?: boolean
   isRetrying?: boolean
   isRestarting?: boolean
   isRemoving?: boolean
   isMoving?: boolean
   canCancel: boolean
-  canForgetUnobservable: boolean
   canRetryFailed: boolean
   canRestart: boolean
   canMoveToTop: boolean
   canRemove: boolean
   onBeginCancel: (taskId: string) => void
-  onBeginForgetUnobservable?: (taskId: string) => void
   onRetryFailed?: (taskId: string) => void
   onRestartTask?: (taskId: string) => void
   onMoveTaskToTop?: (taskId: string) => void
@@ -54,8 +51,6 @@ function actionLabel(action: CommandCenterTaskActionId): string {
   switch (action) {
     case "cancel":
       return t("sidepanel_cancelDownload")
-    case "forget-unobservable":
-      return t("sidepanel_forgetDownload")
     case "retry-failed":
       return t("sidepanel_retryFailedChapters")
     case "restart":
@@ -71,8 +66,6 @@ function actionIcon(action: CommandCenterTaskActionId) {
   switch (action) {
     case "cancel":
       return <XCircle aria-hidden="true" data-icon="inline-start" />
-    case "forget-unobservable":
-      return <XCircle aria-hidden="true" data-icon="inline-start" />
     case "retry-failed":
     case "restart":
       return <RotateCcw aria-hidden="true" data-icon="inline-start" />
@@ -87,19 +80,16 @@ export function CommandCenterTaskActions({
   taskId,
   status,
   isCanceling,
-  isForgettingUnobservable = false,
   isRetrying = false,
   isRestarting = false,
   isRemoving = false,
   isMoving = false,
   canCancel,
-  canForgetUnobservable,
   canRetryFailed,
   canRestart,
   canMoveToTop,
   canRemove,
   onBeginCancel,
-  onBeginForgetUnobservable,
   onRetryFailed,
   onRestartTask,
   onMoveTaskToTop,
@@ -107,7 +97,6 @@ export function CommandCenterTaskActions({
 }: CommandCenterTaskActionsProps) {
   const plan = getTaskActionPlan(status, {
     canCancel,
-    canForgetUnobservable,
     canRetryFailed,
     canRestart,
     canMoveToTop,
@@ -116,7 +105,6 @@ export function CommandCenterTaskActions({
 
   const isPending = (action: CommandCenterTaskActionId): boolean =>
     (action === "cancel" && isCanceling) ||
-    (action === "forget-unobservable" && isForgettingUnobservable) ||
     (action === "retry-failed" && isRetrying) ||
     (action === "restart" && isRestarting) ||
     (action === "remove" && isRemoving) ||
@@ -126,9 +114,6 @@ export function CommandCenterTaskActions({
     switch (action) {
       case "cancel":
         onBeginCancel(taskId)
-        break
-      case "forget-unobservable":
-        onBeginForgetUnobservable?.(taskId)
         break
       case "retry-failed":
         onRetryFailed?.(taskId)
@@ -147,10 +132,7 @@ export function CommandCenterTaskActions({
 
   const renderInlineAction = (action: CommandCenterTaskActionId) => {
     const pending = isPending(action)
-    const isDestructive =
-      action === "cancel" ||
-      action === "forget-unobservable" ||
-      action === "remove"
+    const isDestructive = action === "cancel" || action === "remove"
 
     return (
       <Tooltip key={action}>
@@ -215,9 +197,7 @@ export function CommandCenterTaskActions({
                 key={action}
                 disabled={isPending(action)}
                 className={
-                  action === "cancel" ||
-                  action === "forget-unobservable" ||
-                  action === "remove"
+                  action === "cancel" || action === "remove"
                     ? "text-destructive focus:text-destructive"
                     : undefined
                 }

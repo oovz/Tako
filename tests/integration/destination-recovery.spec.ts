@@ -67,6 +67,7 @@ const chapterId = "first-chapter"
 function createSettings() {
   const settings = structuredClone(DEFAULT_SETTINGS)
   settings.downloads.destination = "file-system-access"
+  settings.downloads.customDirectoryHandleId = "selected-id"
   settings.downloads.pathTemplate = "TMD"
   return settings
 }
@@ -131,7 +132,6 @@ function createRuntime(
       settingsRepository: { getSettings: async () => createSettings() },
       historyRepository: {
         getDownloadedChapters: async () => [],
-        markChapterAsDownloaded: async () => undefined,
         restoreChapterFromCompletedTask: async () => true,
       },
     }
@@ -168,7 +168,6 @@ function createRuntime(
       settingsRepository: { getSettings: async () => createSettings() },
       historyRepository: {
         getDownloadedChapters: async () => [],
-        markChapterAsDownloaded: async () => undefined,
         restoreChapterFromCompletedTask: async () => true,
       },
     }

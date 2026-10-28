@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "Stops this task’s remaining work. Downloads already accepted by Chrome continue; manage them in Chrome Downloads."
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "Forget all pending downloads for this task?"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "The browser download can no longer be inspected. Forgetting it releases all of Tako's pending outputs for this task; files may be incomplete."
-  },
-  "sidepanel_forgetDownload": {
-    "message": "Forget all downloads"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ downloading",
     "placeholders": {
@@ -466,7 +457,7 @@
     "message": "There is not enough disk space."
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "The browser did not finish saving the output."
+    "message": "Chrome could not accept the output."
   },
   "downloadError_browserDownloadUnobservable": {
     "message": "The browser download could not be confirmed after its history was erased."
@@ -861,7 +852,7 @@
     }
   },
   "options_taskSummaryFailed": {
-    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -872,7 +863,7 @@
     }
   },
   "options_taskSummaryCanceled": {
-    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -902,7 +893,7 @@
     }
   },
   "options_taskSummaryPartial": {
-    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1489,15 +1480,18 @@
     "message": "Partial"
   },
   "options_taskCompleted": {
-    "message": "Completed ($TOTAL$ chapters)",
+    "message": "Completed ($TOTAL$ chapter$PLURAL$)",
     "placeholders": {
       "total": {
         "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
       }
     }
   },
   "options_taskFailed": {
-    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1508,7 +1502,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1538,7 +1532,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1746,18 +1740,6 @@
   "background_settingsSyncFailed": {
     "message": "Failed to sync settings to state"
   },
-  "status_nativeOutputActionRequired": {
-    "message": "Download result review required"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "Forgetting pending downloads…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "Forgot $1 pending download(s). The queue will continue."
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "Failed to forget the pending downloads."
-  },
   "startDownloadError_staleSeriesContext": {
     "message": "The series context is stale. Refresh the page and try again."
   },
@@ -1860,5 +1842,45 @@
   "queue_readStale": {
     "message": "Queue and task history may be out of date."
   },
-  "common_retry": { "message": "Retry" }
+  "common_retry": { "message": "Retry" },
+  "status_sentToChrome": {
+    "message": "Sent to Chrome"
+  },
+  "status_savedToFolder": {
+    "message": "Saved to folder"
+  },
+  "status_processed": {
+    "message": "Processed"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "Sending to Chrome"
+  },
+  "progressStage_savingToFolder": {
+    "message": "Saving to folder"
+  },
+  "output_sentToChromeDescription": {
+    "message": "Chrome manages the remaining transfer. Check Chrome Downloads for progress and results."
+  },
+  "options_taskSentToChrome": {
+    "message": "Sent to Chrome ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_taskSavedToFolder": {
+    "message": "Saved to folder ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  }
 }

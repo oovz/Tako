@@ -235,7 +235,6 @@ describe("download task finalization", () => {
       stateManager: queueRepository,
       taskId: task.id,
       chapterOutcomesByIndex: [],
-      settingsSnapshot: task.settingsSnapshot,
       finalizationDependencies,
     })
 

@@ -10,7 +10,6 @@ type QueueMessageType =
   | "CLEAR_ALL_HISTORY"
   | "REMOVE_TASK"
   | "CANCEL_TASK"
-  | "FORGET_UNOBSERVABLE_OUTPUTS"
   | "RETRY_DESTINATION"
   | "CONTINUE_DOWNLOAD"
   | "UNDO_QUEUE_ACTION"
@@ -76,13 +75,6 @@ export function createBackgroundQueueMessageHandlers(
       return result.kind === "queued"
         ? { success: true, data: { undo: result.undo } }
         : { success: true }
-    },
-    FORGET_UNOBSERVABLE_OUTPUTS: async (message) => {
-      const result =
-        await deps.queueApplicationCommands.forgetUnobservableOutputs(
-          message.payload.taskId
-        )
-      return { success: true, surrendered: result.surrendered }
     },
     RETRY_DESTINATION: async (message) => {
       await deps.queueApplicationCommands.retryDestination(

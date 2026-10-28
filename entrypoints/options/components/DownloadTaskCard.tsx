@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InlineConfirmation } from "@/src/ui/shared/components/InlineConfirmation"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
+import { getCompletedOutputDestination } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 import {
   getDownloadCancelPresentation,
@@ -40,8 +41,11 @@ export interface DownloadTaskCardProps {
   onRemove: (taskId: string) => Promise<void>
 }
 
-function StatusBadge({ status }: { status: DownloadTaskState["status"] }) {
-  const variant = getTaskStatusBadge(status)
+function StatusBadge({ task }: { task: DownloadTaskState }) {
+  const variant = getTaskStatusBadge(
+    task.status,
+    getCompletedOutputDestination(task.chapters)
+  )
 
   return <Badge className={variant.className}>{variant.label}</Badge>
 }
@@ -73,15 +77,8 @@ export function DownloadTaskCard({
   const siteIntegrationName = getDisplayName(task.siteIntegrationId)
   const terminalTimestampLabel = getTerminalTimestampLabel(task.status)
   const isRetried = task.isRetried ?? false
-  const cancelPresentation = getDownloadCancelPresentation(
-    task.errorCategory,
-    task.chapters.some(
-      (chapter) => chapter.errorCategory === "browser_download_unobservable"
-    )
-  )
-  const requiresCancelConfirmation =
-    task.status === "downloading" ||
-    task.activeBlock === "native_output_action_required"
+  const cancelPresentation = getDownloadCancelPresentation()
+  const requiresCancelConfirmation = task.status === "downloading"
 
   const runTaskAction = async (
     action: "retry" | "restart" | "remove",
@@ -178,11 +175,20 @@ export function DownloadTaskCard({
               )}
             </div>
           </div>
-          <StatusBadge status={task.status} />
+          <StatusBadge task={task} />
         </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
+        {task.chapters.some(
+          (chapter) =>
+            chapter.status === "completed" &&
+            chapter.outputDestination === "downloads-api"
+        ) && (
+          <p className="text-sm text-muted-foreground">
+            {t("output_sentToChromeDescription")}
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -214,7 +220,7 @@ export function DownloadTaskCard({
             >
               <div
                 role="row"
-                className="grid min-w-[34rem] grid-cols-[minmax(0,1fr)_90px_100px_minmax(0,1fr)] bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                className="grid min-w-[38rem] grid-cols-[minmax(0,1fr)_140px_100px_minmax(0,1fr)] bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
               >
                 <span role="columnheader">{t("options_chapter")}</span>
                 <span role="columnheader">{t("options_status")}</span>
@@ -223,7 +229,7 @@ export function DownloadTaskCard({
               </div>
               <div
                 role="rowgroup"
-                className="max-h-56 min-w-[34rem] overflow-y-auto"
+                className="max-h-56 min-w-[38rem] overflow-y-auto"
               >
                 {task.chapters.map((chapter, index) => {
                   const showError = shouldShowChapterError(chapter.status)
@@ -231,7 +237,7 @@ export function DownloadTaskCard({
                     <div
                       role="row"
                       key={chapter.id ?? chapter.url ?? `chapter-row-${index}`}
-                      className="grid grid-cols-[minmax(0,1fr)_90px_100px_minmax(0,1fr)] items-center gap-2 border-t px-3 py-2 text-xs"
+                      className="grid grid-cols-[minmax(0,1fr)_140px_100px_minmax(0,1fr)] items-center gap-2 border-t px-3 py-2 text-xs"
                     >
                       <span
                         role="cell"
@@ -244,7 +250,10 @@ export function DownloadTaskCard({
                         <Badge
                           className={chapterStatusBadgeClass(chapter.status)}
                         >
-                          {formatChapterStatusLabel(chapter.status)}
+                          {formatChapterStatusLabel(
+                            chapter.status,
+                            chapter.outputDestination
+                          )}
                         </Badge>
                       </div>
                       <span role="cell" className="font-mono text-[11px]">

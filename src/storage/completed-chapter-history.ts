@@ -45,6 +45,7 @@ export async function reconcileCompletedChapterHistory(
           chapterNumber: chapter.chapterNumber,
           volumeNumber: chapter.volumeNumber,
           downloadedAt: chapter.lastUpdated,
+          outputDestination: chapter.outputDestination,
           fileSize: 0,
           format: task.settingsSnapshot.archiveFormat,
         },

@@ -104,17 +104,16 @@ export class OffscreenJobTerminalCoordinator {
         await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
         continue
       }
-      if (task && isTerminalDownloadTask(task)) {
-        try {
-          await reconcileCompletedChapterHistory(
-            [task],
-            this.finalizationDependencies.historyRepository
-          )
-        } catch (error) {
-          // Queue settlement is durable. History is a repairable projection
-          // and will be reconciled during the next startup or alarm pass.
-          logger.warn("Native output history projection will be retried", error)
-        }
+      if (task) {
+        const chapter = task.chapters.find(
+          (chapter) => chapter.id === effect.chapterId
+        )
+        await settleActiveTaskProgressChapter({
+          taskId: effect.taskId,
+          chapterId: effect.chapterId,
+          chapters: task.chapters,
+          destinationCommitted: chapter?.status === "completed",
+        })
       }
       await this.continueTask(effect.taskId, effect)
       await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
@@ -229,6 +228,7 @@ export class OffscreenJobTerminalCoordinator {
         errorCategory: payload.outcome.errorCategory,
         imagesFailed: payload.outcome.imagesFailed,
         outputs: { requested, committed, failed },
+        outputDestination: "fsa",
       },
     })
     if (settlement.outcome === "rejected") {
@@ -262,6 +262,15 @@ export class OffscreenJobTerminalCoordinator {
       return
     }
     if (!task) return
+    try {
+      await reconcileCompletedChapterHistory(
+        [task],
+        this.finalizationDependencies.historyRepository
+      )
+    } catch (error) {
+      // The queue retains the repair source until history persistence succeeds.
+      logger.warn("Chapter history persistence will be retried", error)
+    }
     if (isTerminalDownloadTask(task)) {
       await notifyTerminalDownloadTask({
         task,
@@ -290,7 +299,6 @@ export class OffscreenJobTerminalCoordinator {
         stateManager: this.queueRepository,
         taskId,
         chapterOutcomesByIndex: outcomes,
-        settingsSnapshot: task.settingsSnapshot,
         finalizationDependencies: this.finalizationDependencies,
       })
       if (finalization.finalized) {

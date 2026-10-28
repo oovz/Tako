@@ -59,7 +59,6 @@ const settlement = {
   requested: 3,
   completed: 2,
   interrupted: 1,
-  surrendered: 0,
   lastSuccessfulDownloadId: 42,
   now: 10,
 }
@@ -138,92 +137,20 @@ describe("applyNativeOutputSettlement", () => {
     ).toEqual({ outcome: "conflict", reason: "active-attempt-conflict" })
   })
 
-  it("settles surrendered outputs as unknown instead of complete or interrupted", () => {
-    const surrenderedSettlement = {
-      ...settlement,
-      requested: 3,
-      completed: 1,
-      interrupted: 0,
-      surrendered: 2,
-    }
-    const applied = applyNativeOutputSettlement(state(), surrenderedSettlement)
-    expect(applied.result).toMatchObject({
-      outcome: "applied",
-      chapter: {
-        status: "partial_success",
-        errorCategory: "browser_download_unobservable",
-        outputs: { requested: 3, committed: 1, failed: 2 },
-        nativeOutputSettlement: {
-          completed: 1,
-          interrupted: 0,
-          surrendered: 2,
-        },
-      },
-    })
-    if (applied.result.outcome !== "applied") {
-      throw new Error("expected settlement")
-    }
-    expect(applied.result.chapter.errorMessage).toContain("2")
-    expect(applied.result.chapter.errorMessage).toContain(
-      "Chrome cleared their download history"
-    )
-
-    const replay = applyNativeOutputSettlement(applied.next, {
-      ...surrenderedSettlement,
-      now: 999,
-    })
-    expect(replay.result).toMatchObject({ outcome: "already_applied" })
-  })
-
-  it("marks an all-surrendered chapter as failed with the unobservable category", () => {
-    const applied = applyNativeOutputSettlement(state(), {
-      ...settlement,
-      requested: 2,
-      completed: 0,
-      interrupted: 0,
-      surrendered: 2,
-    })
-    expect(applied.result).toMatchObject({
-      outcome: "applied",
-      chapter: {
-        status: "failed",
-        errorCategory: "browser_download_unobservable",
-        outputs: { requested: 2, committed: 0, failed: 2 },
-      },
-      task: {
-        status: "failed",
-        errorCategory: "browser_download_unobservable",
-      },
-    })
-  })
-
-  it("prefers the unobservable category when interruption and surrender coexist", () => {
-    const applied = applyNativeOutputSettlement(state(), {
-      ...settlement,
-      requested: 4,
-      completed: 1,
-      interrupted: 1,
-      surrendered: 2,
-    })
-    expect(applied.result).toMatchObject({
-      outcome: "applied",
-      chapter: {
-        status: "partial_success",
-        errorCategory: "browser_download_unobservable",
-        outputs: { requested: 4, committed: 1, failed: 3 },
-      },
-    })
-  })
-
-  it("rejects totals that do not include surrendered", () => {
+  it("completes a chapter when every requested file is acknowledged", () => {
     expect(
       applyNativeOutputSettlement(state(), {
         ...settlement,
-        requested: 3,
-        completed: 2,
+        completed: 3,
         interrupted: 0,
-        surrendered: 2,
       }).result
-    ).toEqual({ outcome: "conflict", reason: "invalid-totals" })
+    ).toMatchObject({
+      outcome: "applied",
+      chapter: {
+        status: "completed",
+        outputDestination: "downloads-api",
+        outputs: { requested: 3, committed: 3, failed: 0 },
+      },
+    })
   })
 })

@@ -4,6 +4,7 @@
  * These types define the UI state for the Command Center Side Panel.
  */
 
+import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import type { ChapterState } from "@/src/types/tab-state"
 
 export interface SidePanelChapter {
@@ -17,6 +18,7 @@ export interface SidePanelChapter {
   volumeLabel?: string
   locked?: boolean
   downloaded?: boolean
+  outputDestination?: DownloadedChapterRecord["outputDestination"]
   selected: boolean
   url: string
   status: ChapterState["status"]

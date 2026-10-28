@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { resolveWritableDownloadRoot } from "@/entrypoints/offscreen/download-runtime-helpers"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
 import {
@@ -131,6 +132,26 @@ describe("File System Access IndexedDB lifecycle", () => {
     harness.requests[0].onsuccess?.()
     harness.transactions[0].oncomplete?.()
     await expect(pending).resolves.toBe(handle)
+  })
+
+  it("resolves an offscreen folder by dispatch identity with runtime-only Chrome APIs", async () => {
+    const harness = createIndexedDbHarness()
+    vi.stubGlobal("indexedDB", harness.indexedDb)
+    vi.stubGlobal("chrome", { runtime: {} })
+    const queryPermission = vi.fn(async () => "granted")
+    const handle = { name: "Dispatched folder", queryPermission }
+    const pending = resolveWritableDownloadRoot("dispatched-id")
+    await vi.waitFor(() => expect(harness.requests).toHaveLength(1))
+    expect(harness.objectStore.get).toHaveBeenCalledExactlyOnceWith(
+      "dispatched-id"
+    )
+    harness.requests[0].result = handle
+    harness.requests[0].onsuccess?.()
+    harness.transactions[0].oncomplete?.()
+    await expect(pending).resolves.toBe(handle)
+    expect(queryPermission).toHaveBeenCalledExactlyOnceWith({
+      mode: "readwrite",
+    })
   })
 
   it("reports a missing selected capability without reading another key", async () => {

@@ -176,41 +176,52 @@ export const OffscreenChapterSettingsSnapshotSchema = z.strictObject({
   siteIntegrationId: z.string().min(1),
 })
 
-const OffscreenDownloadChapterPayloadSchema = z.strictObject({
-  jobId: z.string().min(1),
-  attempt: z.number().int().nonnegative(),
-  taskId: z.string().min(1),
-  fingerprint: OffscreenJobFingerprintSchema,
-  seriesKey: z.string().min(1),
-  book: z.strictObject({
-    siteIntegrationId: z.string().min(1),
-    seriesTitle: z.string().min(1),
-    coverUrl: PublicHttpsUrlSchema.optional(),
-    metadata: SeriesMetadataSnapshotSchema.optional(),
-  }),
-  chapter: z.strictObject({
-    id: z.string().min(1),
-    title: z.string().min(1),
-    url: z.string().url(),
-    index: z.number().int().positive(),
-    chapterLabel: z.string().optional(),
-    chapterNumber: z.number().optional(),
-    volumeId: z.string().optional(),
-    volumeNumber: z.number().optional(),
-    volumeLabel: z.string().optional(),
-    language: z.string().optional(),
-    resolvedPath: z.string().min(1),
-  }),
-  settingsSnapshot: OffscreenChapterSettingsSnapshotSchema,
-  saveMode: z.enum(["fsa", "downloads-api"]),
-  notBefore: z.number().finite().nonnegative().optional(),
-  integrationContext: z
-    .strictObject({
-      schemaVersion: z.number().int().positive(),
-      data: z.record(z.string(), z.json()),
-    })
-    .optional(),
-})
+const OffscreenDownloadChapterPayloadSchema = z
+  .strictObject({
+    jobId: z.string().min(1),
+    attempt: z.number().int().nonnegative(),
+    taskId: z.string().min(1),
+    fingerprint: OffscreenJobFingerprintSchema,
+    seriesKey: z.string().min(1),
+    book: z.strictObject({
+      siteIntegrationId: z.string().min(1),
+      seriesTitle: z.string().min(1),
+      coverUrl: PublicHttpsUrlSchema.optional(),
+      metadata: SeriesMetadataSnapshotSchema.optional(),
+    }),
+    chapter: z.strictObject({
+      id: z.string().min(1),
+      title: z.string().min(1),
+      url: z.string().url(),
+      index: z.number().int().positive(),
+      chapterLabel: z.string().optional(),
+      chapterNumber: z.number().optional(),
+      volumeId: z.string().optional(),
+      volumeNumber: z.number().optional(),
+      volumeLabel: z.string().optional(),
+      language: z.string().optional(),
+      resolvedPath: z.string().min(1),
+    }),
+    settingsSnapshot: OffscreenChapterSettingsSnapshotSchema,
+    saveMode: z.enum(["fsa", "downloads-api"]),
+    directoryHandleId: z.string().min(1).optional(),
+    notBefore: z.number().finite().nonnegative().optional(),
+    integrationContext: z
+      .strictObject({
+        schemaVersion: z.number().int().positive(),
+        data: z.record(z.string(), z.json()),
+      })
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.saveMode === "fsa" && value.directoryHandleId === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["directoryHandleId"],
+        message: "FSA dispatch requires a directory handle ID",
+      })
+    }
+  })
 
 const OffscreenParseSeriesHtmlPayloadSchema = z.strictObject({
   requestId: z.string().uuid(),
@@ -557,25 +568,6 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
-  FORGET_UNOBSERVABLE_OUTPUTS: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("FORGET_UNOBSERVABLE_OUTPUTS"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: z.union([
-      z.strictObject({
-        success: z.literal(true),
-        surrendered: z.number().int().nonnegative(),
-      }),
-      RuntimeFailureSchema,
-    ]),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["sidepanel", "options"],
-    readiness: "runtime-ready",
-  }),
   RETRY_DESTINATION: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),
@@ -731,7 +723,6 @@ export const runtimeMessageRegistry = {
           "interrupted",
           "surrendered",
         ]),
-        terminalOutcome: z.enum(["complete", "interrupted"]).optional(),
       }),
       z.strictObject({
         success: z.literal(true),

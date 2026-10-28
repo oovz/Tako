@@ -8,6 +8,8 @@ import { QueueRepository } from "@/src/storage/queue-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
+const chromeI18n = chrome.i18n
+
 vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
@@ -28,6 +30,7 @@ function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
     title: overrides.title ?? "Chapter 1",
     index: overrides.index ?? 1,
     status: overrides.status ?? "completed",
+    outputDestination: overrides.outputDestination,
     lastUpdated: overrides.lastUpdated ?? Date.now(),
   }
 }
@@ -73,6 +76,7 @@ describe("notification content templates", () => {
     windowsUpdate.mockResolvedValue(undefined)
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       runtime: { getURL: runtimeGetUrl },
       storage: {
         local: { get: vi.fn().mockResolvedValue({ downloadQueue: [] }) },
@@ -157,7 +161,61 @@ describe("notification content templates", () => {
   })
 
   describe("completed task notification", () => {
-    it('uses title "Download complete" with series title and chapter count', () => {
+    it.each([
+      {
+        destinations: ["downloads-api"],
+        title: "Sent to Chrome",
+        count: "1/1 chapters",
+        chromeHelp: true,
+      },
+      {
+        destinations: ["fsa"],
+        title: "Saved to folder",
+        count: "1/1 chapters",
+        chromeHelp: false,
+      },
+      {
+        destinations: [undefined],
+        title: "Completed",
+        count: "1/1 chapters",
+        chromeHelp: false,
+      },
+      {
+        destinations: ["downloads-api", "fsa"],
+        title: "Completed",
+        count: "2/2 chapters",
+        chromeHelp: false,
+      },
+      {
+        destinations: ["downloads-api", undefined],
+        title: "Completed",
+        count: "2/2 chapters",
+        chromeHelp: false,
+      },
+    ] as const)(
+      "describes completed output as $title for $destinations",
+      async ({ destinations, title, count, chromeHelp }) => {
+        const task = makeTask({
+          seriesTitle: "Known Series",
+          chapters: destinations.map((outputDestination, index) =>
+            makeChapter({ id: `ch-${index}`, outputDestination })
+          ),
+        })
+        await new NotificationService().notifyTaskCompleted({
+          task,
+          notificationsEnabled: true,
+        })
+        expect(notificationsCreate).toHaveBeenCalledWith(
+          `task_complete_${task.id}`,
+          expect.objectContaining({
+            title,
+            message: `Known Series: ${count}${chromeHelp ? "\nChrome manages the remaining transfer. Check Chrome Downloads for progress and results." : ""}`,
+          })
+        )
+      }
+    )
+
+    it("uses the generic completion title with series title and chapter count", () => {
       const service = new NotificationService()
       const task = makeTask({
         seriesTitle: "Kemutai Hanashi",
@@ -181,7 +239,7 @@ describe("notification content templates", () => {
       expect(notificationOptions.iconUrl).toBe(
         "chrome-extension://test/icon/128.png"
       )
-      expect(notificationOptions.title).toBe("Download complete")
+      expect(notificationOptions.title).toBe("Completed")
       expect(notificationOptions.message).toContain("Kemutai Hanashi")
       expect(notificationOptions.message).toContain("3")
       expect(notificationOptions.requireInteraction).toBe(false)
@@ -272,7 +330,7 @@ describe("notification content templates", () => {
 
       expect(notificationsCreate).toHaveBeenCalledTimes(1)
       const [, options] = notificationsCreate.mock.calls[0]
-      expect(options.title).toBe("Download complete")
+      expect(options.title).toBe("Completed")
       expect(options.message).toContain("Canceled Series")
     })
 

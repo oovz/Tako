@@ -1,84 +1,79 @@
-import { mkdir, readFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 
 import { test, expect } from "./fixtures/extension"
 
-const outputBytes = 32 * 1024 * 1024
+const outputBytes = 4096
 const outputByte = 73
 
 test("retains Blob output through acceptance and releases it after Chrome consumption stops", async ({
   context,
   extensionId,
   page,
-}, testInfo) => {
+}) => {
   await page.goto(`chrome-extension://${extensionId}/options.html`)
-  const directory = testInfo.outputPath("blob-downloads")
-  await mkdir(directory, { recursive: true })
   const browser = await context.newCDPSession(page)
   await browser.send("Browser.setDownloadBehavior", {
-    behavior: "allow",
-    downloadPath: directory,
+    behavior: "default",
     eventsEnabled: true,
   })
 
-  for (const action of ["complete", "cancel", "erase"] as const) {
-    const accepted = await page.evaluate(
-      async ({ action, outputBytes, outputByte }) => {
+  const results = await page.evaluate(
+    async ({ outputBytes, outputByte }) => {
+      const results = []
+      for (const action of ["complete", "cancel", "erase"] as const) {
         const url = URL.createObjectURL(
           new Blob([new Uint8Array(outputBytes).fill(outputByte)])
         )
-        let pause: Promise<void> | undefined
-        const onCreated = (item: chrome.downloads.DownloadItem) => {
-          if (item.url === url) pause = chrome.downloads.pause(item.id)
-        }
-        chrome.downloads.onCreated.addListener(onCreated)
-        try {
-          const id = await chrome.downloads.download({
-            url,
-            filename: `${action}.bin`,
-            saveAs: false,
-          })
-          if (!pause) throw new Error("Download creation was not observed")
-          await pause
-          const [item] = await chrome.downloads.search({ id })
-          return { id, url, item }
-        } finally {
-          chrome.downloads.onCreated.removeListener(onCreated)
-        }
-      },
-      { action, outputBytes, outputByte }
-    )
-    expect(accepted.item).toMatchObject({
-      state: "in_progress",
-      paused: true,
-      bytesReceived: 0,
-      totalBytes: outputBytes,
-    })
-    if (action === "complete") {
-      await page.evaluate((id) => chrome.downloads.resume(id), accepted.id)
-      await expect
-        .poll(
-          async () =>
-            await page.evaluate(
-              async (id) => (await chrome.downloads.search({ id }))[0]?.state,
-              accepted.id
-            )
-        )
-        .toBe("complete")
-    }
-    const stopped = await page.evaluate(
-      async ({ action, id, url }) => {
+        const held = Promise.withResolvers<number>()
+        let suggest:
+          | ((suggestion?: chrome.downloads.FilenameSuggestion) => void)
+          | undefined
         const events: string[] = []
+        let downloadId: number | undefined
+        const completed = Promise.withResolvers<void>()
+        const onFilename = (
+          item: chrome.downloads.DownloadItem,
+          callback: (suggestion?: chrome.downloads.FilenameSuggestion) => void
+        ) => {
+          if (item.url !== url) {
+            callback()
+            return
+          }
+          suggest = callback
+          held.resolve(item.id)
+          return true
+        }
         const onChanged = (delta: chrome.downloads.DownloadDelta) => {
-          if (delta.id === id && delta.state?.current === "interrupted")
-            events.push("interrupted")
+          if (delta.id !== downloadId) return
+          const state = delta.state?.current
+          if (state === "complete" || state === "interrupted")
+            events.push(state)
+          if (state === "complete") completed.resolve()
         }
-        const onErased = (erasedId: number) => {
-          if (erasedId === id) events.push("erased")
+        const onErased = (id: number) => {
+          if (id === downloadId) events.push("erased")
         }
+        chrome.downloads.onDeterminingFilename.addListener(onFilename)
         chrome.downloads.onChanged.addListener(onChanged)
         chrome.downloads.onErased.addListener(onErased)
         try {
+          const [id, heldId] = await Promise.all([
+            chrome.downloads.download({
+              url,
+              filename: `${action}.bin`,
+              saveAs: false,
+            }),
+            held.promise,
+          ])
+          downloadId = id
+          const [accepted] = await chrome.downloads.search({ id })
+          const readableBytes = (await (await fetch(url)).arrayBuffer())
+            .byteLength
           let erasedIds: number[] | undefined
+          if (action === "complete") {
+            suggest!()
+            await completed.promise
+          }
           if (action === "cancel") await chrome.downloads.cancel(id)
           if (action === "erase")
             erasedIds = await chrome.downloads.erase({ id })
@@ -90,30 +85,50 @@ test("retains Blob output through acceptance and releases it after Chrome consum
           } catch {
             readable = false
           }
-          return { items, erasedIds, events, readable }
+          results.push({
+            action,
+            id,
+            heldId,
+            accepted,
+            readableBytes,
+            items,
+            erasedIds,
+            events,
+            readable,
+          })
         } finally {
+          chrome.downloads.onDeterminingFilename.removeListener(onFilename)
           chrome.downloads.onChanged.removeListener(onChanged)
           chrome.downloads.onErased.removeListener(onErased)
+          URL.revokeObjectURL(url)
         }
-      },
-      { action, id: accepted.id, url: accepted.url }
-    )
-    expect(stopped.readable).toBe(false)
-    if (action === "complete") {
-      expect(await readFile(stopped.items[0]!.filename)).toEqual(
+      }
+      return results
+    },
+    { outputBytes, outputByte }
+  )
+
+  for (const result of results) {
+    expect(result.id).toBe(result.heldId)
+    expect(result.accepted.state).toBe("in_progress")
+    expect(result.readableBytes).toBe(outputBytes)
+    expect(result.readable).toBe(false)
+    if (result.action === "complete") {
+      expect(result.items[0]?.state).toBe("complete")
+      expect(await readFile(result.items[0]!.filename)).toEqual(
         Buffer.alloc(outputBytes, outputByte)
       )
-    } else if (action === "cancel") {
-      expect(stopped.items[0]).toMatchObject({
+    } else if (result.action === "cancel") {
+      expect(result.items[0]).toMatchObject({
         state: "interrupted",
         error: "USER_CANCELED",
         canResume: false,
       })
-      expect(stopped.events).toEqual(["interrupted"])
+      expect(result.events).toEqual(["interrupted"])
     } else {
-      expect(stopped.erasedIds).toEqual([accepted.id])
-      expect(stopped.items).toEqual([])
-      expect(stopped.events).toEqual(["interrupted", "erased"])
+      expect(result.erasedIds).toEqual([result.id])
+      expect(result.items).toEqual([])
+      expect(result.events).toEqual(["interrupted", "erased"])
     }
   }
 })

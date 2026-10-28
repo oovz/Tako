@@ -21,6 +21,8 @@ const QueueTaskSummaryStorageSchema = z.object({
   siteIntegration: z.string(),
   coverUrl: z.unknown().optional(),
   status: DownloadTaskStatusSchema,
+  outputDestination: z.enum(["downloads-api", "fsa"]).optional(),
+  outputMode: z.enum(["downloads-api", "fsa"]).optional(),
   activeBlock: z
     .enum([
       "destination_action_required",
@@ -39,7 +41,6 @@ const QueueTaskSummaryStorageSchema = z.object({
     completed: z.number().optional(),
   }),
   failureCategory: z.unknown().optional(),
-  hasUnobservableOutput: z.unknown().optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
   lastSuccessfulDownloadId: z.unknown().optional(),
@@ -58,6 +59,8 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
       : undefined,
     status: data.status,
     activeBlock: data.activeBlock,
+    outputDestination: data.outputDestination,
+    outputMode: data.outputMode,
     chapters: {
       total: data.chapters.total,
       completed: data.chapters.completed,
@@ -68,10 +71,6 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
       completed: data.timestamps.completed,
     },
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
-    hasUnobservableOutput:
-      typeof data.hasUnobservableOutput === "boolean"
-        ? data.hasUnobservableOutput
-        : undefined,
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:
       typeof data.isRetryTask === "boolean" ? data.isRetryTask : undefined,

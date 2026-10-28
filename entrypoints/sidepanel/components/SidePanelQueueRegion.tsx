@@ -21,7 +21,6 @@ interface SidePanelQueueRegionProps {
   onRefresh: () => Promise<void>
   isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
-  forgettingTaskIds: Set<string>
   retryingTaskIds: Set<string>
   restartingTaskIds: Set<string>
   removingTaskIds: Set<string>
@@ -29,7 +28,6 @@ interface SidePanelQueueRegionProps {
   activeTaskProgress: ActiveTaskProgressState | null
   showActiveProgress: boolean
   onCancelTask: (taskId: string) => CancelTaskResult | Promise<CancelTaskResult>
-  onForgetUnobservable: (taskId: string) => void | Promise<void>
   onRetryFailed: (taskId: string) => void | Promise<void>
   onRestartTask: (taskId: string) => void | Promise<void>
   onMoveTaskToTop: (taskId: string) => void | Promise<void>
@@ -45,7 +43,6 @@ export function SidePanelQueueRegion({
   onRefresh,
   isInlineSelectionOpen,
   cancelingTaskIds,
-  forgettingTaskIds,
   retryingTaskIds,
   restartingTaskIds,
   removingTaskIds,
@@ -53,7 +50,6 @@ export function SidePanelQueueRegion({
   activeTaskProgress,
   showActiveProgress,
   onCancelTask,
-  onForgetUnobservable,
   onRetryFailed,
   onRestartTask,
   onMoveTaskToTop,
@@ -103,9 +99,7 @@ export function SidePanelQueueRegion({
       showActiveProgress={task.status === "downloading" && showActiveProgress}
       firstQueuedTaskId={firstQueuedTaskId}
       onCancelTask={onCancelTask}
-      onForgetUnobservable={onForgetUnobservable}
       cancelingTaskIds={cancelingTaskIds}
-      forgettingTaskIds={forgettingTaskIds}
       retryingTaskIds={retryingTaskIds}
       restartingTaskIds={restartingTaskIds}
       removingTaskIds={removingTaskIds}

@@ -1,3 +1,4 @@
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import logger from "@/src/runtime/logger"
 import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -8,75 +9,18 @@ import type { HistoryRepository } from "@/src/storage/history-repository"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ChapterDispatchOutcome } from "@/src/domain/queue/task-lifecycle"
 
-function resolvePersistedFormat(
-  settingsSnapshot: DownloadTaskState["settingsSnapshot"]
-): "cbz" | "zip" | "none" {
-  return settingsSnapshot.archiveFormat
-}
-
 export interface DownloadQueueFinalizationDependencies {
   settingsRepository: Pick<SettingsRepository, "getSettings">
   historyRepository: Pick<
     HistoryRepository,
-    | "markChapterAsDownloaded"
-    | "getDownloadedChapters"
-    | "restoreChapterFromCompletedTask"
+    "getDownloadedChapters" | "restoreChapterFromCompletedTask"
   >
-}
-
-export async function persistCompletedChapter(
-  task: DownloadTaskState,
-  chapterId: string,
-  persistedFormat: "cbz" | "zip" | "none",
-  deps: DownloadQueueFinalizationDependencies
-): Promise<void> {
-  const chapter = task.chapters.find(
-    (taskChapter) => taskChapter.id === chapterId
-  )
-  if (!chapter) {
-    return
-  }
-
-  await deps.historyRepository.markChapterAsDownloaded({
-    siteIntegrationId: task.siteIntegrationId,
-    chapterId: chapter.id,
-    url: chapter.url,
-    title: chapter.title,
-    seriesId: task.mangaId,
-    seriesTitle: task.seriesTitle,
-    chapterNumber: chapter.chapterNumber,
-    volumeNumber: chapter.volumeNumber,
-    downloadedAt: Date.now(),
-    fileSize: 0,
-    format: persistedFormat,
-  })
-}
-
-async function persistCompletedChapters(
-  task: DownloadTaskState,
-  chapterOutcomes: ChapterDispatchOutcome[],
-  persistedFormat: "cbz" | "zip" | "none",
-  deps: DownloadQueueFinalizationDependencies
-): Promise<void> {
-  for (const outcome of chapterOutcomes) {
-    if (outcome.status !== "completed") {
-      continue
-    }
-
-    await persistCompletedChapter(
-      task,
-      outcome.chapterId,
-      persistedFormat,
-      deps
-    )
-  }
 }
 
 export async function finalizeDownloadTaskAfterDispatch(input: {
   stateManager: QueueRepository
   taskId: string
   chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined>
-  settingsSnapshot: DownloadTaskState["settingsSnapshot"]
   dispatchLease?: DispatchLeaseAuthority
   finalizationDependencies: DownloadQueueFinalizationDependencies
 }): Promise<
@@ -88,7 +32,6 @@ export async function finalizeDownloadTaskAfterDispatch(input: {
       finalized: true
     }
 > {
-  const persistedFormat = resolvePersistedFormat(input.settingsSnapshot)
   const finalization = await input.stateManager.finalizeDownloadTask({
     taskId: input.taskId,
     chapterOutcomesByIndex: input.chapterOutcomesByIndex,
@@ -98,11 +41,9 @@ export async function finalizeDownloadTaskAfterDispatch(input: {
 
   if (finalization.outcome === "applied") {
     try {
-      await persistCompletedChapters(
-        finalization.task,
-        finalization.chapterOutcomes,
-        persistedFormat,
-        input.finalizationDependencies
+      await reconcileCompletedChapterHistory(
+        [finalization.task],
+        input.finalizationDependencies.historyRepository
       )
     } catch (error) {
       logger.warn(

@@ -224,6 +224,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
         conflictPolicy: "uniquify",
       },
       saveMode: "fsa",
+      directoryHandleId: "selected-id",
       integrationContext: {
         schemaVersion: 1,
         data: { taskId: "task-123" },
@@ -258,7 +259,9 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
         outcome: { status: "completed" },
       })
     )
-    expect(loadDownloadRootHandle).toHaveBeenCalledTimes(1)
+    expect(loadDownloadRootHandle).toHaveBeenCalledExactlyOnceWith(
+      "selected-id"
+    )
     expect(queryFsaPermission).toHaveBeenCalledWith(expect.anything(), true)
     expect(writeBlobToPath).toHaveBeenCalled()
     expect(
@@ -329,6 +332,7 @@ describe("NONE format + FSAA custom folder contract (behavior-based)", () => {
         archiveFormat: "none",
       },
       saveMode: "fsa",
+      directoryHandleId: "selected-id",
       integrationContext: {
         schemaVersion: 1,
         data: { taskId: "task-123" },

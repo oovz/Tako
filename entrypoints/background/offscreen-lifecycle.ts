@@ -170,7 +170,7 @@ export async function refreshLivenessAlarmForDurableWork(
       stateManager.getQueue(),
       stateManager.getActiveDispatchLease(),
       nativeOutputCoordinator.getLiveTaskIds(),
-      nativeOutputCoordinator.hasReconcilableLiveDependencies(),
+      nativeOutputCoordinator.hasLiveDependencies(),
     ])
   const nativeTaskIds = new Set(nativeOutputTaskIds)
   const hasOffscreenExecutingTask = queue.some(

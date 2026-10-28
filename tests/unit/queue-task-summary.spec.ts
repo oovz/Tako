@@ -163,24 +163,39 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("completedAt")
   })
 
-  it("projects an explicit unobservable-output signal from every chapter", () => {
-    const task = makeTask({
-      status: "downloading",
-      errorCategory: "network_unavailable",
-      chapters: [
-        makeChapter("c1", "downloading", {
-          errorCategory: "network_unavailable",
-        }),
-        makeChapter("c2", "downloading", {
-          errorCategory: "browser_download_unobservable",
-        }),
-      ],
+  it("projects only shared completed destination evidence", () => {
+    const chromeChapter = makeChapter("c1", "completed", {
+      outputDestination: "downloads-api",
     })
+    const folderChapter = makeChapter("c2", "completed", {
+      outputDestination: "fsa",
+    })
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [chromeChapter] }))
+        .outputDestination
+    ).toBe("downloads-api")
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [folderChapter] }))
+        .outputDestination
+    ).toBe("fsa")
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [chromeChapter, folderChapter] }))
+        .outputDestination
+    ).toBeUndefined()
+    expect(
+      toQueueTaskSummary(
+        makeTask({ chapters: [chromeChapter, makeChapter("c2", "completed")] })
+      ).outputDestination
+    ).toBeUndefined()
+  })
 
-    expect(toQueueTaskSummary(task)).toMatchObject({
-      failureCategory: "network_unavailable",
-      hasUnobservableOutput: true,
-    })
+  it("projects the effective active output mode independently of completed output", () => {
+    const task = makeTask()
+    task.settingsSnapshot.destination = "file-system-access"
+    expect(toQueueTaskSummary(task).outputMode).toBe("fsa")
+    task.destinationOverride = "downloads-api"
+    expect(toQueueTaskSummary(task).outputMode).toBe("downloads-api")
+    expect(toQueueTaskSummary(task).outputDestination).toBeUndefined()
   })
 
   it("never infers a presentation category by parsing technical strings", () => {

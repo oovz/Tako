@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "停止此任务剩余的处理。Chrome 已接受的下载会继续，请在 Chrome 下载页面管理。"
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "要忘记此任务的所有待处理下载吗？"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "无法再检查浏览器下载。忘记它会释放此任务中 Tako 的所有待处理输出；文件可能不完整。"
-  },
-  "sidepanel_forgetDownload": {
-    "message": "忘记所有下载"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下载",
     "placeholders": {
@@ -466,7 +457,7 @@
     "message": "磁盘空间不足。"
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "浏览器未能完成输出文件的保存。"
+    "message": "Chrome 未能接收输出文件。"
   },
   "downloadError_browserDownloadUnobservable": {
     "message": "下载历史已删除，无法确认浏览器下载结果。"
@@ -1497,7 +1488,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "失败（已保存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "失败（已处理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1508,7 +1499,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "已取消（已保存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "已取消（已处理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1538,7 +1529,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "部分完成（已保存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "部分完成（已处理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1746,18 +1737,6 @@
   "background_settingsSyncFailed": {
     "message": "无法将设置同步到状态"
   },
-  "status_nativeOutputActionRequired": {
-    "message": "需要确认下载结果"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "正在忘记待处理下载…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "已忘记 $1 个待处理下载。队列将继续。"
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "无法忘记待处理下载。"
-  },
   "startDownloadError_staleSeriesContext": {
     "message": "系列上下文已过期。请刷新页面后重试。"
   },
@@ -1856,5 +1835,39 @@
   },
   "queue_readFailed": { "message": "无法加载队列和任务历史记录。" },
   "queue_readStale": { "message": "队列和任务历史记录可能不是最新的。" },
-  "common_retry": { "message": "重试" }
+  "common_retry": { "message": "重试" },
+  "status_sentToChrome": {
+    "message": "已发送到 Chrome"
+  },
+  "status_savedToFolder": {
+    "message": "已保存到文件夹"
+  },
+  "status_processed": {
+    "message": "已处理"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "正在发送到 Chrome"
+  },
+  "progressStage_savingToFolder": {
+    "message": "正在保存到文件夹"
+  },
+  "output_sentToChromeDescription": {
+    "message": "后续传输由 Chrome 管理。请在 Chrome 下载内容中查看进度和结果。"
+  },
+  "options_taskSentToChrome": {
+    "message": "已发送到 Chrome（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskSavedToFolder": {
+    "message": "已保存到文件夹（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  }
 }

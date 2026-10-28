@@ -1,4 +1,3 @@
-import type { Chapter } from "@/src/types/chapter"
 import {
   writeBlobToPath,
   type WriteBlobToPathResult,
@@ -45,18 +44,15 @@ export async function writeFsaOutput(input: {
 export async function resolveChapterWritableRoot(
   runtime: ChapterProcessingRuntime,
   input: {
-    taskId: string
-    chapter: Chapter
-    totalImages: number
+    directoryHandleId: string | undefined
     abortSignal?: AbortSignal
   }
 ): Promise<FileSystemDirectoryHandle> {
   try {
-    return await runtime.resolveWritableDownloadRoot({
-      taskId: input.taskId,
-      chapter: input.chapter,
-      totalImages: input.totalImages,
-    })
+    if (!input.directoryHandleId) {
+      throw new Error("Custom folder is not configured")
+    }
+    return await runtime.resolveWritableDownloadRoot(input.directoryHandleId)
   } catch (error) {
     if (input.abortSignal?.aborted) {
       throw new Error("job-cancelled", { cause: error })

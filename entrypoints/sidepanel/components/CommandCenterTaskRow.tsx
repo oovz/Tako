@@ -23,15 +23,12 @@ import { useI18n } from "@/src/ui/shared/hooks/useI18n"
 interface CommandCenterTaskRowProps {
   task: QueueTaskSummary
   isCanceling: boolean
-  isForgettingUnobservable: boolean
   isRetrying: boolean
   isRestarting: boolean
   isRemoving: boolean
   isMoving: boolean
   isConfirmingCancel: boolean
-  isConfirmingForget: boolean
   cancelError: string | null
-  forgetError: string | null
   coverFailed: boolean
   activeTaskProgress: ActiveTaskProgressState | null | undefined
   showActiveProgress: boolean
@@ -39,12 +36,8 @@ interface CommandCenterTaskRowProps {
   onBeginCancel: (taskId: string) => void
   onConfirmCancel: (taskId: string) => void
   onDismissCancel: () => void
-  onBeginForgetUnobservable?: (taskId: string) => void
-  onConfirmForgetUnobservable?: (taskId: string) => void
-  onDismissForgetUnobservable?: () => void
   onCoverError: (taskId: string) => void
   onCancelTask?: (taskId: string) => void
-  onForgetUnobservable?: (taskId: string) => void
   onRetryFailed?: (taskId: string) => void
   onRestartTask?: (taskId: string) => void
   onMoveTaskToTop?: (taskId: string) => void
@@ -54,15 +47,12 @@ interface CommandCenterTaskRowProps {
 export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
   task,
   isCanceling,
-  isForgettingUnobservable,
   isRetrying,
   isRestarting,
   isRemoving,
   isMoving,
   isConfirmingCancel,
-  isConfirmingForget,
   cancelError,
-  forgetError,
   coverFailed,
   activeTaskProgress,
   showActiveProgress,
@@ -70,12 +60,8 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
   onBeginCancel,
   onConfirmCancel,
   onDismissCancel,
-  onBeginForgetUnobservable,
-  onConfirmForgetUnobservable,
-  onDismissForgetUnobservable,
   onCoverError,
   onCancelTask,
-  onForgetUnobservable,
   onRetryFailed,
   onRestartTask,
   onMoveTaskToTop,
@@ -87,34 +73,22 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
     task,
     !!onRetryFailed
   )
-  const {
-    canCancel,
-    canForgetUnobservable,
-    isTaskHistory,
-    canRestart,
-    canMoveToTop,
-    canRemove,
-  } = getTaskActionAvailability(task, {
-    hasCancelHandler: !!onCancelTask,
-    hasForgetUnobservableHandler: !!onForgetUnobservable,
-    isCanceling,
-    hasRestartHandler: !!onRestartTask,
-    hasMoveToTopHandler: !!onMoveTaskToTop,
-    hasRemoveHandler: !!onRemoveTask,
-    isFirstQueuedTask,
-  })
+  const { canCancel, isTaskHistory, canRestart, canMoveToTop, canRemove } =
+    getTaskActionAvailability(task, {
+      hasCancelHandler: !!onCancelTask,
+      isCanceling,
+      hasRestartHandler: !!onRestartTask,
+      hasMoveToTopHandler: !!onMoveTaskToTop,
+      hasRemoveHandler: !!onRemoveTask,
+      isFirstQueuedTask,
+    })
 
   const isActive = task.status === "downloading"
-  const cancelPresentation = getDownloadCancelPresentation(
-    task.failureCategory,
-    task.hasUnobservableOutput
-  )
+  const cancelPresentation = getDownloadCancelPresentation()
   const { showProgressInRow, activeRowChapterCount } =
     getTaskProgressPresentation(task, activeTaskProgress, showActiveProgress)
 
-  // Spec: "Per-image progress bar MUST remain visible for at least 500ms to
-  // prevent flickering on fast downloads." Track when progress first becomes
-  // visible and delay hiding until the minimum visibility window has elapsed.
+  // Keep the progress display visible for at least 500ms to avoid flicker.
   const progressVisibleSinceRef = useRef<number | null>(null)
   const [progressVisible, setProgressVisible] = useState(false)
   useEffect(() => {
@@ -181,22 +155,6 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
           />
         )}
 
-        {isConfirmingForget && (
-          <InlineConfirmation
-            title={cancelPresentation.title}
-            description={cancelPresentation.description}
-            confirmLabel={cancelPresentation.confirmLabel}
-            pendingLabel={t("sidepanel_forgettingDownload")}
-            cancelLabel={t("common_no")}
-            isPending={isForgettingUnobservable}
-            errorMessage={forgetError}
-            onConfirm={() => {
-              onConfirmForgetUnobservable?.(task.id)
-            }}
-            onCancel={onDismissForgetUnobservable ?? onDismissCancel}
-          />
-        )}
-
         {/* Thumbnail */}
         <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50 transition-transform duration-200 group-hover:scale-105">
           <img
@@ -241,7 +199,11 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
               <span className="flex items-center gap-1">
                 {icon}
                 <span className="capitalize">
-                  {getTaskStatusLabel(task.status, task.activeBlock)}
+                  {getTaskStatusLabel(
+                    task.status,
+                    task.activeBlock,
+                    task.outputDestination
+                  )}
                 </span>
               </span>
               <span>·</span>
@@ -250,6 +212,13 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
                 {t("common_chaptersShort")}
               </span>
             </div>
+
+            {task.status === "completed" &&
+              task.outputDestination === "downloads-api" && (
+                <p className="text-[11px] text-muted-foreground">
+                  {t("output_sentToChromeDescription")}
+                </p>
+              )}
 
             {/* Failure message */}
             {failureMessage && (
@@ -270,19 +239,16 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
             taskId={task.id}
             status={task.status}
             isCanceling={isCanceling}
-            isForgettingUnobservable={isForgettingUnobservable}
             isRetrying={isRetrying}
             isRestarting={isRestarting}
             isRemoving={isRemoving}
             isMoving={isMoving}
             canCancel={canCancel}
-            canForgetUnobservable={canForgetUnobservable}
             canRetryFailed={canRetryFailed}
             canRestart={canRestart}
             canMoveToTop={canMoveToTop}
             canRemove={canRemove}
             onBeginCancel={onBeginCancel}
-            onBeginForgetUnobservable={onBeginForgetUnobservable}
             onRetryFailed={onRetryFailed}
             onRestartTask={onRestartTask}
             onMoveTaskToTop={onMoveTaskToTop}

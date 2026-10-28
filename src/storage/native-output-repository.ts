@@ -11,7 +11,6 @@ import {
   markNativeOutputBlobReleased,
   markNativeOutputDependencyReleased,
   markNativeOutputJobDependencyReleased,
-  markNativeOutputSurrendered,
   observeNativeDownloadErased,
   prepareNativeOutput,
   sealNativeOutputManifest,
@@ -20,6 +19,7 @@ import {
 import {
   createEmptyNativeOutputState,
   canReleaseNativeOutputBlob,
+  canAccountNativeOutput,
   isNativeOutputLive,
   type NativeOutputManifest,
   type NativeOutputRecord,
@@ -214,7 +214,6 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
   .superRefine((record, context) => {
     const isTerminal =
       record.phase === "complete" || record.phase === "interrupted"
-    const isSettled = isTerminal || record.phase === "surrendered"
     const requiresAcceptance =
       record.phase === "acceptance_unknown" ||
       record.phase === "waiting" ||
@@ -320,12 +319,13 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     }
     if (
       record.accountingDisposition !== "pending" &&
-      (!isSettled || record.accountingDispositionAt === undefined)
+      (!canAccountNativeOutput(record) ||
+        record.accountingDispositionAt === undefined)
     ) {
       context.addIssue({
         code: "custom",
         path: ["accountingDisposition"],
-        message: "accounting disposition requires a terminal output",
+        message: "accounting disposition requires a resolved handoff",
       })
     }
     if (
@@ -342,7 +342,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
     }
     if (
       record.dependencyReleasedAt !== undefined &&
-      (!isSettled ||
+      (!canReleaseNativeOutputBlob(record) ||
         record.accountingDisposition === "pending" ||
         record.blobReleasedAt === undefined ||
         record.dependencyReleasedAt < record.blobReleasedAt)
@@ -351,7 +351,7 @@ const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
         code: "custom",
         path: ["dependencyReleasedAt"],
         message:
-          "dependency release requires terminal accounting and Blob release",
+          "dependency release requires resolved accounting and Blob release",
       })
     }
   })
@@ -853,15 +853,6 @@ export class NativeOutputRepository {
     const detached = structuredClone(input)
     return await this.execute((state) =>
       observeNativeDownloadErased(state, detached)
-    )
-  }
-
-  async markSurrendered(
-    input: Parameters<typeof markNativeOutputSurrendered>[1]
-  ): Promise<ReturnType<typeof markNativeOutputSurrendered>["result"]> {
-    const detached = structuredClone(input)
-    return await this.execute((state) =>
-      markNativeOutputSurrendered(state, detached)
     )
   }
 

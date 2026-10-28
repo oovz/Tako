@@ -126,7 +126,11 @@ export function ActiveTaskProgress({
               ])
             : stage === "archiving"
               ? t("progressStage_archiving")
-              : t("progressStage_saving")
+              : task.outputMode === "downloads-api"
+                ? t("progressStage_sendingToChrome")
+                : task.outputMode === "fsa"
+                  ? t("progressStage_savingToFolder")
+                  : t("progressStage_saving")
   const showImageProgress =
     totalImages > 0 && (stage === "downloading" || stage === "transforming")
   const showImageCounter = activeChapterCount > 0 && totalImages > 0

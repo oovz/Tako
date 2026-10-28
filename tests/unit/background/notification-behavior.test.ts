@@ -10,6 +10,8 @@ import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repo
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
+const chromeI18n = chrome.i18n
+
 vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
@@ -62,6 +64,7 @@ describe("notification behavior", () => {
     })
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       runtime: {
         getURL: runtimeGetUrl,
       },
@@ -114,7 +117,7 @@ describe("notification behavior", () => {
       expect.objectContaining({
         type: "basic",
         iconUrl: "chrome-extension://test/icon/128.png",
-        title: "Download complete",
+        title: "Completed",
       })
     )
   })
@@ -237,6 +240,7 @@ describe("settings and persistent error behavior", () => {
     storageLocalSet.mockResolvedValue(undefined)
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       storage: {
         local: {
           get: storageLocalGet,

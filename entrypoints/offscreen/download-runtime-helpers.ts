@@ -144,13 +144,10 @@ export async function prefetchOptionalCoverImage(input: {
   })
 }
 
-export async function resolveWritableDownloadRoot(_input?: {
-  taskId?: string
-  chapter?: unknown
-  totalImages?: number
-}): Promise<FileSystemDirectoryHandle> {
-  void _input
-  const dir = await loadDownloadRootHandle()
+export async function resolveWritableDownloadRoot(
+  directoryHandleId: string
+): Promise<FileSystemDirectoryHandle> {
+  const dir = await loadDownloadRootHandle(directoryHandleId)
   if (!dir) {
     throw new Error("Custom folder is not configured")
   }

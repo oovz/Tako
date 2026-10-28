@@ -1,3 +1,8 @@
+import { t } from "@/src/runtime/i18n"
+import {
+  getCompletedOutputDestination,
+  getOutputResultLabel,
+} from "@/src/runtime/output-result-presentation"
 import logger from "@/src/runtime/logger"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -175,11 +180,21 @@ export class NotificationService {
         .length ||
         totalCount)
 
+    const destination = getCompletedOutputDestination(task.chapters)
+    const chapterCount = t("options_chaptersCount", [
+      String(completedCount),
+      String(totalCount),
+    ])
+    const chromeTransferGuidance =
+      destination === "downloads-api"
+        ? `\n${t("output_sentToChromeDescription")}`
+        : ""
+
     await chrome.notifications.create(notificationId, {
       type: "basic",
       iconUrl: getIconUrl(),
-      title: "Download complete",
-      message: `${task.seriesTitle}: ${completedCount}/${totalCount} chapters saved`,
+      title: getOutputResultLabel(destination),
+      message: `${task.seriesTitle}: ${chapterCount}${chromeTransferGuidance}`,
       contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 1,
       requireInteraction: false,

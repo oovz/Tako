@@ -35,7 +35,6 @@ describe("DownloadTaskCancellationCoordinator", () => {
         getSettings: vi.fn(async () => DEFAULT_SETTINGS),
       },
       historyRepository: {
-        markChapterAsDownloaded: vi.fn(async () => undefined),
         getDownloadedChapters: vi.fn(async () => []),
         restoreChapterFromCompletedTask: vi.fn(async () => true),
       },
@@ -81,7 +80,6 @@ describe("DownloadTaskCancellationCoordinator", () => {
         getSettings: vi.fn(async () => DEFAULT_SETTINGS),
       },
       historyRepository: {
-        markChapterAsDownloaded: vi.fn(async () => undefined),
         getDownloadedChapters: vi.fn(async () => []),
         restoreChapterFromCompletedTask: vi.fn(async () => true),
       },
@@ -114,7 +112,6 @@ describe("DownloadTaskCancellationCoordinator", () => {
         getSettings: vi.fn(async () => DEFAULT_SETTINGS),
       },
       historyRepository: {
-        markChapterAsDownloaded: vi.fn(async () => undefined),
         getDownloadedChapters: vi.fn(async () => []),
         restoreChapterFromCompletedTask: vi.fn(async () => true),
       },
@@ -157,7 +154,6 @@ describe("DownloadTaskCancellationCoordinator", () => {
           getSettings: vi.fn(async () => DEFAULT_SETTINGS),
         },
         historyRepository: {
-          markChapterAsDownloaded: vi.fn(async () => undefined),
           getDownloadedChapters: vi.fn(async () => []),
           restoreChapterFromCompletedTask: vi.fn(async () => true),
         },

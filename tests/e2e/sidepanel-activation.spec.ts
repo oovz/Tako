@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures/extension"
+import { test, expect, resolveBackgroundWorker } from "./fixtures/extension"
 import {
   getTabId,
   seedTabContext,
@@ -16,44 +16,7 @@ async function getActionTitle(
   context: import("@playwright/test").BrowserContext,
   tabId: number
 ): Promise<string> {
-  const expectedName = "Tako Manga Downloader"
-  const isOurWorker = async (
-    sw: import("@playwright/test").Worker
-  ): Promise<boolean> => {
-    try {
-      const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
-      return name === expectedName
-    } catch {
-      return false
-    }
-  }
-
-  let worker: import("@playwright/test").Worker | undefined
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context
-      .serviceWorkers()
-      .filter((sw) => sw.url().startsWith("chrome-extension://"))
-    for (const sw of candidates) {
-      if (await isOurWorker(sw)) {
-        worker = sw
-        break
-      }
-    }
-    if (worker) break
-
-    try {
-      await context.waitForEvent("serviceworker", {
-        timeout: 1000,
-        predicate: (sw) => sw.url().startsWith("chrome-extension://"),
-      })
-    } catch {
-      void 0
-    }
-  }
-
-  if (!worker) {
-    throw new Error("Service worker not found")
-  }
+  const worker = await resolveBackgroundWorker(context)
   return await worker.evaluate(async (id: number) => {
     try {
       return await chrome.action.getTitle({ tabId: id })
@@ -67,45 +30,7 @@ async function isActionEnabled(
   context: import("@playwright/test").BrowserContext,
   tabId: number
 ): Promise<boolean> {
-  const expectedName = "Tako Manga Downloader"
-  const isOurWorker = async (
-    sw: import("@playwright/test").Worker
-  ): Promise<boolean> => {
-    try {
-      const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
-      return name === expectedName
-    } catch {
-      return false
-    }
-  }
-
-  let worker: import("@playwright/test").Worker | undefined
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context
-      .serviceWorkers()
-      .filter((sw) => sw.url().startsWith("chrome-extension://"))
-    for (const sw of candidates) {
-      if (await isOurWorker(sw)) {
-        worker = sw
-        break
-      }
-    }
-    if (worker) break
-
-    try {
-      await context.waitForEvent("serviceworker", {
-        timeout: 1000,
-        predicate: (sw) => sw.url().startsWith("chrome-extension://"),
-      })
-    } catch {
-      void 0
-    }
-  }
-
-  if (!worker) {
-    throw new Error("Service worker not found")
-  }
-
+  const worker = await resolveBackgroundWorker(context)
   return await worker.evaluate(async (id: number) => {
     try {
       return await chrome.action.isEnabled(id)

@@ -14,7 +14,8 @@ import type { DownloadDestination } from "@/src/shared/download-contract"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 
 type EffectiveDestination =
-  { kind: "custom"; handle: FileSystemDirectoryHandle } | { kind: "downloads" }
+  | { kind: "custom"; handle: FileSystemDirectoryHandle; handleId: string }
+  | { kind: "downloads" }
 
 export interface DestinationContext {
   taskId: string
@@ -86,7 +87,10 @@ export interface DestinationIssueNotifier {
 }
 
 export interface DestinationSettingsReader {
-  getSettings(): Promise<{ notifications: boolean }>
+  getSettings(): Promise<{
+    notifications: boolean
+    downloads: { customDirectoryHandleId: string | null }
+  }>
 }
 
 export type DestinationBlockResult = Awaited<
@@ -148,9 +152,42 @@ export class DestinationService {
       return { ready: true }
     }
 
+    const resolved = await this.resolveCustomDestination()
+    return resolved.ready ? { ready: true } : resolved
+  }
+
+  async getEffectiveDestination(
+    context: DestinationContext
+  ): Promise<EffectiveDestination> {
+    const destination = context.destinationOverride ?? context.destination
+    if (destination === "downloads-api") {
+      return { kind: "downloads" }
+    }
+
+    const resolved = await this.resolveCustomDestination()
+    if (!resolved.ready) {
+      throw new DestinationPreflightError(context, resolved)
+    }
+    return {
+      kind: "custom",
+      handle: resolved.handle,
+      handleId: resolved.handleId,
+    }
+  }
+
+  private async resolveCustomDestination(): Promise<
+    | { ready: true; handle: FileSystemDirectoryHandle; handleId: string }
+    | Exclude<DestinationPreflight, { ready: true }>
+  > {
     let handle: FileSystemDirectoryHandle | undefined
+    let handleId: string | null
     try {
-      handle = await loadDownloadRootHandle()
+      const settings = await this.deps.settingsReader.getSettings()
+      handleId = settings.downloads.customDirectoryHandleId
+      if (handleId === null) {
+        return { ready: false, reason: "not_configured" }
+      }
+      handle = await loadDownloadRootHandle(handleId)
     } catch (error) {
       logger.debug(
         "[DestinationService] FSA handle storage is unavailable",
@@ -164,7 +201,7 @@ export class DestinationService {
 
     const permission = await queryFsaPermission(handle, true)
     if (permission === "granted") {
-      return { ready: true }
+      return { ready: true, handle, handleId }
     }
     if (permission === "prompt") {
       return { ready: false, reason: "permission_prompt" }
@@ -175,33 +212,7 @@ export class DestinationService {
     if (permission === "unsupported") {
       return { ready: false, reason: "unsupported" }
     }
-
     return { ready: false, reason: "folder_unavailable" }
-  }
-
-  async getEffectiveDestination(
-    context: DestinationContext
-  ): Promise<EffectiveDestination> {
-    const destination = context.destinationOverride ?? context.destination
-    if (destination === "downloads-api") {
-      return { kind: "downloads" }
-    }
-
-    const preflight = await this.preflight(context)
-    if (!preflight.ready) {
-      throw new DestinationPreflightError(context, preflight)
-    }
-
-    const handle = await loadDownloadRootHandle()
-    if (!handle) {
-      const unavailable = { ready: false, reason: "not_configured" } as const
-      throw new DestinationPreflightError(context, unavailable)
-    }
-
-    return {
-      kind: "custom",
-      handle,
-    }
   }
 
   private async block(

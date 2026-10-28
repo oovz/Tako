@@ -308,22 +308,6 @@ export class QueueApplicationCommands {
     return cancellation.result
   }
 
-  async forgetUnobservableOutputs(
-    taskId: string
-  ): Promise<{ surrendered: number }> {
-    const result =
-      await this.deps.nativeOutputCoordinator.forgetTaskUnobservableOutputs(
-        taskId
-      )
-    await this.deps.terminalCoordinator.continueAfterNativeOutputSettlement(
-      result.effects
-    )
-    if (result.queueCanContinue && result.effects.length === 0) {
-      await this.activateQueue()
-    }
-    return { surrendered: result.surrendered }
-  }
-
   async retryDestination(taskId: string, commandId: string): Promise<void> {
     await this.resumeDestination(taskId, commandId, undefined)
   }

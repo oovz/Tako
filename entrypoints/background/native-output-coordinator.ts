@@ -1,16 +1,13 @@
 import logger from "@/src/runtime/logger"
 import {
   canReleaseNativeOutputBlob,
-  isNativeOutputLive,
-  isNativeOutputTerminal,
-  isNativeOutputUnobservable,
+  canAccountNativeOutput,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
   type NativeOutputJobIdentity,
   type NativeOutputManifest,
   type NativeOutputRecord,
 } from "@/src/domain/native-output/state"
-import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import type { NativeOutputRepository } from "@/src/storage/native-output-repository"
@@ -61,12 +58,6 @@ export interface NativeOutputSettlementEffect {
 
 export type NativeOutputSettlementEffects =
   readonly NativeOutputSettlementEffect[]
-
-export interface NativeOutputForgetResult {
-  surrendered: number
-  effects: NativeOutputSettlementEffects
-  queueCanContinue: boolean
-}
 
 function addSettlementEffect(
   effects: NativeOutputSettlementEffect[],
@@ -139,48 +130,9 @@ export class NativeOutputCoordinator {
     })
   }
 
-  /**
-   * True while any native-output record or manifest is still live. Erased
-   * downloads awaiting a user decision REMAIN live: the offscreen document
-   * remains alive until each Blob release is proven and accounting is resolved.
-   */
+  /** Keeps offscreen ownership alive until accounting and Blob cleanup finish. */
   async hasLiveDependencies(): Promise<boolean> {
     return await this.deps.repository.hasLiveDependencies()
-  }
-
-  /**
-   * True while durable work exists that can progress WITHOUT user action.
-   * Erased downloads blocked behind `native_output_action_required` are
-   * excluded: their only next step is the user's forget/cancel decision, so
-   * the crash-recovery alarm must not re-arm forever for them.
-   */
-  async hasReconcilableLiveDependencies(): Promise<boolean> {
-    if (!(await this.deps.repository.hasLiveDependencies())) return false
-    const [snapshot, queue] = await Promise.all([
-      this.deps.repository.snapshot(),
-      this.deps.queueRepository.getQueue(),
-    ])
-    const userPendingTaskIds = new Set(
-      queue
-        .filter((task) => task.activeBlock === "native_output_action_required")
-        .map((task) => task.id)
-    )
-    const hasLiveNonUserPendingRecord = Object.values(
-      snapshot.outputsByOutputId
-    ).some(
-      (record) =>
-        isNativeOutputLive(record) &&
-        !(
-          isNativeOutputUnobservable(record) &&
-          userPendingTaskIds.has(record.taskId)
-        )
-    )
-    if (hasLiveNonUserPendingRecord) return true
-    return Object.values(snapshot.manifestsByJobId).some(
-      (manifest) =>
-        manifest.dependencyReleasedAt === undefined &&
-        !userPendingTaskIds.has(manifest.taskId)
-    )
   }
 
   async getLiveTaskIds(): Promise<string[]> {
@@ -403,7 +355,8 @@ export class NativeOutputCoordinator {
         return respond(trackedResponse(record))
       }
 
-      addSettlementEffects(effects, await this.reconcileRecordLocked(record))
+      await this.armLivenessLocked()
+      addSettlementEffects(effects, await this.reconcileJobLocked(record.jobId))
       return respond(
         trackedResponse(
           (await this.deps.repository.getByOutputId(identity.outputId)) ??
@@ -487,8 +440,6 @@ export class NativeOutputCoordinator {
       )
       if (record) {
         await this.releaseJobBlobsLocked([record])
-        const blocked = await this.blockTaskForUnobservableLocked(record)
-        addSettlementEffects(effects, blocked.effects)
       }
       addSettlementEffects(
         effects,
@@ -623,19 +574,6 @@ export class NativeOutputCoordinator {
     const effects = await this.serialized(async () => {
       const effects: NativeOutputSettlementEffect[] = []
       if (!canceledJob) {
-        // The queue task is already durably canceled. Erased downloads that
-        // were waiting for the user's forget confirmation cannot settle on
-        // their own: surrender their queue accounting. Resource release follows
-        // browser consumption evidence.
-        try {
-          const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
-          addSettlementEffects(effects, surrendered.effects)
-        } catch (error) {
-          logger.warn(
-            "Unobservable native output surrender failed during cancellation",
-            { taskId, error }
-          )
-        }
         await this.armLivenessLocked()
         return effects
       }
@@ -648,12 +586,6 @@ export class NativeOutputCoordinator {
           error: "Download task canceled before every output was handed off",
         })
         addSettlementEffects(effects, sealed.effects)
-        // A task can be blocked for an erased browser download while it still
-        // owns the producer lease. Sealing stops further handoff, but the
-        // already-erased output remains unobservable until it is explicitly
-        // surrendered. Cancellation is that terminal user decision.
-        const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
-        addSettlementEffects(effects, surrendered.effects)
         await this.armLivenessLocked()
         return effects
       } catch (error) {
@@ -664,108 +596,6 @@ export class NativeOutputCoordinator {
     for (const effect of effects) {
       await this.acknowledgeSettlement(effect)
     }
-  }
-
-  /**
-   * Task-wide FORGET_UNOBSERVABLE_OUTPUTS command. Surrenders every waiting
-   * output whose Chrome download was erased, releases the task's
-   * action-required block so the queue can continue, and reconciles each
-   * affected job's accounting and independently eligible resource release. A replay
-   * after an already-applied forget converges with `surrendered: 0`.
-   */
-  async forgetTaskUnobservableOutputs(
-    taskId: string
-  ): Promise<NativeOutputForgetResult> {
-    const result = await this.serialized(async () => {
-      const surrendered = await this.surrenderTaskUnobservableLocked(taskId)
-      const released =
-        await this.deps.queueRepository.releaseNativeOutputActionBlock(taskId)
-      return {
-        surrendered: surrendered.surrendered,
-        effects: surrendered.effects,
-        queueCanContinue:
-          released.outcome === "applied" || released.outcome === "unchanged",
-      }
-    })
-    return result
-  }
-
-  /**
-   * Set the durable action-required block on the record's task so the queue
-   * stops and the UI can offer the forget/cancel decision. When the task is
-   * already terminal (or gone), surrender resolves its queue accounting.
-   *
-   * Returns true when the block is durably in place (reconciliation can stop
-   * arming the liveness alarm for this record).
-   */
-  private async blockTaskForUnobservableLocked(
-    record: NativeOutputRecord
-  ): Promise<{
-    blocked: boolean
-    effects: NativeOutputSettlementEffects
-  }> {
-    if (!isNativeOutputUnobservable(record)) {
-      return { blocked: false, effects: [] }
-    }
-    const transition =
-      await this.deps.queueRepository.blockTaskForNativeOutputAction({
-        taskId: record.taskId,
-        errorMessage:
-          "A browser download was erased from Chrome history; its result can no longer be observed.",
-      })
-    if (
-      transition.outcome === "applied" ||
-      transition.outcome === "unchanged"
-    ) {
-      return { blocked: true, effects: [] }
-    }
-    const task = await this.deps.queueRepository.getTask(record.taskId)
-    if (!task || isTerminalDownloadTask(task)) {
-      return {
-        blocked: false,
-        effects: (await this.surrenderTaskUnobservableLocked(record.taskId))
-          .effects,
-      }
-    }
-    return { blocked: false, effects: [] }
-  }
-
-  private async surrenderTaskUnobservableLocked(taskId: string): Promise<{
-    surrendered: number
-    effects: NativeOutputSettlementEffects
-  }> {
-    const snapshot = await this.deps.repository.snapshot()
-    const manifests = Object.values(snapshot.manifestsByJobId).filter(
-      (manifest) => manifest.taskId === taskId
-    )
-    let surrendered = 0
-    const effects: NativeOutputSettlementEffect[] = []
-    const jobsToReconcile = new Set<string>()
-    for (const manifest of manifests) {
-      jobsToReconcile.add(manifest.jobId)
-      for (const outputId of manifestTrackedOutputIds(manifest)) {
-        const record = snapshot.outputsByOutputId[outputId]
-        if (!record) continue
-        if (record.phase === "surrendered") {
-          jobsToReconcile.add(manifest.jobId)
-          continue
-        }
-        if (!isNativeOutputUnobservable(record)) continue
-        const result = await this.deps.repository.markSurrendered({
-          outputId,
-          now: Date.now(),
-        })
-        if (result.outcome === "rejected") {
-          throw new Error(`Native output surrender rejected: ${result.reason}`)
-        }
-        if (result.outcome === "applied") surrendered += 1
-        jobsToReconcile.add(manifest.jobId)
-      }
-    }
-    for (const jobId of jobsToReconcile) {
-      addSettlementEffects(effects, await this.reconcileJobLocked(jobId))
-    }
-    return { surrendered, effects }
   }
 
   private async sealStoppedOpenManifestLocked(input: {
@@ -880,7 +710,15 @@ export class NativeOutputCoordinator {
 
     const snapshot = await this.deps.repository.snapshot()
     for (const record of Object.values(snapshot.outputsByOutputId)) {
-      addSettlementEffects(effects, await this.reconcileRecordLocked(record))
+      try {
+        addSettlementEffects(effects, await this.reconcileRecordLocked(record))
+      } catch (error) {
+        logger.warn("Native output observation will be retried", {
+          outputId: record.outputId,
+          error,
+        })
+        await this.armLivenessLocked()
+      }
     }
     for (const jobId of Object.keys(snapshot.manifestsByJobId)) {
       addSettlementEffects(effects, await this.reconcileJobLocked(jobId))
@@ -954,9 +792,7 @@ export class NativeOutputCoordinator {
             erased.record.outputId
           )
           if (record) {
-            const blocked = await this.blockTaskForUnobservableLocked(record)
-            addSettlementEffects(effects, blocked.effects)
-            if (!blocked.blocked) await this.armLivenessLocked()
+            await this.armLivenessLocked()
           }
         } else {
           await this.armLivenessLocked()
@@ -1025,31 +861,42 @@ export class NativeOutputCoordinator {
 
     await this.releaseJobBlobsLocked(records)
 
+    const chapterSettlement = await this.deps.queueRepository
+      .getTask(manifest.taskId)
+      .then(
+        (task) =>
+          task?.chapters.find((chapter) => chapter.id === manifest.chapterId)
+            ?.nativeOutputSettlement
+      )
+    const queueSettlementProven =
+      chapterSettlement !== undefined &&
+      chapterSettlement.jobId === manifest.jobId &&
+      chapterSettlement.attempt === manifest.attempt &&
+      chapterSettlement.taskId === manifest.taskId &&
+      chapterSettlement.chapterId === manifest.chapterId &&
+      chapterSettlement.requested === manifest.outputsRequested
+
     if (
       manifest.phase === "sealed" &&
       !settlementResolved &&
       records.length === outputIds.length &&
-      records.every(
-        (record) =>
-          isNativeOutputTerminal(record) || record.phase === "surrendered"
-      )
+      records.every(canAccountNativeOutput)
     ) {
       const stats = calculateNativeOutputSettlementStats(manifest, records)
-      const { completed, surrendered, interrupted, lastSuccessfulDownloadId } =
-        stats
-      const settlement =
-        await this.deps.queueRepository.applyNativeOutputSettlement({
-          jobId: manifest.jobId,
-          attempt: manifest.attempt,
-          taskId: manifest.taskId,
-          chapterId: manifest.chapterId,
-          requested: manifest.outputsRequested,
-          completed,
-          interrupted,
-          surrendered,
-          lastSuccessfulDownloadId,
-          now: Date.now(),
-        })
+      const { completed, interrupted, lastSuccessfulDownloadId } = stats
+      const settlement = queueSettlementProven
+        ? { outcome: "already_applied" as const }
+        : await this.deps.queueRepository.applyNativeOutputSettlement({
+            jobId: manifest.jobId,
+            attempt: manifest.attempt,
+            taskId: manifest.taskId,
+            chapterId: manifest.chapterId,
+            requested: manifest.outputsRequested,
+            completed,
+            interrupted,
+            lastSuccessfulDownloadId,
+            now: Date.now(),
+          })
       const disposition =
         settlement.outcome === "applied" ||
         settlement.outcome === "already_applied"
@@ -1084,8 +931,7 @@ export class NativeOutputCoordinator {
       const released = await this.deps.repository.getByOutputId(record.outputId)
       if (
         released &&
-        (isNativeOutputTerminal(released) ||
-          released.phase === "surrendered") &&
+        canReleaseNativeOutputBlob(released) &&
         released.accountingDisposition !== "pending" &&
         released.blobReleasedAt !== undefined &&
         released.dependencyReleasedAt === undefined
@@ -1115,17 +961,6 @@ export class NativeOutputCoordinator {
       }
       return effects
     }
-    const chapterSettlement = await this.deps.queueRepository
-      .getTask(manifest.taskId)
-      .then(
-        (task) =>
-          task?.chapters.find((chapter) => chapter.id === manifest.chapterId)
-            ?.nativeOutputSettlement
-      )
-    const queueSettlementProven =
-      chapterSettlement !== undefined &&
-      chapterSettlement.jobId === manifest.jobId &&
-      chapterSettlement.attempt === manifest.attempt
     if (
       finalManifest?.phase === "sealed" &&
       finalManifest.dependencyReleasedAt === undefined &&

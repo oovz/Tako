@@ -66,9 +66,6 @@ export function useCommandCenterActions() {
   const [cancelingTaskIds, setCancelingTaskIds] = useState<Set<string>>(
     new Set()
   )
-  const [forgettingTaskIds, setForgettingTaskIds] = useState<Set<string>>(
-    new Set()
-  )
   const [retryingTaskIds, setRetryingTaskIds] = useState<Set<string>>(new Set())
   const [restartingTaskIds, setRestartingTaskIds] = useState<Set<string>>(
     new Set()
@@ -102,30 +99,6 @@ export function useCommandCenterActions() {
     },
     []
   )
-
-  const handleForgetTask = useCallback(async (taskId: string) => {
-    const pendingKey = `forget:${taskId}`
-    if (!pendingGuardRef.current.tryBegin(pendingKey)) return
-    addPendingTaskId(setForgettingTaskIds, taskId)
-
-    try {
-      const result = await queueCommandClient.forgetUnobservableOutputs(taskId)
-      if (result.surrendered > 0) {
-        toast.success(
-          t("sidepanel_forgetSucceeded", String(result.surrendered))
-        )
-      }
-    } catch (error) {
-      logger.error(
-        "[CommandCenter] Failed to forget unobservable outputs:",
-        error
-      )
-      toast.error(t("sidepanel_toastForgetFailed"))
-    } finally {
-      pendingGuardRef.current.finish(pendingKey)
-      removePendingTaskId(setForgettingTaskIds, taskId)
-    }
-  }, [])
 
   const handleRetryFailed = useCallback(async (taskId: string) => {
     const pendingKey = `retry:${taskId}`
@@ -210,13 +183,11 @@ export function useCommandCenterActions() {
 
   return {
     cancelingTaskIds,
-    forgettingTaskIds,
     retryingTaskIds,
     restartingTaskIds,
     removingTaskIds,
     movingTaskIds,
     handleCancelTask,
-    handleForgetTask,
     handleRetryFailed,
     handleRemoveTask,
     handleRestartTask,

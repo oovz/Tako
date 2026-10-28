@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "停止這個工作剩餘的處理。Chrome 已接受的下載會繼續，請在 Chrome 下載頁面管理。"
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "要忘記此工作中的所有待處理下載嗎？"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "無法再檢查瀏覽器下載。忘記它會釋放此工作中 Tako 的所有待處理輸出；檔案可能不完整。"
-  },
-  "sidepanel_forgetDownload": {
-    "message": "忘記所有下載"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下載",
     "placeholders": {
@@ -466,7 +457,7 @@
     "message": "磁碟空間不足。"
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "瀏覽器未能完成輸出檔案的儲存。"
+    "message": "Chrome 無法接收輸出檔案。"
   },
   "downloadError_browserDownloadUnobservable": {
     "message": "下載歷程已刪除，無法確認瀏覽器下載結果。"
@@ -1497,7 +1488,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "失敗（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "失敗（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1508,7 +1499,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "已取消（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "已取消（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1538,7 +1529,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "部分完成（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "部分完成（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1746,18 +1737,6 @@
   "background_settingsSyncFailed": {
     "message": "無法將設定同步到狀態"
   },
-  "status_nativeOutputActionRequired": {
-    "message": "需要確認下載結果"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "正在忘記待處理下載…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "已忘記 $1 個待處理下載。佇列將繼續。"
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "無法忘記待處理下載。"
-  },
   "startDownloadError_staleSeriesContext": {
     "message": "系列上下文已過期。請重新整理頁面後重試。"
   },
@@ -1856,5 +1835,39 @@
   },
   "queue_readFailed": { "message": "無法載入佇列和任務歷史記錄。" },
   "queue_readStale": { "message": "佇列和任務歷史記錄可能不是最新的。" },
-  "common_retry": { "message": "重試" }
+  "common_retry": { "message": "重試" },
+  "status_sentToChrome": {
+    "message": "已傳送至 Chrome"
+  },
+  "status_savedToFolder": {
+    "message": "已儲存至資料夾"
+  },
+  "status_processed": {
+    "message": "已處理"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "正在傳送至 Chrome"
+  },
+  "progressStage_savingToFolder": {
+    "message": "正在儲存至資料夾"
+  },
+  "output_sentToChromeDescription": {
+    "message": "後續傳輸由 Chrome 管理。請在 Chrome 下載項目中查看進度和結果。"
+  },
+  "options_taskSentToChrome": {
+    "message": "已傳送至 Chrome（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskSavedToFolder": {
+    "message": "已儲存至資料夾（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  }
 }

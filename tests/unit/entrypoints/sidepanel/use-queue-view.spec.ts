@@ -36,6 +36,30 @@ describe("useQueueView normalizeQueueView", () => {
     expect(() => normalizeQueueView(null)).toThrow()
   })
 
+  it("preserves optional output evidence and rejects malformed destinations", () => {
+    expect(
+      normalizeQueueView([
+        {
+          ...makeQueueTask("native", "completed", "Series A"),
+          outputDestination: "downloads-api",
+          outputMode: "fsa",
+        },
+      ])[0]
+    ).toMatchObject({ outputDestination: "downloads-api", outputMode: "fsa" })
+    expect(
+      normalizeQueueView([makeQueueTask("old", "completed", "Series A")])[0]
+        .outputDestination
+    ).toBeUndefined()
+    expect(() =>
+      normalizeQueueView([
+        {
+          ...makeQueueTask("invalid", "completed", "Series A"),
+          outputDestination: "unknown",
+        },
+      ])
+    ).toThrow()
+  })
+
   it("rejects a projection containing malformed task summaries", () => {
     expect(() =>
       normalizeQueueView([
@@ -65,7 +89,6 @@ describe("useQueueView normalizeQueueView", () => {
         coverUrl: 123,
         failureReason: ["legacy raw error"],
         failureCategory: "bogus",
-        hasUnobservableOutput: "yes",
         isRetried: "yes",
         isRetryTask: true,
         lastSuccessfulDownloadId: "nope",
@@ -75,7 +98,6 @@ describe("useQueueView normalizeQueueView", () => {
         coverUrl: "https://example.com/cover.jpg",
         failureReason: "https://signed.example/image?token=secret",
         failureCategory: "network_unavailable",
-        hasUnobservableOutput: true,
         isRetried: false,
         isRetryTask: true,
         lastSuccessfulDownloadId: 42,
@@ -87,7 +109,6 @@ describe("useQueueView normalizeQueueView", () => {
         ...makeQueueTask("task-1", "completed", "Series A"),
         coverUrl: undefined,
         failureCategory: undefined,
-        hasUnobservableOutput: undefined,
         isRetried: undefined,
         isRetryTask: true,
         lastSuccessfulDownloadId: undefined,
@@ -96,7 +117,6 @@ describe("useQueueView normalizeQueueView", () => {
         ...makeQueueTask("task-2", "partial_success", "Series B"),
         coverUrl: "https://example.com/cover.jpg",
         failureCategory: "network_unavailable",
-        hasUnobservableOutput: true,
         isRetried: false,
         isRetryTask: true,
         lastSuccessfulDownloadId: 42,

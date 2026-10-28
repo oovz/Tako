@@ -315,7 +315,6 @@ describe("QueueRepository", () => {
             requested: 1,
             completed: 1,
             interrupted: 0,
-            surrendered: 0,
             now: 500,
           })
         ).outcome

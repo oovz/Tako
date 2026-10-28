@@ -31,21 +31,6 @@ export const queueCommandClient = {
       : { kind: "active" }
   },
 
-  async forgetUnobservableOutputs(
-    taskId: string
-  ): Promise<{ surrendered: number }> {
-    const response = await sendRuntimeMessage({
-      target: "background",
-      type: "FORGET_UNOBSERVABLE_OUTPUTS",
-      ...createCommandEnvelope(),
-      payload: { taskId },
-    })
-    if (!response.success) {
-      throw new Error(response.error ?? "Queue command failed")
-    }
-    return { surrendered: response.surrendered }
-  },
-
   async retryFailedChapters(taskId: string): Promise<void> {
     assertSuccess(
       await sendRuntimeMessageWithRetry(

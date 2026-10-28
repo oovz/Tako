@@ -4,12 +4,12 @@ import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react"
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
+import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
 
 export interface CommandCenterTaskActionAvailability {
   canCancel: boolean
-  canForgetUnobservable: boolean
   isTaskHistory: boolean
   isRetried: boolean
   canRestart: boolean
@@ -18,12 +18,7 @@ export interface CommandCenterTaskActionAvailability {
 }
 
 export type CommandCenterTaskActionId =
-  | "cancel"
-  | "forget-unobservable"
-  | "retry-failed"
-  | "restart"
-  | "move-to-top"
-  | "remove"
+  "cancel" | "retry-failed" | "restart" | "move-to-top" | "remove"
 
 export interface CommandCenterTaskActionPlan {
   inline: CommandCenterTaskActionId[]
@@ -38,10 +33,7 @@ export interface CommandCenterTaskProgressPresentation {
 export function shouldConfirmTaskCancellation(
   task: Pick<QueueTaskSummary, "status" | "activeBlock">
 ): boolean {
-  return (
-    task.status === "downloading" ||
-    task.activeBlock === "native_output_action_required"
-  )
+  return task.status === "downloading"
 }
 
 export function getRetryAvailability(
@@ -65,7 +57,8 @@ export function getRetryAvailability(
 
 export function getTaskStatusLabel(
   status: QueueTaskSummary["status"],
-  activeBlock?: QueueTaskSummary["activeBlock"]
+  activeBlock?: QueueTaskSummary["activeBlock"],
+  outputDestination?: QueueTaskSummary["outputDestination"]
 ): string {
   if (activeBlock === "destination_action_required") {
     return t("status_destinationActionRequired")
@@ -76,9 +69,6 @@ export function getTaskStatusLabel(
   if (activeBlock === "provider_network_policy_action_required") {
     return t("status_providerActionRequired")
   }
-  if (activeBlock === "native_output_action_required") {
-    return t("status_nativeOutputActionRequired")
-  }
 
   switch (status) {
     case "downloading":
@@ -86,7 +76,7 @@ export function getTaskStatusLabel(
     case "queued":
       return t("status_queued")
     case "completed":
-      return t("status_completed")
+      return getOutputResultLabel(outputDestination)
     case "partial_success":
       return t("status_partialSuccess")
     case "failed":
@@ -131,7 +121,6 @@ export function getTaskActionAvailability(
   task: QueueTaskSummary,
   options: {
     hasCancelHandler: boolean
-    hasForgetUnobservableHandler?: boolean
     isCanceling: boolean
     hasRestartHandler: boolean
     hasMoveToTopHandler: boolean
@@ -145,18 +134,11 @@ export function getTaskActionAvailability(
     task.status === "failed" ||
     task.status === "canceled"
   const isRetried = task.isRetried === true
-  const isUnobservableActionRequired =
-    task.status === "queued" &&
-    task.activeBlock === "native_output_action_required" &&
-    task.hasUnobservableOutput === true
 
   return {
     canCancel:
       (task.status === "downloading" || task.status === "queued") &&
       options.hasCancelHandler,
-    canForgetUnobservable:
-      isUnobservableActionRequired &&
-      (options.hasForgetUnobservableHandler ?? false),
     isTaskHistory,
     isRetried,
     canRestart:
@@ -177,11 +159,7 @@ export function getTaskActionPlan(
   status: QueueTaskSummary["status"],
   availability: Pick<
     CommandCenterTaskActionAvailability,
-    | "canCancel"
-    | "canForgetUnobservable"
-    | "canRestart"
-    | "canMoveToTop"
-    | "canRemove"
+    "canCancel" | "canRestart" | "canMoveToTop" | "canRemove"
   > & { canRetryFailed: boolean }
 ): CommandCenterTaskActionPlan {
   if (status === "downloading") {
@@ -192,15 +170,6 @@ export function getTaskActionPlan(
   }
 
   if (status === "queued") {
-    if (availability.canForgetUnobservable) {
-      return {
-        inline: [
-          "forget-unobservable",
-          ...(availability.canCancel ? (["cancel"] as const) : []),
-        ],
-        overflow: [],
-      }
-    }
     return {
       inline: [
         ...(availability.canMoveToTop ? (["move-to-top"] as const) : []),

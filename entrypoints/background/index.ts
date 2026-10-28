@@ -219,7 +219,7 @@ const queueScheduler = new QueueScheduler(
   async () => {
     await scheduleOffscreenCloseIfIdle(queueRepository, nativeOutputCoordinator)
     await setLivenessAlarmArmed(
-      await nativeOutputCoordinator.hasReconcilableLiveDependencies()
+      await nativeOutputCoordinator.hasLiveDependencies()
     )
   }
 )

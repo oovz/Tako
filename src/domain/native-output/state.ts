@@ -58,7 +58,7 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   erasedAt?: number
   /** Exact Chrome erasure confirms that its underlying download was canceled. */
   erasedByBrowserAt?: number
-  /** Set when the user surrenders observation of an erased download (FORGET). */
+  /** Recorded surrender of an erased download’s observation. */
   surrenderedAt?: number
   accountingDisposition: NativeOutputAccountingDisposition
   accountingDispositionAt?: number
@@ -111,6 +111,10 @@ export function isNativeOutputTerminal(record: NativeOutputRecord): boolean {
   return record.phase === "complete" || record.phase === "interrupted"
 }
 
+export function canAccountNativeOutput(record: NativeOutputRecord): boolean {
+  return record.downloadId !== undefined || isNativeOutputTerminal(record)
+}
+
 /** Browser consumption determines Blob lifetime independently of accounting. */
 export function canReleaseNativeOutputBlob(
   record: NativeOutputRecord
@@ -120,13 +124,6 @@ export function canReleaseNativeOutputBlob(
     (record.phase === "surrendered" && record.terminalAt !== undefined) ||
     record.erasedByBrowserAt !== undefined
   )
-}
-
-/** True when the record is waiting on an erased Chrome download the user has not resolved yet. */
-export function isNativeOutputUnobservable(
-  record: NativeOutputRecord
-): boolean {
-  return record.phase === "waiting" && record.erasedAt !== undefined
 }
 
 export function isNativeOutputLive(record: NativeOutputRecord): boolean {

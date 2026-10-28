@@ -79,7 +79,6 @@ describe("chapter history retention across task removal", () => {
         chapterOutcomesByIndex: [
           { chapterId: "chapter-1", status: "completed" },
         ],
-        settingsSnapshot: task().settingsSnapshot,
         finalizationDependencies: {
           historyRepository: history,
           settingsRepository,

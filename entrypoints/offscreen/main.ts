@@ -3,7 +3,6 @@
  * and background-assisted downloads.
  */
 
-import type { Chapter } from "@/src/types/chapter"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
@@ -238,12 +237,10 @@ export class OffscreenWorker {
     return withRetries(fn, job.retries.image, 1000, hooks, signal)
   }
 
-  private async resolveWritableDownloadRoot(input: {
-    taskId: string
-    chapter: Chapter
-    totalImages: number
-  }): Promise<FileSystemDirectoryHandle> {
-    return await resolveWritableDownloadRoot(input)
+  private async resolveWritableDownloadRoot(
+    directoryHandleId: string
+  ): Promise<FileSystemDirectoryHandle> {
+    return await resolveWritableDownloadRoot(directoryHandleId)
   }
 
   private async requestBrowserBlobDownload(input: {

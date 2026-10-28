@@ -61,6 +61,7 @@ export type TaskChapterUpdate = {
   totalImages?: number
   imagesFailed?: number
   outputs?: OutputAccounting
+  outputDestination?: "downloads-api" | "fsa"
 }
 
 export type TaskMutationRejection = Rejected<
@@ -181,6 +182,7 @@ function applyChapterUpdate(
     totalImages: updates.totalImages ?? chapter.totalImages,
     imagesFailed: updates.imagesFailed ?? chapter.imagesFailed,
     outputs,
+    outputDestination: updates.outputDestination ?? chapter.outputDestination,
     lastUpdated: now,
   }
 }
@@ -192,6 +194,7 @@ function chapterUpdateEquals(left: TaskChapter, right: TaskChapter): boolean {
     left.errorCategory === right.errorCategory &&
     left.totalImages === right.totalImages &&
     left.imagesFailed === right.imagesFailed &&
+    left.outputDestination === right.outputDestination &&
     accountingEquals(left.outputs, right.outputs) &&
     left.lastUpdated === right.lastUpdated
   )
@@ -919,7 +922,6 @@ export function applyNativeOutputSettlement(
     requested: number
     completed: number
     interrupted: number
-    surrendered: number
     lastSuccessfulDownloadId?: number
     now: number
   }
@@ -949,12 +951,10 @@ export function applyNativeOutputSettlement(
     input.requested < 0 ||
     input.completed < 0 ||
     input.interrupted < 0 ||
-    input.surrendered < 0 ||
     !Number.isInteger(input.requested) ||
     !Number.isInteger(input.completed) ||
     !Number.isInteger(input.interrupted) ||
-    !Number.isInteger(input.surrendered) ||
-    input.completed + input.interrupted + input.surrendered !== input.requested
+    input.completed + input.interrupted !== input.requested
   ) {
     return {
       next: state,
@@ -994,7 +994,7 @@ export function applyNativeOutputSettlement(
       existing.requested === input.requested &&
       existing.completed === input.completed &&
       existing.interrupted === input.interrupted &&
-      existing.surrendered === input.surrendered &&
+      existing.surrendered === 0 &&
       existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
     return {
       next: state,
@@ -1051,7 +1051,7 @@ export function applyNativeOutputSettlement(
     requested: input.requested,
     completed: input.completed,
     interrupted: input.interrupted,
-    surrendered: input.surrendered,
+    surrendered: 0,
     lastSuccessfulDownloadId: input.lastSuccessfulDownloadId,
     appliedAt: input.now,
   }
@@ -1059,14 +1059,8 @@ export function applyNativeOutputSettlement(
     input.interrupted === 0
       ? undefined
       : input.completed > 0
-        ? `${input.interrupted} output file(s) did not finish saving.`
-        : "Chrome could not finish saving the output."
-  const surrenderMessage =
-    input.surrendered === 0
-      ? undefined
-      : `${input.surrendered} output file(s) could not be verified because Chrome cleared their download history.`
-  const hasInterruption = input.interrupted > 0
-  const hasSurrender = input.surrendered > 0
+        ? `${input.interrupted} output file(s) were not sent to Chrome.`
+        : "Output could not be sent to Chrome."
   const updatedChapter: TaskChapter = {
     ...chapter,
     status:
@@ -1075,24 +1069,16 @@ export function applyNativeOutputSettlement(
         : input.completed > 0
           ? "partial_success"
           : "failed",
-    errorMessage:
-      !hasInterruption && !hasSurrender
-        ? undefined
-        : [interruptionMessage, surrenderMessage]
-            .filter((part): part is string => part !== undefined)
-            .join(" "),
+    errorMessage: interruptionMessage,
     errorCategory:
-      !hasInterruption && !hasSurrender
-        ? undefined
-        : hasSurrender
-          ? "browser_download_unobservable"
-          : "browser_download_interrupted",
+      input.interrupted > 0 ? "browser_download_interrupted" : undefined,
     outputs: {
       requested: input.requested,
       committed: input.completed,
-      failed: input.interrupted + input.surrendered,
+      failed: input.interrupted,
     },
     nativeOutputSettlement: settlement,
+    outputDestination: "downloads-api",
     lastUpdated: Math.max(chapter.lastUpdated, input.now),
   }
   const chapters = [...task.chapters]
@@ -1123,6 +1109,13 @@ export function applyNativeOutputSettlement(
     ...task,
     chapters,
     lastSuccessfulDownloadId,
+    ...(task.activeBlock === "native_output_action_required"
+      ? {
+          activeBlock: undefined,
+          errorMessage: undefined,
+          errorCategory: undefined,
+        }
+      : {}),
     nextChapterDispatchAt: allChaptersTerminal
       ? undefined
       : task.nextChapterDispatchAt,
@@ -1577,121 +1570,6 @@ export function releaseProviderPolicyBlocks(
   }
 }
 
-/**
- * Block a task because one of its native browser downloads was erased from
- * Chrome history and the user must decide whether to forget it. The queue
- * stops dispatching it until FORGET_UNOBSERVABLE_OUTPUTS releases the block.
- */
-export function blockTaskForNativeOutputAction(
-  state: QueueAggregateState,
-  input: { taskId: string; errorMessage: string }
-): QueueKernelDecision<
-  | Applied<{ task: DownloadTaskState }>
-  | Unchanged<{ reason: "already-blocked" }>
-  | TaskMutationRejection
-> {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  if (
-    task.status === "queued" &&
-    task.activeBlock === "native_output_action_required" &&
-    task.errorCategory === "browser_download_unobservable"
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "already-blocked" },
-    }
-  }
-  const updatedTask: DownloadTaskState = {
-    ...task,
-    status: "queued",
-    activeBlock: "native_output_action_required",
-    destinationIssue: undefined,
-    errorMessage: input.errorMessage,
-    errorCategory: "browser_download_unobservable",
-  }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
-}
-
-export function releaseNativeOutputActionBlock(
-  state: QueueAggregateState,
-  input: { taskId: string }
-): QueueKernelDecision<
-  | Applied<{ task: DownloadTaskState }>
-  | Unchanged<{ reason: "not-blocked" }>
-  | TaskMutationRejection
-> {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
-  }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  if (task.activeBlock !== "native_output_action_required") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "not-blocked" },
-    }
-  }
-  const updatedTask: DownloadTaskState = {
-    ...task,
-    status: "queued",
-    activeBlock: undefined,
-    destinationIssue: undefined,
-    errorMessage: undefined,
-    errorCategory: undefined,
-  }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
-}
-
 export function interruptDownloadTask(
   state: QueueAggregateState,
   input: {
@@ -1926,6 +1804,7 @@ export function retryFailedChapters(
     chapters: failedChapters.map((chapter) => ({
       ...chapter,
       nativeOutputSettlement: undefined,
+      outputDestination: undefined,
       status: "queued",
       errorMessage: undefined,
       totalImages: undefined,
@@ -2019,6 +1898,7 @@ export function restartDownloadTask(
     chapters: original.chapters.map((chapter) => ({
       ...chapter,
       nativeOutputSettlement: undefined,
+      outputDestination: undefined,
       status: "queued",
       errorMessage: undefined,
       totalImages: undefined,
@@ -2229,9 +2109,8 @@ export function cancelDownloadTask(
 
   if (task.status === "queued") {
     if (task.activeBlock === "native_output_action_required") {
-      // A native-output action-required task cancels through the coordinator's
-      // surrender path, NOT ordinary queued Undo: Undo would resurrect a task
-      // whose erased native outputs were surrendered and released.
+      // Retained native output still owns external resources, so cancellation
+      // releases that owner through the coordinator.
       const canceledTask = {
         ...cancelDownloadingTask(task, input.now),
         activeCancel: { commandId: input.commandId },

@@ -42,8 +42,6 @@ const commonProps = {
   activeTaskProgress: null,
   showActiveProgress: false,
   onCancelTask: vi.fn(),
-  onForgetUnobservable: vi.fn(),
-  forgettingTaskIds: new Set<string>(),
   onRetryFailed: vi.fn(),
   onRestartTask: vi.fn(),
   onMoveTaskToTop: vi.fn(),
@@ -73,6 +71,22 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     expect(html).toContain("Queue and task history could not be loaded.")
     expect(html).toContain("Retry")
     expect(html).not.toContain("No downloads yet")
+  })
+
+  it("shows Chrome responsibility alongside an accepted result", () => {
+    const html = renderQueueRegion({
+      ...commonProps,
+      queueTasks: [],
+      historyTasks: [
+        {
+          ...makeTask("native", "completed"),
+          outputDestination: "downloads-api",
+        },
+      ],
+    })
+    expect(html).toContain("Sent to Chrome")
+    expect(html).toContain("Check Chrome Downloads for progress and results.")
+    expect(html).not.toContain("Forget all downloads")
   })
 
   it("labels retained tasks as stale after a failed refresh", () => {

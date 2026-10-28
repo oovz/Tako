@@ -247,7 +247,11 @@ describe("archive chapter edge cases", () => {
       vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
         {} as FileSystemDirectoryHandle
       )
-      const input = archiveInput({ ...createOptions("cbz"), downloadMode })
+      const input = archiveInput({
+        ...createOptions("cbz"),
+        downloadMode,
+        directoryHandleId: "selected-id",
+      })
       input.urls.push("https://example.com/2.jpg")
       workerState.reportedImageCount = 1
 
@@ -476,6 +480,7 @@ describe("archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockResolvedValue({ status: "written" })
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       settingsSnapshot: {
         ...createOptions("cbz").settingsSnapshot,
@@ -509,6 +514,7 @@ describe("archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockRejectedValue(new Error("disk full"))
     const opts = {
       ...createOptions("zip"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -529,6 +535,7 @@ describe("archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -549,6 +556,7 @@ describe("archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       abortSignal: controller.signal,
     }
@@ -579,6 +587,7 @@ describe("archive chapter edge cases", () => {
     })
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       abortSignal: controller.signal,
     }
@@ -688,6 +697,7 @@ describe("no-archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockRejectedValue(new Error("write failed"))
     const opts = {
       ...createOptions("none"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -715,6 +725,7 @@ describe("no-archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("none"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       coverImage: {
         data: new Uint8Array([4]).buffer,
@@ -800,6 +811,7 @@ describe("no-archive chapter edge cases", () => {
     const opts = {
       ...createOptions("none"),
       includeComicInfo: true,
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -826,6 +838,7 @@ describe("no-archive chapter edge cases", () => {
     const opts = {
       ...createOptions("none"),
       includeComicInfo: true,
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       coverImage: {
         data: new Uint8Array([4]).buffer,

@@ -71,32 +71,40 @@ describe("ChapterSelector semantics", () => {
     expect(markup).toContain('aria-expanded="false"')
   })
 
-  it("renders an accessible marker for a previously downloaded chapter", () => {
-    const markup = renderToStaticMarkup(
-      createElement(ChapterSelector, {
-        items: [
-          {
-            id: "chapter-1",
-            title: "Chapter 1",
-            url: "https://example.com/1",
-            index: 1,
-            selected: false,
-            downloaded: true,
-            status: "queued",
-            isStandalone: true,
-          },
-        ],
-        viewMode: "chapters",
-        expandedGroups: new Set<string>(),
-        isEnqueuing: false,
-        ...callbacks,
-      })
-    )
+  it.each([
+    ["downloads-api", "status_sentToChrome"],
+    ["fsa", "status_savedToFolder"],
+    [undefined, "status_processed"],
+  ] as const)(
+    "renders an accessible history result for %s",
+    (outputDestination, label) => {
+      const markup = renderToStaticMarkup(
+        createElement(ChapterSelector, {
+          items: [
+            {
+              id: "chapter-1",
+              title: "Chapter 1",
+              url: "https://example.com/1",
+              index: 1,
+              selected: false,
+              downloaded: true,
+              outputDestination,
+              status: "queued",
+              isStandalone: true,
+            },
+          ],
+          viewMode: "chapters",
+          expandedGroups: new Set<string>(),
+          isEnqueuing: false,
+          ...callbacks,
+        })
+      )
 
-    expect(markup).toContain("data-downloaded-marker")
-    expect(markup).toContain("status_completed")
-    expect(markup.match(/role="checkbox"/g)).toHaveLength(1)
-  })
+      expect(markup).toContain("data-downloaded-marker")
+      expect(markup).toContain(label)
+      expect(markup.match(/role="checkbox"/g)).toHaveLength(1)
+    }
+  )
 
   it("keeps virtualization enabled when a large volume is collapsed or expanded", () => {
     const chapters = Array.from({ length: 48 }, (_, index) => ({

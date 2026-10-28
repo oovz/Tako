@@ -86,7 +86,7 @@ export interface NativeOutputSettlement {
   requested: number
   completed: number
   interrupted: number
-  /** Outputs whose Chrome download history entry was erased and the user surrendered observation of. */
+  /** Retained accounting evidence for surrendered output observations. */
   surrendered: number
   lastSuccessfulDownloadId?: number
   appliedAt: number
@@ -110,6 +110,7 @@ export interface TaskChapter {
   totalImages?: number
   imagesFailed?: number
   outputs?: OutputAccounting
+  outputDestination?: "downloads-api" | "fsa"
   nativeOutputSettlement?: NativeOutputSettlement
   dispatchAttempt?: number
   lastUpdated: number
@@ -179,6 +180,8 @@ export interface QueueTaskSummary {
   siteIntegration: string
   coverUrl?: string
   status: DownloadTaskStatus
+  outputDestination?: "downloads-api" | "fsa"
+  outputMode?: "downloads-api" | "fsa"
   activeBlock?: ActiveTaskBlock
   chapters: {
     total: number
@@ -190,8 +193,6 @@ export interface QueueTaskSummary {
     completed?: number
   }
   failureCategory?: DownloadErrorCategory
-  /** True when any chapter has a native output whose result is unobservable. */
-  hasUnobservableOutput?: boolean
   isRetried?: boolean
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number

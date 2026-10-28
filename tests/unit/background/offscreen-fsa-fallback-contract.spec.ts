@@ -51,7 +51,12 @@ describe("DestinationService explicit destination contract", () => {
       queueRepository: {
         blockTaskForDestination: mocks.blockTaskForDestination,
       },
-      settingsReader: { getSettings: async () => ({ notifications: true }) },
+      settingsReader: {
+        getSettings: async () => ({
+          notifications: true,
+          downloads: { customDirectoryHandleId: "selected-id" },
+        }),
+      },
       notifier: {
         notifyDestinationActionRequired: mocks.notifyDestinationActionRequired,
       },
@@ -104,7 +109,7 @@ describe("DestinationService explicit destination contract", () => {
     )
   })
 
-  it("resolves the fixed persisted download-root handle for an authorized FSA task", async () => {
+  it("resolves the selected persisted download-root handle for an authorized FSA task", async () => {
     const handle = { name: "Downloads" } as FileSystemDirectoryHandle
     mocks.loadDownloadRootHandle.mockResolvedValue(handle)
     mocks.queryFsaPermission.mockResolvedValue("granted")
@@ -116,7 +121,7 @@ describe("DestinationService explicit destination contract", () => {
       })
     ).resolves.toEqual({
       kind: "custom",
-
+      handleId: "selected-id",
       handle,
     })
   })

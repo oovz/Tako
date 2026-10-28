@@ -54,27 +54,8 @@ describe("download error presentation", () => {
     expect(getDownloadErrorMessage(raw)).not.toContain(raw)
     expect(getDownloadErrorMessage(raw)).not.toContain("token=secret")
   })
-
-  it("uses explicit task-wide forget copy for unobservable downloads", () => {
-    expect(
-      getDownloadCancelPresentation("browser_download_unobservable")
-    ).toEqual({
-      title: "sidepanel_forgetUnobservableDownload",
-      description: "sidepanel_forgetUnobservableWarning",
-      confirmLabel: "sidepanel_forgetDownload",
-    })
-  })
-
-  it("uses task-wide forget copy when another chapter owns the unobservable output", () => {
-    expect(getDownloadCancelPresentation("network_unavailable", true)).toEqual({
-      title: "sidepanel_forgetUnobservableDownload",
-      description: "sidepanel_forgetUnobservableWarning",
-      confirmLabel: "sidepanel_forgetDownload",
-    })
-  })
-
-  it("keeps ordinary cancellation copy for other failures", () => {
-    expect(getDownloadCancelPresentation("network_unavailable")).toEqual({
+  it("describes the scope of task cancellation", () => {
+    expect(getDownloadCancelPresentation()).toEqual({
       title: "sidepanel_cancelThisDownload",
       description: "sidepanel_cancelProgressWarning",
       confirmLabel: "common_yes",

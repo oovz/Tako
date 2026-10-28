@@ -351,7 +351,6 @@ describe("ensureOffscreenDocumentReady", () => {
       {
         getLiveTaskIds: vi.fn(async () => []),
         hasLiveDependencies: vi.fn(async () => false),
-        hasReconcilableLiveDependencies: vi.fn(async () => false),
       } as never
     )
 
@@ -370,7 +369,6 @@ describe("ensureOffscreenDocumentReady", () => {
       {
         getLiveTaskIds: vi.fn(async () => []),
         hasLiveDependencies: vi.fn(async () => true),
-        hasReconcilableLiveDependencies: vi.fn(async () => true),
       } as never
     )
 
@@ -443,7 +441,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => true),
-      hasReconcilableLiveDependencies: vi.fn(async () => true),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -467,7 +464,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => false),
-      hasReconcilableLiveDependencies: vi.fn(async () => false),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -520,9 +516,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       })
       const nativeOutputCoordinator = {
         hasLiveDependencies: vi.fn(async () => await nativeDependencyCheck),
-        hasReconcilableLiveDependencies: vi.fn(
-          async () => await nativeDependencyCheck
-        ),
       }
 
       const idleClose = scheduleOffscreenCloseIfIdle(
@@ -564,7 +557,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => false),
-      hasReconcilableLiveDependencies: vi.fn(async () => false),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -588,7 +580,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => true),
-      hasReconcilableLiveDependencies: vi.fn(async () => true),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -646,9 +637,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
     })
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => await nativeDependencyCheck),
-      hasReconcilableLiveDependencies: vi.fn(
-        async () => await nativeDependencyCheck
-      ),
     }
 
     const idleClose = scheduleOffscreenCloseIfIdle(

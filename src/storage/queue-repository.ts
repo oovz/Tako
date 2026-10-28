@@ -3,7 +3,6 @@ import {
   bindDispatchLeaseIncarnation as decideLeaseIncarnationBinding,
   beginChapterDispatch as decideChapterDispatch,
   blockTaskForDestination as decideDestinationBlock,
-  blockTaskForNativeOutputAction as decideNativeOutputActionBlock,
   blockTaskForProviderPolicy as decideProviderPolicyBlock,
   cancelDownloadTask as decideTaskCancellation,
   clearDispatchLease as decideLeaseClear,
@@ -17,7 +16,6 @@ import {
   recoverQueueAfterStartup as decideStartupRecovery,
   recordTaskDispatchError as decideTaskDispatchError,
   releaseDestinationBlock as decideDestinationBlockRelease,
-  releaseNativeOutputActionBlock as decideNativeOutputActionBlockRelease,
   releaseProviderPolicyBlock as decideProviderPolicyBlockRelease,
   releaseProviderPolicyBlocks as decideProviderPolicyBlocksRelease,
   removeTerminalDownloadTask as decideTerminalTaskRemoval,
@@ -483,26 +481,6 @@ export class QueueRepository {
   ): Promise<ReturnType<typeof decideProviderPolicyBlockRelease>["result"]> {
     return await this.executeDecision((state) =>
       decideProviderPolicyBlockRelease(state, { taskId })
-    )
-  }
-
-  async blockTaskForNativeOutputAction(input: {
-    taskId: string
-    errorMessage: string
-  }): Promise<ReturnType<typeof decideNativeOutputActionBlock>["result"]> {
-    const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideNativeOutputActionBlock(state, detachedInput)
-    )
-  }
-
-  async releaseNativeOutputActionBlock(
-    taskId: string
-  ): Promise<
-    ReturnType<typeof decideNativeOutputActionBlockRelease>["result"]
-  > {
-    return await this.executeDecision((state) =>
-      decideNativeOutputActionBlockRelease(state, { taskId })
     )
   }
 

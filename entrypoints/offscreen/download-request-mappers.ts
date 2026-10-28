@@ -64,6 +64,7 @@ export function createProcessChapterStreamingOptions(input: {
     format: snapshot.archiveFormat,
     includeComicInfo: snapshot.includeComicInfo,
     downloadMode: request.saveMode === "fsa" ? "custom" : "browser",
+    directoryHandleId: request.directoryHandleId,
     comicInfoVersion: "2.0",
     abortSignal,
     onProgress,

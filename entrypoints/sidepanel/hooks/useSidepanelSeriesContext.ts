@@ -341,19 +341,24 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)
     if (!derived.seriesId || derived.items.length === 0) return derived
 
-    const downloadedChapterIds = new Set(
+    const downloadedChapterResults = new Map(
       downloadedChapters
         .filter(
           (chapter) =>
             chapter.siteIntegrationId === derived.siteId &&
             chapter.seriesId === derived.seriesId
         )
-        .map((chapter) => chapter.chapterId)
+        .map(
+          (chapter) => [chapter.chapterId, chapter.outputDestination] as const
+        )
     )
 
     return {
       ...derived,
-      items: applyDownloadedChapterMarkers(derived.items, downloadedChapterIds),
+      items: applyDownloadedChapterMarkers(
+        derived.items,
+        downloadedChapterResults
+      ),
     }
   }, [activeTabContext, downloadedChapters])
 

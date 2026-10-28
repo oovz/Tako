@@ -81,7 +81,7 @@ describe("CommandCenterQueue action hierarchy", () => {
           activeBlock: "native_output_action_required",
         })
       )
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("keeps active cancel visible as the only inline action", () => {

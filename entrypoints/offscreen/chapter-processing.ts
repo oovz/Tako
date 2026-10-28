@@ -108,9 +108,7 @@ export async function processNoneFormatChapter(
 
   if (downloadMode === "custom") {
     writableRoot = await resolveChapterWritableRoot(runtime, {
-      taskId,
-      chapter,
-      totalImages: total,
+      directoryHandleId: opts.directoryHandleId,
       abortSignal,
     })
   }
@@ -402,9 +400,7 @@ export async function processArchiveFormatChapter(
   let writableRoot: FileSystemDirectoryHandle | null = null
   if (downloadMode === "custom") {
     writableRoot = await resolveChapterWritableRoot(runtime, {
-      taskId,
-      chapter,
-      totalImages: urls.length,
+      directoryHandleId: opts.directoryHandleId,
       abortSignal,
     })
   }

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   beginChapterDispatch,
   blockTaskForDestination,
-  blockTaskForNativeOutputAction,
   blockTaskForProviderPolicy,
   cancelDownloadTask,
   clearDispatchLease,
@@ -1846,7 +1845,7 @@ describe("queue aggregate kernel cancellation and Undo", () => {
     )
   })
 
-  it("cancels a native-output action-required queued task without Undo so surrender runs", () => {
+  it("cancels retained native-output ownership without Undo", () => {
     const task = createTask("task-1", "queued", {
       activeBlock: "native_output_action_required",
       errorCategory: "browser_download_unobservable",
@@ -1871,13 +1870,9 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       undo: null,
     })
 
-    const blockedWithLease = blockTaskForNativeOutputAction(
-      createState([createTask("task-1", "downloading")]),
-      { taskId: "task-1", errorMessage: "erased" }
-    )
     const lease = createLease()
     const canceledWithLease = cancelDownloadTask(
-      { ...blockedWithLease.next, lease },
+      { ...state, lease },
       {
         taskId: "task-1",
         commandId: "cancel-native",

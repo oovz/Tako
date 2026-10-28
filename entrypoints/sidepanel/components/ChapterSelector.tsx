@@ -8,6 +8,7 @@ import type {
   SidePanelChapter,
   VolumeOrChapter,
 } from "@/entrypoints/sidepanel/types"
+import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 
 interface ChapterSelectorProps {
@@ -209,10 +210,18 @@ export function ChapterSelector({
               <span
                 data-downloaded-marker
                 className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
-                title={t("status_completed")}
+                title={
+                  row.chapter.outputDestination
+                    ? getOutputResultLabel(row.chapter.outputDestination)
+                    : t("status_processed")
+                }
               >
                 <CheckCircle2 className="size-4" aria-hidden="true" />
-                <span className="sr-only">{t("status_completed")}</span>
+                <span className="sr-only">
+                  {row.chapter.outputDestination
+                    ? getOutputResultLabel(row.chapter.outputDestination)
+                    : t("status_processed")}
+                </span>
               </span>
             )}
           </div>

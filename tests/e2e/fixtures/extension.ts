@@ -420,6 +420,18 @@ async function setupExtensionContext(
   const userDataDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tmd-playwright-")
   )
+  const downloadDirectory = path.join(userDataDir, "Downloads")
+  await fs.mkdir(path.join(userDataDir, "Default"))
+  await fs.mkdir(downloadDirectory)
+  await fs.writeFile(
+    path.join(userDataDir, "Default", "Preferences"),
+    JSON.stringify({
+      download: {
+        default_directory: downloadDirectory,
+        prompt_for_download: false,
+      },
+    })
+  )
 
   // Download-workflow specs need to intercept offscreen-initiated
   // fetches. Playwright's context.route doesn't cover those, so we spin up

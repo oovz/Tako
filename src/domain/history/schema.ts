@@ -19,6 +19,7 @@ const DownloadedChapterRecordSchema = z.strictObject({
   chapterNumber: z.number().finite().optional(),
   volumeNumber: z.number().finite().optional(),
   downloadedAt: z.number().finite().nonnegative(),
+  outputDestination: z.enum(["downloads-api", "fsa"]).optional(),
   filePath: z.string().optional(),
   fileSize: z.number().finite().nonnegative().optional(),
   format: z.enum(["zip", "cbz", "cbr", "pdf", "none"]),

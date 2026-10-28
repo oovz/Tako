@@ -1,5 +1,6 @@
 import {
   canReleaseNativeOutputBlob,
+  canAccountNativeOutput,
   isNativeOutputTerminal,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
@@ -429,39 +430,6 @@ export function observeNativeDownloadErased(
   return applied(replaceOutput(state, record), { record })
 }
 
-/**
- * Explicit user surrender of an unobservable Chrome download (FORGET).
- * Only waiting records whose download was erased from Chrome history qualify:
- * their result can never be observed again, and the user has accepted that
- * fact. Surrender does not claim complete or interrupted — the outcome stays
- * unknown — and it releases the queue block. Blob ownership follows browser
- * consumption evidence independently.
- */
-export function markNativeOutputSurrendered(
-  state: NativeOutputState,
-  input: { outputId: string; now: number }
-): NativeOutputKernelDecision<
-  | NativeOutputApplied<{ record: NativeOutputRecord }>
-  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
-  | OutputNotFound
-  | InvalidTransition
-> {
-  const current = state.outputsByOutputId[input.outputId]
-  if (!current) return rejected(state, "output-not-found")
-  if (current.phase === "surrendered") {
-    return unchanged(state, { record: current })
-  }
-  if (current.phase !== "waiting" || current.erasedAt === undefined) {
-    return rejected(state, "invalid-transition")
-  }
-  const record: NativeOutputRecord = {
-    ...current,
-    phase: "surrendered",
-    surrenderedAt: input.now,
-  }
-  return applied(replaceOutput(state, record), { record })
-}
-
 export function markNativeOutputAccountingDisposition(
   state: NativeOutputState,
   input: {
@@ -478,7 +446,7 @@ export function markNativeOutputAccountingDisposition(
 > {
   const current = state.outputsByOutputId[input.outputId]
   if (!current) return rejected(state, "output-not-found")
-  if (!isNativeOutputTerminal(current) && current.phase !== "surrendered") {
+  if (!canAccountNativeOutput(current)) {
     return rejected(state, "invalid-transition")
   }
   if (current.accountingDisposition !== "pending") {
@@ -530,7 +498,7 @@ export function markNativeOutputDependencyReleased(
     return unchanged(state, { record: current })
   }
   if (
-    (!isNativeOutputTerminal(current) && current.phase !== "surrendered") ||
+    !canReleaseNativeOutputBlob(current) ||
     current.accountingDisposition === "pending" ||
     current.blobReleasedAt === undefined
   ) {

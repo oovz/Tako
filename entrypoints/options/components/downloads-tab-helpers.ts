@@ -1,4 +1,8 @@
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
+import {
+  getCompletedOutputDestination,
+  getOutputResultLabel,
+} from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 
 export interface DownloadTaskBuckets {
@@ -45,8 +49,17 @@ export function getTaskStatusSummaryLabel(
   const totalChapters = task.chapters.length
 
   switch (task.status) {
-    case "completed":
-      return t("options_taskCompleted", [String(totalChapters)])
+    case "completed": {
+      const destination = getCompletedOutputDestination(task.chapters)
+      return t(
+        destination === "downloads-api"
+          ? "options_taskSentToChrome"
+          : destination === "fsa"
+            ? "options_taskSavedToFolder"
+            : "options_taskCompleted",
+        [String(totalChapters), totalChapters === 1 ? "" : "s"]
+      )
+    }
     case "failed":
       return t("options_taskFailed", [
         String(completedChapters),
@@ -82,7 +95,10 @@ export function chapterStatusBadgeClass(status: string): string {
   return "bg-muted text-muted-foreground"
 }
 
-export function getTaskStatusBadge(status: DownloadTaskState["status"]): {
+export function getTaskStatusBadge(
+  status: DownloadTaskState["status"],
+  outputDestination?: TaskChapter["outputDestination"]
+): {
   label: string
   className: string
 } {
@@ -99,7 +115,7 @@ export function getTaskStatusBadge(status: DownloadTaskState["status"]): {
       }
     case "completed":
       return {
-        label: t("status_completed"),
+        label: getOutputResultLabel(outputDestination),
         className: "bg-primary/10 text-primary",
       }
     case "partial_success":
@@ -158,11 +174,12 @@ export function shouldShowChapterError(status: TaskChapter["status"]): boolean {
 }
 
 export function formatChapterStatusLabel(
-  status: TaskChapter["status"]
+  status: TaskChapter["status"],
+  outputDestination?: TaskChapter["outputDestination"]
 ): string {
   switch (status) {
     case "completed":
-      return t("status_completed")
+      return getOutputResultLabel(outputDestination)
     case "partial_success":
       return t("status_partialSuccess")
     case "failed":

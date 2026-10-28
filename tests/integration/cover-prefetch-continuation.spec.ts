@@ -212,6 +212,7 @@ async function createDispatchRequest(): Promise<{
     },
     settingsSnapshot,
     saveMode: "fsa" as const,
+    directoryHandleId: "selected-id",
   }
   const fingerprint = await createOffscreenDispatchFingerprint(unsigned)
   const payload = { ...unsigned, fingerprint }

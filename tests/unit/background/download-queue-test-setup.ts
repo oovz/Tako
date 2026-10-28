@@ -148,7 +148,6 @@ export const mockNativeOutputCoordinator = {
         requested: manifest.outputsRequested,
         completed: manifest.outputsRequested - interrupted,
         interrupted,
-        surrendered: 0,
         now: Date.now(),
       })
     }
@@ -367,7 +366,6 @@ export async function resetDownloadQueueTestEnvironment(): Promise<void> {
           requested: manifest.outputsRequested,
           completed: manifest.outputsRequested - interrupted,
           interrupted,
-          surrendered: 0,
           now: Date.now(),
         })
       }

@@ -34,14 +34,6 @@ export function toIdentity(payload: OutputReadyPayload): NativeOutputIdentity {
 export function trackedResponse(
   record: NativeOutputRecord
 ): OutputReadyResponse {
-  if (record.phase === "complete" || record.phase === "interrupted") {
-    return {
-      success: true,
-      disposition: "tracked",
-      phase: record.phase,
-      terminalOutcome: record.phase,
-    }
-  }
   return { success: true, disposition: "tracked", phase: record.phase }
 }
 
@@ -67,7 +59,6 @@ export function manifestTrackedOutputIds(
 
 export interface NativeOutputSettlementStats {
   completed: number
-  surrendered: number
   interrupted: number
   lastSuccessfulDownloadId: number | undefined
 }
@@ -77,15 +68,11 @@ export function calculateNativeOutputSettlementStats(
   records: NativeOutputRecord[]
 ): NativeOutputSettlementStats {
   const completed = records.filter(
-    (record) => record.phase === "complete"
+    (record) => record.downloadId !== undefined
   ).length
-  const surrendered = records.filter(
-    (record) => record.phase === "surrendered"
-  ).length
-  const interrupted = manifest.outputsRequested - completed - surrendered
+  const interrupted = manifest.outputsRequested - completed
   const lastSuccessfulDownloadId = records.reduce<number | undefined>(
     (latest, record) =>
-      record.phase === "complete" &&
       record.downloadId !== undefined &&
       (latest === undefined || record.downloadId > latest)
         ? record.downloadId
@@ -94,7 +81,6 @@ export function calculateNativeOutputSettlementStats(
   )
   return {
     completed,
-    surrendered,
     interrupted,
     lastSuccessfulDownloadId,
   }

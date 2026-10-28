@@ -102,19 +102,14 @@ describe("queueCommandClient", () => {
     ).toEqual(["MOVE_TASK_TO_TOP", "CLEAR_ALL_HISTORY"])
   })
 
-  it("sends reorder, clear, and forget once because they can broaden on replay", async () => {
+  it("sends reorder and clear once because they can broaden on replay", async () => {
     mocks.sendRuntimeMessage
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true })
-      .mockResolvedValueOnce({ success: true, surrendered: 1 })
 
     await queueCommandClient.moveTaskToTop("task-1")
     await queueCommandClient.clearTerminalHistory()
-    await expect(
-      queueCommandClient.forgetUnobservableOutputs("task-1")
-    ).resolves.toEqual({ surrendered: 1 })
-
-    expect(mocks.sendRuntimeMessage).toHaveBeenCalledTimes(3)
+    expect(mocks.sendRuntimeMessage).toHaveBeenCalledTimes(2)
     expect(mocks.sendRuntimeMessageWithRetry).not.toHaveBeenCalled()
   })
 })

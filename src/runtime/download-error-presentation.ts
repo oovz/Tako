@@ -35,20 +35,7 @@ export interface DownloadCancelPresentation {
 }
 
 /** Keep destructive cancellation scope identical across extension surfaces. */
-export function getDownloadCancelPresentation(
-  category: unknown,
-  hasUnobservableOutput = false
-): DownloadCancelPresentation {
-  if (
-    hasUnobservableOutput ||
-    normalizeDownloadErrorCategory(category) === "browser_download_unobservable"
-  ) {
-    return {
-      title: t("sidepanel_forgetUnobservableDownload"),
-      description: t("sidepanel_forgetUnobservableWarning"),
-      confirmLabel: t("sidepanel_forgetDownload"),
-    }
-  }
+export function getDownloadCancelPresentation(): DownloadCancelPresentation {
   return {
     title: t("sidepanel_cancelThisDownload"),
     description: t("sidepanel_cancelProgressWarning"),

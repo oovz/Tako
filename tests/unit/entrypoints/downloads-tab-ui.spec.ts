@@ -21,6 +21,7 @@ function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
     index: overrides.index ?? 1,
     status: overrides.status ?? "queued",
     lastUpdated: overrides.lastUpdated ?? Date.now(),
+    outputDestination: overrides.outputDestination,
     errorMessage: overrides.errorMessage,
     imagesFailed: overrides.imagesFailed,
     totalImages: overrides.totalImages,
@@ -48,12 +49,47 @@ describe("DownloadsTab status summary behavior", () => {
     expect(label).toBe("Completed (2 chapters)")
   })
 
+  it("describes completed output using destination evidence", () => {
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({
+            status: "completed",
+            outputDestination: "downloads-api",
+          }),
+        ])
+      )
+    ).toBe("Sent to Chrome (1 chapter)")
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({ status: "completed", outputDestination: "fsa" }),
+        ])
+      )
+    ).toBe("Saved to folder (1 chapter)")
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({
+            status: "completed",
+            outputDestination: "downloads-api",
+          }),
+          makeChapter({
+            id: "ch-2",
+            status: "completed",
+            outputDestination: "fsa",
+          }),
+        ])
+      )
+    ).toBe("Completed (2 chapters)")
+  })
+
   it("renders single-chapter completed summary for one chapter", () => {
     const label = getTaskStatusSummaryLabel(
       makeTask("completed", [makeChapter({ status: "completed" })])
     )
 
-    expect(label).toBe("Completed (1 chapters)")
+    expect(label).toBe("Completed (1 chapter)")
   })
 
   it("uses completed chapter count in failed/partial summaries", () => {
@@ -65,11 +101,11 @@ describe("DownloadsTab status summary behavior", () => {
     ]
 
     expect(getTaskStatusSummaryLabel(makeTask("failed", chapters))).toBe(
-      "Failed (2 of 4 chapters saved)"
+      "Failed (2 of 4 chapters processed)"
     )
     expect(
       getTaskStatusSummaryLabel(makeTask("partial_success", chapters))
-    ).toBe("Partial (2 of 4 chapters saved)")
+    ).toBe("Partial (2 of 4 chapters processed)")
   })
 
   it("renders queued/downloading/canceled summaries with expected wording", () => {
@@ -86,7 +122,7 @@ describe("DownloadsTab status summary behavior", () => {
       "Downloading 1 of 3 chapters"
     )
     expect(getTaskStatusSummaryLabel(makeTask("canceled", chapters))).toBe(
-      "Canceled (1 of 3 chapters saved)"
+      "Canceled (1 of 3 chapters processed)"
     )
   })
 })

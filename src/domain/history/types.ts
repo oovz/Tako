@@ -8,6 +8,7 @@ export interface DownloadedChapterRecord {
   chapterNumber?: number
   volumeNumber?: number
   downloadedAt: number
+  outputDestination?: "downloads-api" | "fsa"
   filePath?: string
   fileSize?: number
   format: "zip" | "cbz" | "cbr" | "pdf" | "none"

@@ -277,7 +277,6 @@ async function runDownloadTask(
       stateManager,
       taskId,
       chapterOutcomesByIndex,
-      settingsSnapshot,
       finalizationDependencies,
     })
     await clearActiveTaskProgress()

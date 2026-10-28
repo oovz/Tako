@@ -396,9 +396,18 @@ describe("downloaded chapter markers", () => {
 
     const marked = applyDownloadedChapterMarkers(
       items,
-      new Set(["standalone-1", "chapter-2"])
+      new Map<string, "downloads-api" | "fsa" | undefined>([
+        ["standalone-1", "downloads-api"],
+        ["chapter-2", "fsa"],
+      ])
     )
 
+    expect(
+      "chapters" in marked[0] ? undefined : marked[0].outputDestination
+    ).toBe("downloads-api")
+    expect(
+      "chapters" in marked[1] && marked[1].chapters[1].outputDestination
+    ).toBe("fsa")
     expect("chapters" in marked[0] ? undefined : marked[0].downloaded).toBe(
       true
     )

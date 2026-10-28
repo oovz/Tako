@@ -128,6 +128,7 @@ const taskChapterSchema = z
     totalImages: nonnegativeInteger.optional(),
     imagesFailed: nonnegativeInteger.optional(),
     outputs: outputAccountingSchema.optional(),
+    outputDestination: z.enum(["downloads-api", "fsa"]).optional(),
     nativeOutputSettlement: nativeOutputSettlementSchema.optional(),
     dispatchAttempt: nonnegativeInteger.optional(),
     lastUpdated: finiteNumber,

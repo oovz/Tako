@@ -34,8 +34,6 @@ const EXPECTED_RUNTIME_MESSAGES = {
   CLEAR_ALL_HISTORY: "background|command|options|runtime-ready",
   REMOVE_TASK: "background|command|sidepanel,options|runtime-ready",
   CANCEL_TASK: "background|command|sidepanel,options|runtime-ready",
-  FORGET_UNOBSERVABLE_OUTPUTS:
-    "background|command|sidepanel,options|runtime-ready",
   RETRY_DESTINATION: "background|command|options|runtime-ready",
   SAVE_OPTIONS_CONFIGURATION: "background|command|options|runtime-ready",
   GET_UI_PREFERENCES: "background|query|sidepanel,options|runtime-ready",
@@ -75,7 +73,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(35)
+    expect(Object.keys(actual)).toHaveLength(34)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {

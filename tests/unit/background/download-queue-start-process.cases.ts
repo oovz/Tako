@@ -28,6 +28,8 @@ import {
 } from "@/src/site-integrations/session-rule-manager"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
+import { createOffscreenDispatchFingerprint } from "@/src/runtime/offscreen-job-fingerprint"
+import { runtimeMessageRegistry } from "@/src/runtime/runtime-message-contracts"
 import { DestinationService } from "@/entrypoints/background/destination"
 import type {
   RuntimeMessageRequest,
@@ -369,6 +371,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
+        handleId: "selected-id",
         handle: {} as FileSystemDirectoryHandle,
       })
       const finalization = vi
@@ -484,6 +487,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
+        handleId: "selected-id",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(
@@ -497,6 +501,24 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         .filter(([message]) => message.type === "OFFSCREEN_DOWNLOAD_CHAPTER")
         .map(([message]) => message.payload.saveMode)
       expect(saveModes).toEqual(["fsa", "fsa"])
+      for (const message of dispatchedChapters(task.id)) {
+        expect(message.payload.directoryHandleId).toBe("selected-id")
+        expect(
+          runtimeMessageRegistry.OFFSCREEN_DOWNLOAD_CHAPTER.request.safeParse(
+            message
+          ).success
+        ).toBe(true)
+        const { fingerprint, ...unsigned } = message.payload
+        expect(fingerprint).toBe(
+          await createOffscreenDispatchFingerprint(unsigned)
+        )
+        expect(
+          await createOffscreenDispatchFingerprint({
+            ...unsigned,
+            directoryHandleId: "changed-id",
+          })
+        ).not.toBe(fingerprint)
+      }
       expect(
         mockDestinationService.getEffectiveDestination
       ).toHaveBeenCalledTimes(2)
@@ -565,7 +587,12 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         .mockRejectedValue(new Error("notification failed"))
       const destinationService = new DestinationService({
         queueRepository: mockQueueRepository,
-        settingsReader: { getSettings: async () => ({ notifications: true }) },
+        settingsReader: {
+          getSettings: async () => ({
+            notifications: true,
+            downloads: { customDirectoryHandleId: "selected-id" },
+          }),
+        },
         notifier: { notifyDestinationActionRequired: notifier },
       })
       vi.mocked(mockDestinationService.blockForPreflight).mockImplementation(
@@ -606,6 +633,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
+        handleId: "selected-id",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(
@@ -666,6 +694,7 @@ export function registerDownloadQueueStartAndProcessCases(): void {
         mockDestinationService.getEffectiveDestination
       ).mockResolvedValue({
         kind: "custom",
+        handleId: "selected-id",
         handle: {} as FileSystemDirectoryHandle,
       })
       await startDownloadTask(

@@ -8,6 +8,54 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
 describe("DownloadTaskCard error presentation", () => {
+  it.each([
+    ["downloads-api", "Sent to Chrome"],
+    ["fsa", "Saved to folder"],
+    [undefined, "Completed"],
+  ] as const)(
+    "renders completed task and chapter results for %s",
+    (outputDestination, label) => {
+      const task: DownloadTaskState = {
+        id: "completed-task",
+        siteIntegrationId: "mangadex",
+        mangaId: "series-1",
+        seriesTitle: "Series 1",
+        status: "completed",
+        created: 1,
+        completed: 2,
+        chapters: [
+          {
+            id: "chapter-1",
+            url: "https://example.com/chapter-1",
+            title: "Chapter 1",
+            index: 1,
+            status: "completed",
+            outputDestination,
+            lastUpdated: 2,
+          },
+        ],
+        settingsSnapshot: createTaskSettingsSnapshot(
+          DEFAULT_SETTINGS,
+          "mangadex"
+        ),
+      }
+      const html = renderToStaticMarkup(
+        React.createElement(DownloadTaskCard, {
+          task,
+          isChapterListExpanded: true,
+          onCancel: vi.fn(async () => ({ success: true as const })),
+          onRetry: vi.fn(async () => undefined),
+          onRestart: vi.fn(async () => undefined),
+          onRemove: vi.fn(async () => undefined),
+        })
+      )
+      expect(html.match(new RegExp(`>${label}<`, "g"))).toHaveLength(2)
+      expect(
+        html.includes("Check Chrome Downloads for progress and results.")
+      ).toBe(outputDestination === "downloads-api")
+    }
+  )
+
   it("renders localized categories without exposing task or chapter diagnostics", () => {
     const task: DownloadTaskState = {
       id: "task-1",

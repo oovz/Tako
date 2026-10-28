@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "このタスクの残りの処理を停止します。Chrome がすでに受け付けたダウンロードは続行されます。Chrome のダウンロードで管理してください。"
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "このタスクの保留中のダウンロードをすべて忘れますか？"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "ブラウザーのダウンロードを確認できません。このタスクのTakoの保留中の出力をすべて解放すると、ファイルが不完全になる可能性があります。"
-  },
-  "sidepanel_forgetDownload": {
-    "message": "すべてのダウンロードを忘れる"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ ダウンロード中",
     "placeholders": {
@@ -466,7 +457,7 @@
     "message": "ディスクの空き容量が不足しています。"
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "ブラウザーが出力の保存を完了できませんでした。"
+    "message": "Chrome が出力ファイルを受け付けませんでした。"
   },
   "downloadError_browserDownloadUnobservable": {
     "message": "履歴が削除されたため、ブラウザーのダウンロードを確認できませんでした。"
@@ -861,7 +852,7 @@
     }
   },
   "options_taskSummaryFailed": {
-    "message": "失敗（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "失敗（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -872,7 +863,7 @@
     }
   },
   "options_taskSummaryCanceled": {
-    "message": "キャンセル（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "キャンセル（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -902,7 +893,7 @@
     }
   },
   "options_taskSummaryPartial": {
-    "message": "一部完了（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "一部完了（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1497,7 +1488,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "失敗（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "失敗（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1508,7 +1499,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "キャンセル（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "キャンセル（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1538,7 +1529,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "部分的（$COMPLETED$/$TOTAL$ 章保存済み）",
+    "message": "部分的（$COMPLETED$/$TOTAL$ 章処理済み）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1746,18 +1737,6 @@
   "background_settingsSyncFailed": {
     "message": "設定を状態に同期できませんでした"
   },
-  "status_nativeOutputActionRequired": {
-    "message": "ダウンロード結果の確認が必要"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "保留中のダウンロードを忘れています…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "$1件の保留中のダウンロードを忘れました。キューは続行します。"
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "保留中のダウンロードを忘れられませんでした。"
-  },
   "startDownloadError_staleSeriesContext": {
     "message": "シリーズの情報が古くなっています。ページを更新してもう一度お試しください。"
   },
@@ -1860,5 +1839,39 @@
   "queue_readStale": {
     "message": "キューとタスク履歴が最新でない可能性があります。"
   },
-  "common_retry": { "message": "再試行" }
+  "common_retry": { "message": "再試行" },
+  "status_sentToChrome": {
+    "message": "Chrome に送信済み"
+  },
+  "status_savedToFolder": {
+    "message": "フォルダーに保存済み"
+  },
+  "status_processed": {
+    "message": "処理済み"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "Chrome に送信中"
+  },
+  "progressStage_savingToFolder": {
+    "message": "フォルダーに保存中"
+  },
+  "output_sentToChromeDescription": {
+    "message": "送信後の転送は Chrome が管理します。進行状況と結果は Chrome のダウンロードで確認してください。"
+  },
+  "options_taskSentToChrome": {
+    "message": "Chrome に送信済み（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskSavedToFolder": {
+    "message": "フォルダーに保存済み（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  }
 }

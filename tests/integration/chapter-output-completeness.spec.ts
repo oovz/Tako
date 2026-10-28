@@ -73,6 +73,7 @@ function fixture(
 ) {
   const files = new Map<string, Uint8Array>()
   const handoffs: Array<{ filename: string; blob: Blob }> = []
+  const close = vi.fn(async () => undefined)
   const ledger = new OffscreenLiveResourceLedger()
   const rateLimitService = new RateLimitService({
     resolveEffectivePolicy: async () => ({ concurrency, delayMs: 0 }),
@@ -88,6 +89,7 @@ function fixture(
           return {
             write: async (chunk: Uint8Array) => chunks.push(chunk.slice()),
             close: async () => {
+              await close()
               const blob = new Blob(chunks as BlobPart[])
               files.set(
                 `${prefix}${name}`,
@@ -125,6 +127,7 @@ function fixture(
     seriesTitle: "Series",
     format,
     downloadMode,
+    directoryHandleId: downloadMode === "custom" ? "test-folder" : undefined,
     includeComicInfo: false,
     comicInfoVersion: "2.0",
     abortSignal: new AbortController().signal,
@@ -177,6 +180,7 @@ function fixture(
     ledger,
     handoffs,
     files,
+    close,
     downloadImage,
   }
 }
@@ -203,6 +207,56 @@ afterEach(() => {
 })
 
 describe("complete chapter output", () => {
+  it.each(["cbz", "none"] as const)(
+    "finishes %s folder output after writable closure and reports close failure",
+    async (format) => {
+      network(0)
+      const f = fixture(format, "custom")
+      const closing = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      f.close.mockImplementationOnce(async () => {
+        closing.resolve()
+        await release.promise
+      })
+      let settled = false
+      const processing = f.process(undefined, [URLS[0]]).then((outcome) => {
+        settled = true
+        return outcome
+      })
+      await closing.promise
+      expect(settled).toBe(false)
+      expect(f.files.size).toBe(0)
+      release.resolve()
+      expect(await processing).toMatchObject({
+        status: "completed",
+        outputsRequested: 1,
+        outputsCommitted: 1,
+      })
+      expect(f.files.size).toBe(1)
+      expect(f.ledger.getUsedBytes()).toBe(0)
+
+      const failed = fixture(format, "custom")
+      const closeError = new Error("Writable close failed")
+      failed.close.mockRejectedValueOnce(closeError)
+      if (format === "cbz") {
+        await expect(
+          failed.process(undefined, [URLS[0]])
+        ).rejects.toMatchObject({
+          category: "folder_write_failed",
+          cause: closeError,
+        })
+      } else {
+        expect(await failed.process(undefined, [URLS[0]])).toMatchObject({
+          status: "failed",
+          outputsCommitted: 0,
+          errorCategory: "folder_write_failed",
+        })
+      }
+      expect(failed.files.size).toBe(0)
+      expect(failed.ledger.getUsedBytes()).toBe(0)
+    }
+  )
+
   it.each(["browser", "custom"] as const)(
     "stops chapter production on worker failure before %s output and permits later work",
     async (mode) => {

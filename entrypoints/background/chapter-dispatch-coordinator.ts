@@ -195,6 +195,8 @@ export class ChapterDispatchCoordinator {
           },
           settingsSnapshot: { ...settingsSnapshot },
           saveMode,
+          directoryHandleId:
+            destination.kind === "custom" ? destination.handleId : undefined,
           notBefore: latestTask.nextChapterDispatchAt,
           integrationContext,
         }

@@ -56,6 +56,7 @@ export type ProcessChapterStreamingOptions = {
   format: "cbz" | "zip" | "none"
   includeComicInfo: boolean
   downloadMode: "browser" | "custom"
+  directoryHandleId?: string
   comicInfoVersion: "2.0"
   onProgress: (
     pct: number,
@@ -118,11 +119,9 @@ export interface ChapterProcessingRuntime {
       | undefined,
     signal: AbortSignal
   ) => Promise<T>
-  resolveWritableDownloadRoot: (input: {
-    taskId: string
-    chapter: Chapter
-    totalImages: number
-  }) => Promise<FileSystemDirectoryHandle>
+  resolveWritableDownloadRoot: (
+    directoryHandleId: string
+  ) => Promise<FileSystemDirectoryHandle>
   requestBrowserBlobDownload: (input: {
     jobId: string
     attempt: number

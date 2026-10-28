@@ -194,6 +194,7 @@ describe("chapter processing format contracts", () => {
     vi.mocked(writeBlobToPath).mockClear()
     const opts = {
       ...createBaseOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       settingsSnapshot: {
         ...createBaseOptions("cbz").settingsSnapshot,
@@ -358,6 +359,7 @@ describe("chapter processing format contracts", () => {
       processNoneFormatChapter(runtime, {
         opts: {
           ...createBaseOptions("none"),
+          directoryHandleId: "selected-id",
           downloadMode: "custom",
         },
         urls: ["https://example.com/1.jpg"],
@@ -383,6 +385,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -429,6 +432,7 @@ describe("chapter processing format contracts", () => {
       processNoneFormatChapter(runtime, {
         opts: {
           ...createBaseOptions("none"),
+          directoryHandleId: "selected-id",
           downloadMode: "custom",
           abortSignal: controller.signal,
         },
@@ -460,6 +464,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -507,6 +512,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -553,6 +559,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         includeComicInfo: true,
         settingsSnapshot: {
