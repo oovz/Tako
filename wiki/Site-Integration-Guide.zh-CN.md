@@ -12,8 +12,6 @@
 
 站点集成识别受支持的页面，解析系列和章节信息，下载图片，并执行网站所需的图片变换。其定义声明来源、请求策略和设置。
 
-站点细节应保留在集成内部。共享队列和消息契约使用 `siteIntegrationId` 及通用集成上下文。
-
 ## 添加网站
 
 ### 1. 创建脚手架
@@ -44,15 +42,15 @@ pnpm new:site-integration <id> --name "Native Site Name" --english-name "English
 
 ### 3. 在后台解析系列
 
-按照 [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)，在 `background-runtime.ts` 中实现 `resolveSeriesData`。
+按照 [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)，在 `background-runtime.ts` 中实现 `series.resolveSeriesData`。
 
 从网址数据、站点 API 或抓取的 HTML 中解析系列标题、元数据、章节 ID、章节网址和可用状态。请求使用 `integrationHttpClient`，返回前验证站点数据。章节处理需要调度上下文时，再添加相应准备逻辑。
 
 ### 4. 在离屏文档中解析并下载章节图片
 
-按照 [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)，在 `offscreen-runtime.ts` 中实现 `resolveChapterPlan` 和 `downloadImage`。
+按照 [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)，在 `offscreen-runtime.ts` 中实现 `chapter.resolveChapterPlan` 和 `chapter.downloadImage`。
 
-使用共享章节计划结构和 `fetchImageWithStallDetection`。将提供的取消信号、速率策略、字节进度回调和活动资源账本传递到请求中。返回每张图片的字节、文件名、MIME 类型和资源租约。遵循已有集成的调度职责，保证每个请求只调度一次。
+使用共享章节计划结构和 `fetchImageWithStallDetection`。传递取消信号、速率设置、字节进度和资源管理参数，返回接口定义的图片结果。每个请求只调度一次。
 
 在分配资源或进行特权操作之前，验证响应大小、图片尺寸、页数和站点提供的网址。图片变换必须预留所需资源，并在成功、失败或取消后释放。
 
@@ -62,7 +60,7 @@ pnpm new:site-integration <id> --name "Native Site Name" --english-name "English
 
 添加有针对性的单元测试，对界面可见的行为添加模拟浏览器测试。检查页面顺序、图片变换后的内容，以及能否成功解码。
 
-集成的 `README.md` 是可选文档。代码、类型、测试数据说明和共享指南之外，还有对贡献者有用的实用信息时，再添加此文件，并围绕这些信息展开。读者操作说明放在[支持的网站](Supported-Sites.zh-CN)和[故障排查](Troubleshooting.zh-CN)。实际站点检查从 `tests/live/` 运行，共享作品网址定义在 `tests/e2e/fixtures/test-domains-constants.ts`。
+在[支持的网站](Supported-Sites.zh-CN)和[问题排查](Troubleshooting.zh-CN)中更新读者说明。实际站点检查放在 `tests/live/`，共享作品网址定义在 `tests/e2e/fixtures/test-domains-constants.ts`。
 
 ### 6. 生成并验证
 
@@ -78,13 +76,13 @@ pnpm test:unit
 
 解析器和测试样本准备好后，设置 `shipped: true` 并重新生成目录。运行[贡献指南](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing)中适用的集成和浏览器检查，再用 `pnpm build` 构建生产扩展。
 
-实际站点检查按需启用。按照[实际章节验证指南](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation)，检查实际保存的章节，并将变换后的页面与网站阅读器进行对比。记录此次运行的作品、章节、日期、保存结果和视觉检查结果。确定性测试样本覆盖保留的协议及失败情况。
+网站可访问时，运行[实际章节检查](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation)，并将变换后的页面与网站阅读器对比。
 
 ## 可选能力
 
 ### 一次性页面探针
 
-需要实时页面状态时，声明 `pageProbe: "optional"` 或 `"required"`，并提供 `probe.ts`。使用读取范围受限的只读探针，返回经过验证的普通数据，并在完成后释放资源。默认使用隔离环境；如需主环境，应记录原因。
+需要实时页面状态时，声明 `pageProbe: "optional"` 或 `"required"`，并提供 `probe.ts`。使用读取范围受限的只读探针，返回经过验证的普通数据，并在完成后释放资源。默认使用隔离环境。
 
 ### 请求头
 
@@ -92,11 +90,11 @@ pnpm test:unit
 
 ### 图片变换
 
-声明图片变换能力，并在离屏运行时中实现。复用共享图片传输和资源计数。添加能检测分镜、图块或页面顺序错误的确定性测试样本。
+在定义文件中声明图片变换，并在离屏运行时实现。测试分镜、图块和页面顺序。封面需要不同的图片处理时，实现 `cover.downloadImage`。
 
 ### 站点提供的图片服务器
 
-对于动态选择的图片主机，声明 `originKind: "provider-issued"`，并在站点提供网址的位置验证网址。固定端点来源放入 `requiredOrigins`，可选主机模式放入 `optionalOrigins`。生成器会为默认关闭但随扩展打包的站点集成处理可选授权。
+对于动态选择的图片主机，声明 `originKind: "provider-issued"`，并在站点提供网址的位置验证网址。固定端点来源放入 `requiredOrigins`，可选主机模式放入 `optionalOrigins`。
 
 ### 本地化设置
 
@@ -104,8 +102,6 @@ pnpm test:unit
 
 ## 共享请求安全
 
-站点请求使用 `integrationHttpClient` 和共享端点策略。这些边界执行已声明的来源和凭据策略、HTTPS 和公共主机验证、重定向策略、响应大小限制以及取消。图片传输还会验证 MIME 类型和字节限制。
-
-将可执行的集成代码随扩展打包，把远程响应作为数据解析。诊断信息包含脱敏后的技术细节；凭据和原始响应保留在请求边界内。
+请求使用 `integrationHttpClient` 和共享图片传输。在定义文件中声明所需的来源、凭据策略和响应大小限制。可执行代码随扩展打包，远程响应作为数据解析。不要在日志中记录凭据和原始响应。
 
 相关页面：[架构](Architecture.zh-CN)、[权限说明](Permissions.zh-CN)和[支持的网站](Supported-Sites.zh-CN)。

@@ -4,45 +4,38 @@
 
 > 本頁由[英文原文](Supported-Sites)機器翻譯而成。
 
-開啟下列任一頁面，再點選 Tako 圖示以選取章節。頁面類型列出了各整合可識別的路徑。
+開啟下表中對應網站的頁面，再點選 Tako 圖示以選取章節。
 
-## 既有整合
+## 網站清單
 
-| 網站                                                         | 應開啟的頁面   | 預設可用     |
-| ------------------------------------------------------------ | -------------- | ------------ |
-| [MangaDex](https://mangadex.org)                             | 漫畫作品頁     | 在選項中啟用 |
-| [pixiv Comic（pixivコミック）](https://comic.pixiv.net)      | 作品頁         | 是           |
-| [Shonen Jump+（少年ジャンプ＋）](https://shonenjumpplus.com) | 單篇頁面       | 是           |
-| [Manhuagui（看漫画）](https://www.manhuagui.com)             | 漫畫詳細資料頁 | 是           |
-| [Comic Nettai（COMIC熱帯）](https://www.comicnettai.com)     | 書籍頁         | 是           |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)         | 作品頁         | 是           |
-
-## 其他整合
-
-下列網站預設啟用。章節是否可用，取決於各網站的網頁版閱讀器與你的存取權限。
-
-| 網站                                                       | 應開啟的頁面                                               |
-| ---------------------------------------------------------- | ---------------------------------------------------------- |
-| [BoyLove（香香腐宅）](https://boylove.cc)                  | 書籍詳細資料：`/home/book/index/id/{id}`                   |
-| [Mangago](https://www.mangago.me)                          | 作品：`/read-manga/{series}/`                              |
-| [MangaNato](https://manganato.gg)                          | 作品：`/manga/{series}`                                    |
-| [MangaKakalot](https://mangakakalove.com)                  | 作品：`/manga/{series}`                                    |
-| [Coolmic](https://coolmic.me)                              | 網頁版作品：`/titles/{id}`                                 |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | 網頁版作品：`/titles/{id}`                                 |
-| [Anime Manga House（动漫屋）](https://www.dm5.com)         | 作品：`/manhua-{series}/`                                  |
-| [Manga Again（再漫画）](https://www.zaimanhua.com)         | 漫畫詳細資料：`/info/{series}.html`，或閱讀器：`/view/...` |
-| [CopyManga（拷貝漫畫）](https://www.copy3000.com)          | 作品：`/comic/{series}`                                    |
-| [MYCOMIC](https://mycomic.com)                             | 作品：`/comics/{id}` 或 `/cn/comics/{id}`                  |
-| [Māngabz](https://www.mangabz.com)                         | 作品：`/{id}bz/`                                           |
-| [MangaHere](https://newm.mangahere.cc)                     | 作品：`/manga/{series}/`                                   |
-| [Love Manga（爱漫画）](https://www.aimanhua.org)           | 漫畫詳細資料：`/comic/{id}`                                |
+| 網站                                                         | 應開啟的頁面                                               | 預設可用     |
+| ------------------------------------------------------------ | ---------------------------------------------------------- | ------------ |
+| [MangaDex](https://mangadex.org)                             | 漫畫作品頁                                                 | 在選項中啟用 |
+| [pixiv Comic（pixivコミック）](https://comic.pixiv.net)      | 作品頁                                                     | 是           |
+| [Shonen Jump+（少年ジャンプ＋）](https://shonenjumpplus.com) | 單篇頁面                                                   | 是           |
+| [Manhuagui（看漫画）](https://www.manhuagui.com)             | 漫畫詳細資料頁                                             | 是           |
+| [Comic Nettai（COMIC熱帯）](https://www.comicnettai.com)     | 書籍頁                                                     | 是           |
+| [MANGA MILLION](https://mangamillion.shueisha.co.jp)         | 作品頁                                                     | 是           |
+| [BoyLove（香香腐宅）](https://boylove.cc)                    | 書籍詳細資料：`/home/book/index/id/{id}`                   | 是           |
+| [Mangago](https://www.mangago.me)                            | 作品：`/read-manga/{series}/`                              | 是           |
+| [MangaNato](https://manganato.gg)                            | 作品：`/manga/{series}`                                    | 是           |
+| [MangaKakalot](https://mangakakalove.com)                    | 作品：`/manga/{series}`                                    | 是           |
+| [Coolmic](https://coolmic.me)                                | 網頁版作品：`/titles/{id}`                                 | 是           |
+| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp)   | 網頁版作品：`/titles/{id}`                                 | 是           |
+| [Anime Manga House（动漫屋）](https://www.dm5.com)           | 作品：`/manhua-{series}/`                                  | 是           |
+| [Manga Again（再漫画）](https://www.zaimanhua.com)           | 漫畫詳細資料：`/info/{series}.html`，或閱讀器：`/view/...` | 是           |
+| [CopyManga（拷貝漫畫）](https://www.copy3000.com)            | 作品：`/comic/{series}`                                    | 是           |
+| [MYCOMIC](https://mycomic.com)                               | 作品：`/comics/{id}` 或 `/cn/comics/{id}`                  | 是           |
+| [Māngabz](https://www.mangabz.com)                           | 作品：`/{id}bz/`                                           | 是           |
+| [MangaHere](https://newm.mangahere.cc)                       | 作品：`/manga/{series}/`                                   | 是           |
+| [Love Manga（爱漫画）](https://www.aimanhua.org)             | 漫畫詳細資料：`/comic/{id}`                                | 是           |
 
 ## 網域與章節歷史
 
-- **Manga Again（再漫画）：** `www.zaimanhua.com` 與 `manhua.zaimanhua.com` 使用同一個整合。兩個目錄中相同的作品與章節 ID 共用章節歷史。
-- **CopyManga（拷貝漫畫）：** `www.copy3000.com` 與 `www.copy4000.com` 使用同一個整合。兩個網域中相同的作品識別字串與章節 UUID 共用章節歷史。
-- **MangaHere：** 請開啟 `newm.mangahere.cc`。目前的行動版閱讀器支援按卷區分的章節路徑，舊版 `m.mangahere.cc` 閱讀器仍未受支援。
-- **MangaNato 與 MangaKakalot：** 各自在「選項 → 網站整合」中擁有開關與章節歷史。即使作品或章節名稱相同，各網站仍保留各自的紀錄。
+- **Manga Again（再漫画）：** 同一作品與章節的歷史在 `www.zaimanhua.com` 與 `manhua.zaimanhua.com` 之間共用。
+- **CopyManga（拷貝漫畫）：** 同一作品與章節的歷史在 `www.copy3000.com` 與 `www.copy4000.com` 之間共用。
+- **MangaHere：** 請開啟 `newm.mangahere.cc`。舊版 `m.mangahere.cc` 閱讀器未受支援。
+- **MangaNato 與 MangaKakalot：** 各自在「選項 → 網站整合」中擁有開關與章節歷史。
 - **Manhuagui（看漫画）：** 支援 `www.manhuagui.com` 與 `manhuagui.com`。請開啟漫畫詳細資料頁以選取章節。
 
 ## 啟用 MangaDex
@@ -61,8 +54,6 @@ MangaDex 使用位址會變動的圖片伺服器，因此 Chrome 會要求存取
 Manhuagui（看漫画）除了帳號登入外，另有成人內容同意提示。請先在網站完成該提示，再於 Tako 重新開啟漫畫詳細資料頁。
 
 CopyManga（拷貝漫畫）可能暫時回傳空白章節清單，其網站的訪客閱讀器也可能出現相同情況。此時請等待網站恢復顯示章節，再於 Tako 重新載入作品頁。
-
-KissManga 目前未受支援，因為其存取驗證需要互動操作。
 
 若 Tako 找不到作品，請確認頁面類型符合上方表格。例如，MangaDex 需要作品頁，Manhuagui（看漫画）需要漫畫詳細資料頁。若仍無法載入清單，請參閱[疑難排解](Troubleshooting.zh-TW)。
 

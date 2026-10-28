@@ -4,45 +4,38 @@
 
 > 이 페이지는 [영어 원문](Supported-Sites)을 기계 번역한 문서입니다.
 
-아래 페이지 중 하나를 열고 Tako 아이콘을 클릭해 챕터를 선택하세요. 페이지 유형은 각 연동이 인식하는 경로를 나타냅니다.
+아래 표에서 해당 사이트의 페이지를 열고 Tako 아이콘을 클릭해 챕터를 선택하세요.
 
-## 기존 연동
+## 사이트 목록
 
-| 사이트                                                      | 열어야 할 페이지 | 기본 사용 여부 |
-| ----------------------------------------------------------- | ---------------- | -------------- |
-| [MangaDex](https://mangadex.org)                            | 만화 작품 페이지 | 옵션에서 켜기  |
-| [pixiv Comic (pixivコミック)](https://comic.pixiv.net)      | 작품 페이지      | 켜짐           |
-| [Shonen Jump+ (少年ジャンプ＋)](https://shonenjumpplus.com) | 에피소드 페이지  | 켜짐           |
-| [Manhuagui (看漫画)](https://www.manhuagui.com)             | 만화 상세 페이지 | 켜짐           |
-| [Comic Nettai (COMIC熱帯)](https://www.comicnettai.com)     | 책 페이지        | 켜짐           |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)        | 작품 페이지      | 켜짐           |
-
-## 추가 연동
-
-다음 사이트는 기본적으로 켜져 있습니다. 챕터 이용 가능 여부는 각 사이트의 웹 리더와 접근 권한에 따라 달라집니다.
-
-| 사이트                                                     | 열어야 할 페이지                                                 |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| [BoyLove (香香腐宅)](https://boylove.cc)                   | `/home/book/index/id/{id}`의 책 상세 페이지                      |
-| [Mangago](https://www.mangago.me)                          | `/read-manga/{series}/`의 작품 페이지                            |
-| [MangaNato](https://manganato.gg)                          | `/manga/{series}`의 작품 페이지                                  |
-| [MangaKakalot](https://mangakakalove.com)                  | `/manga/{series}`의 작품 페이지                                  |
-| [Coolmic](https://coolmic.me)                              | `/titles/{id}`의 웹사이트 작품 페이지                            |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | `/titles/{id}`의 웹사이트 작품 페이지                            |
-| [Anime Manga House (动漫屋)](https://www.dm5.com)          | `/manhua-{series}/`의 작품 페이지                                |
-| [Manga Again (再漫画)](https://www.zaimanhua.com)          | `/info/{series}.html`의 만화 상세 페이지 또는 `/view/...`의 리더 |
-| [CopyManga (拷貝漫畫)](https://www.copy3000.com)           | `/comic/{series}`의 작품 페이지                                  |
-| [MYCOMIC](https://mycomic.com)                             | `/comics/{id}` 또는 `/cn/comics/{id}`의 작품 페이지              |
-| [Māngabz](https://www.mangabz.com)                         | `/{id}bz/`의 작품 페이지                                         |
-| [MangaHere](https://newm.mangahere.cc)                     | `/manga/{series}/`의 작품 페이지                                 |
-| [Love Manga (爱漫画)](https://www.aimanhua.org)            | `/comic/{id}`의 만화 상세 페이지                                 |
+| 사이트                                                      | 열어야 할 페이지                                                 | 기본 사용 여부 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------- | -------------- |
+| [MangaDex](https://mangadex.org)                            | 만화 작품 페이지                                                 | 옵션에서 켜기  |
+| [pixiv Comic (pixivコミック)](https://comic.pixiv.net)      | 작품 페이지                                                      | 켜짐           |
+| [Shonen Jump+ (少年ジャンプ＋)](https://shonenjumpplus.com) | 에피소드 페이지                                                  | 켜짐           |
+| [Manhuagui (看漫画)](https://www.manhuagui.com)             | 만화 상세 페이지                                                 | 켜짐           |
+| [Comic Nettai (COMIC熱帯)](https://www.comicnettai.com)     | 책 페이지                                                        | 켜짐           |
+| [MANGA MILLION](https://mangamillion.shueisha.co.jp)        | 작품 페이지                                                      | 켜짐           |
+| [BoyLove (香香腐宅)](https://boylove.cc)                    | `/home/book/index/id/{id}`의 책 상세 페이지                      | 켜짐           |
+| [Mangago](https://www.mangago.me)                           | `/read-manga/{series}/`의 작품 페이지                            | 켜짐           |
+| [MangaNato](https://manganato.gg)                           | `/manga/{series}`의 작품 페이지                                  | 켜짐           |
+| [MangaKakalot](https://mangakakalove.com)                   | `/manga/{series}`의 작품 페이지                                  | 켜짐           |
+| [Coolmic](https://coolmic.me)                               | `/titles/{id}`의 웹사이트 작품 페이지                            | 켜짐           |
+| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp)  | `/titles/{id}`의 웹사이트 작품 페이지                            | 켜짐           |
+| [Anime Manga House (动漫屋)](https://www.dm5.com)           | `/manhua-{series}/`의 작품 페이지                                | 켜짐           |
+| [Manga Again (再漫画)](https://www.zaimanhua.com)           | `/info/{series}.html`의 만화 상세 페이지 또는 `/view/...`의 리더 | 켜짐           |
+| [CopyManga (拷貝漫畫)](https://www.copy3000.com)            | `/comic/{series}`의 작품 페이지                                  | 켜짐           |
+| [MYCOMIC](https://mycomic.com)                              | `/comics/{id}` 또는 `/cn/comics/{id}`의 작품 페이지              | 켜짐           |
+| [Māngabz](https://www.mangabz.com)                          | `/{id}bz/`의 작품 페이지                                         | 켜짐           |
+| [MangaHere](https://newm.mangahere.cc)                      | `/manga/{series}/`의 작품 페이지                                 | 켜짐           |
+| [Love Manga (爱漫画)](https://www.aimanhua.org)             | `/comic/{id}`의 만화 상세 페이지                                 | 켜짐           |
 
 ## 도메인과 챕터 기록
 
-- **Manga Again (再漫画):** `www.zaimanhua.com`과 `manhua.zaimanhua.com`은 하나의 연동을 사용합니다. 작품과 챕터 ID가 같으면 두 카탈로그에서 챕터 기록을 공유합니다.
-- **CopyManga (拷貝漫畫):** `www.copy3000.com`과 `www.copy4000.com`은 하나의 연동을 사용합니다. 작품 슬러그와 챕터 UUID가 같으면 두 도메인에서 챕터 기록을 공유합니다.
-- **MangaHere:** `newm.mangahere.cc`를 여세요. 현재 모바일 리더는 권별 챕터 경로를 지원합니다. 이전 `m.mangahere.cc` 리더는 지원하지 않습니다.
-- **MangaNato와 MangaKakalot:** **옵션 → 사이트 연동**에서 각각 켜거나 끌 수 있으며 챕터 기록도 별개입니다. 작품명이나 챕터명이 같아도 각 사이트의 기록은 따로 유지됩니다.
+- **Manga Again (再漫画):** 같은 작품과 챕터의 기록을 `www.zaimanhua.com`과 `manhua.zaimanhua.com`에서 공유합니다.
+- **CopyManga (拷貝漫畫):** 같은 작품과 챕터의 기록을 `www.copy3000.com`과 `www.copy4000.com`에서 공유합니다.
+- **MangaHere:** `newm.mangahere.cc`를 여세요. 이전 `m.mangahere.cc` 리더는 지원하지 않습니다.
+- **MangaNato와 MangaKakalot:** **옵션 → 사이트 연동**에서 각각 켜거나 끌 수 있으며 챕터 기록도 별개입니다.
 - **Manhuagui (看漫画):** `www.manhuagui.com`과 `manhuagui.com`을 모두 인식합니다. 만화 상세 페이지를 열어 챕터를 선택하세요.
 
 ## MangaDex 켜기
@@ -61,8 +54,6 @@ MangaDex는 주소가 바뀌는 이미지 서버를 사용하므로 Chrome이 HT
 Manhuagui (看漫画)에는 계정 로그인 외에 성인 콘텐츠 동의 절차가 있습니다. 사이트에서 동의를 완료한 뒤 Tako에서 만화 상세 페이지를 다시 여세요.
 
 CopyManga (拷貝漫畫)는 사이트 자체의 비회원 웹 리더에서도 일시적으로 빈 챕터 목록을 반환할 수 있습니다. 이때는 사이트에 챕터가 다시 표시될 때까지 기다린 뒤 Tako에서 작품 페이지를 새로고침하세요.
-
-KissManga는 사용자가 직접 수행해야 하는 접근 확인 절차가 있어 현재 지원하지 않습니다.
 
 Tako가 작품을 찾지 못하면 위 표의 페이지 유형을 확인하세요. 예를 들어 MangaDex에는 작품 페이지가, Manhuagui (看漫画)에는 만화 상세 페이지가 필요합니다. 목록이 계속 불러와지지 않으면 [문제 해결](Troubleshooting.ko)을 참고하세요.
 

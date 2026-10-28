@@ -96,12 +96,6 @@ export function SeriesInlineSelection({
     [updatePresentation]
   )
 
-  // `items` is a pure derivation from the two data sources that affect chapter
-  // objects:
-  //   1. `data.items` — the raw chapter/volume data from the page
-  //   2. `selectedChapterIds` — the selection state (owned by parent)
-  // Collapse presentation stays separate so a disclosure toggle does not clone
-  // every chapter in a large series.
   const items = useMemo(
     () => buildInlineSelectionItems(data.items, selectedChapterIds),
     [data.items, selectedChapterIds]

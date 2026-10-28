@@ -4,45 +4,38 @@
 
 このページは[英語版](Supported-Sites)から機械翻訳されています。
 
-以下のページを開き、Tako アイコンをクリックして話を選んでください。各統合機能が認識するページの種類を記載しています。
+利用するサイトについて下表に記載したページを開き、Tako アイコンをクリックして話を選んでください。
 
-## 既存の統合機能
+## 対応サイト一覧
 
-| サイト                                               | 開くページ       | 初期状態で利用可能     |
-| ---------------------------------------------------- | ---------------- | ---------------------- |
-| [MangaDex](https://mangadex.org)                     | 漫画の作品ページ | オプションで有効にする |
-| [pixivコミック](https://comic.pixiv.net)             | 作品ページ       | はい                   |
-| [少年ジャンプ＋](https://shonenjumpplus.com)         | エピソードページ | はい                   |
-| [Manhuagui（看漫画）](https://www.manhuagui.com)     | 漫画の詳細ページ | はい                   |
-| [COMIC熱帯](https://www.comicnettai.com)             | 書籍ページ       | はい                   |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp) | 作品ページ       | はい                   |
-
-## 追加の統合機能
-
-次のサイトは初期状態で有効です。利用できる話は、各サイトのウェブ版リーダーと利用者のアクセス権によって決まります。
-
-| サイト                                                     | 開くページ                                                    |
-| ---------------------------------------------------------- | ------------------------------------------------------------- |
-| [BoyLove（香香腐宅）](https://boylove.cc)                  | `/home/book/index/id/{id}` の書籍詳細                         |
-| [Mangago](https://www.mangago.me)                          | `/read-manga/{series}/` の作品ページ                          |
-| [MangaNato](https://manganato.gg)                          | `/manga/{series}` の作品ページ                                |
-| [MangaKakalot](https://mangakakalove.com)                  | `/manga/{series}` の作品ページ                                |
-| [Coolmic](https://coolmic.me)                              | `/titles/{id}` のウェブ版作品ページ                           |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | `/titles/{id}` のウェブ版作品ページ                           |
-| [Anime Manga House（动漫屋）](https://www.dm5.com)         | `/manhua-{series}/` の作品ページ                              |
-| [Manga Again（再漫画）](https://www.zaimanhua.com)         | `/info/{series}.html` の漫画詳細または `/view/...` のリーダー |
-| [CopyManga（拷貝漫畫）](https://www.copy3000.com)          | `/comic/{series}` の作品ページ                                |
-| [MYCOMIC](https://mycomic.com)                             | `/comics/{id}` または `/cn/comics/{id}` の作品ページ          |
-| [Māngabz](https://www.mangabz.com)                         | `/{id}bz/` の作品ページ                                       |
-| [MangaHere](https://newm.mangahere.cc)                     | `/manga/{series}/` の作品ページ                               |
-| [Love Manga（爱漫画）](https://www.aimanhua.org)           | `/comic/{id}` の漫画詳細                                      |
+| サイト                                                     | 開くページ                                                    | 初期状態で利用可能     |
+| ---------------------------------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| [MangaDex](https://mangadex.org)                           | 漫画の作品ページ                                              | オプションで有効にする |
+| [pixivコミック](https://comic.pixiv.net)                   | 作品ページ                                                    | はい                   |
+| [少年ジャンプ＋](https://shonenjumpplus.com)               | エピソードページ                                              | はい                   |
+| [Manhuagui（看漫画）](https://www.manhuagui.com)           | 漫画の詳細ページ                                              | はい                   |
+| [COMIC熱帯](https://www.comicnettai.com)                   | 書籍ページ                                                    | はい                   |
+| [MANGA MILLION](https://mangamillion.shueisha.co.jp)       | 作品ページ                                                    | はい                   |
+| [BoyLove（香香腐宅）](https://boylove.cc)                  | `/home/book/index/id/{id}` の書籍詳細                         | はい                   |
+| [Mangago](https://www.mangago.me)                          | `/read-manga/{series}/` の作品ページ                          | はい                   |
+| [MangaNato](https://manganato.gg)                          | `/manga/{series}` の作品ページ                                | はい                   |
+| [MangaKakalot](https://mangakakalove.com)                  | `/manga/{series}` の作品ページ                                | はい                   |
+| [Coolmic](https://coolmic.me)                              | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
+| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
+| [Anime Manga House（动漫屋）](https://www.dm5.com)         | `/manhua-{series}/` の作品ページ                              | はい                   |
+| [Manga Again（再漫画）](https://www.zaimanhua.com)         | `/info/{series}.html` の漫画詳細または `/view/...` のリーダー | はい                   |
+| [CopyManga（拷貝漫畫）](https://www.copy3000.com)          | `/comic/{series}` の作品ページ                                | はい                   |
+| [MYCOMIC](https://mycomic.com)                             | `/comics/{id}` または `/cn/comics/{id}` の作品ページ          | はい                   |
+| [Māngabz](https://www.mangabz.com)                         | `/{id}bz/` の作品ページ                                       | はい                   |
+| [MangaHere](https://newm.mangahere.cc)                     | `/manga/{series}/` の作品ページ                               | はい                   |
+| [Love Manga（爱漫画）](https://www.aimanhua.org)           | `/comic/{id}` の漫画詳細                                      | はい                   |
 
 ## ドメインとエピソード履歴
 
-- **Manga Again（再漫画）：** `www.zaimanhua.com` と `manhua.zaimanhua.com` は一つの統合機能を使います。両カタログで作品 ID と話 ID が同じ場合、エピソード履歴を共有します。
-- **CopyManga（拷貝漫畫）：** `www.copy3000.com` と `www.copy4000.com` は一つの統合機能を使います。作品スラッグと話の UUID が同じ場合、両ドメインでエピソード履歴を共有します。
-- **MangaHere：** `newm.mangahere.cc` を開いてください。現在のモバイルリーダーでは巻ごとの話のルートに対応しています。旧 `m.mangahere.cc` リーダーは引き続き未対応です。
-- **MangaNato と MangaKakalot：** **オプション → サイト統合**にそれぞれ有効・無効のスイッチがあり、エピソード履歴も独立しています。作品名や話の名前が同じ場合も、サイトごとに記録を保持します。
+- **Manga Again（再漫画）：** 同じ作品と話の履歴を `www.zaimanhua.com` と `manhua.zaimanhua.com` で共有します。
+- **CopyManga（拷貝漫畫）：** 同じ作品と話の履歴を `www.copy3000.com` と `www.copy4000.com` で共有します。
+- **MangaHere：** `newm.mangahere.cc` を開いてください。旧 `m.mangahere.cc` リーダーは未対応です。
+- **MangaNato と MangaKakalot：** **オプション → サイト統合**にそれぞれ有効・無効のスイッチがあり、エピソード履歴も独立しています。
 - **Manhuagui（看漫画）：** `www.manhuagui.com` と `manhuagui.com` の両方を認識します。話を選択するには漫画の詳細ページを開いてください。
 
 ## MangaDex を有効にする
@@ -61,8 +54,6 @@ MangaDex はアドレスが変わる画像サーバーを使用するため、Ch
 Manhuagui（看漫画）には、アカウントへのログインとは別に成人向けコンテンツへの同意画面があります。サイトで同意を済ませてから、Tako で漫画の詳細ページを開き直してください。
 
 CopyManga（拷貝漫畫）は、サイト自身のゲスト用ウェブリーダーも含め、一時的に空の話一覧を返す場合があります。その場合は、サイトで話が再び表示されるまで待ち、Tako で作品ページを再読み込みしてください。
-
-KissManga は対話式のアクセス認証が必要なため、現在は未対応です。
 
 作品が見つからない場合は、上の表でページの種類を確認してください。例えば、MangaDex は作品ページ、Manhuagui（看漫画）は漫画の詳細ページを使います。それでも読み込めない場合は、[トラブルシューティング](Troubleshooting.ja)をご覧ください。
 

@@ -102,7 +102,7 @@ export interface ComicPageInfo {
   ImageHeight?: number // Height in pixels
 }
 
-// ComicInfo version compatibility definitions - P1-3: Only v2.0 supported
+// Supported ComicInfo schema version.
 export interface ComicInfoVersionSupport {
   version: "2.0"
   supportedFields: (keyof ComicInfoV2)[]

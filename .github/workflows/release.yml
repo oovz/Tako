@@ -1,10 +1,6 @@
 name: Release
 
-# Triggered by tag pushes (v*) and manual dispatch. Calls the same reusable
-# quality-e2e.yml workflow used by ci.yml so a release is gated by the exact
-# same build/lint/test/E2E verification as branch CI, without re-triggering
-# ci.yml itself (which would duplicate runs when main and a tag are pushed
-# together).
+# Verify the selected release commit before building and publishing its asset.
 
 on:
   push:

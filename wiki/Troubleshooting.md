@@ -17,7 +17,7 @@ If the problem remains, open the page normally and check whether the site itself
 | Result                   | Meaning                                                                                          |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
 | **Saved**                | Tako received confirmation that Chrome finished saving the required files                        |
-| **Saved to folder**      | The required files were written and closed in the selected folder                                |
+| **Saved to folder**      | All required files were saved to the selected folder                                             |
 | **Previously processed** | A record of earlier processing exists, but final saving was not confirmed                        |
 | **Failed / Partial**     | The task ended before all requested output was saved; check the task's error and chapter results |
 | **Skipped**              | That chapter was not processed, for example after cancellation or a folder-save failure          |
@@ -36,9 +36,9 @@ If Tako says saving **could not be confirmed**, check Chrome Downloads and your 
 2. Open its folder actions and choose **Grant access again**.
 3. After access is restored, choose **Retry failed chapters** or **Restart task**.
 
-Granting access restores permission for that task’s original folder. Retry or restart the task after restoring access.
+Granting access restores permission for that task’s original folder.
 
-If its original destination is unavailable, choose a folder in **Options → Storage & Files**, click **Save Changes**, and create a new task. Existing tasks keep their captured destination.
+If its original destination is unavailable, choose a folder in **Options → Storage & Files**, click **Save Changes**, and create a new task. Existing tasks keep their original save location.
 
 ## A download failed or saved only some files
 
@@ -47,7 +47,7 @@ Tako retries download failures according to your retry settings. If a task still
 - **Retry failed chapters**, when available, keeps completed chapters and tries failed, partially saved, and eligible skipped chapters again. A partially saved chapter starts from the beginning.
 - **Restart task** tries every chapter again.
 
-Both actions retain the task's requested paths and effective save location. Existing files are handled using the task's file-conflict setting, so review partial output before retrying.
+Both actions keep the task's filenames and save location. Existing files are handled using the task's file-conflict setting, so review partial output before retrying.
 
 A folder-save error ends the task and skips the remaining chapters. Already saved files stay on disk. The optional **Use Chrome Downloads if the folder is unavailable** setting must be enabled before creating a task; it can switch destinations only before that task first attempts to write to its folder.
 

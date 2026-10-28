@@ -21,7 +21,6 @@ Tako は対応サイトの漫画を保存し、オフラインで読めるよう
 | [トラブルシューティング](Troubleshooting.ja) | ダウンロードの失敗、フォルダへのアクセス、保存結果について |
 | [テンプレートマクロ](Template-Macros.ja)     | フォルダやファイル名の自動整理                             |
 | [権限](Permissions.ja)                       | Chrome が権限を求める理由と Tako での用途                  |
-| [Tako を選ぶ](Comparisons.ja)                | 自分の読み方や保存方法に合うかを確認                       |
 
 ## Tako を入手する
 

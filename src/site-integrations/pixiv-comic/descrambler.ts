@@ -53,15 +53,10 @@ class PixivShuffler {
   }
 }
 
-// Minimum pixel cell size for gridshuffle descrambling. Pixiv Comic uses 32:32
-// (each cell is 32×32 px). Smaller values create more cells — gridshuffle1:1 on a
-// 2000×3000 image would produce 6M cells and OOM the offscreen document. This floor
-// allows finer grids if Pixiv ever ships them while preventing DoS.
+// Bound grid density before allocating the tile mapping.
 const MIN_GRID_DIMENSION = 8
 
-// Backstop: reject descrambling if total cell count exceeds this threshold.
-// With 32:32 on a 2000×3000 image → ~5,900 cells (well under cap).
-// With 8:8 on a 2000×3000 image → ~93,750 cells (over cap → skip).
+// Reject grids whose total cell count exceeds this limit.
 const MAX_TOTAL_CELLS = 50_000
 
 const parseGridSizeFromImageUrl = (

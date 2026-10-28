@@ -14,8 +14,6 @@ import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import logger from "@/src/runtime/logger"
 import type { ConflictPolicy } from "@/src/shared/download-contract"
 
-// Types for TS without DOM lib: declare minimal types
-// These are standard in modern browsers; MV3 offscreen/options have DOM.
 export type DirHandle = FileSystemDirectoryHandle
 export type FileHandle = FileSystemFileHandle
 
@@ -400,7 +398,7 @@ export async function writeBlobToPath(
   collisionPolicy: ConflictPolicy,
   options: WriteBlobToPathOptions = {}
 ): Promise<WriteBlobToPathResult> {
-  // fullPath like "Root/Series/Vol/File.cbz" relative to chosen root; we ignore first path if redundant.
+  // Every nonempty path segment is relative to the selected root.
   throwIfAborted(options.signal)
   const parts = fullPath.split("/").filter(Boolean)
   let fileName = parts.pop()!

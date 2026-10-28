@@ -173,7 +173,6 @@ export function SeriesContextCard({
 
   return (
     <div className="group flex gap-4 transition-all duration-200">
-      {/* Cover image - enlarged for better visibility */}
       <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted">
         <CoverPreview
           identity={

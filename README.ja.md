@@ -19,8 +19,8 @@ Chrome のサイドパネルで話を選び、ダウンロードをキューに�
 数話だけ選んでも、まとめてキューに追加しても大丈夫。閲覧中のタブの隣でダウンロードの進み具合を確認でき、失敗した話は再試行できます。
 
 - **いつものアプリで読める。** CBZ や ZIP、個別の画像として保存できます。CBZ には、漫画リーダーで使えるエピソード情報や表紙も含められます。
-- **ライブラリを自分好みに整理。** 保存先のフォルダや、シリーズ・エピソードの名前の付け方を選べます。キューに追加したタスクは、それぞれ選択した保存先を引き継ぎます。
-- **保存できた話を確認。** 保存が確認された話は履歴で確認できます。保存の確認がない古い記録は「**以前に処理済み**」と表示されます。
+- **ライブラリを自分好みに整理。** 保存先のフォルダや、シリーズ・エピソードの名前の付け方を選べます。
+- **保存できた話を確認。** ダウンロードの結果とエピソード履歴を確認できます。
 - **履歴を使いやすく保つ。** エピソードの履歴を残したまま古いタスクを消去できます。それぞれの履歴を個別に消去することもできます。
 
 ## 好きな作品から始めよう
@@ -36,8 +36,6 @@ Chrome のサイドパネルで話を選び、ダウンロードをキューに�
 [pixivコミック](https://comic.pixiv.net) · [少年ジャンプ＋](https://shonenjumpplus.com) · [看漫画](https://www.manhuagui.com) · [COMIC熱帯](https://www.comicnettai.com) · [MANGA MILLION](https://mangamillion.shueisha.co.jp) · [MangaDex](https://mangadex.org)
 
 次のサイトにも対応しています：[BoyLove（香香腐宅）](https://boylove.cc) · [Mangago](https://www.mangago.me) · [MangaNato](https://manganato.gg) · [MangaKakalot](https://mangakakalove.com) · [Coolmic](https://coolmic.me) · [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) · [Anime Manga House（动漫屋）](https://www.dm5.com) · [Manga Again（再漫画）](https://www.zaimanhua.com) · [CopyManga（拷貝漫畫）](https://www.copy3000.com) · [MYCOMIC](https://mycomic.com) · [Māngabz](https://www.mangabz.com) · [MangaHere](https://newm.mangahere.cc) · [Love Manga（爱漫画）](https://www.aimanhua.org)。[サイトごとの説明](https://github.com/oovz/Tako/wiki/Supported-Sites.ja)で、利用状況と開くページをご確認ください。
-
-MangaNato と MangaKakalot は個別に有効にでき、エピソード履歴もそれぞれ独立しています。
 
 MangaDex は初期状態では無効です。**オプション → サイト統合**で有効にして、Chrome のサイトアクセス要求を許可してください。[サイトごとのヒント](https://github.com/oovz/Tako/wiki/Supported-Sites.ja)もご覧いただけます。
 

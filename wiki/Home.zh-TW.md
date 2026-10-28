@@ -14,14 +14,13 @@ Tako 可從支援網站儲存漫畫章節，供離線閱讀。在閱讀分頁旁
 
 ## 讀者指南
 
-| 指南                              | 內容                                 |
-| --------------------------------- | ------------------------------------ |
-| [快速開始](Quick-Start.zh-TW)     | 安裝 Tako、下載章節及選擇儲存位置    |
-| [支援網站](Supported-Sites.zh-TW) | 支援的網站與應開啟的頁面             |
-| [疑難排解](Troubleshooting.zh-TW) | 下載失敗、資料夾存取與儲存結果說明   |
-| [範本巨集](Template-Macros.zh-TW) | 自動整理資料夾與檔名                 |
-| [權限說明](Permissions.zh-TW)     | Chrome 要求權限的原因與 Tako 的用途  |
-| [選擇 Tako](Comparisons.zh-TW)    | 判斷 Tako 是否符合你的閱讀與儲存方式 |
+| 指南                              | 內容                                |
+| --------------------------------- | ----------------------------------- |
+| [快速開始](Quick-Start.zh-TW)     | 安裝 Tako、下載章節及選擇儲存位置   |
+| [支援網站](Supported-Sites.zh-TW) | 支援的網站與應開啟的頁面            |
+| [疑難排解](Troubleshooting.zh-TW) | 下載失敗、資料夾存取與儲存結果說明  |
+| [範本巨集](Template-Macros.zh-TW) | 自動整理資料夾與檔名                |
+| [權限說明](Permissions.zh-TW)     | Chrome 要求權限的原因與 Tako 的用途 |
 
 ## 安裝 Tako
 

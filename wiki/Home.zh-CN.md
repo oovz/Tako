@@ -1,10 +1,10 @@
 <p align="center">
-
-[English](Home) · [日本語](Home.ja) · [简体中文](Home.zh-CN) · [繁體中文](Home.zh-TW) · [한국어](Home.ko)
-<img src="https://raw.githubusercontent.com/oovz/Tako/main/public/icon/128.png" width="80" alt="Tako 标志">
+  <img src="https://raw.githubusercontent.com/oovz/Tako/main/public/icon/128.png" width="80" alt="Tako 标志">
 </p>
 
 # Tako 使用帮助
+
+[English](Home) · [日本語](Home.ja) · [简体中文](Home.zh-CN) · [繁體中文](Home.zh-TW) · [한국어](Home.ko)
 
 > 本页由[英文原文](Home)机器翻译而来。
 
@@ -21,7 +21,6 @@ Tako 可以从支持的网站保存漫画章节，供离线阅读。在阅读标
 | [问题排查](Troubleshooting.zh-CN)   | 处理下载失败、文件夹权限和保存结果问题 |
 | [模板宏](Template-Macros.zh-CN)     | 自动整理文件夹和文件名                 |
 | [权限说明](Permissions.zh-CN)       | 了解 Chrome 请求权限的原因及用途       |
-| [选择 Tako](Comparisons.zh-CN)      | 判断 Tako 是否适合你的阅读和保存习惯   |
 
 ## 获取 Tako
 

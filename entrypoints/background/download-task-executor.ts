@@ -227,8 +227,7 @@ async function runDownloadTask(
       currentLeaseForTask,
     }
 
-    // Deliberately await each chapter before starting the next one. Parallel
-    // chapter dispatch is future scheduler work, not a dormant setting.
+    // Complete each chapter dispatch before starting the next.
     const chapterIndicesToDispatch = task.chapters
       .map((chapter, index) => ({ chapter, index }))
       .filter(

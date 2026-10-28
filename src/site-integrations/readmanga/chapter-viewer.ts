@@ -408,12 +408,8 @@ function extractImageUrlsFromPackedData(
 }
 
 /**
- * Convert chapter viewer HTML into the ordered list of signed image URLs.
- *
- * Two fetches are issued concurrently: the packed payload is decoded locally
- * (synchronous) while the external `config_*.js` is fetched to determine the
- * image host. Config failures are surfaced rather than replaced with a stale
- * host map.
+ * Combine locally decoded viewer data with the fetched reader configuration
+ * to produce signed image URLs in reading order.
  */
 export async function buildManhuaguiChapterImageUrlsFromHtml(
   chapterHtml: string,

@@ -78,4 +78,4 @@ The preview uses sample data; actual values depend on the site’s metadata.
 
 Click **Save Changes** after editing a template. Your changes apply to new tasks; queued tasks, Retry, and Restart keep their recorded requested paths. Chrome's save dialog or the existing-file setting can still affect the final filename.
 
-Tako replaces characters that cannot be used in filenames with underscores and handles reserved names, control characters, and incompatible trailing dots or spaces. Unknown macros, empty templates, and unusable paths produce an error.
+Tako replaces invalid filename characters with underscores. Unknown macros, empty templates and unusable paths show an error.

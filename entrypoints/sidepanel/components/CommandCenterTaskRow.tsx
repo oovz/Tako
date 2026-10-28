@@ -125,7 +125,6 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
 
   return (
     <>
-      {/* Task Row - Reference UX style with hover-reveal actions */}
       <div
         className={cn(
           "group relative flex items-center gap-2.5 px-3 py-2 border-b border-border/50",

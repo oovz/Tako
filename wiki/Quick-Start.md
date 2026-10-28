@@ -54,7 +54,7 @@ The optional **Use Chrome Downloads if the folder is unavailable** setting appli
 
 ## Manage downloads
 
-Tako processes one chapter at a time. You can add more chapters to the queue while it works.
+Tako processes one chapter at a time. You can add more chapters to the queue while it works. Keep Chrome running while downloads save.
 
 - Use **Retry failed chapters** to try the unfinished parts of a task again. A partially saved chapter starts again from the beginning.
 - Use **Restart task** to download every chapter in that task again.

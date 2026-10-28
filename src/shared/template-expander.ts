@@ -1,7 +1,4 @@
-/**
- * Template Expander - Smart File Naming
- * Expands template macros with proper handling for unavailable values
- */
+/** Expand filename and directory templates for the Options preview. */
 
 import {
   generateSampleMacroData,
@@ -9,17 +6,7 @@ import {
 } from "./template-macros"
 import { sanitizeFilename } from "./filename-sanitizer"
 
-/**
- * Template context for the UI preview expander (template-expander).
- *
- * NOTE: This is intentionally a separate type from the `TemplateContext` in
- * `template-resolver.ts`. The expander is used for UI preview rendering where
- * date components are pre-split into year/month/day numbers and chapter title
- * is optional. The resolver is used for actual path resolution where `date`
- * is a `Date` object, `chapterTitle` is required, and `format` is required.
- * Consolidating them would require making all fields optional, weakening
- * type safety at the resolution call sites.
- */
+/** Preview values with optional chapter data and explicit date components. */
 export interface TemplateContext {
   // Site information
   integrationName?: string

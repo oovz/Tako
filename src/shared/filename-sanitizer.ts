@@ -1,10 +1,4 @@
-// utils/filename-sanitizer.ts
-
-/**
- * Maximum filename length (excluding extension) to avoid issues with
- * max path length on Windows (260 chars) and other operating systems.
- * 200 chars leaves room for the extension and parent directory path.
- */
+/** Maximum length retained by sanitizeFilename. */
 export const MAX_FILENAME_LENGTH = 200
 
 /**

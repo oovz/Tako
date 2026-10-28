@@ -187,9 +187,8 @@ export async function fetchReaderConfig(
 }
 
 /**
- * Pick the active image host from a {@link ReaderConfig}. Prefers
- * `curServ`/`curHost` when the selected host has non-zero weight, otherwise
- * falls back to the first host with weight > 0, then the first listed host.
+ * Use the selected host when enabled, otherwise the first enabled host in
+ * the selected service. Throw when the service has no enabled image hosts.
  */
 export function selectReaderHost(config: ReaderConfig): string {
   const service = config.services[config.curServ]

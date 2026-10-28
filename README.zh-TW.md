@@ -19,8 +19,8 @@
 瀏覽時，可以選取幾個章節，也可以將整批選取的章節加入佇列。Tako 會在閱讀分頁旁顯示下載進度，並讓你重試失敗的章節。
 
 - **用喜歡的應用程式閱讀。** 儲存為 CBZ、ZIP 或個別圖片。CBZ 可包含章節資料與封面，供漫畫閱讀器使用。
-- **整理本機書庫。** 選擇資料夾，並自訂作品與章節的命名方式。每個佇列任務都會保留你為它選定的資料夾。
-- **確認儲存結果。** 在歷史紀錄中查看已確認儲存的章節。缺少儲存確認的舊紀錄會顯示為「先前已處理」。
+- **整理本機書庫。** 選擇資料夾，並自訂作品與章節的命名方式。
+- **確認儲存結果。** 查看下載結果與章節歷史。
 - **分別管理歷史紀錄。** 清除舊任務時可保留章節歷史，也能分別清除兩者。
 
 ## 從喜歡的作品開始
@@ -36,8 +36,6 @@ Tako 預設透過 Chrome 下載功能儲存 CBZ 檔案。開啟「選項 → 儲
 [pixiv Comic（pixivコミック）](https://comic.pixiv.net) · [Shonen Jump+（少年ジャンプ＋）](https://shonenjumpplus.com) · [Manhuagui（看漫画）](https://www.manhuagui.com) · [Comic Nettai（COMIC熱帯）](https://www.comicnettai.com) · [MANGA MILLION](https://mangamillion.shueisha.co.jp) · [MangaDex](https://mangadex.org)
 
 也支援：[BoyLove（香香腐宅）](https://boylove.cc) · [Mangago](https://www.mangago.me) · [MangaNato](https://manganato.gg) · [MangaKakalot](https://mangakakalove.com) · [Coolmic](https://coolmic.me) · [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) · [Anime Manga House（动漫屋）](https://www.dm5.com) · [Manga Again（再漫画）](https://www.zaimanhua.com) · [CopyManga（拷貝漫畫）](https://www.copy3000.com) · [MYCOMIC](https://mycomic.com) · [Māngabz](https://www.mangabz.com) · [MangaHere](https://newm.mangahere.cc) · [Love Manga（爱漫画）](https://www.aimanhua.org)。可下載內容與應開啟的頁面，請參閱[各網站說明](https://github.com/oovz/Tako/wiki/Supported-Sites.zh-TW)。
-
-MangaNato 與 MangaKakalot 各自擁有啟用設定和章節歷史。
 
 MangaDex 預設停用。請在「選項 → 網站整合」中啟用，並同意 Chrome 的網站存取要求。[查看各網站使用提示](https://github.com/oovz/Tako/wiki/Supported-Sites.zh-TW)。
 

@@ -262,14 +262,7 @@ export function createMangadexHttpError(
   return error
 }
 
-/**
- * Safely parse a response body as JSON, validating Content-Type first.
- *
- * Cloudflare challenges and proxy error pages can return HTML with HTTP 200,
- * causing `response.json()` to throw a raw `SyntaxError` whose message leaks
- * into the UI. This helper detects non-JSON responses and JSON parse failures,
- * throwing a descriptive {@link MangadexHttpError} instead.
- */
+/** Reject non-JSON responses and malformed JSON with a MangadexHttpError. */
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const contentType = response.headers?.get("content-type")
   if (contentType && !contentType.toLowerCase().includes("application/json")) {
@@ -305,13 +298,7 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   }
 }
 
-/**
- * Throw a concise {@link MangadexHttpError} for a Zod schema validation failure.
- *
- * Zod error messages can be extremely long (hundreds of fields), and dumping
- * the full error into the UI is unhelpful. The full error is logged to the
- * console for debugging; the user-facing error message is short.
- */
+/** Log schema details and throw a concise ProviderContractError. */
 function throwSchemaValidationError(
   response: Response,
   parsed: { success: false; error: z.ZodError }

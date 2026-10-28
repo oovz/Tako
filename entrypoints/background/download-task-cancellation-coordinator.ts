@@ -52,8 +52,7 @@ export class DownloadTaskCancellationCoordinator {
         }
       }
       if (transition.outcome === "rejected") {
-        // Replay of an already-applied cancel: the task is gone or already
-        // terminal, which IS the durable result of this command.
+        // A missing or terminal task already satisfies this cancellation.
         const task = await this.queueRepository.getTask(taskId)
         if (task?.activeCancel && task.activeCancel.commandId !== commandId) {
           throw new Error(

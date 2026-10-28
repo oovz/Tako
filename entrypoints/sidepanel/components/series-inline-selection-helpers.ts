@@ -35,12 +35,8 @@ export function updateInlineSelectionPresentation(
 }
 
 /**
- * Build the display items from raw data, applying selection state from
- * `selectedChapterIds`.
- *
- * Collapse state is intentionally not projected into every item. It is passed
- * separately to ChapterSelector so toggling one volume does not clone every
- * chapter in a large series.
+ * Apply selected chapter IDs to the raw items. Collapse state remains
+ * separate so toggling a group does not rebuild the chapter list.
  */
 export function buildInlineSelectionItems(
   items: VolumeOrChapter[],

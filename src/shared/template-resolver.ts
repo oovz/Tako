@@ -1,28 +1,18 @@
-/**
- * Download path template resolution utilities (directory-only semantics)
- * Single exported resolver that always returns a DIRECTORY path.
- * Final archive filename (chapter title + format extension) is appended elsewhere.
- * If the user supplies what looks like a filename (e.g. "<CHAPTER>.cbz"), it is treated as a directory name verbatim.
- */
+/** Resolve directory and filename templates using chapter metadata. */
 
 import { validateTemplateMacros } from "./template-macros"
 import { validateResolvedPath } from "./download-path-validator"
 import { sanitizeFilename } from "./filename-sanitizer"
 
-/**
- * Template context for download path resolution (template-resolver).
- *
- * NOTE: This is intentionally a separate type from the `TemplateContext` in
- * `template-expander.ts`. See the comment there for why they are not consolidated.
- */
+/** Values required to resolve one chapter's output path. */
 export interface TemplateContext {
   date: Date
   publisher?: string
   integrationName?: string
   seriesTitle?: string
-  chapterTitle: string // REQUIRED for new semantics when resolving per chapter
+  chapterTitle: string
   volumeTitle?: string
-  format: string // REQUIRED (used externally when composing final file name)
+  format: string // Used when composing the final filename.
   chapterNumber?: number
   volumeNumber?: number
 }
@@ -39,8 +29,7 @@ export interface FilenameResolutionResult {
   error?: string
 }
 
-// Canonical token builder (per chapter) – chapters required for new rule-set.
-// Uses local date methods so date macros reflect user's local timezone (for file organization)
+// Date macros use the user's local timezone.
 function buildTokens(ctx: TemplateContext): Record<string, string | undefined> {
   const pad2 = (n: number) => String(n).padStart(2, "0")
   const pad3 = (n: number) => String(n).padStart(3, "0")
@@ -84,11 +73,9 @@ function expandDirectory(template: string, ctx: TemplateContext): string {
 }
 
 /**
- * Resolve a directory template for ONE chapter.
- * - Always per chapter (allows <CHAPTER> macro usage).
- * - Returns error if chapterTitle or format missing (no fallback names).
- * - An empty final directory after expansion is an ERROR (no fallback to series/Chapter).
- * - Treats any extension-looking suffix as part of the directory (not a filename).
+ * Resolve a chapter directory, including any <CHAPTER_TITLE> macro.
+ * Requires a chapter title and format, and rejects an empty result.
+ * A suffix such as .cbz remains part of the directory name.
  */
 export function resolveDownloadDirectory(
   template: string,

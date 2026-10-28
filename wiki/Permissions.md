@@ -8,11 +8,11 @@ Chrome asks for permissions so Tako can identify a manga, download its images, a
 
 Tako needs access to supported sites and their image services to load series information and chapters.
 
-Fixed site permissions cover the declared website, API and image-service domains for the included integrations, including their listed alternative domains. See [Supported Sites](Supported-Sites) for the pages and domains each integration recognizes.
+Site access covers supported websites, their APIs and image services, including alternative domains. See [Supported Sites](Supported-Sites) for the pages and domains Tako recognizes.
 
-Where a website protocol requires an existing session, Tako can send browser-managed site cookies with those requests. This reuses the session established by signing in on the site.
+When a site requires an existing session, Tako can use the browser-managed cookies from your sign-in on that site.
 
-MangaDex is disabled by default. If you enable it in **Options → Site Integrations**, Chrome asks for access to HTTPS sites because MangaDex uses community image servers whose addresses change. If you decline, MangaDex stays disabled. Download requests use the integration’s declared endpoints and request policy.
+MangaDex is disabled by default. If you enable it in **Options → Site Integrations**, Chrome asks for access to HTTPS sites because MangaDex uses community image servers whose addresses change. If you decline, MangaDex stays disabled.
 
 Optional website access that is no longer needed is removed when you disable the relevant integration. Access included with the extension's fixed site permissions remains declared. You can also review site access in Chrome's extension settings.
 
@@ -29,12 +29,12 @@ Optional website access that is no longer needed is removed when you disable the
 | `offscreen`                           | Process images, create archives, and write to a selected folder in the background             |
 | `downloads`                           | Save files through Chrome Downloads and check whether saving finished                         |
 | `notifications`                       | Show download notifications when notifications are enabled                                    |
-| `alarms`                              | Wake Tako to check ongoing work and recover interrupted coordination                          |
+| `alarms`                              | Check ongoing downloads                                                                       |
 | `declarativeNetRequestWithHostAccess` | Set headers required by supported image servers, such as the referring page                   |
 
 ## Folder access
 
-Choosing a custom folder opens Chrome's folder picker. Tako can then save to that folder and its subfolders. The folder reference stays local and is retained while your saved defaults or tasks need it.
+Choosing a custom folder opens Chrome's folder picker. Tako can then save to that folder and its subfolders. Your folder choice is saved locally for your settings and downloads.
 
 Changing the default folder affects new tasks. Existing tasks keep their original folder, and **Grant access again** renews access to that folder. See [Troubleshooting](Troubleshooting#folder-access-was-lost) if a task cannot save.
 

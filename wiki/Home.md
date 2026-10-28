@@ -1,10 +1,10 @@
 <p align="center">
-
-[English](Home) · [日本語](Home.ja) · [简体中文](Home.zh-CN) · [繁體中文](Home.zh-TW) · [한국어](Home.ko)
-<img src="https://raw.githubusercontent.com/oovz/Tako/main/public/icon/128.png" width="80" alt="Tako logo">
+  <img src="https://raw.githubusercontent.com/oovz/Tako/main/public/icon/128.png" width="80" alt="Tako logo">
 </p>
 
 # Tako Help
+
+[English](Home) · [日本語](Home.ja) · [简体中文](Home.zh-CN) · [繁體中文](Home.zh-TW) · [한국어](Home.ko)
 
 Tako saves manga chapters from supported sites for offline reading. Open it beside your reading tab, choose chapters, and save them as CBZ, ZIP, or individual images.
 
@@ -19,7 +19,6 @@ Tako saves manga chapters from supported sites for offline reading. Open it besi
 | [Troubleshooting](Troubleshooting) | Help with failed downloads, folder access, and save results    |
 | [Template Macros](Template-Macros) | Organize folders and filenames automatically                   |
 | [Permissions](Permissions)         | Why Chrome asks for access and how Tako uses it                |
-| [Choosing Tako](Comparisons)       | Decide whether Tako fits how you read and save manga           |
 
 ## Get Tako
 

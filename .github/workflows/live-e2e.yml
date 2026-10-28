@@ -1,12 +1,6 @@
 name: Live E2E
 
-# Live end-to-end tests that hit real external APIs (MangaDex, Pixiv Comic,
-# Shonen Jump+, manhuagui, comicnettai). These tests are inherently flaky
-# because they depend on third-party service availability and rate limits.
-#
-# Runs on every push and PR alongside CI, but as a separate workflow so
-# its result does not affect the CI run status or block releases. Tags are
-# excluded to avoid a duplicate run when main and a tag are pushed together.
+# Run the API canary on pushes and pull requests; run full live tests on request.
 
 on:
   push:
@@ -46,10 +40,7 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
-      # Browser binaries are pinned to the resolved @playwright/test version,
-      # so key the cache on that instead of the whole lockfile. Keying on the
-      # lockfile busts the cache (and forces a full tip-of-tree re-download)
-      # whenever any unrelated dependency changes.
+      # Match cached browsers to the installed Playwright version.
       - name: Resolve Playwright version
         id: pw-version
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -59,11 +50,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
-      # The ubuntu-24.04 runner image routes apt through /etc/apt/apt-mirrors.txt,
-      # whose azure.archive.ubuntu.com endpoint intermittently becomes
-      # unreachable, leaving apt-get update (inside install-deps) hung with no
-      # output for 20+ minutes. Pin the mirror to the reliable
-      # archive.ubuntu.com and bound the step with a retry loop.
+      # Pin the package mirror and bound dependency-installation attempts.
       - name: Pin apt mirror to archive.ubuntu.com
         run: sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' /etc/apt/apt-mirrors.txt
       - name: Install Playwright system dependencies

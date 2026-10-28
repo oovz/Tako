@@ -24,8 +24,7 @@ export function validateDownloadPath(path: string): ValidationResult {
 
   const trimmedPath = path.trim()
 
-  // Check for invalid filesystem characters
-  // Allow letters, numbers, spaces, hyphens, underscores, dots, slashes, and template brackets
+  // Reject reserved filename characters while allowing template brackets.
   if (!/^[^:"|?*]*$/.test(trimmedPath)) {
     return {
       isValid: false,

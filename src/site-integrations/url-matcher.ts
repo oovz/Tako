@@ -1,16 +1,4 @@
-/**
- * Unified URL Matcher - Context-Agnostic URL Pattern Matching
- *
- * This module provides URL matching functionality that works consistently
- * across all extension contexts: popup, content scripts, background/service workers,
- * and offscreen documents.
- *
- * Features:
- * - Pure function with no side effects or dependencies
- * - Precompiled domain and path filtering
- * - Supports multiple site integrations per domain
- * - Works in service worker context (no DOM access)
- */
+/** Match HTTPS URLs against packaged site-integration patterns. */
 
 import {
   getDefinitions,
@@ -125,8 +113,7 @@ function testPatterns(pathname: string, patterns: RegExp[]): boolean {
 }
 
 /**
- * Match a URL against registered site integration patterns
- * Only matches series pages (chapter matching removed per architecture simplification)
+ * Match a URL against a shipped integration's declared series patterns.
  *
  * @param url - Full URL to match
  * @returns Match result with site integration ID and role, or null if no match
@@ -169,7 +156,7 @@ export function matchUrl(
     }
 
     if (testPatterns(pathname, candidate.seriesRegex)) {
-      // Check pre-compiled exclude patterns (FAST - no regex compilation)
+      // Apply the integration's exclusions.
       if (
         candidate.excludeRegex.length > 0 &&
         testPatterns(pathname, candidate.excludeRegex)
@@ -204,7 +191,7 @@ export function isSupportedDomain(url: string): boolean {
 }
 
 /**
- * Get all pattern metadata (for options/popup display)
+ * Get the packaged URL-pattern metadata.
  */
 export function getAllPatternMetadata() {
   return Object.entries(SITE_PATTERNS).map(([integrationId, patterns]) => ({

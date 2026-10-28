@@ -292,8 +292,7 @@ export class QueueApplicationCommands {
     })
     if (result.outcome !== "applied" && result.outcome !== "unchanged") {
       if (result.reason === "task-not-found") {
-        // Replay of an already-applied remove: the task is already gone,
-        // which IS the durable result of this command. No new Undo exists.
+        // Replaying a completed removal does not create another Undo action.
         return undefined
       }
       throw new Error(

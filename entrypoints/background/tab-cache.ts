@@ -41,10 +41,7 @@ export interface CurrentSeriesContext {
   windowId: number
 }
 
-// Maximum number of tab contexts to keep in the in-memory cache.
-// Tabs beyond this limit are evicted on the next set (LRU-style via
-// Map insertion order). In practice users rarely have more than ~50
-// tabs open, but this prevents unbounded growth in edge cases.
+// Cache writes evict the oldest entries once this limit is reached.
 const MAX_TAB_CACHE_SIZE = 100
 
 interface TabCacheDependencies {

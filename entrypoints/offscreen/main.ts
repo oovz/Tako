@@ -950,8 +950,4 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 })
 
-// NOTE: Offscreen documents can use DOM/web APIs, but from the Chrome extension
-// API surface they can ONLY use chrome.runtime, NOT chrome.storage.
-// The previous chrome.storage.session listener caused TypeError because chrome.storage is undefined in offscreen context
-
 logger.debug("✅ Offscreen document script loaded")

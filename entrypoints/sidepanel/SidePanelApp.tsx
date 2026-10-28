@@ -143,14 +143,9 @@ export function SidePanelApp() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      {/* Sonner Toaster: required to render toast.error() calls from
-          useCommandCenterActions (retry/restart/move-top/remove).
-          Without a mounted <Toaster />, sonner toasts are never visible. */}
       <Toaster position="top-right" richColors closeButton />
       <div className="relative flex h-full w-full min-w-0 flex-col bg-background text-foreground select-none">
-        {/* Skip-to-content link for keyboard users — visually hidden until
-            focused, then jumps focus past the header/banners to the main
-            queue region. */}
+        {/* Keyboard users can skip directly to the queue. */}
         <a
           href="#sidepanel-main"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded-md focus:bg-primary focus:px-3 focus:py-1.5 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-md"
@@ -159,7 +154,6 @@ export function SidePanelApp() {
         </a>
         <ErrorBanner />
         <div className="px-2 pt-2"></div>
-        {/* Header with queue status badges - enlarged for better visibility */}
         <SidePanelHeader
           activeCount={
             status === "ready" || status === "stale" ? activeCount : null
@@ -181,7 +175,6 @@ export function SidePanelApp() {
             onOpenChange={updateInlineSelectionOpen}
             className="contents"
           >
-            {/* Context-aware Series Card */}
             <div className="bg-background border-b border-border shadow-sm sticky top-0 z-20">
               <div className="p-4">
                 <SeriesContextCard
@@ -226,7 +219,6 @@ export function SidePanelApp() {
                 </div>
               </div>
 
-              {/* Queue + History region */}
               <SidePanelQueueRegion
                 queueTasks={queueView}
                 historyTasks={historyTasks}

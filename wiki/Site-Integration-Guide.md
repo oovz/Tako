@@ -10,8 +10,6 @@ Read [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md) for 
 
 A site integration identifies supported pages, resolves series and chapter information, downloads images, and handles any site-specific image transformation. Its definition declares origins, request policy, and settings.
 
-Keep provider details inside the integration. Shared queue and message contracts use `siteIntegrationId` and generic integration context.
-
 ## Add a site
 
 ### 1. Create the scaffold
@@ -42,15 +40,15 @@ Define the pages Tako should recognize, fixed and optional origins, endpoint pur
 
 ### 3. Resolve the series in the background
 
-Implement `resolveSeriesData` in `background-runtime.ts`, following [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
+Implement `series.resolveSeriesData` in `background-runtime.ts`, following [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
 
 Resolve the series title, metadata, chapter IDs, chapter URLs, and availability from URL data, the provider API, or fetched HTML. Use `integrationHttpClient` for requests and validate provider data before returning it. Add dispatch-context preparation only when chapter processing needs it.
 
 ### 4. Resolve and download chapter images offscreen
 
-Implement `resolveChapterPlan` and `downloadImage` in `offscreen-runtime.ts`, following [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
+Implement `chapter.resolveChapterPlan` and `chapter.downloadImage` in `offscreen-runtime.ts`, following [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
 
-Use the shared chapter-plan schemas and `fetchImageWithStallDetection`. Carry the provided cancellation signal, rate policy, byte-progress callback, and live-resource ledger through the request. Return each image's bytes, filename, MIME type, and resource lease. Follow an existing integration's scheduling ownership so each request is scheduled once.
+Use the shared chapter-plan schemas and `fetchImageWithStallDetection`. Forward cancellation, rate settings, byte progress and resource accounting, and return the image result defined by the interface. Schedule each request once.
 
 Validate response sizes, image dimensions, page counts, and provider-issued URLs before allocation or privileged use. Transformations must reserve their required resources and release them on success, failure, or cancellation.
 
@@ -60,7 +58,7 @@ Put captured HTML, protocol vectors, and controlled image inputs in `tests/fixtu
 
 Add focused unit coverage and mocked browser coverage for UI-visible behavior. Check page ordering and transformed image content, along with successful decoding.
 
-An integration `README.md` is optional. Add one when it gives contributors practical information beyond the code, types, fixture notes, and shared guides. Keep it focused on that information. Reader instructions belong in [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting). Live checks run from `tests/live/`; shared work URLs are defined in `tests/e2e/fixtures/test-domains-constants.ts`.
+Update reader instructions in [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting). Live checks belong in `tests/live/`; shared work URLs are defined in `tests/e2e/fixtures/test-domains-constants.ts`.
 
 ### 6. Generate and verify
 
@@ -76,13 +74,13 @@ pnpm test:unit
 
 When resolvers and fixtures are ready, set `shipped: true` and regenerate the catalogs. Run the applicable integration and browser checks from [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing), then build the production extension with `pnpm build`.
 
-Live-provider checks are opt-in. Use the [live chapter validation guide](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation) to inspect an actual saved chapter and compare transformed pages with the site's reader. Record the work, chapter, date, save result, and visual inspection from the live run. Deterministic fixtures cover the retained protocol and failure cases.
+Run a [live chapter check](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation) when site access is available, and compare transformed pages with the site's reader.
 
 ## Optional capabilities
 
 ### One-shot page probes
 
-If live page state is necessary, declare `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Use bounded read-only probes that return validated plain data and release their resources when finished. Use the isolated world unless there is a documented reason to use the main world.
+If live page state is necessary, declare `pageProbe: "optional"` or `"required"` and provide `probe.ts`. Use bounded read-only probes that return validated plain data and release their resources when finished. Use the isolated world by default.
 
 ### Request headers
 
@@ -90,11 +88,11 @@ Declare required referer rules in `sessionRefererRules`. Use the managed ID rang
 
 ### Image transformations
 
-Declare the image-transform capability and implement it in the offscreen runtime. Reuse the shared image transport and resource accounting. Add deterministic fixtures that detect incorrect panel, tile, or page order.
+Declare image transformations in the definition and implement them offscreen. Test panel, tile and page order. Provide `cover.downloadImage` when covers need different image handling.
 
 ### Provider-issued image servers
 
-For dynamically selected image hosts, declare `originKind: "provider-issued"` and validate URLs where the provider supplies them. Fixed endpoint origins belong in `requiredOrigins`; optional host patterns belong in `optionalOrigins`. The generator handles optional grants for disabled shipped providers.
+For dynamically selected image hosts, declare `originKind: "provider-issued"` and validate URLs where the provider supplies them. Fixed endpoint origins belong in `requiredOrigins`; optional host patterns belong in `optionalOrigins`.
 
 ### Localized settings
 
@@ -102,8 +100,6 @@ Declare typed settings in `customSettings`. Their labels, descriptions, and opti
 
 ## Shared request security
 
-Provider requests use `integrationHttpClient` and the shared endpoint policy. These boundaries enforce declared origins and credentials, HTTPS and public-host validation, redirect policy, bounded responses, and cancellation. Image transport also validates MIME types and byte limits.
-
-Package executable integration code with the extension and parse remote responses as data. Diagnostics contain redacted technical details; credentials and raw responses stay at the request boundary.
+Use `integrationHttpClient` and the shared image transport for requests. Declare the required origins, credentials and response limits in the definition. Package executable code with the extension and parse remote responses as data. Keep credentials and raw responses out of logs.
 
 Related: [Architecture](Architecture), [Permissions](Permissions), and [Supported Sites](Supported-Sites).

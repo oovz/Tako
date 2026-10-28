@@ -1,7 +1,4 @@
-/**
- * Tako Manga Downloader - Options Page
- * Apple HIG Inset Grouped design with modern WXT / React 19 architecture
- */
+/** Tako options page. */
 
 import { createRoot } from "react-dom/client"
 import "@/globals.css"

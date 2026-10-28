@@ -1,21 +1,8 @@
 #!/usr/bin/env node
 /**
- * merge-coverage.mjs
- *
- * Merges Istanbul coverage data from two sources:
- *   1. Vitest unit + integration coverage  → coverage/coverage-final.json
- *   2. Playwright E2E coverage             → .nyc_output/e2e/coverage-*.json
- *
- * The merged output is written to .nyc_output/merged/coverage-final.json and
- * then reported via `nyc report` (text summary + lcov for CI tooling).
- *
- * Usage:
- *   node scripts/merge-coverage.mjs
- *
- * Prerequisites:
- *   - Run `pnpm test:coverage` first to produce coverage/coverage-final.json
- *   - Run `E2E_COVERAGE=true pnpm test:e2e` first to populate .nyc_output/e2e/
- *   - nyc must be available: pnpm add -D nyc  (or use npx nyc)
+ * Merge Vitest coverage from coverage/coverage-final.json with Playwright
+ * coverage from .nyc_output/e2e/ into .nyc_output/merged/coverage-final.json.
+ * Run pnpm coverage:all to collect, merge, and report both sources.
  */
 
 import fs from "node:fs/promises"

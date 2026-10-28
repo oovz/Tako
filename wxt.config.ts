@@ -6,7 +6,6 @@ import { siteIntegrationWxtPermissions } from "./src/runtime/generated/site-inte
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
 
-  // Configure Vite
   vite: (configEnv) => ({
     define: {
       __TAKO_E2E_STATE_SEED__: JSON.stringify(
@@ -21,9 +20,7 @@ export default defineConfig({
     },
     plugins: [
       tailwindcss(),
-      // Instrument extension source for Istanbul-based E2E coverage.
-      // Only active when building for coverage (E2E_COVERAGE=true) to keep
-      // production and normal dev builds clean and fast.
+      // Instrument only the isolated E2E coverage build.
       ...(configEnv.mode === "e2e-test" && process.env.E2E_COVERAGE === "true"
         ? [
             istanbul({
@@ -50,14 +47,10 @@ export default defineConfig({
     },
   }),
 
-  // Configure manifest. Isolated Playwright builds pre-grant the generated
-  // optional origins so mocked and live workflows can exercise every shipped
-  // integration. Production keeps the user-gesture permission flow.
+  // Test builds pre-grant provider origins; production requests optional access.
   manifest: ({ mode }) => {
     const isLiveTest = mode === "live-test"
-    // A test environment variable alone must never make a normal production
-    // artifact more permissive. Test state seeding and broad mock-host access
-    // are compile-time capabilities of the isolated E2E artifacts.
+    // Test capabilities require an isolated build mode.
     const isDeterministicE2e =
       mode === "e2e-test" && process.env.TAKO_E2E_STATE_SEED === "true"
     const grantsBroadHttpsForIsolatedTest = isLiveTest || isDeterministicE2e
@@ -78,9 +71,7 @@ export default defineConfig({
         "webNavigation",
         "notifications",
         "alarms",
-        // Use the host-access-bound DNR permission and avoid the broad
-        // "Block content on any page" warning. Tako additionally scopes every
-        // provider rule by target domain and extension initiator.
+        // Provider rules are scoped to declared hosts and extension requests.
         "declarativeNetRequestWithHostAccess",
       ],
       background: {
@@ -116,14 +107,11 @@ export default defineConfig({
         "96": "icon/96.png",
         "128": "icon/128.png",
       },
-      // offscreen.html removed from web_accessible_resources (2026-02-06):
-      // Offscreen docs are loaded internally via chrome.offscreen.createDocument(),
-      // not accessed by web pages.
+      // Extension documents are loaded internally.
       web_accessible_resources: [],
     }
   },
 
-  // Configure frontend framework
   webExt: {
     startUrls: [
       "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c/hunter-x-hunter",
@@ -131,7 +119,6 @@ export default defineConfig({
     disabled: false,
   },
 
-  // Configure dev server
   dev: {
     server: {
       port: 51730,
