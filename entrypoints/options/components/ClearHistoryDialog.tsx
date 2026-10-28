@@ -16,21 +16,31 @@ interface ClearHistoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => Promise<boolean>
+  title: string
+  description: string
+  confirmLabel: string
 }
 
 export function ClearHistoryDialog({
   open,
   onOpenChange,
   onConfirm,
+  title,
+  description,
+  confirmLabel,
 }: ClearHistoryDialogProps) {
   const [isClearing, setIsClearing] = useState(false)
+  const [hasFailed, setHasFailed] = useState(false)
 
   const handleConfirm = async () => {
     if (isClearing) return
     setIsClearing(true)
+    setHasFailed(false)
     try {
       if (await onConfirm()) {
         onOpenChange(false)
+      } else {
+        setHasFailed(true)
       }
     } finally {
       setIsClearing(false)
@@ -46,14 +56,17 @@ export function ClearHistoryDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("options_clearHistoryTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t("options_clearHistoryDesc")}
-          </AlertDialogDescription>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {hasFailed && (
+          <p role="alert" className="text-sm text-destructive">
+            {t("options_clearHistoryRetry")}
+          </p>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isClearing}>
-            {t("options_keepHistory")}
+            {t("common_cancel")}
           </AlertDialogCancel>
           <Button
             type="button"
@@ -64,7 +77,7 @@ export function ClearHistoryDialog({
             {isClearing && (
               <Loader2 aria-hidden="true" className="size-4 animate-spin" />
             )}
-            {t("options_clearAll")}
+            {confirmLabel}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

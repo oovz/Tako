@@ -472,7 +472,8 @@ export function useOptionsPageState() {
     repairDownloadFolder,
     grantDownloadFolderAccess,
   } = folder
-  const { clearAllHistory, clearSeriesHistory, handleRefreshHistory } = history
+  const { clearChapterHistory, clearSeriesHistory, handleRefreshHistory } =
+    history
 
   async function resolveExternalChanges(
     strategy: "reload" | "keep-mine"
@@ -593,7 +594,7 @@ export function useOptionsPageState() {
     repairDownloadFolder,
     grantDownloadFolderAccess,
     saveConfiguration,
-    clearAllHistory,
+    clearChapterHistory,
     clearSeriesHistory,
     handleRefreshHistory,
     discardChanges,

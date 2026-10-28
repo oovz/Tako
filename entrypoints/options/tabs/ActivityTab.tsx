@@ -49,7 +49,7 @@ export {
 interface ActivityTabProps {
   stats?: HistoryStats | null
   series?: SeriesHistory[]
-  onClearAllHistory?: () => Promise<boolean>
+  onClearChapterHistory: () => Promise<boolean>
   onClearSeriesHistory?: (
     siteIntegrationId: string,
     seriesId: string
@@ -64,7 +64,7 @@ interface ActivityTabProps {
 export function ActivityTab({
   stats,
   series = [],
-  onClearAllHistory,
+  onClearChapterHistory,
   onClearSeriesHistory,
   onRefreshSeries,
   isClearingHistory = false,
@@ -73,7 +73,9 @@ export function ActivityTab({
   isPickingFolder = false,
   isSaving = false,
 }: ActivityTabProps) {
-  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false)
+  const [historyToClear, setHistoryToClear] = useState<
+    "tasks" | "chapters" | null
+  >(null)
   const [clearSeriesDialogOpen, setClearSeriesDialogOpen] = useState(false)
   const [selectedSeriesToClear, setSelectedSeriesToClear] = useState("")
   const [localSeries, setLocalSeries] = useState<SeriesHistory[]>(series)
@@ -89,7 +91,7 @@ export function ActivityTab({
     retryTask,
     restartTask,
     removeTask,
-    clearAllHistory,
+    clearTaskHistory,
     retryDestinationTask,
     continueTaskInDownloads,
   } = useDownloadsTabState()
@@ -210,11 +212,11 @@ export function ActivityTab({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setShowClearHistoryDialog(true)}
+              onClick={() => setHistoryToClear("tasks")}
               className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
             >
               <Trash2 className="size-3.5" />
-              {t("options_clearAllHistory")}
+              {t("options_clearTaskHistory")}
             </Button>
           )}
         </div>
@@ -358,38 +360,54 @@ export function ActivityTab({
           }
         />
 
-        {/* Clear All History Action */}
+        {/* Clear Chapter History Action */}
         <SettingsRow
           icon={Trash2}
-          title={t("options_clearAllHistoryLabel")}
-          description={t("options_clearAllHistorySubtext")}
+          title={t("options_clearChapterHistory")}
+          description={t("options_clearChapterHistorySubtext")}
           control={
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setShowClearHistoryDialog(true)}
+              onClick={() => setHistoryToClear("chapters")}
               disabled={isClearingHistory || (stats?.totalSeries ?? 0) === 0}
               className="text-xs h-8 text-destructive hover:bg-destructive/10 hover:border-destructive/40"
             >
-              {t("options_clearEverything")}
+              {t("options_clearChapterHistory")}
             </Button>
           }
         />
       </SettingsGroup>
 
-      {/* Clear All Confirmation Dialog */}
-      <ClearHistoryDialog
-        open={showClearHistoryDialog}
-        onOpenChange={setShowClearHistoryDialog}
-        onConfirm={async () => {
-          await clearAllHistory()
-          if (onClearAllHistory) {
-            await onClearAllHistory()
+      {historyToClear && (
+        <ClearHistoryDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setHistoryToClear(null)
+          }}
+          title={t(
+            historyToClear === "tasks"
+              ? "options_clearTaskHistoryTitle"
+              : "options_clearChapterHistoryTitle"
+          )}
+          description={t(
+            historyToClear === "tasks"
+              ? "options_clearTaskHistoryDesc"
+              : "options_clearChapterHistoryDesc"
+          )}
+          confirmLabel={t(
+            historyToClear === "tasks"
+              ? "options_clearTaskHistory"
+              : "options_clearChapterHistory"
+          )}
+          onConfirm={
+            historyToClear === "tasks"
+              ? clearTaskHistory
+              : onClearChapterHistory
           }
-          return true
-        }}
-      />
+        />
+      )}
     </div>
   )
 }

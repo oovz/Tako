@@ -768,9 +768,6 @@
       }
     }
   },
-  "options_clearAllHistory": {
-    "message": "清除全部歷史"
-  },
   "options_activeDownloads": {
     "message": "活躍下載"
   },
@@ -945,12 +942,6 @@
       }
     }
   },
-  "options_clearHistoryTitle": {
-    "message": "清除所有下載歷史？"
-  },
-  "options_clearHistoryDesc": {
-    "message": "這將永久刪除所有下載歷史。已下載的檔案不受影響。"
-  },
   "options_noKeepHistory": {
     "message": "否，保留歷史"
   },
@@ -979,16 +970,7 @@
     "message": "管理歷史資料"
   },
   "options_manageHistoryDesc": {
-    "message": "刪除已儲存的章節歷史記錄，不影響已儲存到磁碟的檔案。"
-  },
-  "options_clearAllHistoryLabel": {
-    "message": "清除全部歷史"
-  },
-  "options_clearAllHistorySubtext": {
-    "message": "刪除所有系列的所有下載歷史"
-  },
-  "options_clearEverything": {
-    "message": "全部清除"
+    "message": "管理所有系列或所選系列的章節歷史。"
   },
   "options_clearAllDownloadHistory": {
     "message": "清除所有下載歷史？"
@@ -1008,16 +990,16 @@
     "message": "此操作無法復原。"
   },
   "options_clearSpecificSeries": {
-    "message": "清除特定系列"
+    "message": "清除指定系列的章節歷史"
   },
   "options_clearSeriesSubtext": {
-    "message": "刪除單個系列的下載歷史"
+    "message": "刪除單一系列的章節紀錄"
   },
   "options_selectSeriesDots": {
     "message": "選擇系列..."
   },
   "options_clearSeriesHistory": {
-    "message": "清除系列歷史"
+    "message": "清除系列章節歷史"
   },
   "options_selectSeries": {
     "message": "選擇系列"
@@ -1026,7 +1008,7 @@
     "message": "選擇一個系列..."
   },
   "options_noDownloadHistory": {
-    "message": "未找到下載歷史"
+    "message": "找不到章節歷史"
   },
   "options_clearSelected": {
     "message": "清除已選"
@@ -1398,17 +1380,11 @@
   "options_toastSetFolderFailed": {
     "message": "設定下載資料夾失敗"
   },
-  "options_toastAllHistoryCleared": {
-    "message": "所有下載歷史已清除"
-  },
-  "options_toastClearHistoryFailed": {
-    "message": "清除歷史失敗"
-  },
   "options_toastSeriesHistoryCleared": {
-    "message": "系列歷史已清除"
+    "message": "已清除系列章節歷史"
   },
   "options_toastClearSeriesFailed": {
-    "message": "清除系列歷史失敗"
+    "message": "清除系列章節歷史失敗"
   },
   "options_toastChangesDiscarded": {
     "message": "變更已放棄"
@@ -1442,12 +1418,6 @@
   },
   "options_openMangaToDownload": {
     "message": "開啟漫畫系列頁面開始下載。"
-  },
-  "options_keepHistory": {
-    "message": "否，保留歷史"
-  },
-  "options_clearAll": {
-    "message": "是，全部清除"
   },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "透過 Chrome 的擴充功能更新服務手動檢查更新。"
@@ -1844,5 +1814,41 @@
   },
   "sidepanel_retrySeriesContext": {
     "message": "重試載入漫畫"
+  },
+  "options_clearTaskHistory": {
+    "message": "清除任務歷史"
+  },
+  "options_clearTaskHistoryTitle": {
+    "message": "清除任務歷史？"
+  },
+  "options_clearTaskHistoryDesc": {
+    "message": "永久刪除已完成、失敗和已取消的任務紀錄。"
+  },
+  "options_clearChapterHistory": {
+    "message": "清除章節歷史"
+  },
+  "options_clearChapterHistoryTitle": {
+    "message": "清除章節歷史？"
+  },
+  "options_clearChapterHistoryDesc": {
+    "message": "永久刪除所有系列的章節紀錄。"
+  },
+  "options_clearChapterHistorySubtext": {
+    "message": "刪除所有系列的章節紀錄"
+  },
+  "options_clearHistoryRetry": {
+    "message": "無法清除歷史，請重試。"
+  },
+  "options_toastTaskHistoryCleared": {
+    "message": "已清除任務歷史"
+  },
+  "options_toastClearTaskHistoryFailed": {
+    "message": "清除任務歷史失敗"
+  },
+  "options_toastChapterHistoryCleared": {
+    "message": "已清除章節歷史"
+  },
+  "options_toastClearChapterHistoryFailed": {
+    "message": "清除章節歷史失敗"
   }
 }

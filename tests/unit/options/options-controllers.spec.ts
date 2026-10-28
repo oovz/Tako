@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest"
 import { OptionsConfigurationClient } from "@/entrypoints/options/controllers/options-configuration-client"
 import { OptionsExternalChangeController } from "@/entrypoints/options/controllers/options-external-change-controller"
 import { OptionsFsaController } from "@/entrypoints/options/controllers/options-fsa-controller"
-import { OptionsHistoryController } from "@/entrypoints/options/controllers/options-history-controller"
+import {
+  OptionsHistoryController,
+  type OptionsHistoryScope,
+} from "@/entrypoints/options/controllers/options-history-controller"
 import { OptionsHostPermissionController } from "@/entrypoints/options/controllers/options-host-permission-controller"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { OptionsConfigurationData } from "@/src/runtime/runtime-message-contracts"
@@ -77,6 +80,45 @@ describe("Options configuration and history controllers", () => {
       load.mock.invocationCallOrder[0]
     )
   })
+
+  it.each<OptionsHistoryScope>([
+    { scope: "all" },
+    { scope: "series", siteIntegrationId: "mangadex", seriesId: "series-1" },
+  ])(
+    "propagates a failed chapter clear and permits retry for $scope",
+    async (scope) => {
+      const sender = vi
+        .fn()
+        .mockResolvedValueOnce({
+          success: false,
+          error: "History storage unavailable",
+        })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: true, data: configurationData() })
+      const client = new OptionsConfigurationClient(sender as never)
+      const controller = new OptionsHistoryController(client, (selection) =>
+        OptionsConfigurationClient.clearHistory(selection, sender as never)
+      )
+
+      await expect(controller.clear(scope)).rejects.toThrow(
+        "History storage unavailable"
+      )
+      expect(sender).toHaveBeenCalledTimes(1)
+      await expect(controller.clear(scope)).resolves.toEqual(
+        configurationData()
+      )
+      expect(
+        sender.mock.calls.map(([request]) => ({
+          type: request.type,
+          payload: request.payload,
+        }))
+      ).toEqual([
+        { type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY", payload: scope },
+        { type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY", payload: scope },
+        { type: "GET_OPTIONS_CONFIGURATION", payload: undefined },
+      ])
+    }
+  )
 })
 
 describe("Options external-change controller", () => {

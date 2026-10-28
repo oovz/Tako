@@ -117,7 +117,7 @@ function OptionsPage() {
     repairDownloadFolder,
     grantDownloadFolderAccess,
     saveConfiguration,
-    clearAllHistory,
+    clearChapterHistory,
     clearSeriesHistory,
     handleRefreshHistory,
     discardChanges,
@@ -370,7 +370,7 @@ function OptionsPage() {
                 <ActivityTab
                   stats={historyStats}
                   series={historySeries}
-                  onClearAllHistory={clearAllHistory}
+                  onClearChapterHistory={clearChapterHistory}
                   onClearSeriesHistory={clearSeriesHistory}
                   onRefreshSeries={handleRefreshHistory}
                   isClearingHistory={isClearing}

@@ -164,14 +164,15 @@ export function useDownloadsTabState() {
     [refreshDownloadState]
   )
 
-  const clearAllHistory = useCallback(async (): Promise<boolean> => {
+  const clearTaskHistory = useCallback(async (): Promise<boolean> => {
     try {
       await queueCommandClient.clearTerminalHistory()
+      toast.success(t("options_toastTaskHistoryCleared"))
       void refreshDownloadState()
       return true
     } catch (error) {
-      logger.error("[DOWNLOADS TAB] Failed to clear history:", error)
-      toast.error(t("options_toastClearHistoryFailed"))
+      logger.error("[DOWNLOADS TAB] Failed to clear task history:", error)
+      toast.error(t("options_toastClearTaskHistoryFailed"))
       return false
     }
   }, [refreshDownloadState])
@@ -204,7 +205,7 @@ export function useDownloadsTabState() {
     retryTask,
     restartTask,
     removeTask,
-    clearAllHistory,
+    clearTaskHistory,
     retryDestinationTask: (taskId: string) =>
       sendDestinationTaskAction(taskId, "RETRY_DESTINATION"),
     continueTaskInDownloads: (taskId: string) =>

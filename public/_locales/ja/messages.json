@@ -768,9 +768,6 @@
       }
     }
   },
-  "options_clearAllHistory": {
-    "message": "全履歴を消去"
-  },
   "options_activeDownloads": {
     "message": "アクティブダウンロード"
   },
@@ -945,12 +942,6 @@
       }
     }
   },
-  "options_clearHistoryTitle": {
-    "message": "すべてのダウンロード履歴を消去しますか？"
-  },
-  "options_clearHistoryDesc": {
-    "message": "すべてのダウンロード履歴が永久に削除されます。ダウンロード済みのファイルには影響しません。"
-  },
   "options_noKeepHistory": {
     "message": "いいえ、履歴を保持"
   },
@@ -979,16 +970,7 @@
     "message": "履歴データを管理"
   },
   "options_manageHistoryDesc": {
-    "message": "ディスクに保存済みのファイルに影響を与えずに、保存された章履歴レコードを削除。"
-  },
-  "options_clearAllHistoryLabel": {
-    "message": "全履歴を消去"
-  },
-  "options_clearAllHistorySubtext": {
-    "message": "すべてのシリーズのすべてのダウンロード履歴を削除"
-  },
-  "options_clearEverything": {
-    "message": "すべて消去"
+    "message": "すべてのシリーズまたは選択したシリーズのチャプター履歴を管理します。"
   },
   "options_clearAllDownloadHistory": {
     "message": "すべてのダウンロード履歴を消去しますか？"
@@ -1008,16 +990,16 @@
     "message": "この操作は取り消せません。"
   },
   "options_clearSpecificSeries": {
-    "message": "特定シリーズを消去"
+    "message": "シリーズのチャプター履歴を消去"
   },
   "options_clearSeriesSubtext": {
-    "message": "単一シリーズのダウンロード履歴を削除"
+    "message": "1つのシリーズのチャプター記録を削除"
   },
   "options_selectSeriesDots": {
     "message": "シリーズを選択..."
   },
   "options_clearSeriesHistory": {
-    "message": "シリーズ履歴を消去"
+    "message": "シリーズのチャプター履歴を消去"
   },
   "options_selectSeries": {
     "message": "シリーズを選択"
@@ -1026,7 +1008,7 @@
     "message": "シリーズを選択..."
   },
   "options_noDownloadHistory": {
-    "message": "ダウンロード履歴が見つかりません"
+    "message": "チャプター履歴が見つかりません"
   },
   "options_clearSelected": {
     "message": "選択を消去"
@@ -1398,17 +1380,11 @@
   "options_toastSetFolderFailed": {
     "message": "ダウンロードフォルダの設定に失敗しました"
   },
-  "options_toastAllHistoryCleared": {
-    "message": "すべてのダウンロード履歴を消去しました"
-  },
-  "options_toastClearHistoryFailed": {
-    "message": "履歴の消去に失敗しました"
-  },
   "options_toastSeriesHistoryCleared": {
-    "message": "シリーズ履歴を消去しました"
+    "message": "シリーズのチャプター履歴を消去しました"
   },
   "options_toastClearSeriesFailed": {
-    "message": "シリーズ履歴の消去に失敗しました"
+    "message": "シリーズのチャプター履歴の消去に失敗しました"
   },
   "options_toastChangesDiscarded": {
     "message": "変更を破棄しました"
@@ -1442,12 +1418,6 @@
   },
   "options_openMangaToDownload": {
     "message": "漫画シリーズのページを開いてダウンロードを開始してください。"
-  },
-  "options_keepHistory": {
-    "message": "いいえ、履歴を保持"
-  },
-  "options_clearAll": {
-    "message": "はい、すべて消去"
   },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "Chromeの拡張機能更新サービスを通じて手動で更新確認を行います。"
@@ -1844,5 +1814,41 @@
   },
   "sidepanel_retrySeriesContext": {
     "message": "シリーズを再読み込み"
+  },
+  "options_clearTaskHistory": {
+    "message": "タスク履歴を消去"
+  },
+  "options_clearTaskHistoryTitle": {
+    "message": "タスク履歴を消去しますか？"
+  },
+  "options_clearTaskHistoryDesc": {
+    "message": "完了、失敗、キャンセル済みのタスク記録を完全に削除します。"
+  },
+  "options_clearChapterHistory": {
+    "message": "チャプター履歴を消去"
+  },
+  "options_clearChapterHistoryTitle": {
+    "message": "チャプター履歴を消去しますか？"
+  },
+  "options_clearChapterHistoryDesc": {
+    "message": "すべてのシリーズのチャプター記録を完全に削除します。"
+  },
+  "options_clearChapterHistorySubtext": {
+    "message": "すべてのシリーズのチャプター記録を削除"
+  },
+  "options_clearHistoryRetry": {
+    "message": "履歴を消去できませんでした。もう一度お試しください。"
+  },
+  "options_toastTaskHistoryCleared": {
+    "message": "タスク履歴を消去しました"
+  },
+  "options_toastClearTaskHistoryFailed": {
+    "message": "タスク履歴の消去に失敗しました"
+  },
+  "options_toastChapterHistoryCleared": {
+    "message": "チャプター履歴を消去しました"
+  },
+  "options_toastClearChapterHistoryFailed": {
+    "message": "チャプター履歴の消去に失敗しました"
   }
 }

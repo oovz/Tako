@@ -244,13 +244,6 @@ export class OptionsPageObject {
       .click()
   }
 
-  // Download History
-  async clearDownloadHistory(): Promise<void> {
-    await this.page.locator('[data-testid="clear-history-button"]').click()
-    // Confirm in dialog
-    await this.page.getByRole("button", { name: "Clear History" }).click()
-  }
-
   // Custom Download Path
   async hasCustomDownloadPath(): Promise<boolean> {
     const text = await this.page

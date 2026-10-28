@@ -768,9 +768,6 @@
       }
     }
   },
-  "options_clearAllHistory": {
-    "message": "Clear All History"
-  },
   "options_activeDownloads": {
     "message": "Active Downloads"
   },
@@ -945,12 +942,6 @@
       }
     }
   },
-  "options_clearHistoryTitle": {
-    "message": "Clear all download history?"
-  },
-  "options_clearHistoryDesc": {
-    "message": "This will permanently delete all download history. Downloaded files are not affected."
-  },
   "options_noKeepHistory": {
     "message": "No, Keep History"
   },
@@ -979,16 +970,7 @@
     "message": "Manage History Data"
   },
   "options_manageHistoryDesc": {
-    "message": "Remove stored chapter history records without affecting files already saved on disk."
-  },
-  "options_clearAllHistoryLabel": {
-    "message": "Clear All History"
-  },
-  "options_clearAllHistorySubtext": {
-    "message": "Remove all download history for all series"
-  },
-  "options_clearEverything": {
-    "message": "Clear Everything"
+    "message": "Manage chapter history for all series or a selected series."
   },
   "options_clearAllDownloadHistory": {
     "message": "Clear All Download History?"
@@ -1008,16 +990,16 @@
     "message": "This action cannot be undone."
   },
   "options_clearSpecificSeries": {
-    "message": "Clear Specific Series"
+    "message": "Clear chapter history for a series"
   },
   "options_clearSeriesSubtext": {
-    "message": "Remove download history for a single series"
+    "message": "Remove chapter records for one series"
   },
   "options_selectSeriesDots": {
     "message": "Select Series..."
   },
   "options_clearSeriesHistory": {
-    "message": "Clear Series History"
+    "message": "Clear series chapter history"
   },
   "options_selectSeries": {
     "message": "Select Series"
@@ -1026,7 +1008,7 @@
     "message": "Choose a series..."
   },
   "options_noDownloadHistory": {
-    "message": "No download history found"
+    "message": "No chapter history found"
   },
   "options_clearSelected": {
     "message": "Clear Selected"
@@ -1398,17 +1380,11 @@
   "options_toastSetFolderFailed": {
     "message": "Failed to set download folder"
   },
-  "options_toastAllHistoryCleared": {
-    "message": "All download history cleared"
-  },
-  "options_toastClearHistoryFailed": {
-    "message": "Failed to clear history"
-  },
   "options_toastSeriesHistoryCleared": {
-    "message": "Series history cleared"
+    "message": "Series chapter history cleared"
   },
   "options_toastClearSeriesFailed": {
-    "message": "Failed to clear series history"
+    "message": "Failed to clear series chapter history"
   },
   "options_toastChangesDiscarded": {
     "message": "Changes discarded"
@@ -1442,12 +1418,6 @@
   },
   "options_openMangaToDownload": {
     "message": "Open a manga series page to start downloading."
-  },
-  "options_keepHistory": {
-    "message": "No, Keep History"
-  },
-  "options_clearAll": {
-    "message": "Yes, Clear All"
   },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "Manual update check through Chrome's extension update service."
@@ -1844,5 +1814,41 @@
   },
   "sidepanel_retrySeriesContext": {
     "message": "Retry series"
+  },
+  "options_clearTaskHistory": {
+    "message": "Clear task history"
+  },
+  "options_clearTaskHistoryTitle": {
+    "message": "Clear task history?"
+  },
+  "options_clearTaskHistoryDesc": {
+    "message": "Permanently remove finished, failed, and canceled task records."
+  },
+  "options_clearChapterHistory": {
+    "message": "Clear chapter history"
+  },
+  "options_clearChapterHistoryTitle": {
+    "message": "Clear chapter history?"
+  },
+  "options_clearChapterHistoryDesc": {
+    "message": "Permanently remove chapter records for all series."
+  },
+  "options_clearChapterHistorySubtext": {
+    "message": "Remove chapter records for all series"
+  },
+  "options_clearHistoryRetry": {
+    "message": "History could not be cleared. Try again."
+  },
+  "options_toastTaskHistoryCleared": {
+    "message": "Task history cleared"
+  },
+  "options_toastClearTaskHistoryFailed": {
+    "message": "Failed to clear task history"
+  },
+  "options_toastChapterHistoryCleared": {
+    "message": "Chapter history cleared"
+  },
+  "options_toastClearChapterHistoryFailed": {
+    "message": "Failed to clear chapter history"
   }
 }

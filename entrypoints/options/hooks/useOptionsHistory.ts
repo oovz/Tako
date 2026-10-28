@@ -30,17 +30,17 @@ export function useOptionsHistory(historyController: OptionsHistoryController) {
     return loaded.historySeries
   }, [historyController])
 
-  const clearAllHistory = useCallback(async (): Promise<boolean> => {
+  const clearChapterHistory = useCallback(async (): Promise<boolean> => {
     try {
       setIsClearing(true)
       const loaded = await historyController.clear({ scope: "all" })
       setHistoryStats(loaded.historyStats)
       setHistorySeries(loaded.historySeries)
-      toast.success(t("options_toastAllHistoryCleared"))
+      toast.success(t("options_toastChapterHistoryCleared"))
       return true
     } catch (error) {
-      logger.error("[OPTIONS] Failed to clear history:", error)
-      toast.error(t("options_toastClearHistoryFailed"))
+      logger.error("[OPTIONS] Failed to clear chapter history:", error)
+      toast.error(t("options_toastClearChapterHistoryFailed"))
       return false
     } finally {
       setIsClearing(false)
@@ -78,7 +78,7 @@ export function useOptionsHistory(historyController: OptionsHistoryController) {
     setHistorySeries,
     isClearing,
     handleRefreshHistory,
-    clearAllHistory,
+    clearChapterHistory,
     clearSeriesHistory,
   }
 }
