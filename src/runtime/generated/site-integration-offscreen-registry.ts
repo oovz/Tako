@@ -5,6 +5,7 @@ import { offscreenSiteAdapter as animemangahouseOffscreenAdapter } from '@/src/s
 import { offscreenSiteAdapter as boyloveOffscreenAdapter } from '@/src/site-integrations/boylove/offscreen-runtime'
 import { offscreenSiteAdapter as comicnettaiOffscreenAdapter } from '@/src/site-integrations/comicnettai/offscreen-runtime'
 import { offscreenSiteAdapter as coolmicOffscreenAdapter } from '@/src/site-integrations/coolmic/offscreen-runtime'
+import { offscreenSiteAdapter as copymangaOffscreenAdapter } from '@/src/site-integrations/copymanga/offscreen-runtime'
 import { offscreenSiteAdapter as mangaagainOffscreenAdapter } from '@/src/site-integrations/mangaagain/offscreen-runtime'
 import { offscreenSiteAdapter as mangabzOffscreenAdapter } from '@/src/site-integrations/mangabz/offscreen-runtime'
 import { offscreenSiteAdapter as mangadexOffscreenAdapter } from '@/src/site-integrations/mangadex/offscreen-runtime'
@@ -23,6 +24,7 @@ export const offscreenSiteAdapters = [
   boyloveOffscreenAdapter,
   comicnettaiOffscreenAdapter,
   coolmicOffscreenAdapter,
+  copymangaOffscreenAdapter,
   mangaagainOffscreenAdapter,
   mangabzOffscreenAdapter,
   mangadexOffscreenAdapter,
@@ -42,6 +44,7 @@ export const offscreenSiteAdaptersById = {
   "boylove": boyloveOffscreenAdapter,
   "comicnettai": comicnettaiOffscreenAdapter,
   "coolmic": coolmicOffscreenAdapter,
+  "copymanga": copymangaOffscreenAdapter,
   "mangaagain": mangaagainOffscreenAdapter,
   "mangabz": mangabzOffscreenAdapter,
   "mangadex": mangadexOffscreenAdapter,

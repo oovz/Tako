@@ -23,7 +23,7 @@ import {
 import { manganatoFixture } from "./fixtures/mock-data/site-integrations/manganato/routes"
 import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
 import { boyloveFixture } from "./fixtures/mock-data/site-integrations/boylove/routes"
-
+import { copyFixture } from "./fixtures/mock-data/site-integrations/copymanga/routes"
 import { mycomicFixture } from "./fixtures/mock-data/site-integrations/mycomic/routes"
 import { dm5Fixture } from "./fixtures/mock-data/site-integrations/animemangahouse/routes"
 import { mangabzFixture } from "./fixtures/mock-data/site-integrations/mangabz/routes"
@@ -38,6 +38,7 @@ const fixtures = [
   manganatoFixture,
   mangakakalotFixture,
   boyloveFixture,
+  copyFixture,
   mycomicFixture,
   dm5Fixture,
   mangabzFixture,

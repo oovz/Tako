@@ -94,7 +94,8 @@ export const LIVE_MYCOMIC_REFERENCE_URL = "https://mycomic.com/cn/comics/35937"
 
 export const LIVE_ZAIMANHUA_REFERENCE_URL =
   "https://www.zaimanhua.com/info/doufo.html"
-
+export const LIVE_COPY_REFERENCE_URL =
+  "https://www.copy3000.com/comic/dianjuren"
 export const LIVE_COOLMIC_REFERENCE_URL = "https://coolmic.me/titles/5101"
 export const LIVE_MANGAPLUS_REFERENCE_URL =
   "https://mangaplus.shueisha.co.jp/titles/100467"

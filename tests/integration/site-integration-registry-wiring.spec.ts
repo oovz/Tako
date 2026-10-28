@@ -57,6 +57,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
   boylove: "https://boylove.cc/home/book/index/id/34260",
   comicnettai: "https://www.comicnettai.com/book/9",
   coolmic: "https://coolmic.me/titles/5101",
+  copymanga: "https://www.copy3000.com/comic/dianjuren",
 
   mangaagain: "https://www.zaimanhua.com/info/doufo.html",
   mangabz: "https://www.mangabz.com/139bz/",
