@@ -57,6 +57,7 @@ const seriesUrls: Readonly<Record<string, string>> = {
 
   mangadex: "https://mangadex.org/title/db692d58-4b13-4174-ae8c-30c515c0689c",
 
+  mangakakalot: "https://www.mangakakalove.com/manga/hunter-x-hunter",
   mangamillion: "https://mangamillion.shueisha.co.jp/en/title/1",
   manganato: "https://www.manganato.gg/manga/hunter-x-hunter",
 

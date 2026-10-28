@@ -255,6 +255,116 @@ export const siteIntegrationCatalog = [
   },
   {
     "schemaVersion": 1,
+    "id": "mangakakalot",
+    "name": "MangaKakalot",
+    "englishName": "MangaKakalot",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mangakakalove.com",
+        "www.mangakakalove.com"
+      ],
+      "seriesMatches": [
+        "/manga/*"
+      ],
+      "excludeMatches": [
+        "/manga/*/*"
+      ]
+    },
+    "requiredOrigins": [
+      "https://mangakakalove.com/*",
+      "https://www.mangakakalove.com/*",
+      "https://*.2xstorage.com/*",
+      "https://storage.waitst.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangakakalot-page",
+        "purpose": "Series and reader HTML",
+        "origins": [
+          "https://mangakakalove.com/*",
+          "https://www.mangakakalove.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangakakalot-chapters",
+        "purpose": "Paginated chapter catalog",
+        "origins": [
+          "https://mangakakalove.com/*",
+          "https://www.mangakakalove.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangakakalot-image",
+        "purpose": "Reader and cover images",
+        "origins": [
+          "https://*.2xstorage.com/*",
+          "https://storage.waitst.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41012,
+        "requestDomains": [
+          "2xstorage.com",
+          "storage.waitst.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.mangakakalove.com/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
     "id": "mangamillion",
     "name": "MangaMillion",
     "englishName": "MANGA MILLION",

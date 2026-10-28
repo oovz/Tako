@@ -28,6 +28,7 @@ import { registerShonenJumpPlusRoutes } from "./mock-data/site-integrations/shon
 import { registerComicNettaiRoutes } from "./mock-data/site-integrations/comicnettai"
 import { registerMangaMillionRoutes } from "./mock-data/site-integrations/mangamillion"
 import { registerManganatoRoutes } from "./mock-data/site-integrations/manganato/routes"
+import { registerMangakakalotRoutes } from "./mock-data/site-integrations/mangakakalot/routes"
 
 import { EXAMPLE_TEST_DOMAIN } from "./test-domains-constants"
 
@@ -42,6 +43,7 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerComicNettaiRoutes,
   registerMangaMillionRoutes,
   registerManganatoRoutes,
+  registerMangakakalotRoutes,
 ]
 
 export function shouldBlockUnmatchedRequest(

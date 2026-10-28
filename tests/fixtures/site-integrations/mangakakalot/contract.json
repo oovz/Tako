@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangakakalot",
+  "data": {
+    "seriesUrl": "https://www.mangakakalove.com/manga/hunter-x-hunter",
+    "seriesTitle": "Hunter X Hunter",
+    "seriesSlug": "hunter-x-hunter",
+    "chapterCount": 546,
+    "readerChapter": "chapter-0",
+    "readerPageCount": 30,
+    "readerUrl": "https://www.mangakakalove.com/manga/hunter-x-hunter/chapter-0"
+  }
+}

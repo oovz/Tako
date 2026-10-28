@@ -19,6 +19,7 @@ export const siteIntegrationWxtPermissions = {
     "https://hamreus.com/*",
     "https://img-comic.pximg.net/*",
     "https://img.mangamillion.shueisha.co.jp/*",
+    "https://mangakakalove.com/*",
     "https://mangamillion.shueisha.co.jp/*",
     "https://manganato.gg/*",
     "https://manhuagui.com/*",
@@ -26,6 +27,7 @@ export const siteIntegrationWxtPermissions = {
     "https://shonenjumpplus.com/*",
     "https://storage.waitst.com/*",
     "https://www.comicnettai.com/*",
+    "https://www.mangakakalove.com/*",
     "https://www.manganato.gg/*",
     "https://www.manhuagui.com/*"
   ],

@@ -26,6 +26,7 @@ import { registerShonenJumpPlusLocalServerHandlers } from "./mock-data/site-inte
 import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comicnettai/local-server"
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
 import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrations/manganato/routes"
+import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"
 
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
@@ -455,6 +456,7 @@ async function setupExtensionContext(
         ...registerComicNettaiLocalServerHandlers(localMockServer),
         ...registerMangaMillionLocalServerHandlers(localMockServer),
         ...registerManganatoLocalServerHandlers(localMockServer),
+        ...registerMangakakalotLocalServerHandlers(localMockServer),
       ]
     }
 

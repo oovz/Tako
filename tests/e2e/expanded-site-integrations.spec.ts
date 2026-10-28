@@ -21,10 +21,11 @@ import {
   testExtensionSessionRuleMatch,
 } from "./fixtures/session-rule-helpers"
 import { manganatoFixture } from "./fixtures/mock-data/site-integrations/manganato/routes"
+import { mangakakalotFixture } from "./fixtures/mock-data/site-integrations/mangakakalot/routes"
 
 import type { RuntimeMessageResponse } from "../../src/runtime/runtime-message-contracts"
 
-const fixtures = [manganatoFixture]
+const fixtures = [manganatoFixture, mangakakalotFixture]
 
 test.describe("site downloads through the chapter selector", () => {
   test.describe.configure({ timeout: 120_000 })
@@ -166,6 +167,11 @@ const refererCases = [
     id: "manganato",
     rule: 41011,
     url: "https://img-manganato.2xstorage.com/manganato/1.png",
+  },
+  {
+    id: "mangakakalot",
+    rule: 41012,
+    url: "https://img-mangakakalove.2xstorage.com/mangakakalove/1.png",
   },
 ]
 
