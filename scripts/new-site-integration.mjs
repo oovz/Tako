@@ -16,8 +16,10 @@ Arguments:
 Options:
   --id <id>                   Unique lowercase identifier (alternative to positional argument)
   --name <name>               Human-readable site name (e.g. "Example Manga")
+  --english-name <name>       English site name (defaults to the title-cased identifier)
   --contributor <name>        Contributor name (defaults to git user.name or current user)
-  --out-dir <dir>             Target output directory (defaults to src/site-integrations/<id>)
+  --out-dir <dir>             Source output directory (defaults to src/site-integrations/<id>)
+  --fixtures-dir <dir>        Test fixture directory (defaults to tests/fixtures/site-integrations/<id>)
   --help, -h                  Show this help message
 `)
 }
@@ -25,8 +27,10 @@ Options:
 function parseArgs(args) {
   let id = null
   let name = null
+  let englishName = null
   let contributor = null
   let outDir = null
+  let fixturesDir = null
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -49,6 +53,14 @@ function parseArgs(args) {
       name = args[++i]
     } else if (arg.startsWith("--name=")) {
       name = arg.slice(7)
+    } else if (arg === "--english-name") {
+      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+        console.error("Error: Missing value for --english-name option.")
+        process.exit(1)
+      }
+      englishName = args[++i]
+    } else if (arg.startsWith("--english-name=")) {
+      englishName = arg.slice(15)
     } else if (arg === "--contributor" || arg === "--contributors") {
       if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
         console.error("Error: Missing value for --contributor option.")
@@ -68,6 +80,14 @@ function parseArgs(args) {
       outDir = args[++i]
     } else if (arg.startsWith("--out-dir=")) {
       outDir = arg.slice(10)
+    } else if (arg === "--fixtures-dir") {
+      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+        console.error("Error: Missing value for --fixtures-dir option.")
+        process.exit(1)
+      }
+      fixturesDir = args[++i]
+    } else if (arg.startsWith("--fixtures-dir=")) {
+      fixturesDir = arg.slice(15)
     } else if (arg.startsWith("-")) {
       console.error(`Error: Unknown option "${arg}".`)
       printUsage()
@@ -82,7 +102,7 @@ function parseArgs(args) {
     }
   }
 
-  return { id, name, contributor, outDir }
+  return { id, name, englishName, contributor, outDir, fixturesDir }
 }
 
 function getGitUser() {
@@ -112,6 +132,68 @@ function toTitleCase(str) {
     .join(" ")
 }
 
+function resolveNewDirectory(directory) {
+  let ancestor = directory
+  const missingSegments = []
+  while (true) {
+    try {
+      fs.lstatSync(ancestor)
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error
+      const parent = path.dirname(ancestor)
+      if (parent === ancestor) throw error
+      missingSegments.push(path.basename(ancestor))
+      ancestor = parent
+      continue
+    }
+    if (missingSegments.length === 0) {
+      throw new Error(
+        `Target directory already exists: ${path.relative(root, directory)}`
+      )
+    }
+    const resolvedAncestor = fs.realpathSync(ancestor)
+    if (!fs.statSync(resolvedAncestor).isDirectory()) {
+      throw new Error(
+        `Output ancestor is not a directory: ${path.relative(root, ancestor)}`
+      )
+    }
+    return path.join(resolvedAncestor, ...missingSegments.reverse())
+  }
+}
+
+function claimOutputDirectory(directory, createdDirectories) {
+  const missingParents = []
+  let parent = path.dirname(directory)
+  while (!fs.existsSync(parent)) {
+    missingParents.push(parent)
+    parent = path.dirname(parent)
+  }
+  for (const missingParent of missingParents.reverse()) {
+    try {
+      fs.mkdirSync(missingParent)
+      createdDirectories.push(missingParent)
+    } catch (error) {
+      if (error.code !== "EEXIST" || !fs.statSync(missingParent).isDirectory())
+        throw error
+    }
+  }
+  fs.mkdirSync(directory)
+  createdDirectories.push(directory)
+  return fs.realpathSync(directory)
+}
+
+function directoryContains(parent, child) {
+  const owner = fs.statSync(parent, { bigint: true })
+  let current = child
+  while (true) {
+    const candidate = fs.statSync(current, { bigint: true })
+    if (owner.dev === candidate.dev && owner.ino === candidate.ino) return true
+    const next = path.dirname(current)
+    if (next === current) return false
+    current = next
+  }
+}
+
 function main() {
   const rawArgs = process.argv.slice(2)
   if (rawArgs.length === 0) {
@@ -122,8 +204,10 @@ function main() {
   const {
     id,
     name: customName,
+    englishName: customEnglishName,
     contributor: customContributor,
     outDir,
+    fixturesDir,
   } = parseArgs(rawArgs)
 
   if (!id) {
@@ -140,12 +224,33 @@ function main() {
     process.exit(1)
   }
 
-  const targetDir = outDir
-    ? path.resolve(root, outDir)
-    : path.join(integrationsDir, id)
-  if (fs.existsSync(targetDir)) {
+  let targetDir
+  let targetFixturesDir
+  try {
+    targetDir = resolveNewDirectory(
+      outDir ? path.resolve(root, outDir) : path.join(integrationsDir, id)
+    )
+    targetFixturesDir = resolveNewDirectory(
+      fixturesDir
+        ? path.resolve(root, fixturesDir)
+        : path.join(root, "tests/fixtures/site-integrations", id)
+    )
+  } catch (error) {
+    console.error(`Error: ${error.message}`)
+    process.exit(1)
+  }
+  const sourceToFixtures = path.relative(targetDir, targetFixturesDir)
+  const fixturesToSource = path.relative(targetFixturesDir, targetDir)
+  const overlaps = [sourceToFixtures, fixturesToSource].some(
+    (relative) =>
+      relative === "" ||
+      (!path.isAbsolute(relative) &&
+        relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`))
+  )
+  if (overlaps) {
     console.error(
-      `Error: Target directory already exists: ${path.relative(root, targetDir)}`
+      "Error: Source and fixture output directories must be separate."
     )
     process.exit(1)
   }
@@ -158,6 +263,7 @@ function main() {
     schemaVersion: 1,
     id,
     name: siteName,
+    englishName: customEnglishName || toTitleCase(id),
     contributors: [contributorName],
     version: "0.1.0",
     shipped: false,
@@ -198,10 +304,6 @@ function main() {
     ],
     sessionRefererRules: [],
     customSettings: [],
-    fixtures: {
-      paths: [`src/site-integrations/${id}/fixtures/contract.json`],
-      liveFreshnessDays: 30,
-    },
   }
 
   const backgroundRuntimeTs = `import type {
@@ -274,39 +376,36 @@ export type ${pascalId}Contract = Record<string, unknown>
     data: {},
   }
 
-  const readmeMd = `# ${siteName}
+  const createdDirectories = []
+  try {
+    targetDir = claimOutputDirectory(targetDir, createdDirectories)
+    targetFixturesDir = claimOutputDirectory(
+      targetFixturesDir,
+      createdDirectories
+    )
+    if (
+      directoryContains(targetDir, targetFixturesDir) ||
+      directoryContains(targetFixturesDir, targetDir)
+    ) {
+      throw new Error("Source and fixture output directories must be separate.")
+    }
+  } catch (error) {
+    for (const directory of createdDirectories.reverse()) {
+      try {
+        fs.rmdirSync(directory)
+      } catch (cleanupError) {
+        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(cleanupError.code)) {
+          console.error(
+            `Unable to remove empty output directory ${directory}: ${cleanupError.message}`
+          )
+        }
+      }
+    }
+    console.error(`Error: ${error.message}`)
+    process.exit(1)
+  }
 
-## Approach
-
-<!-- Describe how this site is handled: API vs HTML parsing, viewer format, auth requirements, etc. -->
-
-- Background: <!-- e.g. HTML series resolution / API series resolution -->
-- Offscreen: <!-- e.g. chapter image planning and download / tile descrambling -->
-- Page probe: none <!-- or describe if required -->
-- Dispatch context: none <!-- or schema version -->
-- DNR: none <!-- or referer rules -->
-
-## Endpoints
-
-<!-- List declared endpoint IDs and their purpose -->
-- \`${id}-series-page\`: Series metadata and chapter catalog
-
-## States covered
-
-<!-- Document how different content states are handled -->
-- Free / readable chapters: <!-- supported -->
-- Locked / paywalled chapters: <!-- skipped or handled -->
-- Unavailable / deleted series: <!-- error handling -->
-
-## Live smoke
-
-<!-- Notes on live verification, test URLs, and freshness cadence -->
-- Freshness cadence: 30 days
-`
-
-  // Create directories
   fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true })
-  fs.mkdirSync(path.join(targetDir, "fixtures"), { recursive: true })
 
   // Write files
   fs.writeFileSync(
@@ -323,12 +422,14 @@ export type ${pascalId}Contract = Record<string, unknown>
   )
   fs.writeFileSync(path.join(targetDir, "contracts/index.ts"), contractsTs)
   fs.writeFileSync(
-    path.join(targetDir, "fixtures/contract.json"),
+    path.join(targetFixturesDir, "contract.json"),
     JSON.stringify(fixtureJson, null, 2) + "\n"
   )
-  fs.writeFileSync(path.join(targetDir, "README.md"), readmeMd)
 
   const displayTarget = path.relative(root, targetDir).replaceAll(path.sep, "/")
+  const displayFixtures = path
+    .relative(root, targetFixturesDir)
+    .replaceAll(path.sep, "/")
   console.log(
     `Successfully created site integration scaffold at ${displayTarget}/`
   )
@@ -338,15 +439,14 @@ Created files:
   - ${displayTarget}/background-runtime.ts
   - ${displayTarget}/offscreen-runtime.ts
   - ${displayTarget}/contracts/index.ts
-  - ${displayTarget}/fixtures/contract.json
-  - ${displayTarget}/README.md
+  - ${displayFixtures}/contract.json
 
 Next steps:
   1. Configure patterns, origins, and endpoint policies in ${displayTarget}/definition.json
   2. Implement series resolution in ${displayTarget}/background-runtime.ts
   3. Implement chapter planning and image downloading in ${displayTarget}/offscreen-runtime.ts
-  4. Record deterministic test fixtures in ${displayTarget}/fixtures/contract.json
-  5. Fill in the README.md sections (Approach, Endpoints, States covered, Live smoke)
+  4. Record deterministic test fixtures in ${displayFixtures}/contract.json
+  5. Add contributor notes in ${displayTarget}/README.md when site-specific behavior needs explanation
   6. When implementation and fixtures are complete, set "shipped": true in ${displayTarget}/definition.json
   7. Re-run "pnpm generate:site-integrations && pnpm test:unit" to compile the new integration into runtime registries and verify all tests pass
 `)

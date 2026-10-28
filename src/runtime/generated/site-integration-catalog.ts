@@ -7,6 +7,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "comicnettai",
     "name": "Comic Nettai",
+    "englishName": "Comic Nettai",
     "contributors": [
       "TMD Team"
     ],
@@ -103,18 +104,13 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/comicnettai/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "mangadex",
     "name": "MangaDex API",
+    "englishName": "MangaDex",
     "contributors": [
       "TMD Team"
     ],
@@ -255,18 +251,13 @@ export const siteIntegrationCatalog = [
         "type": "boolean",
         "defaultValue": true
       }
-    ],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/mangadex/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    ]
   },
   {
     "schemaVersion": 1,
     "id": "mangamillion",
     "name": "MangaMillion",
+    "englishName": "MANGA MILLION",
     "contributors": [
       "TMD Team"
     ],
@@ -339,18 +330,13 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/mangamillion/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "manhuagui",
     "name": "Manhuagui",
+    "englishName": "Manhuagui",
     "contributors": [
       "TMD Team"
     ],
@@ -461,18 +447,13 @@ export const siteIntegrationCatalog = [
         "referer": "https://www.manhuagui.com/"
       }
     ],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/manhuagui/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "pixiv-comic",
     "name": "Pixiv Comic",
+    "englishName": "pixiv Comic",
     "contributors": [
       "TMD Team"
     ],
@@ -583,18 +564,13 @@ export const siteIntegrationCatalog = [
         "referer": "https://comic.pixiv.net/"
       }
     ],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/pixiv-comic/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 14
-    }
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "shonenjumpplus",
     "name": "Shonen Jump+",
+    "englishName": "Shonen Jump+",
     "contributors": [
       "TMD Team"
     ],
@@ -678,13 +654,7 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/shonenjumpplus/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   }
 ] as const satisfies readonly SiteIntegrationDefinition[]
 

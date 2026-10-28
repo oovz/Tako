@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "manhuagui",
   "name": "Manhuagui",
+  "englishName": "Manhuagui",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
   "shipped": true,
@@ -20,17 +21,28 @@
   ],
   "optionalOrigins": [],
   "policyDefaults": {
-    "image": { "concurrency": 2, "delayMs": 1000 },
-    "chapter": { "concurrency": 1, "delayMs": 1000 }
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
   },
   "retryOwner": "platform",
   "pageProbe": "optional",
   "runtimes": {
     "background": true,
     "offscreen": true,
-    "dispatchContext": { "mode": "none" }
+    "dispatchContext": {
+      "mode": "none"
+    }
   },
-  "imageTransform": { "kind": "none", "estimatedCostMs": 0 },
+  "imageTransform": {
+    "kind": "none",
+    "estimatedCostMs": 0
+  },
   "endpointPolicies": [
     {
       "id": "manhuagui-series-html",
@@ -81,9 +93,5 @@
       "referer": "https://www.manhuagui.com/"
     }
   ],
-  "customSettings": [],
-  "fixtures": {
-    "paths": ["src/site-integrations/manhuagui/fixtures/contract.json"],
-    "liveFreshnessDays": 30
-  }
+  "customSettings": []
 }

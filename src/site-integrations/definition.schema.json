@@ -8,6 +8,7 @@
     "schemaVersion",
     "id",
     "name",
+    "englishName",
     "contributors",
     "version",
     "shipped",
@@ -22,8 +23,7 @@
     "imageTransform",
     "endpointPolicies",
     "sessionRefererRules",
-    "customSettings",
-    "fixtures"
+    "customSettings"
   ],
   "properties": {
     "schemaVersion": {
@@ -41,10 +41,18 @@
       "minLength": 1,
       "description": "Human-readable display name for the manga site (e.g. 'MangaDex')."
     },
+    "englishName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "English name for the manga site, alongside its native display name."
+    },
     "contributors": {
       "type": "array",
       "description": "List of contributor names or handles who authored or maintain this site integration.",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "minItems": 1,
       "uniqueItems": true
     },
@@ -70,21 +78,30 @@
         "domains": {
           "type": "array",
           "description": "Hostnames supported by this integration (e.g. ['mangadex.org']).",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "minItems": 1,
           "uniqueItems": true
         },
         "seriesMatches": {
           "type": "array",
           "description": "URL pathname patterns for series pages (e.g. ['/title/*']).",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "minItems": 1,
           "uniqueItems": true
         },
         "excludeMatches": {
           "type": "array",
           "description": "URL pathname patterns explicitly excluded from series matching.",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "uniqueItems": true
         }
       }
@@ -92,14 +109,20 @@
     "requiredOrigins": {
       "type": "array",
       "description": "List of declarative URL pattern origins required for core site functionality.",
-      "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^https://.+/\\*$"
+      },
       "minItems": 1,
       "uniqueItems": true
     },
     "optionalOrigins": {
       "type": "array",
       "description": "List of optional URL pattern origins requested dynamically on demand (e.g. wildcard CDN or mirror domains).",
-      "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+      "items": {
+        "type": "string",
+        "pattern": "^https://.+/\\*$"
+      },
       "uniqueItems": true
     },
     "policyDefaults": {
@@ -180,36 +203,22 @@
       "type": "array",
       "minItems": 1,
       "description": "Hardened network endpoint policies declaring allowed origins, credentials, response types, and byte limits.",
-      "items": { "$ref": "#/$defs/endpointPolicy" }
+      "items": {
+        "$ref": "#/$defs/endpointPolicy"
+      }
     },
     "sessionRefererRules": {
       "type": "array",
       "description": "Declarative Net Request (DNR) session rules managed by the extension to attach required HTTP Referer headers.",
-      "items": { "$ref": "#/$defs/sessionRefererRule" }
+      "items": {
+        "$ref": "#/$defs/sessionRefererRule"
+      }
     },
     "customSettings": {
       "type": "array",
       "description": "Custom user-configurable settings rendered in the Options UI for this integration.",
-      "items": { "$ref": "#/$defs/settingsField" }
-    },
-    "fixtures": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Deterministic test fixture file paths and freshness validation policy.",
-      "required": ["paths", "liveFreshnessDays"],
-      "properties": {
-        "paths": {
-          "type": "array",
-          "description": "Repository-relative file paths to deterministic fixture JSON files.",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1,
-          "uniqueItems": true
-        },
-        "liveFreshnessDays": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Maximum days before live smoke re-verification is advised."
-        }
+      "items": {
+        "$ref": "#/$defs/settingsField"
       }
     }
   },
@@ -260,7 +269,10 @@
         "origins": {
           "type": "array",
           "description": "Allowed URL origin patterns for this endpoint.",
-          "items": { "type": "string", "pattern": "^https://.+/\\*$" },
+          "items": {
+            "type": "string",
+            "pattern": "^https://.+/\\*$"
+          },
           "minItems": 1,
           "uniqueItems": true
         },
@@ -307,14 +319,19 @@
         "requestDomains": {
           "type": "array",
           "description": "Target request domain names where Referer headers will be injected.",
-          "items": { "type": "string", "minLength": 1 },
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
           "minItems": 1,
           "uniqueItems": true
         },
         "resourceTypes": {
           "type": "array",
           "description": "Web request resource types affected by this rule.",
-          "items": { "enum": ["xmlhttprequest", "other"] },
+          "items": {
+            "enum": ["xmlhttprequest", "other"]
+          },
           "minItems": 1,
           "uniqueItems": true
         },

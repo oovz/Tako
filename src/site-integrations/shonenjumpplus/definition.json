@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "shonenjumpplus",
   "name": "Shonen Jump+",
+  "englishName": "Shonen Jump+",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
   "shipped": true,
@@ -17,15 +18,23 @@
   ],
   "optionalOrigins": [],
   "policyDefaults": {
-    "image": { "concurrency": 2, "delayMs": 1000 },
-    "chapter": { "concurrency": 1, "delayMs": 2000 }
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 2000
+    }
   },
   "retryOwner": "platform",
   "pageProbe": "none",
   "runtimes": {
     "background": true,
     "offscreen": true,
-    "dispatchContext": { "mode": "none" }
+    "dispatchContext": {
+      "mode": "none"
+    }
   },
   "imageTransform": {
     "kind": "integrated-descramble",
@@ -67,9 +76,5 @@
     }
   ],
   "sessionRefererRules": [],
-  "customSettings": [],
-  "fixtures": {
-    "paths": ["src/site-integrations/shonenjumpplus/fixtures/contract.json"],
-    "liveFreshnessDays": 30
-  }
+  "customSettings": []
 }

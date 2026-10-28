@@ -139,14 +139,6 @@ export interface SiteIntegrationImageTransform {
   estimatedCostMs: number
 }
 
-/** Deterministic test fixture declarations and freshness verification policy. */
-export interface SiteIntegrationFixtures {
-  /** Repository-relative file paths to fixture JSON files. */
-  paths: string[]
-  /** Maximum days before live smoke re-verification is advised. */
-  liveFreshnessDays: number
-}
-
 /**
  * Static manifest and policy declaration for a site integration provider.
  * Validated at build time against `definition.schema.json`.
@@ -158,6 +150,8 @@ export interface SiteIntegrationDefinition {
   id: string
   /** Human-readable display name for the manga site (e.g. "MangaDex"). */
   name: string
+  /** English name for readers who do not use the site's native language. */
+  englishName: string
   /** List of contributor names or handles who authored or maintain this site integration. */
   contributors: string[]
   /** Semantic version string for the provider implementation (e.g. "1.0.0"). */
@@ -191,8 +185,6 @@ export interface SiteIntegrationDefinition {
   sessionRefererRules: SiteIntegrationSessionRefererRule[]
   /** Custom settings definitions exposed in the Options UI for this integration. */
   customSettings: SiteIntegrationSettingsField[]
-  /** Deterministic test fixture paths and live freshness validation policy. */
-  fixtures: SiteIntegrationFixtures
 }
 
 /** Unique identifier type for site integration providers. */

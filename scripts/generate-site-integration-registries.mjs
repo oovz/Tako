@@ -8,6 +8,7 @@ const integrationsDir = path.join(root, "src/site-integrations")
 const schemaPath = path.join(integrationsDir, "definition.schema.json")
 const generatedDir = path.join(root, "src/runtime/generated")
 const localesDir = path.join(root, "public/_locales")
+const fixturesDir = path.join(root, "tests/fixtures/site-integrations")
 const supportedLocales = ["en", "ja", "zh_CN", "zh_TW"]
 const checkOnly = process.argv.includes("--check")
 
@@ -158,11 +159,7 @@ function assertSettingsFieldLocalization(id, definition) {
 function assertDefinition(id, definition, definitionPath) {
   const providerDirectory = path.dirname(definitionPath)
   const contractsDirectory = path.join(providerDirectory, "contracts")
-  const fixturesDirectory = path.join(providerDirectory, "fixtures")
-  assert(
-    fs.existsSync(path.join(providerDirectory, "README.md")),
-    `${id} must include README.md`
-  )
+  const fixturesDirectory = path.join(fixturesDir, id)
   assert(
     fs.existsSync(contractsDirectory) &&
       fs
@@ -170,7 +167,6 @@ function assertDefinition(id, definition, definitionPath) {
         .some((entry) => entry.isFile() && entry.name.endsWith(".ts")),
     `${id} must include at least one TypeScript contract`
   )
-  assert(fs.existsSync(fixturesDirectory), `${id} must include fixtures`)
   assert(
     definition.id === id,
     `${relativePath(definitionPath)} id must match directory ${id}`
@@ -271,35 +267,39 @@ function assertDefinition(id, definition, definitionPath) {
   }
   assertSettings(id, definition.customSettings)
   assertSettingsFieldLocalization(id, definition)
-  const ownedFixturePrefix = `${relativePath(fixturesDirectory)}/`
-  assert(definition.fixtures.paths.length > 0, `${id} must declare fixtures`)
-  for (const fixturePath of definition.fixtures.paths) {
+  const fixtureFiles = fs.existsSync(fixturesDirectory)
+    ? fs.readdirSync(fixturesDirectory).filter((file) => file.endsWith(".json"))
+    : []
+  assert(
+    fixtureFiles.includes("contract.json"),
+    `${id} must include tests/fixtures/site-integrations/${id}/contract.json`
+  )
+  for (const fixtureFile of fixtureFiles) {
+    const fixturePath = path.join(fixturesDirectory, fixtureFile)
+    const fixture = readJson(fixturePath)
+    const isObject =
+      fixture !== null && typeof fixture === "object" && !Array.isArray(fixture)
+    const isContract =
+      fixtureFile === "contract.json" ||
+      (isObject && ("schemaVersion" in fixture || "providerId" in fixture))
+    if (!isContract) continue
+    const displayPath = relativePath(fixturePath)
+    assert(isObject, `${id} fixture must be an object: ${displayPath}`)
+    if (!isObject) continue
     assert(
-      fixturePath.startsWith(ownedFixturePrefix) &&
-        fixturePath.endsWith(".json"),
-      `${id} fixtures must be provider-owned JSON files: ${fixturePath}`
+      fixture.schemaVersion === 1,
+      `${id} fixture must use schemaVersion 1: ${displayPath}`
     )
     assert(
-      fs.existsSync(path.join(root, fixturePath)),
-      `${id} fixture path does not exist: ${fixturePath}`
+      fixture.providerId === id,
+      `${id} fixture providerId mismatch: ${displayPath}`
     )
-    const fixture = readJson(path.join(root, fixturePath))
-    if (fixture) {
-      assert(
-        fixture.schemaVersion === 1,
-        `${id} fixture must use schemaVersion 1: ${fixturePath}`
-      )
-      assert(
-        fixture.providerId === id,
-        `${id} fixture providerId mismatch: ${fixturePath}`
-      )
-      assert(
-        typeof fixture.data === "object" &&
-          fixture.data !== null &&
-          !Array.isArray(fixture.data),
-        `${id} fixture data must be an object: ${fixturePath}`
-      )
-    }
+    assert(
+      typeof fixture.data === "object" &&
+        fixture.data !== null &&
+        !Array.isArray(fixture.data),
+      `${id} fixture data must be an object: ${displayPath}`
+    )
   }
 }
 
