@@ -1,6 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
+import { Window } from "happy-dom"
 
 import { ChapterSelector } from "@/entrypoints/sidepanel/components/ChapterSelector"
 
@@ -13,6 +14,36 @@ const callbacks = {
 }
 
 describe("ChapterSelector semantics", () => {
+  it("disables both controls of an empty category while retaining its label", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChapterSelector, {
+        items: [
+          {
+            groupId: "empty",
+            title: "Unavailable extras",
+            collapsed: true,
+            chapters: [],
+          },
+        ],
+        viewMode: "volumes",
+        expandedGroups: new Set<string>(["empty"]),
+        isEnqueuing: false,
+        ...callbacks,
+      })
+    )
+    const document = new Window().document
+    document.body.innerHTML = markup
+    expect(document.body.textContent).toContain("Unavailable extras")
+    const controls = Array.from(document.querySelectorAll("button"))
+    expect(controls).toHaveLength(2)
+    expect(controls.every((control) => control.disabled)).toBe(true)
+    expect(
+      document
+        .querySelector("button[aria-expanded]")
+        ?.getAttribute("aria-expanded")
+    ).toBe("false")
+  })
+
   it("uses the checkbox as the only keyboard control for a chapter row", () => {
     const markup = renderToStaticMarkup(
       createElement(ChapterSelector, {

@@ -82,7 +82,8 @@ function flattenRows(
       const allSelected =
         selectableChapters.length > 0 &&
         selectableChapters.every((chapter) => chapter.selected)
-      const isExpanded = expandedGroups.has(groupKey)
+      const isExpanded =
+        item.chapters.length > 0 && expandedGroups.has(groupKey)
 
       rows.push({
         kind: "volume-header",
@@ -241,11 +242,11 @@ export function ChapterSelector({
           aria-label={t("sidepanel_volumeToggleAria", [row.title])}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors duration-150",
-            isEnqueuing
+            isEnqueuing || row.chapterCount === 0
               ? "cursor-default bg-muted/20"
               : "cursor-pointer bg-muted/20 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
-          disabled={isEnqueuing}
+          disabled={isEnqueuing || row.chapterCount === 0}
           onClick={() => {
             onToggleGroup(row.groupKey)
           }}

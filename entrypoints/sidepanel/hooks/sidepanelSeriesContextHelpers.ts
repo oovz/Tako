@@ -290,7 +290,11 @@ export function groupChapters(
       explicitVolumeIds.has(chapter.volumeId)
   )
 
-  if (volumes.length > 0 && hasExplicitVolumeMembership) {
+  if (
+    volumes.length > 0 &&
+    (hasExplicitVolumeMembership ||
+      sidePanelChapters.every((chapter) => chapter.volumeNumber === undefined))
+  ) {
     const volumeById = new Map(volumes.map((volume) => [volume.id, volume]))
     const nodes: Array<VolumeNode | StandaloneNode> = []
     const seenVolumeIds = new Set<string>()
@@ -336,6 +340,29 @@ export function groupChapters(
 
       currentVolumeNode = null
       nodes.push({ kind: "standalone", chapter })
+    })
+
+    // Insert empty categories before the next populated category in catalog
+    // order. Existing chapter runs, including standalone rows, stay in place.
+    volumes.forEach((volume, index) => {
+      if (seenVolumeIds.has(volume.id)) return
+      const followingIds = new Set(
+        volumes.slice(index + 1).map((entry) => entry.id)
+      )
+      const nextIndex = nodes.findIndex(
+        (node) =>
+          node.kind === "volume" &&
+          node.volumeId !== undefined &&
+          followingIds.has(node.volumeId)
+      )
+      const emptyNode: VolumeNode = {
+        kind: "volume",
+        volumeId: volume.id,
+        title: volume.title ?? volume.label ?? "Volume",
+        groupId: volume.id,
+        chapters: [],
+      }
+      nodes.splice(nextIndex < 0 ? nodes.length : nextIndex, 0, emptyNode)
     })
 
     const result: VolumeOrChapter[] = []
