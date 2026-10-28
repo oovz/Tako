@@ -2,6 +2,7 @@
 // Runs CPU-heavy zipping off the main offscreen thread with streaming compression.
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from "fflate"
 import { normalizeImageFilename } from "@/src/shared/filename-sanitizer"
+import { assertNonemptyImagePayload } from "@/src/shared/site-integration-utils"
 import { MAX_ARCHIVE_BYTES } from "@/src/constants/timeouts"
 
 // Message-based streaming protocol used by the offscreen archive pipeline.
@@ -58,7 +59,7 @@ interface StreamingState {
   imageCount: number
   compressedBytes: number
   maxArchiveBytes: number
-  resourceLimitFailed: boolean
+  failed: boolean
   chunkCount: number
   // Normalization state
   normalizeImageFilenames: boolean
@@ -95,7 +96,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     imageCount: 0,
     compressedBytes: 0,
     maxArchiveBytes: MAX_ARCHIVE_BYTES,
-    resourceLimitFailed: false,
+    failed: false,
     chunkCount: 0,
     normalizeImageFilenames: false,
     imagePaddingDigits: "auto",
@@ -110,8 +111,10 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     if (!streamState.zip) {
       streamState.zip = new Zip()
       streamState.zip.ondata = (err, chunk, final) => {
-        if (streamState.resourceLimitFailed) return
+        if (streamState.failed) return
         if (err) {
+          streamState.failed = true
+          streamState.chunks = []
           post({
             success: false,
             error: err.message || "ZIP compression error",
@@ -121,7 +124,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
         const nextCompressedBytes =
           streamState.compressedBytes + chunk.byteLength
         if (nextCompressedBytes > streamState.maxArchiveBytes) {
-          streamState.resourceLimitFailed = true
+          streamState.failed = true
           streamState.chunks = []
           post({
             success: false,
@@ -177,7 +180,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     streamState.imageCount = 0
     streamState.compressedBytes = 0
     streamState.maxArchiveBytes = MAX_ARCHIVE_BYTES
-    streamState.resourceLimitFailed = false
+    streamState.failed = false
     streamState.chunkCount = 0
     streamState.normalizeImageFilenames = false
     streamState.imagePaddingDigits = "auto"
@@ -228,7 +231,7 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           return
         }
         case "addComicInfo": {
-          if (streamState.resourceLimitFailed) return
+          if (streamState.failed) return
           const zip = ensureZip()
           const stream = new ZipDeflate("ComicInfo.xml", { level: 6 })
           zip.add(stream)
@@ -236,15 +239,10 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           return
         }
         case "addImage": {
-          if (streamState.resourceLimitFailed) return
+          if (streamState.failed) return
           const zip = ensureZip()
           const bytes = new Uint8Array(message.buffer)
-          if (bytes.byteLength === 0) {
-            if (message.inputId) {
-              post({ type: "input-consumed", inputId: message.inputId })
-            }
-            return
-          }
+          assertNonemptyImagePayload(message.buffer)
 
           let filename = message.filename
           if (
@@ -270,11 +268,13 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
           return
         }
         case "finalize":
-          if (streamState.resourceLimitFailed) return
+          if (streamState.failed) return
           ensureZip().end()
           return
       }
     } catch (error) {
+      streamState.failed = true
+      streamState.chunks = []
       post({
         success: false,
         error: formatWorkerError(error, `Zip worker ${message.type}`),

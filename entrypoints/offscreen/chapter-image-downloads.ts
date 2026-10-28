@@ -15,6 +15,7 @@ import {
   MAX_IMAGE_BYTES,
 } from "@/src/constants/timeouts"
 import { NonRetryableDownloadError } from "@/src/shared/download-contract"
+import { assertNonemptyImagePayload } from "@/src/shared/site-integration-utils"
 import { OffscreenLiveResourceLimitError } from "@/src/runtime/offscreen-live-resource-ledger"
 import type { JsonObject } from "@/src/types/site-integrations"
 
@@ -200,17 +201,24 @@ export async function downloadChapterImages(
                   rateLimitService.scheduleForIntegrationScope(
                     integrationId,
                     "image",
-                    () => {
+                    async () => {
                       if (chapterController.signal.aborted) {
                         throw new Error("job-cancelled")
                       }
-                      return downloadImage(url, {
+                      const image = await downloadImage(url, {
                         signal: chapterController.signal,
                         dispatchContext: integrationContext,
                         runtime: imageRuntime,
                         onBytesReceived: reportImageBytes,
                         liveResourceLedger: runtime.liveResourceLedger,
                       })
+                      try {
+                        assertNonemptyImagePayload(image.data)
+                        return image
+                      } catch (error) {
+                        image?.liveResourceLease.release()
+                        throw error
+                      }
                     },
                     rateLimitSettings.image
                   ),

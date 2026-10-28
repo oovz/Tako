@@ -1,5 +1,6 @@
 import logger from "@/src/runtime/logger"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
+import { assertNonemptyImagePayload } from "@/src/shared/site-integration-utils"
 import createZipArchiveWorker from "./archive-worker-factory"
 import { ArchiveWorkerSession } from "./archive-worker-session"
 import {
@@ -83,6 +84,7 @@ export async function processNoneFormatChapter(
     seriesMetadata,
   } = opts
   assertChapterImageCount(urls.length + (coverImage ? 1 : 0))
+  if (coverImage) assertNonemptyImagePayload(coverImage.data)
   const chapterDir = chapter.resolvedPath || sanitizeFilename(chapter.title)
   const total = urls.length
   const comicInfoXml = includeComicInfo
@@ -393,6 +395,7 @@ export async function processArchiveFormatChapter(
     seriesMetadata,
   } = opts
   assertChapterImageCount(urls.length + (coverImage ? 1 : 0))
+  if (coverImage) assertNonemptyImagePayload(coverImage.data)
 
   const finalPath =
     chapter.resolvedPath || `${sanitizeFilename(chapter.title)}.${format}`
@@ -569,6 +572,12 @@ export async function processArchiveFormatChapter(
 
       throw new Error(
         `Archive creation failed: ${errorMsg} (${succeeded}/${total} images, ${failed} failed)`
+      )
+    }
+
+    if (result.imageCount !== archivePageCount) {
+      throw new Error(
+        `Archive creation failed: image count mismatch: expected ${archivePageCount}, got ${result.imageCount}`
       )
     }
 

@@ -24,6 +24,7 @@ const workerState = vi.hoisted(() => ({
   finalizeBehavior: "success" as
     "success" | "failure" | "error-event" | "silent",
   terminateThrows: false,
+  reportedImageCount: undefined as number | undefined,
 }))
 
 const buildComicInfoMock = vi.hoisted(() => vi.fn())
@@ -100,7 +101,10 @@ vi.mock("@/entrypoints/offscreen/archive-worker-factory", () => ({
             filename: "chapter.cbz",
             size: 4,
             buffer: new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer,
-            imageCount: 1,
+            imageCount:
+              workerState.reportedImageCount ??
+              this.messages.filter(({ message }) => message.type === "addImage")
+                .length,
             format: "cbz",
           },
         } as MessageEvent<unknown>)
@@ -223,6 +227,7 @@ beforeEach(() => {
   workerState.instances.length = 0
   workerState.finalizeBehavior = "success"
   workerState.terminateThrows = false
+  workerState.reportedImageCount = undefined
   vi.mocked(writeBlobToPath).mockReset()
   vi.mocked(writeBlobToPath).mockResolvedValue({ status: "written" })
   buildComicInfoMock.mockReset()
@@ -235,6 +240,26 @@ beforeEach(() => {
 })
 
 describe("archive chapter edge cases", () => {
+  it.each(["browser", "custom"] as const)(
+    "rejects a successful worker result missing a page before %s output",
+    async (downloadMode) => {
+      const runtime = createRuntime()
+      vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
+        {} as FileSystemDirectoryHandle
+      )
+      const input = archiveInput({ ...createOptions("cbz"), downloadMode })
+      input.urls.push("https://example.com/2.jpg")
+      workerState.reportedImageCount = 1
+
+      await expect(processArchiveFormatChapter(runtime, input)).rejects.toThrow(
+        "Archive creation failed: image count mismatch: expected 2, got 1"
+      )
+      expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+      expect(writeBlobToPath).not.toHaveBeenCalled()
+      expect(runtime.liveResourceLedger.getUsedBytes()).toBe(0)
+    }
+  )
+
   it("streams ComicInfo, cover, and image entries in archive order and terminates the worker", async () => {
     const runtime = createRuntime()
     const opts = {

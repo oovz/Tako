@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image-core"
+import { isNonRetryableDownloadError } from "@/src/shared/download-contract"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 function responseForReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
   return {
@@ -19,6 +21,29 @@ function responseForReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
 }
 
 describe("fetch image stream cleanup", () => {
+  it.each(["stream", "arrayBuffer"])(
+    "rejects an empty %s response as retryable and releases its resources",
+    async (bodyMode) => {
+      const response = new Response(new Uint8Array(), {
+        headers: { "content-type": "image/jpeg" },
+      })
+      if (bodyMode === "arrayBuffer") {
+        Object.defineProperty(response, "body", { value: null })
+      }
+      const ledger = new OffscreenLiveResourceLedger()
+      const error = await fetchImageWithStallDetection(
+        "https://images.example/page.jpg",
+        { fetcher: async () => response, liveResourceLedger: ledger }
+      ).catch((error: unknown) => error)
+
+      expect(error).toBeInstanceOf(Error)
+      expect(error).toHaveProperty("message", "Image payload is empty")
+      expect(isNonRetryableDownloadError(error)).toBe(false)
+      expect(ledger.getUsedBytes()).toBe(0)
+      expect(response.body?.locked ?? false).toBe(false)
+    }
+  )
+
   it("does not cancel a locked reader after successful EOF", async () => {
     const reader = {
       read: vi

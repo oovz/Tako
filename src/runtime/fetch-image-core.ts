@@ -3,7 +3,10 @@ import {
   STALL_TIMEOUT_MS,
   MAX_IMAGE_BYTES,
 } from "@/src/constants/timeouts"
-import { normalizeAllowedImageMimeType } from "@/src/shared/site-integration-utils"
+import {
+  assertNonemptyImagePayload,
+  normalizeAllowedImageMimeType,
+} from "@/src/shared/site-integration-utils"
 import { NonRetryableDownloadError } from "@/src/shared/download-contract"
 import {
   allowsDeterministicE2eRedirect,
@@ -81,6 +84,7 @@ export async function fetchImageWithStallDetection(
     data: ArrayBuffer,
     mimeType: string
   ): FetchedImageData => {
+    assertNonemptyImagePayload(data)
     if (!liveResourceLease) return { data, mimeType }
     liveResourceLease.resize(data.byteLength)
     const retainedLease = liveResourceLease.transfer("retained encoded image")

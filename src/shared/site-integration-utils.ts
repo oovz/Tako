@@ -41,6 +41,12 @@ const ALLOWED_RASTER_IMAGE_MIME_TYPES = new Set([
   "image/gif",
 ])
 
+export function assertNonemptyImagePayload(data: ArrayBuffer): void {
+  if (data.byteLength === 0) {
+    throw new Error("Image payload is empty")
+  }
+}
+
 export function normalizeAllowedImageMimeType(
   rawContentType: string | null | undefined,
   options: { allowEncodedImageMimeType?: boolean } = {}

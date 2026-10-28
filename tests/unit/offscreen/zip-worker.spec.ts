@@ -140,6 +140,26 @@ describe("zip.worker streaming archive protocol", () => {
     })
   })
 
+  it("rejects empty image input and prevents later archive output", async () => {
+    await installWorkerRuntime()
+    sendMessage({ type: "init", chapterTitle: "Empty", extension: "cbz" })
+    sendMessage({
+      type: "addImage",
+      inputId: "empty-input",
+      filename: "001.jpg",
+      buffer: new ArrayBuffer(0),
+    })
+    sendMessage({ type: "finalize" })
+
+    expect(await waitForTerminalMessage()).toMatchObject({
+      success: false,
+      error: expect.stringContaining("Image payload is empty"),
+    })
+    expect(
+      postedMessages.some((message) => "success" in message && message.success)
+    ).toBe(false)
+  })
+
   it("creates an archive for valid small input", async () => {
     await installWorkerRuntime()
 
