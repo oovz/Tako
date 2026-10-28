@@ -30,31 +30,32 @@ function makeQueueTask(
 }
 
 describe("useQueueView normalizeQueueView", () => {
-  it("returns empty array for non-array input", () => {
+  it("accepts an absent projection and rejects malformed collections", () => {
     expect(normalizeQueueView(undefined)).toEqual([])
-    expect(normalizeQueueView({})).toEqual([])
+    expect(() => normalizeQueueView({})).toThrow()
+    expect(() => normalizeQueueView(null)).toThrow()
   })
 
-  it("keeps only valid queue task summaries", () => {
-    const normalized = normalizeQueueView([
-      makeQueueTask("task-1", "queued", "Series A"),
-      {
-        id: "task-2",
-        status: "downloading",
-      },
-      "invalid-item",
-    ])
-
-    expect(normalized).toEqual([makeQueueTask("task-1", "queued", "Series A")])
+  it("rejects a projection containing malformed task summaries", () => {
+    expect(() =>
+      normalizeQueueView([
+        makeQueueTask("task-1", "queued", "Series A"),
+        {
+          id: "task-2",
+          status: "downloading",
+        },
+        "invalid-item",
+      ])
+    ).toThrow()
   })
 
   it("rejects queue items with unsupported status values", () => {
-    const normalized = normalizeQueueView([
-      makeQueueTask("task-1", "waiting", "Series A"),
-      makeQueueTask("task-2", "failed", "Series B"),
-    ])
-
-    expect(normalized).toEqual([makeQueueTask("task-2", "failed", "Series B")])
+    expect(() =>
+      normalizeQueueView([
+        makeQueueTask("task-1", "waiting", "Series A"),
+        makeQueueTask("task-2", "failed", "Series B"),
+      ])
+    ).toThrow()
   })
 
   it("strips malformed optional summary fields while preserving valid ones", () => {
@@ -129,12 +130,12 @@ describe("useQueueView normalizeQueueView", () => {
   })
 
   it("rejects a raw array instead of guessing its projection contract", () => {
-    const projection = normalizeQueueProjection([
-      makeQueueTask("task-1", "completed", "Series A"),
-      makeQueueTask("task-2", "queued", "Series B"),
-    ])
-
-    expect(projection).toEqual({ queueView: [], historyView: [] })
+    expect(() =>
+      normalizeQueueProjection([
+        makeQueueTask("task-1", "completed", "Series A"),
+        makeQueueTask("task-2", "queued", "Series B"),
+      ])
+    ).toThrow()
   })
 
   it("does not synthesize history when the history projection is absent", () => {

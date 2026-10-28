@@ -7,7 +7,10 @@ import {
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { PublicHttpsUrlSchema } from "@/src/runtime/series-data-schemas"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
-import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import {
+  useChromeStorageValue,
+  type StorageReadStatus,
+} from "@/src/ui/shared/hooks/useChromeStorageValue"
 import { isRecord } from "@/src/shared/type-guards"
 import { z } from "zod"
 
@@ -42,13 +45,8 @@ const QueueTaskSummaryStorageSchema = z.object({
   lastSuccessfulDownloadId: z.unknown().optional(),
 })
 
-function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
-  const parsed = QueueTaskSummaryStorageSchema.safeParse(value)
-  if (!parsed.success) {
-    return null
-  }
-
-  const data = parsed.data
+function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
+  const data = QueueTaskSummaryStorageSchema.parse(value)
 
   return {
     id: data.id,
@@ -85,13 +83,8 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
 }
 
 export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .map(normalizeQueueTaskSummary)
-    .filter((task): task is QueueTaskSummary => task !== null)
+  if (value === undefined) return []
+  return z.array(z.unknown()).parse(value).map(normalizeQueueTaskSummary)
 }
 
 function isTerminalTask(task: QueueTaskSummary): boolean {
@@ -122,7 +115,7 @@ export function normalizeQueueProjection(
   value: unknown
 ): QueueProjectionStorageValue {
   if (!isRecord(value)) {
-    return { queueView: [], historyView: [] }
+    throw new Error("Invalid queue projection")
   }
 
   const queue = normalizeQueueView(value[SESSION_STORAGE_KEYS.queueView])
@@ -141,16 +134,22 @@ export interface UseQueueViewResult {
   queuedCount: number
   isLoading: boolean
   hydrated: boolean
+  status: StorageReadStatus
+  refresh: () => Promise<void>
 }
 
 export function useQueueView(): UseQueueViewResult {
-  const { value: projection, hydrated } =
-    useChromeStorageValue<QueueProjectionStorageValue>({
-      areaName: "session",
-      key: [SESSION_STORAGE_KEYS.queueView, SESSION_STORAGE_KEYS.historyView],
-      initialValue: { queueView: [], historyView: [] },
-      parse: normalizeQueueProjection,
-    })
+  const {
+    value: projection,
+    hydrated,
+    status,
+    refresh,
+  } = useChromeStorageValue<QueueProjectionStorageValue>({
+    areaName: "session",
+    key: [SESSION_STORAGE_KEYS.queueView, SESSION_STORAGE_KEYS.historyView],
+    initialValue: { queueView: [], historyView: [] },
+    parse: normalizeQueueProjection,
+  })
   const { queueView, historyView } = projection
 
   const activeTasks = useMemo(
@@ -173,6 +172,8 @@ export function useQueueView(): UseQueueViewResult {
     activeCount: activeTasks.length,
     queuedCount: queuedTasks.length,
     hydrated,
-    isLoading: !hydrated,
+    isLoading: status === "loading",
+    status,
+    refresh,
   }
 }

@@ -1853,5 +1853,8 @@
   },
   "options_toastClearChapterHistoryFailed": {
     "message": "清除章节历史失败"
-  }
+  },
+  "queue_readFailed": { "message": "无法加载队列和任务历史记录。" },
+  "queue_readStale": { "message": "队列和任务历史记录可能不是最新的。" },
+  "common_retry": { "message": "重试" }
 }

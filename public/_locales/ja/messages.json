@@ -1853,5 +1853,12 @@
   },
   "options_toastClearChapterHistoryFailed": {
     "message": "チャプター履歴の消去に失敗しました"
-  }
+  },
+  "queue_readFailed": {
+    "message": "キューとタスク履歴を読み込めませんでした。"
+  },
+  "queue_readStale": {
+    "message": "キューとタスク履歴が最新でない可能性があります。"
+  },
+  "common_retry": { "message": "再試行" }
 }

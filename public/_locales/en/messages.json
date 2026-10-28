@@ -1853,5 +1853,12 @@
   },
   "options_toastClearChapterHistoryFailed": {
     "message": "Failed to clear chapter history"
-  }
+  },
+  "queue_readFailed": {
+    "message": "Queue and task history could not be loaded."
+  },
+  "queue_readStale": {
+    "message": "Queue and task history may be out of date."
+  },
+  "common_retry": { "message": "Retry" }
 }

@@ -7,6 +7,7 @@ import { SidePanelQueueRegion } from "@/entrypoints/sidepanel/components/SidePan
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 vi.stubGlobal("chrome", {
+  ...chrome,
   runtime: {
     getURL: (path: string) => path,
   },
@@ -30,6 +31,8 @@ function makeTask(
 const commonProps = {
   historyTasks: [] as QueueTaskSummary[],
   isLoading: false,
+  readStatus: "ready" as const,
+  onRefresh: vi.fn(),
   isInlineSelectionOpen: false,
   cancelingTaskIds: new Set<string>(),
   retryingTaskIds: new Set<string>(),
@@ -61,6 +64,33 @@ function renderQueueRegion(
 }
 
 describe("SidePanelQueueRegion unified queue layout", () => {
+  it("shows an unavailable view with a retry action", () => {
+    const html = renderQueueRegion({
+      ...commonProps,
+      queueTasks: [],
+      readStatus: "error",
+    })
+    expect(html).toContain("Queue and task history could not be loaded.")
+    expect(html).toContain("Retry")
+    expect(html).not.toContain("No downloads yet")
+  })
+
+  it("labels retained tasks as stale after a failed refresh", () => {
+    const html = renderQueueRegion({
+      ...commonProps,
+      queueTasks: [makeTask("known", "queued")],
+      readStatus: "stale",
+    })
+    expect(html).toContain("Queue and task history may be out of date.")
+    expect(html).toContain("Series known")
+  })
+
+  it("shows the empty view after a successful read", () => {
+    const html = renderQueueRegion({ ...commonProps, queueTasks: [] })
+    expect(html).toContain("No downloads yet")
+    expect(html).not.toContain('role="alert"')
+  })
+
   it("renders active first and queued tasks in one queue container", () => {
     const html = renderQueueRegion({
       ...commonProps,

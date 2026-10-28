@@ -10,6 +10,7 @@ import { t } from "@/src/runtime/i18n"
 import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 import { isPendingUndoReceipt } from "@/src/domain/queue/pending-undo"
+import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
 import type { DownloadTaskActionResult } from "@/entrypoints/options/types/download-task-actions"
 
 function showOptionsUndoToast(
@@ -47,11 +48,14 @@ const EMPTY_DOWNLOAD_STATE: OptionsDownloadState = {
 export function useDownloadsTabState() {
   const [downloadState, setDownloadState] =
     useState<OptionsDownloadState>(EMPTY_DOWNLOAD_STATE)
-  const [isLoading, setIsLoading] = useState(true)
+  const [readStatus, setReadStatus] = useState<StorageReadStatus>("loading")
+  const [readAttempt, setReadAttempt] = useState(0)
+  const hasSnapshot = useRef(false)
   const latestRequestId = useRef(0)
 
   const refreshDownloadState = useCallback(async (): Promise<void> => {
     const requestId = ++latestRequestId.current
+    if (!hasSnapshot.current) setReadStatus("loading")
     try {
       const response = await sendRuntimeMessage({
         target: "background",
@@ -60,20 +64,17 @@ export function useDownloadsTabState() {
       if (!response.success) throw new Error(response.error)
       if (requestId !== latestRequestId.current) return
       setDownloadState(response.data)
+      hasSnapshot.current = true
+      setReadStatus("ready")
     } catch (error) {
       if (requestId === latestRequestId.current) {
         logger.error("[DOWNLOADS TAB] Failed to refresh download state:", error)
+        setReadStatus(hasSnapshot.current ? "stale" : "error")
       }
-    } finally {
-      if (requestId === latestRequestId.current) setIsLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void refreshDownloadState()
-    })
-
     const handleStorageChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: chrome.storage.AreaName
@@ -87,12 +88,30 @@ export function useDownloadsTabState() {
       void refreshDownloadState()
     }
 
-    chrome.storage.onChanged.addListener(handleStorageChange)
+    let disposed = false
+    let subscribed = false
+    queueMicrotask(() => {
+      if (disposed) return
+      try {
+        chrome.storage.onChanged.addListener(handleStorageChange)
+        subscribed = true
+      } catch (error) {
+        logger.error(
+          "[DOWNLOADS TAB] Failed to subscribe to download state:",
+          error
+        )
+        setReadStatus(hasSnapshot.current ? "stale" : "error")
+        return
+      }
+      void refreshDownloadState()
+    })
     return () => {
+      disposed = true
       latestRequestId.current += 1
-      chrome.storage.onChanged.removeListener(handleStorageChange)
+      if (subscribed)
+        chrome.storage.onChanged.removeListener(handleStorageChange)
     }
-  }, [refreshDownloadState])
+  }, [refreshDownloadState, readAttempt])
 
   const cancelTask = useCallback(
     async (taskId: string): Promise<DownloadTaskActionResult> => {
@@ -198,7 +217,9 @@ export function useDownloadsTabState() {
 
   return {
     tasks: downloadState.tasks,
-    isLoading,
+    isLoading: readStatus === "loading",
+    readStatus,
+    retryRead: () => setReadAttempt((attempt) => attempt + 1),
     destinationIssue: downloadState.destinationIssue,
     historyStorageBytes: downloadState.queueStorageBytes,
     cancelTask,

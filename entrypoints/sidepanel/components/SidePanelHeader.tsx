@@ -10,13 +10,14 @@ import {
 import { t } from "@/src/runtime/i18n"
 
 interface SidePanelHeaderProps {
-  activeCount: number
-  queuedCount: number
+  activeCount: number | null
+  queuedCount: number | null
   hasOptionsActionItems: boolean
   onOpenSettings: () => void | Promise<void>
 }
 
-export function formatSidePanelCount(count: number): string {
+export function formatSidePanelCount(count: number | null): string {
+  if (count === null) return "—"
   return count > 99 ? "99+" : String(Math.max(0, count))
 }
 
@@ -34,7 +35,9 @@ export function SidePanelHeader({
     <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background shadow-sm z-30">
       <div className="flex items-center gap-2">
         <Badge
-          variant={activeCount > 0 ? "default" : "secondary"}
+          variant={
+            activeCount !== null && activeCount > 0 ? "default" : "secondary"
+          }
           className="h-6 px-2.5 text-xs font-semibold gap-1 transition-all duration-200 ease-out"
         >
           <span className="tabular-nums">

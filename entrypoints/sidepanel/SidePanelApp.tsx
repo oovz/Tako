@@ -130,8 +130,15 @@ export function SidePanelApp() {
     openFullHistory,
   } = useCommandCenterActions()
 
-  const { queueView, historyTasks, activeCount, queuedCount, isLoading } =
-    useQueueView()
+  const {
+    queueView,
+    historyTasks,
+    activeCount,
+    queuedCount,
+    isLoading,
+    status,
+    refresh,
+  } = useQueueView()
   const { progress: activeTaskProgress } = useActiveTaskProgress()
   const hasOptionsActionItems = useOptionsActionItems()
 
@@ -159,8 +166,12 @@ export function SidePanelApp() {
         </div>
         {/* Header with queue status badges - enlarged for better visibility */}
         <SidePanelHeader
-          activeCount={activeCount}
-          queuedCount={queuedCount}
+          activeCount={
+            status === "ready" || status === "stale" ? activeCount : null
+          }
+          queuedCount={
+            status === "ready" || status === "stale" ? queuedCount : null
+          }
           hasOptionsActionItems={hasOptionsActionItems}
           onOpenSettings={openSettings}
         />
@@ -225,6 +236,8 @@ export function SidePanelApp() {
                 queueTasks={queueView}
                 historyTasks={historyTasks}
                 isLoading={isLoading}
+                readStatus={status}
+                onRefresh={refresh}
                 isInlineSelectionOpen={isInlineSelectionOpen}
                 cancelingTaskIds={cancelingTaskIds}
                 forgettingTaskIds={forgettingTaskIds}

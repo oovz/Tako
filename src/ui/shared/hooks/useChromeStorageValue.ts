@@ -7,18 +7,20 @@ export interface UseChromeStorageValueOptions<T> {
   parse: (raw: unknown) => T
 }
 
+export type StorageReadStatus = "loading" | "ready" | "error" | "stale"
+
 export interface UseChromeStorageValueResult<T> {
   value: T
+  /** The initial subscription/read attempt has finished. Status describes data validity. */
   hydrated: boolean
+  status: StorageReadStatus
+  refresh: () => Promise<void>
 }
 
 interface StorageSnapshot<T> {
   value: T
   hydrated: boolean
-}
-
-function createSnapshot<T>(value: T, hydrated: boolean): StorageSnapshot<T> {
-  return { value, hydrated }
+  status: StorageReadStatus
 }
 
 function getStorageArea(
@@ -41,7 +43,11 @@ function hasRelevantKeyChange(
 function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
   const { areaName, key, initialValue, parse } = options
 
-  let snapshot = createSnapshot(initialValue, false)
+  let snapshot: StorageSnapshot<T> = {
+    value: initialValue,
+    hydrated: false,
+    status: "loading",
+  }
   let listening = false
   let latestReadId = 0
   let deferredRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -53,24 +59,29 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
     }
   }
 
-  const setSnapshot = (nextValue: T, hydrated: boolean): void => {
+  const setSnapshot = (
+    value: T,
+    hydrated: boolean,
+    status: StorageReadStatus
+  ): void => {
     if (
       snapshot.hydrated === hydrated &&
-      Object.is(snapshot.value, nextValue)
-    ) {
+      snapshot.status === status &&
+      Object.is(snapshot.value, value)
+    )
       return
-    }
-
-    snapshot = createSnapshot(nextValue, hydrated)
+    snapshot = { value, hydrated, status }
     emit()
   }
 
-  const safeParse = (raw: unknown): T => {
-    try {
-      return parse(raw)
-    } catch {
-      return initialValue
-    }
+  const fail = (): void => {
+    setSnapshot(
+      snapshot.value,
+      true,
+      snapshot.status === "ready" || snapshot.status === "stale"
+        ? "stale"
+        : "error"
+    )
   }
 
   const readCurrentValue = async (): Promise<void> => {
@@ -83,13 +94,13 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
       }
 
       const raw = Array.isArray(key) ? result : result[key]
-      setSnapshot(safeParse(raw), true)
+      setSnapshot(parse(raw), true, "ready")
     } catch {
       if (readId !== latestReadId) {
         return
       }
 
-      setSnapshot(initialValue, true)
+      fail()
     }
   }
 
@@ -108,20 +119,28 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
     void readCurrentValue()
   }
 
-  const ensureListening = (): void => {
-    if (listening) {
-      return
-    }
-
-    listening = true
+  const ensureListening = (): boolean => {
+    if (listening) return true
 
     try {
       chrome.storage.onChanged.addListener(handleStorageChange)
+      listening = true
     } catch {
-      setSnapshot(initialValue, true)
-      return
+      fail()
+      return false
     }
+    return true
+  }
 
+  const refresh = async (): Promise<void> => {
+    if (!ensureListening()) return
+    if (snapshot.status === "error")
+      setSnapshot(snapshot.value, snapshot.hydrated, "loading")
+    await readCurrentValue()
+  }
+
+  const start = (): void => {
+    if (!ensureListening()) return
     void readCurrentValue()
 
     deferredRefreshTimer = setTimeout(() => {
@@ -131,16 +150,15 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
   }
 
   const cleanup = (): void => {
-    if (!listening) {
-      return
-    }
+    latestReadId += 1
+    if (listening) {
+      listening = false
 
-    listening = false
-
-    try {
-      chrome.storage.onChanged.removeListener(handleStorageChange)
-    } catch {
-      // noop
+      try {
+        chrome.storage.onChanged.removeListener(handleStorageChange)
+      } catch {
+        // The extension may already be shutting down.
+      }
     }
 
     if (deferredRefreshTimer !== null) {
@@ -151,9 +169,10 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
 
   return {
     getSnapshot: (): StorageSnapshot<T> => snapshot,
+    refresh,
     subscribe: (listener: () => void): (() => void) => {
       listeners.add(listener)
-      ensureListening()
+      if (listeners.size === 1) start()
 
       return () => {
         listeners.delete(listener)
@@ -163,12 +182,6 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
       }
     },
   }
-}
-
-export function __createChromeStorageStoreForTests<T>(
-  options: UseChromeStorageValueOptions<T>
-) {
-  return createChromeStorageStore(options)
 }
 
 export function useChromeStorageValue<T>(
@@ -188,9 +201,10 @@ export function useChromeStorageValue<T>(
     })
   }, [areaName, keySignature, parse, stableInitialValue])
 
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
     store.getSnapshot
   )
+  return { ...snapshot, refresh: store.refresh }
 }

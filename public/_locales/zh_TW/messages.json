@@ -1853,5 +1853,8 @@
   },
   "options_toastClearChapterHistoryFailed": {
     "message": "清除章節歷史失敗"
-  }
+  },
+  "queue_readFailed": { "message": "無法載入佇列和任務歷史記錄。" },
+  "queue_readStale": { "message": "佇列和任務歷史記錄可能不是最新的。" },
+  "common_retry": { "message": "重試" }
 }

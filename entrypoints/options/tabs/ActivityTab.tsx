@@ -1,3 +1,4 @@
+import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
 import { useState } from "react"
 import { Database, Layers, Loader2, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -85,6 +86,8 @@ export function ActivityTab({
   const {
     tasks,
     isLoading,
+    readStatus,
+    retryRead,
     destinationIssue,
     historyStorageBytes,
     cancelTask,
@@ -196,44 +199,48 @@ export function ActivityTab({
         />
       )}
 
-      {/* Live Download Queue Monitor */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-foreground tracking-tight">
-              {t("options_activeDownloads")}
-            </h2>
-            <Badge variant="secondary" className="h-5 px-2 text-xs font-mono">
-              {tasks.length}
-            </Badge>
-          </div>
-          {terminalTasks.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setHistoryToClear("tasks")}
-              className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
-            >
-              <Trash2 className="size-3.5" />
-              {t("options_clearTaskHistory")}
-            </Button>
-          )}
-        </div>
+      <QueueReadNotice status={readStatus} onRetry={retryRead} />
 
-        <DownloadTaskGroups
-          tasks={tasks}
-          activeTasks={activeTasks}
-          queuedTasks={queuedTasks}
-          completedTasks={completedTasks}
-          failedTasks={failedTasks}
-          canceledTasks={canceledTasks}
-          onCancel={cancelTask}
-          onRetry={retryTask}
-          onRestart={restartTask}
-          onRemove={removeTask}
-        />
-      </div>
+      {/* Live Download Queue Monitor */}
+      {readStatus !== "error" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-foreground tracking-tight">
+                {t("options_activeDownloads")}
+              </h2>
+              <Badge variant="secondary" className="h-5 px-2 text-xs font-mono">
+                {tasks.length}
+              </Badge>
+            </div>
+            {terminalTasks.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoryToClear("tasks")}
+                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive hover:border-destructive/40"
+              >
+                <Trash2 className="size-3.5" />
+                {t("options_clearTaskHistory")}
+              </Button>
+            )}
+          </div>
+
+          <DownloadTaskGroups
+            tasks={tasks}
+            activeTasks={activeTasks}
+            queuedTasks={queuedTasks}
+            completedTasks={completedTasks}
+            failedTasks={failedTasks}
+            canceledTasks={canceledTasks}
+            onCancel={cancelTask}
+            onRetry={retryTask}
+            onRestart={restartTask}
+            onRemove={removeTask}
+          />
+        </div>
+      )}
 
       {/* History & Storage Management */}
       <SettingsGroup
@@ -263,7 +270,9 @@ export function ActivityTab({
               <span>
                 {t("options_localStorageUsage")}:{" "}
                 <strong className="text-foreground font-semibold">
-                  {formatBytes(historyStorageBytes ?? 0)}
+                  {readStatus === "error"
+                    ? "—"
+                    : formatBytes(historyStorageBytes)}
                 </strong>
               </span>
             </div>

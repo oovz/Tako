@@ -10,11 +10,15 @@ import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoint
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
+import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
+import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
 
 interface SidePanelQueueRegionProps {
   queueTasks: QueueTaskSummary[]
   historyTasks: QueueTaskSummary[]
   isLoading: boolean
+  readStatus: StorageReadStatus
+  onRefresh: () => Promise<void>
   isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
   forgettingTaskIds: Set<string>
@@ -37,6 +41,8 @@ export function SidePanelQueueRegion({
   queueTasks,
   historyTasks,
   isLoading,
+  readStatus,
+  onRefresh,
   isInlineSelectionOpen,
   cancelingTaskIds,
   forgettingTaskIds,
@@ -120,6 +126,7 @@ export function SidePanelQueueRegion({
         isInlineSelectionOpen ? "grow-0" : "grow"
       )}
     >
+      <QueueReadNotice status={readStatus} onRetry={onRefresh} />
       {isLoading && !isInlineSelectionOpen && (
         <div
           className="flex flex-col gap-2 p-3"
@@ -209,7 +216,7 @@ export function SidePanelQueueRegion({
         />
       )}
 
-      {!isLoading && !isInlineSelectionOpen && !hasAnyTask && (
+      {readStatus === "ready" && !isInlineSelectionOpen && !hasAnyTask && (
         <div className="p-6 text-center">
           <Download
             className="size-8 mx-auto mb-2 text-muted-foreground/50"
