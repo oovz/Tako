@@ -106,7 +106,7 @@ test.describe("Pixiv Comic download workflow (mocked)", () => {
     )
 
     const firstChapter = tabState.chapters.find(
-      (chapter) => chapter.locked !== true
+      (chapter) => chapter.id === PixivComic.PIXIV_COMIC_CAPTURED_STORY_ID
     )
     if (!firstChapter) {
       throw new Error(

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import captured from "@/tests/fixtures/site-integrations/pixiv-comic/captured-work.json"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import {
@@ -49,6 +51,52 @@ export function registerPixivComicBackgroundImageCases(): void {
   }
 
   describe("Pixiv Comic integration", () => {
+    it("resolves every declared captured page from the reader bootstrap and read_v4 response", async () => {
+      mockRateLimitedFetch
+        .mockResolvedValueOnce(
+          makeHtmlResponse(
+            readFileSync(
+              "tests/fixtures/site-integrations/pixiv-comic/series.html",
+              "utf8"
+            )
+          )
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => structuredClone(captured.data.storyPage),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => structuredClone(captured.data.readV4),
+        })
+
+      const { imageUrls } = await resolveChapterPlan(
+        { id: "154853", url: "https://comic.pixiv.net/viewer/stories/154853" },
+        { dispatchContext: { taskId: "captured-reader-154853" } }
+      )
+
+      expect(imageUrls).toHaveLength(21)
+      expect(
+        imageUrls.map((url) => new URL(url).pathname.split("/").at(-1))
+      ).toEqual(Array.from({ length: 21 }, (_, index) => `${index + 1}.jpg`))
+      expect(new URL(imageUrls[0]).pathname).toBe(
+        "/c/q90_gridshuffle32:32/images/page/154853/wTMaKLVEvWvgjiiyh4Io/1.jpg"
+      )
+      expect(new URL(imageUrls[0]).search).toBe("?20231017102742")
+      expect(
+        atob(
+          new URLSearchParams(new URL(imageUrls[0]).hash.slice(1)).get(
+            "tmdPixivKey"
+          )!
+        )
+      ).toBe("synthetic-pixiv-page-1")
+      expect(
+        (mockRateLimitedFetch.mock.calls[1]?.[0] as { url: string }).url
+      ).toBe(
+        "https://comic.pixiv.net/_next/data/BVJmAtWWeZJ9AV-ajWqSo/viewer/stories/154853.json?id=154853"
+      )
+    })
+
     it("prepares task-scoped context without reading browser cookies", async () => {
       const context =
         await backgroundSiteAdapter.background.prepareDispatchContext?.({

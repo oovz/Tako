@@ -109,11 +109,11 @@ test.describe("Site integration chapter metadata contracts (mocked)", () => {
     )
 
     const firstChapter = state.chapters.find(
-      (chapter) => chapter.id === "70001"
+      (chapter) => chapter.id === PixivComic.PIXIV_COMIC_CAPTURED_STORY_ID
     )
     expect(firstChapter).toMatchObject({
-      title: "第1話 出発",
-      chapterLabel: "第1話",
+      title: "第1話-①",
+      chapterLabel: "第1話-①",
       chapterNumber: 1,
     })
     expect(firstChapter?.volumeId).toBeUndefined()

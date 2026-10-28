@@ -1568,7 +1568,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "pixiv-comic",
-    "name": "Pixiv Comic",
+    "name": "pixivコミック",
     "englishName": "pixiv Comic",
     "contributors": [
       "TMD Team"
