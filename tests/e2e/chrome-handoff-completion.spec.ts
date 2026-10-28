@@ -107,8 +107,9 @@ test("completes Chrome handoff before transfer completion and retains history af
       .getByRole("button", { name: "Activity & History", exact: true })
       .click()
     await expect(
-      options.getByText("Sent to Chrome", { exact: true }).first()
+      options.getByText("Previously processed", { exact: true }).first()
     ).toBeVisible()
+    await expect(options.getByText("Saved", { exact: true })).toHaveCount(0)
 
     await options.evaluate(
       (id) =>

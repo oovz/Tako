@@ -95,7 +95,7 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     expect(html).not.toContain("No downloads yet")
   })
 
-  it("shows Chrome responsibility alongside an accepted result", () => {
+  it("shows an unconfirmed result without claiming a saved file", () => {
     const html = renderQueueRegion({
       ...commonProps,
       queueTasks: [],
@@ -106,8 +106,9 @@ describe("SidePanelQueueRegion unified queue layout", () => {
         },
       ],
     })
-    expect(html).toContain("Sent to Chrome")
-    expect(html).toContain("Check Chrome Downloads for progress and results.")
+    expect(html).toContain("Previously processed")
+    expect(html).toContain("Final saving was not confirmed.")
+    expect(html).not.toContain(">Saved<")
   })
 
   it("labels retained tasks as stale after a failed refresh", () => {

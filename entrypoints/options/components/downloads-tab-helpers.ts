@@ -1,6 +1,7 @@
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 import {
   getCompletedOutputDestination,
+  getCompletedSaveConfirmedAt,
   getOutputResultLabel,
 } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
@@ -52,11 +53,11 @@ export function getTaskStatusSummaryLabel(
     case "completed": {
       const destination = getCompletedOutputDestination(task.chapters)
       return t(
-        destination === "downloads-api"
-          ? "options_taskSentToChrome"
+        getCompletedSaveConfirmedAt(task.chapters) === undefined
+          ? "options_taskPreviouslyProcessed"
           : destination === "fsa"
             ? "options_taskSavedToFolder"
-            : "options_taskCompleted",
+            : "options_taskSaved",
         [String(totalChapters), totalChapters === 1 ? "" : "s"]
       )
     }
@@ -97,7 +98,8 @@ export function chapterStatusBadgeClass(status: string): string {
 
 export function getTaskStatusBadge(
   status: DownloadTaskState["status"],
-  outputDestination?: TaskChapter["outputDestination"]
+  outputDestination?: TaskChapter["outputDestination"],
+  saveConfirmedAt?: number
 ): {
   label: string
   className: string
@@ -115,7 +117,7 @@ export function getTaskStatusBadge(
       }
     case "completed":
       return {
-        label: getOutputResultLabel(outputDestination),
+        label: getOutputResultLabel(outputDestination, saveConfirmedAt),
         className: "bg-primary/10 text-primary",
       }
     case "partial_success":
@@ -175,11 +177,12 @@ export function shouldShowChapterError(status: TaskChapter["status"]): boolean {
 
 export function formatChapterStatusLabel(
   status: TaskChapter["status"],
-  outputDestination?: TaskChapter["outputDestination"]
+  outputDestination?: TaskChapter["outputDestination"],
+  saveConfirmedAt?: number
 ): string {
   switch (status) {
     case "completed":
-      return getOutputResultLabel(outputDestination)
+      return getOutputResultLabel(outputDestination, saveConfirmedAt)
     case "partial_success":
       return t("status_partialSuccess")
     case "failed":

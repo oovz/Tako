@@ -349,7 +349,14 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
             chapter.seriesId === derived.seriesId
         )
         .map(
-          (chapter) => [chapter.chapterId, chapter.outputDestination] as const
+          (chapter) =>
+            [
+              chapter.chapterId,
+              {
+                outputDestination: chapter.outputDestination,
+                saveConfirmedAt: chapter.saveConfirmedAt,
+              },
+            ] as const
         )
     )
 

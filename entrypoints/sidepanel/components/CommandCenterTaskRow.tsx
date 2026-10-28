@@ -202,7 +202,8 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
                   {getTaskStatusLabel(
                     task.status,
                     task.activeBlock,
-                    task.outputDestination
+                    task.outputDestination,
+                    task.saveConfirmedAt
                   )}
                 </span>
               </span>
@@ -214,9 +215,9 @@ export const CommandCenterTaskRow = memo(function CommandCenterTaskRow({
             </div>
 
             {task.status === "completed" &&
-              task.outputDestination === "downloads-api" && (
+              task.saveConfirmedAt === undefined && (
                 <p className="text-[11px] text-muted-foreground">
-                  {t("output_sentToChromeDescription")}
+                  {t("output_saveUnconfirmedDescription")}
                 </p>
               )}
 

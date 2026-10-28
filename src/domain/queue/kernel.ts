@@ -63,6 +63,7 @@ export type TaskChapterUpdate = {
   imagesFailed?: number
   outputs?: OutputAccounting
   outputDestination?: "downloads-api" | "fsa"
+  saveConfirmedAt?: number
 }
 
 export type TaskMutationRejection = Rejected<
@@ -184,6 +185,7 @@ function applyChapterUpdate(
     imagesFailed: updates.imagesFailed ?? chapter.imagesFailed,
     outputs,
     outputDestination: updates.outputDestination ?? chapter.outputDestination,
+    saveConfirmedAt: updates.saveConfirmedAt ?? chapter.saveConfirmedAt,
     lastUpdated: now,
   }
 }
@@ -196,6 +198,7 @@ function chapterUpdateEquals(left: TaskChapter, right: TaskChapter): boolean {
     left.totalImages === right.totalImages &&
     left.imagesFailed === right.imagesFailed &&
     left.outputDestination === right.outputDestination &&
+    left.saveConfirmedAt === right.saveConfirmedAt &&
     accountingEquals(left.outputs, right.outputs) &&
     left.lastUpdated === right.lastUpdated
   )
@@ -1806,6 +1809,7 @@ export function retryFailedChapters(
       ...chapter,
       nativeOutputSettlement: undefined,
       outputDestination: undefined,
+      saveConfirmedAt: undefined,
       status: "queued",
       errorMessage: undefined,
       errorCategory: undefined,
@@ -1901,6 +1905,7 @@ export function restartDownloadTask(
       ...chapter,
       nativeOutputSettlement: undefined,
       outputDestination: undefined,
+      saveConfirmedAt: undefined,
       status: "queued",
       errorMessage: undefined,
       errorCategory: undefined,

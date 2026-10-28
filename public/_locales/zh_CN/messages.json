@@ -1839,31 +1839,17 @@
   "common_retry": {
     "message": "重试"
   },
-  "status_sentToChrome": {
-    "message": "已发送到 Chrome"
-  },
   "status_savedToFolder": {
     "message": "已保存到文件夹"
   },
   "status_processed": {
-    "message": "已处理"
+    "message": "此前已处理"
   },
   "progressStage_sendingToChrome": {
     "message": "正在发送到 Chrome"
   },
   "progressStage_savingToFolder": {
     "message": "正在保存到文件夹"
-  },
-  "output_sentToChromeDescription": {
-    "message": "后续传输由 Chrome 管理。请在 Chrome 下载内容中查看进度和结果。"
-  },
-  "options_taskSentToChrome": {
-    "message": "已发送到 Chrome（$TOTAL$ 章）",
-    "placeholders": {
-      "total": {
-        "content": "$1"
-      }
-    }
   },
   "options_taskSavedToFolder": {
     "message": "已保存到文件夹（$TOTAL$ 章）",
@@ -1881,5 +1867,27 @@
   },
   "sidepanel_restartUncertainHandoff": {
     "message": "重试所有章节（可能产生重复文件）"
+  },
+  "status_saved": {
+    "message": "已保存"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "这是之前的处理记录，文件保存是否完成尚未确认。"
+  },
+  "options_taskSaved": {
+    "message": "已保存（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "此前已处理（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   }
 }

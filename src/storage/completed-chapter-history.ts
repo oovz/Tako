@@ -3,8 +3,8 @@ import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { HistoryRepository } from "@/src/storage/history-repository"
 
 /**
- * Restore missing chapter history from completed task snapshots. The history
- * repository enforces explicit clear cutoffs during each restoration.
+ * Reconcile chapter history with completed task snapshots and their save evidence.
+ * The repository enforces explicit clear cutoffs during each restoration.
  */
 export async function reconcileCompletedChapterHistory(
   tasks: DownloadTaskState[],
@@ -33,7 +33,8 @@ export async function reconcileCompletedChapterHistory(
         task.mangaId,
         chapter.id
       )
-      if (persistedKeys.has(key)) continue
+      if (persistedKeys.has(key) && chapter.saveConfirmedAt === undefined)
+        continue
       const restored = await historyRepository.restoreChapterFromCompletedTask(
         {
           siteIntegrationId: task.siteIntegrationId,
@@ -46,6 +47,7 @@ export async function reconcileCompletedChapterHistory(
           volumeNumber: chapter.volumeNumber,
           downloadedAt: chapter.lastUpdated,
           outputDestination: chapter.outputDestination,
+          saveConfirmedAt: chapter.saveConfirmedAt,
           fileSize: 0,
           format: task.settingsSnapshot.archiveFormat,
         },

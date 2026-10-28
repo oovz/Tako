@@ -31,6 +31,7 @@ function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
     index: overrides.index ?? 1,
     status: overrides.status ?? "completed",
     outputDestination: overrides.outputDestination,
+    saveConfirmedAt: overrides.saveConfirmedAt,
     lastUpdated: overrides.lastUpdated ?? Date.now(),
   }
 }
@@ -164,41 +165,51 @@ describe("notification content templates", () => {
     it.each([
       {
         destinations: ["downloads-api"],
-        title: "Sent to Chrome",
+        proof: undefined,
+        title: "Previously processed",
         count: "1/1 chapters",
-        chromeHelp: true,
       },
       {
         destinations: ["fsa"],
+        proof: undefined,
+        title: "Previously processed",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["downloads-api"],
+        proof: 42,
+        title: "Saved",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["fsa"],
+        proof: 42,
         title: "Saved to folder",
         count: "1/1 chapters",
-        chromeHelp: false,
       },
       {
         destinations: [undefined],
-        title: "Completed",
+        proof: undefined,
+        title: "Previously processed",
         count: "1/1 chapters",
-        chromeHelp: false,
       },
       {
         destinations: ["downloads-api", "fsa"],
-        title: "Completed",
+        proof: 42,
+        title: "Saved",
         count: "2/2 chapters",
-        chromeHelp: false,
-      },
-      {
-        destinations: ["downloads-api", undefined],
-        title: "Completed",
-        count: "2/2 chapters",
-        chromeHelp: false,
       },
     ] as const)(
-      "describes completed output as $title for $destinations",
-      async ({ destinations, title, count, chromeHelp }) => {
+      "describes completed output as $title for $destinations with proof=$proof",
+      async ({ destinations, title, count, proof }) => {
         const task = makeTask({
           seriesTitle: "Known Series",
           chapters: destinations.map((outputDestination, index) =>
-            makeChapter({ id: `ch-${index}`, outputDestination })
+            makeChapter({
+              id: `ch-${index}`,
+              outputDestination,
+              saveConfirmedAt: proof,
+            })
           ),
         })
         await new NotificationService().notifyTaskCompleted({
@@ -209,7 +220,7 @@ describe("notification content templates", () => {
           `task_complete_${task.id}`,
           expect.objectContaining({
             title,
-            message: `Known Series: ${count}${chromeHelp ? "\nChrome manages the remaining transfer. Check Chrome Downloads for progress and results." : ""}`,
+            message: `Known Series: ${count}${proof === undefined ? "\nThis record shows earlier processing. Final saving was not confirmed." : ""}`,
           })
         )
       }
@@ -239,7 +250,7 @@ describe("notification content templates", () => {
       expect(notificationOptions.iconUrl).toBe(
         "chrome-extension://test/icon/128.png"
       )
-      expect(notificationOptions.title).toBe("Completed")
+      expect(notificationOptions.title).toBe("Previously processed")
       expect(notificationOptions.message).toContain("Kemutai Hanashi")
       expect(notificationOptions.message).toContain("3")
       expect(notificationOptions.requireInteraction).toBe(false)
@@ -330,7 +341,7 @@ describe("notification content templates", () => {
 
       expect(notificationsCreate).toHaveBeenCalledTimes(1)
       const [, options] = notificationsCreate.mock.calls[0]
-      expect(options.title).toBe("Completed")
+      expect(options.title).toBe("Previously processed")
       expect(options.message).toContain("Canceled Series")
     })
 

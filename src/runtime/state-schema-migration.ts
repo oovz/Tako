@@ -1,4 +1,10 @@
 import { z } from "zod"
+import {
+  buildSaveEvidenceWrites,
+  Epoch5DownloadTaskStateSchema,
+  Epoch5PendingUndoActionSchema,
+  validateSaveEvidenceHistory,
+} from "./state-schema-migration-save-evidence"
 
 import {
   convertStoredTask,
@@ -93,7 +99,7 @@ import {
   SITE_OVERRIDES_STORAGE_KEY,
 } from "@/src/storage/site-overrides-service"
 
-export const CURRENT_STATE_SCHEMA_EPOCH = 4
+export const CURRENT_STATE_SCHEMA_EPOCH = 5
 const DESTINATION_PAIRING_EPOCH = 3
 
 const SCHEMA_EPOCH_STORAGE_KEY = "stateSchemaEpoch"
@@ -1033,7 +1039,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
   }
 
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
-    z.array(DownloadTaskStateSchema).parse(
+    z.array(
+      journal.targetEpoch === 5
+        ? Epoch5DownloadTaskStateSchema
+        : DownloadTaskStateSchema
+    ).parse(
       journal.targetEpoch === 3
         ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
             convertStoredTask
@@ -1042,7 +1052,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
     )
   }
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
-    z.array(PendingUndoActionSchema).parse(
+    z.array(
+      journal.targetEpoch === 5
+        ? Epoch5PendingUndoActionSchema
+        : PendingUndoActionSchema
+    ).parse(
       journal.targetEpoch === 3
         ? (
             journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions] as unknown[]
@@ -1097,7 +1111,11 @@ function validateMigrationJournal(journal: MigrationJournal): void {
         "State migration journal contains a partial history aggregate"
       )
     }
-    parseHistoryAggregate({
+    const validateHistory =
+      journal.targetEpoch === 5
+        ? validateSaveEvidenceHistory
+        : parseHistoryAggregate
+    validateHistory({
       downloadedChapters: journal.writes[LOCAL_STORAGE_KEYS.downloadedChapters],
       seriesDownloadHistory:
         journal.writes[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
@@ -1242,12 +1260,28 @@ function buildOutputMigrationJournal(
   return journal
 }
 
+function buildHistoryEvidenceJournal(
+  stored: Record<string, unknown>,
+  sourceEpoch: number | null
+): MigrationJournal {
+  const journal = MigrationJournalSchema.parse({
+    sourceEpoch,
+    targetEpoch: 5,
+    phase: "prepared",
+    writes: buildSaveEvidenceWrites(stored),
+    obsoleteKeys: [],
+  })
+  validateMigrationJournal(journal)
+  return journal
+}
+
 const MIGRATION_STEPS = [
   {
     targetEpoch: DESTINATION_PAIRING_EPOCH,
     prepare: buildDestinationPairingJournal,
   },
   { targetEpoch: 4, prepare: buildOutputMigrationJournal },
+  { targetEpoch: 5, prepare: buildHistoryEvidenceJournal },
 ] as const
 
 function parseMigrationJournal(raw: unknown): MigrationJournal | null {
@@ -1259,7 +1293,8 @@ function parseMigrationJournal(raw: unknown): MigrationJournal | null {
   if (
     (parsed.data.sourceEpoch !== null &&
       parsed.data.sourceEpoch >= parsed.data.targetEpoch) ||
-    (parsed.data.targetEpoch === 4 && parsed.data.sourceEpoch !== 3)
+    (parsed.data.targetEpoch >= 4 &&
+      parsed.data.sourceEpoch !== parsed.data.targetEpoch - 1)
   ) {
     throw new Error(
       "Stored state schema migration journal has an invalid source epoch"
@@ -1336,7 +1371,8 @@ export async function migrateDurableStateForCurrentSchema(): Promise<void> {
     let stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
     while (true) {
       if (
-        stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 &&
+        (stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 ||
+          stored[SCHEMA_EPOCH_STORAGE_KEY] === 4) &&
         stored[MIGRATION_JOURNAL_STORAGE_KEY] === undefined
       ) {
         let index

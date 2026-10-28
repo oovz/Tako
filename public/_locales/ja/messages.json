@@ -1839,31 +1839,17 @@
   "common_retry": {
     "message": "再試行"
   },
-  "status_sentToChrome": {
-    "message": "Chrome に送信済み"
-  },
   "status_savedToFolder": {
     "message": "フォルダーに保存済み"
   },
   "status_processed": {
-    "message": "処理済み"
+    "message": "以前に処理済み"
   },
   "progressStage_sendingToChrome": {
     "message": "Chrome に送信中"
   },
   "progressStage_savingToFolder": {
     "message": "フォルダーに保存中"
-  },
-  "output_sentToChromeDescription": {
-    "message": "送信後の転送は Chrome が管理します。進行状況と結果は Chrome のダウンロードで確認してください。"
-  },
-  "options_taskSentToChrome": {
-    "message": "Chrome に送信済み（$TOTAL$ 章）",
-    "placeholders": {
-      "total": {
-        "content": "$1"
-      }
-    }
   },
   "options_taskSavedToFolder": {
     "message": "フォルダーに保存済み（$TOTAL$ 章）",
@@ -1881,5 +1867,27 @@
   },
   "sidepanel_restartUncertainHandoff": {
     "message": "すべてのチャプターを再試行（重複の可能性あり）"
+  },
+  "status_saved": {
+    "message": "保存済み"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "以前の処理記録です。ファイルの保存完了は確認されていません。"
+  },
+  "options_taskSaved": {
+    "message": "保存済み（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "以前に処理済み（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   }
 }

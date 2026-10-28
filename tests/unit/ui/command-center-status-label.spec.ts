@@ -7,14 +7,17 @@ describe("command center task status labels", () => {
     expect(getTaskStatusLabel("partial_success")).toBe("Partial success")
   })
 
-  it("labels completed results from destination evidence and preserves failure status", () => {
+  it("labels completed results from save evidence and preserves failure status", () => {
     expect(getTaskStatusLabel("completed", undefined, "downloads-api")).toBe(
-      "Sent to Chrome"
+      "Previously processed"
     )
-    expect(getTaskStatusLabel("completed", undefined, "fsa")).toBe(
+    expect(
+      getTaskStatusLabel("completed", undefined, "downloads-api", 42)
+    ).toBe("Saved")
+    expect(getTaskStatusLabel("completed", undefined, "fsa", 42)).toBe(
       "Saved to folder"
     )
-    expect(getTaskStatusLabel("completed")).toBe("Completed")
+    expect(getTaskStatusLabel("completed")).toBe("Previously processed")
     expect(getTaskStatusLabel("failed", undefined, "downloads-api")).toBe(
       "Failed"
     )

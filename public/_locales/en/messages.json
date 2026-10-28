@@ -1842,34 +1842,17 @@
   "common_retry": {
     "message": "Retry"
   },
-  "status_sentToChrome": {
-    "message": "Sent to Chrome"
-  },
   "status_savedToFolder": {
     "message": "Saved to folder"
   },
   "status_processed": {
-    "message": "Processed"
+    "message": "Previously processed"
   },
   "progressStage_sendingToChrome": {
     "message": "Sending to Chrome"
   },
   "progressStage_savingToFolder": {
     "message": "Saving to folder"
-  },
-  "output_sentToChromeDescription": {
-    "message": "Chrome manages the remaining transfer. Check Chrome Downloads for progress and results."
-  },
-  "options_taskSentToChrome": {
-    "message": "Sent to Chrome ($TOTAL$ chapter$PLURAL$)",
-    "placeholders": {
-      "total": {
-        "content": "$1"
-      },
-      "plural": {
-        "content": "$2"
-      }
-    }
   },
   "options_taskSavedToFolder": {
     "message": "Saved to folder ($TOTAL$ chapter$PLURAL$)",
@@ -1890,5 +1873,33 @@
   },
   "sidepanel_restartUncertainHandoff": {
     "message": "Retry all chapters (may create duplicates)"
+  },
+  "status_saved": {
+    "message": "Saved"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "This record shows earlier processing. Final saving was not confirmed."
+  },
+  "options_taskSaved": {
+    "message": "Saved ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "Previously processed ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
   }
 }

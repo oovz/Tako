@@ -1,6 +1,7 @@
 import { firstUnsuccessfulChapter } from "@/src/domain/queue/task-lifecycle"
 import {
   getCompletedOutputDestination,
+  getCompletedSaveConfirmedAt,
   hasUncertainNativeOutput,
 } from "@/src/runtime/output-result-presentation"
 import type {
@@ -48,6 +49,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     status: task.status,
     activeBlock: task.activeBlock,
     outputDestination: getCompletedOutputDestination(task.chapters),
+    saveConfirmedAt: getCompletedSaveConfirmedAt(task.chapters),
     outputMode:
       (task.destinationOverride ?? task.settingsSnapshot.destination) ===
       "file-system-access"

@@ -87,6 +87,91 @@ describe("chapter history retention across task removal", () => {
     ).toMatchObject({ finalized: true, finalStatus: "completed" })
   }
 
+  it("promotes older processed history only from a later confirmed save", async () => {
+    const earlier = task()
+    earlier.chapters[0]!.lastUpdated = 50
+    await reconcileCompletedChapterHistory([earlier], history)
+    expect(
+      (await history.getDownloadedChapters())[0]?.saveConfirmedAt
+    ).toBeUndefined()
+    const confirmed = task()
+    confirmed.chapters[0]!.outputDestination = "fsa"
+    confirmed.chapters[0]!.saveConfirmedAt = 200
+    stored[LOCAL_STORAGE_KEYS.downloadQueue] = [confirmed]
+    await completeTask()
+    const saved = (await history.getDownloadedChapters())[0]!
+    expect(saved).toMatchObject({
+      downloadedAt: 200,
+      saveConfirmedAt: 200,
+      outputDestination: "fsa",
+    })
+    await history.markChapterAsDownloaded({
+      ...saved,
+      downloadedAt: 300,
+      saveConfirmedAt: undefined,
+      outputDestination: "downloads-api",
+    })
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([
+      saved,
+    ])
+  })
+
+  it("does not resurrect cleared history when retained tasks later acquire confirmation", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(250)
+    try {
+      await history.clearAllDownloadHistory()
+      const confirmed = task()
+      confirmed.chapters[0]!.outputDestination = "fsa"
+      confirmed.chapters[0]!.saveConfirmedAt = 200
+      stored[LOCAL_STORAGE_KEYS.downloadQueue] = [confirmed]
+      await completeTask()
+      await queue.clearTerminalHistory()
+      expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it("preserves the last confirmed source when newer retained work has no save proof", async () => {
+    const confirmed = {
+      ...task(),
+      id: "confirmed",
+      status: "completed" as const,
+    }
+    confirmed.chapters[0]!.lastUpdated = 100
+    confirmed.chapters[0]!.outputDestination = "fsa"
+    confirmed.chapters[0]!.saveConfirmedAt = 100
+    const unconfirmed = { ...task(), id: "unconfirmed" }
+    unconfirmed.chapters[0]!.title = "Later unconfirmed chapter"
+    unconfirmed.settingsSnapshot.archiveFormat = "zip"
+    stored[LOCAL_STORAGE_KEYS.downloadQueue] = [confirmed, unconfirmed]
+    await reconcileCompletedChapterHistory([unconfirmed], history)
+    expect(await history.getDownloadedChapters()).toMatchObject([
+      { downloadedAt: 200 },
+    ])
+    failHistory = true
+    await expect(queue.clearTerminalHistory()).rejects.toThrow(
+      "History storage unavailable"
+    )
+    expect((await queue.getQueue()).map((entry) => entry.id)).toEqual([
+      "confirmed",
+      "unconfirmed",
+    ])
+    failHistory = false
+    await queue.clearTerminalHistory()
+    expect(await new HistoryRepository().getDownloadedChapters()).toMatchObject(
+      [
+        {
+          downloadedAt: 100,
+          saveConfirmedAt: 100,
+          outputDestination: "fsa",
+          title: "Chapter 1",
+          format: "cbz",
+        },
+      ]
+    )
+  })
+
   it("preserves chapter memory when the first history write fails and terminal tasks are cleared", async () => {
     failHistory = true
     await completeTask()
@@ -379,6 +464,7 @@ describe("chapter history retention across task removal", () => {
       title: "Newly saved",
       url: "https://mangadex.org/chapter/chapter-1",
       downloadedAt: 400,
+      saveConfirmedAt: 400,
       format: "zip" as const,
       fileSize: 42,
       filePath: "saved.zip",

@@ -1,6 +1,7 @@
 import { t } from "@/src/runtime/i18n"
 import {
   getCompletedOutputDestination,
+  getCompletedSaveConfirmedAt,
   getOutputResultLabel,
 } from "@/src/runtime/output-result-presentation"
 import logger from "@/src/runtime/logger"
@@ -185,16 +186,17 @@ export class NotificationService {
       String(completedCount),
       String(totalCount),
     ])
-    const chromeTransferGuidance =
-      destination === "downloads-api"
-        ? `\n${t("output_sentToChromeDescription")}`
+    const saveConfirmedAt = getCompletedSaveConfirmedAt(task.chapters)
+    const saveGuidance =
+      saveConfirmedAt === undefined
+        ? `\n${t("output_saveUnconfirmedDescription")}`
         : ""
 
     await chrome.notifications.create(notificationId, {
       type: "basic",
       iconUrl: getIconUrl(),
-      title: getOutputResultLabel(destination),
-      message: `${task.seriesTitle}: ${chapterCount}${chromeTransferGuidance}`,
+      title: getOutputResultLabel(destination, saveConfirmedAt),
+      message: `${task.seriesTitle}: ${chapterCount}${saveGuidance}`,
       contextMessage: getDisplayName(task.siteIntegrationId),
       priority: 1,
       requireInteraction: false,

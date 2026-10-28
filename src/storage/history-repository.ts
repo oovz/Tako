@@ -25,6 +25,39 @@ export const HISTORY_STORAGE_KEYS = {
   clearCutoffs: LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
 } as const
 
+function canAcceptRecord(
+  aggregate: HistoryAggregate,
+  record: DownloadedChapterRecord,
+  sourceLastUpdated: number
+): boolean {
+  const seriesKey = `${record.siteIntegrationId}#${record.seriesId}`
+  const chapterKey = composeDownloadedChapterKey(
+    record.siteIntegrationId,
+    record.seriesId,
+    record.chapterId
+  )
+  const clearedAt = Math.max(
+    aggregate.clearCutoffs.allBefore ?? 0,
+    aggregate.clearCutoffs.bySeries[seriesKey] ?? 0,
+    aggregate.clearCutoffs.byChapter[chapterKey] ?? 0
+  )
+  if (sourceLastUpdated <= clearedAt) return false
+  const existing = aggregate.downloadedChapters.find(
+    (candidate) =>
+      composeDownloadedChapterKey(
+        candidate.siteIntegrationId,
+        candidate.seriesId,
+        candidate.chapterId
+      ) === chapterKey
+  )
+  if (!existing) return true
+  if (record.saveConfirmedAt === undefined) return false
+  return (
+    existing.saveConfirmedAt === undefined ||
+    record.downloadedAt > existing.downloadedAt
+  )
+}
+
 export class HistoryRepository {
   private cache: HistoryAggregate | null = null
   private cacheGeneration = 0
@@ -71,9 +104,12 @@ export class HistoryRepository {
   async markChapterAsDownloaded(
     record: DownloadedChapterRecord
   ): Promise<void> {
-    await this.mutations.run(async () =>
-      this.persist(addOrReplaceRecord(await this.loadAggregate(), record))
-    )
+    await this.mutations.run(async () => {
+      const aggregate = await this.loadAggregate()
+      if (canAcceptRecord(aggregate, record, record.downloadedAt)) {
+        await this.persist(addOrReplaceRecord(aggregate, record))
+      }
+    })
   }
   async restoreChapterFromCompletedTask(
     record: DownloadedChapterRecord,
@@ -81,29 +117,7 @@ export class HistoryRepository {
   ): Promise<boolean> {
     return this.mutations.run(async () => {
       const aggregate = await this.loadAggregate()
-      const seriesKey = `${record.siteIntegrationId}#${record.seriesId}`
-      const chapterKey = composeDownloadedChapterKey(
-        record.siteIntegrationId,
-        record.seriesId,
-        record.chapterId
-      )
-      if (
-        aggregate.downloadedChapters.some(
-          (existing) =>
-            composeDownloadedChapterKey(
-              existing.siteIntegrationId,
-              existing.seriesId,
-              existing.chapterId
-            ) === chapterKey
-        )
-      )
-        return false
-      const clearedAt = Math.max(
-        aggregate.clearCutoffs.allBefore ?? 0,
-        aggregate.clearCutoffs.bySeries[seriesKey] ?? 0,
-        aggregate.clearCutoffs.byChapter[chapterKey] ?? 0
-      )
-      if (sourceLastUpdated <= clearedAt) return false
+      if (!canAcceptRecord(aggregate, record, sourceLastUpdated)) return false
       await this.persist(addOrReplaceRecord(aggregate, record))
       return true
     })

@@ -141,7 +141,10 @@ export class QueueRepository {
         return { result: decision.result, queue: null }
       }
 
-      const retainedCompletions = new Map<string, number>()
+      const retainedCompletions = new Map<
+        string,
+        { latest: number; confirmed?: number }
+      >()
       for (const task of [
         ...decision.next.queue,
         ...decision.next.pendingUndoActions.map(
@@ -155,10 +158,14 @@ export class QueueRepository {
             task.mangaId,
             chapter.id
           )
-          retainedCompletions.set(
-            key,
-            Math.max(retainedCompletions.get(key) ?? 0, chapter.lastUpdated)
-          )
+          const retained = retainedCompletions.get(key)
+          retainedCompletions.set(key, {
+            latest: Math.max(retained?.latest ?? 0, chapter.lastUpdated),
+            confirmed:
+              chapter.saveConfirmedAt === undefined
+                ? retained?.confirmed
+                : Math.max(retained?.confirmed ?? 0, chapter.lastUpdated),
+          })
         }
       }
       const lostHistorySources = [
@@ -174,7 +181,11 @@ export class QueueRepository {
               task.mangaId,
               chapter.id
             )
-            const retainedAt = retainedCompletions.get(key)
+            const retained = retainedCompletions.get(key)
+            const retainedAt =
+              chapter.saveConfirmedAt === undefined
+                ? retained?.latest
+                : retained?.confirmed
             return retainedAt === undefined || retainedAt < chapter.lastUpdated
           }),
         }))

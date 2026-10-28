@@ -12,12 +12,25 @@ export function getCompletedOutputDestination(
     : undefined
 }
 
+export function getCompletedSaveConfirmedAt(
+  chapters: readonly Pick<TaskChapter, "status" | "saveConfirmedAt">[]
+): number | undefined {
+  const completed = chapters.filter((chapter) => chapter.status === "completed")
+  if (
+    completed.length === 0 ||
+    completed.some((chapter) => chapter.saveConfirmedAt === undefined)
+  )
+    return undefined
+  return Math.max(...completed.map((chapter) => chapter.saveConfirmedAt!))
+}
+
 export function getOutputResultLabel(
-  destination?: TaskChapter["outputDestination"]
+  destination?: TaskChapter["outputDestination"],
+  saveConfirmedAt?: number
 ): string {
-  if (destination === "downloads-api") return t("status_sentToChrome")
+  if (saveConfirmedAt === undefined) return t("status_processed")
   if (destination === "fsa") return t("status_savedToFolder")
-  return t("status_completed")
+  return t("status_saved")
 }
 
 export function hasUncertainNativeOutput(

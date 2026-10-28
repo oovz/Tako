@@ -220,12 +220,16 @@ function convertToSidePanelChapter(chapter: ChapterState): SidePanelChapter {
 
 export function applyDownloadedChapterMarkers(
   items: VolumeOrChapter[],
-  downloadedChapters: ReadonlyMap<string, SidePanelChapter["outputDestination"]>
+  downloadedChapters: ReadonlyMap<
+    string,
+    Pick<SidePanelChapter, "outputDestination" | "saveConfirmedAt">
+  >
 ): VolumeOrChapter[] {
   const markChapter = (chapter: SidePanelChapter): SidePanelChapter => ({
     ...chapter,
     downloaded: downloadedChapters.has(chapter.id),
-    outputDestination: downloadedChapters.get(chapter.id),
+    outputDestination: downloadedChapters.get(chapter.id)?.outputDestination,
+    saveConfirmedAt: downloadedChapters.get(chapter.id)?.saveConfirmedAt,
   })
 
   return items.map((item) => {

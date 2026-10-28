@@ -219,3 +219,190 @@ describe("retained profile migration and hydration", () => {
     )
   })
 })
+
+function evidenceProfile(
+  destination: "fsa" | "downloads-api",
+  complete: boolean,
+  historyTime = 9,
+  includeDestination = true
+): Record<string, unknown> {
+  const initial = profile(false)
+  const task = initial.downloadQueue[0]!
+  delete (task as Partial<typeof task>).activeBlock
+  delete (task as Partial<typeof task>).errorMessage
+  delete (task as Partial<typeof task>).errorCategory
+  task.status = "completed"
+  const chapter = task.chapters[0]!
+  chapter.status = "completed"
+  chapter.outputs = { requested: 1, committed: 1, failed: 0 }
+  const settlement = {
+    jobId: identity.jobId,
+    attempt: identity.attempt,
+    taskId: identity.taskId,
+    chapterId: identity.chapterId,
+    requested: 1,
+    completed: 1,
+    interrupted: 0,
+    appliedAt: 9,
+  }
+  const current = {
+    ...task,
+    chapters: [
+      {
+        ...chapter,
+        ...(includeDestination ? { outputDestination: destination } : {}),
+        nativeOutputSettlement: { ...settlement, completed: 1, interrupted: 0 },
+      },
+    ],
+  }
+  const output = initial["pendingOutputs:output:output"]
+  const retained: Record<string, unknown> = { ...output }
+  delete retained.erasedAt
+  delete retained.surrenderedAt
+  const record = {
+    siteIntegrationId: "mangadex",
+    seriesId: "series",
+    seriesTitle: "Series",
+    chapterId: "chapter",
+    title: "Chapter",
+    url: chapter.url,
+    downloadedAt: historyTime,
+    ...(includeDestination ? { outputDestination: destination } : {}),
+    format: "cbz" as const,
+  }
+  return {
+    ...initial,
+    stateSchemaEpoch: 4,
+    downloadQueue: [current],
+    pendingUndoActions: [],
+    downloadedChapters: [record],
+    seriesDownloadHistory: {
+      "mangadex#series": {
+        siteIntegrationId: "mangadex",
+        seriesId: "series",
+        seriesTitle: "Series",
+        lastUpdated: historyTime,
+        downloadedChapters: [record],
+      },
+    },
+    "pendingOutputs:output:output": {
+      ...retained,
+      phase: complete ? "complete" : "waiting",
+      ...(complete ? { terminalAt: 8 } : {}),
+    },
+  }
+}
+
+describe("retained save evidence", () => {
+  it.each([
+    ["fsa", false, 9, 9],
+    ["downloads-api", false, 9, undefined],
+    ["downloads-api", true, 9, 8],
+    ["downloads-api", true, 10, undefined],
+  ] as const)(
+    "preserves evidence for %s native complete=%s history time=%s",
+    async (destination, complete, historyTime, expected) => {
+      const stored = installStorage(
+        evidenceProfile(destination, complete, historyTime)
+      )
+      await migrateDurableStateForCurrentSchema()
+      const history = new HistoryRepository()
+      expect((await history.getDownloadedChapters())[0]?.saveConfirmedAt).toBe(
+        expected
+      )
+      const queue = new QueueRepository(new QueueProjectionService(), history)
+      await queue.initialize()
+      expect((await queue.getTask("task"))?.chapters[0]?.saveConfirmedAt).toBe(
+        destination === "fsa" ? 9 : complete ? 8 : undefined
+      )
+      expect((await history.getAggregate()).clearCutoffs.allBefore).toBe(5)
+      expect(stored.stateSchemaEpoch).toBe(5)
+    }
+  )
+
+  it.each([false, true])(
+    "uses exact native completion independently of an older missing destination marker, complete=%s",
+    async (complete) => {
+      installStorage(evidenceProfile("downloads-api", complete, 9, false))
+      await migrateDurableStateForCurrentSchema()
+      const history = new HistoryRepository()
+      const queue = new QueueRepository(new QueueProjectionService(), history)
+      await queue.initialize()
+      const chapter = (await queue.getTask("task"))?.chapters[0]
+      const record = (await history.getDownloadedChapters())[0]
+      expect(chapter?.saveConfirmedAt).toBe(complete ? 8 : undefined)
+      expect(record?.saveConfirmedAt).toBe(complete ? 8 : undefined)
+      expect(chapter?.outputDestination).toBe(
+        complete ? "downloads-api" : undefined
+      )
+      expect(record?.outputDestination).toBe(
+        complete ? "downloads-api" : undefined
+      )
+    }
+  )
+
+  it("keeps history unconfirmed when its indexed native records have been pruned", async () => {
+    const initial = evidenceProfile("downloads-api", true)
+    delete initial["pendingOutputs:output:output"]
+    const stored = installStorage(initial)
+    await migrateDurableStateForCurrentSchema()
+    expect(
+      (await new HistoryRepository().getDownloadedChapters())[0]
+        ?.saveConfirmedAt
+    ).toBeUndefined()
+    expect(stored.stateSchemaEpoch).toBe(5)
+  })
+
+  it.each(["downloadQueue", "pendingUndoActions"])(
+    "preserves invalid explicit null %s",
+    async (key) => {
+      const initial = evidenceProfile("downloads-api", false)
+      initial[key] = null
+      const stored = installStorage(initial)
+      await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow()
+      expect(stored).toEqual(initial)
+    }
+  )
+
+  it.each(["documents", "marker", "journal-removal"])(
+    "replays confirmation after interrupted %s",
+    async (failure) => {
+      const stored = installStorage(evidenceProfile("downloads-api", true))
+      let fail = true
+      vi.mocked(chrome.storage.local.set).mockImplementation(async (values) => {
+        if (
+          fail &&
+          ((failure === "documents" && "downloadQueue" in values) ||
+            (failure === "marker" && "stateSchemaEpoch" in values))
+        ) {
+          fail = false
+          throw new Error("Storage unavailable")
+        }
+        Object.assign(stored, structuredClone(values))
+      })
+      vi.mocked(chrome.storage.local.remove).mockImplementation(
+        async (keys) => {
+          if (
+            fail &&
+            failure === "journal-removal" &&
+            String(keys) === "stateSchemaMigrationJournal"
+          ) {
+            fail = false
+            throw new Error("Storage unavailable")
+          }
+          for (const key of [keys].flat()) delete stored[key]
+        }
+      )
+      await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow(
+        "Storage unavailable"
+      )
+      await migrateDurableStateForCurrentSchema()
+      expect(
+        (await new HistoryRepository().getDownloadedChapters())[0]
+          ?.saveConfirmedAt
+      ).toBe(8)
+      expect(stored.stateSchemaEpoch).toBe(5)
+      expect(stored).not.toHaveProperty("stateSchemaMigrationJournal")
+    }
+  )
+})

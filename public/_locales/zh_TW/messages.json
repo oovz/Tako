@@ -1839,31 +1839,17 @@
   "common_retry": {
     "message": "重試"
   },
-  "status_sentToChrome": {
-    "message": "已傳送至 Chrome"
-  },
   "status_savedToFolder": {
     "message": "已儲存至資料夾"
   },
   "status_processed": {
-    "message": "已處理"
+    "message": "先前已處理"
   },
   "progressStage_sendingToChrome": {
     "message": "正在傳送至 Chrome"
   },
   "progressStage_savingToFolder": {
     "message": "正在儲存至資料夾"
-  },
-  "output_sentToChromeDescription": {
-    "message": "後續傳輸由 Chrome 管理。請在 Chrome 下載項目中查看進度和結果。"
-  },
-  "options_taskSentToChrome": {
-    "message": "已傳送至 Chrome（$TOTAL$ 章）",
-    "placeholders": {
-      "total": {
-        "content": "$1"
-      }
-    }
   },
   "options_taskSavedToFolder": {
     "message": "已儲存至資料夾（$TOTAL$ 章）",
@@ -1881,5 +1867,27 @@
   },
   "sidepanel_restartUncertainHandoff": {
     "message": "重試所有章節（可能產生重複檔案）"
+  },
+  "status_saved": {
+    "message": "已儲存"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "這是先前的處理記錄，檔案儲存是否完成尚未確認。"
+  },
+  "options_taskSaved": {
+    "message": "已儲存（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "先前已處理（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
   }
 }

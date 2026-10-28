@@ -117,7 +117,7 @@ describe("notification behavior", () => {
       expect.objectContaining({
         type: "basic",
         iconUrl: "chrome-extension://test/icon/128.png",
-        title: "Completed",
+        title: "Previously processed",
       })
     )
   })

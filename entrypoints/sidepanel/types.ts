@@ -19,6 +19,7 @@ export interface SidePanelChapter {
   locked?: boolean
   downloaded?: boolean
   outputDestination?: DownloadedChapterRecord["outputDestination"]
+  saveConfirmedAt?: DownloadedChapterRecord["saveConfirmedAt"]
   selected: boolean
   url: string
   status: ChapterState["status"]

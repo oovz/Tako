@@ -16,6 +16,7 @@ import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import {
   getCompletedOutputDestination,
+  getCompletedSaveConfirmedAt,
   hasUncertainNativeOutput,
 } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
@@ -49,7 +50,8 @@ export interface DownloadTaskCardProps {
 function StatusBadge({ task }: { task: DownloadTaskState }) {
   const variant = getTaskStatusBadge(
     task.status,
-    getCompletedOutputDestination(task.chapters)
+    getCompletedOutputDestination(task.chapters),
+    getCompletedSaveConfirmedAt(task.chapters)
   )
 
   return <Badge className={variant.className}>{variant.label}</Badge>
@@ -198,10 +200,10 @@ export function DownloadTaskCard({
         {task.chapters.some(
           (chapter) =>
             chapter.status === "completed" &&
-            chapter.outputDestination === "downloads-api"
+            chapter.saveConfirmedAt === undefined
         ) && (
           <p className="text-sm text-muted-foreground">
-            {t("output_sentToChromeDescription")}
+            {t("output_saveUnconfirmedDescription")}
           </p>
         )}
         <div className="flex flex-col gap-2">
@@ -267,7 +269,8 @@ export function DownloadTaskCard({
                         >
                           {formatChapterStatusLabel(
                             chapter.status,
-                            chapter.outputDestination
+                            chapter.outputDestination,
+                            chapter.saveConfirmedAt
                           )}
                         </Badge>
                       </div>

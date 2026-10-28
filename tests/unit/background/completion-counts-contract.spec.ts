@@ -91,7 +91,7 @@ describe("completion notification chapter counts", () => {
     expect(notificationsCreate).toHaveBeenCalledWith(
       `task_complete_${task.id}`,
       expect.objectContaining({
-        message: `${task.seriesTitle}: 2/2 chapters`,
+        message: `${task.seriesTitle}: 2/2 chapters\nThis record shows earlier processing. Final saving was not confirmed.`,
       })
     )
   })

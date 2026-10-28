@@ -258,6 +258,12 @@ describe("migrateDurableStateForCurrentSchema", () => {
       "journal",
       "marker",
       "remove",
+      "journal",
+      "documents",
+      "journal",
+      "journal",
+      "marker",
+      "remove",
     ])
     expect(chrome.storage.local.clear).not.toHaveBeenCalled()
     expect(deleteDatabase).not.toHaveBeenCalled()
@@ -897,7 +903,7 @@ describe("ordered stored-state migration steps", () => {
       pendingUndoActions: [],
     })
     await migrateDurableStateForCurrentSchema()
-    expect(local.stateSchemaEpoch).toBe(4)
+    expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
     expect(local.downloadQueue).toMatchObject([
       {
         errorCategory: "browser_handoff_interrupted",
@@ -931,7 +937,7 @@ describe("ordered stored-state migration steps", () => {
       storage.set.mock.calls
         .filter(([values]) => "stateSchemaEpoch" in values)
         .map(([values]) => values.stateSchemaEpoch)
-    ).toEqual([3, 4])
+    ).toEqual([3, 4, 5])
     expect(local.downloadQueue).toMatchObject([
       {
         activeBlock: undefined,
@@ -993,7 +999,7 @@ describe("ordered stored-state migration steps", () => {
     storage.set.mockImplementation(set)
     storage.remove.mockImplementation(remove)
     await migrateDurableStateForCurrentSchema()
-    expect(local.stateSchemaEpoch).toBe(4)
+    expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
     expect(local.stateSchemaMigrationJournal).toBeUndefined()
     expect(local.downloadQueue).toMatchObject([
       {

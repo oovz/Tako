@@ -72,12 +72,14 @@ describe("DownloadTaskCard error presentation", () => {
   })
 
   it.each([
-    ["downloads-api", "Sent to Chrome"],
-    ["fsa", "Saved to folder"],
-    [undefined, "Completed"],
+    ["downloads-api", undefined, "Previously processed"],
+    ["fsa", undefined, "Previously processed"],
+    ["downloads-api", 2, "Saved"],
+    ["fsa", 2, "Saved to folder"],
+    [undefined, undefined, "Previously processed"],
   ] as const)(
     "renders completed task and chapter results for %s",
-    (outputDestination, label) => {
+    (outputDestination, saveConfirmedAt, label) => {
       const task: DownloadTaskState = {
         id: "completed-task",
         siteIntegrationId: "mangadex",
@@ -94,6 +96,7 @@ describe("DownloadTaskCard error presentation", () => {
             index: 1,
             status: "completed",
             outputDestination,
+            saveConfirmedAt,
             lastUpdated: 2,
           },
         ],
@@ -113,9 +116,9 @@ describe("DownloadTaskCard error presentation", () => {
         })
       )
       expect(html.match(new RegExp(`>${label}<`, "g"))).toHaveLength(2)
-      expect(
-        html.includes("Check Chrome Downloads for progress and results.")
-      ).toBe(outputDestination === "downloads-api")
+      expect(html.includes("Final saving was not confirmed.")).toBe(
+        saveConfirmedAt === undefined
+      )
     }
   )
 

@@ -1607,6 +1607,11 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
           outputs: { requested: 2, committed: 1, failed: 1 },
           dispatchAttempt: 3,
         }),
+        createChapter("saved-chapter", "completed", {
+          outputDestination: "fsa",
+          saveConfirmedAt: 200,
+          outputs: { requested: 1, committed: 1, failed: 0 },
+        }),
       ],
     })
     const state = createState([original])
@@ -1635,6 +1640,12 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
           totalImages: undefined,
           imagesFailed: undefined,
           dispatchAttempt: undefined,
+          outputs: { requested: 0, committed: 0, failed: 0 },
+        }),
+        expect.objectContaining({
+          status: "queued",
+          outputDestination: undefined,
+          saveConfirmedAt: undefined,
           outputs: { requested: 0, committed: 0, failed: 0 },
         }),
       ],

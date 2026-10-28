@@ -22,6 +22,7 @@ function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
     status: overrides.status ?? "queued",
     lastUpdated: overrides.lastUpdated ?? Date.now(),
     outputDestination: overrides.outputDestination,
+    saveConfirmedAt: overrides.saveConfirmedAt,
     errorMessage: overrides.errorMessage,
     imagesFailed: overrides.imagesFailed,
     totalImages: overrides.totalImages,
@@ -46,10 +47,10 @@ describe("DownloadsTab status summary behavior", () => {
         makeChapter({ id: "ch-2", status: "completed" }),
       ])
     )
-    expect(label).toBe("Completed (2 chapters)")
+    expect(label).toBe("Previously processed (2 chapters)")
   })
 
-  it("describes completed output using destination evidence", () => {
+  it("describes completed output using save evidence", () => {
     expect(
       getTaskStatusSummaryLabel(
         makeTask("completed", [
@@ -59,11 +60,15 @@ describe("DownloadsTab status summary behavior", () => {
           }),
         ])
       )
-    ).toBe("Sent to Chrome (1 chapter)")
+    ).toBe("Previously processed (1 chapter)")
     expect(
       getTaskStatusSummaryLabel(
         makeTask("completed", [
-          makeChapter({ status: "completed", outputDestination: "fsa" }),
+          makeChapter({
+            status: "completed",
+            outputDestination: "fsa",
+            saveConfirmedAt: 42,
+          }),
         ])
       )
     ).toBe("Saved to folder (1 chapter)")
@@ -81,7 +86,7 @@ describe("DownloadsTab status summary behavior", () => {
           }),
         ])
       )
-    ).toBe("Completed (2 chapters)")
+    ).toBe("Previously processed (2 chapters)")
   })
 
   it("renders single-chapter completed summary for one chapter", () => {
@@ -89,7 +94,7 @@ describe("DownloadsTab status summary behavior", () => {
       makeTask("completed", [makeChapter({ status: "completed" })])
     )
 
-    expect(label).toBe("Completed (1 chapter)")
+    expect(label).toBe("Previously processed (1 chapter)")
   })
 
   it("uses completed chapter count in failed/partial summaries", () => {

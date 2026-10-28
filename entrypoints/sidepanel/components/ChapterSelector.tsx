@@ -210,17 +210,17 @@ export function ChapterSelector({
               <span
                 data-downloaded-marker
                 className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
-                title={
-                  row.chapter.outputDestination
-                    ? getOutputResultLabel(row.chapter.outputDestination)
-                    : t("status_processed")
-                }
+                title={getOutputResultLabel(
+                  row.chapter.outputDestination,
+                  row.chapter.saveConfirmedAt
+                )}
               >
                 <CheckCircle2 className="size-4" aria-hidden="true" />
                 <span className="sr-only">
-                  {row.chapter.outputDestination
-                    ? getOutputResultLabel(row.chapter.outputDestination)
-                    : t("status_processed")}
+                  {getOutputResultLabel(
+                    row.chapter.outputDestination,
+                    row.chapter.saveConfirmedAt
+                  )}
                 </span>
               </span>
             )}

@@ -58,7 +58,8 @@ export function getRetryAvailability(
 export function getTaskStatusLabel(
   status: QueueTaskSummary["status"],
   activeBlock?: QueueTaskSummary["activeBlock"],
-  outputDestination?: QueueTaskSummary["outputDestination"]
+  outputDestination?: QueueTaskSummary["outputDestination"],
+  saveConfirmedAt?: number
 ): string {
   if (activeBlock === "destination_action_required") {
     return t("status_destinationActionRequired")
@@ -76,7 +77,7 @@ export function getTaskStatusLabel(
     case "queued":
       return t("status_queued")
     case "completed":
-      return getOutputResultLabel(outputDestination)
+      return getOutputResultLabel(outputDestination, saveConfirmedAt)
     case "partial_success":
       return t("status_partialSuccess")
     case "failed":

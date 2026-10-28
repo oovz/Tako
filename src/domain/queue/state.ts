@@ -111,6 +111,7 @@ export interface TaskChapter {
   imagesFailed?: number
   outputs?: OutputAccounting
   outputDestination?: "downloads-api" | "fsa"
+  saveConfirmedAt?: number
   nativeOutputSettlement?: NativeOutputSettlement
   dispatchAttempt?: number
   lastUpdated: number
@@ -181,6 +182,7 @@ export interface QueueTaskSummary {
   coverUrl?: string
   status: DownloadTaskStatus
   outputDestination?: "downloads-api" | "fsa"
+  saveConfirmedAt?: number
   outputMode?: "downloads-api" | "fsa"
   activeBlock?: ActiveTaskBlock
   chapters: {

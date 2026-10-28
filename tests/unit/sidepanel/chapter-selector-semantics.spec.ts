@@ -72,12 +72,14 @@ describe("ChapterSelector semantics", () => {
   })
 
   it.each([
-    ["downloads-api", "status_sentToChrome"],
-    ["fsa", "status_savedToFolder"],
-    [undefined, "status_processed"],
+    ["downloads-api", undefined, "status_processed"],
+    ["fsa", undefined, "status_processed"],
+    ["downloads-api", 42, "status_saved"],
+    ["fsa", 42, "status_savedToFolder"],
+    [undefined, undefined, "status_processed"],
   ] as const)(
     "renders an accessible history result for %s",
-    (outputDestination, label) => {
+    (outputDestination, saveConfirmedAt, label) => {
       const markup = renderToStaticMarkup(
         createElement(ChapterSelector, {
           items: [
@@ -89,6 +91,7 @@ describe("ChapterSelector semantics", () => {
               selected: false,
               downloaded: true,
               outputDestination,
+              saveConfirmedAt,
               status: "queued",
               isStandalone: true,
             },

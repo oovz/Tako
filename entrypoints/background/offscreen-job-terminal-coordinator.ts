@@ -231,6 +231,13 @@ export class OffscreenJobTerminalCoordinator {
         imagesFailed: payload.outcome.imagesFailed,
         outputs: { requested, committed, failed },
         outputDestination: "fsa",
+        saveConfirmedAt:
+          payload.outcome.status === "completed" &&
+          requested > 0 &&
+          committed === requested &&
+          failed === 0
+            ? payload.terminalAt
+            : undefined,
       },
     })
     if (settlement.outcome === "rejected") {

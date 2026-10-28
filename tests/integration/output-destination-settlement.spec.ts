@@ -325,12 +325,13 @@ describe("output destination settlement", () => {
       chapters: [
         {
           outputDestination: "fsa",
+          saveConfirmedAt: expect.any(Number),
           outputs: { requested: 2, committed: 2, failed: 0 },
         },
       ],
     })
     expect(await f.history.getDownloadedChapters()).toMatchObject([
-      { outputDestination: "fsa" },
+      { outputDestination: "fsa", saveConfirmedAt: expect.any(Number) },
     ])
     expect(f.download).not.toHaveBeenCalled()
   })
