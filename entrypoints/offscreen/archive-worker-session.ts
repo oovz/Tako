@@ -63,31 +63,13 @@ export class ArchiveWorkerSession {
         WorkerZipResult | WorkerZipProgress | ArchiveWorkerInputConsumed
       >
     ) => {
-      if (isInputConsumed(event.data)) {
-        this.releaseInput(event.data.inputId)
-        return
+      try {
+        this.handleMessage(event.data)
+      } catch (error) {
+        this.reject(error)
       }
-      if (isProgress(event.data)) {
-        if (this.state !== "finalizing") return
-        void Promise.resolve(this.onProgress?.(event.data))
-        return
-      }
-      const result = event.data
-      if (!result.success) {
-        this.reject(new Error(result.error || "Archive worker failed"))
-        return
-      }
-      if (this.state !== "finalizing") return
-      if (result.buffer && this.archiveAllowance) {
-        this.archiveAllowance.resize(result.buffer.byteLength)
-        result.liveResourceLease = this.archiveAllowance.transfer(
-          "main archive result buffer"
-        )
-        this.archiveAllowance = undefined
-      }
-      this.releaseInputs()
-      this.settle(() => this.resolveResult?.(result))
     }
+
     this.worker.onerror = (event) => {
       const error =
         event.error instanceof Error
@@ -99,6 +81,40 @@ export class ArchiveWorkerSession {
             )
       this.reject(error)
     }
+  }
+
+  private handleMessage(
+    message: WorkerZipResult | WorkerZipProgress | ArchiveWorkerInputConsumed
+  ): void {
+    if (isInputConsumed(message)) {
+      this.releaseInput(message.inputId)
+      return
+    }
+    if (isProgress(message)) {
+      if (this.state !== "finalizing") return
+      void Promise.resolve(this.onProgress?.(message)).catch((error) =>
+        this.reject(error)
+      )
+      return
+    }
+    if (!message.success) {
+      this.reject(new Error(message.error || "Archive worker failed"))
+      return
+    }
+    if (this.state !== "finalizing") return
+    this.complete(message)
+  }
+
+  private complete(result: WorkerZipResult): void {
+    if (result.buffer && this.archiveAllowance) {
+      this.archiveAllowance.resize(result.buffer.byteLength)
+      result.liveResourceLease = this.archiveAllowance.transfer(
+        "main archive result buffer"
+      )
+      this.archiveAllowance = undefined
+    }
+    this.releaseInputs()
+    this.settle(() => this.resolveResult?.(result))
   }
 
   getState(): ArchiveWorkerSessionState {
@@ -179,12 +195,18 @@ export class ArchiveWorkerSession {
 
   dispose(): void {
     if (this.state === "disposed") return
+    const wasPending = this.state !== "settled"
+    this.state = "disposed"
     this.clearTimeout()
     this.releaseOwnedResources()
-    this.state = "disposed"
     this.worker.onmessage = null
     this.worker.onerror = null
     this.worker.terminate()
+    if (wasPending) {
+      const error = new Error("Archive worker session disposed")
+      this.failureController.abort(error)
+      this.rejectResult?.(error)
+    }
   }
 
   private settle(complete: () => void): void {
