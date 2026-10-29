@@ -1,3 +1,5 @@
+import assert from "node:assert/strict"
+import { setImmediate } from "node:timers/promises"
 import { describe, expect, it } from "vitest"
 import {
   MAX_RENDERER_IMAGE_PIXELS,
@@ -53,6 +55,49 @@ describe("renderer pixel budget", () => {
     await expect(second).rejects.toBe(reason)
     releaseFirst?.()
     await expect(first).resolves.toBeUndefined()
+  })
+
+  it("admits fitting work when a larger queued request is cancelled", async () => {
+    let releaseFirst: (() => void) | undefined
+    const first = withRendererPixelBudget(
+      MAX_RENDERER_IMAGE_PIXELS / 2,
+      undefined,
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve
+        })
+    )
+    await setImmediate()
+
+    const controller = new AbortController()
+    const blocked = withRendererPixelBudget(
+      MAX_RENDERER_IMAGE_PIXELS,
+      controller.signal,
+      () => assert.fail("Cancelled work must not start")
+    )
+    const reason = new Error("job-cancelled")
+    const cancelled = assert.rejects(blocked, (error) => error === reason)
+    let fittingWorkStarted = false
+    const fitting = withRendererPixelBudget(
+      MAX_RENDERER_IMAGE_PIXELS / 2,
+      undefined,
+      () => {
+        fittingWorkStarted = true
+      }
+    )
+
+    try {
+      await setImmediate()
+      assert.equal(fittingWorkStarted, false)
+      controller.abort(reason)
+      await cancelled
+      await setImmediate()
+      assert.equal(fittingWorkStarted, true)
+    } finally {
+      controller.abort(reason)
+      releaseFirst?.()
+      await Promise.all([first, fitting, cancelled])
+    }
   })
 
   it("rejects an image whose two decoded surfaces exceed the envelope", async () => {
