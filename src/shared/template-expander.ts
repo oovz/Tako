@@ -2,32 +2,15 @@
 
 import {
   generateSampleMacroData,
-  getSupportedMacroNames,
+  validateTemplateMacros,
 } from "./template-macros"
 import { sanitizeFilename } from "./filename-sanitizer"
+import {
+  buildTemplateValues,
+  type TemplateValuesContext,
+} from "./template-values"
 
-/** Preview values with optional chapter data and explicit date components. */
-export interface TemplateContext {
-  // Site information
-  integrationName?: string
-  publisher?: string
-
-  // Series information
-  seriesTitle?: string
-
-  // Chapter information
-  chapterTitle?: string
-  chapterNumber?: number
-
-  // Volume information
-  volumeTitle?: string
-  volumeNumber?: number
-
-  // Time values (always available)
-  currentYear: number
-  currentMonth: number
-  currentDay: number
-}
+export type TemplateContext = TemplateValuesContext
 
 export interface ExpansionResult {
   success: boolean
@@ -46,198 +29,51 @@ export function expandTemplate(
   const errors: string[] = []
   const warnings: string[] = []
 
-  let expanded = template
-
-  // Track which macros were unavailable
-  const unavailableMacros: string[] = []
-
-  // Site macros
-  if (template.includes("<INTEGRATION_NAME>")) {
-    if (context.integrationName) {
-      expanded = expanded.replace(
-        /<INTEGRATION_NAME>/g,
-        sanitizePathComponent(context.integrationName)
-      )
-    } else {
-      unavailableMacros.push("<INTEGRATION_NAME>")
+  const values = new Map(Object.entries(buildTemplateValues(context)))
+  const unavailableMacros = new Set<string>()
+  const expanded = template.replace(/<([^>]+)>/g, (macro, name: string) => {
+    if (!values.has(name)) return macro
+    const value = values.get(name)
+    if (!value) {
+      unavailableMacros.add(macro)
+      return ""
     }
-  }
+    return sanitizePathComponent(value)
+  })
 
-  if (template.includes("<PUBLISHER>")) {
-    if (context.publisher) {
-      expanded = expanded.replace(
-        /<PUBLISHER>/g,
-        sanitizePathComponent(context.publisher)
-      )
-    } else {
-      unavailableMacros.push("<PUBLISHER>")
-      expanded = expanded.replace(/<PUBLISHER>/g, "")
-    }
-  }
-
-  // Series macros
-  if (template.includes("<SERIES_TITLE>")) {
-    if (context.seriesTitle) {
-      expanded = expanded.replace(
-        /<SERIES_TITLE>/g,
-        sanitizePathComponent(context.seriesTitle)
-      )
-    } else {
-      unavailableMacros.push("<SERIES_TITLE>")
-      expanded = expanded.replace(/<SERIES_TITLE>/g, "")
-    }
-  }
-
-  // Chapter macros
-  if (template.includes("<CHAPTER_TITLE>")) {
-    if (context.chapterTitle) {
-      expanded = expanded.replace(
-        /<CHAPTER_TITLE>/g,
-        sanitizePathComponent(context.chapterTitle)
-      )
-    } else {
-      unavailableMacros.push("<CHAPTER_TITLE>")
-      expanded = expanded.replace(/<CHAPTER_TITLE>/g, "")
-    }
-  }
-
-  if (template.includes("<CHAPTER_NUMBER>")) {
-    if (context.chapterNumber !== undefined) {
-      expanded = expanded.replace(
-        /<CHAPTER_NUMBER>/g,
-        String(context.chapterNumber)
-      )
-    } else {
-      unavailableMacros.push("<CHAPTER_NUMBER>")
-      expanded = expanded.replace(/<CHAPTER_NUMBER>/g, "")
-    }
-  }
-
-  if (template.includes("<CHAPTER_NUMBER_PAD2>")) {
-    if (context.chapterNumber !== undefined) {
-      expanded = expanded.replace(
-        /<CHAPTER_NUMBER_PAD2>/g,
-        String(context.chapterNumber).padStart(2, "0")
-      )
-    } else {
-      unavailableMacros.push("<CHAPTER_NUMBER_PAD2>")
-      expanded = expanded.replace(/<CHAPTER_NUMBER_PAD2>/g, "")
-    }
-  }
-
-  if (template.includes("<CHAPTER_NUMBER_PAD3>")) {
-    if (context.chapterNumber !== undefined) {
-      expanded = expanded.replace(
-        /<CHAPTER_NUMBER_PAD3>/g,
-        String(context.chapterNumber).padStart(3, "0")
-      )
-    } else {
-      unavailableMacros.push("<CHAPTER_NUMBER_PAD3>")
-      expanded = expanded.replace(/<CHAPTER_NUMBER_PAD3>/g, "")
-    }
-  }
-
-  // Volume macros
-  if (template.includes("<VOLUME_TITLE>")) {
-    if (context.volumeTitle) {
-      expanded = expanded.replace(
-        /<VOLUME_TITLE>/g,
-        sanitizePathComponent(context.volumeTitle)
-      )
-    } else {
-      unavailableMacros.push("<VOLUME_TITLE>")
-      expanded = expanded.replace(/<VOLUME_TITLE>/g, "")
-    }
-  }
-
-  if (template.includes("<VOLUME_NUMBER>")) {
-    if (context.volumeNumber !== undefined) {
-      expanded = expanded.replace(
-        /<VOLUME_NUMBER>/g,
-        String(context.volumeNumber)
-      )
-    } else {
-      unavailableMacros.push("<VOLUME_NUMBER>")
-      expanded = expanded.replace(/<VOLUME_NUMBER>/g, "")
-    }
-  }
-
-  if (template.includes("<VOLUME_NUMBER_PAD2>")) {
-    if (context.volumeNumber !== undefined) {
-      expanded = expanded.replace(
-        /<VOLUME_NUMBER_PAD2>/g,
-        String(context.volumeNumber).padStart(2, "0")
-      )
-    } else {
-      unavailableMacros.push("<VOLUME_NUMBER_PAD2>")
-      expanded = expanded.replace(/<VOLUME_NUMBER_PAD2>/g, "")
-    }
-  }
-
-  // Date macros (always available)
-  expanded = expanded.replace(/<YYYY>/g, String(context.currentYear))
-  expanded = expanded.replace(
-    /<MM>/g,
-    String(context.currentMonth).padStart(2, "0")
-  )
-  expanded = expanded.replace(
-    /<DD>/g,
-    String(context.currentDay).padStart(2, "0")
-  )
-
-  // Check for unavailable macros that would result in invalid paths
-  if (unavailableMacros.length > 0) {
-    // Critical macros that cannot be missing
-    const criticalMacros = ["<SERIES_TITLE>", "<CHAPTER_TITLE>"]
-    const missingCritical = unavailableMacros.filter((m) =>
-      criticalMacros.includes(m)
+  appendUnavailableMacroDiagnostics(unavailableMacros, errors, warnings)
+  const { invalidMacros } = validateTemplateMacros(template)
+  if (invalidMacros.length > 0) {
+    errors.push(
+      `Unknown macros in template: ${invalidMacros.map((name) => `<${name}>`).join(", ")}`
     )
-
-    if (missingCritical.length > 0) {
-      errors.push(`Required macros unavailable: ${missingCritical.join(", ")}`)
-    } else {
-      warnings.push(
-        `Optional macros unavailable: ${unavailableMacros.join(", ")}`
-      )
-    }
   }
-
-  // Check for remaining unexpanded macros (typos or unknown macros)
-  const remainingMacros = expanded.match(/<[A-Z_]+>/g)
-  if (remainingMacros) {
-    errors.push(`Unknown macros in template: ${remainingMacros.join(", ")}`)
-  }
-
-  // Validate result
-  if (errors.length > 0) {
-    return {
-      success: false,
-      expanded: template, // Return original on error
-      errors,
-      warnings,
-    }
-  }
-
-  // Check for empty path components (invalid)
-  const pathParts = expanded.split("/")
-  const emptyParts = pathParts.filter(
-    (part, idx) => part === "" && idx !== 0 && idx !== pathParts.length - 1
-  )
-  if (emptyParts.length > 0) {
+  if (errors.length === 0 && expanded.includes("//")) {
     errors.push("Template results in empty path components")
-    return {
-      success: false,
-      expanded: template,
-      errors,
-      warnings,
-    }
   }
 
   return {
-    success: true,
-    expanded,
+    success: errors.length === 0,
+    expanded: errors.length === 0 ? expanded : template,
     errors,
     warnings,
+  }
+}
+
+function appendUnavailableMacroDiagnostics(
+  unavailableMacros: ReadonlySet<string>,
+  errors: string[],
+  warnings: string[]
+): void {
+  const missingCritical = ["<SERIES_TITLE>", "<CHAPTER_TITLE>"].filter(
+    (macro) => unavailableMacros.has(macro)
+  )
+  if (missingCritical.length > 0) {
+    errors.push(`Required macros unavailable: ${missingCritical.join(", ")}`)
+  } else if (unavailableMacros.size > 0) {
+    warnings.push(
+      `Optional macros unavailable: ${[...unavailableMacros].join(", ")}`
+    )
   }
 }
 
@@ -315,15 +151,8 @@ export function validateTemplate(template: string): {
     errors.push("Template contains consecutive slashes")
   }
 
-  // Check for known macro typos (case-sensitive)
-  const macroPattern = /<([A-Z_0-9]+)>/g
-  const macros = Array.from(template.matchAll(macroPattern), (m) => m[1])
-  const validMacros = getSupportedMacroNames()
-
-  for (const macro of macros) {
-    if (!validMacros.includes(macro)) {
-      errors.push(`Unknown macro: <${macro}>`)
-    }
+  for (const macro of validateTemplateMacros(template).invalidMacros) {
+    errors.push(`Unknown macro: <${macro}>`)
   }
 
   return {

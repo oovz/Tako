@@ -14,7 +14,7 @@ export interface TemplateMacro {
 /**
  * Definitive list of all supported template macros
  */
-export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
+export const TEMPLATE_MACROS = [
   // Date macros - can be resolved anywhere
   {
     name: "YYYY",
@@ -113,7 +113,7 @@ export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
     requiresMangaMetadata: true,
     category: "manga",
   },
-] as const
+] as const satisfies readonly TemplateMacro[]
 
 export type TemplateMacroName = (typeof TEMPLATE_MACROS)[number]["name"]
 

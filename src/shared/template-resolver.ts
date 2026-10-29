@@ -3,6 +3,7 @@
 import { validateTemplateMacros } from "./template-macros"
 import { validateResolvedPath } from "./download-path-validator"
 import { sanitizeFilename } from "./filename-sanitizer"
+import { buildTemplateValues } from "./template-values"
 
 /** Values required to resolve one chapter's output path. */
 export interface TemplateContext {
@@ -31,28 +32,12 @@ export interface FilenameResolutionResult {
 
 // Date macros use the user's local timezone.
 function buildTokens(ctx: TemplateContext): Record<string, string | undefined> {
-  const pad2 = (n: number) => String(n).padStart(2, "0")
-  const pad3 = (n: number) => String(n).padStart(3, "0")
-  return {
-    YYYY: String(ctx.date.getFullYear()),
-    MM: pad2(ctx.date.getMonth() + 1),
-    DD: pad2(ctx.date.getDate()),
-    PUBLISHER: ctx.publisher,
-    INTEGRATION_NAME: ctx.integrationName,
-    SERIES_TITLE: ctx.seriesTitle,
-    CHAPTER_TITLE: ctx.chapterTitle,
-    VOLUME_TITLE: ctx.volumeTitle,
-    CHAPTER_NUMBER:
-      ctx.chapterNumber !== undefined ? String(ctx.chapterNumber) : undefined,
-    CHAPTER_NUMBER_PAD2:
-      ctx.chapterNumber !== undefined ? pad2(ctx.chapterNumber) : undefined,
-    CHAPTER_NUMBER_PAD3:
-      ctx.chapterNumber !== undefined ? pad3(ctx.chapterNumber) : undefined,
-    VOLUME_NUMBER:
-      ctx.volumeNumber !== undefined ? String(ctx.volumeNumber) : undefined,
-    VOLUME_NUMBER_PAD2:
-      ctx.volumeNumber !== undefined ? pad2(ctx.volumeNumber) : undefined,
-  }
+  return buildTemplateValues({
+    ...ctx,
+    currentYear: ctx.date.getFullYear(),
+    currentMonth: ctx.date.getMonth() + 1,
+    currentDay: ctx.date.getDate(),
+  })
 }
 
 // Expand (directory only). Each segment sanitized. Empty segments discarded.
