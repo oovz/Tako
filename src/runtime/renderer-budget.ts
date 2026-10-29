@@ -22,6 +22,10 @@ function removeWaiter(waiter: RendererBudgetWaiter): void {
   if (index >= 0) waiters.splice(index, 1)
 }
 
+function rendererAbortReason(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error ? signal.reason : new Error("aborted")
+}
+
 function drainRendererBudget(): void {
   while (waiters.length > 0) {
     const waiter = waiters[0]
@@ -59,9 +63,7 @@ export function withRendererPixelBudget<T>(
   }
 
   if (signal?.aborted) {
-    return Promise.reject(
-      signal.reason instanceof Error ? signal.reason : new Error("aborted")
-    )
+    return Promise.reject(rendererAbortReason(signal))
   }
 
   return new Promise<T>((resolve, reject) => {
@@ -76,9 +78,7 @@ export function withRendererPixelBudget<T>(
     const onAbort = () => {
       removeWaiter(waiter)
       waiter.cleanup()
-      reject(
-        signal?.reason instanceof Error ? signal.reason : new Error("aborted")
-      )
+      reject(rendererAbortReason(signal))
       drainRendererBudget()
     }
     waiter.cleanup = () => signal?.removeEventListener("abort", onAbort)

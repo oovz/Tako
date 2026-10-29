@@ -43,8 +43,7 @@ function buildTokens(ctx: TemplateContext): Record<string, string | undefined> {
 // Expand (directory only). Each segment sanitized. Empty segments discarded.
 function expandDirectory(template: string, ctx: TemplateContext): string {
   const tokens = buildTokens(ctx)
-  const tpl = template || ""
-  const rawSegments = tpl.split("/")
+  const rawSegments = template.split("/")
   const out: string[] = []
   for (let seg of rawSegments) {
     seg = seg.replace(
@@ -80,12 +79,13 @@ export function resolveDownloadDirectory(
       }
     }
 
-    const macroValidation = validateTemplateMacros(template || "")
+    const normalizedTemplate = template || ""
+    const macroValidation = validateTemplateMacros(normalizedTemplate)
     if (!macroValidation.isValid) {
       return { success: false, error: macroValidation.error }
     }
 
-    const expanded = expandDirectory(template || "", ctx)
+    const expanded = expandDirectory(normalizedTemplate, ctx)
     if (!expanded) {
       return { success: false, error: "Resolved directory is empty" }
     }

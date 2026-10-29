@@ -403,6 +403,109 @@ describe("Offscreen resource lifecycles", () => {
     expect(ledger.getUsedBytes()).toBe(0)
   })
 
+  it.each([
+    {
+      inputId: undefined,
+      buffer: new ArrayBuffer(3),
+      error: "Archive worker input lease requires an input identity",
+    },
+    {
+      inputId: "input-1",
+      buffer: new Uint8Array(3),
+      error: "Archive worker input lease size mismatch",
+    },
+    {
+      inputId: "input-1",
+      buffer: new ArrayBuffer(2),
+      error: "Archive worker input lease size mismatch",
+    },
+  ])(
+    "preserves caller ownership when a leased input is invalid: $error",
+    ({ inputId, buffer, error }) => {
+      const ledger = new OffscreenLiveResourceLedger(3)
+      const inputLease = ledger.reserve(3, "caller input")
+      const worker = new WorkerStub()
+      const session = new ArchiveWorkerSession(worker as unknown as Worker)
+
+      expect(() =>
+        session.post(
+          { type: "addImage", inputId, buffer },
+          undefined,
+          inputLease
+        )
+      ).toThrow(error)
+      expect(worker.postMessage).not.toHaveBeenCalled()
+      expect(session.getState()).toBe("collecting")
+      expect(inputLease.bytes).toBe(3)
+      session.dispose()
+      expect(ledger.getUsedBytes()).toBe(3)
+      inputLease.release()
+      expect(ledger.getUsedBytes()).toBe(0)
+    }
+  )
+
+  it("rejects an input identity collision while preserving both owners", () => {
+    const ledger = new OffscreenLiveResourceLedger(6)
+    const firstLease = ledger.reserve(3, "first input")
+    const secondLease = ledger.reserve(3, "second input")
+    const worker = new WorkerStub()
+    const session = new ArchiveWorkerSession(worker as unknown as Worker)
+    const message = {
+      type: "addImage" as const,
+      inputId: "input-1",
+      buffer: new ArrayBuffer(3),
+    }
+
+    session.post(message, undefined, firstLease)
+    expect(() => session.post(message, undefined, secondLease)).toThrow(
+      "Archive worker input identity collision"
+    )
+    expect(() => session.post(message)).toThrow(
+      "Archive worker input identity collision"
+    )
+    expect(worker.postMessage).toHaveBeenCalledOnce()
+    expect(firstLease.bytes).toBe(0)
+    expect(secondLease.bytes).toBe(3)
+    expect(ledger.getUsedBytes()).toBe(6)
+
+    worker.onmessage?.call(
+      worker as unknown as Worker,
+      { data: { type: "input-consumed", inputId: "input-1" } } as MessageEvent
+    )
+    expect(ledger.getUsedBytes()).toBe(3)
+    session.dispose()
+    expect(ledger.getUsedBytes()).toBe(3)
+    secondLease.release()
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("releases transferred input ownership when worker posting fails", () => {
+    const ledger = new OffscreenLiveResourceLedger(3)
+    const inputLease = ledger.reserve(3, "caller input")
+    const worker = new WorkerStub()
+    const failure = new Error("Worker message transfer failed")
+    worker.postMessage.mockImplementationOnce(() => {
+      throw failure
+    })
+    const session = new ArchiveWorkerSession(worker as unknown as Worker)
+
+    expect(() =>
+      session.post(
+        { type: "addImage", inputId: "input-1", buffer: new ArrayBuffer(3) },
+        undefined,
+        inputLease
+      )
+    ).toThrow(failure)
+    expect(inputLease.bytes).toBe(0)
+    expect(ledger.getUsedBytes()).toBe(0)
+    expect(session.getState()).toBe("settled")
+    expect(session.failureSignal.reason).toBe(failure)
+    expect(() => session.post({ type: "addImage" })).toThrow(failure)
+    expect(worker.postMessage).toHaveBeenCalledOnce()
+    session.dispose()
+    expect(worker.terminate).toHaveBeenCalledOnce()
+  })
+
   it("releases retained encoded ownership when renderer validation fails", async () => {
     const ledger = new OffscreenLiveResourceLedger(4)
     const sourceLease = ledger.reserve(4, "invalid encoded image")

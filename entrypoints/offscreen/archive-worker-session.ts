@@ -40,6 +40,22 @@ function isInputConsumed(value: unknown): value is ArchiveWorkerInputConsumed {
   )
 }
 
+function validateInputLease(
+  message: ArchiveWorkerMessage,
+  inputId: string | undefined,
+  inputLease: OffscreenLiveResourceLease
+): void {
+  if (!inputId) {
+    throw new Error("Archive worker input lease requires an input identity")
+  }
+  if (
+    !(message.buffer instanceof ArrayBuffer) ||
+    inputLease.bytes !== message.buffer.byteLength
+  ) {
+    throw new Error("Archive worker input lease size mismatch")
+  }
+}
+
 /** Owns one archive worker from collection through exactly one finalization. */
 export class ArchiveWorkerSession {
   private state: ArchiveWorkerSessionState = "collecting"
@@ -134,31 +150,29 @@ export class ArchiveWorkerSession {
     if (this.state !== "collecting") {
       throw new Error("Archive worker is not collecting")
     }
-    const inputId = message.type === "addImage" ? message.inputId : undefined
-    if (inputLease && !inputId) {
-      throw new Error("Archive worker input lease requires an input identity")
-    }
-    if (
-      inputLease &&
-      (!(message.buffer instanceof ArrayBuffer) ||
-        inputLease.bytes !== message.buffer.byteLength)
-    ) {
-      throw new Error("Archive worker input lease size mismatch")
-    }
-    if (inputId && this.inputLeases.has(inputId)) {
-      throw new Error("Archive worker input identity collision")
-    }
-    const retainedInputLease = inputLease?.transfer(
-      `archive worker input ${inputId}`
-    )
-    if (inputId && retainedInputLease) {
-      this.inputLeases.set(inputId, retainedInputLease)
-    }
+    this.retainInput(message, inputLease)
     try {
       this.worker.postMessage(message, transfer ?? [])
     } catch (error) {
       this.reject(error)
       throw error
+    }
+  }
+
+  private retainInput(
+    message: ArchiveWorkerMessage,
+    inputLease: OffscreenLiveResourceLease | undefined
+  ): void {
+    const inputId = message.type === "addImage" ? message.inputId : undefined
+    if (inputLease) validateInputLease(message, inputId, inputLease)
+    if (inputId && this.inputLeases.has(inputId)) {
+      throw new Error("Archive worker input identity collision")
+    }
+    if (inputId && inputLease) {
+      this.inputLeases.set(
+        inputId,
+        inputLease.transfer(`archive worker input ${inputId}`)
+      )
     }
   }
 

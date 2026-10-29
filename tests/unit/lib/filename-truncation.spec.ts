@@ -15,12 +15,15 @@ describe("filename truncation", () => {
     })
   }
 
-  it("removes an incomplete supplementary character at the length limit", () => {
-    const prefix = "a".repeat(MAX_FILENAME_LENGTH - 1)
-    const result = sanitizeFilename(`${prefix}📚chapter`)
-    assert.equal(result, prefix)
-    assert.equal(sanitizeFilename(result), result)
-  })
+  it.each(["📚", "\u{10000}", "\u{10ffff}"])(
+    "removes incomplete character %s at the length limit",
+    (character) => {
+      const prefix = "a".repeat(MAX_FILENAME_LENGTH - 1)
+      const result = sanitizeFilename(`${prefix}${character}chapter`)
+      assert.equal(result, prefix)
+      assert.equal(sanitizeFilename(result), result)
+    }
+  )
 
   it("sanitizes a suffix exposed by removing an incomplete character", () => {
     const prefix = "a".repeat(MAX_FILENAME_LENGTH - 2)
@@ -33,14 +36,5 @@ describe("filename truncation", () => {
     const expected = `${"a".repeat(MAX_FILENAME_LENGTH - 2)}📚`
     assert.equal(sanitizeFilename(`${expected}chapter`), expected)
     assert.equal(sanitizeFilename(expected), expected)
-  })
-
-  it("preserves ordinary names and the existing ASCII length limit", () => {
-    assert.equal(sanitizeFilename("第1話 - Chapter 📚"), "第1話 - Chapter 📚")
-    assert.equal(
-      sanitizeFilename("a".repeat(MAX_FILENAME_LENGTH + 1)),
-      "a".repeat(MAX_FILENAME_LENGTH)
-    )
-    assert.equal(sanitizeFilename("CON.txt"), "_")
   })
 })

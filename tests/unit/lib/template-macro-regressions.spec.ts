@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
-import { describe, it } from "vitest"
+import { describe, it, vi } from "vitest"
 import {
   expandTemplate,
+  getCurrentTimeValues,
   validateTemplate,
   type TemplateContext,
 } from "@/src/shared/template-expander"
@@ -31,6 +32,20 @@ const outputContext = {
 }
 
 describe("template macro expansion", () => {
+  it("uses the local calendar with a one-based month for current date macros", () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(2026, 0, 15, 12))
+      assert.deepEqual(getCurrentTimeValues(), {
+        currentYear: 2026,
+        currentMonth: 1,
+        currentDay: 15,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   for (const title of ["Price $$5", "A $& B", "A $` B", "A $' B"]) {
     it(`preserves replacement characters in ${JSON.stringify(title)}`, () => {
       const template = "<SERIES_TITLE>/<SERIES_TITLE>"
@@ -108,8 +123,10 @@ describe("template macro expansion", () => {
   }
 
   it("retains zero and decimal chapter numbers", () => {
-    for (const number of [0, 1.5]) {
-      const expected = String(number).padStart(3, "0")
+    for (const [number, expected] of [
+      [0, "000"],
+      [1.5, "1.5"],
+    ] as const) {
       assert.equal(
         expandTemplate("<CHAPTER_NUMBER_PAD3>", {
           ...context,
