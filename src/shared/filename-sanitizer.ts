@@ -33,14 +33,18 @@ export function sanitizeFilename(filename: string): string {
     .replace(controlRe, "_")
     .replace(reservedRe, "_")
     .replace(windowsReservedRe, "_")
-    .replace(windowsTrailingRe, "_")
 
   // Truncate to a reasonable length to avoid issues with max path length.
   if (sanitized.length > MAX_FILENAME_LENGTH) {
     sanitized = sanitized.substring(0, MAX_FILENAME_LENGTH)
+    const lastCodeUnit = sanitized.charCodeAt(sanitized.length - 1)
+    if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff) {
+      sanitized = sanitized.slice(0, -1)
+    }
   }
 
-  return sanitized
+  // Truncation can expose a trailing dot or space that was previously interior.
+  return sanitized.replace(windowsTrailingRe, "_")
 }
 
 /**
