@@ -59,6 +59,7 @@ describe("template macro expansion", () => {
       })
       assert.equal(preview.success, true)
       assert.equal(preview.expanded, `${title}/${title}`)
+      assert.deepEqual(preview.warnings, [])
       assert.equal(directory.resolvedPath, preview.expanded)
     })
   }

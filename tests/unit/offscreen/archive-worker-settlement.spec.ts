@@ -120,12 +120,31 @@ describe("archive worker settlement", () => {
       buffer: new ArrayBuffer(3),
       filename: "Chapter.cbz",
     }
+    worker.send(progress)
     worker.send(saved)
     assert.equal(await result, saved)
     assert.deepEqual(worker.messages, [{ type: "finalize" }])
     session.dispose()
     assert.equal(session.failureSignal.aborted, false)
     assert.equal(worker.terminations, 1)
+  })
+
+  it("ignores worker failures after successful settlement", async () => {
+    const worker = new WorkerStub()
+    const session = new ArchiveWorkerSession(worker as unknown as Worker)
+    const result = session.finalize()
+    const saved: WorkerZipResult = { success: true, filename: "Chapter.cbz" }
+    worker.send(saved)
+    assert.equal(await result, saved)
+    worker.onerror?.call(
+      worker as unknown as Worker,
+      {
+        error: new Error("Late worker failure"),
+      } as ErrorEvent
+    )
+    assert.equal(session.getState(), "settled")
+    assert.equal(session.failureSignal.aborted, false)
+    session.dispose()
   })
 
   it("does not replace a worker failure during disposal", async () => {

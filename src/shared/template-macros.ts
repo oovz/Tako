@@ -126,11 +126,6 @@ export const IMPLEMENTED_MACRO_NAMES: readonly string[] = TEMPLATE_MACROS.map(
   (macro) => macro.name
 )
 
-/** Get all registered macro names as an array. */
-export function getSupportedMacroNames(): TemplateMacroName[] {
-  return TEMPLATE_MACROS.map((macro) => macro.name)
-}
-
 /**
  * Get all IMPLEMENTED macro names as array
  */

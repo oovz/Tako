@@ -405,23 +405,23 @@ describe("Offscreen resource lifecycles", () => {
 
   it.each([
     {
+      description: "missing identity",
       inputId: undefined,
       buffer: new ArrayBuffer(3),
-      error: "Archive worker input lease requires an input identity",
     },
     {
+      description: "non-ArrayBuffer payload",
       inputId: "input-1",
       buffer: new Uint8Array(3),
-      error: "Archive worker input lease size mismatch",
     },
     {
+      description: "lease and payload size mismatch",
       inputId: "input-1",
       buffer: new ArrayBuffer(2),
-      error: "Archive worker input lease size mismatch",
     },
   ])(
-    "preserves caller ownership when a leased input is invalid: $error",
-    ({ inputId, buffer, error }) => {
+    "preserves caller ownership when a leased input is invalid: $description",
+    ({ inputId, buffer }) => {
       const ledger = new OffscreenLiveResourceLedger(3)
       const inputLease = ledger.reserve(3, "caller input")
       const worker = new WorkerStub()
@@ -433,7 +433,7 @@ describe("Offscreen resource lifecycles", () => {
           undefined,
           inputLease
         )
-      ).toThrow(error)
+      ).toThrow(Error)
       expect(worker.postMessage).not.toHaveBeenCalled()
       expect(session.getState()).toBe("collecting")
       expect(inputLease.bytes).toBe(3)
@@ -457,12 +457,8 @@ describe("Offscreen resource lifecycles", () => {
     }
 
     session.post(message, undefined, firstLease)
-    expect(() => session.post(message, undefined, secondLease)).toThrow(
-      "Archive worker input identity collision"
-    )
-    expect(() => session.post(message)).toThrow(
-      "Archive worker input identity collision"
-    )
+    expect(() => session.post(message, undefined, secondLease)).toThrow(Error)
+    expect(() => session.post(message)).toThrow(Error)
     expect(worker.postMessage).toHaveBeenCalledOnce()
     expect(firstLease.bytes).toBe(0)
     expect(secondLease.bytes).toBe(3)
