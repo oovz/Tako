@@ -2206,6 +2206,53 @@ describe("MangaDex site integration", () => {
       )
     })
 
+    it("preserves the selected later page when recovery refreshes every filename", async () => {
+      const firstPage = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1])
+      const secondPage = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 2])
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url === "https://uploads.mangadex.org/data/hash123/2-old.png")
+          return new Response(null, { status: 404 })
+        if (url === "https://api.mangadex.org/at-home/server/ch-1")
+          return Response.json({
+            baseUrl: "https://new-node.mangadex.network",
+            chapter: {
+              hash: "hash456",
+              data: ["1-new.png", "2-new.png"],
+              dataSaver: ["1-new.jpg", "2-new.jpg"],
+            },
+          })
+        if (url === "https://new-node.mangadex.network/data/hash456/1-new.png")
+          return new Response(firstPage, {
+            headers: { "content-type": "image/png" },
+          })
+        if (url === "https://new-node.mangadex.network/data/hash456/2-new.png")
+          return new Response(secondPage, {
+            headers: { "content-type": "image/png" },
+          })
+        if (url.includes("mangadex.network/report"))
+          return new Response(null, { status: 204 })
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://uploads.mangadex.org/data/hash123/2-old.png",
+        {
+          runtime: {
+            chapterId: "ch-1",
+            rateLimitService,
+            rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
+          },
+        }
+      )
+      try {
+        expect(result.filename).toBe("2-new.png")
+        expect(new Uint8Array(result.data)).toEqual(secondPage)
+      } finally {
+        result.liveResourceLease.release()
+      }
+    })
+
     it("aborts a stalled at-home recovery request with the owning image signal", async () => {
       const fetchMock = global.fetch as ReturnType<typeof vi.fn>
       const controller = new AbortController()

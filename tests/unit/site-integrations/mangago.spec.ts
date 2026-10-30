@@ -6,6 +6,7 @@ import {
   parseMangagoReader,
   parseMangagoProtocol,
   decodeMangagoImageList,
+  withMangagoGrid,
 } from "@/src/site-integrations/mangago/reader"
 import {
   parseMangagoImageTransport,
@@ -215,6 +216,23 @@ describe("Mangago content contracts", () => {
         parseMangagoProtocol(fixture.protocolScript)
       )
     ).rejects.toThrow()
+  })
+  it("uses the parsed image-specific tile order while preserving the default for other pages", () => {
+    const signature = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    const protocolSource =
+      'var key=CryptoJS.enc.Hex.parse("00000000000000000000000000000000");var iv=CryptoJS.enc.Hex.parse("11111111111111111111111111111111");widthnum=heightnum=2;str.charAt(1);str.charAt(2);str.charAt(3);str.charAt(4);var renImg;var key="0a1a2a3";' +
+      `_imgkeys_["${signature}"]="1a0a3a2";`
+    const encoded = Array.from(protocolSource, (char) =>
+      char.charCodeAt(0)
+    ).join("a")
+    const protocol = parseMangagoProtocol(`sojson.v4; null,"${encoded}"[0]`)
+    const mapped = `https://iweb_9.mangapicgallery.com/r/cspiclink/chapter/${signature}.jpg`
+    const other =
+      "https://iweb_9.mangapicgallery.com/r/cspiclink/chapter/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg"
+    expect(withMangagoGrid(mapped, protocol)).toBe(
+      `${mapped}#mg-grid=2:1,0,3,2`
+    )
+    expect(withMangagoGrid(other, protocol)).toBe(`${other}#mg-grid=2:0,1,2,3`)
   })
 })
 

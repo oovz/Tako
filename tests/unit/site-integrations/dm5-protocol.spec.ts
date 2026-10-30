@@ -357,6 +357,33 @@ describe.each(readers)("$id signed chapter plan", (fixture) => {
   })
 })
 
+it("decodes hexadecimal and Unicode signing escapes before requesting the signed pages", async () => {
+  const fixture = readers[0]
+  const html = String.raw`<script>DM5_CID=521974;DM5_MID=33991;DM5_IMAGE_COUNT=2;DM5_VIEWSIGN="\x73ynthetic\u002dview-sign";DM5_VIEWSIGN_DT="2026-10-25 00:00:00";</script>`
+  const requests: URL[] = []
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (value: string) => {
+      const url = new URL(value)
+      requests.push(url)
+      return response(
+        value,
+        url.pathname.endsWith(fixture.endpoint) ? fixture.body : html,
+        url.pathname.endsWith(fixture.endpoint)
+          ? "application/javascript"
+          : "text/html"
+      )
+    })
+  )
+  const plan = await fixture.adapter.offscreen.chapter.resolveChapterPlan(
+    { id: fixture.chapterId, url: `${fixture.origin}/m${fixture.chapterId}/` },
+    { runtime }
+  )
+  expect(plan.imageUrls).toEqual(fixture.expected)
+  const signed = requests.find((url) => url.pathname.endsWith(fixture.endpoint))
+  expect(signed?.searchParams.get("_sign")).toBe("synthetic-view-sign")
+})
+
 describe("signed-reader public series recognition", () => {
   it.each([
     ["https://www.dm5.com/manhua-shanhainizhan1/", "animemangahouse"],
