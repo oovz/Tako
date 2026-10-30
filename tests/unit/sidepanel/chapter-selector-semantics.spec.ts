@@ -38,6 +38,9 @@ describe("ChapterSelector semantics", () => {
     expect(controls).toHaveLength(2)
     expect(controls.every((control) => control.disabled)).toBe(true)
     expect(
+      document.querySelector('[role="checkbox"]')?.getAttribute("aria-checked")
+    ).toBe("false")
+    expect(
       document
         .querySelector("button[aria-expanded]")
         ?.getAttribute("aria-expanded")
