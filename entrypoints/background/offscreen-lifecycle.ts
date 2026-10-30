@@ -457,7 +457,15 @@ class OffscreenLivenessRecovery {
       }
       return true
     }
-    if (this.nativeOutputPhase === "open") return true
+    if (this.nativeOutputPhase === "open") {
+      // Open manifests retain output dependencies while expired producers
+      // without an active chapter owner pass through cooperative cancellation.
+      return (
+        lease === null ||
+        this.exactQueriedJob?.status !== "active" ||
+        this.leaseOwnerAcceptsEvents(lease)
+      )
+    }
 
     return false
   }
