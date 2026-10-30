@@ -104,6 +104,12 @@ function extractPackedPayloadTemplate(
     )
   }
 
+  return readPackedPayloadFields(packedMatch)
+}
+
+function readPackedPayloadFields(
+  packedMatch: RegExpMatchArray
+): PackedPayloadTemplate {
   const [, templateLiteral, radixText, countText, rawKeys] = packedMatch
   if (!templateLiteral || !radixText || !countText || rawKeys == null) {
     throw new ProviderContractError(
@@ -111,31 +117,32 @@ function extractPackedPayloadTemplate(
     )
   }
 
-  const template = decodeJavaScriptStringLiteral(templateLiteral)
-  const radix = Number.parseInt(radixText, 10)
-  const count = Number.parseInt(countText, 10)
-  if (radix < 2 || radix > 62) {
+  const payload = {
+    template: decodeJavaScriptStringLiteral(templateLiteral),
+    radix: Number.parseInt(radixText, 10),
+    count: Number.parseInt(countText, 10),
+    rawKeys,
+  }
+  assertPackedPayloadBounds(payload)
+  return payload
+}
+
+function assertPackedPayloadBounds(payload: PackedPayloadTemplate): void {
+  if (payload.radix < 2 || payload.radix > 62) {
     throw new ProviderContractError("Manhuagui packed radix is out of bounds")
   }
-  if (count < 0 || count > MAX_PACKED_DICTIONARY_SIZE) {
+  if (payload.count < 0 || payload.count > MAX_PACKED_DICTIONARY_SIZE) {
     throw new ProviderContractError(
       "Manhuagui packed dictionary size is out of bounds"
     )
   }
   if (
-    template.length > MAX_PACKED_TEMPLATE_LENGTH ||
-    rawKeys.length > MAX_PACKED_KEYS_LENGTH
+    payload.template.length > MAX_PACKED_TEMPLATE_LENGTH ||
+    payload.rawKeys.length > MAX_PACKED_KEYS_LENGTH
   ) {
     throw new ProviderContractError(
       "Manhuagui packed payload exceeds the supported size"
     )
-  }
-
-  return {
-    template,
-    radix,
-    count,
-    rawKeys,
   }
 }
 
@@ -161,56 +168,39 @@ function extractBalancedJsonObject(source: string, marker: string): string {
   }
 
   let depth = 0
-  let inString = false
-  let escaped = false
+  const stringState = { inString: false, escaped: false }
 
   for (let index = startIndex; index < source.length; index += 1) {
     const char = source[index]
-    if (!char) {
-      continue
-    }
-
-    if (inString) {
-      if (escaped) {
-        escaped = false
-        continue
-      }
-
-      if (char === "\\") {
-        escaped = true
-        continue
-      }
-
-      if (char === '"') {
-        inString = false
-      }
-
-      continue
-    }
-
-    if (char === '"') {
-      inString = true
-      continue
-    }
-
+    if (consumeJsonStringCharacter(stringState, char)) continue
     if (char === "{") {
       depth += 1
-      continue
-    }
-
-    if (char !== "}") {
-      continue
-    }
-
-    depth -= 1
-    if (depth === 0) {
-      return source.slice(startIndex, index + 1)
+    } else if (char === "}") {
+      depth -= 1
+      if (depth === 0) return source.slice(startIndex, index + 1)
     }
   }
 
   throw new ProviderContractError(
     "Manhuagui viewer data no longer matches the supported format."
   )
+}
+
+function consumeJsonStringCharacter(
+  state: { inString: boolean; escaped: boolean },
+  char: string
+): boolean {
+  if (state.inString) {
+    if (state.escaped) state.escaped = false
+    else if (char === "\\") state.escaped = true
+    else if (char === '"') state.inString = false
+    return true
+  }
+  if (char === '"') {
+    state.inString = true
+    return true
+  }
+  return false
 }
 
 /**
@@ -301,31 +291,29 @@ function buildReaderFilePath(
     )
   }
 
-  if (/^https?:\/\//i.test(normalizedPath)) {
-    const absoluteUrl = normalizedPath.endsWith("/")
-      ? normalizedPath
-      : `${normalizedPath}/`
-    if (!isAllowedManhuaguiImageUrl(absoluteUrl)) {
-      throw new ProviderContractError(
-        "Manhuagui image URL origin is not allowed"
-      )
-    }
-    return absoluteUrl
-  }
+  const absoluteUrl = resolveAbsoluteReaderPath(normalizedPath)
+  if (absoluteUrl) return absoluteUrl
 
-  if (normalizedPath.startsWith("//")) {
-    const absoluteUrl = `${DEFAULT_IMAGE_PROTOCOL}${normalizedPath}`
-    if (!isAllowedManhuaguiImageUrl(absoluteUrl)) {
-      throw new ProviderContractError(
-        "Manhuagui image URL origin is not allowed"
-      )
-    }
-    return absoluteUrl.endsWith("/") ? absoluteUrl : `${absoluteUrl}/`
-  }
+  const hostName = selectChapterReaderHost(readerConfig)
+  return `${DEFAULT_IMAGE_PROTOCOL}//${hostName}.hamreus.com/${normalizeImagePath(normalizedPath).replace(/\/?$/, "/")}`
+}
 
-  let hostName: string
+function resolveAbsoluteReaderPath(path: string): string | undefined {
+  let absoluteUrl: string
+  if (/^https?:\/\//i.test(path)) absoluteUrl = path
+  else if (path.startsWith("//"))
+    absoluteUrl = `${DEFAULT_IMAGE_PROTOCOL}${path}`
+  else return undefined
+
+  if (!isAllowedManhuaguiImageUrl(absoluteUrl)) {
+    throw new ProviderContractError("Manhuagui image URL origin is not allowed")
+  }
+  return absoluteUrl.endsWith("/") ? absoluteUrl : `${absoluteUrl}/`
+}
+
+function selectChapterReaderHost(readerConfig: ReaderConfig): string {
   try {
-    hostName = selectReaderHost(readerConfig)
+    return selectReaderHost(readerConfig)
   } catch (error) {
     if (error instanceof ProviderContractError) {
       throw new ProviderContractError(
@@ -335,7 +323,6 @@ function buildReaderFilePath(
     }
     throw error
   }
-  return `${DEFAULT_IMAGE_PROTOCOL}//${hostName}.hamreus.com/${normalizeImagePath(normalizedPath).replace(/\/?$/, "/")}`
 }
 
 function buildImageUrl(
@@ -355,21 +342,18 @@ function buildImageUrl(
   return `${normalizedBasePath}${normalizedFilename}?e=${encodeURIComponent(expiresAt)}&m=${encodeURIComponent(signature)}`
 }
 
-function extractImageUrlsFromPackedData(
-  data: PackedImageData,
-  readerConfig: ReaderConfig
-): string[] {
-  if (!Array.isArray(data.files) || data.files.length === 0) {
+function readImageFiles(files: unknown): string[] {
+  if (!Array.isArray(files) || files.length === 0) {
     throw new ProviderContractError(
       "Manhuagui viewer data no longer matches the supported format."
     )
   }
-  if (data.files.length > MAX_IMAGE_FILES) {
+  if (files.length > MAX_IMAGE_FILES) {
     throw new ProviderContractError(
       "Manhuagui image file count exceeds the supported limit"
     )
   }
-  const files = data.files.map((value) => {
+  return files.map((value) => {
     if (typeof value !== "string" || sanitizeLabel(value).length === 0) {
       throw new ProviderContractError(
         "Manhuagui viewer data contains an invalid image filename."
@@ -377,25 +361,41 @@ function extractImageUrlsFromPackedData(
     }
     return value
   })
+}
+
+function readSignatureValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : ""
+}
+
+function readSignedImageDirectory(
+  data: PackedImageData,
+  readerConfig: ReaderConfig
+) {
   const basePath =
     typeof data.path === "string"
       ? buildReaderFilePath(data.path, readerConfig)
       : ""
-  const expiresAt =
-    typeof data.sl?.e === "string" || typeof data.sl?.e === "number"
-      ? String(data.sl.e)
-      : ""
-  const signature =
-    typeof data.sl?.m === "string" || typeof data.sl?.m === "number"
-      ? String(data.sl.m)
-      : ""
-
+  const expiresAt = readSignatureValue(data.sl?.e)
+  const signature = readSignatureValue(data.sl?.m)
   if (!basePath || !expiresAt || !signature) {
     throw new ProviderContractError(
       "Manhuagui viewer data no longer matches the supported format."
     )
   }
+  return { basePath, expiresAt, signature }
+}
 
+function extractImageUrlsFromPackedData(
+  data: PackedImageData,
+  readerConfig: ReaderConfig
+): string[] {
+  const files = readImageFiles(data.files)
+  const { basePath, expiresAt, signature } = readSignedImageDirectory(
+    data,
+    readerConfig
+  )
   return files.map((filename) => {
     const imageUrl = buildImageUrl(basePath, filename, expiresAt, signature)
     if (!isAllowedManhuaguiImageUrl(imageUrl)) {

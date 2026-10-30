@@ -16,37 +16,42 @@ import {
   extractSeriesMetadataFromDocument,
 } from "./series-dom"
 
+function resolveManhuaguiSeriesDataFromDocument({
+  document,
+  language,
+}: {
+  document: Document
+  language?: string
+}): Promise<SeriesDataResolutionResult> {
+  const result: SeriesDataResolutionResult = {}
+  try {
+    result.seriesMetadata = extractSeriesMetadataFromDocument(document)
+  } catch (error) {
+    result.metadataError =
+      error instanceof Error ? error.message : String(error)
+  }
+  try {
+    result.chapterList = extractChapterListFromDocument(document)
+    if (document.querySelector("#checkAdult")) {
+      result.chapterListNotice = "adult-consent-required"
+    }
+  } catch (error) {
+    result.chapterListError =
+      error instanceof Error ? error.message : String(error)
+  }
+  if (result.seriesMetadata && language) {
+    result.seriesMetadata.language = language
+  }
+  return Promise.resolve(result)
+}
+
 const offscreen: OffscreenIntegration = {
   name: "Manhuagui Offscreen",
   cover: {
     downloadImage: downloadManhuaguiCoverImage,
   },
   series: {
-    resolveSeriesData({
-      document,
-      language,
-    }): Promise<SeriesDataResolutionResult> {
-      const result: SeriesDataResolutionResult = {}
-      try {
-        result.seriesMetadata = extractSeriesMetadataFromDocument(document)
-      } catch (error) {
-        result.metadataError =
-          error instanceof Error ? error.message : String(error)
-      }
-      try {
-        result.chapterList = extractChapterListFromDocument(document)
-        if (document.querySelector("#checkAdult")) {
-          result.chapterListNotice = "adult-consent-required"
-        }
-      } catch (error) {
-        result.chapterListError =
-          error instanceof Error ? error.message : String(error)
-      }
-      if (result.seriesMetadata && language) {
-        result.seriesMetadata.language = language
-      }
-      return Promise.resolve(result)
-    },
+    resolveSeriesData: resolveManhuaguiSeriesDataFromDocument,
   },
   chapter: {
     async resolveChapterPlan(chapter, input) {

@@ -101,31 +101,7 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
     )
   }
 
-  const services = serviceMatches.map((serviceMatch) => {
-    const [, serviceName, hostsBlock] = serviceMatch
-    const hosts = [
-      ...(hostsBlock ?? "").matchAll(/\{h:"([^"]+)",w:([0-9.]+)\}/g),
-    ]
-      .map((hostMatch) => ({
-        name: hostMatch[1] ?? "",
-        weight: parseHostWeight(hostMatch[2] ?? "0"),
-      }))
-      .filter(
-        (host) =>
-          host.name && MANHUAGUI_IMAGE_HOSTS.has(`${host.name}.hamreus.com`)
-      )
-
-    if (!serviceName || hosts.length === 0) {
-      throw new ProviderContractError(
-        "Manhuagui viewer data no longer matches the supported format."
-      )
-    }
-
-    return {
-      name: serviceName,
-      hosts,
-    } satisfies ReaderServiceConfig
-  })
+  const services = serviceMatches.map(parseReaderService)
 
   const curServ = Number.parseInt(
     scriptText.match(/curServ:(\d+)/)?.[1] ?? "",
@@ -141,6 +117,28 @@ function parseReaderConfigScript(scriptText: string): ReaderConfig {
     curServ: Number.isFinite(curServ) ? curServ : 0,
     services,
   }
+}
+
+function parseReaderService(
+  serviceMatch: RegExpMatchArray
+): ReaderServiceConfig {
+  const [, serviceName, hostsBlock] = serviceMatch
+  const hosts = [...(hostsBlock ?? "").matchAll(/\{h:"([^"]+)",w:([0-9.]+)\}/g)]
+    .map((hostMatch) => ({
+      name: hostMatch[1] ?? "",
+      weight: parseHostWeight(hostMatch[2] ?? "0"),
+    }))
+    .filter(
+      (host) =>
+        host.name && MANHUAGUI_IMAGE_HOSTS.has(`${host.name}.hamreus.com`)
+    )
+
+  if (!serviceName || hosts.length === 0) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
+  }
+  return { name: serviceName, hosts }
 }
 
 /**

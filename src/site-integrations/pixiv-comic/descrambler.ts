@@ -3,6 +3,7 @@ import {
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
 import { withRendererPixelBudget } from "@/src/runtime/renderer-budget"
+import { isImageBitmapRenderingAvailable } from "@/src/runtime/image-rendering-capability"
 import { ProviderContractError } from "../provider-contract-error"
 import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
 import type {
@@ -28,12 +29,7 @@ class PixivShuffler {
     }
 
     this.state = new Uint32Array(seed)
-    if (
-      this.state[0] === 0 &&
-      this.state[1] === 0 &&
-      this.state[2] === 0 &&
-      this.state[3] === 0
-    ) {
+    if (this.state.every((value) => value === 0)) {
       this.state[0] = 1
     }
   }
@@ -133,6 +129,172 @@ const buildPixivReverseShuffleTable = async (
   return table
 }
 
+class PixivReconstructionResources {
+  sourceBlob: OffscreenLiveResourceLease | undefined
+  decodedSurfaces: OffscreenLiveResourceLease | undefined
+  outputBlob: OffscreenLiveResourceLease | undefined
+  outputBuffer: OffscreenLiveResourceLease | undefined
+
+  release(sourceLease: OffscreenLiveResourceLease): void {
+    sourceLease.release()
+    this.sourceBlob?.release()
+    this.decodedSurfaces?.release()
+    this.outputBlob?.release()
+    this.outputBuffer?.release()
+  }
+}
+
+type PixivReconstructedImage = {
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease: OffscreenLiveResourceLease
+}
+
+async function decodePixivBitmap(
+  buffer: ArrayBuffer,
+  mimeType: string,
+  ledger: OffscreenLiveResourceLedger,
+  resources: PixivReconstructionResources
+): Promise<ImageBitmap> {
+  resources.sourceBlob = ledger.reserve(
+    buffer.byteLength,
+    "Pixiv Comic encoded source Blob"
+  )
+  const bitmap = await createImageBitmap(new Blob([buffer], { type: mimeType }))
+  resources.sourceBlob.release()
+  resources.sourceBlob = undefined
+  return bitmap
+}
+
+function resolvePixivGrid(bitmap: ImageBitmap, imageUrl: string) {
+  const { gridWidth, gridHeight } = parseGridSizeFromImageUrl(imageUrl)
+  const rows = Math.ceil(bitmap.height / gridHeight)
+  const columns = Math.floor(bitmap.width / gridWidth)
+  if (rows <= 0 || columns <= 0) {
+    throw new ProviderContractError(
+      "Pixiv Comic image is too small to reconstruct safely."
+    )
+  }
+  const totalCells = rows * columns
+  if (totalCells > MAX_TOTAL_CELLS) {
+    throw new ProviderContractError(
+      `Pixiv descrambling safety cap exceeded (${totalCells} cells; maximum ${MAX_TOTAL_CELLS})`
+    )
+  }
+  return { gridWidth, gridHeight, rows, columns }
+}
+
+function drawPixivTiles(
+  bitmap: ImageBitmap,
+  context: OffscreenCanvasRenderingContext2D,
+  grid: ReturnType<typeof resolvePixivGrid>,
+  reverseShuffle: number[][]
+): void {
+  const { gridWidth, gridHeight, rows, columns } = grid
+  // Draw from the decoded bitmap to avoid allocating duplicate ImageData surfaces.
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    const sourceY = rowIndex * gridHeight
+    const copyHeight = Math.min(gridHeight, bitmap.height - sourceY)
+    // The shuffle table has exactly one complete permutation per grid row.
+    const rowShuffle = reverseShuffle[rowIndex]
+    for (let column = 0; column < columns; column += 1) {
+      const destX = column * gridWidth
+      const sourceX = rowShuffle[column] * gridWidth
+      context.drawImage(
+        bitmap,
+        sourceX,
+        sourceY,
+        gridWidth,
+        copyHeight,
+        destX,
+        sourceY,
+        gridWidth,
+        copyHeight
+      )
+    }
+    const overflowStartX = columns * gridWidth
+    if (overflowStartX < bitmap.width) {
+      const overflowWidth = bitmap.width - overflowStartX
+      context.drawImage(
+        bitmap,
+        overflowStartX,
+        sourceY,
+        overflowWidth,
+        copyHeight,
+        overflowStartX,
+        sourceY,
+        overflowWidth,
+        copyHeight
+      )
+    }
+  }
+}
+
+async function reconstructPixivCanvas(
+  bitmap: ImageBitmap,
+  key: string,
+  imageUrl: string
+): Promise<OffscreenCanvas> {
+  assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Pixiv Comic")
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const context = canvas.getContext("2d")
+  if (!context) {
+    throw new ProviderContractError(
+      "Pixiv Comic image reconstruction canvas is unavailable."
+    )
+  }
+  const grid = resolvePixivGrid(bitmap, imageUrl)
+  const reverseShuffle = await buildPixivReverseShuffleTable(
+    grid.rows,
+    grid.columns,
+    key
+  )
+  drawPixivTiles(bitmap, context, grid, reverseShuffle)
+  return canvas
+}
+
+async function encodePixivCanvas(
+  canvas: OffscreenCanvas,
+  bitmap: ImageBitmap,
+  mimeType: string,
+  ledger: OffscreenLiveResourceLedger,
+  resources: PixivReconstructionResources
+): Promise<PixivReconstructedImage> {
+  const outputMimeType = mimeType.startsWith("image/") ? mimeType : "image/png"
+  const blobLease = ledger.reserve(
+    Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
+    "Pixiv Comic encoded output Blob"
+  )
+  resources.outputBlob = blobLease
+  const outputBlob = await canvas.convertToBlob({
+    type: outputMimeType,
+    quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
+  })
+  if (outputBlob.size > MAX_IMAGE_BYTES) {
+    throw new ProviderContractError(
+      `Pixiv Comic encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${outputBlob.size})`
+    )
+  }
+  blobLease.resize(outputBlob.size)
+  const bufferLease = ledger.reserve(
+    outputBlob.size,
+    "Pixiv Comic encoded output ArrayBuffer"
+  )
+  resources.outputBuffer = bufferLease
+  const data = await outputBlob.arrayBuffer()
+  blobLease.release()
+  resources.outputBlob = undefined
+  const liveResourceLease = bufferLease.transfer(
+    "retained Pixiv Comic encoded output"
+  )
+  resources.outputBuffer = undefined
+  return {
+    data,
+    mimeType: outputBlob.type || outputMimeType,
+    liveResourceLease,
+  }
+}
+
 export const descramblePixivImage = async (
   buffer: ArrayBuffer,
   mimeType: string,
@@ -141,21 +303,10 @@ export const descramblePixivImage = async (
   signal: AbortSignal | undefined,
   liveResourceLedger: OffscreenLiveResourceLedger,
   sourceLease: OffscreenLiveResourceLease
-): Promise<{
-  data: ArrayBuffer
-  mimeType: string
-  liveResourceLease: OffscreenLiveResourceLease
-}> => {
-  const encodedSourceLease = sourceLease
-  let sourceBlobLease: OffscreenLiveResourceLease | undefined
-  let decodedSurfaceLease: OffscreenLiveResourceLease | undefined
-  let outputBlobLease: OffscreenLiveResourceLease | undefined
-  let outputBufferLease: OffscreenLiveResourceLease | undefined
+): Promise<PixivReconstructedImage> => {
+  const resources = new PixivReconstructionResources()
   try {
-    if (
-      typeof createImageBitmap !== "function" ||
-      typeof OffscreenCanvas === "undefined"
-    ) {
+    if (!isImageBitmapRenderingAvailable()) {
       throw new ProviderContractError(
         "Pixiv Comic image reconstruction is unavailable in this browser."
       )
@@ -174,150 +325,31 @@ export const descramblePixivImage = async (
       dimensions.width * dimensions.height,
       signal,
       async () => {
-        decodedSurfaceLease = liveResourceLedger.reserve(
+        resources.decodedSurfaces = liveResourceLedger.reserve(
           dimensions.width * dimensions.height * 8,
           "Pixiv Comic decoded source and destination surfaces"
         )
-        sourceBlobLease = liveResourceLedger.reserve(
-          buffer.byteLength,
-          "Pixiv Comic encoded source Blob"
+        const bitmap = await decodePixivBitmap(
+          buffer,
+          mimeType,
+          liveResourceLedger,
+          resources
         )
-        const sourceBlob = new Blob([buffer], { type: mimeType })
-        const bitmap = await createImageBitmap(sourceBlob)
-        sourceBlobLease?.release()
-        sourceBlobLease = undefined
-
         try {
-          assertDecodedImageWithinLimits(
-            bitmap.width,
-            bitmap.height,
-            "Pixiv Comic"
+          const canvas = await reconstructPixivCanvas(bitmap, key, imageUrl)
+          return await encodePixivCanvas(
+            canvas,
+            bitmap,
+            mimeType,
+            liveResourceLedger,
+            resources
           )
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-          const context = canvas.getContext("2d")
-          if (!context) {
-            throw new ProviderContractError(
-              "Pixiv Comic image reconstruction canvas is unavailable."
-            )
-          }
-
-          const { gridWidth, gridHeight } = parseGridSizeFromImageUrl(imageUrl)
-          const rows = Math.ceil(bitmap.height / gridHeight)
-          const columns = Math.floor(bitmap.width / gridWidth)
-
-          if (rows <= 0 || columns <= 0) {
-            throw new ProviderContractError(
-              "Pixiv Comic image is too small to reconstruct safely."
-            )
-          }
-
-          const totalCells = rows * columns
-          if (totalCells > MAX_TOTAL_CELLS) {
-            throw new ProviderContractError(
-              `Pixiv descrambling safety cap exceeded (${totalCells} cells; maximum ${MAX_TOTAL_CELLS})`
-            )
-          }
-
-          const reverseShuffle = await buildPixivReverseShuffleTable(
-            rows,
-            columns,
-            key
-          )
-          // Draw shuffled tiles directly from the decoded bitmap into the output
-          // canvas. Keeping source/target ImageData copies here doubles the largest
-          // renderer allocation for every Pixiv page.
-          for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-            const sourceY = rowIndex * gridHeight
-            const copyHeight = Math.min(gridHeight, bitmap.height - sourceY)
-            const rowShuffle = reverseShuffle[rowIndex]
-            if (!rowShuffle) {
-              continue
-            }
-
-            for (let column = 0; column < columns; column += 1) {
-              const sourceColumn = rowShuffle[column] ?? column
-              const destX = column * gridWidth
-              const sourceX = sourceColumn * gridWidth
-              const copyWidth = Math.min(
-                gridWidth,
-                bitmap.width - destX,
-                bitmap.width - sourceX
-              )
-              if (copyWidth > 0 && copyHeight > 0) {
-                context.drawImage(
-                  bitmap,
-                  sourceX,
-                  sourceY,
-                  copyWidth,
-                  copyHeight,
-                  destX,
-                  sourceY,
-                  copyWidth,
-                  copyHeight
-                )
-              }
-            }
-
-            const overflowStartX = columns * gridWidth
-            if (overflowStartX < bitmap.width) {
-              const overflowWidth = bitmap.width - overflowStartX
-              context.drawImage(
-                bitmap,
-                overflowStartX,
-                sourceY,
-                overflowWidth,
-                copyHeight,
-                overflowStartX,
-                sourceY,
-                overflowWidth,
-                copyHeight
-              )
-            }
-          }
-
-          const outputMimeType = mimeType.startsWith("image/")
-            ? mimeType
-            : "image/png"
-          outputBlobLease = liveResourceLedger.reserve(
-            Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
-            "Pixiv Comic encoded output Blob"
-          )
-          const outputBlob = await canvas.convertToBlob({
-            type: outputMimeType,
-            quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
-          })
-          if (outputBlob.size > MAX_IMAGE_BYTES) {
-            throw new ProviderContractError(
-              `Pixiv Comic encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${outputBlob.size})`
-            )
-          }
-          outputBlobLease?.resize(outputBlob.size)
-          outputBufferLease = liveResourceLedger.reserve(
-            outputBlob.size,
-            "Pixiv Comic encoded output ArrayBuffer"
-          )
-          const data = await outputBlob.arrayBuffer()
-          outputBlobLease?.release()
-          outputBlobLease = undefined
-          const liveResourceLease = outputBufferLease?.transfer(
-            "retained Pixiv Comic encoded output"
-          )
-          outputBufferLease = undefined
-          return {
-            data,
-            mimeType: outputBlob.type || outputMimeType,
-            liveResourceLease,
-          }
         } finally {
           bitmap.close()
         }
       }
     )
   } finally {
-    encodedSourceLease?.release()
-    sourceBlobLease?.release()
-    decodedSurfaceLease?.release()
-    outputBlobLease?.release()
-    outputBufferLease?.release()
+    resources.release(sourceLease)
   }
 }

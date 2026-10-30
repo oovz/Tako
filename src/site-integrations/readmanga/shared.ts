@@ -92,13 +92,7 @@ export function toAllowedManhuaguiAssetUrl(
   const absolute = toAbsoluteUrl(url)
   if (!absolute) return undefined
   const parsed = new URL(absolute)
-  const isOfficialPageHost = MANHUAGUI_PAGE_HOSTS.has(parsed.hostname)
-  const isOfficialCdnHost =
-    parsed.hostname === MANHUAGUI_CONFIG_HOST ||
-    parsed.hostname === "hamreus.com" ||
-    parsed.hostname.endsWith(".hamreus.com")
-  return parsed.protocol === "https:" &&
-    (isOfficialPageHost || isOfficialCdnHost)
+  return isAllowedManhuaguiCoverUrl(parsed.toString())
     ? parsed.toString()
     : undefined
 }

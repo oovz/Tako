@@ -2,6 +2,7 @@ import { cancelResponseBody } from "@/src/shared/response-body"
 import logger from "@/src/runtime/logger"
 import { integrationHttpClient } from "../http-client"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
+import { createImageDownloadAdapter } from "../image-download-adapter"
 import { decodeHtmlResponse } from "@/src/shared/html-response-decoder"
 import { readResponseJson } from "@/src/shared/html-response-decoder"
 import { descramblePixivImage } from "./descrambler"
@@ -238,11 +239,32 @@ async function resolvePixivReadPages(
   context: PixivResolveContext
 ): Promise<PixivReadV4Page[]> {
   const storyId = parseStoryId(chapter)
+  const buildId = await resolvePixivBuildId(chapter.id, storyId, context)
+  const saltResult = await fetchPixivSaltWithBuildRefresh(
+    chapter.id,
+    storyId,
+    buildId,
+    context
+  )
+  const pages = await fetchPixivReadV4(storyId, saltResult, context)
+  logger.debug("[pixiv-comic] Resolved read pages from Pixiv API", {
+    chapterId: chapter.id,
+    storyId,
+    pageCount: pages.length,
+  })
+  return pages
+}
+
+async function resolvePixivBuildId(
+  chapterId: string,
+  storyId: string,
+  context: PixivResolveContext
+): Promise<string> {
   const taskId = context.taskId
 
   let buildId = taskId ? getPixivBuildIdCache(taskId) : undefined
   logger.debug("[pixiv-comic] Resolving read pages", {
-    chapterId: chapter.id,
+    chapterId,
     storyId,
     taskId,
     buildIdCacheHit: Boolean(buildId),
@@ -254,9 +276,17 @@ async function resolvePixivReadPages(
     }
   }
 
-  let saltResult: { salt: string; pages: PixivReadV4Page[] }
+  return buildId
+}
+
+async function fetchPixivSaltWithBuildRefresh(
+  chapterId: string,
+  storyId: string,
+  buildId: string,
+  context: PixivResolveContext
+): Promise<{ salt: string; pages: PixivReadV4Page[] }> {
   try {
-    saltResult = await fetchPixivSalt(storyId, buildId, context)
+    return await fetchPixivSalt(storyId, buildId, context)
   } catch (error) {
     const statusCode = (error as { status?: number })?.status
     if (statusCode !== 404) {
@@ -266,19 +296,19 @@ async function resolvePixivReadPages(
     logger.debug(
       "[pixiv-comic] Build ID likely stale after salt fetch 404, refreshing build ID",
       {
-        chapterId: chapter.id,
+        chapterId,
         storyId,
         previousBuildId: buildId,
       }
     )
 
     const refreshedBuildId = await fetchPixivBuildId(context)
-    if (taskId) {
-      cachePixivBuildId(taskId, refreshedBuildId)
+    if (context.taskId) {
+      cachePixivBuildId(context.taskId, refreshedBuildId)
     }
 
     try {
-      saltResult = await fetchPixivSalt(storyId, refreshedBuildId, context)
+      return await fetchPixivSalt(storyId, refreshedBuildId, context)
     } catch (error) {
       const refreshedStatusCode = (error as { status?: number })?.status
       if (refreshedStatusCode === 404) {
@@ -290,7 +320,13 @@ async function resolvePixivReadPages(
       throw error
     }
   }
+}
 
+async function fetchPixivReadV4(
+  storyId: string,
+  saltResult: { salt: string; pages: PixivReadV4Page[] },
+  context: PixivResolveContext
+): Promise<PixivReadV4Page[]> {
   const timestamp = new Date().toISOString().replace(/\.\d+Z$/, "Z")
   const clientHash = await computeClientHash(timestamp, saltResult.salt)
   const headers = createPixivHeaders(timestamp) as Record<string, string>
@@ -318,31 +354,34 @@ async function resolvePixivReadPages(
     )
   }
 
-  const payload = (await readResponseJson(response)) as {
+  const payload = (await readResponseJson(response)) as PixivReadV4Response
+  return readPixivResponsePages(payload, saltResult.pages)
+}
+
+type PixivReadV4Response = {
+  pages?: PixivReadV4Page[]
+  reading_episode?: {
+    pages?: PixivReadV4Page[]
+  }
+  data?: {
     pages?: PixivReadV4Page[]
     reading_episode?: {
       pages?: PixivReadV4Page[]
     }
-    data?: {
-      pages?: PixivReadV4Page[]
-      reading_episode?: {
-        pages?: PixivReadV4Page[]
-      }
-    }
   }
+}
 
-  const pages =
+function readPixivResponsePages(
+  payload: PixivReadV4Response,
+  fallback: PixivReadV4Page[]
+): PixivReadV4Page[] {
+  return (
     payload.pages ??
     payload.reading_episode?.pages ??
     payload.data?.pages ??
     payload.data?.reading_episode?.pages ??
-    saltResult.pages
-  logger.debug("[pixiv-comic] Resolved read pages from Pixiv API", {
-    chapterId: chapter.id,
-    storyId,
-    pageCount: pages.length,
-  })
-  return pages
+    fallback
+  )
 }
 
 export async function resolvePixivChapterImageUrls(
@@ -461,41 +500,12 @@ export async function downloadPixivChapterImage(
   return { ...downloadedImage, filename }
 }
 
-export async function downloadPixivCoverImage(
-  imageUrl: string,
-  opts: {
-    signal?: AbortSignal
-    dispatchContext?: PixivDispatchContext
-    runtime: ChapterRuntimeData
-    skipRateLimit?: boolean
-    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger: OffscreenLiveResourceLedger
-  }
-): Promise<{
-  data: ArrayBuffer
-  filename: string
-  mimeType: string
-  liveResourceLease: OffscreenLiveResourceLease
-}> {
-  const sourceImageUrl = normalizePixivImageUrl(imageUrl)
-  const { data, mimeType, liveResourceLease } =
-    await fetchImageWithStallDetection(sourceImageUrl, {
-      integrationId: "pixiv-comic",
-      endpointId: "pixiv-comic-image-cdn",
-      signal: opts.signal,
-      rateLimitService: opts.runtime.rateLimitService,
-      skipRateLimit: opts.skipRateLimit,
-      onBytesReceived: opts.onBytesReceived,
-      assertUrlAllowed: assertPixivImageUrl,
-      init: { credentials: "include" },
-      liveResourceLedger: opts.liveResourceLedger,
-    })
-  return {
-    data,
-    mimeType,
-    liveResourceLease,
-    filename:
-      new URL(sourceImageUrl).pathname.split("/").filter(Boolean).pop() ||
-      "cover.jpg",
-  }
-}
+export const downloadPixivCoverImage =
+  createImageDownloadAdapter<PixivDispatchContext>({
+    integrationId: "pixiv-comic",
+    endpointId: "pixiv-comic-image-cdn",
+    normalizeUrl: normalizePixivImageUrl,
+    assertUrlAllowed: assertPixivImageUrl,
+    init: { credentials: "include" },
+    filename: "cover",
+  })

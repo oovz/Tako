@@ -221,10 +221,7 @@ function extractChapterGroupsFromDocument(
  * number, then by numeric chapter ID, then by DOM position as a final
  * tiebreaker so adjacent specials stay adjacent.
  */
-function mapChapterGroupToChapters(
-  group: ChapterGroup,
-  groupIndex: number
-): Chapter[] {
+function mapChapterGroupToChapters(group: ChapterGroup): Chapter[] {
   const seenIds = new Set<string>()
 
   const mapped = group.links
@@ -253,47 +250,51 @@ function mapChapterGroupToChapters(
           Volume: group.volumeNumber,
           LanguageISO: "zh",
         },
-        __sortOrder: { groupIndex, linkIndex },
-      } as Chapter & { __sortOrder: { groupIndex: number; linkIndex: number } }
+        __sortOrder: { linkIndex },
+      } as Chapter & { __sortOrder: { linkIndex: number } }
     })
     .filter(
       (
         chapter
       ): chapter is Chapter & {
-        __sortOrder: { groupIndex: number; linkIndex: number }
+        __sortOrder: { linkIndex: number }
       } => chapter != null
     )
 
-  mapped.sort((left, right) => {
-    const leftNumber = left.chapterNumber
-    const rightNumber = right.chapterNumber
-
-    if (
-      typeof leftNumber === "number" &&
-      typeof rightNumber === "number" &&
-      leftNumber !== rightNumber
-    ) {
-      return leftNumber - rightNumber
-    }
-
-    const leftId = Number.parseInt(left.id, 10)
-    const rightId = Number.parseInt(right.id, 10)
-    if (
-      Number.isFinite(leftId) &&
-      Number.isFinite(rightId) &&
-      leftId !== rightId
-    ) {
-      return leftId - rightId
-    }
-
-    return left.__sortOrder.linkIndex - right.__sortOrder.linkIndex
-  })
+  mapped.sort(compareChapterOrder)
 
   return mapped.map((chapter) => {
     const { __sortOrder, ...rest } = chapter
     void __sortOrder
     return rest
   })
+}
+
+type OrderedChapter = Chapter & { __sortOrder: { linkIndex: number } }
+
+function compareChapterOrder(
+  left: OrderedChapter,
+  right: OrderedChapter
+): number {
+  const leftNumber = left.chapterNumber
+  const rightNumber = right.chapterNumber
+  if (
+    typeof leftNumber === "number" &&
+    typeof rightNumber === "number" &&
+    leftNumber !== rightNumber
+  ) {
+    return leftNumber - rightNumber
+  }
+  const leftId = Number.parseInt(left.id, 10)
+  const rightId = Number.parseInt(right.id, 10)
+  if (
+    Number.isFinite(leftId) &&
+    Number.isFinite(rightId) &&
+    leftId !== rightId
+  ) {
+    return leftId - rightId
+  }
+  return left.__sortOrder.linkIndex - right.__sortOrder.linkIndex
 }
 
 function mapChapterGroupsToVolumes(groups: ChapterGroup[]): VolumeState[] {
@@ -322,8 +323,8 @@ export function extractChapterListFromDocument(documentLike: Document): {
   const duplicateChapterIds = new Set<string>()
   const chapterById = new Map<string, Chapter>()
 
-  groups.forEach((group, groupIndex) => {
-    for (const chapter of mapChapterGroupToChapters(group, groupIndex)) {
+  groups.forEach((group) => {
+    for (const chapter of mapChapterGroupToChapters(group)) {
       if (chapterById.has(chapter.id)) {
         duplicateChapterIds.add(chapter.id)
         continue
@@ -371,18 +372,36 @@ export function extractSeriesMetadataFromDocument(
     throw new Error("Manhuagui series title not found")
   }
 
-  const subtitle = getTextContent(bookContainer.querySelector(".book-title h2"))
+  return {
+    title,
+    ...readSeriesDetails(documentLike),
+    ...readSeriesPresentation(bookContainer, documentLike),
+    language: "zh",
+  }
+}
+
+function readSeriesDetails(
+  documentLike: Document
+): Pick<SeriesMetadata, "author" | "year" | "genres" | "status"> {
   const detailItems = Array.from(
     documentLike.querySelectorAll(".detail-list span")
   )
   const yearValue = readDetailValues(detailItems, 0)[0]
   const genres = readDetailValues(detailItems, 3)
-  const authors = readDetailValues(detailItems, 4)
-  const status = readDetailValues(detailItems, 7)[0]
-
   return {
-    title,
-    author: authors[0],
+    author: readDetailValues(detailItems, 4)[0],
+    year: yearValue ? Number.parseInt(yearValue, 10) : undefined,
+    genres: genres.length > 0 ? genres : undefined,
+    status: readDetailValues(detailItems, 7)[0],
+  }
+}
+
+function readSeriesPresentation(
+  bookContainer: Element,
+  documentLike: Document
+): Pick<SeriesMetadata, "description" | "coverUrl" | "alternativeTitles"> {
+  const subtitle = getTextContent(bookContainer.querySelector(".book-title h2"))
+  return {
     description:
       getTextContent(bookContainer.querySelector("#intro-all")) ||
       getTextContent(bookContainer.querySelector(".book-intro")) ||
@@ -395,9 +414,5 @@ export function extractSeriesMetadataFromDocument(
         )
     ),
     alternativeTitles: subtitle ? [subtitle] : undefined,
-    year: yearValue ? Number.parseInt(yearValue, 10) : undefined,
-    genres: genres.length > 0 ? genres : undefined,
-    status,
-    language: "zh",
   }
 }

@@ -126,14 +126,7 @@ function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
   }
 
   const id = String(episode.id)
-  const canonicalUrl = `${PIXIV_BASE_URL}/viewer/stories/${id}`
-  let url = canonicalUrl
-  if (episode.viewer_path) {
-    const candidateUrl = new URL(episode.viewer_path, PIXIV_BASE_URL).toString()
-    if (parseEpisodeIdFromUrl(candidateUrl) === id) {
-      url = candidateUrl
-    }
-  }
+  const url = resolvePixivEpisodeUrl(id, episode.viewer_path)
 
   const numberingTitle = sanitizeLabel(episode.numbering_title || "")
   const subtitle = sanitizeLabel(episode.sub_title || "")
@@ -156,12 +149,22 @@ function mapPixivEpisodeToChapter(entry: PixivEpisodeEntry): Chapter | null {
   }
 }
 
+function resolvePixivEpisodeUrl(
+  id: string,
+  viewerPath: string | undefined
+): string {
+  const canonicalUrl = `${PIXIV_BASE_URL}/viewer/stories/${id}`
+  if (!viewerPath) return canonicalUrl
+  const candidateUrl = new URL(viewerPath, PIXIV_BASE_URL).toString()
+  return parseEpisodeIdFromUrl(candidateUrl) === id
+    ? candidateUrl
+    : canonicalUrl
+}
+
 function resolvePixivCoverUrl(work: PixivOfficialWork): string | undefined {
-  const candidate =
-    work.image?.main_big ||
-    work.image?.main ||
-    work.image?.thumbnail ||
-    undefined
+  const image = work.image
+  if (!image) return undefined
+  const candidate = image.main_big || image.main || image.thumbnail
   return candidate ? normalizePixivImageUrl(candidate) : undefined
 }
 

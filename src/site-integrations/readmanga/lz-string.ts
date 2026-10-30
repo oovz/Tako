@@ -15,117 +15,112 @@ function getBaseValue(alphabet: string, character: string): number {
   return baseReverseDictionary[alphabet][character] ?? 0
 }
 
-function decompress(
-  length: number,
-  resetValue: number,
-  getNextValue: (index: number) => number
-): string | null {
-  const dictionary: string[] = []
-  const result: string[] = []
-  let resultLength = 0
+class LzBitReader {
+  private value: number
+  private position: number
+  index = 1
 
-  let enlargeIn = 4
-  let dictSize = 4
-  let numBits = 3
-  let entry: string
-  const data = {
-    value: getNextValue(0),
-    position: resetValue,
-    index: 1,
+  constructor(
+    private readonly resetValue: number,
+    private readonly getNextValue: (index: number) => number
+  ) {
+    this.value = getNextValue(0)
+    this.position = resetValue
   }
 
-  const readBits = (bitCount: number): number => {
+  readBits(bitCount: number): number {
     let bits = 0
     const maxpower = 2 ** bitCount
     let power = 1
-
     while (power !== maxpower) {
-      const resb = data.value & data.position
-      data.position >>= 1
-
-      if (data.position === 0) {
-        data.position = resetValue
-        data.value = getNextValue(data.index++)
+      const resb = this.value & this.position
+      this.position >>= 1
+      if (this.position === 0) {
+        this.position = this.resetValue
+        this.value = this.getNextValue(this.index++)
       }
-
       bits |= (resb > 0 ? 1 : 0) * power
       power <<= 1
     }
-
     return bits
   }
+}
 
-  for (let iteration = 0; iteration < 3; iteration += 1) {
-    dictionary[iteration] = String(iteration)
+class LzDictionary {
+  private readonly entries: string[]
+  private enlargeIn = 4
+  numBits = 3
+
+  constructor(first: string) {
+    this.entries = ["0", "1", "2", first]
   }
 
-  const next = readBits(2)
-  let c: string
-  switch (next) {
+  readIndex(reader: LzBitReader): number {
+    const index = reader.readBits(this.numBits)
+    if (index !== 0 && index !== 1) return index
+    const literal = String.fromCharCode(reader.readBits(index === 0 ? 8 : 16))
+    this.entries.push(literal)
+    this.enlargeIn -= 1
+    return this.entries.length - 1
+  }
+
+  growCodeWidth(): void {
+    if (this.enlargeIn === 0) {
+      this.enlargeIn = 2 ** this.numBits
+      this.numBits += 1
+    }
+  }
+
+  resolve(index: number, previous: string): string | null {
+    if (this.entries[index]) return this.entries[index]
+    return index === this.entries.length ? previous + previous.charAt(0) : null
+  }
+
+  append(previous: string, entry: string): void {
+    this.entries.push(previous + entry.charAt(0))
+    this.enlargeIn -= 1
+    this.growCodeWidth()
+  }
+}
+
+function readInitialLzCharacter(reader: LzBitReader): string | null {
+  switch (reader.readBits(2)) {
     case 0:
-      c = String.fromCharCode(readBits(8))
-      break
+      return String.fromCharCode(reader.readBits(8))
     case 1:
-      c = String.fromCharCode(readBits(16))
-      break
+      return String.fromCharCode(reader.readBits(16))
     case 2:
       return ""
     default:
       return null
   }
+}
 
-  dictionary[3] = c
-  let w = c
-  result.push(c)
-  resultLength += c.length
+function decompress(
+  length: number,
+  resetValue: number,
+  getNextValue: (index: number) => number
+): string | null {
+  const reader = new LzBitReader(resetValue, getNextValue)
+  const first = readInitialLzCharacter(reader)
+  if (first === null || first === "") return first
+  const dictionary = new LzDictionary(first)
+  const result = [first]
+  let resultLength = first.length
+  let previous = first
 
   while (true) {
-    if (data.index > length) {
-      return ""
-    }
-
-    const bits = readBits(numBits)
-    let current = bits
-
-    if (current === 0) {
-      dictionary[dictSize++] = String.fromCharCode(readBits(8))
-      current = dictSize - 1
-      enlargeIn -= 1
-    } else if (current === 1) {
-      dictionary[dictSize++] = String.fromCharCode(readBits(16))
-      current = dictSize - 1
-      enlargeIn -= 1
-    } else if (current === 2) {
-      return result.join("")
-    }
-
-    if (enlargeIn === 0) {
-      enlargeIn = 2 ** numBits
-      numBits += 1
-    }
-
-    if (dictionary[current]) {
-      entry = dictionary[current]!
-    } else if (current === dictSize) {
-      entry = w + w.charAt(0)
-    } else {
-      return null
-    }
-
+    if (reader.index > length) return ""
+    const current = dictionary.readIndex(reader)
+    if (current === 2) return result.join("")
+    dictionary.growCodeWidth()
+    const entry = dictionary.resolve(current, previous)
+    if (entry === null) return null
     resultLength += entry.length
-    if (resultLength > MAX_DECOMPRESSED_OUTPUT_LENGTH) {
-      return null
-    }
+    if (resultLength > MAX_DECOMPRESSED_OUTPUT_LENGTH) return null
     result.push(entry)
-
-    dictionary[dictSize++] = w + entry.charAt(0)
-    enlargeIn -= 1
-    w = entry
-
-    if (enlargeIn === 0) {
-      enlargeIn = 2 ** numBits
-      numBits += 1
-    }
+    dictionary.append(previous, entry)
+    previous = entry
   }
 }
 

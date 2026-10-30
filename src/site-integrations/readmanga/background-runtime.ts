@@ -30,17 +30,13 @@ function readManhuaguiLiveChapterHtml(
   return chapterHtml
 }
 
-async function resolveManhuaguiSeriesData(input: {
-  seriesUrl: string
-  seriesId?: string
-  language?: string
-  pageProbeData?: unknown
-  signal?: AbortSignal
-  rateLimitService: RateLimitService
-}): Promise<SeriesDataResolutionResult> {
+function resolveManhuaguiSeriesId(
+  seriesUrl: string,
+  requestedSeriesId: string | undefined
+): string {
   let parsedUrl: URL
   try {
-    parsedUrl = new URL(input.seriesUrl)
+    parsedUrl = new URL(seriesUrl)
   } catch {
     throw new Error("Invalid Manhuagui series URL")
   }
@@ -52,12 +48,26 @@ async function resolveManhuaguiSeriesData(input: {
     throw new Error("Manhuagui URL must use a trusted manhuagui.com origin")
   }
 
-  const seriesId = input.seriesId ?? parseSeriesIdFromPath(parsedUrl.pathname)
+  const seriesId =
+    requestedSeriesId ?? parseSeriesIdFromPath(parsedUrl.pathname)
   if (!seriesId) {
     throw new Error(
       "Manhuagui series URL must match /comic/{id} or include a seriesId"
     )
   }
+
+  return seriesId
+}
+
+async function resolveManhuaguiSeriesData(input: {
+  seriesUrl: string
+  seriesId?: string
+  language?: string
+  pageProbeData?: unknown
+  signal?: AbortSignal
+  rateLimitService: RateLimitService
+}): Promise<SeriesDataResolutionResult> {
+  const seriesId = resolveManhuaguiSeriesId(input.seriesUrl, input.seriesId)
 
   const liveChapterHtml = readManhuaguiLiveChapterHtml(input.pageProbeData)
   logger.debug("[manhuagui] Resolving series data", {
@@ -121,23 +131,30 @@ async function resolveManhuaguiSeriesData(input: {
     signal: input.signal,
     rateLimitService: input.rateLimitService,
   })
+  return mergeManhuaguiLiveChapterList(resolved, liveResolved, seriesId)
+}
+
+function mergeManhuaguiLiveChapterList(
+  resolved: SeriesDataResolutionResult,
+  liveResolved: SeriesDataResolutionResult,
+  seriesId: string
+): SeriesDataResolutionResult {
   const liveChapterList = liveResolved.chapterList as
     { chapters?: unknown[] } | undefined
-  if (Array.isArray(liveChapterList?.chapters)) {
-    logger.debug("[manhuagui] Returning live page chapter list", {
-      seriesId,
-      chapterCount: liveChapterList.chapters.length,
-    })
-    const stableResolved = { ...resolved }
-    delete stableResolved.chapterListNotice
-    return {
-      ...stableResolved,
-      seriesId,
-      chapterList: liveResolved.chapterList,
-      chapterListError: liveResolved.chapterListError,
-    }
+  if (!Array.isArray(liveChapterList?.chapters))
+    return { ...resolved, seriesId }
+  logger.debug("[manhuagui] Returning live page chapter list", {
+    seriesId,
+    chapterCount: liveChapterList.chapters.length,
+  })
+  const stableResolved = { ...resolved }
+  delete stableResolved.chapterListNotice
+  return {
+    ...stableResolved,
+    seriesId,
+    chapterList: liveResolved.chapterList,
+    chapterListError: liveResolved.chapterListError,
   }
-  return { ...resolved, seriesId }
 }
 
 const background: ServiceWorkerIntegration = {
