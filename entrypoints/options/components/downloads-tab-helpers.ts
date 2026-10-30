@@ -43,6 +43,19 @@ function countCompletedChapters(chapters: TaskChapter[]): number {
   return chapters.filter((chapter) => chapter.status === "completed").length
 }
 
+function completedTaskSummary(chapters: TaskChapter[]): string {
+  const totalChapters = chapters.length
+  const destination = getCompletedOutputDestination(chapters)
+  return t(
+    getCompletedSaveConfirmedAt(chapters) === undefined
+      ? "options_taskPreviouslyProcessed"
+      : destination === "fsa"
+        ? "options_taskSavedToFolder"
+        : "options_taskSaved",
+    [String(totalChapters), totalChapters === 1 ? "" : "s"]
+  )
+}
+
 export function getTaskStatusSummaryLabel(
   task: Pick<DownloadTaskState, "status" | "chapters">
 ): string {
@@ -50,17 +63,8 @@ export function getTaskStatusSummaryLabel(
   const totalChapters = task.chapters.length
 
   switch (task.status) {
-    case "completed": {
-      const destination = getCompletedOutputDestination(task.chapters)
-      return t(
-        getCompletedSaveConfirmedAt(task.chapters) === undefined
-          ? "options_taskPreviouslyProcessed"
-          : destination === "fsa"
-            ? "options_taskSavedToFolder"
-            : "options_taskSaved",
-        [String(totalChapters), totalChapters === 1 ? "" : "s"]
-      )
-    }
+    case "completed":
+      return completedTaskSummary(task.chapters)
     case "failed":
       return t("options_taskFailed", [
         String(completedChapters),
