@@ -26,6 +26,7 @@
     "test:integration": "vitest run --project integration",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:runtime": "vitest run --config vitest.runtime-coverage.config.ts --coverage",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:diag": "cross-env TMD_TEST_E2E_DIAG=true playwright test --config=playwright.config.ts",
     "test:e2e:headed": "playwright test --config=playwright.config.ts --headed",
@@ -36,7 +37,7 @@
     "test:live:ci": "playwright test --config=playwright.live.ci.config.ts",
     "coverage:merge": "node scripts/merge-coverage.mjs",
     "coverage:report": "nyc report --reporter=text --reporter=lcov --reporter=html --temp-dir=.nyc_output --report-dir=coverage/merged",
-    "coverage:all": "pnpm test:coverage && pnpm test:e2e:coverage && pnpm coverage:merge && pnpm coverage:report"
+    "coverage:all": "pnpm test:coverage && pnpm test:coverage:runtime && pnpm test:e2e:coverage && pnpm coverage:merge && pnpm coverage:report"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -47,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
+    "@vitest/coverage-istanbul": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "@vitest/ui": "4.1.10",
     "@wxt-dev/module-react": "^1.2.2",
@@ -56,6 +58,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "happy-dom": "21.0.1",
     "istanbul-lib-coverage": "3.2.2",
+    "istanbul-lib-source-maps": "5.0.6",
     "nyc": "^18.0.0",
     "prettier": "3.9.4",
     "tailwindcss": "^4.3.2",

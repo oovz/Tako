@@ -1,7 +1,8 @@
 export interface CoverageInputState {
-  hasVitestCoverage: boolean;
-  e2ePageCoverageFileCount: number;
-  e2eWorkerCoverageFileCount: number;
+  hasVitestCoverage: boolean
+  hasRuntimeCoverage: boolean
+  e2ePageCoverageFileCount: number
+  e2eWorkerCoverageFileCount: number
 }
 
-export function assertCompleteCoverageInputs(inputs: CoverageInputState): void;
+export function assertCompleteCoverageInputs(inputs: CoverageInputState): void

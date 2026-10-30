@@ -41,6 +41,8 @@ jobs:
         run: pnpm type-check
       - name: Unit and integration tests with coverage check
         run: pnpm test:coverage
+      - name: Browser-compatible runtime coverage check
+        run: pnpm test:coverage:runtime
       - name: Build
         run: pnpm build
   e2e:

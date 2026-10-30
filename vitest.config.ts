@@ -30,56 +30,28 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      // Executable source and extension runtime modules.
+      // Native tests exercise shared logic, UI components and maintained tooling.
+      // The merged browser report adds the application launchers below.
       include: [
-        "src/**/*.ts",
-        "entrypoints/background/**/*.ts",
-        "entrypoints/offscreen/**/*.ts",
-        "entrypoints/options/**/*.ts",
-        "entrypoints/sidepanel/**/*.ts",
+        "src/**/*.{ts,tsx}",
+        "entrypoints/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,tsx,js,mjs,cjs,mts,cts}",
       ],
       exclude: [
-        "src/**/*.d.ts",
-        "src/types/**",
-        "src/runtime/generated/**", // Generated registries (tested via E2E)
-        // PUBLUS decoding is checked by browser and live workflows.
-        "src/site-integrations/comictropics/publus-config.ts",
+        "**/*.d.ts",
+        "src/runtime/generated/**",
         "**/node_modules/**",
-        // Browser-tested UI components.
-        "entrypoints/**/*.tsx",
-        "components/**/*.tsx",
-        // Lifecycle entrypoints exercised by browser tests.
-        "entrypoints/background/index.ts",
-        // Isolated browser-test state setup.
+        // Isolated browser-test setup.
         "entrypoints/background/e2e-state-seed.ts",
+        // Application launchers are exercised by the instrumented browser suite.
+        "entrypoints/background/index.ts",
         "entrypoints/offscreen/main.ts",
-        "entrypoints/offscreen/zip.worker.ts",
         "entrypoints/options/main.tsx",
         "entrypoints/sidepanel/main.tsx",
         // Type-only modules.
         "entrypoints/offscreen/chapter-processing-types.ts",
         "entrypoints/sidepanel/types.ts",
-        // UI hooks exercised by browser tests.
-        "entrypoints/options/hooks/useOptionsPageState.ts",
-        "entrypoints/options/hooks/useOptionsFolderManagement.ts",
-        "entrypoints/options/hooks/useOptionsHistory.ts",
-        "entrypoints/options/hooks/useDownloadsTabState.ts",
-        "entrypoints/sidepanel/hooks/useCommandCenterActions.ts",
-        "entrypoints/sidepanel/hooks/useSidepanelTrackedTabId.ts",
-        "entrypoints/sidepanel/hooks/useErrors.ts",
-        "entrypoints/sidepanel/hooks/useSidepanelSeriesContext.ts",
-        "entrypoints/sidepanel/hooks/useInlineSelectionState.ts",
-        "entrypoints/sidepanel/hooks/useOptionsActionItems.ts",
-        "entrypoints/sidepanel/hooks/useSelection.ts",
-        "entrypoints/sidepanel/hooks/useDownload.ts",
-        "entrypoints/sidepanel/hooks/useQueueView.ts",
-        "entrypoints/sidepanel/hooks/useChapterSelections.ts",
-        "entrypoints/sidepanel/hooks/useInitFailure.ts",
-        "entrypoints/sidepanel/hooks/useActiveTaskProgress.ts",
-        "src/ui/shared/hooks/useChromeStorageValue.ts",
-        "src/ui/shared/hooks/useUiPreferences.ts",
-        // Status presentation is covered through the offscreen/browser runtime.
-        "entrypoints/offscreen/status-ui.ts",
       ],
       thresholds: {
         lines: 80,

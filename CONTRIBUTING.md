@@ -45,7 +45,7 @@ To add a site, run `pnpm new:site-integration <id>` and follow the [Site Integra
 | E2E         | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                 |
 | Live E2E    | `pnpm test:live`        | The built extension against real sites; run when site access is available |
 
-Use `pnpm test:coverage` for unit and integration coverage. Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
+Use `pnpm test:coverage` for unit and integration coverage. Use `pnpm coverage:all` to collect compatible native and browser profiles and generate the combined report. Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
 Browser tests create disposable profiles and build their own test extension. Install the configured Chromium channel before running them:
 
