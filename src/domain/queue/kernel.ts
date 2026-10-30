@@ -23,6 +23,7 @@ import {
   normalizeDownloadTaskExecutionState,
   normalizeInterruptedTask,
   resolveFinalDownloadTaskStatus,
+  resolveTerminalChapterTaskStatus,
   type ChapterDispatchOutcome,
 } from "./task-lifecycle"
 import type {
@@ -117,7 +118,7 @@ const STAGE_ORDER: Record<OffscreenJobStage, number> = {
 }
 
 function baseLeaseMatches(
-  lease: ActiveDispatchLease | null,
+  lease: DispatchLeaseIdentity | null,
   identity: DispatchLeaseIdentity
 ): boolean {
   return (
@@ -147,6 +148,92 @@ function replaceTaskAt(
   const nextQueue = [...queue]
   nextQueue[taskIndex] = task
   return nextQueue
+}
+
+function applyTaskReplacement(
+  state: QueueAggregateState,
+  taskIndex: number,
+  task: DownloadTaskState
+): QueueKernelDecision<Applied<{ task: DownloadTaskState }>> {
+  return {
+    next: { ...state, queue: replaceTaskAt(state.queue, taskIndex, task) },
+    changedKeys: QUEUE_KEY,
+    result: { outcome: "applied", task },
+  }
+}
+
+type ActiveTaskLookup =
+  | { taskIndex: number; task: DownloadTaskState }
+  | { rejection: TaskMutationRejection }
+
+function findActiveTask(
+  state: QueueAggregateState,
+  taskId: string
+): ActiveTaskLookup {
+  const located = findPendingTask(state, taskId)
+  if ("rejection" in located || located.task.status === "downloading")
+    return located
+  return {
+    rejection: {
+      outcome: "rejected",
+      reason: "task-not-active",
+      currentStatus: located.task.status,
+    },
+  }
+}
+
+function findPendingTask(
+  state: QueueAggregateState,
+  taskId: string
+): ActiveTaskLookup {
+  const taskIndex = state.queue.findIndex((task) => task.id === taskId)
+  if (taskIndex === -1) {
+    return { rejection: { outcome: "rejected", reason: "task-not-found" } }
+  }
+  const task = state.queue[taskIndex]
+  if (task.status !== "queued" && task.status !== "downloading") {
+    return {
+      rejection: {
+        outcome: "rejected",
+        reason: "task-not-active",
+        currentStatus: task.status,
+      },
+    }
+  }
+  return { taskIndex, task }
+}
+
+function findActiveTaskChapter(
+  state: QueueAggregateState,
+  input: { taskId: string; chapterId: string }
+):
+  | {
+      taskIndex: number
+      task: DownloadTaskState
+      chapterIndex: number
+      chapter: TaskChapter
+    }
+  | { rejection: TaskMutationRejection | Rejected<"chapter-not-found"> } {
+  const located = findActiveTask(state, input.taskId)
+  if ("rejection" in located) return located
+  const chapterIndex = located.task.chapters.findIndex(
+    (chapter) => chapter.id === input.chapterId
+  )
+  if (chapterIndex === -1) {
+    return { rejection: { outcome: "rejected", reason: "chapter-not-found" } }
+  }
+  return {
+    ...located,
+    chapterIndex,
+    chapter: located.task.chapters[chapterIndex],
+  }
+}
+
+function observedLeaseMatches(
+  lease: ActiveDispatchLease | null,
+  observed: DispatchLeaseAuthority | null
+): boolean {
+  return observed ? exactLeaseMatches(lease, observed) : lease === null
 }
 
 function accountingWithMonotonicCounts(
@@ -230,55 +317,68 @@ export function enqueueDownloadTask(
   }
 }
 
-export function recoverQueueAfterStartup(
-  state: QueueAggregateState,
-  input: StartupRecoveryInput
-): QueueKernelDecision<StartupRecoveryResult> {
-  const observedLeaseMatches = input.observedLease
-    ? exactLeaseMatches(state.lease, input.observedLease)
-    : state.lease === null
-  if (!observedLeaseMatches) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "lease-conflict" },
-    }
-  }
+function startupOffscreenJobMatches(
+  lease: ActiveDispatchLease | null,
+  job: StartupOffscreenJobObservation | null
+): boolean {
+  return (
+    lease !== null &&
+    job !== null &&
+    job.status !== "canceled" &&
+    exactLeaseMatches(lease, job)
+  )
+}
 
+function normalizeStartupTask(
+  task: DownloadTaskState,
+  now: number
+): DownloadTaskState {
+  const taskWithCompletion =
+    isTerminalDownloadTask(task) && typeof task.completed !== "number"
+      ? { ...task, completed: now }
+      : task
+  return normalizeDownloadTaskExecutionState(taskWithCompletion)
+}
+
+function startupTaskDisposition(
+  task: DownloadTaskState,
+  lease: ActiveDispatchLease | null,
+  exactOffscreenJob: boolean,
+  nativeOutputTaskIds: ReadonlySet<string>
+): "preserve" | "resume" | "interrupt" {
+  if (!isExecutingDownloadTask(task)) return "preserve"
+  if (nativeOutputTaskIds.has(task.id)) return "preserve"
+  if (exactOffscreenJob && lease?.taskId === task.id) return "preserve"
+  return lease === null &&
+    task.chapters.every((chapter) => chapter.status !== "downloading")
+    ? "resume"
+    : "interrupt"
+}
+
+function recoverStartupTasks(
+  state: QueueAggregateState,
+  input: StartupRecoveryInput,
+  exactOffscreenJob: boolean
+) {
   const recoveredTaskIds = new Set<string>()
   const interruptedTaskIds: string[] = []
   const nativeOutputTaskIds = new Set(input.nativeOutputTaskIds)
-  let queue = state.queue.map((task) => {
-    const taskWithCompletion =
-      isTerminalDownloadTask(task) && typeof task.completed !== "number"
-        ? { ...task, completed: input.normalizationTime }
-        : task
-    const normalizedTask =
-      normalizeDownloadTaskExecutionState(taskWithCompletion)
-    if (normalizedTask !== task) recoveredTaskIds.add(task.id)
-    return normalizedTask
-  })
-  if (recoveredTaskIds.size === 0) queue = state.queue
-
-  const exactOffscreenJob =
-    state.lease !== null &&
-    input.offscreenJob !== null &&
-    input.offscreenJob.status !== "canceled" &&
-    exactLeaseMatches(state.lease, input.offscreenJob)
-  const clearLease = state.lease !== null && !exactOffscreenJob
   let resumeTaskId = exactOffscreenJob ? state.lease?.taskId : undefined
-
-  queue = queue.map((task) => {
-    if (!isExecutingDownloadTask(task)) return task
-    if (nativeOutputTaskIds.has(task.id)) return task
-    if (exactOffscreenJob && state.lease?.taskId === task.id) return task
-    if (
-      state.lease === null &&
-      task.chapters.every((chapter) => chapter.status !== "downloading")
-    ) {
-      resumeTaskId ??= task.id
-      return task
-    }
+  // Preserve normalization order in the recovery receipt before interrupted tasks.
+  const normalized = state.queue.map((task) => {
+    const recovered = normalizeStartupTask(task, input.normalizationTime)
+    if (recovered !== task) recoveredTaskIds.add(task.id)
+    return recovered
+  })
+  const queue = normalized.map((task) => {
+    const disposition = startupTaskDisposition(
+      task,
+      state.lease,
+      exactOffscreenJob,
+      nativeOutputTaskIds
+    )
+    if (disposition === "resume") resumeTaskId ??= task.id
+    if (disposition !== "interrupt") return task
     recoveredTaskIds.add(task.id)
     interruptedTaskIds.push(task.id)
     return normalizeInterruptedTask(
@@ -287,6 +387,29 @@ export function recoverQueueAfterStartup(
       input.interruptedAt
     )
   })
+  return { queue, recoveredTaskIds, interruptedTaskIds, resumeTaskId }
+}
+
+export function recoverQueueAfterStartup(
+  state: QueueAggregateState,
+  input: StartupRecoveryInput
+): QueueKernelDecision<StartupRecoveryResult> {
+  const leaseMatches = observedLeaseMatches(state.lease, input.observedLease)
+  if (!leaseMatches) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "lease-conflict" },
+    }
+  }
+
+  const exactOffscreenJob = startupOffscreenJobMatches(
+    state.lease,
+    input.offscreenJob
+  )
+  const clearLease = state.lease !== null && !exactOffscreenJob
+  const { queue, recoveredTaskIds, interruptedTaskIds, resumeTaskId } =
+    recoverStartupTasks(state, input, exactOffscreenJob)
 
   const queueChanged = recoveredTaskIds.size > 0
   if (!queueChanged && !clearLease) {
@@ -378,14 +501,7 @@ export function startDownloadTask(
     status: "downloading",
     started: input.now,
   }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, startedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: startedTask },
-  }
+  return applyTaskReplacement(state, taskIndex, startedTask)
 }
 
 export function beginChapterDispatch(
@@ -408,37 +524,11 @@ export function beginChapterDispatch(
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findActiveTaskChapter(state, input)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  const chapterIndex = task.chapters.findIndex(
-    (chapter) => chapter.id === input.chapterId
-  )
-  if (chapterIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "chapter-not-found" },
-    }
-  }
-  const chapter = task.chapters[chapterIndex]
+  const { taskIndex, task, chapterIndex, chapter } = located
   if (chapter.status !== "queued" && chapter.status !== "downloading") {
     return {
       next: state,
@@ -447,9 +537,10 @@ export function beginChapterDispatch(
     }
   }
 
-  const previousLeaseMatches = input.expectedPreviousLease
-    ? exactLeaseMatches(state.lease, input.expectedPreviousLease)
-    : state.lease === null
+  const previousLeaseMatches = observedLeaseMatches(
+    state.lease,
+    input.expectedPreviousLease
+  )
   if (
     !previousLeaseMatches ||
     input.lease.taskId !== input.taskId ||
@@ -530,6 +621,25 @@ export function settleTaskChapter(
   })
 }
 
+function chapterMutationLeaseMatches(
+  lease: ActiveDispatchLease | null,
+  chapter: TaskChapter,
+  identity: DispatchLeaseAuthority | undefined
+): boolean {
+  if (identity) return exactLeaseMatches(lease, identity)
+  return chapter.status !== "downloading"
+}
+
+function chapterRejectsUpdate(
+  chapter: TaskChapter,
+  input: { status: ChapterStatus; terminalUpdate: boolean }
+): boolean {
+  return (
+    isTerminalChapterStatus(chapter.status) &&
+    (input.status !== chapter.status || !input.terminalUpdate)
+  )
+}
+
 function updateChapter(
   state: QueueAggregateState,
   input: {
@@ -547,65 +657,19 @@ function updateChapter(
   | TaskMutationRejection
   | Rejected<"chapter-not-found" | "lease-conflict">
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findActiveTaskChapter(state, input)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
-  const chapterIndex = task.chapters.findIndex(
-    (chapter) => chapter.id === input.chapterId
-  )
-  if (chapterIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "chapter-not-found" },
-    }
-  }
-  const chapter = task.chapters[chapterIndex]
-  if (chapter.status === "downloading" && !input.leaseIdentity) {
+  const { taskIndex, task, chapterIndex, chapter } = located
+  if (!chapterMutationLeaseMatches(state.lease, chapter, input.leaseIdentity)) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "lease-conflict" },
     }
   }
-  if (
-    input.leaseIdentity &&
-    !exactLeaseMatches(state.lease, input.leaseIdentity)
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "lease-conflict" },
-    }
-  }
-  if (
-    isTerminalChapterStatus(chapter.status) &&
-    input.status !== chapter.status
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "unchanged", reason: "terminal-chapter" },
-    }
-  }
-  if (!input.terminalUpdate && isTerminalChapterStatus(chapter.status)) {
+  if (chapterRejectsUpdate(chapter, input)) {
     return {
       next: state,
       changedKeys: [],
@@ -655,26 +719,11 @@ export function recordTaskDispatchError(
   | Unchanged<{ reason: "already-current" }>
   | TaskMutationRejection
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findActiveTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (
     task.errorMessage === input.errorMessage &&
     task.errorCategory === input.errorCategory
@@ -691,14 +740,29 @@ export function recordTaskDispatchError(
     errorMessage: input.errorMessage,
     errorCategory: input.errorCategory,
   }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
+  return applyTaskReplacement(state, taskIndex, updatedTask)
+}
+
+function leaseEventRejection(
+  current: ActiveDispatchLease,
+  input: Parameters<typeof renewDispatchLease>[1]
+):
+  | "invalid-activity-time"
+  | "stale-sequence"
+  | "sequence-conflict"
+  | "stage-regression"
+  | undefined {
+  if (!Number.isFinite(input.activityAt) || input.activityAt < 0)
+    return "invalid-activity-time"
+  if (input.sequence < current.sequence) return "stale-sequence"
+  if (input.sequence === current.sequence) {
+    if (current.lastEventSignature !== input.eventSignature)
+      return "sequence-conflict"
+    if (input.requireSequenceAdvance === true) return "stale-sequence"
   }
+  if (STAGE_ORDER[input.stage] < STAGE_ORDER[current.stage])
+    return "stage-regression"
+  return undefined
 }
 
 export function renewDispatchLease(
@@ -724,58 +788,19 @@ export function renewDispatchLease(
     >
 > {
   const current = state.lease
-  if (
-    !current ||
-    !exactLeaseMatches(current, input) ||
-    current.fingerprint !== input.fingerprint ||
-    (current.documentInstanceId !== undefined &&
-      current.documentInstanceId !== input.documentInstanceId)
-  ) {
+  if (!current || !exactLeaseMatches(current, input)) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "lease-not-current" },
     }
   }
-  if (!Number.isFinite(input.activityAt) || input.activityAt < 0) {
+  const rejection = leaseEventRejection(current, input)
+  if (rejection) {
     return {
       next: state,
       changedKeys: [],
-      result: { outcome: "rejected", reason: "invalid-activity-time" },
-    }
-  }
-  if (input.sequence < current.sequence) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "stale-sequence" },
-    }
-  }
-  if (
-    input.sequence === current.sequence &&
-    current.lastEventSignature !== input.eventSignature
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "sequence-conflict" },
-    }
-  }
-  if (
-    input.sequence === current.sequence &&
-    input.requireSequenceAdvance === true
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "stale-sequence" },
-    }
-  }
-  if (STAGE_ORDER[input.stage] < STAGE_ORDER[current.stage]) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "stage-regression" },
+      result: { outcome: "rejected", reason: rejection },
     }
   }
   if (input.sequence === current.sequence) {
@@ -879,26 +904,11 @@ export function setNextChapterDispatchAt(
   | Unchanged<{ reason: "already-current" }>
   | TaskMutationRejection
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findActiveTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (task.nextChapterDispatchAt === input.nextChapterDispatchAt) {
     return {
       next: state,
@@ -910,13 +920,159 @@ export function setNextChapterDispatchAt(
     ...task,
     nextChapterDispatchAt: input.nextChapterDispatchAt,
   }
+  return applyTaskReplacement(state, taskIndex, updatedTask)
+}
+
+type NativeSettlementInput = Parameters<typeof applyNativeOutputSettlement>[1]
+type NativeSettlementOwnershipResult =
+  | { outcome: "not_owner"; reason: "task-canceled" | "stale-terminal" }
+  | {
+      outcome: "conflict"
+      reason: "active-attempt-conflict" | "lease-conflict"
+    }
+
+function nativeSettlementTotalsValid(input: NativeSettlementInput): boolean {
+  return (
+    [input.requested, input.completed, input.interrupted].every(
+      (count) => Number.isInteger(count) && count >= 0
+    ) && input.completed + input.interrupted === input.requested
+  )
+}
+
+function nativeSettlementMatches(
+  existing: NativeOutputSettlement,
+  input: NativeSettlementInput
+): boolean {
+  return (
+    baseLeaseMatches(existing, input) &&
+    existing.requested === input.requested &&
+    existing.completed === input.completed &&
+    existing.interrupted === input.interrupted &&
+    existing.outputUncertain === input.outputUncertain &&
+    existing.errorMessage === input.errorMessage &&
+    existing.errorCategory === input.errorCategory &&
+    existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
+  )
+}
+
+function nativeSettlementOwnership(
+  lease: ActiveDispatchLease | null,
+  task: DownloadTaskState,
+  chapter: TaskChapter,
+  input: NativeSettlementInput
+): NativeSettlementOwnershipResult | undefined {
+  if (task.status === "canceled")
+    return { outcome: "not_owner", reason: "task-canceled" }
+  if (isTerminalDownloadTask(task))
+    return { outcome: "not_owner", reason: "stale-terminal" }
+  if (chapter.dispatchAttempt !== input.attempt) {
+    return isTerminalChapterStatus(chapter.status)
+      ? { outcome: "not_owner", reason: "stale-terminal" }
+      : { outcome: "conflict", reason: "active-attempt-conflict" }
+  }
+  if (baseLeaseMatches(lease, input))
+    return { outcome: "conflict", reason: "lease-conflict" }
+  return undefined
+}
+
+function nativeSettlementFailure(
+  settlement: NativeOutputSettlement
+): Pick<TaskChapter, "errorMessage" | "errorCategory"> {
+  if (settlement.outputUncertain) {
+    return {
+      errorMessage:
+        settlement.errorMessage ??
+        "Chrome file-save outcome could not be established. Retrying may create duplicates.",
+      errorCategory: settlement.errorCategory ?? "browser_output_unconfirmed",
+    }
+  }
+  if (settlement.interrupted === 0)
+    return {
+      errorMessage: settlement.errorMessage,
+      errorCategory: settlement.errorCategory,
+    }
   return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
+    errorMessage:
+      settlement.errorMessage ??
+      (settlement.completed > 0
+        ? `${settlement.interrupted} output file(s) could not be saved by Chrome.`
+        : "Output could not be saved by Chrome."),
+    errorCategory: settlement.errorCategory ?? "browser_download_interrupted",
+  }
+}
+
+function materializeNativeSettledChapter(
+  chapter: TaskChapter,
+  settlement: NativeOutputSettlement,
+  now: number
+): TaskChapter {
+  const succeeded =
+    settlement.requested > 0 && settlement.completed === settlement.requested
+  return {
+    ...chapter,
+    status: succeeded
+      ? "completed"
+      : settlement.completed > 0
+        ? "partial_success"
+        : "failed",
+    ...(succeeded
+      ? { errorMessage: undefined, errorCategory: undefined }
+      : nativeSettlementFailure(settlement)),
+    outputs: {
+      requested: settlement.requested,
+      committed: settlement.completed,
+      failed: settlement.interrupted,
     },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
+    nativeOutputSettlement: settlement,
+    outputDestination: "downloads-api",
+    saveConfirmedAt: succeeded ? now : undefined,
+    lastUpdated: Math.max(chapter.lastUpdated, now),
+  }
+}
+
+function terminalChapterTaskSummary(
+  chapters: readonly TaskChapter[]
+): Pick<DownloadTaskState, "status" | "errorMessage" | "errorCategory"> {
+  const status = resolveTerminalChapterTaskStatus(chapters)
+  const allCompleted = status === "completed"
+  const failure = firstUnsuccessfulChapter(chapters)
+  return {
+    status,
+    errorMessage: allCompleted ? undefined : failure?.errorMessage,
+    errorCategory: allCompleted
+      ? undefined
+      : (failure?.errorCategory ?? "unknown"),
+  }
+}
+
+function materializeNativeSettledTask(
+  task: DownloadTaskState,
+  chapters: TaskChapter[],
+  input: NativeSettlementInput
+): DownloadTaskState {
+  const lastSuccessfulDownloadId =
+    input.lastSuccessfulDownloadId !== undefined &&
+    (task.lastSuccessfulDownloadId === undefined ||
+      input.lastSuccessfulDownloadId > task.lastSuccessfulDownloadId)
+      ? input.lastSuccessfulDownloadId
+      : task.lastSuccessfulDownloadId
+  const allChaptersTerminal = chapters.every((chapter) =>
+    isTerminalChapterStatus(chapter.status)
+  )
+  return {
+    ...task,
+    chapters,
+    lastSuccessfulDownloadId,
+    nextChapterDispatchAt: allChaptersTerminal
+      ? undefined
+      : task.nextChapterDispatchAt,
+    ...(allChaptersTerminal
+      ? {
+          ...terminalChapterTaskSummary(chapters),
+          completed: input.now,
+          activeBlock: undefined,
+        }
+      : {}),
   }
 }
 
@@ -958,15 +1114,7 @@ export function applyNativeOutputSettlement(
         | "lease-conflict"
     }
 > {
-  if (
-    input.requested < 0 ||
-    input.completed < 0 ||
-    input.interrupted < 0 ||
-    !Number.isInteger(input.requested) ||
-    !Number.isInteger(input.completed) ||
-    !Number.isInteger(input.interrupted) ||
-    input.completed + input.interrupted !== input.requested
-  ) {
+  if (!nativeSettlementTotalsValid(input)) {
     return {
       next: state,
       changedKeys: [],
@@ -997,18 +1145,7 @@ export function applyNativeOutputSettlement(
 
   const existing = chapter.nativeOutputSettlement
   if (existing) {
-    const exactReplay =
-      existing.jobId === input.jobId &&
-      existing.attempt === input.attempt &&
-      existing.taskId === input.taskId &&
-      existing.chapterId === input.chapterId &&
-      existing.requested === input.requested &&
-      existing.completed === input.completed &&
-      existing.interrupted === input.interrupted &&
-      existing.outputUncertain === input.outputUncertain &&
-      existing.errorMessage === input.errorMessage &&
-      existing.errorCategory === input.errorCategory &&
-      existing.lastSuccessfulDownloadId === input.lastSuccessfulDownloadId
+    const exactReplay = nativeSettlementMatches(existing, input)
     return {
       next: state,
       changedKeys: [],
@@ -1017,44 +1154,14 @@ export function applyNativeOutputSettlement(
         : { outcome: "conflict", reason: "settlement-conflict" },
     }
   }
-  if (task.status === "canceled") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "not_owner", reason: "task-canceled" },
-    }
-  }
-  if (isTerminalDownloadTask(task)) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "not_owner", reason: "stale-terminal" },
-    }
-  }
-  if (chapter.dispatchAttempt !== input.attempt) {
-    const terminal = isTerminalChapterStatus(chapter.status)
-    return {
-      next: state,
-      changedKeys: [],
-      result: terminal
-        ? { outcome: "not_owner", reason: "stale-terminal" }
-        : { outcome: "conflict", reason: "active-attempt-conflict" },
-    }
-  }
-  if (
-    baseLeaseMatches(state.lease, {
-      jobId: input.jobId,
-      attempt: input.attempt,
-      taskId: input.taskId,
-      chapterId: input.chapterId,
-    })
-  ) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "conflict", reason: "lease-conflict" },
-    }
-  }
+  const ownershipResult = nativeSettlementOwnership(
+    state.lease,
+    task,
+    chapter,
+    input
+  )
+  if (ownershipResult)
+    return { next: state, changedKeys: [], result: ownershipResult }
 
   const settlement: NativeOutputSettlement = {
     jobId: input.jobId,
@@ -1070,90 +1177,14 @@ export function applyNativeOutputSettlement(
     lastSuccessfulDownloadId: input.lastSuccessfulDownloadId,
     appliedAt: input.now,
   }
-  const interruptionMessage = input.outputUncertain
-    ? "Chrome file-save outcome could not be established. Retrying may create duplicates."
-    : input.interrupted === 0
-      ? undefined
-      : input.completed > 0
-        ? `${input.interrupted} output file(s) could not be saved by Chrome.`
-        : "Output could not be saved by Chrome."
-  const succeeded = input.requested > 0 && input.completed === input.requested
-  const updatedChapter: TaskChapter = {
-    ...chapter,
-    status: succeeded
-      ? "completed"
-      : input.completed > 0
-        ? "partial_success"
-        : "failed",
-    errorMessage: succeeded
-      ? undefined
-      : (input.errorMessage ?? interruptionMessage),
-    errorCategory: succeeded
-      ? undefined
-      : (input.errorCategory ??
-        (input.outputUncertain
-          ? "browser_output_unconfirmed"
-          : input.interrupted > 0
-            ? "browser_download_interrupted"
-            : undefined)),
-    outputs: {
-      requested: input.requested,
-      committed: input.completed,
-      failed: input.interrupted,
-    },
-    nativeOutputSettlement: settlement,
-    outputDestination: "downloads-api",
-    saveConfirmedAt: succeeded ? input.now : undefined,
-    lastUpdated: Math.max(chapter.lastUpdated, input.now),
-  }
+  const updatedChapter = materializeNativeSettledChapter(
+    chapter,
+    settlement,
+    input.now
+  )
   const chapters = [...task.chapters]
   chapters[chapterIndex] = updatedChapter
-  const lastSuccessfulDownloadId =
-    input.lastSuccessfulDownloadId !== undefined &&
-    (task.lastSuccessfulDownloadId === undefined ||
-      input.lastSuccessfulDownloadId > task.lastSuccessfulDownloadId)
-      ? input.lastSuccessfulDownloadId
-      : task.lastSuccessfulDownloadId
-  const allChaptersTerminal = chapters.every((candidate) =>
-    isTerminalChapterStatus(candidate.status)
-  )
-  const completedChapterCount = chapters.filter(
-    (candidate) => candidate.status === "completed"
-  ).length
-  const successfulChapterCount = chapters.filter(
-    (candidate) =>
-      candidate.status === "completed" || candidate.status === "partial_success"
-  ).length
-  const terminalStatus: DownloadTaskState["status"] =
-    completedChapterCount === chapters.length && chapters.length > 0
-      ? "completed"
-      : successfulChapterCount > 0
-        ? "partial_success"
-        : "failed"
-  const failureChapter = firstUnsuccessfulChapter(chapters)
-  const updatedTask: DownloadTaskState = {
-    ...task,
-    chapters,
-    lastSuccessfulDownloadId,
-    nextChapterDispatchAt: allChaptersTerminal
-      ? undefined
-      : task.nextChapterDispatchAt,
-    ...(allChaptersTerminal
-      ? {
-          status: terminalStatus,
-          completed: input.now,
-          activeBlock: undefined,
-          errorMessage:
-            terminalStatus === "completed"
-              ? undefined
-              : failureChapter?.errorMessage,
-          errorCategory:
-            terminalStatus === "completed"
-              ? undefined
-              : (failureChapter?.errorCategory ?? "unknown"),
-        }
-      : {}),
-  }
+  const updatedTask = materializeNativeSettledTask(task, chapters, input)
   return {
     next: {
       ...state,
@@ -1182,26 +1213,11 @@ export function blockTaskForProviderPolicy(
   | Unchanged<{ reason: "already-blocked" }>
   | TaskMutationRejection
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findPendingTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (task.status === "queued" && task.activeBlock === input.block) {
     return {
       next: state,
@@ -1214,14 +1230,7 @@ export function blockTaskForProviderPolicy(
     status: "queued",
     activeBlock: input.block,
   }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
+  return applyTaskReplacement(state, taskIndex, updatedTask)
 }
 
 export function releaseProviderPolicyBlock(
@@ -1232,26 +1241,11 @@ export function releaseProviderPolicyBlock(
   | Unchanged<{ reason: "not-blocked" }>
   | TaskMutationRejection
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findPendingTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (
     task.activeBlock !== "provider_network_policy_pending" &&
     task.activeBlock !== "provider_network_policy_action_required"
@@ -1266,14 +1260,7 @@ export function releaseProviderPolicyBlock(
     ...task,
     activeBlock: undefined,
   }
-  return {
-    next: {
-      ...state,
-      queue: replaceTaskAt(state.queue, taskIndex, updatedTask),
-    },
-    changedKeys: QUEUE_KEY,
-    result: { outcome: "applied", task: updatedTask },
-  }
+  return applyTaskReplacement(state, taskIndex, updatedTask)
 }
 
 export function releaseProviderPolicyBlocks(
@@ -1303,6 +1290,89 @@ export function releaseProviderPolicyBlocks(
     next: { ...state, queue },
     changedKeys: QUEUE_KEY,
     result: { outcome: "applied", releasedTaskIds },
+  }
+}
+
+type SaveFailureInput = Parameters<typeof failTaskForSave>[1]
+
+function isPendingChapter(chapter: TaskChapter): boolean {
+  return chapter.status === "queued" || chapter.status === "downloading"
+}
+
+function findSaveFailureChapter(
+  task: DownloadTaskState,
+  chapterId?: string
+): TaskChapter | undefined {
+  const failing = chapterId
+    ? task.chapters.find((chapter) => chapter.id === chapterId)
+    : (task.chapters.find((chapter) => chapter.status === "downloading") ??
+      task.chapters.find((chapter) => chapter.status === "queued"))
+  return failing && isPendingChapter(failing) ? failing : undefined
+}
+
+function saveFailureLeaseMatches(
+  lease: ActiveDispatchLease | null,
+  task: DownloadTaskState,
+  input: SaveFailureInput
+): boolean {
+  return (
+    !input.clearLease ||
+    (exactLeaseMatches(lease, input.clearLease) &&
+      input.clearLease.taskId === task.id &&
+      input.clearLease.chapterId === input.chapterId)
+  )
+}
+
+function materializeSaveFailureChapter(
+  chapter: TaskChapter,
+  failing: TaskChapter,
+  input: SaveFailureInput
+): TaskChapter {
+  if (chapter.id !== failing.id) {
+    return chapter.status === "queued"
+      ? { ...chapter, status: "skipped", lastUpdated: input.now }
+      : chapter
+  }
+  const committed = Math.max(
+    failing.outputs?.committed ?? 0,
+    input.outputs?.committed ?? 0
+  )
+  return applyChapterUpdate(
+    chapter,
+    committed > 0 ? "partial_success" : "failed",
+    {
+      errorMessage: input.errorMessage,
+      errorCategory: input.errorCategory,
+      outputs: input.outputs,
+      imagesFailed: input.imagesFailed,
+      outputDestination: "fsa",
+    },
+    input.now
+  )
+}
+
+function materializeSaveFailedTask(
+  task: DownloadTaskState,
+  failing: TaskChapter,
+  input: SaveFailureInput
+): DownloadTaskState {
+  const chapters = task.chapters.map((chapter) =>
+    materializeSaveFailureChapter(chapter, failing, input)
+  )
+  const failure = firstUnsuccessfulChapter(chapters)
+  const hasSavedOutput = chapters.some(
+    (chapter) =>
+      chapter.status === "completed" || (chapter.outputs?.committed ?? 0) > 0
+  )
+  return {
+    ...task,
+    chapters,
+    status: hasSavedOutput ? "partial_success" : "failed",
+    completed: input.now,
+    activeBlock: undefined,
+    nextChapterDispatchAt: undefined,
+    errorMessage: failure?.errorMessage ?? input.errorMessage,
+    errorCategory: failure?.errorCategory ?? input.errorCategory,
   }
 }
 
@@ -1344,67 +1414,22 @@ export function failTaskForSave(
       changedKeys: [],
       result: { outcome: "rejected", reason: "task-not-active" },
     }
-  if (
-    input.clearLease &&
-    (!exactLeaseMatches(state.lease, input.clearLease) ||
-      input.clearLease.taskId !== task.id ||
-      input.clearLease.chapterId !== input.chapterId)
-  )
+  if (!saveFailureLeaseMatches(state.lease, task, input)) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "lease-conflict" },
     }
-  const failing = input.chapterId
-    ? task.chapters.find((chapter) => chapter.id === input.chapterId)
-    : (task.chapters.find((chapter) => chapter.status === "downloading") ??
-      task.chapters.find((chapter) => chapter.status === "queued"))
-  if (
-    !failing ||
-    (failing.status !== "queued" && failing.status !== "downloading")
-  )
+  }
+  const failing = findSaveFailureChapter(task, input.chapterId)
+  if (!failing) {
     return {
       next: state,
       changedKeys: [],
       result: { outcome: "rejected", reason: "chapter-not-pending" },
     }
-  const committed = Math.max(
-    failing.outputs?.committed ?? 0,
-    input.outputs?.committed ?? 0
-  )
-  const chapters = task.chapters.map((chapter) =>
-    chapter.id === failing.id
-      ? applyChapterUpdate(
-          chapter,
-          committed > 0 ? "partial_success" : "failed",
-          {
-            errorMessage: input.errorMessage,
-            errorCategory: input.errorCategory,
-            outputs: input.outputs,
-            imagesFailed: input.imagesFailed,
-            outputDestination: "fsa",
-          },
-          input.now
-        )
-      : chapter.status === "queued"
-        ? { ...chapter, status: "skipped" as const, lastUpdated: input.now }
-        : chapter
-  )
-  const failure = firstUnsuccessfulChapter(chapters)
-  const hasSavedOutput = chapters.some(
-    (chapter) =>
-      chapter.status === "completed" || (chapter.outputs?.committed ?? 0) > 0
-  )
-  const updated: DownloadTaskState = {
-    ...task,
-    chapters,
-    status: hasSavedOutput ? "partial_success" : "failed",
-    completed: input.now,
-    activeBlock: undefined,
-    nextChapterDispatchAt: undefined,
-    errorMessage: failure?.errorMessage ?? input.errorMessage,
-    errorCategory: failure?.errorCategory ?? input.errorCategory,
   }
+  const updated = materializeSaveFailedTask(task, failing, input)
   return {
     next: {
       ...state,
@@ -1438,26 +1463,11 @@ export function interruptDownloadTask(
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findPendingTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "queued" && task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (input.clearLease && !exactLeaseMatches(state.lease, input.clearLease)) {
     return {
       next: state,
@@ -1483,6 +1493,27 @@ export function interruptDownloadTask(
   }
 }
 
+function materializeFinalizedTask(
+  task: DownloadTaskState,
+  chapterOutcomes: readonly ChapterDispatchOutcome[],
+  finalStatus: DownloadTaskState["status"],
+  completedAt: number
+): DownloadTaskState {
+  const firstFailed = firstUnsuccessfulChapter(chapterOutcomes)
+  return normalizeDownloadTaskExecutionState({
+    ...task,
+    status: finalStatus,
+    completed: completedAt,
+    nextChapterDispatchAt: undefined,
+    errorMessage: firstFailed?.errorMessage,
+    errorCategory:
+      firstFailed?.errorCategory ??
+      (finalStatus === "failed" || finalStatus === "partial_success"
+        ? "unknown"
+        : undefined),
+  })
+}
+
 export function finalizeDownloadTask(
   state: QueueAggregateState,
   input: {
@@ -1504,26 +1535,11 @@ export function finalizeDownloadTask(
       { currentStatus?: DownloadTaskState["status"] }
     >
 > {
-  const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
-  if (taskIndex === -1) {
-    return {
-      next: state,
-      changedKeys: [],
-      result: { outcome: "rejected", reason: "task-not-found" },
-    }
+  const located = findActiveTask(state, input.taskId)
+  if ("rejection" in located) {
+    return { next: state, changedKeys: [], result: located.rejection }
   }
-  const task = state.queue[taskIndex]
-  if (task.status !== "downloading") {
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "rejected",
-        reason: "task-not-active",
-        currentStatus: task.status,
-      },
-    }
-  }
+  const { taskIndex, task } = located
   if (input.clearLease && !exactLeaseMatches(state.lease, input.clearLease)) {
     return {
       next: state,
@@ -1540,19 +1556,12 @@ export function finalizeDownloadTask(
     (outcome) => outcome.status === "completed"
   ).length
   const finalStatus = resolveFinalDownloadTaskStatus(chapterOutcomes)
-  const firstFailed = firstUnsuccessfulChapter(chapterOutcomes)
-  const updatedTask = normalizeDownloadTaskExecutionState({
-    ...task,
-    status: finalStatus,
-    completed: input.completedAt,
-    nextChapterDispatchAt: undefined,
-    errorMessage: firstFailed?.errorMessage,
-    errorCategory:
-      firstFailed?.errorCategory ??
-      (finalStatus === "failed" || finalStatus === "partial_success"
-        ? "unknown"
-        : undefined),
-  })
+  const updatedTask = materializeFinalizedTask(
+    task,
+    chapterOutcomes,
+    finalStatus,
+    input.completedAt
+  )
   const clearedLease = input.clearLease ? state.lease : null
   return {
     next: {
@@ -1569,6 +1578,31 @@ export function finalizeDownloadTask(
       finalStatus,
       clearedLease,
     },
+  }
+}
+
+function canRepeatTaskDestination(task: DownloadTaskState): boolean {
+  const destination = getEffectiveTaskDestination(task)
+  return (
+    !task.chapters.some((chapter) => chapter.requestedPath === null) &&
+    (destination.kind !== "file-system-access" || destination.handleId !== null)
+  )
+}
+
+function freshRetryChapter(chapter: TaskChapter, now: number): TaskChapter {
+  return {
+    ...chapter,
+    nativeOutputSettlement: undefined,
+    outputDestination: undefined,
+    saveConfirmedAt: undefined,
+    status: "queued",
+    errorMessage: undefined,
+    errorCategory: undefined,
+    totalImages: undefined,
+    imagesFailed: undefined,
+    outputs: { requested: 0, committed: 0, failed: 0 },
+    dispatchAttempt: undefined,
+    lastUpdated: now,
   }
 }
 
@@ -1617,11 +1651,7 @@ export function retryFailedChapters(
       },
     }
   }
-  const destination = getEffectiveTaskDestination(original)
-  if (
-    original.chapters.some((chapter) => chapter.requestedPath === null) ||
-    (destination.kind === "file-system-access" && destination.handleId === null)
-  ) {
+  if (!canRepeatTaskDestination(original)) {
     return {
       next: state,
       changedKeys: [],
@@ -1661,20 +1691,9 @@ export function retryFailedChapters(
     mangaId: original.mangaId,
     seriesTitle: original.seriesTitle,
     seriesCoverUrl: original.seriesCoverUrl,
-    chapters: failedChapters.map((chapter) => ({
-      ...chapter,
-      nativeOutputSettlement: undefined,
-      outputDestination: undefined,
-      saveConfirmedAt: undefined,
-      status: "queued",
-      errorMessage: undefined,
-      errorCategory: undefined,
-      totalImages: undefined,
-      imagesFailed: undefined,
-      outputs: { requested: 0, committed: 0, failed: 0 },
-      dispatchAttempt: undefined,
-      lastUpdated: input.now,
-    })),
+    chapters: failedChapters.map((chapter) =>
+      freshRetryChapter(chapter, input.now)
+    ),
     status: "queued",
     created: input.now,
     isRetried: false,
@@ -1743,11 +1762,7 @@ export function restartDownloadTask(
       },
     }
   }
-  const destination = getEffectiveTaskDestination(original)
-  if (
-    original.chapters.some((chapter) => chapter.requestedPath === null) ||
-    (destination.kind === "file-system-access" && destination.handleId === null)
-  ) {
+  if (!canRepeatTaskDestination(original)) {
     return {
       next: state,
       changedKeys: [],
@@ -1772,20 +1787,9 @@ export function restartDownloadTask(
     fsaFallbackEligible: undefined,
     ...freshTaskFallbackState(original),
     id: input.restartTaskId,
-    chapters: original.chapters.map((chapter) => ({
-      ...chapter,
-      nativeOutputSettlement: undefined,
-      outputDestination: undefined,
-      saveConfirmedAt: undefined,
-      status: "queued",
-      errorMessage: undefined,
-      errorCategory: undefined,
-      totalImages: undefined,
-      imagesFailed: undefined,
-      outputs: { requested: 0, committed: 0, failed: 0 },
-      dispatchAttempt: undefined,
-      lastUpdated: input.now,
-    })),
+    chapters: original.chapters.map((chapter) =>
+      freshRetryChapter(chapter, input.now)
+    ),
     status: "queued",
     errorMessage: undefined,
     errorCategory: undefined,
@@ -1890,6 +1894,46 @@ export function clearTerminalHistory(
   }
 }
 
+function replayQueuedCancellation(
+  state: QueueAggregateState,
+  action: PendingUndoAction,
+  taskId: string
+): QueueKernelDecision<
+  | Unchanged<{
+      reason: "already-canceled"
+      task: DownloadTaskState
+      canceledLease: null
+      undo: PendingUndoReceipt
+    }>
+  | Rejected<"undo-token-conflict">
+> {
+  if (action.type !== "cancel_queued" || action.taskSnapshot.id !== taskId) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "undo-token-conflict" },
+    }
+  }
+  return {
+    next: state,
+    changedKeys: [],
+    result: {
+      outcome: "unchanged",
+      reason: "already-canceled",
+      task: action.taskSnapshot,
+      canceledLease: null,
+      undo: toPendingUndoReceipt(action),
+    },
+  }
+}
+
+function leaseOwnedByTask(
+  state: QueueAggregateState,
+  taskId: string
+): ActiveDispatchLease | null {
+  return state.lease?.taskId === taskId ? state.lease : null
+}
+
 export function cancelDownloadTask(
   state: QueueAggregateState,
   input: {
@@ -1925,27 +1969,7 @@ export function cancelDownloadTask(
     (action) => action.token === undoToken
   )
   if (existingUndo) {
-    if (
-      existingUndo.type !== "cancel_queued" ||
-      existingUndo.taskSnapshot.id !== input.taskId
-    ) {
-      return {
-        next: state,
-        changedKeys: [],
-        result: { outcome: "rejected", reason: "undo-token-conflict" },
-      }
-    }
-    return {
-      next: state,
-      changedKeys: [],
-      result: {
-        outcome: "unchanged",
-        reason: "already-canceled",
-        task: existingUndo.taskSnapshot,
-        canceledLease: null,
-        undo: toPendingUndoReceipt(existingUndo),
-      },
-    }
+    return replayQueuedCancellation(state, existingUndo, input.taskId)
   }
 
   const taskIndex = state.queue.findIndex((task) => task.id === input.taskId)
@@ -1958,7 +1982,7 @@ export function cancelDownloadTask(
   }
   const task = state.queue[taskIndex]
   if (task.activeCancel?.commandId === input.commandId) {
-    const canceledLease = state.lease?.taskId === task.id ? state.lease : null
+    const canceledLease = leaseOwnedByTask(state, task.id)
     return {
       next: state,
       changedKeys: [],
@@ -2007,7 +2031,7 @@ export function cancelDownloadTask(
     }
   }
 
-  const canceledLease = state.lease?.taskId === task.id ? state.lease : null
+  const canceledLease = leaseOwnedByTask(state, task.id)
   const canceledTask = {
     ...cancelDownloadingTask(task, input.now),
     activeCancel: { commandId: input.commandId },
@@ -2111,6 +2135,46 @@ export function removeTerminalDownloadTask(
   }
 }
 
+function restoreUndoQueue(
+  queue: DownloadTaskState[],
+  action: PendingUndoAction,
+  expired: boolean
+): { queue: DownloadTaskState[]; queueChanged: boolean } {
+  const existingTaskIndex = queue.findIndex(
+    (task) => task.id === action.taskSnapshot.id
+  )
+  if (expired) {
+    return {
+      queue: applyExpiredPendingUndoAction(queue, action),
+      queueChanged: existingTaskIndex === -1 && action.type === "cancel_queued",
+    }
+  }
+  const restoredUndo = { token: action.token, type: action.type }
+  if (existingTaskIndex === -1) {
+    return {
+      queue: reinsertPendingUndoTask(queue, action, {
+        ...action.taskSnapshot,
+        restoredUndo,
+      }),
+      queueChanged: true,
+    }
+  }
+  const existingTask = queue[existingTaskIndex]
+  if (
+    existingTask.restoredUndo?.token === action.token &&
+    existingTask.restoredUndo.type === action.type
+  ) {
+    return { queue, queueChanged: false }
+  }
+  return {
+    queue: replaceTaskAt(queue, existingTaskIndex, {
+      ...existingTask,
+      restoredUndo,
+    }),
+    queueChanged: true,
+  }
+}
+
 export function restorePendingUndoAction(
   state: QueueAggregateState,
   input: { token: string; now: number }
@@ -2157,41 +2221,7 @@ export function restorePendingUndoAction(
     (_candidate, index) => index !== actionIndex
   )
   const expired = input.now >= action.expiresAt
-  const taskAlreadyPresent = state.queue.some(
-    (task) => task.id === action.taskSnapshot.id
-  )
-  let queue: DownloadTaskState[]
-  let queueChanged = false
-  if (expired) {
-    queue = applyExpiredPendingUndoAction(state.queue, action)
-    queueChanged = !taskAlreadyPresent && action.type === "cancel_queued"
-  } else {
-    const restoredTask: DownloadTaskState = {
-      ...action.taskSnapshot,
-      restoredUndo: { token: action.token, type: action.type },
-    }
-    if (taskAlreadyPresent) {
-      const existingTaskIndex = state.queue.findIndex(
-        (task) => task.id === action.taskSnapshot.id
-      )
-      queue = [...state.queue]
-      const existingTask = queue[existingTaskIndex]
-      if (
-        existingTask &&
-        (existingTask.restoredUndo?.token !== action.token ||
-          existingTask.restoredUndo?.type !== action.type)
-      ) {
-        queue[existingTaskIndex] = {
-          ...existingTask,
-          restoredUndo: restoredTask.restoredUndo,
-        }
-        queueChanged = true
-      }
-    } else {
-      queue = reinsertPendingUndoTask(state.queue, action, restoredTask)
-      queueChanged = true
-    }
-  }
+  const { queue, queueChanged } = restoreUndoQueue(state.queue, action, expired)
   return {
     next: {
       ...state,
@@ -2288,6 +2318,47 @@ export function reconcileExpiredPendingUndoActions(
   }
 }
 
+function taskOwnsChapterDispatch(
+  state: QueueAggregateState,
+  task: DownloadTaskState,
+  identity: DispatchLeaseAuthority
+): boolean {
+  return (
+    task.status === "downloading" &&
+    !task.activeCancel &&
+    task.id === identity.taskId &&
+    task.chapters.some(
+      (chapter) =>
+        chapter.id === identity.chapterId && chapter.status === "downloading"
+    ) &&
+    exactLeaseMatches(state.lease, identity)
+  )
+}
+
+function currentFsaProducerMatches(
+  state: QueueAggregateState,
+  task: DownloadTaskState,
+  identity: DispatchLeaseAuthority
+): boolean {
+  const destination = getEffectiveTaskDestination(task)
+  return (
+    taskOwnsChapterDispatch(state, task, identity) &&
+    state.lease?.saveMode === "fsa" &&
+    destination.kind === "file-system-access" &&
+    destination.handleId === state.lease.destinationHandleId
+  )
+}
+
+function automaticFallbackAvailable(task: DownloadTaskState): boolean {
+  return (
+    (task.status === "queued" || task.status === "downloading") &&
+    !task.activeCancel &&
+    task.fsaFallbackEligible === true &&
+    task.settingsSnapshot.allowChromeFallback === true &&
+    getEffectiveTaskDestination(task).kind === "file-system-access"
+  )
+}
+
 /** Durably close the automatic-switch window before the producer mutates a folder. */
 export function beginFsaWrite(
   state: QueueAggregateState,
@@ -2295,19 +2366,9 @@ export function beginFsaWrite(
 ): QueueKernelDecision<Applied | Unchanged | Rejected<"lease-not-current">> {
   const index = state.queue.findIndex((task) => task.id === input.taskId)
   const task = state.queue[index]
-  const destination = task && getEffectiveTaskDestination(task)
   if (
     !task ||
-    task.status !== "downloading" ||
-    task.activeCancel ||
-    !task.chapters.some(
-      (chapter) =>
-        chapter.id === input.chapterId && chapter.status === "downloading"
-    ) ||
-    !exactLeaseMatches(state.lease, input) ||
-    state.lease?.saveMode !== "fsa" ||
-    destination?.kind !== "file-system-access" ||
-    destination.handleId !== state.lease.destinationHandleId ||
+    !currentFsaProducerMatches(state, task, input) ||
     task.settingsSnapshot.allowChromeFallback !== true
   ) {
     return {
@@ -2338,25 +2399,11 @@ export function selectChromeFallback(
 ): QueueKernelDecision<Applied | Rejected<"fallback-unavailable">> {
   const index = state.queue.findIndex((task) => task.id === input.taskId)
   const task = state.queue[index]
-  const destination = task && getEffectiveTaskDestination(task)
   if (
     !task ||
-    (task.status !== "queued" && task.status !== "downloading") ||
-    task.activeCancel ||
-    !task.fsaFallbackEligible ||
-    task.settingsSnapshot.allowChromeFallback !== true ||
-    destination?.kind !== "file-system-access" ||
+    !automaticFallbackAvailable(task) ||
     (input.terminalLease
-      ? task.status !== "downloading" ||
-        input.terminalLease.taskId !== task.id ||
-        !task.chapters.some(
-          (chapter) =>
-            chapter.id === input.terminalLease!.chapterId &&
-            chapter.status === "downloading"
-        ) ||
-        !exactLeaseMatches(state.lease, input.terminalLease) ||
-        state.lease?.saveMode !== "fsa" ||
-        state.lease.destinationHandleId !== destination.handleId
+      ? !currentFsaProducerMatches(state, task, input.terminalLease)
       : state.lease !== null)
   ) {
     return {

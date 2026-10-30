@@ -129,8 +129,6 @@ export function canReleaseNativeOutputBlob(
 
 export function isNativeOutputLive(record: NativeOutputRecord): boolean {
   return (
-    record.phase === "acceptance_unknown" ||
-    record.phase === "waiting" ||
     !isNativeOutputTerminal(record) ||
     record.accountingDisposition === "pending" ||
     record.blobReleasedAt === undefined ||

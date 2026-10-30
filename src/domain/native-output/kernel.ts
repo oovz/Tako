@@ -148,20 +148,7 @@ export function prepareNativeOutput(
 > {
   const existing = state.outputsByOutputId[input.outputId]
   if (existing) {
-    if (!nativeOutputIdentityMatches(existing, input)) {
-      return rejected(state, "output-identity-conflict")
-    }
-    const manifest = state.manifestsByJobId[input.jobId]
-    if (
-      !manifest ||
-      !manifestMatches(manifest, {
-        ...input,
-        outputsRequested: input.outputCount,
-      })
-    ) {
-      return rejected(state, "manifest-conflict")
-    }
-    return unchanged(state, { manifest, record: existing })
+    return replayPreparedNativeOutput(state, existing, input)
   }
 
   if (input.outputIndex < 0 || input.outputIndex >= input.outputCount) {
@@ -224,6 +211,33 @@ export function prepareNativeOutput(
     record
   )
   return applied(next, { manifest: updatedManifest, record })
+}
+
+function replayPreparedNativeOutput(
+  state: NativeOutputState,
+  existing: NativeOutputRecord,
+  input: NativeOutputIdentity
+): NativeOutputKernelDecision<
+  | NativeOutputUnchanged<{
+      manifest: NativeOutputManifest
+      record: NativeOutputRecord
+    }>
+  | NativeOutputRejected<"output-identity-conflict" | "manifest-conflict">
+> {
+  if (!nativeOutputIdentityMatches(existing, input)) {
+    return rejected(state, "output-identity-conflict")
+  }
+  const manifest = state.manifestsByJobId[input.jobId]
+  if (
+    !manifest ||
+    !manifestMatches(manifest, {
+      ...input,
+      outputsRequested: input.outputCount,
+    })
+  ) {
+    return rejected(state, "manifest-conflict")
+  }
+  return unchanged(state, { manifest, record: existing })
 }
 
 export function sealNativeOutputManifest(
