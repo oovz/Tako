@@ -1,11 +1,8 @@
 import { useMemo } from "react"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
 
-import {
-  createMockContext,
-  expandTemplate,
-  validateTemplate,
-} from "@/src/shared/template-expander"
+import { createMockContext } from "@/src/shared/template-expander"
+import { createPathPreview } from "./PathVisualization-preview"
 import { t } from "@/src/runtime/i18n"
 
 interface PathVisualizationProps {
@@ -21,50 +18,10 @@ export function PathVisualization({
 }: PathVisualizationProps) {
   const mockContext = useMemo(() => createMockContext(), [])
 
-  const pathValidation = useMemo(() => validateTemplate(template), [template])
-  const filenameValidation = useMemo(
-    () => validateTemplate(filenameTemplate),
-    [filenameTemplate]
+  const { hasErrors, fullPath, errors, warnings } = useMemo(
+    () => createPathPreview(template, filenameTemplate, format, mockContext),
+    [template, filenameTemplate, format, mockContext]
   )
-
-  const pathResult = useMemo(() => {
-    if (!pathValidation.valid) {
-      return {
-        success: false,
-        expanded: "",
-        errors: pathValidation.errors,
-        warnings: [],
-      }
-    }
-    return expandTemplate(template, mockContext)
-  }, [template, pathValidation.valid, pathValidation.errors, mockContext])
-
-  const filenameResult = useMemo(() => {
-    if (!filenameValidation.valid) {
-      return {
-        success: false,
-        expanded: "",
-        errors: filenameValidation.errors,
-        warnings: [],
-      }
-    }
-    return expandTemplate(filenameTemplate, mockContext)
-  }, [
-    filenameTemplate,
-    filenameValidation.valid,
-    filenameValidation.errors,
-    mockContext,
-  ])
-
-  const fullPath = useMemo(() => {
-    if (!pathResult.success || !filenameResult.success) return null
-    const extension = format === "none" ? "" : `.${format}`
-    return `${pathResult.expanded}/${filenameResult.expanded}${extension}`
-  }, [pathResult, filenameResult, format])
-
-  const hasErrors = !pathResult.success || !filenameResult.success
-  const hasWarnings =
-    pathResult.warnings.length > 0 || filenameResult.warnings.length > 0
 
   return (
     <div
@@ -90,13 +47,11 @@ export function PathVisualization({
               {fullPath}
             </p>
           ) : (
-            <p className="text-xs text-destructive">
-              {pathResult.errors.concat(filenameResult.errors).join("; ")}
-            </p>
+            <p className="text-xs text-destructive">{errors.join("; ")}</p>
           )}
-          {hasWarnings && (
+          {warnings.length > 0 && (
             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              {pathResult.warnings.concat(filenameResult.warnings).join("; ")}
+              {warnings.join("; ")}
             </p>
           )}
         </div>

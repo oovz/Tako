@@ -1,7 +1,4 @@
-/**
- * RateLimitingForm - Form for rate limiting policies with hierarchy visualization
- * Shows effective policy from hierarchy: site override > site integration default > global
- */
+/** Rate policy inputs and the hierarchy that supplies inherited values. */
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,6 +9,10 @@ import {
   parseOptionalRatePolicyInteger,
   RATE_POLICY_LIMITS,
 } from "@/src/shared/rate-policy-limits"
+import {
+  resolveRatePolicyField,
+  type RatePolicySource,
+} from "./RateLimitingForm-policy"
 
 interface RateLimitingFormProps {
   scope: "image" | "chapter"
@@ -24,187 +25,186 @@ interface RateLimitingFormProps {
   disabled?: boolean
 }
 
-export function RateLimitingForm({
+const POLICY_FIELDS = {
+  concurrency: {
+    id: "concurrency",
+    label: "options_concurrencyLabel",
+    description: "options_maxConcurrentDesc",
+    inherited: "options_usingValue",
+    minimum: RATE_POLICY_LIMITS.MIN_CONCURRENCY,
+    maximum: RATE_POLICY_LIMITS.MAX_CONCURRENCY,
+    fallback: 2,
+    step: undefined,
+  },
+  delayMs: {
+    id: "delay",
+    label: "options_delayLabel",
+    description: "options_minDelayDesc",
+    inherited: "options_usingMs",
+    minimum: RATE_POLICY_LIMITS.MIN_DELAY_MS,
+    maximum: RATE_POLICY_LIMITS.MAX_DELAY_MS,
+    fallback: 500,
+    step: 100,
+  },
+} as const
+
+const SOURCE_BADGES = {
+  override: { variant: "default", label: "options_override" },
+  siteIntegration: {
+    variant: "secondary",
+    label: "options_siteIntegrationBadge",
+  },
+  global: { variant: "outline", label: "options_global" },
+} as const
+
+function PolicySourceBadge({ source }: { source: RatePolicySource }) {
+  const badge = SOURCE_BADGES[source]
+  return (
+    <Badge variant={badge.variant} className="ml-2 text-xs">
+      {t(badge.label)}
+    </Badge>
+  )
+}
+
+function NumericPolicyField({
+  field,
   scope,
   value,
   onChange,
   globalValue,
   siteIntegrationDefault,
+  showHierarchy,
+  disabled,
+}: RateLimitingFormProps & { field: keyof RateScopePolicy }) {
+  const definition = POLICY_FIELDS[field]
+  const effective = resolveRatePolicyField(
+    value[field],
+    siteIntegrationDefault?.[field],
+    globalValue?.[field],
+    definition.fallback
+  )
+  const localizedScope =
+    scope === "image" ? t("options_images") : t("options_chapter")
+  const id = `${scope}-${definition.id}`
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center">
+        <Label htmlFor={id}>{t(definition.label, [localizedScope])}</Label>
+        {showHierarchy && <PolicySourceBadge source={effective.source} />}
+      </div>
+      <Input
+        id={id}
+        type="number"
+        min={definition.minimum}
+        max={definition.maximum}
+        step={definition.step}
+        value={value[field] ?? ""}
+        onChange={(event) =>
+          onChange({
+            ...value,
+            [field]: parseOptionalRatePolicyInteger(
+              event.target.value,
+              definition.minimum,
+              definition.maximum
+            ),
+          })
+        }
+        placeholder={
+          showHierarchy
+            ? t("options_defaultValue", [String(effective.value)])
+            : undefined
+        }
+        disabled={disabled}
+      />
+      <p className="text-xs text-muted-foreground">
+        {t(definition.description, [localizedScope])}
+        {showHierarchy &&
+          value[field] == null &&
+          t(definition.inherited, [String(effective.value)])}
+      </p>
+    </div>
+  )
+}
+
+function PolicyHierarchyRow({
+  label,
+  policy,
+  showConcurrency,
+}: {
+  label: string
+  policy: Partial<RateScopePolicy>
+  showConcurrency: boolean
+}) {
+  const description = showConcurrency
+    ? t("options_concurrentDelay", [
+        String(policy.concurrency),
+        String(policy.delayMs),
+      ])
+    : t("options_msDelay", [String(policy.delayMs)])
+  return (
+    <li>
+      • <strong>{t(label)}</strong>: {description}
+    </li>
+  )
+}
+
+function PolicyHierarchy({
+  value,
+  siteIntegrationDefault,
+  globalValue,
+  showConcurrency,
+}: {
+  value: Partial<RateScopePolicy>
+  siteIntegrationDefault?: Partial<RateScopePolicy>
+  globalValue?: RateScopePolicy
+  showConcurrency: boolean
+}) {
+  if (!globalValue && !siteIntegrationDefault) return null
+  const hasOverride = value.concurrency != null || value.delayMs != null
+  return (
+    <div className="rounded-md bg-muted p-3 text-sm">
+      <p className="font-medium mb-2">{t("options_policyHierarchy")}</p>
+      <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
+        {hasOverride && (
+          <li>
+            ✓ <strong>{t("options_override")}</strong>:{" "}
+            {t("options_activeThisForm")}
+          </li>
+        )}
+        {siteIntegrationDefault && (
+          <PolicyHierarchyRow
+            label="options_siteIntegrationDefault"
+            policy={siteIntegrationDefault}
+            showConcurrency={showConcurrency}
+          />
+        )}
+        {globalValue && (
+          <PolicyHierarchyRow
+            label="options_globalDefault"
+            policy={globalValue}
+            showConcurrency={showConcurrency}
+          />
+        )}
+      </ul>
+    </div>
+  )
+}
+
+export function RateLimitingForm({
   showHierarchy = false,
   showConcurrency = true,
   disabled = false,
+  ...props
 }: RateLimitingFormProps) {
-  const localizedScope =
-    scope === "image" ? t("options_images") : t("options_chapter")
-
-  // Calculate effective values from hierarchy
-  const effectiveConcurrency =
-    value.concurrency ??
-    siteIntegrationDefault?.concurrency ??
-    globalValue?.concurrency ??
-    2
-  const effectiveDelay =
-    value.delayMs ??
-    siteIntegrationDefault?.delayMs ??
-    globalValue?.delayMs ??
-    500
-
-  // Determine source of each value for hierarchy display
-  const concurrencySource =
-    value.concurrency != null
-      ? "override"
-      : siteIntegrationDefault?.concurrency != null
-        ? "siteIntegration"
-        : "global"
-  const delaySource =
-    value.delayMs != null
-      ? "override"
-      : siteIntegrationDefault?.delayMs != null
-        ? "siteIntegration"
-        : "global"
-
-  const getSourceBadge = (source: string) => {
-    switch (source) {
-      case "override":
-        return (
-          <Badge variant="default" className="ml-2 text-xs">
-            {t("options_override")}
-          </Badge>
-        )
-      case "siteIntegration":
-        return (
-          <Badge variant="secondary" className="ml-2 text-xs">
-            {t("options_siteIntegrationBadge")}
-          </Badge>
-        )
-      case "global":
-        return (
-          <Badge variant="outline" className="ml-2 text-xs">
-            {t("options_global")}
-          </Badge>
-        )
-      default:
-        return null
-    }
-  }
-
+  const fieldProps = { ...props, showHierarchy, disabled }
   return (
     <div className="flex flex-col gap-4">
       {showConcurrency && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center">
-            <Label htmlFor={`${scope}-concurrency`}>
-              {t("options_concurrencyLabel", [localizedScope])}
-            </Label>
-            {showHierarchy && getSourceBadge(concurrencySource)}
-          </div>
-          <Input
-            id={`${scope}-concurrency`}
-            type="number"
-            min={RATE_POLICY_LIMITS.MIN_CONCURRENCY}
-            max={RATE_POLICY_LIMITS.MAX_CONCURRENCY}
-            value={value.concurrency ?? ""}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                concurrency: parseOptionalRatePolicyInteger(
-                  e.target.value,
-                  RATE_POLICY_LIMITS.MIN_CONCURRENCY,
-                  RATE_POLICY_LIMITS.MAX_CONCURRENCY
-                ),
-              })
-            }
-            placeholder={
-              showHierarchy
-                ? t("options_defaultValue", [String(effectiveConcurrency)])
-                : undefined
-            }
-            disabled={disabled}
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("options_maxConcurrentDesc", [localizedScope])}
-            {showHierarchy &&
-              value.concurrency == null &&
-              t("options_usingValue", [String(effectiveConcurrency)])}
-          </p>
-        </div>
+        <NumericPolicyField {...fieldProps} field="concurrency" />
       )}
-
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center">
-          <Label htmlFor={`${scope}-delay`}>
-            {t("options_delayLabel", [localizedScope])}
-          </Label>
-          {showHierarchy && getSourceBadge(delaySource)}
-        </div>
-        <Input
-          id={`${scope}-delay`}
-          type="number"
-          min={RATE_POLICY_LIMITS.MIN_DELAY_MS}
-          max={RATE_POLICY_LIMITS.MAX_DELAY_MS}
-          step={100}
-          value={value.delayMs ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              delayMs: parseOptionalRatePolicyInteger(
-                e.target.value,
-                RATE_POLICY_LIMITS.MIN_DELAY_MS,
-                RATE_POLICY_LIMITS.MAX_DELAY_MS
-              ),
-            })
-          }
-          placeholder={
-            showHierarchy
-              ? t("options_defaultValue", [String(effectiveDelay)])
-              : undefined
-          }
-          disabled={disabled}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("options_minDelayDesc", [localizedScope])}
-          {showHierarchy &&
-            value.delayMs == null &&
-            t("options_usingMs", [String(effectiveDelay)])}
-        </p>
-      </div>
-
-      {showHierarchy && (globalValue || siteIntegrationDefault) && (
-        <div className="rounded-md bg-muted p-3 text-sm">
-          <p className="font-medium mb-2">{t("options_policyHierarchy")}</p>
-          <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
-            {value.concurrency != null || value.delayMs != null ? (
-              <li>
-                ✓ <strong>{t("options_override")}</strong>:{" "}
-                {t("options_activeThisForm")}
-              </li>
-            ) : null}
-            {siteIntegrationDefault && (
-              <li>
-                • <strong>{t("options_siteIntegrationDefault")}</strong>:{" "}
-                {showConcurrency
-                  ? t("options_concurrentDelay", [
-                      String(siteIntegrationDefault.concurrency),
-                      String(siteIntegrationDefault.delayMs),
-                    ])
-                  : t("options_msDelay", [
-                      String(siteIntegrationDefault.delayMs),
-                    ])}
-              </li>
-            )}
-            {globalValue && (
-              <li>
-                • <strong>{t("options_globalDefault")}</strong>:{" "}
-                {showConcurrency
-                  ? t("options_concurrentDelay", [
-                      String(globalValue.concurrency),
-                      String(globalValue.delayMs),
-                    ])
-                  : t("options_msDelay", [String(globalValue.delayMs)])}
-              </li>
-            )}
-          </ul>
-        </div>
+      <NumericPolicyField {...fieldProps} field="delayMs" />
+      {showHierarchy && (
+        <PolicyHierarchy {...props} showConcurrency={showConcurrency} />
       )}
     </div>
   )
