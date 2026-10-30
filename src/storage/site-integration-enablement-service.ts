@@ -3,7 +3,11 @@ import {
   SiteIntegrationEnablementMapSchema,
   type SiteIntegrationEnablementMap,
 } from "@/src/domain/site-integrations/storage-schemas"
-import { assertKnownSiteIntegrationIds } from "./site-integration-document-validation"
+import {
+  assertKnownSiteIntegrationIds,
+  parseKnownSiteIntegrationDocument,
+  readSiteIntegrationDocument,
+} from "./site-integration-document-validation"
 
 export const SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY =
   "siteIntegrationEnablement"
@@ -11,21 +15,20 @@ export const SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY =
 export function parseSiteIntegrationEnablementDocument(
   value: unknown
 ): SiteIntegrationEnablementMap {
-  const parsed = SiteIntegrationEnablementMapSchema.parse(value)
-  assertKnownSiteIntegrationIds(parsed, "site integration enablement")
-  return parsed
+  return parseKnownSiteIntegrationDocument(
+    SiteIntegrationEnablementMapSchema,
+    value,
+    "site integration enablement"
+  )
 }
 
 export class SiteIntegrationEnablementService {
   private readonly mutations = new StorageMutationQueue()
 
   private async getStored(): Promise<SiteIntegrationEnablementMap> {
-    const result = await chrome.storage.local.get(
-      SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY
-    )
-    if (!(SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY in result)) return {}
-    return parseSiteIntegrationEnablementDocument(
-      result[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
+    return readSiteIntegrationDocument(
+      SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
+      parseSiteIntegrationEnablementDocument
     )
   }
 

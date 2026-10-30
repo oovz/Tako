@@ -13,7 +13,11 @@ import {
   type SiteIntegrationSettingsMap,
 } from "@/src/domain/site-integrations/storage-schemas"
 import type { StorageValue } from "@/src/shared/type-guards"
-import { assertKnownSiteIntegrationIds } from "./site-integration-document-validation"
+import {
+  assertKnownSiteIntegrationIds,
+  readSiteIntegrationDocument,
+} from "./site-integration-document-validation"
+import { updateSiteIntegrationDocument } from "./site-integration-document-update"
 
 export const SITE_INTEGRATION_SETTINGS_STORAGE_KEY = "siteIntegrationSettings"
 
@@ -83,12 +87,9 @@ export class SiteIntegrationSettingsService {
   }
 
   async getAll(): Promise<SiteIntegrationSettingsMap> {
-    const res = await chrome.storage.local.get(
-      SITE_INTEGRATION_SETTINGS_STORAGE_KEY
-    )
-    if (!(SITE_INTEGRATION_SETTINGS_STORAGE_KEY in res)) return {}
-    return parseSiteIntegrationSettingsDocument(
-      res[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
+    return readSiteIntegrationDocument(
+      SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
+      parseSiteIntegrationSettingsDocument
     )
   }
   async getForSite(siteId: string): Promise<Record<string, StorageValue>> {
@@ -106,12 +107,14 @@ export class SiteIntegrationSettingsService {
     siteId: string,
     updates: Record<string, StorageValue>
   ): Promise<void> {
-    assertKnownSiteIntegrationIds({ [siteId]: {} }, "site integration settings")
-    await this.mutations.run(async () => {
-      const all = await this.getAll()
-      all[siteId] = { ...(all[siteId] || {}), ...updates }
-      await this.persist(all)
-    })
+    await updateSiteIntegrationDocument(
+      siteId,
+      updates,
+      "site integration settings",
+      this.mutations,
+      () => this.getAll(),
+      (map) => this.persist(map)
+    )
   }
   async clear(): Promise<void> {
     await this.mutations.run(() => this.persist({}))

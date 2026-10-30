@@ -16,14 +16,21 @@ import {
   type SiteOverrideRecord,
   type SiteOverridesMap,
 } from "@/src/domain/site-integrations/storage-schemas"
-import { assertKnownSiteIntegrationIds } from "./site-integration-document-validation"
+import {
+  assertKnownSiteIntegrationIds,
+  parseKnownSiteIntegrationDocument,
+  readSiteIntegrationDocument,
+} from "./site-integration-document-validation"
+import { updateSiteIntegrationDocument } from "./site-integration-document-update"
 
 export const SITE_OVERRIDES_STORAGE_KEY = "siteOverrides"
 
 export function parseSiteOverridesDocument(value: unknown): SiteOverridesMap {
-  const parsed = SiteOverridesMapSchema.parse(value)
-  assertKnownSiteIntegrationIds(parsed, "site overrides")
-  return parsed
+  return parseKnownSiteIntegrationDocument(
+    SiteOverridesMapSchema,
+    value,
+    "site overrides"
+  )
 }
 
 export class SiteOverridesService {
@@ -35,9 +42,10 @@ export class SiteOverridesService {
   }
 
   async getAll(): Promise<SiteOverridesMap> {
-    const res = await chrome.storage.local.get(SITE_OVERRIDES_STORAGE_KEY)
-    if (!(SITE_OVERRIDES_STORAGE_KEY in res)) return {}
-    return parseSiteOverridesDocument(res[SITE_OVERRIDES_STORAGE_KEY])
+    return readSiteIntegrationDocument(
+      SITE_OVERRIDES_STORAGE_KEY,
+      parseSiteOverridesDocument
+    )
   }
 
   async setAll(map: SiteOverridesMap): Promise<void> {
@@ -48,12 +56,14 @@ export class SiteOverridesService {
     siteId: string,
     updates: SiteOverrideRecord
   ): Promise<void> {
-    assertKnownSiteIntegrationIds({ [siteId]: {} }, "site overrides")
-    await this.mutations.run(async () => {
-      const current = await this.getAll()
-      current[siteId] = { ...(current[siteId] || {}), ...updates }
-      await this.persist(current)
-    })
+    await updateSiteIntegrationDocument(
+      siteId,
+      updates,
+      "site overrides",
+      this.mutations,
+      () => this.getAll(),
+      (map) => this.persist(map)
+    )
   }
   async removeSite(siteId: string): Promise<void> {
     assertKnownSiteIntegrationIds({ [siteId]: {} }, "site overrides")

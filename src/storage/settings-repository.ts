@@ -83,18 +83,7 @@ export class SettingsRepository {
         continue
       }
 
-      if (!(SETTINGS_STORAGE_KEY in result)) {
-        const defaults = createDefaultSettings(this.defaultLogLevel)
-        await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: defaults })
-        if (generation !== this.cacheGeneration) {
-          if (this.cache) return cloneSettings(this.cache)
-          continue
-        }
-        this.cache = cloneSettings(defaults)
-        return cloneSettings(defaults)
-      }
-
-      const settings = parseSettingsDocument(result[SETTINGS_STORAGE_KEY])
+      const settings = await this.parseOrInitializeDocument(result)
       if (generation !== this.cacheGeneration) {
         if (this.cache) return cloneSettings(this.cache)
         continue
@@ -102,5 +91,16 @@ export class SettingsRepository {
       this.cache = cloneSettings(settings)
       return cloneSettings(settings)
     }
+  }
+
+  private async parseOrInitializeDocument(
+    stored: Record<string, unknown>
+  ): Promise<ExtensionSettings> {
+    if (SETTINGS_STORAGE_KEY in stored) {
+      return parseSettingsDocument(stored[SETTINGS_STORAGE_KEY])
+    }
+    const defaults = createDefaultSettings(this.defaultLogLevel)
+    await chrome.storage.local.set({ [SETTINGS_STORAGE_KEY]: defaults })
+    return defaults
   }
 }

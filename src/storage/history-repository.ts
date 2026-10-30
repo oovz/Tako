@@ -25,6 +25,14 @@ export const HISTORY_STORAGE_KEYS = {
   clearCutoffs: LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
 } as const
 
+function parseStoredHistory(stored: Record<string, unknown>): HistoryAggregate {
+  const document: Record<string, unknown> = {}
+  for (const [field, key] of Object.entries(HISTORY_STORAGE_KEYS)) {
+    if (key in stored) document[field] = stored[key]
+  }
+  return parseHistoryAggregate(document)
+}
+
 function canAcceptRecord(
   aggregate: HistoryAggregate,
   record: DownloadedChapterRecord,
@@ -83,16 +91,7 @@ export class HistoryRepository {
         continue
       }
 
-      const document: Record<string, unknown> = {}
-      if (HISTORY_STORAGE_KEYS.downloadedChapters in result)
-        document.downloadedChapters =
-          result[HISTORY_STORAGE_KEYS.downloadedChapters]
-      if (HISTORY_STORAGE_KEYS.seriesDownloadHistory in result)
-        document.seriesDownloadHistory =
-          result[HISTORY_STORAGE_KEYS.seriesDownloadHistory]
-      if (HISTORY_STORAGE_KEYS.clearCutoffs in result)
-        document.clearCutoffs = result[HISTORY_STORAGE_KEYS.clearCutoffs]
-      const aggregate = parseHistoryAggregate(document)
+      const aggregate = parseStoredHistory(result)
       if (generation !== this.cacheGeneration) {
         if (this.cache) return cloneHistoryAggregate(this.cache)
         continue
