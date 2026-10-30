@@ -4,25 +4,24 @@
  * Ref: https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts#matchAndGlob
  */
 
-export function isInternalUrl(url: string | undefined | null): boolean {
-  if (!url) {
-    return true
-  }
+const INTERNAL_URL_PREFIXES = [
+  "chrome-extension://",
+  "chrome://",
+  "edge://",
+  "about:",
+  "devtools://",
+  "blob:",
+  "data:",
+  "view-source:",
+  "file://",
+  "mailto:",
+  "tel:",
+  "javascript:",
+]
 
-  return (
-    url.startsWith("chrome-extension://") ||
-    url.startsWith("chrome://") ||
-    url.startsWith("edge://") ||
-    url.startsWith("about:") ||
-    url.startsWith("devtools://") ||
-    url.startsWith("blob:") ||
-    url.startsWith("data:") ||
-    url.startsWith("view-source:") ||
-    url.startsWith("file://") ||
-    url.startsWith("mailto:") ||
-    url.startsWith("tel:") ||
-    url.startsWith("javascript:")
-  )
+export function isInternalUrl(url: string | undefined | null): boolean {
+  if (!url) return true
+  return INTERNAL_URL_PREFIXES.some((prefix) => url.startsWith(prefix))
 }
 
 export function isExtensionUrl(url: string | undefined | null): boolean {

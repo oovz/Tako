@@ -57,17 +57,18 @@ export function validateDownloadPath(path: string): ValidationResult {
     }
   }
 
-  // Check for basic template syntax balance
-  const openBrackets = (trimmedPath.match(/</g) || []).length
-  const closeBrackets = (trimmedPath.match(/>/g) || []).length
+  return validateTemplateBrackets(trimmedPath)
+}
 
+function validateTemplateBrackets(path: string): ValidationResult {
+  const openBrackets = (path.match(/</g) || []).length
+  const closeBrackets = (path.match(/>/g) || []).length
   if (openBrackets !== closeBrackets) {
     return {
       isValid: false,
       error: "Download path has unmatched template brackets < >",
     }
   }
-
   return { isValid: true }
 }
 

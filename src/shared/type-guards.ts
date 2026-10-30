@@ -37,17 +37,13 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
  */
 export const isJsonRecord = (
   value: unknown
-): value is Record<string, JsonValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+): value is Record<string, JsonValue> => isRecord(value)
 
 /**
  * Type guard variant that narrows to StorageValue record.
  * Use when working with chrome.storage API results.
  */
-export const isStorageRecord = (
-  value: unknown
-): value is Record<string, StorageValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+export const isStorageRecord = isJsonRecord
 
 /**
  * Safely convert an unknown error to an Error instance.

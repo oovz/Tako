@@ -79,63 +79,146 @@ export const MAX_AVIF_METADATA_BYTES = 1024 * 1024
 // the parser is bounded to the metadata prefix above.
 const AVIF_METADATA_WORKING_SET_MULTIPLIER = 16
 
+const JPEG_START_OF_FRAME_MARKERS = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+])
+const JPEG_TERMINAL_MARKERS = new Set([0xda, 0xd9])
+
+function readJpegMarker(bytes: Uint8Array, start: number) {
+  if (start - 2 >= MAX_JPEG_METADATA_BYTES || bytes[start] !== 0xff) {
+    return null
+  }
+  let offset = start
+  while (
+    hasBytes(bytes, offset, 1) &&
+    bytes[offset] === 0xff &&
+    offset - 2 < MAX_JPEG_METADATA_BYTES
+  ) {
+    offset += 1
+  }
+  if (!hasBytes(bytes, offset, 1)) return null
+  const marker = bytes[offset++]
+  if (JPEG_TERMINAL_MARKERS.has(marker)) return null
+  return { marker, offset }
+}
+
+function isStandaloneJpegMarker(marker: number): boolean {
+  return (
+    marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)
+  )
+}
+
+function readJpegSegmentLength(
+  bytes: Uint8Array,
+  offset: number
+): number | null {
+  if (!hasBytes(bytes, offset, 2)) return null
+  const length = readUint16BE(bytes, offset)
+  if (length < 2 || !hasBytes(bytes, offset, length)) return null
+  if (offset + length - 2 > MAX_JPEG_METADATA_BYTES) return null
+  return length
+}
+
+function readJpegFrameDimensions(
+  bytes: Uint8Array,
+  marker: number,
+  offset: number,
+  segmentLength: number
+): EncodedImageDimensions | null {
+  if (!JPEG_START_OF_FRAME_MARKERS.has(marker) || segmentLength < 7) return null
+  return {
+    width: readUint16BE(bytes, offset + 5),
+    height: readUint16BE(bytes, offset + 3),
+  }
+}
+
 function readJpegDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
   if (!hasBytes(bytes, 0, 2) || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
     return null
   }
-  const startOfFrameMarkers = new Set([
-    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce,
-    0xcf,
-  ])
   let offset = 2
   while (hasBytes(bytes, offset, 1)) {
-    if (offset - 2 >= MAX_JPEG_METADATA_BYTES || bytes[offset] !== 0xff) {
-      return null
-    }
-    while (
-      hasBytes(bytes, offset, 1) &&
-      bytes[offset] === 0xff &&
-      offset - 2 < MAX_JPEG_METADATA_BYTES
-    ) {
-      offset += 1
-    }
-    if (!hasBytes(bytes, offset, 1)) return null
-    const marker = bytes[offset++]
-    if (marker === 0xda || marker === 0xd9) return null
-    if (
-      marker === 0xd8 ||
-      marker === 0x01 ||
-      (marker >= 0xd0 && marker <= 0xd7)
-    ) {
-      continue
-    }
-    if (!hasBytes(bytes, offset, 2)) return null
-    const segmentLength = readUint16BE(bytes, offset)
-    if (segmentLength < 2 || !hasBytes(bytes, offset, segmentLength)) {
-      return null
-    }
-    if (offset + segmentLength - 2 > MAX_JPEG_METADATA_BYTES) {
-      return null
-    }
-    if (startOfFrameMarkers.has(marker) && segmentLength >= 7) {
-      return {
-        width: readUint16BE(bytes, offset + 5),
-        height: readUint16BE(bytes, offset + 3),
-      }
-    }
+    const next = readJpegMarker(bytes, offset)
+    if (!next) return null
+    offset = next.offset
+    if (isStandaloneJpegMarker(next.marker)) continue
+    const segmentLength = readJpegSegmentLength(bytes, offset)
+    if (segmentLength === null) return null
+    const dimensions = readJpegFrameDimensions(
+      bytes,
+      next.marker,
+      offset,
+      segmentLength
+    )
+    if (dimensions) return dimensions
     offset += segmentLength
   }
   return null
 }
 
-function readWebpDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
-  if (
-    !hasBytes(bytes, 0, 16) ||
-    String.fromCharCode(...bytes.subarray(0, 4)) !== "RIFF" ||
-    String.fromCharCode(...bytes.subarray(8, 12)) !== "WEBP"
-  ) {
-    return null
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    hasBytes(bytes, 0, 16) &&
+    String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
+    String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
+  )
+}
+
+function readWebpFrameDimensions(
+  bytes: Uint8Array,
+  type: string,
+  payload: number,
+  size: number
+): EncodedImageDimensions | null {
+  switch (type) {
+    case "VP8X":
+      if (size < 10) return null
+      return {
+        width:
+          1 +
+          bytes[payload + 4] +
+          (bytes[payload + 5] << 8) +
+          (bytes[payload + 6] << 16),
+        height:
+          1 +
+          bytes[payload + 7] +
+          (bytes[payload + 8] << 8) +
+          (bytes[payload + 9] << 16),
+      }
+    case "VP8L": {
+      if (size < 5 || bytes[payload] !== 0x2f) return null
+      const bits = readUint32LE(bytes, payload + 1)
+      return {
+        width: 1 + (bits & 0x3fff),
+        height: 1 + ((bits >>> 14) & 0x3fff),
+      }
+    }
+    case "VP8 ":
+      return readLossyWebpDimensions(bytes, payload, size)
+    default:
+      return null
   }
+}
+
+function readLossyWebpDimensions(
+  bytes: Uint8Array,
+  payload: number,
+  size: number
+): EncodedImageDimensions | null {
+  if (size < 10) return null
+  if (
+    String.fromCharCode(...bytes.subarray(payload + 3, payload + 6)) !==
+    "\x9d\x01\x2a"
+  )
+    return null
+  return {
+    width: readUint16LE(bytes, payload + 6) & 0x3fff,
+    height: readUint16LE(bytes, payload + 8) & 0x3fff,
+  }
+}
+
+function readWebpDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
+  if (!isWebp(bytes)) return null
   const maxMetadataOffset = Math.min(bytes.byteLength, 1024 * 1024)
   const maxChunks = 4096
   let chunksScanned = 0
@@ -150,39 +233,8 @@ function readWebpDimensions(bytes: Uint8Array): EncodedImageDimensions | null {
     const size = readUint32LE(bytes, offset + 4)
     const payload = offset + 8
     if (!hasBytes(bytes, payload, size)) return null
-    if (type === "VP8X" && size >= 10) {
-      return {
-        width:
-          1 +
-          bytes[payload + 4] +
-          (bytes[payload + 5] << 8) +
-          (bytes[payload + 6] << 16),
-        height:
-          1 +
-          bytes[payload + 7] +
-          (bytes[payload + 8] << 8) +
-          (bytes[payload + 9] << 16),
-      }
-    }
-    if (type === "VP8L" && size >= 5 && bytes[payload] === 0x2f) {
-      const bits = readUint32LE(bytes, payload + 1)
-      return {
-        width: 1 + (bits & 0x3fff),
-        height: 1 + ((bits >>> 14) & 0x3fff),
-      }
-    }
-    if (type === "VP8 " && size >= 10) {
-      if (
-        bytes[payload + 3] === 0x9d &&
-        bytes[payload + 4] === 0x01 &&
-        bytes[payload + 5] === 0x2a
-      ) {
-        return {
-          width: readUint16LE(bytes, payload + 6) & 0x3fff,
-          height: readUint16LE(bytes, payload + 8) & 0x3fff,
-        }
-      }
-    }
+    const dimensions = readWebpFrameDimensions(bytes, type, payload, size)
+    if (dimensions) return dimensions
     if (payload + size > maxMetadataOffset) return null
     offset = payload + size + (size % 2)
   }
@@ -193,35 +245,41 @@ function readUint16LE(bytes: Uint8Array, offset: number): number {
   return bytes[offset] | (bytes[offset + 1] << 8)
 }
 
+function readAvifDimensions(
+  buffer: ArrayBuffer,
+  liveResourceLedger: OffscreenLiveResourceLedger
+): EncodedImageDimensions {
+  const metadataLength = Math.min(buffer.byteLength, MAX_AVIF_METADATA_BYTES)
+  const metadata = new Uint8Array(buffer, 0, metadataLength)
+  const scratchLease = liveResourceLedger.reserve(
+    metadataLength * AVIF_METADATA_WORKING_SET_MULTIPLIER,
+    "AVIF dimension metadata parser"
+  )
+  try {
+    const dimensions = imageDimensionsFromData(metadata)
+    if (!dimensions || dimensions.type !== "avif") {
+      throw new DecodedImageResourceLimitError(
+        "Encoded image/avif dimensions are unavailable within the metadata limit"
+      )
+    }
+    return { width: dimensions.width, height: dimensions.height }
+  } catch (error) {
+    if (error instanceof DecodedImageResourceLimitError) throw error
+    throw new DecodedImageResourceLimitError(
+      "Encoded image/avif metadata is malformed"
+    )
+  } finally {
+    scratchLease.release()
+  }
+}
+
 export function readEncodedImageDimensions(
   buffer: ArrayBuffer,
   mimeType: string,
   liveResourceLedger: OffscreenLiveResourceLedger
 ): EncodedImageDimensions {
-  if (mimeType === "image/avif") {
-    const metadataLength = Math.min(buffer.byteLength, MAX_AVIF_METADATA_BYTES)
-    const metadata = new Uint8Array(buffer, 0, metadataLength)
-    const scratchLease = liveResourceLedger.reserve(
-      metadataLength * AVIF_METADATA_WORKING_SET_MULTIPLIER,
-      "AVIF dimension metadata parser"
-    )
-    try {
-      const dimensions = imageDimensionsFromData(metadata)
-      if (!dimensions || dimensions.type !== "avif") {
-        throw new DecodedImageResourceLimitError(
-          "Encoded image/avif dimensions are unavailable within the metadata limit"
-        )
-      }
-      return { width: dimensions.width, height: dimensions.height }
-    } catch (error) {
-      if (error instanceof DecodedImageResourceLimitError) throw error
-      throw new DecodedImageResourceLimitError(
-        "Encoded image/avif metadata is malformed"
-      )
-    } finally {
-      scratchLease.release()
-    }
-  }
+  if (mimeType === "image/avif")
+    return readAvifDimensions(buffer, liveResourceLedger)
   const bytes = new Uint8Array(buffer)
   const dimensions =
     readPngDimensions(bytes) ??
