@@ -8,6 +8,7 @@ import {
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
 import { ChapterImagePlanSchema } from "../chapter-plan"
+import { ImageAccessBatch } from "../image-access-batch"
 import { ProviderContractError } from "../provider-contract-error"
 import { createIntegrationEndpointUrlAssertion } from "../request-policy"
 import { fetchCoolmicViewer, parseCoolmicId } from "./api"
@@ -26,15 +27,11 @@ type ImageAccess = {
   cookies: CoolmicViewer["signed_cookie"]
   remaining: number
 }
-let access = new Map<string, ImageAccess>()
-let releaseAccess = () => {}
+const access = new ImageAccessBatch<ImageAccess>(
+  "Coolmic reader image access has expired"
+)
 
-function installAccess(
-  viewer: CoolmicViewer,
-  chapterId: string,
-  signal?: AbortSignal
-): string[] {
-  signal?.throwIfAborted()
+function readImageAccess(viewer: CoolmicViewer, chapterId: string) {
   const images = [...viewer.image_data].sort((a, b) => a.num - b.num)
   const owned = new Map<string, ImageAccess>()
   for (const [index, image] of images.entries()) {
@@ -54,6 +51,25 @@ function installAccess(
       remaining: (previous?.remaining ?? 0) + 1,
     })
   }
+  return { images, owned }
+}
+
+function readPolicyEpoch(policy: unknown): number {
+  if (!policy || typeof policy !== "object") throw new Error()
+  const statement = (
+    policy as {
+      Statement?: {
+        Condition?: { DateLessThan?: { "AWS:EpochTime"?: unknown } }
+      }[]
+    }
+  ).Statement?.[0]
+  const epoch = statement?.Condition?.DateLessThan?.["AWS:EpochTime"]
+  if (typeof epoch !== "number" || !Number.isSafeInteger(epoch))
+    throw new Error()
+  return epoch
+}
+
+function readAccessExpiration(viewer: CoolmicViewer): number {
   let expiration: number
   try {
     const policy: unknown = JSON.parse(
@@ -64,17 +80,7 @@ function installAccess(
           .replace(/~/g, "/")
       )
     )
-    if (!policy || typeof policy !== "object") throw new Error()
-    const statement = (
-      policy as {
-        Statement?: {
-          Condition?: { DateLessThan?: { "AWS:EpochTime"?: unknown } }
-        }[]
-      }
-    ).Statement?.[0]
-    const epoch = statement?.Condition?.DateLessThan?.["AWS:EpochTime"]
-    if (typeof epoch !== "number" || !Number.isSafeInteger(epoch))
-      throw new Error()
+    const epoch = readPolicyEpoch(policy)
     expiration = epoch * 1000
     if (expiration <= Date.now()) throw new Error()
   } catch {
@@ -82,35 +88,46 @@ function installAccess(
       "Coolmic image access is invalid or expired"
     )
   }
-  releaseAccess()
-  access = owned
-  const cleanup = () => {
-    owned.clear()
-    clearTimeout(timer)
-    signal?.removeEventListener("abort", cleanup)
-  }
-  const timer = setTimeout(
-    cleanup,
-    Math.min(expiration - Date.now(), 24 * 60 * 60 * 1000)
+  return expiration
+}
+
+function installAccess(
+  viewer: CoolmicViewer,
+  chapterId: string,
+  signal?: AbortSignal
+): string[] {
+  signal?.throwIfAborted()
+  const { images, owned } = readImageAccess(viewer, chapterId)
+  const expiration = readAccessExpiration(viewer)
+  access.install(
+    owned,
+    Math.min(expiration - Date.now(), 24 * 60 * 60 * 1000),
+    signal
   )
-  signal?.addEventListener("abort", cleanup, { once: true })
-  releaseAccess = cleanup
-  if (signal?.aborted) cleanup()
   return images.map((image) => image.path)
 }
 
-async function downloadImage(
-  imageUrl: string,
-  opts: Parameters<OffscreenIntegration["chapter"]["downloadImage"]>[1],
-  imageAccess?: ImageAccess
-) {
-  const assertUrlAllowed = imageAccess ? assertContent : assertCover
-  assertUrlAllowed(imageUrl)
+type ImageOptions = Parameters<
+  OffscreenIntegration["chapter"]["downloadImage"]
+>[1]
+
+function imageRequestUrl(imageUrl: string, imageAccess?: ImageAccess): URL {
   const url = new URL(imageUrl)
   if (imageAccess) {
     for (const [key, value] of Object.entries(imageAccess.cookies))
       url.searchParams.set(key.replace("CloudFront-", ""), value)
   }
+  return url
+}
+
+async function requestImage(
+  imageUrl: string,
+  opts: ImageOptions,
+  imageAccess?: ImageAccess
+) {
+  const assertUrlAllowed = imageAccess ? assertContent : assertCover
+  assertUrlAllowed(imageUrl)
+  const url = imageRequestUrl(imageUrl, imageAccess)
   let fetched: Awaited<ReturnType<typeof fetchImageWithStallDetection>>
   try {
     fetched = await fetchImageWithStallDetection(url.href, {
@@ -133,18 +150,29 @@ async function downloadImage(
       Object.assign(failure, { status: error.status })
     throw failure
   }
+  return { fetched, url }
+}
+
+function readImageMimeType(buffer: ArrayBuffer): "image/jpeg" | "image/png" {
+  const data = new Uint8Array(buffer)
+  const isJpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  const isPng =
+    data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47
+  if (!isJpeg && !isPng)
+    throw new ProviderContractError("Coolmic returned invalid image content")
+  const mimeType = isJpeg ? "image/jpeg" : "image/png"
+  return mimeType
+}
+
+async function downloadImage(
+  imageUrl: string,
+  opts: ImageOptions,
+  imageAccess?: ImageAccess
+) {
+  const { fetched, url } = await requestImage(imageUrl, opts, imageAccess)
   try {
     opts.signal?.throwIfAborted()
-    const data = new Uint8Array(fetched.data)
-    const isJpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
-    const isPng =
-      data[0] === 0x89 &&
-      data[1] === 0x50 &&
-      data[2] === 0x4e &&
-      data[3] === 0x47
-    if (!isJpeg && !isPng)
-      throw new ProviderContractError("Coolmic returned invalid image content")
-    const mimeType = isJpeg ? "image/jpeg" : "image/png"
+    const mimeType = readImageMimeType(fetched.data)
     const dimensions = readEncodedImageDimensions(
       fetched.data,
       mimeType,
@@ -155,10 +183,7 @@ async function downloadImage(
       dimensions.height,
       "Coolmic"
     )
-    if (imageAccess && --imageAccess.remaining === 0) {
-      access.delete(imageUrl)
-      if (!access.size) releaseAccess()
-    }
+    access.consume(imageUrl, imageAccess)
     return {
       ...fetched,
       mimeType,
@@ -167,7 +192,7 @@ async function downloadImage(
           .split("/")
           .pop()
           ?.replace(/\.[^.]*$/, "") || "page"
-      }.${isJpeg ? "jpg" : "png"}`,
+      }.${mimeType === "image/jpeg" ? "jpg" : "png"}`,
     }
   } catch (error) {
     fetched.liveResourceLease.release()
@@ -199,11 +224,7 @@ const offscreen: OffscreenIntegration = {
       })
     },
     async downloadImage(imageUrl, opts) {
-      const imageAccess = access.get(imageUrl)
-      if (!imageAccess)
-        throw new ProviderContractError(
-          "Coolmic reader image access has expired"
-        )
+      const imageAccess = access.require(imageUrl)
       return downloadImage(imageUrl, opts, imageAccess)
     },
   },

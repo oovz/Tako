@@ -9,6 +9,7 @@ import {
 } from "@/src/runtime/decoded-image-limits"
 import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
 import { ChapterImagePlanSchema } from "../chapter-plan"
+import { ImageAccessBatch } from "../image-access-batch"
 import { ProviderContractError } from "../provider-contract-error"
 import {
   assertIntegrationEndpointRequestUrl,
@@ -21,16 +22,21 @@ const assertImage = createIntegrationEndpointUrlAssertion(
   "mangaplus-image"
 )
 type ImageAccess = { key: string; token: string; remaining: number }
-let access = new Map<string, ImageAccess>()
-let releaseAccess = () => {}
+const access = new ImageAccessBatch<ImageAccess>(
+  "MANGA Plus viewer image access has expired"
+)
 
-function installAccess(
+function imageAccessLifetime(url: string, lifetime: number): number {
+  const expires = Number(new URL(url).searchParams.get("expires")) * 1000
+  if (!Number.isFinite(expires) || expires <= Date.now()) return lifetime
+  return Math.max(lifetime, Math.min(expires - Date.now(), 24 * 60 * 60 * 1000))
+}
+
+function buildImageAccess(
   images: { url: string; encryptionKey: string }[],
   token: string,
-  signal?: AbortSignal
-): void {
-  releaseAccess()
-  const owned = new Map<string, ImageAccess>()
+  owned: Map<string, ImageAccess>
+): number {
   let lifetime = HARD_TIMEOUT_MS
   for (const image of images) {
     assertIntegrationEndpointRequestUrl(
@@ -38,13 +44,7 @@ function installAccess(
       "mangaplus-image",
       image.url
     )
-    const expires =
-      Number(new URL(image.url).searchParams.get("expires")) * 1000
-    if (Number.isFinite(expires) && expires > Date.now())
-      lifetime = Math.max(
-        lifetime,
-        Math.min(expires - Date.now(), 24 * 60 * 60 * 1000)
-      )
+    lifetime = imageAccessLifetime(image.url, lifetime)
     const existing = owned.get(image.url)
     if (existing && existing.key !== image.encryptionKey)
       throw new ProviderContractError("Conflicting MANGA Plus image keys")
@@ -54,16 +54,48 @@ function installAccess(
       remaining: (existing?.remaining ?? 0) + 1,
     })
   }
-  access = owned
-  const cleanup = () => {
-    owned.clear()
-    clearTimeout(timer)
-    signal?.removeEventListener("abort", cleanup)
+  return lifetime
+}
+
+function installAccess(
+  images: { url: string; encryptionKey: string }[],
+  token: string,
+  signal?: AbortSignal
+): void {
+  access.release()
+  const owned = new Map<string, ImageAccess>()
+  const lifetime = buildImageAccess(images, token, owned)
+  access.install(owned, lifetime, signal)
+}
+
+function decodeImageContent(
+  buffer: ArrayBuffer,
+  imageAccess?: ImageAccess
+): "image/jpeg" | "image/png" {
+  const data = new Uint8Array(buffer)
+  if (imageAccess?.key) {
+    const key = Uint8Array.from(imageAccess.key.match(/../g)!, (pair) =>
+      Number.parseInt(pair, 16)
+    )
+    for (let i = 0; i < data.length; i++) data[i] ^= key[i % key.length]
   }
-  const timer = setTimeout(cleanup, lifetime)
-  signal?.addEventListener("abort", cleanup, { once: true })
-  releaseAccess = cleanup
-  if (signal?.aborted) cleanup()
+  if ([0xff, 0xd8, 0xff].every((byte, index) => data[index] === byte))
+    return "image/jpeg"
+  if ([0x89, 0x50, 0x4e, 0x47].every((byte, index) => data[index] === byte))
+    return "image/png"
+  throw new ProviderContractError("MANGA Plus returned invalid image content")
+}
+
+function imageFilename(
+  imageUrl: string,
+  mimeType: "image/jpeg" | "image/png"
+): string {
+  const stem =
+    new URL(imageUrl).pathname
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]*$/, "") || "page"
+  return `${stem}.${mimeType === "image/jpeg" ? "jpg" : "png"}`
 }
 
 async function downloadImage(
@@ -90,24 +122,7 @@ async function downloadImage(
   })
   try {
     opts.signal?.throwIfAborted()
-    const data = new Uint8Array(fetched.data)
-    if (imageAccess?.key) {
-      const key = Uint8Array.from(imageAccess.key.match(/../g)!, (pair) =>
-        Number.parseInt(pair, 16)
-      )
-      for (let i = 0; i < data.length; i++) data[i] ^= key[i % key.length]
-    }
-    const isJpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
-    const isPng =
-      data[0] === 0x89 &&
-      data[1] === 0x50 &&
-      data[2] === 0x4e &&
-      data[3] === 0x47
-    if (!isJpeg && !isPng)
-      throw new ProviderContractError(
-        "MANGA Plus returned invalid image content"
-      )
-    const mimeType = isJpeg ? "image/jpeg" : "image/png"
+    const mimeType = decodeImageContent(fetched.data, imageAccess)
     const dimensions = readEncodedImageDimensions(
       fetched.data,
       mimeType,
@@ -118,19 +133,11 @@ async function downloadImage(
       dimensions.height,
       "MANGA Plus"
     )
-    if (imageAccess && --imageAccess.remaining === 0) {
-      access.delete(imageUrl)
-      if (!access.size) releaseAccess()
-    }
+    access.consume(imageUrl, imageAccess)
     return {
       ...fetched,
       mimeType,
-      filename: `${
-        new URL(imageUrl).pathname
-          .split("/")
-          .pop()
-          ?.replace(/\.[^.]*$/, "") || "page"
-      }.${isJpeg ? "jpg" : "png"}`,
+      filename: imageFilename(imageUrl, mimeType),
     }
   } catch (error) {
     fetched.liveResourceLease.release()
@@ -164,11 +171,7 @@ const offscreen: OffscreenIntegration = {
       return plan
     },
     async downloadImage(imageUrl, opts) {
-      const imageAccess = access.get(imageUrl)
-      if (!imageAccess)
-        throw new ProviderContractError(
-          "MANGA Plus viewer image access has expired"
-        )
+      const imageAccess = access.require(imageUrl)
       return downloadImage(imageUrl, opts, imageAccess)
     },
   },
