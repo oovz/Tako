@@ -132,3 +132,42 @@ it("uses the complete series authorization and falls back when the request is re
   await act(async () => root.render(createElement(View)))
   expect(container.textContent).toBe("fallback")
 })
+
+it("keeps the replacement cover ready when another consumer's old shared cover finishes later", async () => {
+  const old = Promise.withResolvers<ReturnType<typeof response>>()
+  const replacement: CoverPreviewIdentity = {
+    ...identity,
+    coverUrl: `${identity.coverUrl}?new`,
+    source: { kind: "task", taskId: "task-two" },
+  }
+  const retained: CoverPreviewIdentity = {
+    ...identity,
+    source: { kind: "task", taskId: "retained" },
+  }
+  send.mockImplementation(async (message) => {
+    if (message.type !== "GET_COVER_PREVIEW") return { success: true }
+    return message.payload.source.taskId === "task-two"
+      ? response(replacement)
+      : old.promise
+  })
+  create.mockReturnValueOnce("blob:new").mockReturnValueOnce("blob:old")
+  const views = (request: CoverPreviewIdentity) =>
+    createElement(
+      "section",
+      null,
+      createElement(View, { key: "changing", request }),
+      createElement(View, { key: "retained", request: retained })
+    )
+  const displayed = () =>
+    Array.from(container.querySelectorAll("output"), (node) => node.textContent)
+  await act(async () => root.render(views(identity)))
+  expect(displayed()).toEqual(["loading", "loading"])
+  expect(send).toHaveBeenCalledTimes(1)
+  await act(async () => root.render(views(replacement)))
+  expect(displayed()).toEqual(["blob:new", "loading"])
+  await act(async () => old.resolve(response()))
+  expect(displayed()).toEqual(["blob:new", "blob:old"])
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(send).toHaveBeenCalledTimes(2)
+  expect(revoke).not.toHaveBeenCalled()
+})
