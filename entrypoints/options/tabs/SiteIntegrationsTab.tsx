@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
 import { SiteIntegrationCard } from "../components/SiteIntegrationCard"
 import {
-  isEnabled,
-  requiresBroadHttpsPermission,
-  siteIntegrationCatalog,
-} from "@/src/site-integrations/catalog"
+  getOverriddenIntegrationIds,
+  getSiteIntegrationList,
+  type IntegrationFilter,
+} from "./SiteIntegrationsTab-model"
 import type {
   SiteIntegrationEnablementMap,
   SiteIntegrationSettingValue,
@@ -19,7 +19,6 @@ import { cn } from "@/src/shared/utils"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
 
 type CustomSettingValue = SiteIntegrationSettingValue
-type FilterType = "all" | "enabled" | "disabled" | "overrides"
 
 interface SiteIntegrationsTabProps {
   overrides: Record<string, SiteOverrideRecord>
@@ -55,96 +54,27 @@ export function SiteIntegrationsTab({
   onChange,
 }: SiteIntegrationsTabProps) {
   const [search, setSearch] = useState("")
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all")
-
-  // Build from the manifest SSOT so the tab is not coupled to async registry initialization.
-  const integrations = useMemo(() => {
-    return siteIntegrationCatalog
-      .filter((manifest) => manifest.shipped)
-      .map((manifest) => ({
-        id: manifest.id,
-        name: manifest.name,
-        contributors: manifest.contributors,
-        domains: manifest.patterns.domains,
-        customSettings: manifest.customSettings,
-        policyDefaults: manifest.policyDefaults,
-        requiresBroadHttpsPermission: requiresBroadHttpsPermission(manifest.id),
-      }))
-  }, [])
-
-  // Filter counts
-  const enabledCount = useMemo(() => {
-    return integrations.filter((i) =>
-      isEnabled(i.id, siteIntegrationEnablement)
-    ).length
-  }, [integrations, siteIntegrationEnablement])
-
-  const disabledCount = useMemo(() => {
-    return integrations.length - enabledCount
-  }, [integrations.length, enabledCount])
-
-  const overridesCount = useMemo(() => {
-    return new Set([
-      ...Object.keys(overrides),
-      ...Object.entries(siteIntegrationSettingsByIntegration)
-        .filter(([, values]) => Object.keys(values).length > 0)
-        .map(([integrationId]) => integrationId),
-    ]).size
-  }, [overrides, siteIntegrationSettingsByIntegration])
-
-  // Filter integrations by search query and active filter
-  const filteredIntegrations = useMemo(() => {
-    return integrations.filter((integration) => {
-      const query = search.toLowerCase().trim()
-      const matchesQuery =
-        !query ||
-        integration.name.toLowerCase().includes(query) ||
-        integration.domains.some((d) => d.toLowerCase().includes(query)) ||
-        integration.contributors?.some((c) => c.toLowerCase().includes(query))
-
-      if (!matchesQuery) return false
-
-      if (activeFilter === "enabled") {
-        return isEnabled(integration.id, siteIntegrationEnablement)
-      }
-      if (activeFilter === "disabled") {
-        return !isEnabled(integration.id, siteIntegrationEnablement)
-      }
-      if (activeFilter === "overrides") {
-        return (
-          !!overrides[integration.id] ||
-          Object.keys(
-            siteIntegrationSettingsByIntegration[integration.id] ?? {}
-          ).length > 0
-        )
-      }
-
-      return true
-    })
-  }, [
-    integrations,
-    search,
-    activeFilter,
-    siteIntegrationEnablement,
-    overrides,
-    siteIntegrationSettingsByIntegration,
-  ])
-
-  // Sort: overrides first, then alphabetically
-  const sortedIntegrations = useMemo(() => {
-    return [...filteredIntegrations].sort((a, b) => {
-      const aHasOverride =
-        !!overrides[a.id] ||
-        Object.keys(siteIntegrationSettingsByIntegration[a.id] ?? {}).length > 0
-      const bHasOverride =
-        !!overrides[b.id] ||
-        Object.keys(siteIntegrationSettingsByIntegration[b.id] ?? {}).length > 0
-
-      if (aHasOverride && !bHasOverride) return -1
-      if (!aHasOverride && bHasOverride) return 1
-      return a.name.localeCompare(b.name)
-    })
-  }, [filteredIntegrations, overrides, siteIntegrationSettingsByIntegration])
+  const [activeFilter, setActiveFilter] = useState<IntegrationFilter>("all")
+  const overriddenIds = useMemo(
+    () =>
+      getOverriddenIntegrationIds(
+        overrides,
+        siteIntegrationSettingsByIntegration
+      ),
+    [overrides, siteIntegrationSettingsByIntegration]
+  )
+  const { integrations, visibleIntegrations, enabledCount } = useMemo(
+    () =>
+      getSiteIntegrationList({
+        search,
+        filter: activeFilter,
+        enablement: siteIntegrationEnablement,
+        overriddenIds,
+      }),
+    [search, activeFilter, siteIntegrationEnablement, overriddenIds]
+  )
+  const disabledCount = integrations.length - enabledCount
+  const overridesCount = overriddenIds.size
 
   const globalDefaults = {
     outputFormat: globalSettings.downloads.defaultFormat,
@@ -179,62 +109,16 @@ export function SiteIntegrationsTab({
           />
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          <button
-            type="button"
-            onClick={() => setActiveFilter("all")}
-            className={cn(
-              "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
-              activeFilter === "all"
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {t("common_all")} ({integrations.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveFilter("enabled")}
-            className={cn(
-              "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
-              activeFilter === "enabled"
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {t("common_enabled")} ({enabledCount})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveFilter("disabled")}
-            className={cn(
-              "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
-              activeFilter === "disabled"
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {t("common_disabled")} ({disabledCount})
-          </button>
-
-          {overridesCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setActiveFilter("overrides")}
-              className={cn(
-                "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
-                activeFilter === "overrides"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              {t("common_overrides")} ({overridesCount})
-            </button>
-          )}
-        </div>
+        <IntegrationFilters
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          counts={{
+            all: integrations.length,
+            enabled: enabledCount,
+            disabled: disabledCount,
+            overrides: overridesCount,
+          }}
+        />
       </div>
 
       {/* Active Overrides Summary Banner */}
@@ -268,7 +152,7 @@ export function SiteIntegrationsTab({
 
       {/* Site Integration List */}
       <div className="min-w-0 flex flex-col gap-4">
-        {sortedIntegrations.length === 0 ? (
+        {visibleIntegrations.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
             <div className="text-muted-foreground">
               {search ? (
@@ -286,11 +170,11 @@ export function SiteIntegrationsTab({
             </div>
           </div>
         ) : (
-          sortedIntegrations.map((integration) => (
+          visibleIntegrations.map((integration) => (
             <SiteIntegrationCard
               key={integration.id}
               siteIntegration={integration}
-              isEnabled={isEnabled(integration.id, siteIntegrationEnablement)}
+              isEnabled={integration.enabled}
               override={overrides[integration.id]}
               globalDefaults={globalDefaults}
               siteIntegrationSettingsValues={
@@ -303,6 +187,46 @@ export function SiteIntegrationsTab({
           ))
         )}
       </div>
+    </div>
+  )
+}
+
+function IntegrationFilters({
+  activeFilter,
+  onFilterChange,
+  counts,
+}: {
+  activeFilter: IntegrationFilter
+  onFilterChange: (filter: IntegrationFilter) => void
+  counts: Record<IntegrationFilter, number>
+}) {
+  const filters = [
+    { value: "all", label: t("common_all") },
+    { value: "enabled", label: t("common_enabled") },
+    { value: "disabled", label: t("common_disabled") },
+    { value: "overrides", label: t("common_overrides") },
+  ] as const
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+      {filters
+        .filter(
+          (filter) => filter.value !== "overrides" || counts.overrides > 0
+        )
+        .map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            onClick={() => onFilterChange(filter.value)}
+            className={cn(
+              "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
+              activeFilter === filter.value
+                ? "bg-primary text-primary-foreground shadow-2xs"
+                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            {filter.label} ({counts[filter.value]})
+          </button>
+        ))}
     </div>
   )
 }
