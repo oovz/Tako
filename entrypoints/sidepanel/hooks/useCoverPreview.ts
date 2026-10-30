@@ -7,42 +7,63 @@ import {
 } from "@/entrypoints/sidepanel/services/cover-preview-loader"
 
 type PreviewState = CoverPreviewResult | { status: "loading" }
+interface SourceFields {
+  kind?: CoverPreviewSource["kind"]
+  taskId?: string
+  tabId?: number
+  windowId?: number
+  seriesId?: string
+  seriesRevision?: number
+}
 
-export function useCoverPreview(identity?: CoverPreviewIdentity): PreviewState {
-  const integrationId = identity?.integrationId
-  const coverUrl = identity?.coverUrl
-  const kind = identity?.source.kind
-  const taskId =
-    identity?.source.kind === "task" ? identity.source.taskId : undefined
-  const tabId =
-    identity?.source.kind === "series" ? identity.source.tabId : undefined
-  const windowId =
-    identity?.source.kind === "series" ? identity.source.windowId : undefined
-  const seriesId =
-    identity?.source.kind === "series" ? identity.source.seriesId : undefined
-  const seriesRevision =
-    identity?.source.kind === "series"
-      ? identity.source.seriesRevision
-      : undefined
-  const source = useMemo<CoverPreviewSource | undefined>(() => {
-    if (kind === "task" && taskId) return { kind, taskId }
-    if (
-      kind === "series" &&
-      tabId !== undefined &&
-      windowId !== undefined &&
-      seriesId &&
-      seriesRevision !== undefined
-    ) {
-      return { kind, tabId, windowId, seriesId, seriesRevision }
-    }
-  }, [kind, taskId, tabId, windowId, seriesId, seriesRevision])
-  const request = useMemo(
+function sourceFields(source?: CoverPreviewSource): SourceFields {
+  if (source?.kind === "task")
+    return { kind: source.kind, taskId: source.taskId }
+  if (source?.kind === "series") return source
+  return {}
+}
+
+function previewSource(fields: SourceFields): CoverPreviewSource | undefined {
+  const { kind, taskId, tabId, windowId, seriesId, seriesRevision } = fields
+  if (kind === "task" && taskId) return { kind, taskId }
+  if (
+    kind === "series" &&
+    tabId !== undefined &&
+    windowId !== undefined &&
+    seriesId &&
+    seriesRevision !== undefined
+  ) {
+    return { kind, tabId, windowId, seriesId, seriesRevision }
+  }
+}
+
+function usePreviewRequest(identity?: CoverPreviewIdentity) {
+  const { integrationId, coverUrl, source: rawSource } = identity ?? {}
+  const { kind, taskId, tabId, windowId, seriesId, seriesRevision } =
+    sourceFields(rawSource)
+  const source = useMemo(
+    () =>
+      previewSource({
+        kind,
+        taskId,
+        tabId,
+        windowId,
+        seriesId,
+        seriesRevision,
+      }),
+    [kind, taskId, tabId, windowId, seriesId, seriesRevision]
+  )
+  return useMemo(
     () =>
       integrationId && coverUrl && source
         ? { integrationId, coverUrl, source }
         : undefined,
     [integrationId, coverUrl, source]
   )
+}
+
+export function useCoverPreview(identity?: CoverPreviewIdentity): PreviewState {
+  const request = usePreviewRequest(identity)
   const [state, setState] = useState<{
     request: typeof request
     value: PreviewState

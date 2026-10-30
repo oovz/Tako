@@ -1,3 +1,8 @@
+import {
+  awaitWhileActive,
+  fetchForRetainedConsumer,
+  decodeCoverPreviewBytes,
+} from "./cover-preview-loader-authorization"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import {
   MAX_COVER_PREVIEW_BYTES,
@@ -55,255 +60,215 @@ type Entry = {
   deadline: ReturnType<typeof setTimeout>
 }
 
-function awaitWhileActive<T>(
-  operation: Promise<T>,
-  signal: AbortSignal
-): Promise<T> {
-  if (signal.aborted) return Promise.reject(new Error("Cover preview released"))
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener("abort", onAbort)
-      reject(new Error("Cover preview released"))
-    }
-    signal.addEventListener("abort", onAbort, { once: true })
-    void operation
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", onAbort))
-  })
-}
-
 export function coverPreviewKey(
   identity: Pick<CoverPreviewIdentity, "integrationId" | "coverUrl">
 ): string {
   return JSON.stringify([identity.integrationId, identity.coverUrl])
 }
 
-function sourceKey(source: CoverPreviewSource): string {
-  return JSON.stringify(
-    source.kind === "task"
-      ? [source.kind, source.taskId]
-      : [
-          source.kind,
-          source.windowId,
-          source.tabId,
-          source.seriesId,
-          source.seriesRevision,
-        ]
-  )
+function createEntry(
+  identity: CoverPreviewIdentity,
+  expire: () => void
+): Entry {
+  let resolve!: Entry["resolve"]
+  const result = new Promise<CoverPreviewResult>((done) => {
+    resolve = done
+  })
+  return {
+    identity: {
+      integrationId: identity.integrationId,
+      coverUrl: identity.coverUrl,
+    },
+    requestId: crypto.randomUUID(),
+    consumers: new Map(),
+    state: "pending",
+    result,
+    resolve,
+    bytes: 0,
+    controller: new AbortController(),
+    deadline: setTimeout(expire, COVER_PREVIEW_TIMEOUT_MS + 5_000),
+  }
+}
+
+class CoverPreviewCache {
+  readonly entries = new Map<string, Entry>()
+  retainedBytes = 0
+  constructor(private readonly boundary: PreviewBoundary) {}
+
+  revoke(entry: Entry) {
+    if (!entry.url) return
+    this.boundary.revokeObjectURL(entry.url)
+    entry.url = undefined
+  }
+
+  cancel(entry: Entry) {
+    if (entry.state === "running")
+      void this.boundary.cancelPreview(entry.requestId).catch(() => {})
+  }
+
+  remove(key: string, entry: Entry) {
+    if (this.entries.get(key) !== entry) return
+    this.entries.delete(key)
+    clearTimeout(entry.deadline)
+    entry.controller.abort()
+    this.retainedBytes -= entry.bytes
+    this.revoke(entry)
+    this.cancel(entry)
+    entry.resolve({ status: "fallback" })
+  }
+
+  evictUnused() {
+    for (const [key, entry] of this.entries) {
+      if (entry.consumers.size === 0) {
+        this.remove(key, entry)
+        return true
+      }
+    }
+    return false
+  }
+}
+
+class CoverPreviewLoader {
+  private readonly cache: CoverPreviewCache
+  private running = 0
+  private disposed = false
+  constructor(
+    private readonly boundary: PreviewBoundary,
+    private readonly limits: PreviewLimits
+  ) {
+    this.cache = new CoverPreviewCache(boundary)
+  }
+
+  private expire(key: string, entry: Entry) {
+    if (this.cache.entries.get(key) !== entry) return
+    this.cache.cancel(entry)
+    entry.controller.abort(new Error("Cover preview timed out"))
+    entry.state = "settled"
+    entry.resolve({ status: "fallback" })
+    this.pump()
+  }
+
+  private async load(key: string, entry: Entry) {
+    try {
+      const response = await fetchForRetainedConsumer(entry, (payload) =>
+        this.boundary.fetchPreview(payload)
+      )
+      if (this.cache.entries.get(key) !== entry) return
+      const bytes = decodeCoverPreviewBytes(
+        response,
+        entry.identity,
+        this.limits.maxImageBytes
+      )
+      entry.url = this.boundary.createObjectURL(
+        new Blob([bytes], { type: response.mimeType })
+      )
+      await awaitWhileActive(
+        this.boundary.decode(entry.url),
+        entry.controller.signal
+      )
+      if (this.cache.entries.get(key) !== entry || !entry.url) return
+      entry.bytes = bytes.byteLength
+      this.cache.retainedBytes += entry.bytes
+      entry.resolve({ status: "ready", url: entry.url })
+    } catch {
+      this.cache.revoke(entry)
+      entry.resolve({ status: "fallback" })
+    } finally {
+      clearTimeout(entry.deadline)
+      entry.state = "settled"
+      this.running -= 1
+      this.pump()
+    }
+  }
+
+  private canReserveImage() {
+    return (
+      this.cache.retainedBytes +
+        (this.running + 1) * this.limits.maxImageBytes <=
+      this.limits.maxRetainedBytes
+    )
+  }
+
+  private reserveImage() {
+    while (!this.canReserveImage() && this.cache.evictUnused()) {
+      // Unused least-recently-used images make room for a new request.
+    }
+    return this.canReserveImage()
+  }
+
+  private pump() {
+    if (this.disposed) return
+    for (const [key, entry] of this.cache.entries) {
+      if (entry.state !== "pending") continue
+      if (this.running >= this.limits.maxConcurrentRequests) return
+      if (!this.reserveImage()) {
+        if (this.running > 0) return
+        entry.state = "settled"
+        entry.resolve({ status: "fallback" })
+        continue
+      }
+      entry.state = "running"
+      this.running += 1
+      void this.load(key, entry)
+    }
+  }
+
+  private admit(key: string, identity: CoverPreviewIdentity) {
+    if (this.disposed) return
+    while (
+      this.cache.entries.size >= this.limits.maxEntries &&
+      this.cache.evictUnused()
+    ) {
+      // Active consumers retain admission priority.
+    }
+    if (this.cache.entries.size >= this.limits.maxEntries) return
+    const entry = createEntry(identity, () => this.expire(key, entry))
+    this.cache.entries.set(key, entry)
+    return entry
+  }
+
+  private release(key: string, entry: Entry, consumer: symbol) {
+    entry.consumers.delete(consumer)
+    if (entry.consumers.size === 0 && (entry.state !== "settled" || !entry.url))
+      this.cache.remove(key, entry)
+    this.pump()
+  }
+
+  acquire(identity: CoverPreviewIdentity) {
+    const key = coverPreviewKey(identity)
+    const entry = this.cache.entries.get(key) ?? this.admit(key, identity)
+    if (!entry)
+      return {
+        result: Promise.resolve<CoverPreviewResult>({ status: "fallback" }),
+        release() {},
+      }
+    this.cache.entries.delete(key)
+    this.cache.entries.set(key, entry)
+    const consumer = Symbol()
+    entry.consumers.set(consumer, identity.source)
+    this.pump()
+    let released = false
+    return {
+      result: entry.result,
+      release: () => {
+        if (released) return
+        released = true
+        this.release(key, entry, consumer)
+      },
+    }
+  }
+
+  dispose() {
+    this.disposed = true
+    for (const [key, entry] of this.cache.entries) this.cache.remove(key, entry)
+  }
 }
 
 export function createCoverPreviewLoader(
   boundary: PreviewBoundary,
   limits: PreviewLimits = DEFAULT_LIMITS
 ) {
-  const entries = new Map<string, Entry>()
-  let retainedBytes = 0
-  let running = 0
-  let disposed = false
-
-  function remove(key: string, entry: Entry) {
-    if (entries.get(key) !== entry) return
-    entries.delete(key)
-    clearTimeout(entry.deadline)
-    entry.controller.abort()
-    retainedBytes -= entry.bytes
-    if (entry.url) {
-      boundary.revokeObjectURL(entry.url)
-      entry.url = undefined
-    }
-    if (entry.state === "running") {
-      void boundary.cancelPreview(entry.requestId).catch(() => {})
-    }
-    entry.resolve({ status: "fallback" })
-  }
-
-  function evictUnused() {
-    for (const [key, entry] of entries) {
-      if (entry.consumers.size === 0) {
-        remove(key, entry)
-        return true
-      }
-    }
-    return false
-  }
-
-  async function fetchForRetainedConsumer(entry: Entry) {
-    const attemptedSources = new Set<string>()
-    for (;;) {
-      const source = Array.from(entry.consumers.values())
-        .reverse()
-        .find((candidate) => !attemptedSources.has(sourceKey(candidate)))
-      if (!source) throw new Error("Cover preview has no active consumer")
-      const selectedKey = sourceKey(source)
-      attemptedSources.add(selectedKey)
-      try {
-        const response = await awaitWhileActive(
-          boundary.fetchPreview({ requestId: entry.requestId, source }),
-          entry.controller.signal
-        )
-        if (!response.success) throw new Error(response.error)
-        return response
-      } catch (error) {
-        const retainedSources = Array.from(entry.consumers.values())
-        if (
-          entry.controller.signal.aborted ||
-          retainedSources.some(
-            (candidate) => sourceKey(candidate) === selectedKey
-          ) ||
-          !retainedSources.some(
-            (candidate) => !attemptedSources.has(sourceKey(candidate))
-          )
-        ) {
-          throw error
-        }
-        entry.requestId = crypto.randomUUID()
-      }
-    }
-  }
-
-  async function load(key: string, entry: Entry) {
-    try {
-      const response = await fetchForRetainedConsumer(entry)
-      if (entries.get(key) !== entry) return
-      if (
-        response.integrationId !== entry.identity.integrationId ||
-        response.coverUrl !== entry.identity.coverUrl ||
-        response.base64.length > 4 * Math.ceil(limits.maxImageBytes / 3)
-      ) {
-        throw new Error("Cover preview is unavailable")
-      }
-      const binary = atob(response.base64)
-      if (binary.length === 0 || binary.length > limits.maxImageBytes)
-        throw new Error("Cover preview exceeds its byte limit")
-      const bytes = Uint8Array.from(binary, (character) =>
-        character.charCodeAt(0)
-      )
-      entry.url = boundary.createObjectURL(
-        new Blob([bytes], { type: response.mimeType })
-      )
-      await awaitWhileActive(
-        boundary.decode(entry.url),
-        entry.controller.signal
-      )
-      if (entries.get(key) !== entry || !entry.url) return
-      entry.bytes = bytes.byteLength
-      retainedBytes += entry.bytes
-      entry.resolve({ status: "ready", url: entry.url })
-    } catch {
-      if (entry.url) {
-        boundary.revokeObjectURL(entry.url)
-        entry.url = undefined
-      }
-      entry.resolve({ status: "fallback" })
-    } finally {
-      clearTimeout(entry.deadline)
-      entry.state = "settled"
-      running -= 1
-      pump()
-    }
-  }
-
-  function pump() {
-    if (disposed) return
-    for (const [key, entry] of entries) {
-      if (entry.state !== "pending") continue
-      if (running >= limits.maxConcurrentRequests) return
-      while (
-        retainedBytes + (running + 1) * limits.maxImageBytes >
-          limits.maxRetainedBytes &&
-        evictUnused()
-      ) {
-        // Unused least-recently-used images make room for a new request.
-      }
-      if (
-        retainedBytes + (running + 1) * limits.maxImageBytes >
-        limits.maxRetainedBytes
-      ) {
-        if (running > 0) return
-        entry.state = "settled"
-        entry.resolve({ status: "fallback" })
-        continue
-      }
-      entry.state = "running"
-      running += 1
-      void load(key, entry)
-    }
-  }
-
-  return {
-    acquire(identity: CoverPreviewIdentity) {
-      const key = coverPreviewKey(identity)
-      let entry = entries.get(key)
-      if (!entry && !disposed) {
-        while (entries.size >= limits.maxEntries && evictUnused()) {
-          // Only consumers with active interest retain admission priority.
-        }
-        if (entries.size < limits.maxEntries) {
-          let resolve!: Entry["resolve"]
-          const result = new Promise<CoverPreviewResult>((done) => {
-            resolve = done
-          })
-          const controller = new AbortController()
-          const deadline = setTimeout(() => {
-            const expired = entries.get(key)
-            if (!expired || expired.controller !== controller) return
-            if (expired.state === "running") {
-              void boundary.cancelPreview(expired.requestId).catch(() => {})
-            }
-            controller.abort(new Error("Cover preview timed out"))
-            expired.state = "settled"
-            expired.resolve({ status: "fallback" })
-            pump()
-          }, COVER_PREVIEW_TIMEOUT_MS + 5_000)
-          entry = {
-            identity: {
-              integrationId: identity.integrationId,
-              coverUrl: identity.coverUrl,
-            },
-            requestId: crypto.randomUUID(),
-            consumers: new Map(),
-            state: "pending",
-            result,
-            resolve,
-            bytes: 0,
-            controller,
-            deadline,
-          }
-          entries.set(key, entry)
-        }
-      }
-      if (!entry)
-        return {
-          result: Promise.resolve<CoverPreviewResult>({ status: "fallback" }),
-          release() {},
-        }
-      const current = entry
-      entries.delete(key)
-      entries.set(key, current)
-      const consumer = Symbol()
-      current.consumers.set(consumer, identity.source)
-      pump()
-      let released = false
-      return {
-        result: current.result,
-        release() {
-          if (released) return
-          released = true
-          current.consumers.delete(consumer)
-          if (
-            current.consumers.size === 0 &&
-            (current.state !== "settled" || !current.url)
-          )
-            remove(key, current)
-          pump()
-        },
-      }
-    },
-    dispose() {
-      disposed = true
-      for (const [key, entry] of entries) remove(key, entry)
-    },
-  }
+  return new CoverPreviewLoader(boundary, limits)
 }
 
 let panelLoader: ReturnType<typeof createCoverPreviewLoader> | undefined
