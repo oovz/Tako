@@ -71,18 +71,11 @@ export function mapEpisode(product: PaginationProduct): Chapter | null {
   }
 }
 
-export async function fetchPaginationInfo(
-  aggregateId: string,
-  episodeId: string,
+async function requestViewerApi(
+  endpoint: URL,
   rateLimitService: RateLimitService,
   signal?: AbortSignal
-): Promise<PaginationInfo> {
-  const endpoint = new URL(
-    `${API_BASE}/readable_product_pagination_information`
-  )
-  endpoint.searchParams.set("type", "episode")
-  endpoint.searchParams.set("aggregate_id", aggregateId)
-  endpoint.searchParams.set("readable_product_id", episodeId)
+): Promise<unknown> {
   const response = await integrationHttpClient.request({
     integrationId: "shonenjumpplus",
     endpointId: "shonenjumpplus-viewer-api",
@@ -100,7 +93,26 @@ export async function fetchPaginationInfo(
       { status: response.status }
     )
   }
-  return (await readResponseJson(response)) as PaginationInfo
+  return readResponseJson(response)
+}
+
+export async function fetchPaginationInfo(
+  aggregateId: string,
+  episodeId: string,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
+): Promise<PaginationInfo> {
+  const endpoint = new URL(
+    `${API_BASE}/readable_product_pagination_information`
+  )
+  endpoint.searchParams.set("type", "episode")
+  endpoint.searchParams.set("aggregate_id", aggregateId)
+  endpoint.searchParams.set("readable_product_id", episodeId)
+  return (await requestViewerApi(
+    endpoint,
+    rateLimitService,
+    signal
+  )) as PaginationInfo
 }
 
 export async function fetchProducts(
@@ -117,30 +129,68 @@ export async function fetchProducts(
   endpoint.searchParams.set("limit", String(limit))
   endpoint.searchParams.set("sort_order", "desc")
   endpoint.searchParams.set("is_guest", "1")
-  const response = await integrationHttpClient.request({
-    integrationId: "shonenjumpplus",
-    endpointId: "shonenjumpplus-viewer-api",
-    url: endpoint.href,
-    scope: "chapter",
-    init: { ...PUBLIC_FETCH_INIT, signal },
-    rateLimitService,
-  })
-  if (!response.ok) {
-    cancelResponseBody(response)
-    throw Object.assign(
-      new Error(
-        `Shonen Jump+ chapter list could not be loaded (HTTP ${response.status}).`
-      ),
-      { status: response.status }
-    )
-  }
-  const payload = await readResponseJson(response)
+  const payload = await requestViewerApi(endpoint, rateLimitService, signal)
   if (!Array.isArray(payload)) {
     throw new ProviderContractError(
       "Shonen Jump+ chapter list returned an unexpected response structure."
     )
   }
   return payload as PaginationProduct[]
+}
+
+function positiveInteger(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : fallback
+}
+
+function paginationBounds(info: PaginationInfo): {
+  limit: number
+  reportedTotal: number
+  targetTotal: number
+} {
+  const reportedPageSize = positiveInteger(info.per_page, 50)
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, reportedPageSize))
+  const reportedTotal = positiveInteger(info.readable_products_count, limit)
+  return {
+    limit,
+    reportedTotal,
+    targetTotal: Math.min(reportedTotal, MAX_SERIES_CHAPTERS),
+  }
+}
+
+function appendProducts(
+  products: PaginationProduct[],
+  chapters: Map<string, Chapter>,
+  duplicateIds: Set<string>
+): void {
+  for (const product of products) {
+    const chapter = mapEpisode(product)
+    if (!chapter) continue
+    if (chapters.has(chapter.id)) duplicateIds.add(chapter.id)
+    else chapters.set(chapter.id, chapter)
+  }
+}
+
+function reportCatalogStatus(
+  aggregateId: string,
+  retrieved: number,
+  reportedTotal: number,
+  duplicateIds: Set<string>
+): void {
+  if (retrieved < reportedTotal) {
+    logger.debug("[shonenjumpplus] Chapter list appears incomplete", {
+      aggregateId,
+      expected: reportedTotal,
+      retrieved,
+    })
+  }
+  if (duplicateIds.size > 0) {
+    logger.error(
+      "[shonenjumpplus] Duplicate chapter ids detected in fetchChapterList",
+      { aggregateId, duplicateChapterIds: [...duplicateIds] }
+    )
+  }
 }
 
 export async function fetchShonenJumpPlusChapterList(
@@ -155,20 +205,7 @@ export async function fetchShonenJumpPlusChapterList(
     rateLimitService,
     signal
   )
-  const reportedPageSize =
-    typeof info.per_page === "number" &&
-    Number.isFinite(info.per_page) &&
-    info.per_page > 0
-      ? Math.floor(info.per_page)
-      : 50
-  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, reportedPageSize))
-  const reportedTotal =
-    typeof info.readable_products_count === "number" &&
-    Number.isFinite(info.readable_products_count) &&
-    info.readable_products_count > 0
-      ? Math.floor(info.readable_products_count)
-      : limit
-  const targetTotal = Math.min(reportedTotal, MAX_SERIES_CHAPTERS)
+  const { limit, reportedTotal, targetTotal } = paginationBounds(info)
 
   const chapters = new Map<string, Chapter>()
   const duplicateIds = new Set<string>()
@@ -188,34 +225,11 @@ export async function fetchShonenJumpPlusChapterList(
       signal
     )
     retrieved += products.length
-    for (const product of products) {
-      const chapter = mapEpisode(product)
-      if (!chapter) continue
-      if (chapters.has(chapter.id)) {
-        duplicateIds.add(chapter.id)
-      } else {
-        chapters.set(chapter.id, chapter)
-      }
-    }
+    appendProducts(products, chapters, duplicateIds)
     if (products.length < limit) break
   }
 
-  if (retrieved < reportedTotal) {
-    logger.debug("[shonenjumpplus] Chapter list appears incomplete", {
-      aggregateId,
-      expected: reportedTotal,
-      retrieved,
-    })
-  }
-  if (duplicateIds.size > 0) {
-    logger.error(
-      "[shonenjumpplus] Duplicate chapter ids detected in fetchChapterList",
-      {
-        aggregateId,
-        duplicateChapterIds: [...duplicateIds],
-      }
-    )
-  }
+  reportCatalogStatus(aggregateId, retrieved, reportedTotal, duplicateIds)
 
   return {
     chapters: [...chapters.values()],

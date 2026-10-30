@@ -10,9 +10,5 @@ export function parseAggregateIdFromHtml(html: string): string | null {
   const match = html.match(
     /<[^>]*\bclass=["'][^"']*js-readable-products-pagination[^"']*["'][^>]*?\bdata-aggregate-id=["'](\d+)["'][^>]*>/i
   )
-  if (match?.[1] && /^\d+$/.test(match[1])) {
-    return match[1]
-  }
-
-  return null
+  return match?.[1] ?? null
 }

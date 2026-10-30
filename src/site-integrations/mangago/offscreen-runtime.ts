@@ -55,6 +55,113 @@ const downloadImage: OffscreenIntegration["chapter"]["downloadImage"] = async (
   )
   return { ...reconstructed, filename: filename.replace(/\.[^.]+$/, ".png") }
 }
+type ChapterPlanInput = Parameters<
+  OffscreenIntegration["chapter"]["resolveChapterPlan"]
+>[1]
+type MangagoReader = ReturnType<typeof parseMangagoReader>
+type MangagoProtocol = ReturnType<typeof parseMangagoProtocol>
+
+async function requestReaderResource(
+  url: string,
+  input: ChapterPlanInput,
+  script = false
+): Promise<string> {
+  input.signal?.throwIfAborted()
+  const response = await integrationHttpClient.request({
+    integrationId: "mangago",
+    endpointId: script ? "mangago-script" : "mangago-page",
+    url,
+    scope: "chapter",
+    rateLimitService: input.runtime.rateLimitService,
+    policyOverride: input.runtime.rateLimitSettings.chapter,
+    init: { credentials: script ? "omit" : "include", signal: input.signal },
+  })
+  if (!response.ok) {
+    cancelResponseBody(response)
+    throw Object.assign(
+      new Error(`Mangago reader request failed (HTTP ${response.status})`),
+      { status: response.status }
+    )
+  }
+  return script
+    ? readResponseText(response, 2_000_000)
+    : (
+        await decodeHtmlResponse(response, {
+          // Viewer scripts precede its explicit charset declaration.
+          scanByteLimit: 64 * 1024,
+        })
+      ).html
+}
+
+async function readReaderPage(
+  url: string,
+  input: ChapterPlanInput
+): Promise<MangagoReader> {
+  const html = await requestReaderResource(url, input)
+  return parseMangagoReader(
+    new DOMParser().parseFromString(html, "text/html"),
+    url
+  )
+}
+
+async function recoverReaderEntries(
+  first: MangagoReader,
+  protocol: MangagoProtocol,
+  entries: string[],
+  index: number,
+  input: ChapterPlanInput
+): Promise<void> {
+  const url = first.pageUrl(index + 1)
+  const reader = await readReaderPage(url, input)
+  if (
+    reader.totalPages !== first.totalPages ||
+    reader.currentPage !== index + 1 ||
+    reader.scriptUrl !== first.scriptUrl
+  )
+    throw new ProviderContractError("Mangago reader page sequence changed")
+  const batch = await decodeMangagoImageList(reader.encryptedImages, protocol)
+  for (let position = index; position < first.totalPages; position++)
+    if (batch[position]?.trim()) entries[position] = batch[position]!
+}
+
+async function collectChapterImages(
+  first: MangagoReader,
+  protocol: MangagoProtocol,
+  input: ChapterPlanInput
+): Promise<string[]> {
+  const entries = await decodeMangagoImageList(first.encryptedImages, protocol)
+  const imageUrls: string[] = []
+  for (let index = 0; index < first.totalPages; index++) {
+    let source = entries[index]?.trim()
+    if (!source) {
+      await recoverReaderEntries(first, protocol, entries, index, input)
+      source = entries[index]?.trim()
+    }
+    if (!source)
+      throw new ProviderContractError(
+        `Mangago required page ${index + 1} is unavailable`
+      )
+    imageUrls.push(withMangagoGrid(source, protocol))
+  }
+  return imageUrls
+}
+
+async function resolveChapterPlan(
+  chapter: Parameters<OffscreenIntegration["chapter"]["resolveChapterPlan"]>[0],
+  input: ChapterPlanInput
+): ReturnType<OffscreenIntegration["chapter"]["resolveChapterPlan"]> {
+  if (parseMangagoUrl(chapter.url).chapterId !== chapter.id)
+    throw new ProviderContractError(
+      "Mangago selected chapter does not match its URL"
+    )
+  const first = await readReaderPage(chapter.url, input)
+  const protocol = parseMangagoProtocol(
+    await requestReaderResource(first.scriptUrl, input, true)
+  )
+  const imageUrls = await collectChapterImages(first, protocol, input)
+  return ChapterImagePlanSchema.parse({ imageUrls })
+}
+
 const offscreen: OffscreenIntegration = {
   name: "Mangago Offscreen",
   series: {
@@ -63,92 +170,6 @@ const offscreen: OffscreenIntegration = {
     },
   },
   cover: { downloadImage },
-  chapter: {
-    async resolveChapterPlan(chapter, input) {
-      if (parseMangagoUrl(chapter.url).chapterId !== chapter.id)
-        throw new ProviderContractError(
-          "Mangago selected chapter does not match its URL"
-        )
-      const request = async (url: string, script = false) => {
-        input.signal?.throwIfAborted()
-        const response = await integrationHttpClient.request({
-          integrationId: "mangago",
-          endpointId: script ? "mangago-script" : "mangago-page",
-          url,
-          scope: "chapter",
-          rateLimitService: input.runtime.rateLimitService,
-          policyOverride: input.runtime.rateLimitSettings.chapter,
-          init: {
-            credentials: script ? "omit" : "include",
-            signal: input.signal,
-          },
-        })
-        if (!response.ok) {
-          cancelResponseBody(response)
-          throw Object.assign(
-            new Error(
-              `Mangago reader request failed (HTTP ${response.status})`
-            ),
-            { status: response.status }
-          )
-        }
-        return script
-          ? readResponseText(response, 2_000_000)
-          : (
-              await decodeHtmlResponse(response, {
-                // Viewer scripts precede its explicit charset declaration.
-                scanByteLimit: 64 * 1024,
-              })
-            ).html
-      }
-      const first = parseMangagoReader(
-        new DOMParser().parseFromString(
-          await request(chapter.url),
-          "text/html"
-        ),
-        chapter.url
-      )
-      const protocol = parseMangagoProtocol(
-        await request(first.scriptUrl, true)
-      )
-      const entries = await decodeMangagoImageList(
-        first.encryptedImages,
-        protocol
-      )
-      const imageUrls: string[] = []
-      for (let index = 0; index < first.totalPages; index++) {
-        let source = entries[index]?.trim()
-        if (!source) {
-          const url = first.pageUrl(index + 1)
-          const reader = parseMangagoReader(
-            new DOMParser().parseFromString(await request(url), "text/html"),
-            url
-          )
-          if (
-            reader.totalPages !== first.totalPages ||
-            reader.currentPage !== index + 1 ||
-            reader.scriptUrl !== first.scriptUrl
-          )
-            throw new ProviderContractError(
-              "Mangago reader page sequence changed"
-            )
-          const batch = await decodeMangagoImageList(
-            reader.encryptedImages,
-            protocol
-          )
-          for (let position = index; position < first.totalPages; position++)
-            if (batch[position]?.trim()) entries[position] = batch[position]!
-          source = entries[index]?.trim()
-        }
-        if (!source)
-          throw new ProviderContractError(
-            `Mangago required page ${index + 1} is unavailable`
-          )
-        imageUrls.push(withMangagoGrid(source, protocol))
-      }
-      return ChapterImagePlanSchema.parse({ imageUrls })
-    },
-    downloadImage,
-  },
+  chapter: { resolveChapterPlan, downloadImage },
 }
 export const offscreenSiteAdapter: OffscreenSiteAdapter = { offscreen }

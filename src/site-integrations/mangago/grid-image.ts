@@ -8,7 +8,27 @@ import type {
   OffscreenLiveResourceLedger,
   OffscreenLiveResourceLease,
 } from "@/src/runtime/offscreen-live-resource-ledger"
+import { isMangagoTilePermutation } from "./grid-image-metadata"
 import { ProviderContractError } from "../provider-contract-error"
+
+function readTileMetadata(fragment: string): {
+  columns: number
+  grid: number[]
+} {
+  const match = fragment.match(/^#mg-grid=(\d+):([\d,]+)$/)
+  if (!match)
+    throw new ProviderContractError("Mangago image tile metadata is invalid")
+  const columns = Number(match[1])
+  const grid = match[2].split(",").map(Number)
+  if (
+    !Number.isInteger(columns) ||
+    columns < 1 ||
+    columns > 16 ||
+    !isMangagoTilePermutation(grid, columns)
+  )
+    throw new ProviderContractError("Mangago image tile metadata is invalid")
+  return { columns, grid }
+}
 
 export function parseMangagoImageTransport(imageUrl: string): {
   sourceUrl: string
@@ -25,24 +45,82 @@ export function parseMangagoImageTransport(imageUrl: string): {
       )
     return { sourceUrl: url.href }
   }
-  const match = fragment.match(/^#mg-grid=(\d+):([\d,]+)$/)
-  const columns = Number(match?.[1])
-  const grid = match?.[2]?.split(",").map(Number)
-  if (
-    !match ||
-    !url.pathname.startsWith("/r/cspiclink/") ||
-    !Number.isInteger(columns) ||
-    columns < 1 ||
-    columns > 16 ||
-    !grid ||
-    grid.length !== columns * columns ||
-    new Set(grid).size !== grid.length ||
-    grid.some(
-      (entry) => !Number.isInteger(entry) || entry < 0 || entry >= grid.length
-    )
-  )
+  if (!url.pathname.startsWith("/r/cspiclink/"))
     throw new ProviderContractError("Mangago image tile metadata is invalid")
-  return { sourceUrl: url.href, columns, grid }
+  return { sourceUrl: url.href, ...readTileMetadata(fragment) }
+}
+
+type ReconstructedOutputResources = {
+  blob?: OffscreenLiveResourceLease
+  bytes?: OffscreenLiveResourceLease
+}
+
+function drawMangagoTiles(
+  bitmap: ImageBitmap,
+  dimensions: { width: number; height: number },
+  columns: number,
+  grid: number[],
+  signal: AbortSignal | undefined
+): OffscreenCanvas {
+  if (bitmap.width !== dimensions.width || bitmap.height !== dimensions.height)
+    throw new ProviderContractError(
+      "Mangago image dimensions changed during decode"
+    )
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const context = canvas.getContext("2d")
+  if (!context)
+    throw new ProviderContractError("Mangago image canvas is unavailable")
+  const width = bitmap.width / columns
+  const height = bitmap.height / columns
+  for (const [source, destination] of grid.entries()) {
+    signal?.throwIfAborted()
+    context.drawImage(
+      bitmap,
+      (source % columns) * width,
+      Math.floor(source / columns) * height,
+      width,
+      height,
+      (destination % columns) * width,
+      Math.floor(destination / columns) * height,
+      width,
+      height
+    )
+  }
+  return canvas
+}
+
+async function encodeMangagoCanvas(
+  canvas: OffscreenCanvas,
+  pixels: number,
+  signal: AbortSignal | undefined,
+  ledger: OffscreenLiveResourceLedger,
+  resources: ReconstructedOutputResources
+): Promise<{
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease: OffscreenLiveResourceLease
+}> {
+  resources.blob = ledger.reserve(
+    Math.max(MAX_IMAGE_BYTES, pixels * 4),
+    "Mangago reconstructed image Blob"
+  )
+  const blob = await canvas.convertToBlob({ type: "image/png" })
+  if (blob.size > MAX_IMAGE_BYTES)
+    throw new ProviderContractError(
+      "Mangago reconstructed image exceeds its byte limit"
+    )
+  resources.blob.resize(blob.size)
+  signal?.throwIfAborted()
+  resources.bytes = ledger.reserve(
+    blob.size,
+    "Mangago reconstructed image bytes"
+  )
+  const data = await blob.arrayBuffer()
+  const liveResourceLease = resources.bytes.transfer(
+    "retained Mangago reconstructed image"
+  )
+  resources.bytes = undefined
+  return { data, mimeType: "image/png", liveResourceLease }
 }
 
 export async function reconstructMangagoImage(
@@ -61,8 +139,7 @@ export async function reconstructMangagoImage(
   let bitmap: ImageBitmap | undefined
   let sourceBlobLease: OffscreenLiveResourceLease | undefined
   let surfaces: OffscreenLiveResourceLease | undefined
-  let outputBlobLease: OffscreenLiveResourceLease | undefined
-  let outputLease: OffscreenLiveResourceLease | undefined
+  const outputResources: ReconstructedOutputResources = {}
   try {
     const dimensions = readEncodedImageDimensions(buffer, mimeType, ledger)
     assertDecodedImageWithinLimits(
@@ -84,54 +161,14 @@ export async function reconstructMangagoImage(
       bitmap = await createImageBitmap(new Blob([buffer], { type: mimeType }))
       sourceBlobLease.release()
       sourceBlobLease = undefined
-      if (
-        bitmap.width !== dimensions.width ||
-        bitmap.height !== dimensions.height
+      const canvas = drawMangagoTiles(bitmap, dimensions, columns, grid, signal)
+      return encodeMangagoCanvas(
+        canvas,
+        pixels,
+        signal,
+        ledger,
+        outputResources
       )
-        throw new ProviderContractError(
-          "Mangago image dimensions changed during decode"
-        )
-      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-      const context = canvas.getContext("2d")
-      if (!context)
-        throw new ProviderContractError("Mangago image canvas is unavailable")
-      const width = bitmap.width / columns
-      const height = bitmap.height / columns
-      for (const [source, destination] of grid.entries()) {
-        signal?.throwIfAborted()
-        context.drawImage(
-          bitmap,
-          (source % columns) * width,
-          Math.floor(source / columns) * height,
-          width,
-          height,
-          (destination % columns) * width,
-          Math.floor(destination / columns) * height,
-          width,
-          height
-        )
-      }
-      outputBlobLease = ledger.reserve(
-        Math.max(MAX_IMAGE_BYTES, pixels * 4),
-        "Mangago reconstructed image Blob"
-      )
-      const blob = await canvas.convertToBlob({ type: "image/png" })
-      if (blob.size > MAX_IMAGE_BYTES)
-        throw new ProviderContractError(
-          "Mangago reconstructed image exceeds its byte limit"
-        )
-      outputBlobLease.resize(blob.size)
-      signal?.throwIfAborted()
-      outputLease = ledger.reserve(
-        blob.size,
-        "Mangago reconstructed image bytes"
-      )
-      const data = await blob.arrayBuffer()
-      const liveResourceLease = outputLease.transfer(
-        "retained Mangago reconstructed image"
-      )
-      outputLease = undefined
-      return { data, mimeType: "image/png", liveResourceLease }
     })
   } finally {
     sourceLease.release()
@@ -140,8 +177,8 @@ export async function reconstructMangagoImage(
     } finally {
       sourceBlobLease?.release()
       surfaces?.release()
-      outputBlobLease?.release()
-      outputLease?.release()
+      outputResources.blob?.release()
+      outputResources.bytes?.release()
     }
   }
 }

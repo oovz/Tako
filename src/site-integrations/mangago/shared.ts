@@ -18,28 +18,9 @@ export function parseMangagoUrl(value: string): {
     !match
   )
     throw new ProviderContractError("Invalid Mangago series or reader URL")
-  let chapterPath: string | undefined
-  if (match[3]) {
-    const parts = match[3].split("/")
-    if (/^pg-[1-9]\d*$/.test(parts.at(-1) ?? "")) {
-      parts.pop()
-      chapterPath = parts.join("/")
-    } else {
-      // Older single-key chapters can end in .html or carry a display alias.
-      if (
-        parts.length > 2 ||
-        (parts.length === 1 &&
-          !url.pathname.endsWith("/") &&
-          !parts[0].endsWith(".html"))
-      )
-        throw new ProviderContractError("Invalid Mangago chapter route")
-      chapterPath = parts[0]
-    }
-    if (!chapterPath)
-      throw new ProviderContractError(
-        "Mangago reader URL has no chapter identity"
-      )
-  }
+  const chapterPath = match[3]
+    ? parseChapterPath(match[3], url.pathname)
+    : undefined
   return {
     url,
     seriesId: match[1],
@@ -47,6 +28,28 @@ export function parseMangagoUrl(value: string): {
     readerPrefix: `${url.origin}/read-manga/${match[1]}`,
   }
 }
+function parseChapterPath(path: string, pathname: string): string {
+  const parts = path.split("/")
+  if (/^pg-[1-9]\d*$/.test(parts.at(-1) ?? "")) {
+    parts.pop()
+    const chapterPath = parts.join("/")
+    if (!chapterPath)
+      throw new ProviderContractError(
+        "Mangago reader URL has no chapter identity"
+      )
+    return chapterPath
+  }
+  // Older single-key chapters can end in .html or carry a display alias.
+  if (
+    parts.length > 2 ||
+    (parts.length === 1 &&
+      !pathname.endsWith("/") &&
+      !parts[0].endsWith(".html"))
+  )
+    throw new ProviderContractError("Invalid Mangago chapter route")
+  return parts[0]
+}
+
 export function assertMangagoImageUrl(value: string): void {
   const url = new URL(value)
   if (

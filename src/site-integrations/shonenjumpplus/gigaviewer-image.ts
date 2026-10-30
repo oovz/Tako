@@ -3,6 +3,7 @@ import {
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
 import { withRendererPixelBudget } from "@/src/runtime/renderer-budget"
+import { isImageBitmapRenderingAvailable } from "@/src/runtime/image-rendering-capability"
 import { ProviderContractError } from "../provider-contract-error"
 import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
 import type {
@@ -46,6 +47,94 @@ function outputMimeType(sourceMimeType: string): string {
     : "image/png"
 }
 
+type ReconstructedOutputResources = {
+  blob?: OffscreenLiveResourceLease
+  bytes?: OffscreenLiveResourceLease
+}
+
+function drawGigaviewerTiles(bitmap: ImageBitmap): OffscreenCanvas {
+  assertDecodedImageWithinLimits(bitmap.width, bitmap.height, "Shonen Jump+")
+  const { tileWidth, tileHeight, moves } = buildGigaviewerTileMoves(
+    bitmap.width,
+    bitmap.height
+  )
+  if (tileWidth <= 0 || tileHeight <= 0)
+    throw new ProviderContractError(
+      "Shonen Jump+ image is too small to reconstruct safely."
+    )
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const context = canvas.getContext("2d")
+  if (!context)
+    throw new ProviderContractError(
+      "Shonen Jump+ image reconstruction canvas is unavailable."
+    )
+  context.imageSmoothingEnabled = false
+  context.drawImage(
+    bitmap,
+    0,
+    0,
+    bitmap.width,
+    bitmap.height,
+    0,
+    0,
+    bitmap.width,
+    bitmap.height
+  )
+  for (const move of moves) {
+    context.drawImage(
+      bitmap,
+      move.source.x * tileWidth,
+      move.source.y * tileHeight,
+      tileWidth,
+      tileHeight,
+      move.dest.x * tileWidth,
+      move.dest.y * tileHeight,
+      tileWidth,
+      tileHeight
+    )
+  }
+  return canvas
+}
+
+async function encodeGigaviewerCanvas(
+  canvas: OffscreenCanvas,
+  pixels: number,
+  mimeType: string,
+  ledger: OffscreenLiveResourceLedger,
+  resources: ReconstructedOutputResources
+): Promise<{
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease: OffscreenLiveResourceLease
+}> {
+  const finalMimeType = outputMimeType(mimeType)
+  resources.blob = ledger.reserve(
+    Math.max(MAX_IMAGE_BYTES, pixels * 4),
+    "Shonen Jump+ encoded output Blob"
+  )
+  const output = await canvas.convertToBlob({
+    type: finalMimeType,
+    quality: finalMimeType === "image/jpeg" ? 0.92 : undefined,
+  })
+  if (output.size > MAX_IMAGE_BYTES)
+    throw new ProviderContractError(
+      `Shonen Jump+ encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${output.size})`
+    )
+  resources.blob.resize(output.size)
+  resources.bytes = ledger.reserve(
+    output.size,
+    "Shonen Jump+ encoded output ArrayBuffer"
+  )
+  const data = await output.arrayBuffer()
+  resources.blob.release()
+  resources.blob = undefined
+  const liveResourceLease = resources.bytes.transfer(
+    "retained Shonen Jump+ encoded output"
+  )
+  resources.bytes = undefined
+  return { data, mimeType: output.type || finalMimeType, liveResourceLease }
+}
+
 export async function descrambleGigaviewerImage(
   buffer: ArrayBuffer,
   mimeType: string,
@@ -60,13 +149,9 @@ export async function descrambleGigaviewerImage(
   const encodedSourceLease = sourceLease
   let sourceBlobLease: OffscreenLiveResourceLease | undefined
   let decodedSurfaceLease: OffscreenLiveResourceLease | undefined
-  let outputBlobLease: OffscreenLiveResourceLease | undefined
-  let outputBufferLease: OffscreenLiveResourceLease | undefined
+  const outputResources: ReconstructedOutputResources = {}
   try {
-    if (
-      typeof createImageBitmap !== "function" ||
-      typeof OffscreenCanvas === "undefined"
-    ) {
+    if (!isImageBitmapRenderingAvailable()) {
       throw new ProviderContractError(
         "Shonen Jump+ image reconstruction is unavailable in this browser."
       )
@@ -96,88 +181,17 @@ export async function descrambleGigaviewerImage(
         const bitmap = await createImageBitmap(
           new Blob([buffer], { type: mimeType })
         )
-        sourceBlobLease?.release()
+        sourceBlobLease.release()
         sourceBlobLease = undefined
         try {
-          assertDecodedImageWithinLimits(
-            bitmap.width,
-            bitmap.height,
-            "Shonen Jump+"
+          const canvas = drawGigaviewerTiles(bitmap)
+          return await encodeGigaviewerCanvas(
+            canvas,
+            bitmap.width * bitmap.height,
+            mimeType,
+            liveResourceLedger,
+            outputResources
           )
-          const { tileWidth, tileHeight, moves } = buildGigaviewerTileMoves(
-            bitmap.width,
-            bitmap.height
-          )
-          if (tileWidth <= 0 || tileHeight <= 0) {
-            throw new ProviderContractError(
-              "Shonen Jump+ image is too small to reconstruct safely."
-            )
-          }
-
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-          const context = canvas.getContext("2d")
-          if (!context) {
-            throw new ProviderContractError(
-              "Shonen Jump+ image reconstruction canvas is unavailable."
-            )
-          }
-          context.imageSmoothingEnabled = false
-          context.drawImage(
-            bitmap,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height
-          )
-          for (const move of moves) {
-            context.drawImage(
-              bitmap,
-              move.source.x * tileWidth,
-              move.source.y * tileHeight,
-              tileWidth,
-              tileHeight,
-              move.dest.x * tileWidth,
-              move.dest.y * tileHeight,
-              tileWidth,
-              tileHeight
-            )
-          }
-
-          const finalMimeType = outputMimeType(mimeType)
-          outputBlobLease = liveResourceLedger.reserve(
-            Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
-            "Shonen Jump+ encoded output Blob"
-          )
-          const output = await canvas.convertToBlob({
-            type: finalMimeType,
-            quality: finalMimeType === "image/jpeg" ? 0.92 : undefined,
-          })
-          if (output.size > MAX_IMAGE_BYTES) {
-            throw new ProviderContractError(
-              `Shonen Jump+ encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${output.size})`
-            )
-          }
-          outputBlobLease?.resize(output.size)
-          outputBufferLease = liveResourceLedger.reserve(
-            output.size,
-            "Shonen Jump+ encoded output ArrayBuffer"
-          )
-          const data = await output.arrayBuffer()
-          outputBlobLease?.release()
-          outputBlobLease = undefined
-          const liveResourceLease = outputBufferLease?.transfer(
-            "retained Shonen Jump+ encoded output"
-          )
-          outputBufferLease = undefined
-          return {
-            data,
-            mimeType: output.type || finalMimeType,
-            liveResourceLease,
-          }
         } finally {
           bitmap.close()
         }
@@ -187,7 +201,7 @@ export async function descrambleGigaviewerImage(
     encodedSourceLease?.release()
     sourceBlobLease?.release()
     decodedSurfaceLease?.release()
-    outputBlobLease?.release()
-    outputBufferLease?.release()
+    outputResources.blob?.release()
+    outputResources.bytes?.release()
   }
 }
