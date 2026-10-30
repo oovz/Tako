@@ -267,6 +267,18 @@ describe("chapter dispatch authority", () => {
     expect((await repository.getTask("task"))!.chapters[0]!.status).toBe(
       "downloading"
     )
+    const preservedTask = (await repository.getTask("task"))!
+    expect(preservedTask.errorMessage).toBeUndefined()
+    expect(preservedTask.errorCategory).toBeUndefined()
+    expect(preservedTask.chapters[0]).toMatchObject({
+      id: "chapter",
+      status: "downloading",
+      requestedPath: "Series/Chapter.cbz",
+      dispatchAttempt: first!.attempt,
+    })
+    expect(preservedTask.chapters[0]!.errorMessage).toBeUndefined()
+    expect(preservedTask.chapters[0]!.errorCategory).toBeUndefined()
+    expect(await repository.getActiveDispatchLease()).toEqual(first)
   })
 
   it("propagates a disabled-provider block before beginning a producer", async () => {

@@ -685,13 +685,14 @@ describe("NativeOutputCoordinator", () => {
     expect(conflicted).toMatchObject({ phase: "sealed", slots: [] })
     expect(conflicted).not.toHaveProperty("dependencyReleasedAt")
 
-    await coordinator.reconcile()
+    const conflictedEffects = await coordinator.reconcile()
     expect(ensureLiveness).toHaveBeenCalled()
     await reconcileAndAcknowledge(coordinator)
 
     // The second settlement attempt succeeds and the released job is pruned.
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
     await expect(repository.hasLiveDependencies()).resolves.toBe(false)
+    expect(conflictedEffects).toEqual([])
   })
 
   it("uses not-owner as a final cleanup disposition for a missing task", async () => {

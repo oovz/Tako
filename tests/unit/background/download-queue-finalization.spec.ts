@@ -341,5 +341,72 @@ describe("download task finalization", () => {
     expect(
       notificationMocks.showDownloadCompleteNotification
     ).toHaveBeenCalledOnce()
+    expect(notificationMocks.notifyTaskFailed).not.toHaveBeenCalled()
   })
+
+  it.each(["completed", "failed"] as const)(
+    "routes a %s task to its terminal notification",
+    async (finalStatus) => {
+      const task: DownloadTaskState = {
+        id: "task-terminal-notification",
+        siteIntegrationId: "mangadex",
+        mangaId: "series-1",
+        seriesTitle: "Series 1",
+        chapters: [
+          {
+            requestedPath: "Tako/Chapter.cbz",
+            id: "chapter-1",
+            title: "Chapter 1",
+            url: "https://example.com/chapter-1",
+            index: 0,
+            status: finalStatus,
+            lastUpdated: 1,
+          },
+        ],
+        status: finalStatus,
+        errorMessage:
+          finalStatus === "failed" ? "Download interrupted" : undefined,
+        created: 1,
+        settingsSnapshot: createTaskSettingsSnapshot(
+          DEFAULT_SETTINGS,
+          "mangadex"
+        ),
+      }
+      const queueRepository = {
+        getTask: vi.fn(async () => task),
+      } as unknown as QueueRepository
+
+      await notifyDownloadTaskCompletion({
+        stateManager: queueRepository,
+        taskId: task.id,
+        finalStatus,
+        completedCount: finalStatus === "completed" ? 1 : 0,
+        totalChapters: 1,
+        settingsRepository: finalizationDependencies.settingsRepository,
+      })
+
+      if (finalStatus === "completed") {
+        expect(
+          notificationMocks.showDownloadCompleteNotification
+        ).toHaveBeenCalledExactlyOnceWith({
+          task,
+          notificationsEnabled: true,
+          chaptersCompleted: 1,
+          chaptersTotal: 1,
+        })
+        expect(notificationMocks.notifyTaskFailed).not.toHaveBeenCalled()
+      } else {
+        expect(
+          notificationMocks.notifyTaskFailed
+        ).toHaveBeenCalledExactlyOnceWith({
+          task,
+          notificationsEnabled: true,
+          errorMessage: "Download interrupted",
+        })
+        expect(
+          notificationMocks.showDownloadCompleteNotification
+        ).not.toHaveBeenCalled()
+      }
+    }
+  )
 })

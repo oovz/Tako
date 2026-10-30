@@ -111,6 +111,7 @@ describe("native output handoff authority", () => {
     expect(
       (await f.coordinator.handleOutputReady(payload)).response
     ).toMatchObject({
+      success: true,
       disposition: "not_persisted",
       reason: "stale-job",
     })
@@ -149,6 +150,7 @@ describe("native output handoff authority", () => {
         })
       ).response
     ).toMatchObject({
+      success: true,
       disposition: "not_persisted",
       reason: "output-identity-conflict",
     })
