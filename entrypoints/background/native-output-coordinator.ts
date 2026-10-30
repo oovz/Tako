@@ -1,12 +1,16 @@
-import type { NativeOutputSettlement } from "@/src/domain/queue/state"
+import type {
+  DownloadTaskState,
+  NativeOutputSettlement,
+} from "@/src/domain/queue/state"
 import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 
 import logger from "@/src/runtime/logger"
 import {
   canReleaseNativeOutputBlob,
-  canAccountNativeOutput,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
+  type NativeOutputIdentity,
+  type NativeOutputState,
   type NativeOutputJobIdentity,
   type NativeOutputManifest,
   type NativeOutputRecord,
@@ -18,12 +22,18 @@ import type { SettingsRepository } from "@/src/storage/settings-repository"
 
 import {
   toIdentity,
+  ownsNativeOutputProducer,
   trackedResponse,
   notPersistedResponse,
   errorMessage,
   isValidDownloadId,
   manifestTrackedOutputIds,
   calculateNativeOutputSettlementStats,
+  manifestRecords,
+  allTrackedDependenciesReleased,
+  manifestAccountingResolved,
+  manifestReadyForAccounting,
+  settlementContinuationReady,
   classifyProducerStoppedError,
   type OutputReadyPayload,
   type OutputReadyResponse,
@@ -117,6 +127,15 @@ function settlementEffect(
   }
 }
 
+function accountingDisposition(
+  outcome: Awaited<
+    ReturnType<QueueRepository["applyNativeOutputSettlement"]>
+  >["outcome"]
+): "accounted" | "not_owner" | undefined {
+  if (outcome === "applied" || outcome === "already_applied") return "accounted"
+  if (outcome === "not_owner") return "not_owner"
+}
+
 /**
  * Sole owner of native Chrome Downloads state and its durable reconciliation.
  * Every public command is serialized so API acceptance, event observation,
@@ -183,207 +202,190 @@ export class NativeOutputCoordinator {
   }> {
     return await this.serialized(async () => {
       const effects: NativeOutputSettlementEffect[] = []
-      const respond = (response: OutputReadyResponse) => ({
-        response,
-        effects,
-      })
       const identity = toIdentity(payload)
-      const existing = await this.deps.repository.getByOutputId(
-        identity.outputId
-      )
-      if (existing) {
-        if (!nativeOutputIdentityMatches(existing, identity)) {
-          return respond(notPersistedResponse("output-identity-conflict"))
-        }
-        if (existing.phase === "prepared") {
-          const [lease, task] = await Promise.all([
-            this.deps.queueRepository.getActiveDispatchLease(),
-            this.deps.queueRepository.getTask(identity.taskId),
-          ])
-          if (
-            !lease ||
-            lease.jobId !== identity.jobId ||
-            lease.attempt !== identity.attempt ||
-            lease.taskId !== identity.taskId ||
-            lease.chapterId !== identity.chapterId ||
-            lease.fingerprint !== identity.fingerprint ||
-            lease.documentInstanceId !== identity.documentInstanceId ||
-            task?.status !== "downloading"
-          ) {
-            const interrupted =
-              await this.deps.repository.interruptBeforeAcceptance({
-                outputId: identity.outputId,
-                error: "Output producer no longer owns an active task",
-                now: Date.now(),
-              })
-            if (interrupted.outcome === "rejected") {
-              return respond(notPersistedResponse(interrupted.reason))
-            }
-            addSettlementEffects(
-              effects,
-              await this.reconcileJobLocked(identity.jobId)
-            )
-            return respond(trackedResponse(interrupted.record))
-          }
-        }
-        if (existing.phase !== "prepared") {
-          addSettlementEffects(
-            effects,
-            await this.reconcileRecordLocked(existing)
-          )
-          return respond(
-            trackedResponse(
-              (await this.deps.repository.getByOutputId(identity.outputId)) ??
-                existing
-            )
-          )
-        }
-      } else {
-        const [lease, task] = await Promise.all([
-          this.deps.queueRepository.getActiveDispatchLease(),
-          this.deps.queueRepository.getTask(identity.taskId),
-        ])
-        if (
-          !lease ||
-          lease.jobId !== identity.jobId ||
-          lease.attempt !== identity.attempt ||
-          lease.taskId !== identity.taskId ||
-          lease.chapterId !== identity.chapterId ||
-          lease.fingerprint !== identity.fingerprint ||
-          lease.documentInstanceId !== identity.documentInstanceId ||
-          task?.status !== "downloading"
-        ) {
-          return respond(notPersistedResponse("stale-job"))
-        }
+      const preparation = await this.prepareOutputLocked(identity, effects)
+      if (preparation) return { response: preparation, effects }
 
-        try {
-          const prepared = await this.deps.repository.prepare({
-            ...identity,
-            now: Date.now(),
-          })
-          if (prepared.outcome === "rejected") {
-            return respond(notPersistedResponse(prepared.reason))
-          }
-        } catch (error) {
-          return respond(notPersistedResponse(errorMessage(error)))
-        }
-      }
-
-      let record = await this.deps.repository.getByOutputId(identity.outputId)
-      if (!record)
-        return respond(notPersistedResponse("prepared-record-missing"))
-      if (record.phase !== "prepared") return respond(trackedResponse(record))
-
-      try {
-        const marked = await this.deps.repository.markAcceptanceUnknown({
-          outputId: identity.outputId,
-          now: Date.now(),
-        })
-        if (marked.outcome === "rejected") {
-          await this.armLivenessLocked()
-          return respond(trackedResponse(record))
-        }
-        record = marked.record
-      } catch (error) {
-        logger.warn(
-          "Native output remains prepared; acceptance was not attempted",
-          {
-            outputId: identity.outputId,
-            error,
-          }
-        )
-        await this.armLivenessLocked()
-        return respond(trackedResponse(record))
-      }
-
-      let acceptedId: unknown
-      try {
-        const settings = await this.deps.settingsRepository.getSettings()
-        const [task, lease] = await Promise.all([
-          this.deps.queueRepository.getTask(identity.taskId),
-          this.deps.queueRepository.getActiveDispatchLease(),
-        ])
-        if (
-          task?.status !== "downloading" ||
-          !task.chapters.some(
-            (chapter) =>
-              chapter.id === identity.chapterId &&
-              chapter.status === "downloading"
-          ) ||
-          !lease ||
-          lease.jobId !== identity.jobId ||
-          lease.attempt !== identity.attempt ||
-          lease.taskId !== identity.taskId ||
-          lease.chapterId !== identity.chapterId ||
-          lease.fingerprint !== identity.fingerprint ||
-          lease.documentInstanceId !== identity.documentInstanceId
-        ) {
-          throw new Error("Output producer no longer owns an active task")
-        }
-        acceptedId = await chrome.downloads.download({
-          url: identity.blobUrl,
-          filename: identity.filename,
-          conflictAction: task.settingsSnapshot.conflictPolicy,
-          saveAs: settings.downloads.suppressSaveAsDialog === false,
-        })
-        if (!isValidDownloadId(acceptedId)) {
-          throw new Error("downloads.download returned no download id")
-        }
-      } catch (error) {
-        try {
-          const interrupted =
-            await this.deps.repository.interruptBeforeAcceptance({
-              outputId: identity.outputId,
-              error: errorMessage(error),
-              now: Date.now(),
-            })
-          if (interrupted.outcome !== "rejected") {
-            record = interrupted.record
-          } else {
-            await this.armLivenessLocked()
-          }
-        } catch (persistenceError) {
-          logger.warn(
-            "Native output remains in acceptance-unknown safety quarantine",
-            {
-              outputId: identity.outputId,
-              persistenceError,
-            }
-          )
-          await this.armLivenessLocked()
-        }
-        addSettlementEffects(
+      const record = await this.deps.repository.getByOutputId(identity.outputId)
+      if (!record) {
+        return {
+          response: notPersistedResponse("prepared-record-missing"),
           effects,
-          await this.reconcileJobLocked(identity.jobId)
-        )
-        return respond(trackedResponse(record))
+        }
       }
-
-      try {
-        const attached = await this.deps.repository.attachDownload({
-          outputId: identity.outputId,
-          downloadId: acceptedId,
-        })
-        if (attached.outcome !== "rejected") record = attached.record
-      } catch (error) {
-        logger.warn("Native download ID persistence will be reconciled", {
-          outputId: identity.outputId,
-          downloadId: acceptedId,
-          error,
-        })
-        await this.armLivenessLocked()
-        return respond(trackedResponse(record))
+      if (record.phase !== "prepared") {
+        return { response: trackedResponse(record), effects }
       }
-
-      await this.armLivenessLocked()
-      addSettlementEffects(effects, await this.reconcileJobLocked(record.jobId))
-      return respond(
-        trackedResponse(
-          (await this.deps.repository.getByOutputId(identity.outputId)) ??
-            record
-        )
-      )
+      const accepting = await this.beginAcceptanceLocked(record)
+      const accepted = accepting
+        ? await this.acceptOutputLocked(accepting, effects)
+        : record
+      return { response: trackedResponse(accepted), effects }
     })
+  }
+
+  private async getProducingTask(
+    identity: NativeOutputJobIdentity
+  ): Promise<DownloadTaskState | undefined> {
+    const [lease, task] = await Promise.all([
+      this.deps.queueRepository.getActiveDispatchLease(),
+      this.deps.queueRepository.getTask(identity.taskId),
+    ])
+    if (!ownsNativeOutputProducer(lease, identity)) return
+    return task?.status === "downloading" ? task : undefined
+  }
+
+  private async prepareOutputLocked(
+    identity: NativeOutputIdentity,
+    effects: NativeOutputSettlementEffect[]
+  ): Promise<OutputReadyResponse | undefined> {
+    const existing = await this.deps.repository.getByOutputId(identity.outputId)
+    if (existing)
+      return await this.resumeExistingOutputLocked(existing, identity, effects)
+    if (!(await this.getProducingTask(identity)))
+      return notPersistedResponse("stale-job")
+    try {
+      const prepared = await this.deps.repository.prepare({
+        ...identity,
+        now: Date.now(),
+      })
+      if (prepared.outcome === "rejected")
+        return notPersistedResponse(prepared.reason)
+    } catch (error) {
+      return notPersistedResponse(errorMessage(error))
+    }
+  }
+
+  private async resumeExistingOutputLocked(
+    existing: NativeOutputRecord,
+    identity: NativeOutputIdentity,
+    effects: NativeOutputSettlementEffect[]
+  ): Promise<OutputReadyResponse | undefined> {
+    if (!nativeOutputIdentityMatches(existing, identity)) {
+      return notPersistedResponse("output-identity-conflict")
+    }
+    if (existing.phase !== "prepared") {
+      addSettlementEffects(effects, await this.reconcileRecordLocked(existing))
+      return trackedResponse(
+        (await this.deps.repository.getByOutputId(identity.outputId)) ??
+          existing
+      )
+    }
+    if (await this.getProducingTask(identity)) return
+    const interrupted = await this.deps.repository.interruptBeforeAcceptance({
+      outputId: identity.outputId,
+      error: "Output producer no longer owns an active task",
+      now: Date.now(),
+    })
+    if (interrupted.outcome === "rejected")
+      return notPersistedResponse(interrupted.reason)
+    addSettlementEffects(effects, await this.reconcileJobLocked(identity.jobId))
+    return trackedResponse(interrupted.record)
+  }
+
+  private async beginAcceptanceLocked(
+    record: NativeOutputRecord
+  ): Promise<NativeOutputRecord | undefined> {
+    try {
+      const marked = await this.deps.repository.markAcceptanceUnknown({
+        outputId: record.outputId,
+        now: Date.now(),
+      })
+      if (marked.outcome !== "rejected") return marked.record
+    } catch (error) {
+      logger.warn(
+        "Native output remains prepared; acceptance was not attempted",
+        {
+          outputId: record.outputId,
+          error,
+        }
+      )
+    }
+    await this.armLivenessLocked()
+  }
+
+  private async startChromeDownloadLocked(
+    record: NativeOutputRecord
+  ): Promise<number> {
+    const settings = await this.deps.settingsRepository.getSettings()
+    const task = await this.getProducingTask(record)
+    if (
+      !task?.chapters.some(
+        (chapter) =>
+          chapter.id === record.chapterId && chapter.status === "downloading"
+      )
+    ) {
+      throw new Error("Output producer no longer owns an active task")
+    }
+    const downloadId = await chrome.downloads.download({
+      url: record.blobUrl,
+      filename: record.filename,
+      conflictAction: task.settingsSnapshot.conflictPolicy,
+      saveAs: settings.downloads.suppressSaveAsDialog === false,
+    })
+    if (!isValidDownloadId(downloadId)) {
+      throw new Error("downloads.download returned no download id")
+    }
+    return downloadId
+  }
+
+  private async interruptRejectedOutputLocked(
+    record: NativeOutputRecord,
+    error: unknown
+  ): Promise<NativeOutputRecord> {
+    try {
+      const interrupted = await this.deps.repository.interruptBeforeAcceptance({
+        outputId: record.outputId,
+        error: errorMessage(error),
+        now: Date.now(),
+      })
+      if (interrupted.outcome !== "rejected") return interrupted.record
+    } catch (persistenceError) {
+      logger.warn(
+        "Native output remains in acceptance-unknown safety quarantine",
+        {
+          outputId: record.outputId,
+          persistenceError,
+        }
+      )
+    }
+    await this.armLivenessLocked()
+    return record
+  }
+
+  private async acceptOutputLocked(
+    record: NativeOutputRecord,
+    effects: NativeOutputSettlementEffect[]
+  ): Promise<NativeOutputRecord> {
+    let acceptedId: number
+    try {
+      acceptedId = await this.startChromeDownloadLocked(record)
+    } catch (error) {
+      const interrupted = await this.interruptRejectedOutputLocked(
+        record,
+        error
+      )
+      addSettlementEffects(effects, await this.reconcileJobLocked(record.jobId))
+      return interrupted
+    }
+    try {
+      const attached = await this.deps.repository.attachDownload({
+        outputId: record.outputId,
+        downloadId: acceptedId,
+      })
+      if (attached.outcome !== "rejected") record = attached.record
+    } catch (error) {
+      logger.warn("Native download ID persistence will be reconciled", {
+        outputId: record.outputId,
+        downloadId: acceptedId,
+        error,
+      })
+      await this.armLivenessLocked()
+      return record
+    }
+    await this.armLivenessLocked()
+    addSettlementEffects(effects, await this.reconcileJobLocked(record.jobId))
+    return (await this.deps.repository.getByOutputId(record.outputId)) ?? record
   }
 
   async sealManifest(
@@ -499,13 +501,7 @@ export class NativeOutputCoordinator {
       })
       if (acknowledged.outcome === "rejected") return
 
-      const allTrackedDependenciesReleased = manifestTrackedOutputIds(
-        manifest
-      ).every((outputId) => {
-        const record = snapshot.outputsByOutputId[outputId]
-        return record === undefined || record.dependencyReleasedAt !== undefined
-      })
-      if (!allTrackedDependenciesReleased) return
+      if (!allTrackedDependenciesReleased(snapshot, manifest)) return
 
       await this.deps.repository.markJobDependencyReleased({
         jobId: effect.jobId,
@@ -546,24 +542,11 @@ export class NativeOutputCoordinator {
       if (!manifest) return { observedJobSealed: false, effects }
 
       if (input.offscreenJob.status === "active") {
-        if (manifest.phase === "sealed") {
-          logger.warn(
-            "Exact active offscreen producer conflicts with a sealed native output manifest; lease remains owned",
-            { jobId: manifest.jobId, taskId: manifest.taskId }
-          )
-          await this.armLivenessLocked()
-          return { observedJobSealed: false, effects }
-        }
-        if (
-          input.activeLease === null ||
-          !nativeOutputJobIdentityMatches(input.activeLease, input.offscreenJob)
-        ) {
-          logger.warn(
-            "Exact active offscreen producer has no matching startup lease; manifest remains open",
-            { jobId: manifest.jobId, taskId: manifest.taskId }
-          )
-          await this.armLivenessLocked()
-        }
+        await this.observeActiveStartupProducerLocked(
+          manifest,
+          input.offscreenJob,
+          input.activeLease
+        )
         return { observedJobSealed: false, effects }
       }
 
@@ -571,25 +554,50 @@ export class NativeOutputCoordinator {
         return { observedJobSealed: true, effects }
       }
 
-      if (input.offscreenJob.status === "terminal") {
-        const sealed = await this.sealStoppedOpenManifestLocked({
-          identity: manifest,
-          error:
-            "Offscreen producer stopped before every output was handed off",
-          errorMessage: input.offscreenJob.outcome?.errorMessage,
-          errorCategory: input.offscreenJob.outcome?.errorCategory,
-        })
-        addSettlementEffects(effects, sealed.effects)
-        return { observedJobSealed: sealed.sealed, effects }
-      }
-
-      const sealed = await this.sealStoppedOpenManifestLocked({
-        identity: manifest,
-        error:
-          "Offscreen producer was canceled before every output was handed off",
-      })
+      const sealed = await this.sealObservedStoppedProducerLocked(
+        manifest,
+        input.offscreenJob
+      )
       addSettlementEffects(effects, sealed.effects)
       return { observedJobSealed: sealed.sealed, effects }
+    })
+  }
+
+  private async observeActiveStartupProducerLocked(
+    manifest: NativeOutputManifest,
+    job: OffscreenJobState,
+    activeLease: NativeOutputJobIdentity | null
+  ): Promise<void> {
+    if (manifest.phase === "sealed") {
+      logger.warn(
+        "Exact active offscreen producer conflicts with a sealed native output manifest; lease remains owned",
+        { jobId: manifest.jobId, taskId: manifest.taskId }
+      )
+      await this.armLivenessLocked()
+      return
+    }
+    if (
+      activeLease === null ||
+      !nativeOutputJobIdentityMatches(activeLease, job)
+    ) {
+      logger.warn(
+        "Exact active offscreen producer has no matching startup lease; manifest remains open",
+        { jobId: manifest.jobId, taskId: manifest.taskId }
+      )
+      await this.armLivenessLocked()
+    }
+  }
+
+  private async sealObservedStoppedProducerLocked(
+    manifest: NativeOutputManifest,
+    job: OffscreenJobState
+  ): Promise<{ sealed: boolean; effects: NativeOutputSettlementEffects }> {
+    const outcome = job.status === "terminal" ? job.outcome : undefined
+    return await this.sealStoppedOpenManifestLocked({
+      identity: manifest,
+      error: classifyProducerStoppedError(job.status),
+      errorMessage: outcome?.errorMessage,
+      errorCategory: outcome?.errorCategory,
     })
   }
 
@@ -644,20 +652,7 @@ export class NativeOutputCoordinator {
 
     const nullSlotCount = manifest.slots.filter((slot) => slot === null).length
 
-    for (const outputId of manifestTrackedOutputIds(manifest)) {
-      const record = snapshot.outputsByOutputId[outputId]
-      if (record?.phase !== "prepared") continue
-      const interrupted = await this.deps.repository.interruptBeforeAcceptance({
-        outputId,
-        error: input.error,
-        now: Date.now(),
-      })
-      if (interrupted.outcome === "rejected") {
-        throw new Error(
-          `Native output interruption rejected: ${interrupted.reason}`
-        )
-      }
-    }
+    await this.interruptPreparedOutputsLocked(manifest, snapshot, input.error)
 
     const sealed = await this.deps.repository.sealManifest({
       ...input.identity,
@@ -689,55 +684,10 @@ export class NativeOutputCoordinator {
     const initial = await this.deps.repository.snapshot()
     for (const manifest of Object.values(initial.manifestsByJobId)) {
       if (manifest.phase !== "open") continue
-      const identity = {
-        jobId: manifest.jobId,
-        attempt: manifest.attempt,
-        taskId: manifest.taskId,
-        chapterId: manifest.chapterId,
-        fingerprint: manifest.fingerprint,
-        documentInstanceId: manifest.documentInstanceId,
-      }
-
-      let observedJob: OffscreenJobState | null
-      try {
-        observedJob = await this.deps.queryOffscreenJob(identity)
-      } catch (error) {
-        logger.warn("Unable to query an open native output producer", {
-          jobId: manifest.jobId,
-          error,
-        })
-        await this.armLivenessLocked()
-        continue
-      }
-      if (
-        observedJob !== null &&
-        !nativeOutputJobIdentityMatches(manifest, observedJob)
-      ) {
-        logger.warn("Exact native output producer query returned a mismatch", {
-          jobId: manifest.jobId,
-          observedJobId: observedJob.jobId,
-        })
-        await this.armLivenessLocked()
-        continue
-      }
-      if (observedJob?.status === "active") continue
-
-      const error = classifyProducerStoppedError(observedJob?.status)
-      try {
-        const sealed = await this.sealStoppedOpenManifestLocked({
-          identity,
-          error,
-          errorMessage: observedJob?.outcome?.errorMessage,
-          errorCategory: observedJob?.outcome?.errorCategory,
-        })
-        addSettlementEffects(effects, sealed.effects)
-      } catch (sealError) {
-        logger.warn("Unable to seal an exact stopped native output producer", {
-          jobId: manifest.jobId,
-          error: sealError,
-        })
-        await this.armLivenessLocked()
-      }
+      addSettlementEffects(
+        effects,
+        await this.reconcileOpenProducerLocked(manifest)
+      )
     }
 
     const snapshot = await this.deps.repository.snapshot()
@@ -758,109 +708,185 @@ export class NativeOutputCoordinator {
     return effects
   }
 
+  private async reconcileOpenProducerLocked(
+    manifest: NativeOutputManifest
+  ): Promise<NativeOutputSettlementEffects> {
+    let observedJob: OffscreenJobState | null
+    try {
+      observedJob = await this.deps.queryOffscreenJob({
+        jobId: manifest.jobId,
+        attempt: manifest.attempt,
+        taskId: manifest.taskId,
+        chapterId: manifest.chapterId,
+        fingerprint: manifest.fingerprint,
+        documentInstanceId: manifest.documentInstanceId,
+      })
+    } catch (error) {
+      logger.warn("Unable to query an open native output producer", {
+        jobId: manifest.jobId,
+        error,
+      })
+      await this.armLivenessLocked()
+      return []
+    }
+    if (
+      observedJob !== null &&
+      !nativeOutputJobIdentityMatches(manifest, observedJob)
+    ) {
+      logger.warn("Exact native output producer query returned a mismatch", {
+        jobId: manifest.jobId,
+        observedJobId: observedJob.jobId,
+      })
+      await this.armLivenessLocked()
+      return []
+    }
+    if (observedJob?.status === "active") return []
+    return await this.sealReconciledProducerLocked(manifest, observedJob)
+  }
+
+  private async sealReconciledProducerLocked(
+    manifest: NativeOutputManifest,
+    observedJob: OffscreenJobState | null
+  ): Promise<NativeOutputSettlementEffects> {
+    try {
+      const sealed = await this.sealStoppedOpenManifestLocked({
+        identity: manifest,
+        error: classifyProducerStoppedError(observedJob?.status),
+        errorMessage: observedJob?.outcome?.errorMessage,
+        errorCategory: observedJob?.outcome?.errorCategory,
+      })
+      return sealed.effects
+    } catch (error) {
+      logger.warn("Unable to seal an exact stopped native output producer", {
+        jobId: manifest.jobId,
+        error,
+      })
+      await this.armLivenessLocked()
+      return []
+    }
+  }
+
   private async reconcileRecordLocked(
     record: NativeOutputRecord
   ): Promise<NativeOutputSettlementEffects> {
-    const effects: NativeOutputSettlementEffect[] = []
     const current = await this.deps.repository.getByOutputId(record.outputId)
     if (!current) return []
-
     if (
       current.phase === "acceptance_unknown" ||
       (current.phase === "outcome_unknown" && current.downloadId === undefined)
     ) {
-      let matches: chrome.downloads.DownloadItem[]
-      try {
-        matches = await chrome.downloads.search({ url: current.blobUrl })
-      } catch (error) {
-        logger.warn("Chrome handoff evidence is unavailable", {
-          outputId: current.outputId,
-          error,
-        })
-        await this.deps.repository.markOutcomeUnknown({
-          outputId: current.outputId,
-        })
-        await this.armLivenessLocked()
-        return effects
-      }
-      const snapshot = await this.deps.repository.snapshot()
-      const claimedIds = new Set(
-        Object.values(snapshot.outputsByOutputId).flatMap((candidate) =>
-          candidate.downloadId === undefined ? [] : [candidate.downloadId]
-        )
-      )
-      const exactUnclaimed = matches.filter(
-        (item) =>
-          isValidDownloadId(item.id) &&
-          item.url === current.blobUrl &&
-          !claimedIds.has(item.id)
-      )
-      if (exactUnclaimed.length === 1) {
-        const candidate = exactUnclaimed[0]
-        const attached = await this.deps.repository.attachDownload({
-          outputId: current.outputId,
-          downloadId: candidate.id,
-        })
-        if (attached.outcome !== "rejected") {
-          addSettlementEffects(
-            effects,
-            await this.observeDownloadItemLocked(attached.record, candidate)
-          )
-        }
-      } else {
-        await this.deps.repository.markOutcomeUnknown({
-          outputId: current.outputId,
-        })
-        await this.armLivenessLocked()
-      }
-      return effects
+      return await this.recoverDownloadIdentityLocked(current)
     }
-
     if (
       (current.phase === "waiting" || current.phase === "outcome_unknown") &&
       current.downloadId !== undefined
     ) {
-      let items: chrome.downloads.DownloadItem[]
-      try {
-        items = await chrome.downloads.search({ id: current.downloadId })
-      } catch (error) {
-        logger.warn("Chrome file-save evidence is unavailable", {
-          outputId: current.outputId,
-          error,
-        })
-        await this.deps.repository.markOutcomeUnknown({
-          outputId: current.outputId,
-        })
-        await this.armLivenessLocked()
-        return effects
-      }
-      const item = items.find(
-        (candidate) => candidate.id === current.downloadId
-      )
-      if (item) {
-        addSettlementEffects(
-          effects,
-          await this.observeDownloadItemLocked(current, item)
-        )
-      } else {
-        const erased = await this.deps.repository.observeErased({
-          downloadId: current.downloadId,
-          now: Date.now(),
-          confirmedByBrowser: false,
-        })
-        if (erased.outcome !== "rejected") {
-          const record = await this.deps.repository.getByOutputId(
-            erased.record.outputId
-          )
-          if (record) {
-            await this.armLivenessLocked()
-          }
-        } else {
-          await this.armLivenessLocked()
-        }
-      }
+      return await this.observeKnownDownloadLocked(current, current.downloadId)
     }
-    return effects
+    return []
+  }
+
+  private async searchOutputEvidenceLocked(
+    record: NativeOutputRecord,
+    query: chrome.downloads.DownloadQuery,
+    evidence: "handoff" | "file-save"
+  ): Promise<chrome.downloads.DownloadItem[] | undefined> {
+    try {
+      return await chrome.downloads.search(query)
+    } catch (error) {
+      logger.warn(`Chrome ${evidence} evidence is unavailable`, {
+        outputId: record.outputId,
+        error,
+      })
+      await this.deps.repository.markOutcomeUnknown({
+        outputId: record.outputId,
+      })
+      await this.armLivenessLocked()
+    }
+  }
+
+  private async recoverDownloadIdentityLocked(
+    record: NativeOutputRecord
+  ): Promise<NativeOutputSettlementEffects> {
+    const matches = await this.searchOutputEvidenceLocked(
+      record,
+      { url: record.blobUrl },
+      "handoff"
+    )
+    if (!matches) return []
+    const snapshot = await this.deps.repository.snapshot()
+    const claimedIds = new Set(
+      Object.values(snapshot.outputsByOutputId).flatMap((candidate) =>
+        candidate.downloadId === undefined ? [] : [candidate.downloadId]
+      )
+    )
+    const exactUnclaimed = matches.filter(
+      (item) =>
+        isValidDownloadId(item.id) &&
+        item.url === record.blobUrl &&
+        !claimedIds.has(item.id)
+    )
+    if (exactUnclaimed.length !== 1) {
+      await this.deps.repository.markOutcomeUnknown({
+        outputId: record.outputId,
+      })
+      await this.armLivenessLocked()
+      return []
+    }
+    const candidate = exactUnclaimed[0]
+    const attached = await this.deps.repository.attachDownload({
+      outputId: record.outputId,
+      downloadId: candidate.id,
+    })
+    if (attached.outcome === "rejected") return []
+    return await this.observeDownloadItemLocked(attached.record, candidate)
+  }
+
+  private async observeKnownDownloadLocked(
+    record: NativeOutputRecord,
+    downloadId: number
+  ): Promise<NativeOutputSettlementEffects> {
+    const items = await this.searchOutputEvidenceLocked(
+      record,
+      { id: downloadId },
+      "file-save"
+    )
+    if (!items) return []
+    const item = items.find((candidate) => candidate.id === downloadId)
+    if (item) return await this.observeDownloadItemLocked(record, item)
+    const erased = await this.deps.repository.observeErased({
+      downloadId,
+      now: Date.now(),
+      confirmedByBrowser: false,
+    })
+    if (erased.outcome === "rejected") {
+      await this.armLivenessLocked()
+    } else if (
+      await this.deps.repository.getByOutputId(erased.record.outputId)
+    ) {
+      await this.armLivenessLocked()
+    }
+    return []
+  }
+
+  private async restoreObservedPendingLocked(
+    record: NativeOutputRecord,
+    downloadId: number
+  ): Promise<void> {
+    const task = await this.deps.queueRepository.getTask(record.taskId)
+    const chapter = task?.chapters.find(
+      (chapter) => chapter.id === record.chapterId
+    )
+    if (
+      task?.status === "downloading" &&
+      chapter?.dispatchAttempt === record.attempt &&
+      !settlementReceiptMatches(
+        { ...record, outputsRequested: record.outputCount },
+        chapter.nativeOutputSettlement
+      )
+    ) {
+      await this.deps.repository.observePending({ downloadId })
+    }
   }
 
   private async observeDownloadItemLocked(
@@ -872,20 +898,7 @@ export class NativeOutputCoordinator {
       record.phase === "outcome_unknown" &&
       record.accountingDisposition === "pending"
     ) {
-      const task = await this.deps.queueRepository.getTask(record.taskId)
-      const chapter = task?.chapters.find(
-        (chapter) => chapter.id === record.chapterId
-      )
-      if (
-        task?.status === "downloading" &&
-        chapter?.dispatchAttempt === record.attempt &&
-        !settlementReceiptMatches(
-          { ...record, outputsRequested: record.outputCount },
-          chapter.nativeOutputSettlement
-        )
-      ) {
-        await this.deps.repository.observePending({ downloadId: item.id })
-      }
+      await this.restoreObservedPendingLocked(record, item.id)
       return []
     }
     if (item.state !== "complete" && item.state !== "interrupted") return []
@@ -898,125 +911,70 @@ export class NativeOutputCoordinator {
     return await this.reconcileJobLocked(record.jobId)
   }
 
-  private async reconcileJobLocked(
-    jobId: string
-  ): Promise<NativeOutputSettlementEffects> {
-    let snapshot = await this.deps.repository.snapshot()
-    let manifest = snapshot.manifestsByJobId[jobId]
-    if (!manifest) return []
-
-    if (manifest.phase === "sealed") {
-      const preparedOutputIds = manifestTrackedOutputIds(manifest).filter(
-        (outputId) => snapshot.outputsByOutputId[outputId]?.phase === "prepared"
-      )
-      for (const outputId of preparedOutputIds) {
-        const interrupted =
-          await this.deps.repository.interruptBeforeAcceptance({
-            outputId,
-            error: "Native output was not accepted before manifest sealing",
-            now: Date.now(),
-          })
-        if (interrupted.outcome === "rejected") {
-          throw new Error(
-            `Native output interruption rejected: ${interrupted.reason}`
-          )
-        }
-      }
-      if (preparedOutputIds.length > 0) {
-        snapshot = await this.deps.repository.snapshot()
-        manifest = snapshot.manifestsByJobId[jobId]
-        if (!manifest) return []
-      }
-    }
-
-    const outputIds = manifestTrackedOutputIds(manifest)
-    const records = outputIds.flatMap((outputId) => {
-      const record = snapshot.outputsByOutputId[outputId]
-      return record ? [record] : []
-    })
-    const effects: NativeOutputSettlementEffect[] = []
-    let settlementResolved =
-      manifest.settlementAcknowledgedAt !== undefined ||
-      (records.length === outputIds.length &&
-        records.length > 0 &&
-        records.every((record) => record.accountingDisposition !== "pending"))
-
-    await this.releaseJobBlobsLocked(records)
-
-    const chapterSettlement = await this.deps.queueRepository
-      .getTask(manifest.taskId)
-      .then(
-        (task) =>
-          task?.chapters.find((chapter) => chapter.id === manifest.chapterId)
-            ?.nativeOutputSettlement
-      )
-    const queueSettlementProven = settlementReceiptMatches(
-      manifest,
-      chapterSettlement
+  private async interruptPreparedOutputsLocked(
+    manifest: NativeOutputManifest,
+    snapshot: NativeOutputState,
+    error: string
+  ): Promise<boolean> {
+    const preparedOutputIds = manifestTrackedOutputIds(manifest).filter(
+      (outputId) => snapshot.outputsByOutputId[outputId]?.phase === "prepared"
     )
-
-    if (
-      manifest.phase === "sealed" &&
-      !settlementResolved &&
-      records.length === outputIds.length &&
-      records.every(canAccountNativeOutput)
-    ) {
-      const stats = calculateNativeOutputSettlementStats(manifest, records)
-      const {
-        completed,
-        interrupted,
-        outputUncertain,
-        lastSuccessfulDownloadId,
-        errorMessage: outputErrorMessage,
-        errorCategory: outputErrorCategory,
-      } = stats
-      const settlement = queueSettlementProven
-        ? { outcome: "already_applied" as const }
-        : await this.deps.queueRepository.applyNativeOutputSettlement({
-            jobId: manifest.jobId,
-            attempt: manifest.attempt,
-            taskId: manifest.taskId,
-            chapterId: manifest.chapterId,
-            requested: manifest.outputsRequested,
-            completed,
-            interrupted,
-            outputUncertain: outputUncertain || undefined,
-            errorMessage: outputErrorMessage,
-            errorCategory: outputErrorCategory,
-            lastSuccessfulDownloadId,
-            now: Date.now(),
-          })
-      const disposition =
-        settlement.outcome === "applied" ||
-        settlement.outcome === "already_applied"
-          ? "accounted"
-          : settlement.outcome === "not_owner"
-            ? "not_owner"
-            : undefined
-      if (disposition) {
-        settlementResolved = true
-        for (const record of records) {
-          await this.deps.repository.markAccountingDisposition({
-            outputId: record.outputId,
-            disposition,
-            now: Date.now(),
-          })
-        }
-      } else {
-        await this.armLivenessLocked()
+    for (const outputId of preparedOutputIds) {
+      const interrupted = await this.deps.repository.interruptBeforeAcceptance({
+        outputId,
+        error,
+        now: Date.now(),
+      })
+      if (interrupted.outcome === "rejected") {
+        throw new Error(
+          `Native output interruption rejected: ${interrupted.reason}`
+        )
       }
     }
+    return preparedOutputIds.length > 0
+  }
 
-    const refreshed = await this.deps.repository.snapshot()
-    const refreshedManifest = refreshed.manifestsByJobId[jobId]
-    if (!refreshedManifest) return effects
-    const refreshedRecords = manifestTrackedOutputIds(
-      refreshedManifest
-    ).flatMap((outputId) => {
-      const record = refreshed.outputsByOutputId[outputId]
-      return record ? [record] : []
-    })
-    for (const record of refreshedRecords) {
+  private async accountManifestOutputsLocked(
+    manifest: NativeOutputManifest,
+    records: NativeOutputRecord[],
+    queueSettlementProven: boolean
+  ): Promise<boolean> {
+    const stats = calculateNativeOutputSettlementStats(manifest, records)
+    const settlement = queueSettlementProven
+      ? { outcome: "already_applied" as const }
+      : await this.deps.queueRepository.applyNativeOutputSettlement({
+          jobId: manifest.jobId,
+          attempt: manifest.attempt,
+          taskId: manifest.taskId,
+          chapterId: manifest.chapterId,
+          requested: manifest.outputsRequested,
+          completed: stats.completed,
+          interrupted: stats.interrupted,
+          outputUncertain: stats.outputUncertain || undefined,
+          errorMessage: stats.errorMessage,
+          errorCategory: stats.errorCategory,
+          lastSuccessfulDownloadId: stats.lastSuccessfulDownloadId,
+          now: Date.now(),
+        })
+    const disposition = accountingDisposition(settlement.outcome)
+    if (!disposition) {
+      await this.armLivenessLocked()
+      return false
+    }
+    for (const record of records) {
+      await this.deps.repository.markAccountingDisposition({
+        outputId: record.outputId,
+        disposition,
+        now: Date.now(),
+      })
+    }
+    return true
+  }
+
+  private async releaseAccountedDependenciesLocked(
+    records: NativeOutputRecord[]
+  ): Promise<void> {
+    for (const record of records) {
       const released = await this.deps.repository.getByOutputId(record.outputId)
       if (
         released &&
@@ -1031,39 +989,92 @@ export class NativeOutputCoordinator {
         })
       }
     }
+  }
 
+  private async collectJobSettlementEffectsLocked(
+    jobId: string,
+    queueSettlementProven: boolean,
+    settlementResolved: boolean
+  ): Promise<NativeOutputSettlementEffects> {
     const finalState = await this.deps.repository.snapshot()
-    const finalManifest = finalState.manifestsByJobId[jobId]
-    const finalOutputIds = finalManifest
-      ? manifestTrackedOutputIds(finalManifest)
-      : []
-    const allTrackedDependenciesReleased = finalOutputIds.every((outputId) => {
-      const record = finalState.outputsByOutputId[outputId]
-      return record === undefined || record.dependencyReleasedAt !== undefined
-    })
-    if (finalManifest?.settlementAcknowledgedAt !== undefined) {
-      if (allTrackedDependenciesReleased) {
+    const manifest = finalState.manifestsByJobId[jobId]
+    if (!manifest) return []
+    const dependenciesReleased = allTrackedDependenciesReleased(
+      finalState,
+      manifest
+    )
+    if (manifest.settlementAcknowledgedAt !== undefined) {
+      if (dependenciesReleased) {
         await this.deps.repository.markJobDependencyReleased({
           jobId,
           now: Date.now(),
         })
       }
-      return effects
+      return []
     }
     if (
-      finalManifest?.phase === "sealed" &&
-      finalManifest.dependencyReleasedAt === undefined &&
-      (queueSettlementProven ||
-        settlementResolved ||
-        (finalOutputIds.length > 0 && allTrackedDependenciesReleased))
+      settlementContinuationReady(
+        manifest,
+        queueSettlementProven,
+        settlementResolved,
+        dependenciesReleased
+      )
     ) {
-      // Pruning removes accounted output records before the outer effect is
-      // acknowledged. Reconstruct that effect from the released tracked slots
-      // even when its queue owner has since been removed. Empty manifests still
-      // require queue accounting above, including its producer-lease guard.
-      addSettlementEffect(effects, settlementEffect(finalManifest))
+      // Accounted records can be pruned before the continuation is acknowledged.
+      // Released tracked slots retain that effect even if its queue owner was removed.
+      // Empty manifests still require queue accounting and its producer-lease guard.
+      return [settlementEffect(manifest)]
     }
-    return effects
+    return []
+  }
+
+  private async reconcileJobLocked(
+    jobId: string
+  ): Promise<NativeOutputSettlementEffects> {
+    let snapshot = await this.deps.repository.snapshot()
+    let manifest = snapshot.manifestsByJobId[jobId]
+    if (!manifest) return []
+    if (
+      manifest.phase === "sealed" &&
+      (await this.interruptPreparedOutputsLocked(
+        manifest,
+        snapshot,
+        "Native output was not accepted before manifest sealing"
+      ))
+    ) {
+      snapshot = await this.deps.repository.snapshot()
+      manifest = snapshot.manifestsByJobId[jobId]
+      if (!manifest) return []
+    }
+    const records = manifestRecords(snapshot, manifest)
+    let settlementResolved = manifestAccountingResolved(manifest, records)
+    await this.releaseJobBlobsLocked(records)
+    const task = await this.deps.queueRepository.getTask(manifest.taskId)
+    const chapterSettlement = task?.chapters.find(
+      (chapter) => chapter.id === manifest.chapterId
+    )?.nativeOutputSettlement
+    const queueSettlementProven = settlementReceiptMatches(
+      manifest,
+      chapterSettlement
+    )
+    if (manifestReadyForAccounting(manifest, records, settlementResolved)) {
+      settlementResolved = await this.accountManifestOutputsLocked(
+        manifest,
+        records,
+        queueSettlementProven
+      )
+    }
+    const refreshed = await this.deps.repository.snapshot()
+    const refreshedManifest = refreshed.manifestsByJobId[jobId]
+    if (!refreshedManifest) return []
+    await this.releaseAccountedDependenciesLocked(
+      manifestRecords(refreshed, refreshedManifest)
+    )
+    return await this.collectJobSettlementEffectsLocked(
+      jobId,
+      queueSettlementProven,
+      settlementResolved
+    )
   }
 
   private async releaseJobBlobsLocked(
