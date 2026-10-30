@@ -39,9 +39,21 @@ export function readSiteIntegrationDispatchContext(
     return undefined
   }
 
-  if (envelope.schemaVersion !== contract.schemaVersion) {
+  return parseDispatchContext(
+    siteIntegrationId,
+    envelope,
+    contract.schemaVersion
+  )
+}
+
+function parseDispatchContext(
+  siteIntegrationId: string,
+  envelope: SiteIntegrationDispatchContextEnvelope,
+  schemaVersion: number | undefined
+): JsonObject {
+  if (envelope.schemaVersion !== schemaVersion) {
     throw new Error(
-      `Unsupported dispatch context schema version ${envelope.schemaVersion} for ${siteIntegrationId}; expected ${contract.schemaVersion}`
+      `Unsupported dispatch context schema version ${envelope.schemaVersion} for ${siteIntegrationId}; expected ${schemaVersion}`
     )
   }
 

@@ -3,58 +3,29 @@ import type { ChapterState, MangaPageState } from "@/src/types/tab-state"
 export function deriveVolumeStates(
   chapters: Array<Pick<ChapterState, "volumeNumber" | "volumeLabel" | "index">>
 ): MangaPageState["volumes"] {
-  const volumeMap = new Map<number, { label?: string; firstIndex: number }>()
+  const volumeMap = new Map<number, string>()
 
   for (const chapter of chapters) {
     if (
       typeof chapter.volumeNumber !== "number" ||
-      Number.isNaN(chapter.volumeNumber)
+      Number.isNaN(chapter.volumeNumber) ||
+      volumeMap.has(chapter.volumeNumber)
     ) {
       continue
     }
-
-    const existing = volumeMap.get(chapter.volumeNumber)
     const label =
-      typeof chapter.volumeLabel === "string" &&
-      chapter.volumeLabel.trim().length > 0
+      typeof chapter.volumeLabel === "string" && chapter.volumeLabel.trim()
         ? chapter.volumeLabel.trim()
         : `Volume ${chapter.volumeNumber}`
-
-    if (!existing) {
-      volumeMap.set(chapter.volumeNumber, {
-        label,
-        firstIndex:
-          typeof chapter.index === "number"
-            ? chapter.index
-            : Number.MAX_SAFE_INTEGER,
-      })
-      continue
-    }
-
-    if (!existing.label && label) {
-      existing.label = label
-    }
-
-    if (
-      typeof chapter.index === "number" &&
-      chapter.index < existing.firstIndex
-    ) {
-      existing.firstIndex = chapter.index
-    }
+    volumeMap.set(chapter.volumeNumber, label)
   }
 
   return Array.from(volumeMap.entries())
-    .sort(([leftVolumeNumber, left], [rightVolumeNumber, right]) => {
-      if (leftVolumeNumber !== rightVolumeNumber) {
-        return leftVolumeNumber - rightVolumeNumber
-      }
-
-      return left.firstIndex - right.firstIndex
-    })
-    .map(([volumeNumber, value]) => ({
+    .sort(([left], [right]) => left - right)
+    .map(([volumeNumber, label]) => ({
       id: `volume-${volumeNumber}`,
-      title: value.label,
-      label: value.label,
+      title: label,
+      label,
     }))
 }
 

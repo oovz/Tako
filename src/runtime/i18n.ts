@@ -128,6 +128,27 @@ export function getUILanguage(): string {
   return activePreference === "auto" ? getBrowserUiLanguage() : activePreference
 }
 
+function applyCatalogs(
+  preference: UiLanguagePreference,
+  catalog: MessageCatalog | null,
+  fallback: MessageCatalog | null
+): void {
+  const changed =
+    activePreference !== preference ||
+    activeCatalog !== catalog ||
+    englishCatalog !== fallback
+  activePreference = preference
+  activeCatalog = catalog
+  englishCatalog = fallback
+  if (changed) emitChange()
+}
+
+function loadedCatalog(
+  result: PromiseSettledResult<MessageCatalog>
+): MessageCatalog | null {
+  return result.status === "fulfilled" ? result.value : null
+}
+
 /** Apply a persisted language preference after its packaged catalog is ready. */
 export async function applyUiLanguagePreference(
   preference: UiLanguagePreference
@@ -135,11 +156,7 @@ export async function applyUiLanguagePreference(
   const generation = ++applicationGeneration
 
   if (preference === "auto") {
-    const changed = activePreference !== "auto" || activeCatalog !== null
-    activePreference = "auto"
-    activeCatalog = null
-    englishCatalog = null
-    if (changed) emitChange()
+    applyCatalogs("auto", null, null)
     return
   }
 
@@ -149,19 +166,11 @@ export async function applyUiLanguagePreference(
   ])
   if (generation !== applicationGeneration) return
 
-  const nextCatalog =
-    selectedResult.status === "fulfilled" ? selectedResult.value : null
-  const nextEnglishCatalog =
-    englishResult.status === "fulfilled" ? englishResult.value : null
-  const changed =
-    activePreference !== preference ||
-    activeCatalog !== nextCatalog ||
-    englishCatalog !== nextEnglishCatalog
-
-  activePreference = preference
-  activeCatalog = nextCatalog
-  englishCatalog = nextEnglishCatalog
-  if (changed) emitChange()
+  applyCatalogs(
+    preference,
+    loadedCatalog(selectedResult),
+    loadedCatalog(englishResult)
+  )
 }
 
 export function subscribeI18n(listener: () => void): () => void {

@@ -8,6 +8,19 @@ type DispatchFingerprintInput = Omit<
   "fingerprint"
 >
 
+function canonicalizeObject(value: object): unknown {
+  const prototype = Reflect.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("Dispatch fingerprints require plain data objects")
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalize(entry)])
+  )
+}
+
 function canonicalize(value: unknown): unknown {
   if (
     value === null ||
@@ -23,18 +36,7 @@ function canonicalize(value: unknown): unknown {
     return value
   }
   if (Array.isArray(value)) return value.map(canonicalize)
-  if (typeof value === "object") {
-    const prototype = Reflect.getPrototypeOf(value)
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new TypeError("Dispatch fingerprints require plain data objects")
-    }
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, entry]) => entry !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, canonicalize(entry)])
-    )
-  }
+  if (typeof value === "object") return canonicalizeObject(value)
   throw new TypeError("Dispatch fingerprints require JSON-compatible data")
 }
 

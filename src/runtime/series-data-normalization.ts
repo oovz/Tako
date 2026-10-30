@@ -53,6 +53,15 @@ export function normalizeSeriesMetadataSnapshot(
   return snapshot
 }
 
+function normalizedOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  return value.trim() || undefined
+}
+
+function normalizedOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined
+}
+
 function normalizeRawChapter(value: unknown): RawSeriesChapter | null {
   if (!isRecord(value)) return null
 
@@ -61,33 +70,16 @@ function normalizeRawChapter(value: unknown): RawSeriesChapter | null {
   if (!url || !title) return null
 
   return {
-    id:
-      typeof value.id === "string" && value.id.trim()
-        ? value.id.trim()
-        : undefined,
+    id: normalizedOptionalString(value.id),
     url,
     title,
     locked: value.locked === true,
-    chapterLabel:
-      typeof value.chapterLabel === "string" && value.chapterLabel.trim()
-        ? value.chapterLabel.trim()
-        : undefined,
-    chapterNumber:
-      typeof value.chapterNumber === "number" ? value.chapterNumber : undefined,
-    volumeId:
-      typeof value.volumeId === "string" && value.volumeId.trim()
-        ? value.volumeId.trim()
-        : undefined,
-    volumeNumber:
-      typeof value.volumeNumber === "number" ? value.volumeNumber : undefined,
-    volumeLabel:
-      typeof value.volumeLabel === "string" && value.volumeLabel.trim()
-        ? value.volumeLabel.trim()
-        : undefined,
-    language:
-      typeof value.language === "string" && value.language.trim()
-        ? value.language.trim()
-        : undefined,
+    chapterLabel: normalizedOptionalString(value.chapterLabel),
+    chapterNumber: normalizedOptionalNumber(value.chapterNumber),
+    volumeId: normalizedOptionalString(value.volumeId),
+    volumeNumber: normalizedOptionalNumber(value.volumeNumber),
+    volumeLabel: normalizedOptionalString(value.volumeLabel),
+    language: normalizedOptionalString(value.language),
   }
 }
 
@@ -98,14 +90,8 @@ function normalizeRawVolume(value: unknown): RawSeriesVolume | null {
 
   return {
     id,
-    title:
-      typeof value.title === "string" && value.title.trim()
-        ? value.title.trim()
-        : undefined,
-    label:
-      typeof value.label === "string" && value.label.trim()
-        ? value.label.trim()
-        : undefined,
+    title: normalizedOptionalString(value.title),
+    label: normalizedOptionalString(value.label),
   }
 }
 
@@ -130,13 +116,36 @@ export function normalizeFetchedSeriesData(
   }
 }
 
+function extractionErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return typeof error === "string" ? error : "Failed to extract series metadata"
+}
+
+function resolveChapterIdentities(chapters: RawSeriesChapter[]):
+  | { context: "error"; error: string }
+  | {
+      context: "ready"
+      chapters: Array<RawSeriesChapter & { id: string }>
+      chapterIds: string[]
+    } {
+  if (chapters.some((chapter) => !chapter.id?.trim())) {
+    return { context: "error", error: "Failed to extract stable chapter ids" }
+  }
+  const identified = chapters as Array<RawSeriesChapter & { id: string }>
+  const chapterIds = identified.map((chapter) => chapter.id.trim())
+  if (new Set(chapterIds).size !== chapterIds.length) {
+    return {
+      context: "error",
+      error: "Failed to extract unique stable chapter ids",
+    }
+  }
+  return { context: "ready", chapters: identified, chapterIds }
+}
+
 export function buildResolvedTabContext(
   input: BuildResolvedTabContextInput
 ): ResolvedTabContext {
-  const rawMangaId =
-    typeof input.rawMangaId === "string" && input.rawMangaId.trim()
-      ? input.rawMangaId.trim()
-      : null
+  const rawMangaId = normalizedOptionalString(input.rawMangaId)
 
   if (!rawMangaId) return { context: "unsupported" }
 
@@ -145,40 +154,35 @@ export function buildResolvedTabContext(
     : undefined
 
   if (input.extractionError) {
-    const errorMessage =
-      input.extractionError instanceof Error
-        ? input.extractionError.message
-        : typeof input.extractionError === "string"
-          ? input.extractionError
-          : "Failed to extract series metadata"
+    const errorMessage = extractionErrorMessage(input.extractionError)
     return {
       context: "error",
       error: errorMessage || "Failed to extract series metadata",
     }
   }
 
+  return buildReadySeriesContext(input, rawMangaId, seriesMetadata)
+}
+
+function buildReadySeriesContext(
+  input: BuildResolvedTabContextInput,
+  mangaId: string,
+  seriesMetadata: SeriesMetadata | undefined
+): ResolvedTabContext {
   const seriesTitle = seriesMetadata?.title?.trim() ?? ""
   if (!seriesTitle) {
     return { context: "error", error: "Failed to extract series metadata" }
   }
 
-  if (input.chapters.some((chapter) => !chapter.id?.trim())) {
-    return { context: "error", error: "Failed to extract stable chapter ids" }
-  }
-
-  const chapters = input.chapters as Array<RawSeriesChapter & { id: string }>
-  const chapterIds = chapters.map((chapter) => chapter.id.trim())
-  if (new Set(chapterIds).size !== chapterIds.length) {
-    return {
-      context: "error",
-      error: "Failed to extract unique stable chapter ids",
-    }
-  }
+  const identity = resolveChapterIdentities(input.chapters)
+  if (identity.context === "error") return identity
+  const chapters = identity.chapters
+  const chapterIds = identity.chapterIds
   const payload: ResolvedTabReadyContext = {
     context: "ready",
     sourceUrl: input.sourceUrl,
     siteIntegrationId: input.siteIntegrationId,
-    mangaId: rawMangaId,
+    mangaId,
     seriesTitle,
     chapters: chapters.map((chapter, index) => ({
       id: chapterIds[index],

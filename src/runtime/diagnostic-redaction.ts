@@ -108,23 +108,18 @@ function readArrayCell(value: unknown[], index: number): DataPropertyRead {
   return readDataProperty(value, String(index))
 }
 
-function inspectHeaderEntry(value: unknown): HeaderEntryInspection {
-  const isArray = (() => {
-    try {
-      return Array.isArray(value)
-    } catch {
-      return undefined
-    }
-  })()
-  if (isArray === undefined) return { kind: "unreadable" }
-  if (!isArray) return { kind: "not-entry" }
+function inspectArray(value: unknown): boolean | undefined {
+  try {
+    return Array.isArray(value)
+  } catch {
+    return undefined
+  }
+}
 
-  const length = readArrayLength(value as unknown[])
-  if (length === null) return { kind: "unreadable" }
-  if (length !== 2) return { kind: "not-entry" }
-
-  const name = readArrayCell(value as unknown[], 0)
-  const headerValue = readArrayCell(value as unknown[], 1)
+function inspectHeaderCells(
+  name: DataPropertyRead,
+  headerValue: DataPropertyRead
+): HeaderEntryInspection {
   if (name.kind === "unreadable" || headerValue.kind === "unreadable") {
     return { kind: "unreadable" }
   }
@@ -137,18 +132,28 @@ function inspectHeaderEntry(value: unknown): HeaderEntryInspection {
   return { kind: "entry", name: name.value, value: headerValue.value }
 }
 
-function inspectHeaderEntries(value: unknown): HeaderEntriesInspection {
-  const isArray = (() => {
-    try {
-      return Array.isArray(value)
-    } catch {
-      return undefined
-    }
-  })()
+function inspectHeaderEntry(value: unknown): HeaderEntryInspection {
+  const isArray = inspectArray(value)
   if (isArray === undefined) return { kind: "unreadable" }
-  if (!isArray) return { kind: "not-entries" }
+  if (!isArray) return { kind: "not-entry" }
 
-  const array = value as unknown[]
+  const length = readArrayLength(value as unknown[])
+  if (length === null) return { kind: "unreadable" }
+  if (length !== 2) return { kind: "not-entry" }
+
+  return inspectHeaderCells(
+    readArrayCell(value as unknown[], 0),
+    readArrayCell(value as unknown[], 1)
+  )
+}
+
+function inspectHeaderListCell(cell: DataPropertyRead): HeaderEntryInspection {
+  if (cell.kind === "unreadable") return { kind: "unreadable" }
+  if (cell.kind !== "value") return { kind: "not-entry" }
+  return inspectHeaderEntry(cell.value)
+}
+
+function inspectHeaderEntries(array: unknown[]): HeaderEntriesInspection {
   const length = readArrayLength(array)
   if (length === null) return { kind: "unreadable" }
   if (length === 0) return { kind: "not-entries" }
@@ -156,10 +161,7 @@ function inspectHeaderEntries(value: unknown): HeaderEntriesInspection {
   const entries: Array<[string, string]> = []
   const limit = Math.min(length, MAX_DIAGNOSTIC_ARRAY_ITEMS)
   for (let index = 0; index < limit; index += 1) {
-    const cell = readArrayCell(array, index)
-    if (cell.kind === "unreadable") return { kind: "unreadable" }
-    if (cell.kind !== "value") return { kind: "not-entries" }
-    const entry = inspectHeaderEntry(cell.value)
+    const entry = inspectHeaderListCell(readArrayCell(array, index))
     if (entry.kind === "unreadable") return { kind: "unreadable" }
     if (entry.kind !== "entry") return { kind: "not-entries" }
     entries.push([entry.name, entry.value])
@@ -181,6 +183,29 @@ function redactUrl(value: string): string {
   }
 }
 
+function isSerializedDiagnostic(value: string): boolean {
+  return (
+    value.startsWith("{") ||
+    value.startsWith('"') ||
+    /^\[\s*(?:[[{"\d-]|true\b|false\b|null\b|\])/.test(value)
+  )
+}
+
+function redactPathMatch(match: string): string {
+  const prefix = match.match(/^[\s"'(=]/)?.[0] ?? ""
+  return `${prefix}${REDACTED_DIAGNOSTIC_PATH}`
+}
+
+function containsOpaqueDiagnostic(value: string): boolean {
+  return (
+    value.includes("{") ||
+    /\\u[0-9a-f]{4}|\[\s*(?:[[{"\d-]|true\b|false\b|null\b|\])/i.test(value) ||
+    /\b(?:authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|api[-_]?key|(?:access|refresh|id)?[-_]?token|password|passphrase|secret|credential|private[-_]?key|client[-_]?secret|session[-_]?id|x[-_][\w-]+|[\w-]*session[\w-]*)["']?\s*[:=]|\b(?:bearer|basic)\s+\S+/i.test(
+      value
+    )
+  )
+}
+
 function redactString(value: string, state: RedactionState): string {
   if (
     value.length > MAX_DIAGNOSTIC_STRING_LENGTH ||
@@ -189,11 +214,7 @@ function redactString(value: string, state: RedactionState): string {
     return REDACTED_DIAGNOSTIC_VALUE
   }
   const trimmed = value.trim()
-  const serialized =
-    trimmed.startsWith("{") ||
-    trimmed.startsWith('"') ||
-    /^\[\s*(?:[[{"\d-]|true\b|false\b|null\b|\])/.test(trimmed)
-  if (serialized) {
+  if (isSerializedDiagnostic(trimmed)) {
     try {
       return JSON.stringify(
         redactValue(JSON.parse(trimmed), "", {
@@ -208,55 +229,48 @@ function redactString(value: string, state: RedactionState): string {
   // Embedded or malformed object dumps are opaque. Do not attempt to recover
   // fields from a partial serialization (including an Error stack's prefix).
   let redacted = value.replace(URL_PATTERN, redactUrl)
-  if (
-    redacted.includes("{") ||
-    /\\u[0-9a-f]{4}|\[\s*(?:[[{"\d-]|true\b|false\b|null\b|\])/i.test(
-      redacted
-    ) ||
-    /\b(?:authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|api[-_]?key|(?:access|refresh|id)?[-_]?token|password|passphrase|secret|credential|private[-_]?key|client[-_]?secret|session[-_]?id|x[-_][\w-]+|[\w-]*session[\w-]*)["']?\s*[:=]|\b(?:bearer|basic)\s+\S+/i.test(
-      redacted
-    )
-  ) {
-    return REDACTED_DIAGNOSTIC_VALUE
-  }
-  redacted = redacted.replace(WINDOWS_PATH_PATTERN, (match) => {
-    const prefix = match.match(/^[\s"'(=]/)?.[0] ?? ""
-    return `${prefix}${REDACTED_DIAGNOSTIC_PATH}`
-  })
-  redacted = redacted.replace(POSIX_PATH_PATTERN, (match) => {
-    const prefix = match.match(/^[\s"'(=]/)?.[0] ?? ""
-    return `${prefix}${REDACTED_DIAGNOSTIC_PATH}`
-  })
+  if (containsOpaqueDiagnostic(redacted)) return REDACTED_DIAGNOSTIC_VALUE
+  redacted = redacted.replace(WINDOWS_PATH_PATTERN, redactPathMatch)
+  redacted = redacted.replace(POSIX_PATH_PATTERN, redactPathMatch)
   if (redacted.length <= MAX_DIAGNOSTIC_STRING_LENGTH) return redacted
   return `${redacted.slice(0, MAX_DIAGNOSTIC_STRING_LENGTH)}…`
 }
 
+function redactHeaderValue(
+  name: string,
+  value: unknown,
+  state: RedactionState
+): unknown {
+  return isSafeHeader(name) && !isSensitiveHeader(name)
+    ? redactValue(value, name, state)
+    : REDACTED_DIAGNOSTIC_VALUE
+}
+
+function redactNativeHeaders(value: Headers, state: RedactionState): unknown {
+  const result: Record<string, unknown> = {}
+  try {
+    for (const [name, headerValue] of value.entries()) {
+      result[name] = redactHeaderValue(name, headerValue, state)
+    }
+  } catch {
+    return UNREADABLE_DIAGNOSTIC_VALUE
+  }
+  return result
+}
+
+function redactHeaderList(value: unknown[], state: RedactionState): unknown {
+  const inspected = inspectHeaderEntries(value)
+  if (inspected.kind === "unreadable") return UNREADABLE_DIAGNOSTIC_VALUE
+  if (inspected.kind !== "entries") return REDACTED_DIAGNOSTIC_VALUE
+  return redactHeaderEntries(inspected.entries, state)
+}
+
 function redactHeaders(value: unknown, state: RedactionState): unknown {
   if (typeof Headers !== "undefined" && value instanceof Headers) {
-    const result: Record<string, unknown> = {}
-    try {
-      for (const [name, headerValue] of value.entries()) {
-        result[name] =
-          isSafeHeader(name) && !isSensitiveHeader(name)
-            ? redactValue(headerValue, name, state)
-            : REDACTED_DIAGNOSTIC_VALUE
-      }
-    } catch {
-      return UNREADABLE_DIAGNOSTIC_VALUE
-    }
-    return result
+    return redactNativeHeaders(value, state)
   }
 
-  if (Array.isArray(value)) {
-    const inspected = inspectHeaderEntries(value)
-    if (inspected.kind === "unreadable") {
-      return UNREADABLE_DIAGNOSTIC_VALUE
-    }
-    if (inspected.kind !== "entries") {
-      return REDACTED_DIAGNOSTIC_VALUE
-    }
-    return redactHeaderEntries(inspected.entries, state)
-  }
+  if (Array.isArray(value)) return redactHeaderList(value, state)
 
   if (typeof value === "string") return REDACTED_DIAGNOSTIC_VALUE
   if (!value || typeof value !== "object") return REDACTED_DIAGNOSTIC_VALUE
@@ -273,9 +287,7 @@ function redactHeaderEntries(
 ): Array<[string, unknown]> {
   return entries.map(([name, headerValue]) => [
     name,
-    isSafeHeader(name) && !isSensitiveHeader(name)
-      ? redactValue(headerValue, name, state)
-      : REDACTED_DIAGNOSTIC_VALUE,
+    redactHeaderValue(name, headerValue, state),
   ])
 }
 
@@ -309,6 +321,18 @@ function redactError(
   return result
 }
 
+function redactObjectProperty(
+  value: Record<string, unknown>,
+  key: string,
+  state: RedactionState,
+  headers: boolean
+): unknown {
+  if (isSensitiveKey(key) || isPathKey(key)) return REDACTED_DIAGNOSTIC_VALUE
+  if (headers) return redactHeaderValue(key, readProperty(value, key), state)
+  if (isHeadersKey(key)) return redactHeaders(readProperty(value, key), state)
+  return redactValue(readProperty(value, key), key, state)
+}
+
 function redactObject(
   value: Record<string, unknown>,
   state: RedactionState,
@@ -332,28 +356,97 @@ function redactObject(
     return UNREADABLE_DIAGNOSTIC_VALUE
   }
   for (const key of keys) {
-    if (isSensitiveKey(key)) {
-      result[key] = REDACTED_DIAGNOSTIC_VALUE
-      continue
-    }
-    if (isPathKey(key)) {
-      result[key] = REDACTED_DIAGNOSTIC_VALUE
-      continue
-    }
-    if (headers) {
-      result[key] =
-        isSafeHeader(key) && !isSensitiveHeader(key)
-          ? redactValue(readProperty(value, key), key, childState)
-          : REDACTED_DIAGNOSTIC_VALUE
-      continue
-    }
-    if (isHeadersKey(key)) {
-      result[key] = redactHeaders(readProperty(value, key), childState)
-      continue
-    }
-    result[key] = redactValue(readProperty(value, key), key, childState)
+    result[key] = redactObjectProperty(value, key, childState, headers)
   }
   return result
+}
+
+function redactPrimitive(value: unknown, state: RedactionState): unknown {
+  switch (typeof value) {
+    case "string":
+      return redactString(value, state)
+    case "bigint":
+      return "[BigInt]"
+    case "function":
+      return "[Function]"
+    case "symbol":
+      return "[Symbol]"
+    default:
+      return value
+  }
+}
+
+function redactTrackedError(value: Error, state: RedactionState): unknown {
+  if (state.depth >= MAX_DIAGNOSTIC_DEPTH) return REDACTED_DIAGNOSTIC_VALUE
+  if (state.seen.has(value)) return CIRCULAR_DIAGNOSTIC_VALUE
+  state.seen.add(value)
+  return redactError(value, state)
+}
+
+function redactArrayItem(
+  value: unknown[],
+  index: number,
+  state: RedactionState
+): unknown {
+  const item = readArrayCell(value, index)
+  if (item.kind !== "value") return UNREADABLE_DIAGNOSTIC_VALUE
+  try {
+    return redactValue(item.value, "", state)
+  } catch {
+    return UNREADABLE_DIAGNOSTIC_VALUE
+  }
+}
+
+function redactArrayItems(value: unknown[], state: RedactionState): unknown {
+  if (state.seen.has(value)) return CIRCULAR_DIAGNOSTIC_VALUE
+  state.seen.add(value)
+  const childState: RedactionState = {
+    depth: state.depth + 1,
+    seen: state.seen,
+  }
+  const length = readArrayLength(value)
+  if (length === null) return UNREADABLE_DIAGNOSTIC_VALUE
+  const items: unknown[] = []
+  const limit = Math.min(length, MAX_DIAGNOSTIC_ARRAY_ITEMS)
+  for (let index = 0; index < limit; index += 1) {
+    items.push(redactArrayItem(value, index, childState))
+  }
+  return items
+}
+
+function redactArray(value: unknown[], state: RedactionState): unknown {
+  if (state.depth >= MAX_DIAGNOSTIC_DEPTH) return REDACTED_DIAGNOSTIC_VALUE
+  const headerEntries = inspectHeaderEntries(value)
+  if (headerEntries.kind === "entries")
+    return redactHeaderEntries(headerEntries.entries, state)
+  const headerEntry = inspectHeaderEntry(value)
+  if (headerEntry.kind === "unreadable") return UNREADABLE_DIAGNOSTIC_VALUE
+  if (headerEntry.kind === "entry" && isSensitiveHeader(headerEntry.name)) {
+    return [headerEntry.name, REDACTED_DIAGNOSTIC_VALUE]
+  }
+  return redactArrayItems(value, state)
+}
+
+function redactOpaqueOrRecord(value: object, state: RedactionState): unknown {
+  if (typeof Headers !== "undefined" && value instanceof Headers)
+    return redactHeaders(value, state)
+  if (value instanceof Map || value instanceof Set)
+    return REDACTED_DIAGNOSTIC_VALUE
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value))
+    return "[Binary diagnostic omitted]"
+  return redactObject(value as Record<string, unknown>, state)
+}
+
+function redactObjectValue(value: object, state: RedactionState): unknown {
+  if (value instanceof URL) return redactUrl(value.toString())
+  if (
+    typeof URLSearchParams !== "undefined" &&
+    value instanceof URLSearchParams
+  )
+    return REDACTED_DIAGNOSTIC_VALUE
+  if (value instanceof Error) return redactTrackedError(value, state)
+  if (Array.isArray(value)) return redactArray(value, state)
+  return redactOpaqueOrRecord(value, state)
 }
 
 function redactValue(
@@ -361,84 +454,11 @@ function redactValue(
   key: string,
   state: RedactionState
 ): unknown {
-  if (isSensitiveKey(key)) return REDACTED_DIAGNOSTIC_VALUE
-  if (isPathKey(key)) return REDACTED_DIAGNOSTIC_VALUE
-
+  if (isSensitiveKey(key) || isPathKey(key)) return REDACTED_DIAGNOSTIC_VALUE
   if (isHeadersKey(key)) return redactHeaders(value, state)
-  if (typeof value === "string") return redactString(value, state)
-  if (
-    value === null ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "undefined"
-  ) {
-    return value
-  }
-  if (typeof value === "bigint") return "[BigInt]"
-  if (typeof value === "function") return "[Function]"
-  if (typeof value === "symbol") return "[Symbol]"
-
-  if (value instanceof URL) return redactUrl(value.toString())
-  if (
-    typeof URLSearchParams !== "undefined" &&
-    value instanceof URLSearchParams
-  ) {
-    return REDACTED_DIAGNOSTIC_VALUE
-  }
-  if (value instanceof Error) {
-    if (state.depth >= MAX_DIAGNOSTIC_DEPTH) return REDACTED_DIAGNOSTIC_VALUE
-    if (state.seen.has(value)) return CIRCULAR_DIAGNOSTIC_VALUE
-    state.seen.add(value)
-    return redactError(value, state)
-  }
-  if (Array.isArray(value)) {
-    if (state.depth >= MAX_DIAGNOSTIC_DEPTH) return REDACTED_DIAGNOSTIC_VALUE
-    const headerEntries = inspectHeaderEntries(value)
-    if (headerEntries.kind === "entries") {
-      return redactHeaderEntries(headerEntries.entries, state)
-    }
-    const headerEntry = inspectHeaderEntry(value)
-    if (headerEntry.kind === "unreadable") {
-      return UNREADABLE_DIAGNOSTIC_VALUE
-    }
-    if (headerEntry.kind === "entry" && isSensitiveHeader(headerEntry.name)) {
-      return [headerEntry.name, REDACTED_DIAGNOSTIC_VALUE]
-    }
-    if (state.seen.has(value)) return CIRCULAR_DIAGNOSTIC_VALUE
-    state.seen.add(value)
-    const childState: RedactionState = {
-      depth: state.depth + 1,
-      seen: state.seen,
-    }
-    const items: unknown[] = []
-    const length = readArrayLength(value)
-    if (length === null) return UNREADABLE_DIAGNOSTIC_VALUE
-    const limit = Math.min(length, MAX_DIAGNOSTIC_ARRAY_ITEMS)
-    for (let index = 0; index < limit; index += 1) {
-      const item = readArrayCell(value, index)
-      if (item.kind !== "value") {
-        items.push(UNREADABLE_DIAGNOSTIC_VALUE)
-        continue
-      }
-      try {
-        items.push(redactValue(item.value, "", childState))
-      } catch {
-        items.push(UNREADABLE_DIAGNOSTIC_VALUE)
-      }
-    }
-    return items
-  }
-  if (typeof Headers !== "undefined" && value instanceof Headers) {
-    return redactHeaders(value, state)
-  }
-  if (value instanceof Map || value instanceof Set) {
-    return REDACTED_DIAGNOSTIC_VALUE
-  }
-  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-    return "[Binary diagnostic omitted]"
-  }
-
-  return redactObject(value as Record<string, unknown>, state)
+  return typeof value === "object" && value !== null
+    ? redactObjectValue(value, state)
+    : redactPrimitive(value, state)
 }
 
 /** Convert an arbitrary diagnostic value into a bounded, redacted value. */

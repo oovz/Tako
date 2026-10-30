@@ -100,6 +100,12 @@ export async function resolveSeriesDataViaOffscreen(
     input.signal?.removeEventListener("abort", cancel)
   }
 
+  return readSeriesParseResponse(response)
+}
+
+function readSeriesParseResponse(
+  response: RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML"> | undefined
+): SeriesDataResolutionResult {
   if (!response) {
     throw new Error("No response from offscreen series HTML parser")
   }

@@ -33,7 +33,15 @@ export async function resolveSiteIntegrationDispatchContext(
     )
   }
 
-  let data: SiteIntegrationDispatchContextEnvelope["data"] | undefined
+  const data = await prepareSiteIntegrationDispatchContext(input, capability)
+  if (data === undefined) return undefined
+  return { schemaVersion, data }
+}
+
+async function prepareSiteIntegrationDispatchContext(
+  input: SiteIntegrationDispatchContextInput,
+  capability: "optional" | "required"
+): Promise<SiteIntegrationDispatchContextEnvelope["data"] | undefined> {
   try {
     const integration = await getBackgroundSiteAdapterById(
       input.siteIntegrationId
@@ -49,7 +57,7 @@ export async function resolveSiteIntegrationDispatchContext(
       return undefined
     }
 
-    data = await prepareDispatchContext({
+    return await prepareDispatchContext({
       taskId: input.taskId,
       seriesKey: input.seriesKey,
       chapter: input.chapter,
@@ -69,7 +77,4 @@ export async function resolveSiteIntegrationDispatchContext(
     })
     return undefined
   }
-
-  if (data === undefined) return undefined
-  return { schemaVersion, data }
 }

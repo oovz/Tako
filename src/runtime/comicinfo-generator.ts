@@ -9,7 +9,11 @@
  * like Komga, Kavita, and other ComicInfo.xml-supporting applications.
  */
 
-import type { ComicInfoV2, ComicInfoVersionSupport } from "../types/comic-info"
+import type {
+  ComicInfoV2,
+  ComicInfoVersionSupport,
+  ComicPageInfo,
+} from "../types/comic-info"
 import logger from "@/src/runtime/logger"
 
 /**
@@ -276,7 +280,14 @@ function validateField(fieldName: string, value: unknown): boolean {
     return !field.required
   }
 
-  switch (field.type) {
+  return validateFieldType(field.type, value)
+}
+
+function validateFieldType(
+  type: ComicInfoField["type"],
+  value: unknown
+): boolean {
+  switch (type) {
     case "string":
       return typeof value === "string" || typeof value === "number"
     case "number":
@@ -318,33 +329,77 @@ function filterMetadataByVersion(
 /**
  * Clean and validate unified metadata
  */
-function cleanUnifiedMetadata(metadata: ComicInfoV2): ComicInfoV2 {
-  const cleaned: ComicInfoV2 = {}
-
-  for (const [key, value] of Object.entries(metadata)) {
-    if (value !== null && value !== undefined && value !== "") {
-      const fieldKey = key as keyof ComicInfoV2
-
-      // Type-specific cleaning
-      if (typeof value === "string") {
-        const trimmed = value.trim()
-        if (trimmed.length > 0) {
-          ;(cleaned as Record<string, unknown>)[fieldKey] = trimmed
-        }
-      } else if (typeof value === "number") {
-        if (
-          value > 0 ||
-          ["Year", "Month", "Day", "Count", "Volume", "PageCount"].includes(key)
-        ) {
-          ;(cleaned as Record<string, unknown>)[fieldKey] = value
-        }
-      } else {
-        ;(cleaned as Record<string, unknown>)[fieldKey] = value
-      }
-    }
+function cleanMetadataValue(key: string, value: unknown): unknown {
+  if (typeof value === "string") return value.trim() || undefined
+  if (typeof value === "number") {
+    return value > 0 ||
+      ["Year", "Month", "Day", "Count", "Volume", "PageCount"].includes(key)
+      ? value
+      : undefined
   }
+  return value
+}
 
+function cleanUnifiedMetadata(metadata: ComicInfoV2): ComicInfoV2 {
+  const cleaned: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    const normalized = cleanMetadataValue(key, value)
+    if (normalized !== null && normalized !== undefined)
+      cleaned[key] = normalized
+  }
   return cleaned
+}
+
+function renderMetadataField(
+  fieldName: string,
+  value: ComicInfoV2[keyof ComicInfoV2]
+): string {
+  if (value === null || value === undefined || value === "") return ""
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value)
+  return `  <${fieldName}>${escapeXML(text)}</${fieldName}>\n`
+}
+
+function renderPageAttribute(
+  name: string,
+  value: ComicPageInfo[keyof ComicPageInfo],
+  type: "string" | "number" | "boolean"
+): string | undefined {
+  if (type === "string") {
+    return value ? `${name}="${escapeXML(String(value))}"` : undefined
+  }
+  return typeof value === type ? `${name}="${String(value)}"` : undefined
+}
+
+function renderComicPage(page: ComicPageInfo): string {
+  const attributes = [
+    `Image="${page.Image}"`,
+    renderPageAttribute("Type", page.Type, "string"),
+    renderPageAttribute("DoublePage", page.DoublePage, "boolean"),
+    renderPageAttribute("ImageSize", page.ImageSize, "number"),
+    renderPageAttribute("Key", page.Key, "string"),
+    renderPageAttribute("Bookmark", page.Bookmark, "string"),
+    renderPageAttribute("ImageWidth", page.ImageWidth, "number"),
+    renderPageAttribute("ImageHeight", page.ImageHeight, "number"),
+  ].filter((attribute) => attribute !== undefined)
+  return `    <Page ${attributes.join(" ")} />\n`
+}
+
+function renderComicPages(
+  metadata: ComicInfoV2,
+  hasCoverImage: boolean
+): string {
+  if (Array.isArray(metadata.Pages) && metadata.Pages.length > 0) {
+    let pages = ""
+    for (const page of metadata.Pages) pages += renderComicPage(page)
+    return `  <Pages>\n${pages}  </Pages>\n`
+  }
+  if (!hasCoverImage || !metadata.PageCount || metadata.PageCount <= 0)
+    return ""
+  let pages = '    <Page Image="0" Type="FrontCover" />\n'
+  for (let index = 1; index < metadata.PageCount; index += 1) {
+    pages += `    <Page Image="${index}" />\n`
+  }
+  return `  <Pages>\n${pages}  </Pages>\n`
 }
 
 /**
@@ -404,77 +459,11 @@ function generateVersionSpecificXML(
     "PageCount",
   ]
 
-  // Add fields in order
   for (const fieldName of fieldOrder) {
-    const value = metadata[fieldName]
-    if (value !== null && value !== undefined && value !== "") {
-      // Skip Pages array - handle separately if needed
-      if (fieldName === "Pages") continue
-      const strValue =
-        typeof value === "object" ? JSON.stringify(value) : String(value)
-      xml += `  <${fieldName}>${escapeXML(strValue)}</${fieldName}>\n`
-    }
+    xml += renderMetadataField(fieldName, metadata[fieldName])
   }
 
-  // Add any additional fields not in the standard order
-  for (const [fieldName, value] of Object.entries(metadata)) {
-    if (
-      !fieldOrder.includes(fieldName as keyof ComicInfoV2) &&
-      fieldName !== "Pages" &&
-      value !== null &&
-      value !== undefined &&
-      value !== ""
-    ) {
-      xml += `  <${fieldName}>${escapeXML(String(value))}</${fieldName}>\n`
-    }
-  }
-
-  const explicitPages = Array.isArray(metadata.Pages)
-    ? metadata.Pages
-    : undefined
-
-  // Add Pages section from explicit page metadata when provided.
-  if (explicitPages && explicitPages.length > 0) {
-    xml += "  <Pages>\n"
-    for (const page of explicitPages) {
-      const attributes = [`Image="${page.Image}"`]
-      if (page.Type) {
-        attributes.push(`Type="${escapeXML(page.Type)}"`)
-      }
-      if (typeof page.DoublePage === "boolean") {
-        attributes.push(`DoublePage="${page.DoublePage}"`)
-      }
-      if (typeof page.ImageSize === "number") {
-        attributes.push(`ImageSize="${page.ImageSize}"`)
-      }
-      if (page.Key) {
-        attributes.push(`Key="${escapeXML(page.Key)}"`)
-      }
-      if (page.Bookmark) {
-        attributes.push(`Bookmark="${escapeXML(page.Bookmark)}"`)
-      }
-      if (typeof page.ImageWidth === "number") {
-        attributes.push(`ImageWidth="${page.ImageWidth}"`)
-      }
-      if (typeof page.ImageHeight === "number") {
-        attributes.push(`ImageHeight="${page.ImageHeight}"`)
-      }
-
-      xml += `    <Page ${attributes.join(" ")} />\n`
-    }
-    xml += "  </Pages>\n"
-  }
-  // Otherwise derive a simple Pages section when we only know there is a cover image.
-  else if (hasCoverImage && metadata.PageCount && metadata.PageCount > 0) {
-    xml += "  <Pages>\n"
-    // First page is the cover
-    xml += '    <Page Image="0" Type="FrontCover" />\n'
-    // Remaining pages are chapter content
-    for (let i = 1; i < metadata.PageCount; i++) {
-      xml += `    <Page Image="${i}" />\n`
-    }
-    xml += "  </Pages>\n"
-  }
+  xml += renderComicPages(metadata, hasCoverImage)
 
   xml += "</ComicInfo>"
   return xml
