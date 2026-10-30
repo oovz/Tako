@@ -1,10 +1,4 @@
-import {
-  type TransitionEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react"
+import React from "react"
 
 import { t } from "@/src/runtime/i18n"
 import { useActiveTaskProgress } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
@@ -24,48 +18,16 @@ import { SidePanelHeader } from "@/entrypoints/sidepanel/components/SidePanelHea
 import { SidePanelQueueRegion } from "@/entrypoints/sidepanel/components/SidePanelQueueRegion"
 import { SeriesContextCard } from "@/entrypoints/sidepanel/components/SeriesContextCard"
 import { SeriesInlineSelection } from "@/entrypoints/sidepanel/components/SeriesInlineSelection"
-import { useUiPreferences } from "@/src/ui/shared/hooks/useUiPreferences"
-import { useI18n } from "@/src/ui/shared/hooks/useI18n"
-import {
-  applyUiPreferences,
-  toDocumentLanguageTag,
-} from "@/src/ui/shared/ui-preferences"
+import { useInlineSelectionPresence } from "./SidePanelApp-selection"
+import { useSidePanelDocumentPreferences } from "./SidePanelApp-document"
 
-function prefersReducedMotion() {
-  if (typeof window === "undefined") return false
-
-  return (
-    document.documentElement.dataset.takoMotion === "reduce" ||
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
-  )
-}
-
-export const INLINE_SELECTION_LAYOUT_TRANSITION_PROPERTY = "flex-grow"
-
-export function shouldUnmountInlineSelectionAfterTransition(
-  event: Pick<TransitionEvent, "propertyName">,
-  isOpen: boolean,
-  state: "open" | "closed"
-): boolean {
-  return (
-    event.propertyName === INLINE_SELECTION_LAYOUT_TRANSITION_PROPERTY &&
-    !isOpen &&
-    state === "closed"
-  )
-}
+export {
+  INLINE_SELECTION_LAYOUT_TRANSITION_PROPERTY,
+  shouldUnmountInlineSelectionAfterTransition,
+} from "./SidePanelApp-selection"
 
 export function SidePanelApp() {
-  const { value: uiPreferences, hydrated: uiPreferencesHydrated } =
-    useUiPreferences()
-  const { locale } = useI18n()
-  useEffect(() => {
-    if (!uiPreferencesHydrated) return
-    void applyUiPreferences(uiPreferences)
-  }, [uiPreferences, uiPreferencesHydrated])
-  useEffect(() => {
-    document.documentElement.lang = toDocumentLanguageTag(locale)
-    document.title = t("extName")
-  }, [locale])
+  useSidePanelDocumentPreferences()
 
   const seriesData: SidepanelSeriesContextData = useSidepanelSeriesContext()
   const {
@@ -76,42 +38,13 @@ export function SidePanelApp() {
     isInlineSelectionOpen,
     setInlineSelectionOpen,
   } = useInlineSelectionState(seriesData)
-  const [isInlineSelectionPresent, setInlineSelectionPresent] = useState(
-    isInlineSelectionOpen
-  )
-  const isInlineSelectionVisible =
-    isInlineSelectionOpen || isInlineSelectionPresent
-  const updateInlineSelectionOpen = useCallback(
-    (open: boolean) => {
-      if (open || prefersReducedMotion()) {
-        setInlineSelectionPresent(open)
-      }
-      setInlineSelectionOpen(open)
-    },
-    [setInlineSelectionOpen]
-  )
-  const inlineSelectionTriggerRef = useRef<HTMLButtonElement>(null)
-  const closeInlineSelectionAndRestoreFocus = useCallback(() => {
-    updateInlineSelectionOpen(false)
-    inlineSelectionTriggerRef.current?.focus()
-  }, [updateInlineSelectionOpen])
-  const handleInlineSelectionTransitionEnd = useCallback(
-    (event: TransitionEvent<HTMLDivElement>) => {
-      if (event.target !== event.currentTarget) return
-
-      const state = event.currentTarget.dataset.state as "open" | "closed"
-      if (
-        shouldUnmountInlineSelectionAfterTransition(
-          event,
-          isInlineSelectionOpen,
-          state
-        )
-      ) {
-        setInlineSelectionPresent(false)
-      }
-    },
-    [isInlineSelectionOpen]
-  )
+  const {
+    isInlineSelectionVisible,
+    updateInlineSelectionOpen,
+    inlineSelectionTriggerRef,
+    closeInlineSelectionAndRestoreFocus,
+    handleInlineSelectionTransitionEnd,
+  } = useInlineSelectionPresence(isInlineSelectionOpen, setInlineSelectionOpen)
   const {
     cancelingTaskIds,
     retryingTaskIds,
@@ -140,6 +73,8 @@ export function SidePanelApp() {
   const hasOptionsActionItems = useOptionsActionItems()
 
   const showActiveProgress = activeTaskProgress !== null
+  const countsAvailable = status === "ready" || status === "stale"
+  const inlineSelectionState = isInlineSelectionOpen ? "open" : "closed"
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -155,12 +90,8 @@ export function SidePanelApp() {
         <ErrorBanner />
         <div className="px-2 pt-2"></div>
         <SidePanelHeader
-          activeCount={
-            status === "ready" || status === "stale" ? activeCount : null
-          }
-          queuedCount={
-            status === "ready" || status === "stale" ? queuedCount : null
-          }
+          activeCount={countsAvailable ? activeCount : null}
+          queuedCount={countsAvailable ? queuedCount : null}
           hasOptionsActionItems={hasOptionsActionItems}
           onOpenSettings={openSettings}
         />
@@ -188,7 +119,7 @@ export function SidePanelApp() {
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
                 data-sidepanel-selection-region
-                data-state={isInlineSelectionOpen ? "open" : "closed"}
+                data-state={inlineSelectionState}
                 className={`relative min-h-0 basis-0 overflow-hidden transition-[flex-grow] duration-[280ms] ease-out ${
                   isInlineSelectionOpen ? "grow" : "grow-0"
                 }`}
@@ -197,7 +128,7 @@ export function SidePanelApp() {
                 <div
                   id="inline-selection-panel"
                   data-sidepanel-inline-selection
-                  data-state={isInlineSelectionOpen ? "open" : "closed"}
+                  data-state={inlineSelectionState}
                   aria-hidden={!isInlineSelectionOpen}
                   inert={!isInlineSelectionOpen}
                   className="h-full min-h-0 overflow-hidden"
