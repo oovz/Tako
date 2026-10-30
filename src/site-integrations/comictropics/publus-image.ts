@@ -219,10 +219,6 @@ function selectExcluding(
   excluded: number,
   length: number
 ): number {
-  if (length <= 0) {
-    return 0
-  }
-
   const selected = next(length)
   return selected < excluded ? selected : selected + 1
 }
