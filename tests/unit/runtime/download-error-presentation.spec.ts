@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   getDownloadCancelPresentation,
   getDownloadErrorMessage,
+  getDownloadFailureMessage,
 } from "@/src/runtime/download-error-presentation"
 import { DOWNLOAD_ERROR_CATEGORIES } from "@/src/shared/download-contract"
 
@@ -50,6 +51,38 @@ describe("download error presentation", () => {
     expect(getDownloadErrorMessage(raw)).not.toContain(raw)
     expect(getDownloadErrorMessage(raw)).not.toContain("token=secret")
   })
+
+  it.each([
+    {
+      label: "a confirmed interruption",
+      category: "browser_download_interrupted",
+      outputUncertain: false,
+      expectedKeys: ["downloadError_browserDownloadInterrupted"],
+    },
+    {
+      label: "an interruption with other unconfirmed output",
+      category: "browser_download_interrupted",
+      outputUncertain: true,
+      expectedKeys: [
+        "downloadError_browserDownloadInterrupted",
+        "downloadError_browserOutputUnconfirmed",
+      ],
+    },
+    {
+      label: "an already unconfirmed failure",
+      category: "browser_output_unconfirmed",
+      outputUncertain: true,
+      expectedKeys: ["downloadError_browserOutputUnconfirmed"],
+    },
+  ] as const)(
+    "shows uncertainty recovery guidance once for $label",
+    ({ category, outputUncertain, expectedKeys }) => {
+      expect(getDownloadFailureMessage(category, outputUncertain)).toBe(
+        expectedKeys.join(" ")
+      )
+    }
+  )
+
   it("describes the scope of task cancellation", () => {
     expect(getDownloadCancelPresentation()).toEqual({
       title: "sidepanel_cancelThisDownload",

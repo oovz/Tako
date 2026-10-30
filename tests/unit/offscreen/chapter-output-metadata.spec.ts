@@ -255,4 +255,38 @@ describe("chapter artifact metadata and browser output identities", () => {
       expect(harness.ledger.getUsedBytes()).toBe(0)
     }
   )
+
+  it("preserves Japanese right-to-left reading order in archived ComicInfo", async () => {
+    const harness = createHarness("cbz", false)
+    harness.opts.seriesMetadata = { language: "ja", readingDirection: "rtl" }
+
+    const outcome = await processArchiveFormatChapter(harness.runtime, {
+      opts: harness.opts,
+      urls: URLS,
+      integrationId: "mycomic",
+      downloadImage: harness.downloadImage,
+      normalizeSettings: {
+        normalizeImageFilenames: true,
+        imagePaddingDigits: 3,
+      },
+    })
+
+    expect(outcome.status).toBe("completed")
+    expect(harness.requestBrowserBlobDownload).toHaveBeenCalledTimes(1)
+    const [[output]] = harness.requestBrowserBlobDownload.mock.calls
+    const entries = unzipSync(new Uint8Array(await output.blob.arrayBuffer()))
+    const window = new Window()
+    try {
+      const document = new window.DOMParser().parseFromString(
+        strFromU8(entries["ComicInfo.xml"]),
+        "application/xml"
+      )
+      expect(document.getElementsByTagName("Manga")[0]?.textContent).toBe(
+        "YesAndRightToLeft"
+      )
+    } finally {
+      await window.happyDOM.close()
+    }
+    expect(harness.ledger.getUsedBytes()).toBe(0)
+  })
 })

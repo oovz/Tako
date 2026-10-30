@@ -100,6 +100,22 @@ describe("decoded image resource limits", () => {
     })
   })
 
+  it("reads the full PNG IHDR width before applying the decoded image limit", () => {
+    const bytes = new Uint8Array(24)
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    bytes.set([0x49, 0x48, 0x44, 0x52], 12)
+    const view = new DataView(bytes.buffer)
+    view.setUint32(16, 65_537)
+    view.setUint32(20, 512)
+
+    const dimensions = readDimensions(bytes.buffer, "image/png")
+
+    expect(dimensions).toEqual({ width: 65_537, height: 512 })
+    expect(() =>
+      assertDecodedImageWithinLimits(dimensions.width, dimensions.height, "PNG")
+    ).toThrow(DecodedImageResourceLimitError)
+  })
+
   it.each([0xc0, 0xc2])(
     "reads baseline/progressive JPEG SOF marker 0x%02x",
     (marker) => {
