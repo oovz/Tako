@@ -102,11 +102,18 @@ export const ActiveTabContextByWindowSchema = z
     }
   })
 
+function parseOptionalState<T>(
+  schema: z.ZodType<T>,
+  value: unknown
+): T | undefined {
+  const parsed = schema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
 export function parseMangaPageState(
   value: unknown
 ): MangaPageState | undefined {
-  const parsed = MangaPageStateSchema.safeParse(value)
-  return parsed.success ? parsed.data : undefined
+  return parseOptionalState(MangaPageStateSchema, value)
 }
 
 export function isMangaPageState(value: unknown): value is MangaPageState {
@@ -116,12 +123,21 @@ export function isMangaPageState(value: unknown): value is MangaPageState {
 export function parseActiveTabContextByWindow(
   value: unknown
 ): ActiveTabContextByWindow | undefined {
-  const parsed = ActiveTabContextByWindowSchema.safeParse(value)
-  return parsed.success ? parsed.data : undefined
+  return parseOptionalState(ActiveTabContextByWindowSchema, value)
 }
 
 export function isActiveTabContextByWindow(
   value: unknown
 ): value is ActiveTabContextByWindow {
   return ActiveTabContextByWindowSchema.safeParse(value).success
+}
+
+export function isLoadingTabContext(
+  value: unknown
+): value is { loading: true } {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { loading?: unknown }).loading === true
+  )
 }

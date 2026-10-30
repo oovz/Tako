@@ -204,70 +204,94 @@ export const DownloadTaskStateDocumentSchema = z
   .object(downloadTaskStateShape)
   .strict()
 
-export const DownloadTaskStateSchema =
-  DownloadTaskStateDocumentSchema.superRefine((task, ctx) => {
-    if (
-      (task.status === "queued" || task.status === "downloading") &&
-      task.settingsSnapshot.destination.kind === "file-system-access" &&
-      task.settingsSnapshot.destination.handleId === null
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["settingsSnapshot", "destination"],
-        message: "Active folder tasks require their captured folder identity",
-      })
-    }
-    if (
-      (task.status === "queued" || task.status === "downloading") &&
-      task.chapters.some(
-        (chapter) =>
-          (chapter.status === "queued" || chapter.status === "downloading") &&
-          chapter.requestedPath === null
-      )
+type TaskDocument = z.infer<typeof DownloadTaskStateDocumentSchema>
+
+function validateCapturedFolder(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    (task.status === "queued" || task.status === "downloading") &&
+    task.settingsSnapshot.destination.kind === "file-system-access" &&
+    task.settingsSnapshot.destination.handleId === null
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["settingsSnapshot", "destination"],
+      message: "Active folder tasks require their captured folder identity",
+    })
+  }
+}
+
+function validateCapturedChapterPaths(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    (task.status === "queued" || task.status === "downloading") &&
+    task.chapters.some(
+      (chapter) =>
+        (chapter.status === "queued" || chapter.status === "downloading") &&
+        chapter.requestedPath === null
     )
-      ctx.addIssue({
-        code: "custom",
-        path: ["chapters"],
-        message: "Active chapters require a captured requested path",
-      })
-    if (task.activeBlock === "destination_action_required") {
-      if (!task.destinationIssue) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue"],
-          message: "destination blocks require a paired destination issue",
-        })
-        return
-      }
-      if (task.destinationIssue.taskId !== task.id) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue", "taskId"],
-          message: "destination issue task ID must match its task",
-        })
-      }
-      if (
-        task.destinationIssue.chapterId !== undefined &&
-        !task.chapters.some(
-          (chapter) => chapter.id === task.destinationIssue?.chapterId
-        )
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["destinationIssue", "chapterId"],
-          message: "destination issue chapter ID must match its task",
-        })
-      }
-      return
-    }
-    if (task.destinationIssue) {
+  )
+    ctx.addIssue({
+      code: "custom",
+      path: ["chapters"],
+      message: "Active chapters require a captured requested path",
+    })
+}
+
+function validateDestinationIssuePair(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  const issue = task.destinationIssue
+  if (task.activeBlock === "destination_action_required") {
+    if (!issue) {
       ctx.addIssue({
         code: "custom",
         path: ["destinationIssue"],
-        message: "destination issues require a destination block",
+        message: "destination blocks require a paired destination issue",
       })
+      return
     }
-  })
+    if (issue.taskId !== task.id)
+      ctx.addIssue({
+        code: "custom",
+        path: ["destinationIssue", "taskId"],
+        message: "destination issue task ID must match its task",
+      })
+    if (
+      issue.chapterId !== undefined &&
+      !task.chapters.some((chapter) => chapter.id === issue.chapterId)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["destinationIssue", "chapterId"],
+        message: "destination issue chapter ID must match its task",
+      })
+    return
+  }
+  if (issue)
+    ctx.addIssue({
+      code: "custom",
+      path: ["destinationIssue"],
+      message: "destination issues require a destination block",
+    })
+}
+
+function validateDownloadTaskState(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  validateCapturedFolder(task, ctx)
+  validateCapturedChapterPaths(task, ctx)
+  validateDestinationIssuePair(task, ctx)
+}
+
+export const DownloadTaskStateSchema =
+  DownloadTaskStateDocumentSchema.superRefine(validateDownloadTaskState)
 
 export const ActiveDispatchLeaseSchema = z
   .object({

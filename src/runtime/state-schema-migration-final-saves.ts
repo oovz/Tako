@@ -13,7 +13,8 @@ import {
 import { parseEpoch5NativeOutputState } from "./state-schema-migration-native-schema"
 import {
   nativeStorageKeys,
-  parseNativeStorageIndex,
+  nativeStateWrites,
+  readIndexedNativeState,
 } from "./state-schema-migration-output"
 
 function currentCategory(category: string | undefined) {
@@ -75,21 +76,14 @@ export function buildFinalSaveWrites(
     ),
   }
   if (stored[nativeStorageKeys.index] === undefined) return writes
-  const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
-  const previous = parseEpoch5NativeOutputState({
-    manifestsByJobId: Object.fromEntries(
-      index.jobIds.flatMap((id) => {
-        const raw = stored[nativeStorageKeys.manifestPrefix + id]
-        return raw === undefined ? [] : [[id, raw]]
-      })
-    ),
-    outputsByOutputId: Object.fromEntries(
-      index.outputIds.flatMap((id) => {
-        const raw = stored[nativeStorageKeys.outputPrefix + id]
-        return raw === undefined ? [] : [[id, raw]]
-      })
-    ),
-  })
+  Object.assign(writes, finalNativeSaveWrites(stored))
+  return writes
+}
+
+function finalNativeSaveWrites(
+  stored: Record<string, unknown>
+): Record<string, unknown> {
+  const previous = parseEpoch5NativeOutputState(readIndexedNativeState(stored))
   const state = parseCurrentNativeOutputState({
     manifestsByJobId: Object.fromEntries(
       Object.entries(previous.manifestsByJobId).map(([id, manifest]) => [
@@ -115,30 +109,5 @@ export function buildFinalSaveWrites(
       ])
     ),
   })
-  Object.assign(writes, {
-    [nativeStorageKeys.index]: {
-      jobIds: Object.keys(state.manifestsByJobId),
-      outputIds: Object.keys(state.outputsByOutputId),
-      downloadIdToOutputId: Object.fromEntries(
-        Object.values(state.outputsByOutputId).flatMap((output) =>
-          output.downloadId === undefined
-            ? []
-            : [[String(output.downloadId), output.outputId]]
-        )
-      ),
-    },
-    ...Object.fromEntries(
-      Object.entries(state.manifestsByJobId).map(([id, manifest]) => [
-        nativeStorageKeys.manifestPrefix + id,
-        manifest,
-      ])
-    ),
-    ...Object.fromEntries(
-      Object.entries(state.outputsByOutputId).map(([id, output]) => [
-        nativeStorageKeys.outputPrefix + id,
-        output,
-      ])
-    ),
-  })
-  return writes
+  return nativeStateWrites(state)
 }

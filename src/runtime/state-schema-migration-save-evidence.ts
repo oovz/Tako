@@ -18,10 +18,7 @@ import {
   SeriesDownloadHistorySchema,
   parseHistoryAggregate,
 } from "./state-schema-migration-history-schema"
-import {
-  nativeStorageKeys,
-  parseNativeStorageIndex,
-} from "./state-schema-migration-output"
+import { readIndexedNativeState } from "./state-schema-migration-output"
 
 const confirmationSchema = z.number().finite().nonnegative().optional()
 const ChapterSchema = DownloadTaskStateSchema.shape.chapters.element.extend({
@@ -85,21 +82,66 @@ export function validateSaveEvidenceHistory(
 export function readEpoch5NativeOutputState(
   stored: Record<string, unknown>
 ): NativeOutputState {
-  const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
-  return parseEpoch5NativeOutputState({
-    manifestsByJobId: Object.fromEntries(
-      index.jobIds.flatMap((id) => {
-        const value = stored[nativeStorageKeys.manifestPrefix + id]
-        return value === undefined ? [] : [[id, value]]
-      })
-    ),
-    outputsByOutputId: Object.fromEntries(
-      index.outputIds.flatMap((id) => {
-        const value = stored[nativeStorageKeys.outputPrefix + id]
-        return value === undefined ? [] : [[id, value]]
-      })
-    ),
-  })
+  return parseEpoch5NativeOutputState(readIndexedNativeState(stored))
+}
+
+type NativeManifest = NativeOutputState["manifestsByJobId"][string]
+type NativeSlot = NativeManifest["slots"][number]
+type NativeSettlement = NonNullable<TaskChapter["nativeOutputSettlement"]>
+
+function matchesChapter(
+  reference: { taskId: string; chapterId: string } | undefined,
+  task: DownloadTaskState,
+  chapter: TaskChapter
+): boolean {
+  return (
+    reference !== undefined &&
+    reference.taskId === task.id &&
+    reference.chapterId === chapter.id
+  )
+}
+
+function confirmsRequestedBatch(
+  manifest: NativeManifest,
+  settlement: NativeSettlement
+): boolean {
+  return (
+    manifest.phase === "sealed" &&
+    manifest.attempt === settlement.attempt &&
+    manifest.outputsRequested > 0 &&
+    manifest.outputsRequested === settlement.requested &&
+    manifest.outputsFailedBeforeHandoff === 0 &&
+    manifest.slots.length === manifest.outputsRequested
+  )
+}
+
+function confirmedOutputTime(
+  slot: NativeSlot,
+  manifest: NativeManifest,
+  native: NativeOutputState
+): number | undefined {
+  if (slot?.disposition !== "tracked") return undefined
+  const output = native.outputsByOutputId[slot.outputId]
+  if (
+    !output ||
+    !nativeOutputJobIdentityMatches(output, manifest) ||
+    output.phase !== "complete"
+  )
+    return undefined
+  return output.terminalAt
+}
+
+function confirmedBatchTime(
+  manifest: NativeManifest,
+  native: NativeOutputState
+): number | undefined {
+  const times: number[] = []
+  for (const slot of manifest.slots) {
+    const time = confirmedOutputTime(slot, manifest, native)
+    if (time === undefined) return undefined
+    times.push(time)
+  }
+  return Math.max(...times)
 }
 
 function confirmedAt(
@@ -110,39 +152,98 @@ function confirmedAt(
   if (chapter.status !== "completed") return undefined
   if (chapter.outputDestination === "fsa") return chapter.lastUpdated
   const settlement = chapter.nativeOutputSettlement
-  if (
-    !settlement ||
-    settlement.taskId !== task.id ||
-    settlement.chapterId !== chapter.id
-  )
+  if (!settlement || !matchesChapter(settlement, task, chapter))
     return undefined
   const manifest = native.manifestsByJobId[settlement.jobId]
   if (
     !manifest ||
-    manifest.phase !== "sealed" ||
-    manifest.taskId !== task.id ||
-    manifest.chapterId !== chapter.id ||
-    manifest.attempt !== settlement.attempt ||
-    manifest.outputsRequested <= 0 ||
-    manifest.outputsRequested !== settlement.requested ||
-    manifest.outputsFailedBeforeHandoff !== 0 ||
-    manifest.slots.length !== manifest.outputsRequested
+    !matchesChapter(manifest, task, chapter) ||
+    !confirmsRequestedBatch(manifest, settlement)
   )
     return undefined
-  const times: number[] = []
-  for (const slot of manifest.slots) {
-    if (slot?.disposition !== "tracked") return undefined
-    const output = native.outputsByOutputId[slot.outputId]
-    if (
-      !output ||
-      !nativeOutputJobIdentityMatches(output, manifest) ||
-      output.phase !== "complete" ||
-      output.terminalAt === undefined
-    )
-      return undefined
-    times.push(output.terminalAt)
+  return confirmedBatchTime(manifest, native)
+}
+
+type SaveEvidence = {
+  saveConfirmedAt: number
+  outputDestination: "fsa" | "downloads-api"
+}
+type Proofs = Map<string, Map<number, SaveEvidence>>
+
+function upgradeTaskSaveEvidence(
+  task: DownloadTaskState,
+  native: NativeOutputState,
+  proofs: Proofs
+): DownloadTaskState {
+  return {
+    ...task,
+    chapters: task.chapters.map((chapter) => {
+      const saveConfirmedAt = confirmedAt(task, chapter, native)
+      if (saveConfirmedAt === undefined) return { ...chapter }
+      const key = composeDownloadedChapterKey(
+        task.siteIntegrationId,
+        task.mangaId,
+        chapter.id
+      )
+      const byTime = proofs.get(key) ?? new Map<number, SaveEvidence>()
+      const proof: SaveEvidence = {
+        saveConfirmedAt,
+        outputDestination: chapter.outputDestination ?? "downloads-api",
+      }
+      byTime.set(chapter.lastUpdated, proof)
+      proofs.set(key, byTime)
+      return { ...chapter, ...proof }
+    }),
   }
-  return Math.max(...times)
+}
+
+function upgradeHistoryRecord(
+  record: DownloadedChapterRecord,
+  proofs: Proofs
+): DownloadedChapterRecord {
+  if (record.outputDestination === "fsa")
+    return { ...record, saveConfirmedAt: record.downloadedAt }
+  const key = composeDownloadedChapterKey(
+    record.siteIntegrationId,
+    record.seriesId,
+    record.chapterId
+  )
+  const proof = proofs.get(key)?.get(record.downloadedAt)
+  return {
+    ...record,
+    ...(proof !== undefined &&
+    (record.outputDestination === undefined ||
+      record.outputDestination === proof.outputDestination)
+      ? proof
+      : {}),
+  }
+}
+
+function historySaveEvidenceWrites(
+  stored: Record<string, unknown>,
+  proofs: Proofs
+): Record<string, unknown> {
+  if (
+    ![
+      LOCAL_STORAGE_KEYS.downloadedChapters,
+      LOCAL_STORAGE_KEYS.seriesDownloadHistory,
+      LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
+    ].some((key) => key in stored)
+  )
+    return {}
+  const history = parseHistoryAggregate({
+    downloadedChapters: stored[LOCAL_STORAGE_KEYS.downloadedChapters],
+    seriesDownloadHistory: stored[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
+    clearCutoffs: stored[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs],
+  })
+  const records = history.downloadedChapters.map((record) =>
+    upgradeHistoryRecord(record, proofs)
+  )
+  return {
+    [LOCAL_STORAGE_KEYS.downloadedChapters]: records,
+    [LOCAL_STORAGE_KEYS.seriesDownloadHistory]: rebuildSeriesHistory(records),
+    [LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs]: history.clearCutoffs,
+  }
 }
 
 export function buildSaveEvidenceWrites(
@@ -163,84 +264,20 @@ export function buildSaveEvidenceWrites(
         : stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
     )
   const native = readEpoch5NativeOutputState(stored)
-  type SaveEvidence = {
-    saveConfirmedAt: number
-    outputDestination: "fsa" | "downloads-api"
-  }
-  const proofs = new Map<string, Map<number, SaveEvidence>>()
-  const upgradeTask = (task: DownloadTaskState): DownloadTaskState => ({
-    ...task,
-    chapters: task.chapters.map((chapter) => {
-      const saveConfirmedAt = confirmedAt(task, chapter, native)
-      if (saveConfirmedAt !== undefined) {
-        const key = composeDownloadedChapterKey(
-          task.siteIntegrationId,
-          task.mangaId,
-          chapter.id
-        )
-        const byTime = proofs.get(key) ?? new Map<number, SaveEvidence>()
-        byTime.set(chapter.lastUpdated, {
-          saveConfirmedAt,
-          outputDestination: chapter.outputDestination ?? "downloads-api",
-        })
-        proofs.set(key, byTime)
-      }
-      return {
-        ...chapter,
-        ...(saveConfirmedAt === undefined
-          ? {}
-          : {
-              saveConfirmedAt,
-              outputDestination: chapter.outputDestination ?? "downloads-api",
-            }),
-      }
-    }),
-  })
+  const proofs: Proofs = new Map()
   const writes: Record<string, unknown> = {
-    [LOCAL_STORAGE_KEYS.downloadQueue]: queue.map(upgradeTask),
+    [LOCAL_STORAGE_KEYS.downloadQueue]: queue.map((task) =>
+      upgradeTaskSaveEvidence(task, native, proofs)
+    ),
     [LOCAL_STORAGE_KEYS.pendingUndoActions]: undo.map((action) => ({
       ...action,
-      taskSnapshot: upgradeTask(action.taskSnapshot),
+      taskSnapshot: upgradeTaskSaveEvidence(
+        action.taskSnapshot,
+        native,
+        proofs
+      ),
     })),
   }
-  if (
-    [
-      LOCAL_STORAGE_KEYS.downloadedChapters,
-      LOCAL_STORAGE_KEYS.seriesDownloadHistory,
-      LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
-    ].some((key) => key in stored)
-  ) {
-    const history = parseHistoryAggregate({
-      downloadedChapters: stored[LOCAL_STORAGE_KEYS.downloadedChapters],
-      seriesDownloadHistory: stored[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
-      clearCutoffs: stored[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs],
-    })
-    const records = history.downloadedChapters.map((record) => {
-      if (record.outputDestination === "fsa")
-        return { ...record, saveConfirmedAt: record.downloadedAt }
-      const proof = proofs
-        .get(
-          composeDownloadedChapterKey(
-            record.siteIntegrationId,
-            record.seriesId,
-            record.chapterId
-          )
-        )
-        ?.get(record.downloadedAt)
-      return {
-        ...record,
-        ...(proof !== undefined &&
-        (record.outputDestination === undefined ||
-          record.outputDestination === proof.outputDestination)
-          ? proof
-          : {}),
-      }
-    })
-    Object.assign(writes, {
-      [LOCAL_STORAGE_KEYS.downloadedChapters]: records,
-      [LOCAL_STORAGE_KEYS.seriesDownloadHistory]: rebuildSeriesHistory(records),
-      [LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs]: history.clearCutoffs,
-    })
-  }
+  Object.assign(writes, historySaveEvidenceWrites(stored, proofs))
   return writes
 }

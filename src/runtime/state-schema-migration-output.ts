@@ -97,55 +97,58 @@ function convertOutput(raw: unknown): unknown {
   return { ...record, phase: "waiting" }
 }
 
-/** Converts indexed records together so identity and resource invariants are validated. */
-export function convertStoredNativeState(
-  stored: Record<string, unknown>
+function indexedNativeRecords(
+  stored: Record<string, unknown>,
+  ids: string[],
+  prefix: string
+) {
+  return Object.fromEntries(
+    ids.flatMap((id) => {
+      const value = stored[prefix + id]
+      return value === undefined ? [] : [[id, value]]
+    })
+  )
+}
+
+/** Read the indexed documents; each migration validates its own historical epoch. */
+export function readIndexedNativeState(
+  stored: Record<string, unknown>,
+  index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
+) {
+  return {
+    manifestsByJobId: indexedNativeRecords(
+      stored,
+      index.jobIds,
+      nativeStorageKeys.manifestPrefix
+    ),
+    outputsByOutputId: indexedNativeRecords(
+      stored,
+      index.outputIds,
+      nativeStorageKeys.outputPrefix
+    ),
+  }
+}
+
+type IndexedNativeState = {
+  manifestsByJobId: Record<string, unknown>
+  outputsByOutputId: Record<string, { downloadId?: number; outputId: string }>
+}
+
+/** Serialize an already validated epoch without interpreting its save evidence. */
+export function nativeStateWrites(
+  state: IndexedNativeState
 ): Record<string, unknown> {
-  if (stored[nativeStorageKeys.index] === undefined) return {}
-  const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
-  if (
-    new Set(index.jobIds).size !== index.jobIds.length ||
-    new Set(index.outputIds).size !== index.outputIds.length
-  ) {
-    throw new Error("Native output index contains duplicate identities")
-  }
-  const outputsByOutputId = Object.fromEntries(
-    index.outputIds.flatMap((id) => {
-      const raw = stored[nativeStorageKeys.outputPrefix + id]
-      return raw === undefined ? [] : [[id, convertOutput(raw)]]
-    })
-  )
-  const manifestsByJobId = Object.fromEntries(
-    index.jobIds.flatMap((id) => {
-      const raw = stored[nativeStorageKeys.manifestPrefix + id]
-      if (raw === undefined) return []
-      if (!isRecord(raw)) throw new Error("Invalid native output manifest")
-      // The former job-release transition already required resolved accounting.
-      // Its receipt proves that acknowledgement, without proving a successful save.
-      const manifest = { ...raw }
-      if (
-        manifest.dependencyReleasedAt !== undefined &&
-        manifest.settlementAcknowledgedAt === undefined
-      ) {
-        manifest.settlementAcknowledgedAt = manifest.dependencyReleasedAt
-      }
-      return [[id, manifest]]
-    })
-  )
-  const state = parseEpoch5NativeOutputState({
-    manifestsByJobId,
-    outputsByOutputId,
-  })
-  const downloadIdToOutputId: Record<string, string> = {}
-  for (const output of Object.values(state.outputsByOutputId)) {
-    if (output.downloadId !== undefined)
-      downloadIdToOutputId[String(output.downloadId)] = output.outputId
-  }
   return {
     [nativeStorageKeys.index]: {
       jobIds: Object.keys(state.manifestsByJobId),
       outputIds: Object.keys(state.outputsByOutputId),
-      downloadIdToOutputId,
+      downloadIdToOutputId: Object.fromEntries(
+        Object.values(state.outputsByOutputId).flatMap((output) =>
+          output.downloadId === undefined
+            ? []
+            : [[String(output.downloadId), output.outputId]]
+        )
+      ),
     },
     ...Object.fromEntries(
       Object.entries(state.manifestsByJobId).map(([id, manifest]) => [
@@ -160,6 +163,47 @@ export function convertStoredNativeState(
       ])
     ),
   }
+}
+
+function convertManifest(raw: unknown): unknown {
+  if (!isRecord(raw)) throw new Error("Invalid native output manifest")
+  // The former job-release receipt proves accounting acknowledgement, without proving a successful save.
+  const manifest = { ...raw }
+  if (
+    manifest.dependencyReleasedAt !== undefined &&
+    manifest.settlementAcknowledgedAt === undefined
+  )
+    manifest.settlementAcknowledgedAt = manifest.dependencyReleasedAt
+  return manifest
+}
+
+/** Converts indexed records together so identity and resource invariants are validated. */
+export function convertStoredNativeState(
+  stored: Record<string, unknown>
+): Record<string, unknown> {
+  if (stored[nativeStorageKeys.index] === undefined) return {}
+  const index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
+  if (
+    new Set(index.jobIds).size !== index.jobIds.length ||
+    new Set(index.outputIds).size !== index.outputIds.length
+  )
+    throw new Error("Native output index contains duplicate identities")
+  const records = readIndexedNativeState(stored, index)
+  const state = parseEpoch5NativeOutputState({
+    outputsByOutputId: Object.fromEntries(
+      Object.entries(records.outputsByOutputId).map(([id, raw]) => [
+        id,
+        convertOutput(raw),
+      ])
+    ),
+    manifestsByJobId: Object.fromEntries(
+      Object.entries(records.manifestsByJobId).map(([id, raw]) => [
+        id,
+        convertManifest(raw),
+      ])
+    ),
+  })
+  return nativeStateWrites(state)
 }
 
 export function validateNativeOutputMigrationWrites(

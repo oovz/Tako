@@ -93,7 +93,3 @@ export function parseSettingsDocument(value: unknown): ExtensionSettings {
   }
   return parsed.data
 }
-
-export function cloneSettings(settings: ExtensionSettings): ExtensionSettings {
-  return structuredClone(settings)
-}

@@ -182,44 +182,72 @@ export const DownloadTaskStateDocumentSchema = z
   .object(downloadTaskStateShape)
   .strict()
 
+type TaskDocument = z.infer<typeof DownloadTaskStateDocumentSchema>
+
+function validateFallbackConsent(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    (task.fsaFallbackEligible || task.useChromeFallback) &&
+    (task.settingsSnapshot.allowChromeFallback !== true ||
+      task.settingsSnapshot.destination.kind !== "file-system-access" ||
+      (task.fsaFallbackEligible && task.useChromeFallback))
+  )
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "Fallback state requires captured folder consent and one effective target",
+    })
+}
+
+function validateCapturedFolder(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    (task.status === "queued" || task.status === "downloading") &&
+    task.settingsSnapshot.destination.kind === "file-system-access" &&
+    task.settingsSnapshot.destination.handleId === null
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["settingsSnapshot", "destination"],
+      message: "Active folder tasks require their captured folder identity",
+    })
+  }
+}
+
+function validateCapturedChapterPaths(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  if (
+    (task.status === "queued" || task.status === "downloading") &&
+    task.chapters.some(
+      (chapter) =>
+        (chapter.status === "queued" || chapter.status === "downloading") &&
+        chapter.requestedPath === null
+    )
+  )
+    ctx.addIssue({
+      code: "custom",
+      path: ["chapters"],
+      message: "Active chapters require a captured requested path",
+    })
+}
+
+function validateDownloadTaskState(
+  task: TaskDocument,
+  ctx: z.RefinementCtx
+): void {
+  validateFallbackConsent(task, ctx)
+  validateCapturedFolder(task, ctx)
+  validateCapturedChapterPaths(task, ctx)
+}
+
 export const DownloadTaskStateSchema =
-  DownloadTaskStateDocumentSchema.superRefine((task, ctx) => {
-    if (
-      (task.fsaFallbackEligible || task.useChromeFallback) &&
-      (task.settingsSnapshot.allowChromeFallback !== true ||
-        task.settingsSnapshot.destination.kind !== "file-system-access" ||
-        (task.fsaFallbackEligible && task.useChromeFallback))
-    )
-      ctx.addIssue({
-        code: "custom",
-        message:
-          "Fallback state requires captured folder consent and one effective target",
-      })
-    if (
-      (task.status === "queued" || task.status === "downloading") &&
-      task.settingsSnapshot.destination.kind === "file-system-access" &&
-      task.settingsSnapshot.destination.handleId === null
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["settingsSnapshot", "destination"],
-        message: "Active folder tasks require their captured folder identity",
-      })
-    }
-    if (
-      (task.status === "queued" || task.status === "downloading") &&
-      task.chapters.some(
-        (chapter) =>
-          (chapter.status === "queued" || chapter.status === "downloading") &&
-          chapter.requestedPath === null
-      )
-    )
-      ctx.addIssue({
-        code: "custom",
-        path: ["chapters"],
-        message: "Active chapters require a captured requested path",
-      })
-  })
+  DownloadTaskStateDocumentSchema.superRefine(validateDownloadTaskState)
 
 export const ActiveDispatchLeaseSchema = z
   .object({

@@ -127,20 +127,4 @@ export function parseHistoryAggregate(
   return aggregate
 }
 
-export function cloneHistoryAggregate(
-  aggregate: HistoryAggregate
-): HistoryAggregate {
-  return structuredClone(aggregate)
-}
-
-export function serializeHistoryAggregate(
-  aggregate: HistoryAggregate
-): Record<string, unknown> {
-  return {
-    downloadedChapters: aggregate.downloadedChapters,
-    seriesDownloadHistory: aggregate.seriesDownloadHistory,
-    clearCutoffs: aggregate.clearCutoffs,
-  }
-}
-
 export { DownloadedChapterRecordSchema, SeriesDownloadHistorySchema }

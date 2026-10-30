@@ -11,6 +11,94 @@ import {
 
 type SourceTask = z.infer<typeof SourceTaskSchema>
 
+type SourceChapter = SourceTask["chapters"][number]
+type DestinationIssue = SourceTask["destinationIssue"]
+
+const FOLDER_ERROR_CATEGORIES = new Map<
+  string,
+  "folder_permission_required" | "disk_full" | "folder_write_failed"
+>([
+  ["fsa_permission_required", "folder_permission_required"],
+  ["disk_full", "disk_full"],
+  ["fsa_write_failed", "folder_write_failed"],
+])
+
+function folderErrorCategory(task: SourceTask, issue: DestinationIssue) {
+  return (
+    task.errorCategory ??
+    FOLDER_ERROR_CATEGORIES.get(issue?.kind ?? "") ??
+    "folder_unavailable"
+  )
+}
+
+function pendingFolderChapter(task: SourceTask, issue: DestinationIssue) {
+  return (
+    task.chapters.find(
+      (chapter) =>
+        chapter.id === issue?.chapterId &&
+        (chapter.status === "queued" || chapter.status === "downloading")
+    ) ??
+    task.chapters.find((chapter) => chapter.status === "downloading") ??
+    task.chapters.find((chapter) => chapter.status === "queued")
+  )
+}
+
+function settleFolderChapter(
+  chapter: SourceChapter,
+  pendingId: string | undefined,
+  now: number,
+  message: string,
+  category: ReturnType<typeof folderErrorCategory>
+): SourceChapter {
+  if (chapter.id === pendingId)
+    return {
+      ...chapter,
+      status:
+        (chapter.outputs?.committed ?? 0) > 0 ? "partial_success" : "failed",
+      errorMessage: message,
+      errorCategory: category,
+      lastUpdated: Math.max(chapter.lastUpdated, now),
+    }
+  if (chapter.status === "queued")
+    return {
+      ...chapter,
+      status: "skipped",
+      lastUpdated: Math.max(chapter.lastUpdated, now),
+    }
+  return chapter
+}
+
+function folderTaskStatus(chapters: SourceChapter[]) {
+  if (
+    chapters.length > 0 &&
+    chapters.every((chapter) => chapter.status === "completed")
+  )
+    return "completed"
+  const saved = chapters.some(
+    (chapter) =>
+      chapter.status === "completed" || (chapter.outputs?.committed ?? 0) > 0
+  )
+  return saved ? "partial_success" : "failed"
+}
+
+function folderTaskFailure(
+  chapters: SourceChapter[],
+  status: ReturnType<typeof folderTaskStatus>,
+  message: string,
+  category: ReturnType<typeof folderErrorCategory>
+) {
+  if (status === "completed")
+    return { errorMessage: undefined, errorCategory: undefined }
+  const failure = chapters.find(
+    (chapter) =>
+      chapter.status === "failed" || chapter.status === "partial_success"
+  )
+  return {
+    errorMessage: failure?.errorMessage ?? message,
+    errorCategory: failure?.errorCategory ?? category,
+  }
+}
+
 function convertTask(source: SourceTask) {
   const task = { ...source }
   const issue = task.destinationIssue
@@ -20,66 +108,23 @@ function convertTask(source: SourceTask) {
   const blocked = task.activeBlock === "destination_action_required"
   const activeBlock = blocked ? undefined : task.activeBlock
   if (!blocked) return DownloadTaskStateSchema.parse({ ...task, activeBlock })
-  const category =
-    task.errorCategory ??
-    (issue?.kind === "fsa_permission_required"
-      ? "folder_permission_required"
-      : issue?.kind === "disk_full"
-        ? "disk_full"
-        : issue?.kind === "fsa_write_failed"
-          ? "folder_write_failed"
-          : "folder_unavailable")
+  const category = folderErrorCategory(task, issue)
   const message =
     task.errorMessage ?? "The task's selected folder is unavailable."
-  const pending =
-    task.chapters.find(
-      (chapter) =>
-        chapter.id === issue?.chapterId &&
-        (chapter.status === "queued" || chapter.status === "downloading")
-    ) ??
-    task.chapters.find((chapter) => chapter.status === "downloading") ??
-    task.chapters.find((chapter) => chapter.status === "queued")
+  const pending = pendingFolderChapter(task, issue)
   const now = issue?.occurredAt ?? task.started ?? task.created
   const chapters = task.chapters.map((chapter) =>
-    chapter.id === pending?.id
-      ? {
-          ...chapter,
-          status:
-            (chapter.outputs?.committed ?? 0) > 0
-              ? "partial_success"
-              : "failed",
-          errorMessage: message,
-          errorCategory: category,
-          lastUpdated: Math.max(chapter.lastUpdated, now),
-        }
-      : chapter.status === "queued"
-        ? {
-            ...chapter,
-            status: "skipped",
-            lastUpdated: Math.max(chapter.lastUpdated, now),
-          }
-        : chapter
+    settleFolderChapter(chapter, pending?.id, now, message, category)
   )
-  const failure = chapters.find(
-    (chapter) =>
-      chapter.status === "failed" || chapter.status === "partial_success"
-  )
-  const completed =
-    chapters.length > 0 &&
-    chapters.every((chapter) => chapter.status === "completed")
-  const saved = chapters.some(
-    (chapter) =>
-      chapter.status === "completed" || (chapter.outputs?.committed ?? 0) > 0
-  )
+  const status = folderTaskStatus(chapters)
   return DownloadTaskStateSchema.parse({
     ...task,
     chapters,
+    status,
     activeBlock,
-    status: completed ? "completed" : saved ? "partial_success" : "failed",
+    ...folderTaskFailure(chapters, status, message, category),
     completed: Math.max(now, ...chapters.map((chapter) => chapter.lastUpdated)),
     nextChapterDispatchAt: undefined,
-    errorMessage: completed ? undefined : (failure?.errorMessage ?? message),
-    errorCategory: completed ? undefined : (failure?.errorCategory ?? category),
   })
 }
 

@@ -1,3 +1,7 @@
+import {
+  boundedInteger,
+  canonicalizeSettings,
+} from "./state-schema-migration-settings"
 import { parseSettingsDocument as parseCurrentSettingsDocument } from "@/src/domain/settings/schema"
 import {
   DownloadTaskStateSchema as FallbackTaskSchema,
@@ -77,13 +81,7 @@ import {
 import { SeriesMetadataSnapshotSchema } from "@/src/runtime/series-data-schemas"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
-import {
-  ARCHIVE_FORMATS,
-  CONFLICT_POLICIES,
-  DOWNLOAD_DESTINATIONS,
-  IMAGE_PADDING_DIGITS,
-  LOG_LEVELS,
-} from "@/src/shared/download-contract"
+import { ARCHIVE_FORMATS } from "@/src/shared/download-contract"
 import {
   LegacyTaskSettingsSnapshotSchema,
   LegacyDownloadTaskSchema,
@@ -91,16 +89,10 @@ import {
   LegacyDownloadedChapterSchema,
   LegacyHistoryCutoffsSchema,
 } from "./state-schema-migration-legacy-schemas"
-import { MOTION_PREFERENCES } from "@/src/shared/motion-preference"
-import {
-  clampRatePolicyInteger,
-  RATE_POLICY_LIMITS,
-} from "@/src/shared/rate-policy-limits"
-import { UI_LANGUAGE_PREFERENCES } from "@/src/shared/ui-language"
+import { RATE_POLICY_LIMITS } from "@/src/shared/rate-policy-limits"
 import { isRecord } from "@/src/shared/type-guards"
 import { assertValidSettingsFieldValue } from "@/src/site-integrations/catalog"
 import { assertSafePublicHttpsUrl } from "@/src/site-integrations/request-policy"
-import { DOWNLOAD_ROOT_HANDLE_ID } from "@/src/storage/fs-access"
 import {
   parseSiteIntegrationEnablementDocument,
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
@@ -170,182 +162,6 @@ const MIGRATION_OBSOLETE_KEYS = new Set([
   LEGACY_DESTINATION_ISSUES_STORAGE_KEY,
 ])
 
-function boundedInteger(
-  value: unknown,
-  fallback: number,
-  minimum: number,
-  maximum: number
-): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? clampRatePolicyInteger(value, minimum, maximum)
-    : fallback
-}
-
-function nonemptyString(value: unknown, fallback: string): string {
-  return typeof value === "string" && value.length > 0 ? value : fallback
-}
-
-function canonicalizeSettings(
-  raw: unknown
-): ReturnType<typeof parseSettingsDocument> | undefined {
-  if (raw === undefined) return undefined
-  if (!isRecord(raw)) throw new Error("Stored settings are not an object")
-
-  const defaults = createDefaultSettings("warn")
-  const downloads = isRecord(raw.downloads) ? raw.downloads : {}
-  const globalPolicy = isRecord(raw.globalPolicy) ? raw.globalPolicy : {}
-  const imagePolicy = isRecord(globalPolicy.image) ? globalPolicy.image : {}
-  const chapterPolicy = isRecord(globalPolicy.chapter)
-    ? globalPolicy.chapter
-    : {}
-  const retries = isRecord(raw.globalRetries) ? raw.globalRetries : {}
-  const advanced = isRecord(raw.advanced) ? raw.advanced : {}
-
-  const canonicalDestination = DOWNLOAD_DESTINATIONS.find(
-    (candidate) => candidate === downloads.destination
-  )
-  const legacyDestination =
-    downloads.downloadMode === "custom" ||
-    downloads.customDirectoryEnabled === true
-      ? "file-system-access"
-      : downloads.downloadMode === "browser" ||
-          downloads.customDirectoryEnabled === false
-        ? "downloads-api"
-        : undefined
-  const destination =
-    canonicalDestination ?? legacyDestination ?? defaults.downloads.destination
-
-  const canonicalConflictPolicy = CONFLICT_POLICIES.find(
-    (candidate) => candidate === downloads.conflictPolicy
-  )
-  const legacyConflictPolicy =
-    destination === "file-system-access"
-      ? downloads.fsaCollisionPolicy === "overwrite"
-        ? "overwrite"
-        : downloads.fsaCollisionPolicy === "skip"
-          ? "uniquify"
-          : undefined
-      : typeof downloads.overwriteExisting === "boolean"
-        ? downloads.overwriteExisting
-          ? "overwrite"
-          : "uniquify"
-        : undefined
-
-  const handleId =
-    typeof downloads.customDirectoryHandleId === "string" &&
-    downloads.customDirectoryHandleId.length > 0
-      ? downloads.customDirectoryHandleId
-      : destination === "file-system-access"
-        ? DOWNLOAD_ROOT_HANDLE_ID
-        : defaults.downloads.customDirectoryHandleId
-
-  const settings: ReturnType<typeof parseSettingsDocument> = {
-    downloads: {
-      destination,
-      customDirectoryHandleId: handleId,
-      pathTemplate: nonemptyString(
-        downloads.pathTemplate,
-        defaults.downloads.pathTemplate
-      ),
-      defaultFormat:
-        ARCHIVE_FORMATS.find(
-          (candidate) => candidate === downloads.defaultFormat
-        ) ?? defaults.downloads.defaultFormat,
-      fileNameTemplate: nonemptyString(
-        downloads.fileNameTemplate,
-        defaults.downloads.fileNameTemplate
-      ),
-      conflictPolicy:
-        canonicalConflictPolicy ??
-        legacyConflictPolicy ??
-        defaults.downloads.conflictPolicy,
-      suppressSaveAsDialog:
-        typeof downloads.suppressSaveAsDialog === "boolean"
-          ? downloads.suppressSaveAsDialog
-          : defaults.downloads.suppressSaveAsDialog,
-      includeComicInfo:
-        typeof downloads.includeComicInfo === "boolean"
-          ? downloads.includeComicInfo
-          : defaults.downloads.includeComicInfo,
-      includeCoverImage:
-        typeof downloads.includeCoverImage === "boolean"
-          ? downloads.includeCoverImage
-          : defaults.downloads.includeCoverImage,
-      normalizeImageFilenames:
-        typeof downloads.normalizeImageFilenames === "boolean"
-          ? downloads.normalizeImageFilenames
-          : defaults.downloads.normalizeImageFilenames,
-      imagePaddingDigits:
-        IMAGE_PADDING_DIGITS.find(
-          (candidate) => candidate === downloads.imagePaddingDigits
-        ) ?? defaults.downloads.imagePaddingDigits,
-    },
-    globalPolicy: {
-      image: {
-        concurrency: boundedInteger(
-          imagePolicy.concurrency,
-          defaults.globalPolicy.image.concurrency,
-          RATE_POLICY_LIMITS.MIN_CONCURRENCY,
-          RATE_POLICY_LIMITS.MAX_CONCURRENCY
-        ),
-        delayMs: boundedInteger(
-          imagePolicy.delayMs,
-          defaults.globalPolicy.image.delayMs,
-          RATE_POLICY_LIMITS.MIN_DELAY_MS,
-          RATE_POLICY_LIMITS.MAX_DELAY_MS
-        ),
-      },
-      chapter: {
-        concurrency: 1,
-        delayMs: boundedInteger(
-          chapterPolicy.delayMs,
-          defaults.globalPolicy.chapter.delayMs,
-          RATE_POLICY_LIMITS.MIN_DELAY_MS,
-          RATE_POLICY_LIMITS.MAX_DELAY_MS
-        ),
-      },
-    },
-    globalRetries: {
-      image: boundedInteger(
-        retries.image,
-        defaults.globalRetries.image,
-        SETTINGS_LIMITS.MIN_RETRIES,
-        SETTINGS_LIMITS.MAX_RETRIES
-      ),
-      chapter: boundedInteger(
-        retries.chapter,
-        defaults.globalRetries.chapter,
-        SETTINGS_LIMITS.MIN_RETRIES,
-        SETTINGS_LIMITS.MAX_RETRIES
-      ),
-    },
-    notifications:
-      typeof raw.notifications === "boolean"
-        ? raw.notifications
-        : defaults.notifications,
-    motionPreference:
-      MOTION_PREFERENCES.find(
-        (candidate) => candidate === raw.motionPreference
-      ) ?? defaults.motionPreference,
-    uiLanguage:
-      UI_LANGUAGE_PREFERENCES.find(
-        (candidate) => candidate === raw.uiLanguage
-      ) ?? defaults.uiLanguage,
-    advanced: {
-      logLevel:
-        LOG_LEVELS.find((candidate) => candidate === advanced.logLevel) ??
-        defaults.advanced.logLevel,
-      storageCleanupDays:
-        typeof advanced.storageCleanupDays === "number" &&
-        Number.isFinite(advanced.storageCleanupDays) &&
-        advanced.storageCleanupDays >= 0
-          ? advanced.storageCleanupDays
-          : defaults.advanced.storageCleanupDays,
-    },
-  }
-  return parseSettingsDocument(settings)
-}
-
 function snapshotMetadata(
   raw: unknown
 ): z.infer<typeof SeriesMetadataSnapshotSchema> | undefined {
@@ -376,20 +192,111 @@ function migrateCoverUrl(raw: unknown): string | undefined {
   }
 }
 
-function migrateDownloadTask(raw: unknown): DownloadTaskState {
-  const current = DownloadTaskStateSchema.safeParse(raw)
-  if (current.success) return current.data
+type LegacyTask = z.infer<typeof LegacyDownloadTaskSchema>
+type LegacySnapshot = z.infer<typeof LegacyTaskSettingsSnapshotSchema>
+type TaskSnapshot = DownloadTaskState["settingsSnapshot"]
 
-  const legacy = LegacyDownloadTaskSchema.parse(raw)
-  const rawSnapshot = isRecord(legacy.settingsSnapshot)
+function readLegacyTaskSnapshot(legacy: LegacyTask): LegacySnapshot {
+  const raw = isRecord(legacy.settingsSnapshot)
     ? legacy.settingsSnapshot
     : isRecord(legacy.taskSettingsSnapshot)
       ? legacy.taskSettingsSnapshot
       : undefined
-  const parsedSnapshot = rawSnapshot
-    ? LegacyTaskSettingsSnapshotSchema.parse(rawSnapshot)
-    : undefined
-  const baseSnapshot = taskSettingsSnapshotSchema.strip().parse({
+  return raw ? LegacyTaskSettingsSnapshotSchema.parse(raw) : {}
+}
+
+function legacySnapshotConflictPolicy(snapshot: LegacySnapshot) {
+  if (snapshot.conflictPolicy !== undefined) return snapshot.conflictPolicy
+  if (snapshot.destination === "file-system-access")
+    return snapshot.fsaCollisionPolicy === "overwrite"
+      ? "overwrite"
+      : "uniquify"
+  return snapshot.overwriteExisting ? "overwrite" : "uniquify"
+}
+
+function legacySnapshotArchiveSettings(
+  snapshot: LegacySnapshot,
+  base: TaskSnapshot
+) {
+  return {
+    archiveFormat: snapshot.archiveFormat ?? base.archiveFormat,
+    destination: snapshot.destination ?? "downloads-api",
+    conflictPolicy: legacySnapshotConflictPolicy(snapshot),
+    pathTemplate: snapshot.pathTemplate ?? base.pathTemplate,
+    fileNameTemplate: snapshot.fileNameTemplate ?? base.fileNameTemplate,
+    includeComicInfo: snapshot.includeComicInfo ?? base.includeComicInfo,
+    includeCoverImage: snapshot.includeCoverImage ?? base.includeCoverImage,
+  }
+}
+
+function legacySnapshotImageSettings(
+  snapshot: LegacySnapshot,
+  base: TaskSnapshot
+) {
+  return {
+    siteSettings: snapshot.siteSettings ?? base.siteSettings,
+    normalizeImageFilenames:
+      snapshot.normalizeImageFilenames ?? base.normalizeImageFilenames,
+    imagePaddingDigits: snapshot.imagePaddingDigits ?? base.imagePaddingDigits,
+    comicInfo: snapshotMetadata(snapshot.comicInfo) ?? base.comicInfo,
+  }
+}
+
+function legacySnapshotRatePolicy(
+  snapshot: LegacySnapshot,
+  base: TaskSnapshot
+): TaskSnapshot["rateLimitSettings"] {
+  const policy = snapshot.rateLimitSettings ?? {}
+  const image = policy.image ?? {}
+  const chapter = policy.chapter ?? {}
+  return {
+    image: {
+      concurrency: boundedInteger(
+        image.concurrency,
+        base.rateLimitSettings.image.concurrency,
+        RATE_POLICY_LIMITS.MIN_CONCURRENCY,
+        RATE_POLICY_LIMITS.MAX_CONCURRENCY
+      ),
+      delayMs: boundedInteger(
+        image.delayMs,
+        base.rateLimitSettings.image.delayMs,
+        RATE_POLICY_LIMITS.MIN_DELAY_MS,
+        RATE_POLICY_LIMITS.MAX_DELAY_MS
+      ),
+    },
+    chapter: {
+      concurrency: 1,
+      delayMs: boundedInteger(
+        chapter.delayMs,
+        base.rateLimitSettings.chapter.delayMs,
+        RATE_POLICY_LIMITS.MIN_DELAY_MS,
+        RATE_POLICY_LIMITS.MAX_DELAY_MS
+      ),
+    },
+  }
+}
+
+function legacySnapshotRetries(snapshot: LegacySnapshot, base: TaskSnapshot) {
+  const retries = snapshot.retrySettings ?? {}
+  return {
+    image: boundedInteger(
+      retries.image,
+      base.retrySettings.image,
+      SETTINGS_LIMITS.MIN_RETRIES,
+      SETTINGS_LIMITS.MAX_RETRIES
+    ),
+    chapter: boundedInteger(
+      retries.chapter,
+      base.retrySettings.chapter,
+      SETTINGS_LIMITS.MIN_RETRIES,
+      SETTINGS_LIMITS.MAX_RETRIES
+    ),
+  }
+}
+
+function migrateLegacyTaskSnapshot(legacy: LegacyTask): TaskSnapshot {
+  const snapshot = readLegacyTaskSnapshot(legacy)
+  const base = taskSettingsSnapshotSchema.strip().parse({
     ...createTaskSettingsSnapshot(
       createDefaultSettings("warn"),
       legacy.siteIntegrationId,
@@ -399,122 +306,56 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
     ),
     destination: "downloads-api",
   })
-  const imagePolicy = parsedSnapshot?.rateLimitSettings?.image
-  const chapterPolicy = parsedSnapshot?.rateLimitSettings?.chapter
-  const settingsSnapshot = {
-    ...baseSnapshot,
-    archiveFormat: parsedSnapshot?.archiveFormat ?? baseSnapshot.archiveFormat,
-    destination: parsedSnapshot?.destination ?? "downloads-api",
-    conflictPolicy:
-      parsedSnapshot?.conflictPolicy ??
-      (parsedSnapshot?.destination === "file-system-access"
-        ? parsedSnapshot.fsaCollisionPolicy === "overwrite"
-          ? "overwrite"
-          : "uniquify"
-        : parsedSnapshot?.overwriteExisting
-          ? "overwrite"
-          : "uniquify"),
-    pathTemplate: parsedSnapshot?.pathTemplate ?? baseSnapshot.pathTemplate,
-    fileNameTemplate:
-      parsedSnapshot?.fileNameTemplate ?? baseSnapshot.fileNameTemplate,
-    includeComicInfo:
-      parsedSnapshot?.includeComicInfo ?? baseSnapshot.includeComicInfo,
-    includeCoverImage:
-      parsedSnapshot?.includeCoverImage ?? baseSnapshot.includeCoverImage,
-    siteSettings: parsedSnapshot?.siteSettings ?? baseSnapshot.siteSettings,
-    rateLimitSettings: {
-      image: {
-        concurrency: boundedInteger(
-          imagePolicy?.concurrency,
-          baseSnapshot.rateLimitSettings.image.concurrency,
-          RATE_POLICY_LIMITS.MIN_CONCURRENCY,
-          RATE_POLICY_LIMITS.MAX_CONCURRENCY
-        ),
-        delayMs: boundedInteger(
-          imagePolicy?.delayMs,
-          baseSnapshot.rateLimitSettings.image.delayMs,
-          RATE_POLICY_LIMITS.MIN_DELAY_MS,
-          RATE_POLICY_LIMITS.MAX_DELAY_MS
-        ),
-      },
-      chapter: {
-        concurrency: 1 as const,
-        delayMs: boundedInteger(
-          chapterPolicy?.delayMs,
-          baseSnapshot.rateLimitSettings.chapter.delayMs,
-          RATE_POLICY_LIMITS.MIN_DELAY_MS,
-          RATE_POLICY_LIMITS.MAX_DELAY_MS
-        ),
-      },
-    },
-    retrySettings: {
-      image: boundedInteger(
-        parsedSnapshot?.retrySettings?.image,
-        baseSnapshot.retrySettings.image,
-        SETTINGS_LIMITS.MIN_RETRIES,
-        SETTINGS_LIMITS.MAX_RETRIES
-      ),
-      chapter: boundedInteger(
-        parsedSnapshot?.retrySettings?.chapter,
-        baseSnapshot.retrySettings.chapter,
-        SETTINGS_LIMITS.MIN_RETRIES,
-        SETTINGS_LIMITS.MAX_RETRIES
-      ),
-    },
-    normalizeImageFilenames:
-      parsedSnapshot?.normalizeImageFilenames ??
-      baseSnapshot.normalizeImageFilenames,
-    imagePaddingDigits:
-      parsedSnapshot?.imagePaddingDigits ?? baseSnapshot.imagePaddingDigits,
-    comicInfo:
-      snapshotMetadata(parsedSnapshot?.comicInfo) ?? baseSnapshot.comicInfo,
+  return {
+    ...base,
+    ...legacySnapshotArchiveSettings(snapshot, base),
+    ...legacySnapshotImageSettings(snapshot, base),
+    rateLimitSettings: legacySnapshotRatePolicy(snapshot, base),
+    retrySettings: legacySnapshotRetries(snapshot, base),
     siteIntegrationId: legacy.siteIntegrationId,
   }
+}
 
+function optionalImageCount(value: number | undefined) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined
+}
+
+function migrateLegacyChapter(chapter: LegacyTask["chapters"][number]) {
+  const outputs = chapter.outputs ?? {}
+  return {
+    ...chapter,
+    locked: chapter.locked === true,
+    errorCategory: normalizeDownloadErrorCategory(chapter.errorCategory),
+    totalImages: optionalImageCount(chapter.totalImages),
+    imagesFailed: optionalImageCount(chapter.imagesFailed),
+    outputs: {
+      requested: outputs.requested ?? 0,
+      committed: outputs.committed ?? 0,
+      failed: outputs.failed ?? 0,
+    },
+  }
+}
+
+function migrateDownloadTask(raw: unknown): DownloadTaskState {
+  const current = DownloadTaskStateSchema.safeParse(raw)
+  if (current.success) return current.data
+  const legacy = LegacyDownloadTaskSchema.parse(raw)
   return DownloadTaskStateSchema.parse({
     id: legacy.id,
     siteIntegrationId: legacy.siteIntegrationId,
     mangaId: legacy.mangaId,
     seriesTitle: legacy.seriesTitle,
     seriesCoverUrl: migrateCoverUrl(legacy.seriesCoverUrl),
-    chapters: legacy.chapters.map((chapter) => ({
-      ...chapter,
-      locked: chapter.locked === true,
-      errorCategory: normalizeDownloadErrorCategory(chapter.errorCategory),
-      totalImages:
-        typeof chapter.totalImages === "number" &&
-        Number.isInteger(chapter.totalImages) &&
-        chapter.totalImages >= 0
-          ? chapter.totalImages
-          : undefined,
-      imagesFailed:
-        typeof chapter.imagesFailed === "number" &&
-        Number.isInteger(chapter.imagesFailed) &&
-        chapter.imagesFailed >= 0
-          ? chapter.imagesFailed
-          : undefined,
-      outputs: {
-        requested: chapter.outputs?.requested ?? 0,
-        committed: chapter.outputs?.committed ?? 0,
-        failed: chapter.outputs?.failed ?? 0,
-      },
-    })),
+    chapters: legacy.chapters.map(migrateLegacyChapter),
     status: legacy.status,
     errorMessage: legacy.errorMessage,
     errorCategory: normalizeDownloadErrorCategory(legacy.errorCategory),
     activeBlock: legacy.activeBlock,
     destinationIssue:
       legacy.activeBlock === "destination_action_required"
-        ? {
-            id: `${legacy.id}:${legacy.chapters.find((chapter) => chapter.status === "queued" || chapter.status === "downloading")?.id ?? ""}:${destinationIssueKindForErrorCategory(legacy.errorCategory)}`,
-            taskId: legacy.id,
-            chapterId: legacy.chapters.find(
-              (chapter) =>
-                chapter.status === "queued" || chapter.status === "downloading"
-            )?.id,
-            kind: destinationIssueKindForErrorCategory(legacy.errorCategory),
-            occurredAt: legacy.started ?? legacy.created,
-          }
+        ? synthesizeDestinationIssue(legacy)
         : undefined,
     destinationOverride: legacy.destinationOverride,
     created: legacy.created,
@@ -524,7 +365,7 @@ function migrateDownloadTask(raw: unknown): DownloadTaskState {
     isRetryTask: legacy.isRetryTask === true,
     lastSuccessfulDownloadId: legacy.lastSuccessfulDownloadId,
     nextChapterDispatchAt: legacy.nextChapterDispatchAt,
-    settingsSnapshot,
+    settingsSnapshot: migrateLegacyTaskSnapshot(legacy),
   })
 }
 
@@ -541,22 +382,14 @@ function migrateEpoch2DownloadTask(raw: unknown): DownloadTaskState {
   return DownloadTaskStateSchema.parse(normalizeDestinationIssuePair(candidate))
 }
 
-function migrateQueue(raw: unknown): DownloadTaskState[] {
+function migrateQueue(
+  raw: unknown,
+  migrateTask: (raw: unknown) => DownloadTaskState = migrateDownloadTask
+): DownloadTaskState[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw))
     throw new Error("Stored download queue is not an array")
-  const queue = raw.map(migrateDownloadTask)
-  if (new Set(queue.map((task) => task.id)).size !== queue.length) {
-    throw new Error("Stored download queue contains duplicate task IDs")
-  }
-  return queue
-}
-
-function migrateEpoch2Queue(raw: unknown): DownloadTaskState[] {
-  if (raw === undefined) return []
-  if (!Array.isArray(raw))
-    throw new Error("Stored download queue is not an array")
-  const queue = raw.map(migrateEpoch2DownloadTask)
+  const queue = raw.map(migrateTask)
   if (new Set(queue.map((task) => task.id)).size !== queue.length) {
     throw new Error("Stored download queue contains duplicate task IDs")
   }
@@ -581,34 +414,32 @@ function migrateDestinationIssues(raw: unknown): DestinationIssue[] {
   return [...latestByTask.values()]
 }
 
+const LEGACY_DESTINATION_ISSUE_KINDS = new Map<unknown, DestinationIssueKind>([
+  ["folder_permission_required", "fsa_permission_required"],
+  ["folder_write_failed", "fsa_write_failed"],
+  ["disk_full", "disk_full"],
+  ["folder_unavailable", "fsa_folder_missing"],
+])
+
 function destinationIssueKindForErrorCategory(
   errorCategory: unknown
 ): DestinationIssueKind {
-  switch (errorCategory) {
-    case "folder_permission_required":
-      return "fsa_permission_required"
-    case "folder_write_failed":
-      return "fsa_write_failed"
-    case "disk_full":
-      return "disk_full"
-    case "folder_unavailable":
-      return "fsa_folder_missing"
-    default:
-      return "fsa_folder_missing"
-  }
+  return (
+    LEGACY_DESTINATION_ISSUE_KINDS.get(errorCategory) ?? "fsa_folder_missing"
+  )
 }
 
-function destinationIssueKindForTask(
-  task: DownloadTaskState
-): DestinationIssueKind {
-  return destinationIssueKindForErrorCategory(task.errorCategory)
-}
-
-function synthesizeDestinationIssue(task: DownloadTaskState): DestinationIssue {
+function synthesizeDestinationIssue(task: {
+  id: string
+  chapters: { id: string; status: string }[]
+  errorCategory?: unknown
+  started?: number
+  created: number
+}): DestinationIssue {
   const chapterId = task.chapters.find(
     (chapter) => chapter.status === "queued" || chapter.status === "downloading"
   )?.id
-  const kind = destinationIssueKindForTask(task)
+  const kind = destinationIssueKindForErrorCategory(task.errorCategory)
   return {
     id: `${task.id}:${chapterId ?? ""}:${kind}`,
     taskId: task.id,
@@ -739,16 +570,9 @@ function migrateHistoryRecord(
   })
 }
 
-function migrateHistory(
+function readLegacyHistoryRecords(
   stored: Record<string, unknown>
-): Record<string, unknown> | undefined {
-  const hasHistory = [
-    LOCAL_STORAGE_KEYS.downloadedChapters,
-    LOCAL_STORAGE_KEYS.seriesDownloadHistory,
-    LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
-  ].some((key) => key in stored)
-  if (!hasHistory) return undefined
-
+): DownloadedChapterRecord[] {
   const records: DownloadedChapterRecord[] = []
   const rawChapters = stored[LOCAL_STORAGE_KEYS.downloadedChapters]
   if (rawChapters !== undefined) {
@@ -775,6 +599,12 @@ function migrateHistory(
     }
   }
 
+  return records
+}
+
+function latestHistoryRecords(
+  records: DownloadedChapterRecord[]
+): DownloadedChapterRecord[] {
   const byChapter = new Map<string, DownloadedChapterRecord>()
   for (const record of records) {
     const key = composeDownloadedChapterKey(
@@ -787,7 +617,22 @@ function migrateHistory(
       byChapter.set(key, record)
     }
   }
-  const downloadedChapters = [...byChapter.values()]
+  return [...byChapter.values()]
+}
+
+function migrateHistory(
+  stored: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  const hasHistory = [
+    LOCAL_STORAGE_KEYS.downloadedChapters,
+    LOCAL_STORAGE_KEYS.seriesDownloadHistory,
+    LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
+  ].some((key) => key in stored)
+  if (!hasHistory) return undefined
+
+  const downloadedChapters = latestHistoryRecords(
+    readLegacyHistoryRecords(stored)
+  )
 
   const parsedCutoffs = LegacyHistoryCutoffsSchema.parse(
     stored[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs] ?? {}
@@ -878,6 +723,64 @@ function migrateSiteSettings(
   return migrated
 }
 
+function optionalBoundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number
+) {
+  return typeof value === "number"
+    ? boundedInteger(value, minimum, minimum, maximum)
+    : undefined
+}
+
+function migrateSiteOverride(
+  override: Record<string, unknown>
+): SiteOverrideRecord {
+  const image = isRecord(override.imagePolicy) ? override.imagePolicy : {}
+  const chapter = isRecord(override.chapterPolicy) ? override.chapterPolicy : {}
+  const retries = isRecord(override.retries) ? override.retries : {}
+  return SiteOverrideRecordSchema.parse({
+    outputFormat: ARCHIVE_FORMATS.find(
+      (format) => format === override.outputFormat
+    ),
+    pathTemplate:
+      typeof override.pathTemplate === "string"
+        ? override.pathTemplate
+        : undefined,
+    imagePolicy: {
+      concurrency: optionalBoundedInteger(
+        image.concurrency,
+        RATE_POLICY_LIMITS.MIN_CONCURRENCY,
+        RATE_POLICY_LIMITS.MAX_CONCURRENCY
+      ),
+      delayMs: optionalBoundedInteger(
+        image.delayMs,
+        RATE_POLICY_LIMITS.MIN_DELAY_MS,
+        RATE_POLICY_LIMITS.MAX_DELAY_MS
+      ),
+    },
+    chapterPolicy: {
+      delayMs: optionalBoundedInteger(
+        chapter.delayMs,
+        RATE_POLICY_LIMITS.MIN_DELAY_MS,
+        RATE_POLICY_LIMITS.MAX_DELAY_MS
+      ),
+    },
+    retries: {
+      image: optionalBoundedInteger(
+        retries.image,
+        SETTINGS_LIMITS.MIN_RETRIES,
+        SETTINGS_LIMITS.MAX_RETRIES
+      ),
+      chapter: optionalBoundedInteger(
+        retries.chapter,
+        SETTINGS_LIMITS.MIN_RETRIES,
+        SETTINGS_LIMITS.MAX_RETRIES
+      ),
+    },
+  })
+}
+
 function migrateSiteOverrides(
   raw: unknown
 ): Record<string, SiteOverrideRecord> | undefined {
@@ -892,77 +795,34 @@ function migrateSiteOverrides(
       warnDroppedProviderEntry("overrides", siteIntegrationId)
       continue
     }
-    const imagePolicy = isRecord(override.imagePolicy)
-      ? override.imagePolicy
-      : {}
-    const chapterPolicy = isRecord(override.chapterPolicy)
-      ? override.chapterPolicy
-      : {}
-    const retries = isRecord(override.retries) ? override.retries : {}
-    const candidate: SiteOverrideRecord = {
-      outputFormat: ARCHIVE_FORMATS.find(
-        (format) => format === override.outputFormat
-      ),
-      pathTemplate:
-        typeof override.pathTemplate === "string"
-          ? override.pathTemplate
-          : undefined,
-      imagePolicy: {
-        concurrency:
-          typeof imagePolicy.concurrency === "number"
-            ? boundedInteger(
-                imagePolicy.concurrency,
-                RATE_POLICY_LIMITS.MIN_CONCURRENCY,
-                RATE_POLICY_LIMITS.MIN_CONCURRENCY,
-                RATE_POLICY_LIMITS.MAX_CONCURRENCY
-              )
-            : undefined,
-        delayMs:
-          typeof imagePolicy.delayMs === "number"
-            ? boundedInteger(
-                imagePolicy.delayMs,
-                RATE_POLICY_LIMITS.MIN_DELAY_MS,
-                RATE_POLICY_LIMITS.MIN_DELAY_MS,
-                RATE_POLICY_LIMITS.MAX_DELAY_MS
-              )
-            : undefined,
-      },
-      chapterPolicy: {
-        delayMs:
-          typeof chapterPolicy.delayMs === "number"
-            ? boundedInteger(
-                chapterPolicy.delayMs,
-                RATE_POLICY_LIMITS.MIN_DELAY_MS,
-                RATE_POLICY_LIMITS.MIN_DELAY_MS,
-                RATE_POLICY_LIMITS.MAX_DELAY_MS
-              )
-            : undefined,
-      },
-      retries: {
-        image:
-          typeof retries.image === "number"
-            ? boundedInteger(
-                retries.image,
-                SETTINGS_LIMITS.MIN_RETRIES,
-                SETTINGS_LIMITS.MIN_RETRIES,
-                SETTINGS_LIMITS.MAX_RETRIES
-              )
-            : undefined,
-        chapter:
-          typeof retries.chapter === "number"
-            ? boundedInteger(
-                retries.chapter,
-                SETTINGS_LIMITS.MIN_RETRIES,
-                SETTINGS_LIMITS.MIN_RETRIES,
-                SETTINGS_LIMITS.MAX_RETRIES
-              )
-            : undefined,
-      },
-    }
-    migrated[siteIntegrationId] = SiteOverrideRecordSchema.parse(candidate)
+    migrated[siteIntegrationId] = migrateSiteOverride(override)
   }
   parseSiteOverridesDocument(currentIntegrationMapForValidation(migrated))
   return migrated
+}
+
+function persistentErrorTimestamp(value: unknown, now: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : now
+}
+
+function migratePersistentError(value: unknown, now: number) {
+  if (
+    !isRecord(value) ||
+    typeof value.code !== "string" ||
+    value.code.length === 0 ||
+    typeof value.message !== "string"
+  )
+    return []
+  return [
+    {
+      code: value.code,
+      message: value.message,
+      severity: value.severity === "error" ? "error" : "warning",
+      ts: persistentErrorTimestamp(value.ts, now),
+    },
+  ]
 }
 
 function migratePersistentErrors(raw: unknown, now: number): unknown {
@@ -972,93 +832,112 @@ function migratePersistentErrors(raw: unknown, now: number): unknown {
   if (!Array.isArray(raw))
     throw new Error("Stored persistent errors are not an array")
   return PersistentErrorsSchema.parse(
-    raw.flatMap((value) => {
-      if (
-        !isRecord(value) ||
-        typeof value.code !== "string" ||
-        value.code.length === 0 ||
-        typeof value.message !== "string"
-      ) {
-        return []
-      }
-      return [
-        {
-          code: value.code,
-          message: value.message,
-          severity: value.severity === "error" ? "error" : "warning",
-          ts:
-            typeof value.ts === "number" &&
-            Number.isFinite(value.ts) &&
-            value.ts >= 0
-              ? value.ts
-              : now,
-        },
-      ]
-    })
+    raw.flatMap((value) => migratePersistentError(value, now))
   )
+}
+
+type TaskChapter = DownloadTaskState["chapters"][number]
+
+function retainedOutputCounts(chapter: TaskChapter) {
+  const previous = chapter.outputs ?? { requested: 0, committed: 0, failed: 0 }
+  const requested = Math.max(0, previous.requested)
+  const committed = Math.max(0, previous.committed)
+  return {
+    requested,
+    committed,
+    failed: Math.max(0, previous.failed, requested - committed),
+  }
+}
+
+function interruptedChapterResult(
+  chapter: TaskChapter,
+  outputs: ReturnType<typeof retainedOutputCounts>
+) {
+  const complete =
+    chapter.status === "downloading" &&
+    outputs.requested > 0 &&
+    outputs.committed === outputs.requested &&
+    outputs.failed === 0
+  if (complete)
+    return {
+      status: "completed" as const,
+      errorMessage: undefined,
+      errorCategory: undefined,
+    }
+  return {
+    status:
+      chapter.status === "downloading" && outputs.committed > 0
+        ? ("partial_success" as const)
+        : ("failed" as const),
+    errorMessage: UPDATE_INTERRUPTION_MESSAGE,
+    errorCategory: "unknown" as const,
+  }
+}
+
+function normalizeRetainedInterruptedChapter(
+  chapter: TaskChapter,
+  now: number
+): TaskChapter {
+  if (chapter.status !== "downloading" && chapter.status !== "queued")
+    return chapter
+  const outputs = retainedOutputCounts(chapter)
+  return {
+    ...chapter,
+    ...interruptedChapterResult(chapter, outputs),
+    ...(chapter.status === "downloading" && outputs.committed > 0
+      ? { outputs }
+      : {}),
+    lastUpdated: now,
+  }
+}
+
+function interruptedTaskStatus(
+  chapters: TaskChapter[]
+): DownloadTaskState["status"] {
+  if (
+    chapters.length > 0 &&
+    chapters.every((chapter) => chapter.status === "completed")
+  )
+    return "completed"
+  return chapters.some(
+    (chapter) =>
+      chapter.status === "completed" || chapter.status === "partial_success"
+  )
+    ? "partial_success"
+    : "failed"
+}
+
+function interruptedTaskFailure(
+  chapters: TaskChapter[],
+  status: DownloadTaskState["status"]
+) {
+  if (status === "completed")
+    return { errorMessage: undefined, errorCategory: undefined }
+  const firstFailure = chapters.find(
+    (chapter) =>
+      chapter.status === "failed" || chapter.status === "partial_success"
+  )
+  return {
+    errorMessage: firstFailure?.errorMessage ?? UPDATE_INTERRUPTION_MESSAGE,
+    errorCategory: firstFailure?.errorCategory ?? ("unknown" as const),
+  }
 }
 
 function normalizeRetainedInterruptedTask(
   task: DownloadTaskState,
   now: number
 ): DownloadTaskState {
-  const chapters = task.chapters.map((chapter) => {
-    if (chapter.status !== "downloading" && chapter.status !== "queued")
-      return chapter
-    const requested = Math.max(0, chapter.outputs?.requested ?? 0)
-    const committed = Math.max(0, chapter.outputs?.committed ?? 0)
-    const failed = Math.max(
-      0,
-      chapter.outputs?.failed ?? 0,
-      requested - committed
-    )
-    const complete =
-      chapter.status === "downloading" &&
-      requested > 0 &&
-      committed === requested &&
-      failed === 0
-    return {
-      ...chapter,
-      status: complete
-        ? ("completed" as const)
-        : chapter.status === "downloading" && committed > 0
-          ? ("partial_success" as const)
-          : ("failed" as const),
-      errorMessage: complete ? undefined : UPDATE_INTERRUPTION_MESSAGE,
-      errorCategory: complete ? undefined : ("unknown" as const),
-      ...(chapter.status === "downloading" && committed > 0
-        ? { outputs: { requested, committed, failed } }
-        : {}),
-      lastUpdated: now,
-    }
-  })
-  const allCompleted =
-    chapters.length > 0 &&
-    chapters.every((chapter) => chapter.status === "completed")
-  const firstFailure = chapters.find(
-    (chapter) =>
-      chapter.status === "failed" || chapter.status === "partial_success"
+  const chapters = task.chapters.map((chapter) =>
+    normalizeRetainedInterruptedChapter(chapter, now)
   )
+  const status = interruptedTaskStatus(chapters)
   return {
     ...task,
     chapters,
-    status: allCompleted
-      ? "completed"
-      : chapters.some(
-            (chapter) =>
-              chapter.status === "completed" ||
-              chapter.status === "partial_success"
-          )
-        ? "partial_success"
-        : "failed",
+    status,
     activeBlock: undefined,
     destinationIssue: undefined,
-    errorMessage: allCompleted
-      ? undefined
-      : (firstFailure?.errorMessage ?? UPDATE_INTERRUPTION_MESSAGE),
-    errorCategory: allCompleted
-      ? undefined
-      : (firstFailure?.errorCategory ?? "unknown"),
+    ...interruptedTaskFailure(chapters, status),
     completed: task.completed ?? now,
   }
 }
@@ -1093,122 +972,120 @@ function readSupportedEpoch(raw: unknown): number | null {
   return raw
 }
 
-function validateMigrationJournal(journal: MigrationJournal): void {
-  if (
-    !MIGRATION_STEPS.some((step) => step.targetEpoch === journal.targetEpoch)
-  ) {
-    throw new Error("State migration journal has an unsupported target epoch")
-  }
+const JOURNAL_QUEUE_CODECS: Record<
+  number,
+  { task: z.ZodType; undo: z.ZodType }
+> = {
+  3: { task: DownloadTaskStateSchema, undo: PendingUndoActionSchema },
+  4: { task: DownloadTaskStateSchema, undo: PendingUndoActionSchema },
+  5: {
+    task: Epoch5DownloadTaskStateSchema,
+    undo: Epoch5PendingUndoActionSchema,
+  },
+  6: { task: CurrentTaskSchema, undo: CurrentUndoSchema },
+  7: {
+    task: CurrentDownloadTaskStateSchema,
+    undo: CurrentPendingUndoActionSchema,
+  },
+  8: { task: TerminalTaskSchema, undo: TerminalUndoSchema },
+  9: { task: FallbackTaskSchema, undo: FallbackUndoSchema },
+  10: { task: FallbackTaskSchema, undo: FallbackUndoSchema },
+}
+
+function isNativeJournalWriteKey(key: string, targetEpoch: number): boolean {
+  if (targetEpoch !== 4 && targetEpoch !== 7) return false
+  return (
+    key === nativeStorageKeys.index ||
+    key.startsWith(nativeStorageKeys.manifestPrefix) ||
+    key.startsWith(nativeStorageKeys.outputPrefix)
+  )
+}
+
+function validateJournalWriteKeys(journal: MigrationJournal): void {
   for (const key of [
     LOCAL_STORAGE_KEYS.downloadQueue,
     LOCAL_STORAGE_KEYS.pendingUndoActions,
   ]) {
-    if (!Object.hasOwn(journal.writes, key)) {
+    if (!Object.hasOwn(journal.writes, key))
       throw new Error(
         `State migration journal is missing canonical write key: ${key}`
       )
-    }
   }
   for (const key of Object.keys(journal.writes)) {
+    const timing =
+      journal.targetEpoch === 10 &&
+      key === LOCAL_STORAGE_KEYS.progressTimingEstimates
     if (
       !MIGRATION_WRITE_KEYS.has(key) &&
-      !(
-        journal.targetEpoch === 10 &&
-        key === LOCAL_STORAGE_KEYS.progressTimingEstimates
-      ) &&
-      !(
-        (journal.targetEpoch === 4 || journal.targetEpoch === 7) &&
-        (key === nativeStorageKeys.index ||
-          key.startsWith(nativeStorageKeys.manifestPrefix) ||
-          key.startsWith(nativeStorageKeys.outputPrefix))
-      )
-    ) {
+      !timing &&
+      !isNativeJournalWriteKey(key, journal.targetEpoch)
+    )
       throw new Error(
         `State migration journal contains an invalid write key: ${key}`
       )
-    }
   }
-  const seenObsoleteKeys = new Set<string>()
+}
+
+function validateJournalObsoleteKeys(journal: MigrationJournal): void {
+  const seen = new Set<string>()
   for (const key of journal.obsoleteKeys) {
-    if (!MIGRATION_OBSOLETE_KEYS.has(key)) {
+    if (!MIGRATION_OBSOLETE_KEYS.has(key))
       throw new Error(
         `State migration journal contains an invalid obsolete key: ${key}`
       )
-    }
-    if (seenObsoleteKeys.has(key)) {
+    if (seen.has(key))
       throw new Error(
         `State migration journal contains a duplicate obsolete key: ${key}`
       )
-    }
-    seenObsoleteKeys.add(key)
+    seen.add(key)
   }
+}
 
-  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.downloadQueue)) {
-    z.array(
-      journal.targetEpoch === 10 || journal.targetEpoch === 9
-        ? FallbackTaskSchema
-        : journal.targetEpoch === 8
-          ? TerminalTaskSchema
-          : journal.targetEpoch === 7
-            ? CurrentDownloadTaskStateSchema
-            : journal.targetEpoch === 6
-              ? CurrentTaskSchema
-              : journal.targetEpoch === 5
-                ? Epoch5DownloadTaskStateSchema
-                : DownloadTaskStateSchema
-    ).parse(
-      journal.targetEpoch === 3
-        ? (journal.writes[LOCAL_STORAGE_KEYS.downloadQueue] as unknown[]).map(
-            convertStoredTask
-          )
-        : journal.writes[LOCAL_STORAGE_KEYS.downloadQueue]
-    )
-  }
-  if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.pendingUndoActions)) {
-    z.array(
-      journal.targetEpoch === 10 || journal.targetEpoch === 9
-        ? FallbackUndoSchema
-        : journal.targetEpoch === 8
-          ? TerminalUndoSchema
-          : journal.targetEpoch === 7
-            ? CurrentPendingUndoActionSchema
-            : journal.targetEpoch === 6
-              ? CurrentUndoSchema
-              : journal.targetEpoch === 5
-                ? Epoch5PendingUndoActionSchema
-                : PendingUndoActionSchema
-    ).parse(
-      journal.targetEpoch === 3
-        ? (
-            journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions] as unknown[]
-          ).map(convertStoredUndo)
-        : journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions]
-    )
-  }
+function validateJournalQueue(journal: MigrationJournal): void {
+  const codecs = JOURNAL_QUEUE_CODECS[journal.targetEpoch]
+  const queue = journal.writes[LOCAL_STORAGE_KEYS.downloadQueue]
+  const undo = journal.writes[LOCAL_STORAGE_KEYS.pendingUndoActions]
+  z.array(codecs.task).parse(
+    journal.targetEpoch === 3
+      ? (queue as unknown[]).map(convertStoredTask)
+      : queue
+  )
+  z.array(codecs.undo).parse(
+    journal.targetEpoch === 3
+      ? (undo as unknown[]).map(convertStoredUndo)
+      : undo
+  )
+}
+
+function validateJournalSettings(journal: MigrationJournal): void {
   if (Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.settings)) {
-    const parseSettings =
-      journal.targetEpoch === 10 || journal.targetEpoch === 9
+    const parse =
+      journal.targetEpoch >= 9
         ? parseCurrentSettingsDocument
         : parseSettingsDocument
-    parseSettings(journal.writes[LOCAL_STORAGE_KEYS.settings])
+    parse(journal.writes[LOCAL_STORAGE_KEYS.settings])
   }
-  const providerDocument = (key: string) =>
-    journal.targetEpoch <= 9
-      ? currentIntegrationMapForValidation(journal.writes[key])
-      : journal.writes[key]
-  if (Object.hasOwn(journal.writes, SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)) {
-    parseSiteIntegrationEnablementDocument(
-      providerDocument(SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY)
+  const providerParsers = [
+    [
+      SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
+      parseSiteIntegrationEnablementDocument,
+    ],
+    [
+      SITE_INTEGRATION_SETTINGS_STORAGE_KEY,
+      parseSiteIntegrationSettingsDocument,
+    ],
+    [SITE_OVERRIDES_STORAGE_KEY, parseSiteOverridesDocument],
+  ] as const
+  for (const [key, parse] of providerParsers) {
+    if (!Object.hasOwn(journal.writes, key)) continue
+    const raw = journal.writes[key]
+    parse(
+      journal.targetEpoch <= 9 ? currentIntegrationMapForValidation(raw) : raw
     )
   }
-  if (Object.hasOwn(journal.writes, SITE_INTEGRATION_SETTINGS_STORAGE_KEY)) {
-    parseSiteIntegrationSettingsDocument(
-      providerDocument(SITE_INTEGRATION_SETTINGS_STORAGE_KEY)
-    )
-  }
-  if (Object.hasOwn(journal.writes, SITE_OVERRIDES_STORAGE_KEY)) {
-    parseSiteOverridesDocument(providerDocument(SITE_OVERRIDES_STORAGE_KEY))
-  }
+}
+
+function validateJournalAuxiliaryDocuments(journal: MigrationJournal): void {
   if (
     Object.hasOwn(journal.writes, LOCAL_STORAGE_KEYS.progressTimingEstimates)
   ) {
@@ -1221,47 +1098,122 @@ function validateMigrationJournal(journal: MigrationJournal): void {
       journal.writes[LOCAL_STORAGE_KEYS.persistentErrors]
     )
   }
+}
 
-  const nativeKeys = Object.keys(journal.writes).filter((key) =>
-    key.startsWith("pendingOutputs:")
-  )
-  if (nativeKeys.length > 0) {
-    if (!Object.hasOwn(journal.writes, nativeStorageKeys.index))
-      throw new Error(
-        "State migration journal is missing the native output index"
-      )
-    validateNativeOutputMigrationWrites(
-      journal.writes,
-      journal.targetEpoch === 7 ? parseCurrentNativeOutputState : undefined
+function validateJournalNativeOutput(journal: MigrationJournal): void {
+  if (
+    !Object.keys(journal.writes).some((key) =>
+      key.startsWith("pendingOutputs:")
     )
-  }
+  )
+    return
+  if (!Object.hasOwn(journal.writes, nativeStorageKeys.index))
+    throw new Error(
+      "State migration journal is missing the native output index"
+    )
+  validateNativeOutputMigrationWrites(
+    journal.writes,
+    journal.targetEpoch === 7 ? parseCurrentNativeOutputState : undefined
+  )
+}
 
-  const historyKeys = [
+function validateJournalHistory(journal: MigrationJournal): void {
+  const keys = [
     LOCAL_STORAGE_KEYS.downloadedChapters,
     LOCAL_STORAGE_KEYS.seriesDownloadHistory,
     LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
   ]
-  const presentHistoryKeys = historyKeys.filter((key) =>
-    Object.hasOwn(journal.writes, key)
-  )
-  if (presentHistoryKeys.length > 0) {
-    if (presentHistoryKeys.length !== historyKeys.length) {
-      throw new Error(
-        "State migration journal contains a partial history aggregate"
+  const present = keys.filter((key) => Object.hasOwn(journal.writes, key))
+  if (present.length === 0) return
+  if (present.length !== keys.length)
+    throw new Error(
+      "State migration journal contains a partial history aggregate"
+    )
+  const validate =
+    journal.targetEpoch >= 5
+      ? validateSaveEvidenceHistory
+      : parseHistoryAggregate
+  validate({
+    downloadedChapters: journal.writes[LOCAL_STORAGE_KEYS.downloadedChapters],
+    seriesDownloadHistory:
+      journal.writes[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
+    clearCutoffs:
+      journal.writes[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs],
+  })
+}
+
+function validateMigrationJournal(journal: MigrationJournal): void {
+  if (!MIGRATION_STEPS.some((step) => step.targetEpoch === journal.targetEpoch))
+    throw new Error("State migration journal has an unsupported target epoch")
+  validateJournalWriteKeys(journal)
+  validateJournalObsoleteKeys(journal)
+  validateJournalQueue(journal)
+  validateJournalSettings(journal)
+  validateJournalAuxiliaryDocuments(journal)
+  validateJournalNativeOutput(journal)
+  validateJournalHistory(journal)
+}
+
+function obsoleteDestinationKeys(stored: Record<string, unknown>): string[] {
+  const keys = [
+    OBSOLETE_COMMAND_RESULTS_KEY,
+    LOCAL_STORAGE_KEYS.pendingOutputs,
+    LOCAL_STORAGE_KEYS.activeDispatchLease,
+    LEGACY_DESTINATION_ISSUES_STORAGE_KEY,
+  ]
+  return keys.filter((key) => {
+    if (key === LOCAL_STORAGE_KEYS.activeDispatchLease)
+      return (
+        stored[key] !== undefined &&
+        !ActiveDispatchLeaseSchema.safeParse(stored[key]).success
       )
-    }
-    const validateHistory =
-      journal.targetEpoch >= 5
-        ? validateSaveEvidenceHistory
-        : parseHistoryAggregate
-    validateHistory({
-      downloadedChapters: journal.writes[LOCAL_STORAGE_KEYS.downloadedChapters],
-      seriesDownloadHistory:
-        journal.writes[LOCAL_STORAGE_KEYS.seriesDownloadHistory],
-      clearCutoffs:
-        journal.writes[LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs],
-    })
+    return key in stored
+  })
+}
+
+function interruptLegacyQueue(
+  queue: DownloadTaskState[],
+  stored: Record<string, unknown>,
+  now: number
+) {
+  const obsolete = obsoleteDestinationKeys(stored)
+  if (
+    !obsolete.includes(LOCAL_STORAGE_KEYS.activeDispatchLease) &&
+    !obsolete.includes(LOCAL_STORAGE_KEYS.pendingOutputs)
+  )
+    return queue
+  const inFlight = legacyInFlightTaskIds(stored)
+  return queue.map((task) =>
+    inFlight.has(task.id) &&
+    (task.status === "queued" || task.status === "downloading")
+      ? normalizeRetainedInterruptedTask(task, now)
+      : task
+  )
+}
+
+function legacyDocumentWrites(
+  stored: Record<string, unknown>,
+  now: number
+): Record<string, unknown> {
+  const writes: Record<string, unknown> = {}
+  const settings = canonicalizeSettings(stored[LOCAL_STORAGE_KEYS.settings])
+  if (settings) writes[LOCAL_STORAGE_KEYS.settings] = settings
+  const history = migrateHistory(stored)
+  if (history) Object.assign(writes, history)
+  const documents = [
+    [SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY, migrateEnablement],
+    [SITE_INTEGRATION_SETTINGS_STORAGE_KEY, migrateSiteSettings],
+    [SITE_OVERRIDES_STORAGE_KEY, migrateSiteOverrides],
+    [
+      LOCAL_STORAGE_KEYS.persistentErrors,
+      (raw: unknown) => migratePersistentErrors(raw, now),
+    ],
+  ] as const
+  for (const [key, migrate] of documents) {
+    const value = migrate(stored[key])
+    if (value) writes[key] = value
   }
+  return writes
 }
 
 function buildDestinationPairingJournal(
@@ -1270,90 +1222,37 @@ function buildDestinationPairingJournal(
 ): MigrationJournal {
   const now = Date.now()
   const isReleasedEpoch2 = sourceEpoch === 2
-  let queue = isReleasedEpoch2
-    ? migrateEpoch2Queue(stored[LOCAL_STORAGE_KEYS.downloadQueue])
+  const queue = isReleasedEpoch2
+    ? migrateQueue(
+        stored[LOCAL_STORAGE_KEYS.downloadQueue],
+        migrateEpoch2DownloadTask
+      )
     : migrateQueue(stored[LOCAL_STORAGE_KEYS.downloadQueue])
-  let pendingUndoActions = isReleasedEpoch2
+  const undo = isReleasedEpoch2
     ? migrateEpoch2PendingUndoActions(
         stored[LOCAL_STORAGE_KEYS.pendingUndoActions]
       )
     : migratePendingUndoActions(stored[LOCAL_STORAGE_KEYS.pendingUndoActions])
-  const destinationState = attachDestinationIssues(
+  const paired = attachDestinationIssues(
     queue,
-    pendingUndoActions,
+    undo,
     stored[LEGACY_DESTINATION_ISSUES_STORAGE_KEY]
   )
-  queue = destinationState.queue
-  pendingUndoActions = destinationState.pendingUndoActions
-
-  const rawLease = stored[LOCAL_STORAGE_KEYS.activeDispatchLease]
-  const currentLease = ActiveDispatchLeaseSchema.safeParse(rawLease)
-  const inFlightTaskIds = legacyInFlightTaskIds(stored)
-  const hasLegacyPendingOutputs = LOCAL_STORAGE_KEYS.pendingOutputs in stored
-  if (
-    (rawLease !== undefined && !currentLease.success) ||
-    hasLegacyPendingOutputs
-  ) {
-    queue = queue.map((task) =>
-      inFlightTaskIds.has(task.id) &&
-      (task.status === "queued" || task.status === "downloading")
-        ? normalizeRetainedInterruptedTask(task, now)
-        : task
-    )
-  }
-
   const writes: Record<string, unknown> = {
-    [LOCAL_STORAGE_KEYS.downloadQueue]: queue,
-    [LOCAL_STORAGE_KEYS.pendingUndoActions]: pendingUndoActions,
+    [LOCAL_STORAGE_KEYS.downloadQueue]: interruptLegacyQueue(
+      paired.queue,
+      stored,
+      now
+    ),
+    [LOCAL_STORAGE_KEYS.pendingUndoActions]: paired.pendingUndoActions,
+    ...legacyDocumentWrites(stored, now),
   }
-
-  const settings = canonicalizeSettings(stored[LOCAL_STORAGE_KEYS.settings])
-  if (settings) writes[LOCAL_STORAGE_KEYS.settings] = settings
-
-  const history = migrateHistory(stored)
-  if (history) Object.assign(writes, history)
-
-  const enablement = migrateEnablement(
-    stored[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY]
-  )
-  if (enablement) writes[SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY] = enablement
-
-  const siteSettings = migrateSiteSettings(
-    stored[SITE_INTEGRATION_SETTINGS_STORAGE_KEY]
-  )
-  if (siteSettings) writes[SITE_INTEGRATION_SETTINGS_STORAGE_KEY] = siteSettings
-
-  const siteOverrides = migrateSiteOverrides(stored[SITE_OVERRIDES_STORAGE_KEY])
-  if (siteOverrides) writes[SITE_OVERRIDES_STORAGE_KEY] = siteOverrides
-
-  const persistentErrors = migratePersistentErrors(
-    stored[LOCAL_STORAGE_KEYS.persistentErrors],
-    now
-  )
-  if (persistentErrors)
-    writes[LOCAL_STORAGE_KEYS.persistentErrors] = persistentErrors
-
-  const obsoleteKeys = [
-    ...(OBSOLETE_COMMAND_RESULTS_KEY in stored
-      ? [OBSOLETE_COMMAND_RESULTS_KEY]
-      : []),
-    ...(LOCAL_STORAGE_KEYS.pendingOutputs in stored
-      ? [LOCAL_STORAGE_KEYS.pendingOutputs]
-      : []),
-    ...(rawLease !== undefined && !currentLease.success
-      ? [LOCAL_STORAGE_KEYS.activeDispatchLease]
-      : []),
-    ...(LEGACY_DESTINATION_ISSUES_STORAGE_KEY in stored
-      ? [LEGACY_DESTINATION_ISSUES_STORAGE_KEY]
-      : []),
-  ]
-
   const journal = MigrationJournalSchema.parse({
     sourceEpoch,
     targetEpoch: DESTINATION_PAIRING_EPOCH,
     phase: "prepared",
     writes,
-    obsoleteKeys,
+    obsoleteKeys: obsoleteDestinationKeys(stored),
   })
   validateMigrationJournal(journal)
   return journal
@@ -1614,6 +1513,74 @@ async function replayMigrationJournal(
   await chrome.storage.local.remove(MIGRATION_JOURNAL_STORAGE_KEY)
 }
 
+async function readNativeMigrationRecords(
+  stored: Record<string, unknown>
+): Promise<void> {
+  const epochs = new Set<unknown>([3, 4, 5, 6])
+  if (
+    !epochs.has(stored[SCHEMA_EPOCH_STORAGE_KEY]) ||
+    stored[MIGRATION_JOURNAL_STORAGE_KEY] !== undefined
+  )
+    return
+  let index
+  try {
+    index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
+  } catch (cause) {
+    throw new InvalidDurableStateError("Invalid durable native output index", {
+      cause,
+    })
+  }
+  const keys = [
+    ...index.jobIds.map((id) => nativeStorageKeys.manifestPrefix + id),
+    ...index.outputIds.map((id) => nativeStorageKeys.outputPrefix + id),
+  ]
+  if (keys.length > 0)
+    Object.assign(stored, await chrome.storage.local.get(keys))
+}
+
+function readExistingMigrationJournal(
+  stored: Record<string, unknown>,
+  epoch: number | null
+) {
+  const journal = parseMigrationJournal(stored[MIGRATION_JOURNAL_STORAGE_KEY])
+  if (journal === null) return null
+  validateMigrationJournalAgainstStoredState(journal, stored, epoch)
+  if (epoch === journal.targetEpoch && journal.phase !== "obsolete-removed")
+    throw new Error(
+      "State migration journal phase is inconsistent with the current epoch"
+    )
+  return journal
+}
+
+function prepareNextMigrationJournal(
+  stored: Record<string, unknown>,
+  epoch: number | null
+) {
+  const step = MIGRATION_STEPS.find(
+    (candidate) => candidate.targetEpoch > (epoch ?? -1)
+  )
+  if (!step) throw new Error("No supported state migration step")
+  return step.prepare(stored, epoch)
+}
+
+function readMigrationPlan(stored: Record<string, unknown>) {
+  try {
+    const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
+    const existing = readExistingMigrationJournal(stored, epoch)
+    if (existing) return { journal: existing, prepared: true }
+    if (epoch === CURRENT_STATE_SCHEMA_EPOCH) return null
+    return {
+      journal: prepareNextMigrationJournal(stored, epoch),
+      prepared: false,
+    }
+  } catch (cause) {
+    throw new InvalidDurableStateError(
+      cause instanceof Error ? cause.message : "Invalid retained state",
+      { cause }
+    )
+  }
+}
+
 /**
  * Migrates supported released documents before repository hydration. The
  * journal stores the canonical write set and its phase, so every interrupted
@@ -1623,70 +1590,14 @@ export async function migrateDurableStateForCurrentSchema(): Promise<void> {
   try {
     let stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
     while (true) {
-      if (
-        (stored[SCHEMA_EPOCH_STORAGE_KEY] === 3 ||
-          stored[SCHEMA_EPOCH_STORAGE_KEY] === 4 ||
-          stored[SCHEMA_EPOCH_STORAGE_KEY] === 5 ||
-          stored[SCHEMA_EPOCH_STORAGE_KEY] === 6) &&
-        stored[MIGRATION_JOURNAL_STORAGE_KEY] === undefined
-      ) {
-        let index
-        try {
-          index = parseNativeStorageIndex(stored[nativeStorageKeys.index])
-        } catch (cause) {
-          throw new InvalidDurableStateError(
-            "Invalid durable native output index",
-            { cause }
-          )
-        }
-        const keys = [
-          ...index.jobIds.map((id) => nativeStorageKeys.manifestPrefix + id),
-          ...index.outputIds.map((id) => nativeStorageKeys.outputPrefix + id),
-        ]
-        if (keys.length > 0)
-          Object.assign(stored, await chrome.storage.local.get(keys))
-      }
-      let plan: MigrationJournal
-      let existingJournal: MigrationJournal | null
-      try {
-        const epoch = readSupportedEpoch(stored[SCHEMA_EPOCH_STORAGE_KEY])
-        existingJournal = parseMigrationJournal(
-          stored[MIGRATION_JOURNAL_STORAGE_KEY]
-        )
-        if (existingJournal) {
-          validateMigrationJournalAgainstStoredState(
-            existingJournal,
-            stored,
-            epoch
-          )
-          if (
-            epoch === existingJournal.targetEpoch &&
-            existingJournal.phase !== "obsolete-removed"
-          ) {
-            throw new Error(
-              "State migration journal phase is inconsistent with the current epoch"
-            )
-          }
-        }
-        if (epoch === CURRENT_STATE_SCHEMA_EPOCH && existingJournal === null)
-          return
-        const step = MIGRATION_STEPS.find(
-          (candidate) => candidate.targetEpoch > (epoch ?? -1)
-        )
-        if (!existingJournal && !step)
-          throw new Error("No supported state migration step")
-        plan = existingJournal ?? step!.prepare(stored, epoch)
-      } catch (cause) {
-        throw new InvalidDurableStateError(
-          cause instanceof Error ? cause.message : "Invalid retained state",
-          { cause }
-        )
-      }
-      if (existingJournal === null) await persistMigrationJournal(plan)
+      await readNativeMigrationRecords(stored)
+      const plan = readMigrationPlan(stored)
+      if (plan === null) return
+      if (!plan.prepared) await persistMigrationJournal(plan.journal)
       logger.info(
-        `[Init] Migrating durable state schema from ${String(plan.sourceEpoch)} to ${plan.targetEpoch}`
+        `[Init] Migrating durable state schema from ${String(plan.journal.sourceEpoch)} to ${plan.journal.targetEpoch}`
       )
-      await replayMigrationJournal(plan)
+      await replayMigrationJournal(plan.journal)
       stored = await chrome.storage.local.get([...MIGRATION_STORAGE_KEYS])
     }
   } catch (error) {
