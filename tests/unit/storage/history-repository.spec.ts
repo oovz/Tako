@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import acceptedHistory from "@/tests/fixtures/history/numeric-chapter-titles.json"
 import { HistoryDocumentError } from "@/src/domain/history/schema"
 import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import {
@@ -52,6 +53,23 @@ describe("HistoryRepository", () => {
       seriesDownloadHistory: {},
       clearCutoffs: { bySeries: {}, byChapter: {} },
     })
+  })
+
+  it("hydrates stored series history with numeric chapter titles after a cold start", async () => {
+    Object.assign(storage, structuredClone(acceptedHistory))
+    const cold = new HistoryRepository()
+
+    await expect(
+      cold.getSeriesHistory("mangadex", "series-1")
+    ).resolves.toMatchObject({
+      downloadedChapters: [
+        { chapterId: "opaque-two", title: "Chapter 2" },
+        { chapterId: "opaque-ten", title: "Chapter 10" },
+      ],
+    })
+    await expect(cold.getDownloadedChapters()).resolves.toEqual(
+      acceptedHistory.downloadedChapters
+    )
   })
 
   it("rejects partial history aggregates", async () => {
