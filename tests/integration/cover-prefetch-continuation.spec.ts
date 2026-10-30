@@ -273,7 +273,7 @@ const sendMessage = vi.fn(async (message: OffscreenMessage) => {
   throw new Error(`Unexpected runtime message: ${message.type}`)
 })
 
-let OffscreenWorker: typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+let OffscreenWorker: typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
 
 describe("cover prefetch and chapter processing", () => {
   beforeEach(async () => {
@@ -298,7 +298,7 @@ describe("cover prefetch and chapter processing", () => {
         },
       },
     })
-    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main"))
+    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main-worker"))
   })
 
   afterEach(() => {

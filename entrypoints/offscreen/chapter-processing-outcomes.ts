@@ -17,62 +17,73 @@ export function requireNativeOutputDisposition(
   return response
 }
 
-export function createNoneFormatChapterOutcome(input: {
+type NoneFormatCounts = {
   downloadMode: "browser" | "custom"
   totalImages: number
   failedImages: number
   totalAdditionalOutputs?: number
   failedAdditionalOutputs?: number
-}): ChapterOutcome {
-  const {
-    downloadMode,
-    totalImages,
-    failedImages,
-    totalAdditionalOutputs = 0,
-    failedAdditionalOutputs = 0,
-  } = input
-  const totalOutputs = totalImages + totalAdditionalOutputs
-  const failedOutputs = failedImages + failedAdditionalOutputs
+}
 
-  if (failedOutputs > 0) {
-    const succeededOutputs = totalOutputs - failedOutputs
-    if (succeededOutputs > 0) {
-      logger.warn(
-        `Partial success (${downloadMode}): ${succeededOutputs} succeeded, ${failedOutputs} failed`
-      )
-      return {
-        status: "partial_success",
-        errorMessage:
-          totalAdditionalOutputs > 0
-            ? `${failedOutputs}/${totalOutputs} output files failed`
-            : `${failedImages}/${totalImages} images failed`,
-        imagesFailed: failedImages || undefined,
-        outputsRequested: totalOutputs,
-        outputsFailedBeforeHandoff:
-          downloadMode === "browser" ? failedOutputs : 0,
-        outputsCommitted: downloadMode === "custom" ? succeededOutputs : 0,
-      }
-    }
+type NoneFormatFailures = NoneFormatCounts & {
+  totalOutputs: number
+  failedOutputs: number
+}
 
-    return {
-      status: "failed",
-      errorMessage:
-        totalAdditionalOutputs > 0
-          ? `All output files failed (${failedOutputs}/${totalOutputs})`
-          : `All images failed (${failedImages}/${totalImages})`,
-      imagesFailed: failedImages || undefined,
-      outputsRequested: totalOutputs,
-      outputsFailedBeforeHandoff:
-        downloadMode === "browser" ? failedOutputs : 0,
-      outputsCommitted: 0,
-    }
+function describeNoneFormatFailures(
+  input: NoneFormatFailures,
+  partial: boolean
+): string {
+  if ((input.totalAdditionalOutputs ?? 0) > 0) {
+    return partial
+      ? `${input.failedOutputs}/${input.totalOutputs} output files failed`
+      : `All output files failed (${input.failedOutputs}/${input.totalOutputs})`
   }
+  return partial
+    ? `${input.failedImages}/${input.totalImages} images failed`
+    : `All images failed (${input.failedImages}/${input.totalImages})`
+}
 
+function createNoneFormatFailureOutcome(
+  input: NoneFormatFailures
+): ChapterOutcome {
+  const succeededOutputs = input.totalOutputs - input.failedOutputs
+  const partial = succeededOutputs > 0
+  if (partial) {
+    logger.warn(
+      `Partial success (${input.downloadMode}): ${succeededOutputs} succeeded, ${input.failedOutputs} failed`
+    )
+  }
+  return {
+    status: partial ? "partial_success" : "failed",
+    errorMessage: describeNoneFormatFailures(input, partial),
+    imagesFailed: input.failedImages || undefined,
+    outputsRequested: input.totalOutputs,
+    outputsFailedBeforeHandoff:
+      input.downloadMode === "browser" ? input.failedOutputs : 0,
+    outputsCommitted:
+      input.downloadMode === "custom" && partial ? succeededOutputs : 0,
+  }
+}
+
+export function createNoneFormatChapterOutcome(
+  input: NoneFormatCounts
+): ChapterOutcome {
+  const totalOutputs = input.totalImages + (input.totalAdditionalOutputs ?? 0)
+  const failedOutputs =
+    input.failedImages + (input.failedAdditionalOutputs ?? 0)
+  if (failedOutputs > 0) {
+    return createNoneFormatFailureOutcome({
+      ...input,
+      totalOutputs,
+      failedOutputs,
+    })
+  }
   return {
     status: "completed",
     outputsRequested: totalOutputs,
     outputsFailedBeforeHandoff: 0,
-    outputsCommitted: downloadMode === "custom" ? totalOutputs : 0,
+    outputsCommitted: input.downloadMode === "custom" ? totalOutputs : 0,
   }
 }
 

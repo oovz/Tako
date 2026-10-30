@@ -129,7 +129,7 @@ global.HTMLDivElement = class {} as unknown as typeof HTMLDivElement
 
 describe("loose image saves to a custom folder", () => {
   let worker: InstanceType<
-    typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+    typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
   >
 
   beforeEach(async () => {
@@ -139,7 +139,7 @@ describe("loose image saves to a custom folder", () => {
     vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:mock-url")
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
 
-    const module = await import("@/entrypoints/offscreen/main")
+    const module = await import("@/entrypoints/offscreen/main-worker")
     worker = new module.OffscreenWorker()
 
     const mockDownloadImage = vi

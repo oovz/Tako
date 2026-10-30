@@ -17,6 +17,8 @@ import { offscreenSiteAdaptersById } from "@/src/runtime/generated/site-integrat
 import { loadOffscreenSiteIntegrationEnablement } from "@/src/runtime/site-integration-offscreen-initialization"
 import { getDefinition, isEnabled } from "@/src/site-integrations/catalog"
 
+import type { ChapterDownloadImageResult } from "./chapter-processing-types"
+
 type PreviewPayload =
   RuntimeMessageRequest<"OFFSCREEN_FETCH_COVER_PREVIEW">["payload"]
 type PreviewResponse = RuntimeMessageResponse<"OFFSCREEN_FETCH_COVER_PREVIEW">
@@ -121,17 +123,7 @@ export class CoverPreviewService {
     payload: PreviewPayload,
     signal: AbortSignal
   ): Promise<PreviewResponse> {
-    const enablement = await loadOffscreenSiteIntegrationEnablement()
-    signal.throwIfAborted()
-    if (
-      !getDefinition(payload.integrationId)?.shipped ||
-      !isEnabled(payload.integrationId, enablement)
-    ) {
-      throw new Error("Cover integration is unavailable")
-    }
-    const integration =
-      offscreenSiteAdaptersById[payload.integrationId]?.offscreen
-    if (!integration) throw new Error("Cover integration is unavailable")
+    const integration = await this.resolveIntegration(payload, signal)
     const download =
       integration.cover?.downloadImage ?? integration.chapter.downloadImage
     const image = await this.rateLimitService.scheduleForIntegrationScope(
@@ -165,29 +157,7 @@ export class CoverPreviewService {
       ) {
         throw new Error("Cover preview exceeds its encoded image limit")
       }
-      const dimensions = readEncodedImageDimensions(
-        image.data,
-        image.mimeType,
-        this.liveResourceLedger
-      )
-      assertPreviewDimensions(dimensions.width, dimensions.height)
-      const decodedLease = this.liveResourceLedger.reserve(
-        dimensions.width * dimensions.height * 4,
-        "cover preview decoder"
-      )
-      try {
-        const bitmap = await createImageBitmap(
-          new Blob([image.data], { type: image.mimeType })
-        )
-        try {
-          signal.throwIfAborted()
-          assertPreviewDimensions(bitmap.width, bitmap.height)
-        } finally {
-          bitmap.close()
-        }
-      } finally {
-        decodedLease.release()
-      }
+      await this.validateDecodedImage(image, signal)
       signal.throwIfAborted()
       const encodingLease = this.liveResourceLedger.reserve(
         image.data.byteLength * 6,
@@ -206,6 +176,52 @@ export class CoverPreviewService {
       }
     } finally {
       image.liveResourceLease.release()
+    }
+  }
+  private async resolveIntegration(
+    payload: PreviewPayload,
+    signal: AbortSignal
+  ) {
+    const enablement = await loadOffscreenSiteIntegrationEnablement()
+    signal.throwIfAborted()
+    if (
+      !getDefinition(payload.integrationId)?.shipped ||
+      !isEnabled(payload.integrationId, enablement)
+    ) {
+      throw new Error("Cover integration is unavailable")
+    }
+    const integration =
+      offscreenSiteAdaptersById[payload.integrationId]?.offscreen
+    if (!integration) throw new Error("Cover integration is unavailable")
+    return integration
+  }
+
+  private async validateDecodedImage(
+    image: ChapterDownloadImageResult,
+    signal: AbortSignal
+  ): Promise<void> {
+    const dimensions = readEncodedImageDimensions(
+      image.data,
+      image.mimeType,
+      this.liveResourceLedger
+    )
+    assertPreviewDimensions(dimensions.width, dimensions.height)
+    const decodedLease = this.liveResourceLedger.reserve(
+      dimensions.width * dimensions.height * 4,
+      "cover preview decoder"
+    )
+    try {
+      const bitmap = await createImageBitmap(
+        new Blob([image.data], { type: image.mimeType })
+      )
+      try {
+        signal.throwIfAborted()
+        assertPreviewDimensions(bitmap.width, bitmap.height)
+      } finally {
+        bitmap.close()
+      }
+    } finally {
+      decodedLease.release()
     }
   }
 }

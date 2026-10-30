@@ -122,7 +122,7 @@ global.HTMLDivElement = class {} as unknown as typeof HTMLDivElement
 
 describe("loose image saves through Chrome", () => {
   let worker: InstanceType<
-    typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+    typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
   >
   let mockDownloadImage: ReturnType<typeof vi.fn>
 
@@ -132,7 +132,7 @@ describe("loose image saves through Chrome", () => {
     vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:mock-url")
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
 
-    const module = await import("@/entrypoints/offscreen/main")
+    const module = await import("@/entrypoints/offscreen/main-worker")
     worker = new module.OffscreenWorker()
 
     mockDownloadImage = vi.fn().mockImplementation(async (url: string) => ({

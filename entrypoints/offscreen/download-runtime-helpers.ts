@@ -24,6 +24,11 @@ type ImageRetryHooks = {
   onAttemptStart?: (attempt: number) => void | Promise<void>
 }
 
+function resolveCoverDownloader(integrationId: string) {
+  const integration = offscreenSiteAdaptersById[integrationId]?.offscreen
+  return integration?.cover?.downloadImage ?? integration?.chapter.downloadImage
+}
+
 export async function prefetchCoverImage(input: {
   coverUrl?: string
   integrationId?: string
@@ -54,17 +59,11 @@ export async function prefetchCoverImage(input: {
   }
 
   try {
-    const OffscreenIntegration =
-      offscreenSiteAdaptersById[integrationId]?.offscreen
-    if (!OffscreenIntegration) {
-      return undefined
-    }
+    const downloadCoverImage = resolveCoverDownloader(integrationId)
+    if (!downloadCoverImage) return undefined
     const reportActivity = async () => {
       await onActivity?.()
     }
-    const downloadCoverImage =
-      OffscreenIntegration.cover?.downloadImage ??
-      OffscreenIntegration.chapter.downloadImage
     const result = await withImageRetries<ChapterDownloadImageResult>(
       () =>
         rateLimitService.scheduleForIntegrationScope(

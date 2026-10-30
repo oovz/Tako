@@ -53,7 +53,6 @@ export type ZipWorkerResponse =
 interface StreamingState {
   zip?: Zip
   chunks: Uint8Array[]
-  isFinalized: boolean
   chapterTitle?: string
   extension?: "cbz" | "zip"
   imageCount: number
@@ -89,10 +88,9 @@ function formatWorkerError(error: unknown, context: string): string {
   return `${context}: ${String(error)}`
 }
 
-export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
-  const streamState: StreamingState = {
+function createStreamingState(): StreamingState {
+  return {
     chunks: [],
-    isFinalized: false,
     imageCount: 0,
     compressedBytes: 0,
     maxArchiveBytes: MAX_ARCHIVE_BYTES,
@@ -102,92 +100,149 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
     imagePaddingDigits: "auto",
     totalImages: 0,
   }
+}
 
-  const post = (message: ZipWorkerResponse, transfer?: Transferable[]) => {
-    scope.postMessage(message, transfer)
+class ZipArchiveRuntime {
+  private state = createStreamingState()
+
+  constructor(private readonly scope: ZipWorkerRuntimeScope) {
+    scope.addEventListener("error", (event) => this.handleGlobalError(event))
+    scope.addEventListener("unhandledrejection", (event) => {
+      this.post({
+        success: false,
+        error: formatWorkerError(
+          event.reason,
+          "Zip worker unhandled rejection"
+        ),
+      })
+      event.preventDefault()
+    })
+    scope.onmessage = (event) => this.handleMessage(event.data)
   }
 
-  const ensureZip = (): Zip => {
-    if (!streamState.zip) {
-      streamState.zip = new Zip()
-      streamState.zip.ondata = (err, chunk, final) => {
-        if (streamState.failed) return
-        if (err) {
-          streamState.failed = true
-          streamState.chunks = []
-          post({
-            success: false,
-            error: err.message || "ZIP compression error",
-          })
-          return
-        }
-        const nextCompressedBytes =
-          streamState.compressedBytes + chunk.byteLength
-        if (nextCompressedBytes > streamState.maxArchiveBytes) {
-          streamState.failed = true
-          streamState.chunks = []
-          post({
-            success: false,
-            error: `Archive size exceeds ${streamState.maxArchiveBytes} byte limit (got at least ${nextCompressedBytes})`,
-          })
-          return
-        }
-        streamState.compressedBytes = nextCompressedBytes
-        streamState.chunks.push(chunk)
-        streamState.chunkCount += 1
-        post({
-          type: "progress",
-          bytes: streamState.compressedBytes,
-          chunks: streamState.chunkCount,
-          final,
-        })
-        if (final) {
-          const totalLength = streamState.chunks.reduce(
-            (sum, chunk) => sum + chunk.length,
-            0
-          )
-          const finalBuffer = new Uint8Array(totalLength)
-          let offset = 0
-          for (const chunk of streamState.chunks) {
-            finalBuffer.set(chunk, offset)
-            offset += chunk.length
-          }
-          const filename = `${streamState.chapterTitle || "chapter"}.${streamState.extension || "cbz"}`
-          const buffer = finalBuffer.buffer
-          streamState.chunks = []
-          const response: ZipWorkerResponse = {
-            success: true,
-            filename,
-            size: buffer.byteLength,
-            buffer,
-            imageCount: streamState.imageCount,
-            format: streamState.extension || "cbz",
-          }
-          post(response, [buffer])
-          streamState.isFinalized = true
-        }
-      }
+  private post(message: ZipWorkerResponse, transfer?: Transferable[]): void {
+    this.scope.postMessage(message, transfer)
+  }
+
+  private ensureZip(): Zip {
+    if (!this.state.zip) {
+      this.state.zip = new Zip()
+      this.state.zip.ondata = (error, chunk, final) =>
+        this.acceptChunk(error, chunk, final)
     }
-    return streamState.zip
+    return this.state.zip
   }
 
-  const resetState = () => {
-    streamState.zip = undefined
-    streamState.chunks = []
-    streamState.isFinalized = false
-    streamState.chapterTitle = undefined
-    streamState.extension = undefined
-    streamState.imageCount = 0
-    streamState.compressedBytes = 0
-    streamState.maxArchiveBytes = MAX_ARCHIVE_BYTES
-    streamState.failed = false
-    streamState.chunkCount = 0
-    streamState.normalizeImageFilenames = false
-    streamState.imagePaddingDigits = "auto"
-    streamState.totalImages = 0
+  private fail(error: string): void {
+    this.state.failed = true
+    this.state.chunks = []
+    this.post({ success: false, error })
   }
 
-  scope.addEventListener("error", (event) => {
+  private acceptChunk(
+    error: Error | null,
+    chunk: Uint8Array,
+    final: boolean
+  ): void {
+    if (this.state.failed) return
+    if (error) {
+      this.fail(error.message || "ZIP compression error")
+      return
+    }
+    const nextBytes = this.state.compressedBytes + chunk.byteLength
+    if (nextBytes > this.state.maxArchiveBytes) {
+      this.fail(
+        `Archive size exceeds ${this.state.maxArchiveBytes} byte limit (got at least ${nextBytes})`
+      )
+      return
+    }
+    this.state.compressedBytes = nextBytes
+    this.state.chunks.push(chunk)
+    this.state.chunkCount += 1
+    this.post({
+      type: "progress",
+      bytes: nextBytes,
+      chunks: this.state.chunkCount,
+      final,
+    })
+    if (final) this.finishArchive()
+  }
+
+  private finishArchive(): void {
+    const totalLength = this.state.chunks.reduce(
+      (sum, chunk) => sum + chunk.length,
+      0
+    )
+    const finalBuffer = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of this.state.chunks) {
+      finalBuffer.set(chunk, offset)
+      offset += chunk.length
+    }
+    const format = this.state.extension || "cbz"
+    const filename = `${this.state.chapterTitle || "chapter"}.${format}`
+    const buffer = finalBuffer.buffer
+    this.state.chunks = []
+    this.post(
+      {
+        success: true,
+        filename,
+        size: buffer.byteLength,
+        buffer,
+        imageCount: this.state.imageCount,
+        format,
+      },
+      [buffer]
+    )
+  }
+
+  private initialize(message: InitMsg): void {
+    this.state = createStreamingState()
+    this.state.chapterTitle = message.chapterTitle
+    this.state.extension = message.extension
+    this.state.normalizeImageFilenames =
+      message.normalizeImageFilenames ?? false
+    this.state.imagePaddingDigits = message.imagePaddingDigits ?? "auto"
+    this.state.totalImages = message.totalImages ?? 0
+    this.state.maxArchiveBytes = message.maxArchiveBytes ?? MAX_ARCHIVE_BYTES
+    this.ensureZip()
+  }
+
+  private addComicInfo(message: AddComicInfoMsg): void {
+    if (this.state.failed) return
+    const zip = this.ensureZip()
+    const stream = new ZipDeflate("ComicInfo.xml", { level: 6 })
+    zip.add(stream)
+    stream.push(strToU8(message.xml), true)
+  }
+
+  private addImage(message: AddImageMsg): void {
+    if (this.state.failed) return
+    const zip = this.ensureZip()
+    const bytes = new Uint8Array(message.buffer)
+    assertNonemptyImagePayload(message.buffer)
+    let filename = message.filename
+    if (
+      this.state.normalizeImageFilenames &&
+      message.index !== undefined &&
+      message.mimeType
+    ) {
+      filename = normalizeImageFilename(
+        message.index,
+        this.state.totalImages,
+        message.mimeType,
+        this.state.imagePaddingDigits
+      )
+    }
+    const image = new ZipPassThrough(filename)
+    zip.add(image)
+    image.push(bytes, true)
+    this.state.imageCount += 1
+    if (message.inputId)
+      this.post({ type: "input-consumed", inputId: message.inputId })
+  }
+
+  private handleGlobalError(event: ErrorEvent): void {
     const location = event.filename
       ? ` (${event.filename}:${event.lineno}:${event.colno})`
       : ""
@@ -195,90 +250,38 @@ export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
       event.error instanceof Error
         ? event.error
         : new Error(`${event.message || "Unhandled worker error"}${location}`)
-    post({
+    this.post({
       success: false,
       error: formatWorkerError(error, "Zip worker global error"),
     })
     event.preventDefault()
-  })
+  }
 
-  scope.addEventListener("unhandledrejection", (event) => {
-    post({
-      success: false,
-      error: formatWorkerError(event.reason, "Zip worker unhandled rejection"),
-    })
-    event.preventDefault()
-  })
-
-  scope.onmessage = (event) => {
-    const message = event.data
+  private handleMessage(message: InboundMsg): void {
     try {
       switch (message.type) {
         case "reset":
-          resetState()
+          this.state = createStreamingState()
           return
-        case "init": {
-          resetState()
-          streamState.chapterTitle = message.chapterTitle
-          streamState.extension = message.extension
-          streamState.normalizeImageFilenames =
-            message.normalizeImageFilenames ?? false
-          streamState.imagePaddingDigits = message.imagePaddingDigits ?? "auto"
-          streamState.totalImages = message.totalImages ?? 0
-          streamState.maxArchiveBytes =
-            message.maxArchiveBytes ?? MAX_ARCHIVE_BYTES
-          ensureZip()
+        case "init":
+          this.initialize(message)
           return
-        }
-        case "addComicInfo": {
-          if (streamState.failed) return
-          const zip = ensureZip()
-          const stream = new ZipDeflate("ComicInfo.xml", { level: 6 })
-          zip.add(stream)
-          stream.push(strToU8(message.xml), true)
+        case "addComicInfo":
+          this.addComicInfo(message)
           return
-        }
-        case "addImage": {
-          if (streamState.failed) return
-          const zip = ensureZip()
-          const bytes = new Uint8Array(message.buffer)
-          assertNonemptyImagePayload(message.buffer)
-
-          let filename = message.filename
-          if (
-            streamState.normalizeImageFilenames &&
-            message.index !== undefined &&
-            message.mimeType
-          ) {
-            filename = normalizeImageFilename(
-              message.index,
-              streamState.totalImages,
-              message.mimeType,
-              streamState.imagePaddingDigits
-            )
-          }
-
-          const image = new ZipPassThrough(filename)
-          zip.add(image)
-          image.push(bytes, true)
-          streamState.imageCount += 1
-          if (message.inputId) {
-            post({ type: "input-consumed", inputId: message.inputId })
-          }
+        case "addImage":
+          this.addImage(message)
           return
-        }
         case "finalize":
-          if (streamState.failed) return
-          ensureZip().end()
+          if (!this.state.failed) this.ensureZip().end()
           return
       }
     } catch (error) {
-      streamState.failed = true
-      streamState.chunks = []
-      post({
-        success: false,
-        error: formatWorkerError(error, `Zip worker ${message.type}`),
-      })
+      this.fail(formatWorkerError(error, `Zip worker ${message.type}`))
     }
   }
+}
+
+export function installZipWorkerRuntime(scope: ZipWorkerRuntimeScope): void {
+  new ZipArchiveRuntime(scope)
 }

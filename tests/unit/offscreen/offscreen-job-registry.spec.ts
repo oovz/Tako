@@ -58,7 +58,7 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-let OffscreenWorker: typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+let OffscreenWorker: typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
 
 async function request(
   overrides: Partial<Omit<OffscreenDownloadChapterPayload, "fingerprint">> = {}
@@ -111,7 +111,7 @@ describe("offscreen job registry", () => {
     vi.stubGlobal("document", {
       addEventListener: vi.fn(),
     })
-    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main"))
+    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main-worker"))
   })
 
   beforeEach(() => {

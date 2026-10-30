@@ -46,7 +46,7 @@ export async function writeFsaOutput(input: {
 export async function resolveChapterWritableRoot(
   runtime: ChapterProcessingRuntime,
   input: {
-    directoryHandleId: string | undefined
+    directoryHandleId?: string
     abortSignal?: AbortSignal
   }
 ): Promise<FileSystemDirectoryHandle> {

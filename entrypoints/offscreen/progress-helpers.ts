@@ -99,6 +99,44 @@ export function createTerminalProgressPayload(input: {
   }
 }
 
+type ProgressPhase = Pick<UnsequencedProgressPayload, "stage" | "phaseFraction">
+const resolvingProgress = new Map([
+  ["fetching", 0.25],
+  ["parsing", 0.75],
+  ["ready", 1],
+])
+
+function getImageProgressPhase(
+  pct: number,
+  label: string | undefined
+): ProgressPhase {
+  const fraction = resolvingProgress.get(label ?? "")
+  return fraction === undefined
+    ? {
+        stage: "downloading",
+        phaseFraction: Math.max(0, Math.min(1, pct / 100)),
+      }
+    : { stage: "resolving", phaseFraction: fraction }
+}
+
+function getArchiveProgressPhase(
+  pct: number,
+  label: string | undefined
+): ProgressPhase {
+  const normalizedLabel = label?.toLowerCase() ?? ""
+  if (normalizedLabel.includes("cover"))
+    return { stage: "resolving", phaseFraction: 0.5 }
+  const saving = ["saving", "handoff", "saved", "download"].some((word) =>
+    normalizedLabel.includes(word)
+  )
+  return saving
+    ? {
+        stage: "saving",
+        phaseFraction: Math.max(0, Math.min(1, (pct - 90) / 10)),
+      }
+    : { stage: "archiving", phaseFraction: Math.max(0, Math.min(1, pct / 95)) }
+}
+
 export function createStreamingProgressHandlers(input: {
   taskId: string
   chapterId: string
@@ -123,18 +161,7 @@ export function createStreamingProgressHandlers(input: {
       latestImageProgress.current = imageProgress.current
       latestImageProgress.total = imageProgress.total
     }
-    const stage =
-      label === "fetching" || label === "parsing" || label === "ready"
-        ? "resolving"
-        : "downloading"
-    const phaseFraction =
-      stage === "resolving"
-        ? label === "ready"
-          ? 1
-          : label === "parsing"
-            ? 0.75
-            : 0.25
-        : Math.max(0, Math.min(1, pct / 100))
+    const { stage, phaseFraction } = getImageProgressPhase(pct, label)
     if (latestImageProgress.total === 0 && stage !== "resolving") return
     await emitProgressMessage(
       createDownloadingProgressPayload({
@@ -151,21 +178,7 @@ export function createStreamingProgressHandlers(input: {
 
   const onArchiveProgress: ProcessChapterStreamingOptions["onArchiveProgress"] =
     async (pct, label) => {
-      const normalizedLabel = label?.toLowerCase() ?? ""
-      const stage = normalizedLabel.includes("cover")
-        ? "resolving"
-        : normalizedLabel.includes("saving") ||
-            normalizedLabel.includes("handoff") ||
-            normalizedLabel.includes("saved") ||
-            normalizedLabel.includes("download")
-          ? "saving"
-          : "archiving"
-      const phaseFraction =
-        stage === "resolving"
-          ? 0.5
-          : stage === "saving"
-            ? Math.max(0, Math.min(1, (pct - 90) / 10))
-            : Math.max(0, Math.min(1, pct / 95))
+      const { stage, phaseFraction } = getArchiveProgressPhase(pct, label)
       await emitProgressMessage(
         createDownloadingProgressPayload({
           taskId,

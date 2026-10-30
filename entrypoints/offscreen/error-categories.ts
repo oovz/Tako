@@ -18,41 +18,45 @@ function readErrorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).toLowerCase()
 }
 
+const fsaNameCategories = new Map<string, FsaWriteErrorCategory>([
+  ["quotaexceedederror", "disk_full"],
+  ["diskfullerror", "disk_full"],
+  ["notallowederror", "folder_permission_required"],
+  ["permissionexpirederror", "folder_permission_required"],
+  ["notfounderror", "folder_unavailable"],
+  ["directorynotfounderror", "folder_unavailable"],
+])
+
+function includesAny(message: string, phrases: readonly string[]): boolean {
+  return phrases.some((phrase) => message.includes(phrase))
+}
+
 export function classifyFsaWriteErrorCategory(
   error: unknown
 ): FsaWriteErrorCategory {
-  const name = readErrorName(error)
-  const message = readErrorMessage(error)
-
+  const category = fsaNameCategories.get(readErrorName(error))
   if (
-    name === "quotaexceedederror" ||
-    name === "diskfullerror" ||
-    message.includes("disk full") ||
-    message.includes("no space") ||
-    message.includes("file_no_space")
+    category === "disk_full" ||
+    includesAny(readErrorMessage(error), [
+      "disk full",
+      "no space",
+      "file_no_space",
+    ])
   ) {
     return "disk_full"
   }
-  if (name === "notallowederror" || name === "permissionexpirederror") {
-    return "folder_permission_required"
-  }
-  if (name === "notfounderror" || name === "directorynotfounderror") {
-    return "folder_unavailable"
-  }
-  return "folder_write_failed"
+  return category ?? "folder_write_failed"
+}
+
+const fsaWriteErrorMessages: Record<FsaWriteErrorCategory, string> = {
+  folder_permission_required: "Access to the selected folder is required.",
+  folder_unavailable: "The selected folder is no longer available.",
+  disk_full: "There is not enough disk space in the selected folder.",
+  folder_write_failed: "Tako could not write to the selected folder.",
 }
 
 function getFsaWriteErrorMessage(category: FsaWriteErrorCategory): string {
-  switch (category) {
-    case "folder_permission_required":
-      return "Access to the selected folder is required."
-    case "folder_unavailable":
-      return "The selected folder is no longer available."
-    case "disk_full":
-      return "There is not enough disk space in the selected folder."
-    case "folder_write_failed":
-      return "Tako could not write to the selected folder."
-  }
+  return fsaWriteErrorMessages[category]
 }
 
 export class FsaWriteError extends Error {
@@ -78,83 +82,91 @@ export function toFsaWriteError(error: unknown): FsaWriteError {
     : new FsaWriteError(classifyFsaWriteErrorCategory(error), error)
 }
 
-export function classifyOffscreenErrorCategory(error: unknown): ErrorCategory {
+function readExplicitCategory(error: unknown): ErrorCategory | undefined {
   if (error && typeof error === "object" && "category" in error) {
-    const explicitCategory = normalizeDownloadErrorCategory(error.category)
-    if (explicitCategory) return explicitCategory
+    return normalizeDownloadErrorCategory(error.category)
   }
-  if (error instanceof FsaWriteError) return error.category
+  return undefined
+}
 
-  const msg = readErrorMessage(error)
-  const name = readErrorName(error)
-
-  if (msg.includes("429") || msg.includes("rate limit")) {
-    return "provider_rate_limited"
+function classifyContentError(message: string): ErrorCategory | undefined {
+  const rules: ReadonlyArray<readonly [ErrorCategory, readonly string[]]> = [
+    ["archive_creation_failed", ["archive creation failed", "zip worker"]],
+    [
+      "chapter_unavailable",
+      ["no images found", "http 404", "chapter unavailable"],
+    ],
+    [
+      "provider_changed",
+      ["schema", "extract", "page structure", "provider changed"],
+    ],
+  ]
+  for (const [category, phrases] of rules) {
+    if (includesAny(message, phrases)) return category
   }
+  return undefined
+}
 
-  if (
-    msg.includes("disk full") ||
-    msg.includes("no space") ||
-    name === "quotaexceedederror" ||
-    msg.includes("quotaexceeded") ||
-    msg.includes("file_no_space")
-  ) {
-    return "disk_full"
-  }
-
-  if (msg.includes("archive creation failed") || msg.includes("zip worker")) {
-    return "archive_creation_failed"
-  }
-
-  if (
-    msg.includes("no images found") ||
-    msg.includes("http 404") ||
-    msg.includes("chapter unavailable")
-  ) {
-    return "chapter_unavailable"
-  }
-
-  if (
-    msg.includes("schema") ||
-    msg.includes("extract") ||
-    msg.includes("page structure") ||
-    msg.includes("provider changed")
-  ) {
-    return "provider_changed"
-  }
-
+function classifyFolderError(
+  name: string,
+  message: string
+): ErrorCategory | undefined {
   if (
     name === "notallowederror" ||
-    (msg.includes("permission") && msg.includes("folder")) ||
-    (msg.includes("permission denied") && msg.includes("folder"))
+    (message.includes("permission") && message.includes("folder"))
   ) {
     return "folder_permission_required"
   }
-
   if (
     name === "notfounderror" ||
-    msg.includes("folder is unavailable") ||
-    msg.includes("folder is not configured") ||
-    msg.includes("folder is missing") ||
-    (msg.includes("not configured") && msg.includes("folder")) ||
-    (msg.includes("unavailable") && msg.includes("folder"))
+    message.includes("folder is missing") ||
+    (message.includes("folder") &&
+      includesAny(message, ["not configured", "unavailable"]))
   ) {
     return "folder_unavailable"
   }
+  return undefined
+}
 
-  if (
-    msg.includes("timeout") ||
-    msg.includes("network") ||
-    msg.includes("dns") ||
-    msg.includes("unreachable") ||
-    msg.includes("offline") ||
-    msg.includes("econn") ||
-    msg.includes("enet") ||
-    msg.includes("fetch") ||
-    msg.includes("failed to fetch")
-  ) {
-    return "network_unavailable"
+function classifyNetworkError(message: string): ErrorCategory {
+  return includesAny(message, [
+    "timeout",
+    "network",
+    "dns",
+    "unreachable",
+    "offline",
+    "econn",
+    "enet",
+    "fetch",
+  ])
+    ? "network_unavailable"
+    : "unknown"
+}
+
+export function classifyOffscreenErrorCategory(error: unknown): ErrorCategory {
+  const explicitCategory = readExplicitCategory(error)
+  if (explicitCategory) return explicitCategory
+  if (error instanceof FsaWriteError) return error.category
+
+  const message = readErrorMessage(error)
+  const name = readErrorName(error)
+  if (includesAny(message, ["429", "rate limit"])) {
+    return "provider_rate_limited"
   }
-
-  return "unknown"
+  if (
+    name === "quotaexceedederror" ||
+    includesAny(message, [
+      "disk full",
+      "no space",
+      "quotaexceeded",
+      "file_no_space",
+    ])
+  ) {
+    return "disk_full"
+  }
+  return (
+    classifyContentError(message) ??
+    classifyFolderError(name, message) ??
+    classifyNetworkError(message)
+  )
 }
