@@ -20,6 +20,10 @@ export interface CommandCenterTaskActionAvailability {
 export type CommandCenterTaskActionId =
   "cancel" | "retry-failed" | "restart" | "move-to-top" | "remove"
 
+export type CommandCenterTaskActionHandler = (
+  taskId: string
+) => void | Promise<void>
+
 export interface CommandCenterTaskActionPlan {
   inline: CommandCenterTaskActionId[]
   overflow: CommandCenterTaskActionId[]
@@ -55,65 +59,66 @@ export function getRetryAvailability(
   return { canRetryFailed: true, retryBlockedMessage: null }
 }
 
+const STATUS_LABEL_KEYS = {
+  downloading: "status_downloading",
+  queued: "status_queued",
+  partial_success: "status_partialSuccess",
+  failed: "status_failed",
+  canceled: "status_canceled",
+}
+
 export function getTaskStatusLabel(
   status: QueueTaskSummary["status"],
   activeBlock?: QueueTaskSummary["activeBlock"],
   outputDestination?: QueueTaskSummary["outputDestination"],
   saveConfirmedAt?: number
 ): string {
-  if (activeBlock === "provider_network_policy_pending") {
+  if (activeBlock === "provider_network_policy_pending")
     return t("status_waitingProviderPolicy")
-  }
-  if (activeBlock === "provider_network_policy_action_required") {
+  if (activeBlock === "provider_network_policy_action_required")
     return t("status_providerActionRequired")
-  }
+  if (status === "completed")
+    return getOutputResultLabel(outputDestination, saveConfirmedAt)
+  const key = STATUS_LABEL_KEYS[status]
+  return key ? t(key) : status
+}
 
-  switch (status) {
-    case "downloading":
-      return t("status_downloading")
-    case "queued":
-      return t("status_queued")
-    case "completed":
-      return getOutputResultLabel(outputDestination, saveConfirmedAt)
-    case "partial_success":
-      return t("status_partialSuccess")
-    case "failed":
-      return t("status_failed")
-    case "canceled":
-      return t("status_canceled")
-    default:
-      return status
-  }
+const STATUS_ICONS = {
+  downloading: { Icon: Loader2, className: "h-2.5 w-2.5 animate-spin" },
+  queued: { Icon: Clock, className: "h-2.5 w-2.5" },
+  completed: { Icon: CheckCircle2, className: "h-2.5 w-2.5 text-emerald-600" },
+  partial_success: {
+    Icon: CheckCircle2,
+    className: "h-2.5 w-2.5 text-amber-600",
+  },
+  failed: { Icon: XCircle, className: "h-2.5 w-2.5 text-destructive" },
+  canceled: { Icon: XCircle, className: "h-2.5 w-2.5 text-muted-foreground" },
 }
 
 export function getTaskStatusIcon(
   status: QueueTaskSummary["status"]
 ): ReactNode {
-  switch (status) {
-    case "downloading":
-      return createElement(Loader2, { className: "h-2.5 w-2.5 animate-spin" })
-    case "queued":
-      return createElement(Clock, { className: "h-2.5 w-2.5" })
-    case "completed":
-      return createElement(CheckCircle2, {
-        className: "h-2.5 w-2.5 text-emerald-600",
-      })
-    case "partial_success":
-      return createElement(CheckCircle2, {
-        className: "h-2.5 w-2.5 text-amber-600",
-      })
-    case "failed":
-      return createElement(XCircle, {
-        className: "h-2.5 w-2.5 text-destructive",
-      })
-    case "canceled":
-      return createElement(XCircle, {
-        className: "h-2.5 w-2.5 text-muted-foreground",
-      })
-    default:
-      return null
-  }
+  const presentation = STATUS_ICONS[status]
+  return presentation
+    ? createElement(presentation.Icon, { className: presentation.className })
+    : null
 }
+
+const HISTORY_STATUSES = new Set<QueueTaskSummary["status"]>([
+  "completed",
+  "partial_success",
+  "failed",
+  "canceled",
+])
+const RESTARTABLE_STATUSES = new Set<QueueTaskSummary["status"]>([
+  "partial_success",
+  "failed",
+  "canceled",
+])
+const CANCELABLE_STATUSES = new Set<QueueTaskSummary["status"]>([
+  "downloading",
+  "queued",
+])
 
 export function getTaskActionAvailability(
   task: QueueTaskSummary,
@@ -126,25 +131,17 @@ export function getTaskActionAvailability(
     isFirstQueuedTask?: boolean
   }
 ): CommandCenterTaskActionAvailability {
-  const isTaskHistory =
-    task.status === "completed" ||
-    task.status === "partial_success" ||
-    task.status === "failed" ||
-    task.status === "canceled"
+  const isTaskHistory = HISTORY_STATUSES.has(task.status)
   const isRetried = task.isRetried === true
 
   return {
-    canCancel:
-      (task.status === "downloading" || task.status === "queued") &&
-      options.hasCancelHandler,
+    canCancel: CANCELABLE_STATUSES.has(task.status) && options.hasCancelHandler,
     isTaskHistory,
     isRetried,
     canRestart:
       options.hasRestartHandler &&
       !isRetried &&
-      (task.status === "partial_success" ||
-        task.status === "failed" ||
-        task.status === "canceled"),
+      RESTARTABLE_STATUSES.has(task.status),
     canMoveToTop:
       options.hasMoveToTopHandler &&
       task.status === "queued" &&
@@ -153,64 +150,62 @@ export function getTaskActionAvailability(
   }
 }
 
+type TaskActionPlanAvailability = Pick<
+  CommandCenterTaskActionAvailability,
+  "canCancel" | "canRestart" | "canMoveToTop" | "canRemove"
+> & { canRetryFailed: boolean }
+
+const ACTION_AVAILABILITY = {
+  cancel: "canCancel",
+  "retry-failed": "canRetryFailed",
+  restart: "canRestart",
+  "move-to-top": "canMoveToTop",
+  remove: "canRemove",
+} as const satisfies Record<
+  CommandCenterTaskActionId,
+  keyof TaskActionPlanAvailability
+>
+
+const ACTION_LAYOUTS: Record<
+  Exclude<QueueTaskSummary["status"], "partial_success">,
+  CommandCenterTaskActionPlan
+> = {
+  downloading: { inline: ["cancel"], overflow: [] },
+  queued: { inline: ["move-to-top", "cancel"], overflow: [] },
+  failed: { inline: ["restart", "remove"], overflow: [] },
+  canceled: { inline: ["restart", "remove"], overflow: [] },
+  completed: { inline: ["remove"], overflow: [] },
+}
+
+function getPartialSuccessActionLayout(
+  canRetryFailed: boolean
+): CommandCenterTaskActionPlan {
+  return canRetryFailed
+    ? { inline: ["retry-failed", "remove"], overflow: ["restart"] }
+    : { inline: ["restart", "remove"], overflow: [] }
+}
+
 export function getTaskActionPlan(
   status: QueueTaskSummary["status"],
-  availability: Pick<
-    CommandCenterTaskActionAvailability,
-    "canCancel" | "canRestart" | "canMoveToTop" | "canRemove"
-  > & { canRetryFailed: boolean }
+  availability: TaskActionPlanAvailability
 ): CommandCenterTaskActionPlan {
-  if (status === "downloading") {
-    return {
-      inline: availability.canCancel ? ["cancel"] : [],
-      overflow: [],
-    }
-  }
-
-  if (status === "queued") {
-    return {
-      inline: [
-        ...(availability.canMoveToTop ? (["move-to-top"] as const) : []),
-        ...(availability.canCancel ? (["cancel"] as const) : []),
-      ],
-      overflow: [],
-    }
-  }
-
-  if (status === "partial_success") {
-    const inline: CommandCenterTaskActionId[] = []
-    const overflow: CommandCenterTaskActionId[] = []
-
-    if (availability.canRetryFailed) {
-      inline.push("retry-failed")
-      if (availability.canRestart) {
-        overflow.push("restart")
-      }
-    } else if (availability.canRestart) {
-      inline.push("restart")
-    }
-
-    if (availability.canRemove) {
-      inline.push("remove")
-    }
-
-    return { inline, overflow }
-  }
-
-  if (status === "failed" || status === "canceled") {
-    return {
-      inline: [
-        ...(availability.canRestart ? (["restart"] as const) : []),
-        ...(availability.canRemove ? (["remove"] as const) : []),
-      ],
-      overflow: [],
-    }
-  }
-
+  const layout =
+    status === "partial_success"
+      ? getPartialSuccessActionLayout(availability.canRetryFailed)
+      : ACTION_LAYOUTS[status]
+  const available = (action: CommandCenterTaskActionId) =>
+    availability[ACTION_AVAILABILITY[action]]
   return {
-    inline: availability.canRemove ? ["remove"] : [],
-    overflow: [],
+    inline: layout.inline.filter(available),
+    overflow: layout.overflow.filter(available),
   }
+}
+
+function getInFlightChapterCount(progress: ActiveTaskProgressState): number {
+  return Math.max(
+    1,
+    progress.activeChapterCount ?? progress.activeChapters?.length ?? 1
+  )
 }
 
 export function getTaskProgressPresentation(
@@ -218,29 +213,25 @@ export function getTaskProgressPresentation(
   activeTaskProgress: ActiveTaskProgressState | null | undefined,
   showActiveProgress: boolean
 ): CommandCenterTaskProgressPresentation {
-  const showProgressInRow =
-    task.status === "downloading" &&
-    showActiveProgress &&
-    !!activeTaskProgress &&
-    activeTaskProgress.taskId === task.id
-  const inFlightChapterCount = showProgressInRow
-    ? Math.max(
-        1,
-        activeTaskProgress?.activeChapterCount ??
-          activeTaskProgress?.activeChapters?.length ??
-          1
-      )
+  if (task.status !== "downloading") {
+    return {
+      showProgressInRow: false,
+      activeRowChapterCount: task.chapters.completed,
+    }
+  }
+  const currentProgress =
+    showActiveProgress && activeTaskProgress?.taskId === task.id
+      ? activeTaskProgress
+      : null
+  const inFlightChapterCount = currentProgress
+    ? getInFlightChapterCount(currentProgress)
     : 0
-
   return {
-    showProgressInRow,
-    activeRowChapterCount:
-      task.status === "downloading"
-        ? Math.min(
-            task.chapters.total,
-            task.chapters.completed + inFlightChapterCount
-          )
-        : task.chapters.completed,
+    showProgressInRow: !!currentProgress,
+    activeRowChapterCount: Math.min(
+      task.chapters.total,
+      task.chapters.completed + inFlightChapterCount
+    ),
   }
 }
 

@@ -25,6 +25,7 @@ import { t } from "@/src/runtime/i18n"
 import {
   getTaskActionPlan,
   type CommandCenterTaskActionId,
+  type CommandCenterTaskActionHandler,
 } from "./command-center-queue-helpers"
 
 interface CommandCenterTaskActionsProps {
@@ -42,187 +43,183 @@ interface CommandCenterTaskActionsProps {
   canMoveToTop: boolean
   canRemove: boolean
   onBeginCancel: (taskId: string) => void
-  onRetryFailed?: (taskId: string) => void
-  onRestartTask?: (taskId: string) => void
-  onMoveTaskToTop?: (taskId: string) => void
-  onRemoveTask?: (taskId: string) => void
+  onRetryFailed?: CommandCenterTaskActionHandler
+  onRestartTask?: CommandCenterTaskActionHandler
+  onMoveTaskToTop?: CommandCenterTaskActionHandler
+  onRemoveTask?: CommandCenterTaskActionHandler
 }
+
+interface TaskActionDescriptor {
+  id: CommandCenterTaskActionId
+  label: string
+  pending: boolean | undefined
+  destructive: boolean
+  Icon: typeof XCircle
+  invoke: () => void | Promise<void>
+}
+
+const ACTION_PRESENTATION = {
+  cancel: {
+    labelKey: "sidepanel_cancelDownload",
+    Icon: XCircle,
+    destructive: true,
+  },
+  "retry-failed": {
+    labelKey: "sidepanel_retryFailedChapters",
+    Icon: RotateCcw,
+    destructive: false,
+  },
+  restart: {
+    labelKey: "sidepanel_restartAllChapters",
+    Icon: RotateCcw,
+    destructive: false,
+  },
+  "move-to-top": {
+    labelKey: "sidepanel_moveTaskToTop",
+    Icon: ArrowUp,
+    destructive: false,
+  },
+  remove: { labelKey: "common_remove", Icon: Trash2, destructive: true },
+} satisfies Record<
+  CommandCenterTaskActionId,
+  { labelKey: string; Icon: typeof XCircle; destructive: boolean }
+>
 
 function actionLabel(
   action: CommandCenterTaskActionId,
-  outputUncertain: boolean
+  outputUncertain: boolean | undefined
 ): string {
   if (outputUncertain) {
     if (action === "retry-failed") return t("sidepanel_retryUncertainHandoff")
     if (action === "restart") return t("sidepanel_restartUncertainHandoff")
   }
-  switch (action) {
-    case "cancel":
-      return t("sidepanel_cancelDownload")
-    case "retry-failed":
-      return t("sidepanel_retryFailedChapters")
-    case "restart":
-      return t("sidepanel_restartAllChapters")
-    case "move-to-top":
-      return t("sidepanel_moveTaskToTop")
-    case "remove":
-      return t("common_remove")
+  return t(ACTION_PRESENTATION[action].labelKey)
+}
+
+function getTaskActionDescriptor(
+  action: CommandCenterTaskActionId,
+  props: CommandCenterTaskActionsProps
+): TaskActionDescriptor {
+  const controls = {
+    cancel: { pending: props.isCanceling, handler: props.onBeginCancel },
+    "retry-failed": { pending: props.isRetrying, handler: props.onRetryFailed },
+    restart: { pending: props.isRestarting, handler: props.onRestartTask },
+    "move-to-top": { pending: props.isMoving, handler: props.onMoveTaskToTop },
+    remove: { pending: props.isRemoving, handler: props.onRemoveTask },
+  }[action]
+  return {
+    id: action,
+    label: actionLabel(action, props.outputUncertain),
+    pending: controls.pending,
+    ...ACTION_PRESENTATION[action],
+    invoke: () => controls.handler?.(props.taskId),
   }
 }
 
-function actionIcon(action: CommandCenterTaskActionId) {
-  switch (action) {
-    case "cancel":
-      return <XCircle aria-hidden="true" data-icon="inline-start" />
-    case "retry-failed":
-    case "restart":
-      return <RotateCcw aria-hidden="true" data-icon="inline-start" />
-    case "move-to-top":
-      return <ArrowUp aria-hidden="true" data-icon="inline-start" />
-    case "remove":
-      return <Trash2 aria-hidden="true" data-icon="inline-start" />
-  }
-}
-
-export function CommandCenterTaskActions({
-  taskId,
-  status,
-  outputUncertain = false,
-  isCanceling,
-  isRetrying = false,
-  isRestarting = false,
-  isRemoving = false,
-  isMoving = false,
-  canCancel,
-  canRetryFailed,
-  canRestart,
-  canMoveToTop,
-  canRemove,
-  onBeginCancel,
-  onRetryFailed,
-  onRestartTask,
-  onMoveTaskToTop,
-  onRemoveTask,
-}: CommandCenterTaskActionsProps) {
-  const plan = getTaskActionPlan(status, {
-    canCancel,
-    canRetryFailed,
-    canRestart,
-    canMoveToTop,
-    canRemove,
-  })
-
-  const isPending = (action: CommandCenterTaskActionId): boolean =>
-    (action === "cancel" && isCanceling) ||
-    (action === "retry-failed" && isRetrying) ||
-    (action === "restart" && isRestarting) ||
-    (action === "remove" && isRemoving) ||
-    (action === "move-to-top" && isMoving)
-
-  const invoke = (action: CommandCenterTaskActionId) => {
-    switch (action) {
-      case "cancel":
-        onBeginCancel(taskId)
-        break
-      case "retry-failed":
-        onRetryFailed?.(taskId)
-        break
-      case "restart":
-        onRestartTask?.(taskId)
-        break
-      case "move-to-top":
-        onMoveTaskToTop?.(taskId)
-        break
-      case "remove":
-        onRemoveTask?.(taskId)
-        break
-    }
-  }
-
-  const renderInlineAction = (action: CommandCenterTaskActionId) => {
-    const pending = isPending(action)
-    const isDestructive = action === "cancel" || action === "remove"
-
+function TaskActionIcon({
+  action,
+  inline = false,
+}: {
+  action: TaskActionDescriptor
+  inline?: boolean
+}) {
+  if (action.pending) {
     return (
-      <Tooltip key={action}>
-        <TooltipTrigger asChild>
-          <Button
-            aria-label={
-              pending && action === "cancel"
-                ? t("sidepanel_cancelingDownload")
-                : actionLabel(action, outputUncertain)
-            }
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "size-6 rounded transition-all duration-150 active:scale-90",
-              isDestructive
-                ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-            onClick={() => invoke(action)}
-            disabled={pending}
-          >
-            {pending ? (
-              <Loader2
-                aria-hidden="true"
-                data-icon="inline-start"
-                className="size-3.5 animate-spin"
-              />
-            ) : (
-              actionIcon(action)
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="text-xs">
-          {actionLabel(action, outputUncertain)}
-        </TooltipContent>
-      </Tooltip>
+      <Loader2
+        aria-hidden="true"
+        data-icon={inline ? "inline-start" : undefined}
+        className={cn("animate-spin", inline && "size-3.5")}
+      />
     )
   }
+  return <action.Icon aria-hidden="true" data-icon="inline-start" />
+}
 
+function InlineTaskAction({ action }: { action: TaskActionDescriptor }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={
+            action.pending && action.id === "cancel"
+              ? t("sidepanel_cancelingDownload")
+              : action.label
+          }
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "size-6 rounded transition-all duration-150 active:scale-90",
+            action.destructive
+              ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+          onClick={action.invoke}
+          disabled={action.pending}
+        >
+          <TaskActionIcon action={action} inline />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="text-xs">
+        {action.label}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function OverflowTaskActions({ actions }: { actions: TaskActionDescriptor[] }) {
+  if (actions.length === 0) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          aria-label={t("sidepanel_moreActions")}
+          variant="ghost"
+          size="icon"
+          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 active:scale-90"
+        >
+          <MoreHorizontal
+            aria-hidden="true"
+            data-icon="inline-start"
+            className="size-3.5"
+          />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.id}
+            disabled={action.pending}
+            className={
+              action.destructive
+                ? "text-destructive focus:text-destructive"
+                : undefined
+            }
+            onSelect={action.invoke}
+          >
+            <TaskActionIcon action={action} />
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function CommandCenterTaskActions(props: CommandCenterTaskActionsProps) {
+  const plan = getTaskActionPlan(props.status, props)
   return (
     <div className="flex items-center gap-0.5 shrink-0">
-      {plan.inline.map(renderInlineAction)}
-      {plan.overflow.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label={t("sidepanel_moreActions")}
-              variant="ghost"
-              size="icon"
-              className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 active:scale-90"
-            >
-              <MoreHorizontal
-                aria-hidden="true"
-                data-icon="inline-start"
-                className="size-3.5"
-              />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {plan.overflow.map((action) => (
-              <DropdownMenuItem
-                key={action}
-                disabled={isPending(action)}
-                className={
-                  action === "cancel" || action === "remove"
-                    ? "text-destructive focus:text-destructive"
-                    : undefined
-                }
-                onSelect={() => invoke(action)}
-              >
-                {isPending(action) ? (
-                  <Loader2 aria-hidden="true" className="animate-spin" />
-                ) : (
-                  actionIcon(action)
-                )}
-                {actionLabel(action, outputUncertain)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {plan.inline.map((action) => (
+        <InlineTaskAction
+          key={action}
+          action={getTaskActionDescriptor(action, props)}
+        />
+      ))}
+      <OverflowTaskActions
+        actions={plan.overflow.map((action) =>
+          getTaskActionDescriptor(action, props)
+        )}
+      />
     </div>
   )
 }
