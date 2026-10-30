@@ -172,6 +172,36 @@ describe("mounted series selection", () => {
     expect(onAfterStart).toHaveBeenCalledOnce()
   })
 
+  it("enqueues only the selected unlocked chapter from a partial selection", async () => {
+    await render()
+    await click(checkbox("Chapter one"))
+    expect(selections["mangadex#one"]).toEqual(["one"])
+    expect(checkbox("Chapter extra").getAttribute("aria-checked")).toBe("false")
+    expect(checkbox("Chapter locked").disabled).toBe(true)
+    expect(checkbox("Chapter locked").getAttribute("aria-checked")).toBe(
+      "false"
+    )
+
+    const pending = Promise.withResolvers<unknown>()
+    sendMessage.mockReturnValueOnce(pending.promise)
+    await click(button("Download (1)"))
+    await vi.waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          type: "START_DOWNLOAD",
+          payload: expect.objectContaining({ selectedChapterIds: ["one"] }),
+        })
+      )
+    )
+    expect(selections["mangadex#one"]).toEqual(["one"])
+    await act(async () =>
+      pending.resolve({ success: true, taskId: "new-task" })
+    )
+    expect(selections["mangadex#one"]).toBeUndefined()
+    expect(selections["mangadex#other"]).toEqual(["other-chapter"])
+    expect(onAfterStart).toHaveBeenCalledOnce()
+  })
+
   it("keeps controls disabled during an enqueue and displays loading before the list is ready", async () => {
     await render(series({ isChaptersLoading: true }))
     expect(

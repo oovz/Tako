@@ -137,3 +137,20 @@ it("recovers a disconnected port, rejects its old messages and cancels reconnect
   await act(async () => vi.advanceTimersByTimeAsync(1_000))
   expect(connect).toHaveBeenCalledTimes(2)
 })
+
+it("does not reconnect when disconnected-port recovery settles after unmount", async () => {
+  await act(async () => root.render(createElement(View)))
+  expect(connect).toHaveBeenCalledTimes(1)
+  const pending = Promise.withResolvers<Record<string, unknown>>()
+  get.mockReturnValueOnce(pending.promise)
+  const readsBeforeDisconnect = get.mock.calls.length
+
+  await act(async () => first.onDisconnect.emit())
+  expect(get).toHaveBeenCalledTimes(readsBeforeDisconnect + 1)
+  act(() => root.unmount())
+  await act(async () => pending.resolve(snapshot("worker-2", 1)))
+  await act(async () => vi.advanceTimersByTimeAsync(1_000))
+
+  expect(connect).toHaveBeenCalledTimes(1)
+  expect(get).toHaveBeenCalledTimes(readsBeforeDisconnect + 1)
+})
