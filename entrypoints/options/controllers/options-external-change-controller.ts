@@ -1,3 +1,4 @@
+import { optionsValuesEqual as valuesEqual } from "../state/options-configuration-reducer-values"
 import type { OptionsConfigurationData } from "@/src/runtime/runtime-message-contracts"
 import {
   OPTIONS_CONFIGURATION_STORAGE_KEYS,
@@ -23,32 +24,6 @@ export interface OptionsSaveExpectation {
 interface PendingSaveExpectation {
   expected: OptionsConfigurationSnapshot
   expectStorageChange: boolean
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function valuesEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((entry, index) => valuesEqual(entry, right[index]))
-    )
-  }
-  if (!isRecord(left) || !isRecord(right)) return false
-
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key) => Object.hasOwn(right, key) && valuesEqual(left[key], right[key])
-    )
-  )
 }
 
 /** Owns storage-change generations so stale reads cannot overwrite a draft. */
@@ -140,65 +115,72 @@ export class OptionsExternalChangeController {
     return null
   }
 
+  private async readExternalChange(
+    dependencies: OptionsExternalChangeDependencies,
+    changedKeys: OptionsConfigurationStorageKey[],
+    isCurrent: () => boolean
+  ): Promise<void> {
+    const draftRevisionAtStart = dependencies.draftRevision()
+    try {
+      const latest = await this.configuration.load()
+      if (!isCurrent()) return
+      if (
+        dependencies.isSaving() ||
+        dependencies.isDirty() ||
+        dependencies.draftRevision() !== draftRevisionAtStart
+      ) {
+        dependencies.onConflict(changedKeys)
+        return
+      }
+      dependencies.onSync(latest)
+    } catch (error) {
+      if (isCurrent()) dependencies.onError(error, changedKeys)
+    }
+  }
+
+  private handleStorageChange(
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: chrome.storage.AreaName,
+    dependencies: OptionsExternalChangeDependencies,
+    isSubscribed: () => boolean
+  ): void {
+    if (areaName !== "local") return
+    const changedKeys = OPTIONS_CONFIGURATION_STORAGE_KEYS.filter(
+      (key) => changes[key] !== undefined
+    )
+    if (changedKeys.length === 0) return
+
+    // Match the exact submitted values even when Chrome emits before the response.
+    const ownSaveToken = this.isOwnSaveChange(changes)
+    if (ownSaveToken !== null) {
+      this.pendingSaves.delete(ownSaveToken)
+      return
+    }
+    this.changeRevision += 1
+    const requestId = ++this.requestGeneration
+    if (
+      dependencies.isSaving() ||
+      dependencies.isDirty() ||
+      dependencies.hasUnsavedChanges()
+    ) {
+      dependencies.onConflict(changedKeys)
+      return
+    }
+    void this.readExternalChange(
+      dependencies,
+      changedKeys,
+      () => isSubscribed() && requestId === this.requestGeneration
+    )
+  }
+
   subscribe(dependencies: OptionsExternalChangeDependencies): () => void {
     let canceled = false
-
     const handleStorageChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: chrome.storage.AreaName
     ) => {
-      if (areaName !== "local") return
-      const changedKeys = OPTIONS_CONFIGURATION_STORAGE_KEYS.filter(
-        (key) => changes[key] !== undefined
-      )
-      if (changedKeys.length === 0) return
-
-      // Chrome may deliver the write event before SAVE_OPTIONS_CONFIGURATION
-      // resolves. Suppress only values matching the exact submitted snapshot;
-      // any differing key is a real concurrent writer and remains a conflict.
-      const ownSaveToken = this.isOwnSaveChange(changes)
-      if (ownSaveToken !== null) {
-        this.pendingSaves.delete(ownSaveToken)
-        return
-      }
-
-      this.changeRevision += 1
-      const requestId = ++this.requestGeneration
-      const recordConflict = () => dependencies.onConflict(changedKeys)
-      // Do not drop storage events while a save is in flight. We cannot tell
-      // whether the event came from this save or another writer, so retain the
-      // conflict and fence any read that started before it.
-      if (dependencies.isSaving()) {
-        recordConflict()
-        return
-      }
-      if (dependencies.isDirty() || dependencies.hasUnsavedChanges()) {
-        recordConflict()
-        return
-      }
-
-      const draftRevisionAtStart = dependencies.draftRevision()
-      void this.configuration
-        .load()
-        .then((latest) => {
-          if (canceled || requestId !== this.requestGeneration) return
-          if (
-            dependencies.isSaving() ||
-            dependencies.isDirty() ||
-            dependencies.draftRevision() !== draftRevisionAtStart
-          ) {
-            recordConflict()
-            return
-          }
-          dependencies.onSync(latest)
-        })
-        .catch((error: unknown) => {
-          if (!canceled && requestId === this.requestGeneration) {
-            dependencies.onError(error, changedKeys)
-          }
-        })
+      this.handleStorageChange(changes, areaName, dependencies, () => !canceled)
     }
-
     chrome.storage.onChanged.addListener(handleStorageChange)
     return () => {
       canceled = true

@@ -1,3 +1,7 @@
+import {
+  isOptionsRecord as isRecord,
+  optionsValuesEqual as valuesEqual,
+} from "./options-configuration-reducer-values"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import type {
   SiteIntegrationEnablementMap,
@@ -54,32 +58,6 @@ interface MergeResult {
   value?: unknown
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function valuesEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((entry, index) => valuesEqual(entry, right[index]))
-    )
-  }
-  if (!isRecord(left) || !isRecord(right)) return false
-
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every(
-      (key) => Object.hasOwn(right, key) && valuesEqual(left[key], right[key])
-    )
-  )
-}
-
 export function optionsConfigurationSnapshotsEqual(
   left: OptionsConfigurationSnapshot,
   right: OptionsConfigurationSnapshot
@@ -104,36 +82,65 @@ function mergeNode(
   }
 
   if (
+    canMergeRecords(
+      baselinePresent,
+      baseline,
+      draftPresent,
+      draft,
+      latestPresent,
+      latest
+    )
+  ) {
+    return {
+      present: true,
+      value: mergeRecords(baseline, draft, latest),
+    }
+  }
+
+  return draftPresent ? { present: true, value: draft } : { present: false }
+}
+
+function canMergeRecords(
+  baselinePresent: boolean,
+  baseline: unknown,
+  draftPresent: boolean,
+  draft: unknown,
+  latestPresent: boolean,
+  latest: unknown
+): draft is Record<string, unknown> {
+  return (
     draftPresent &&
     isRecord(draft) &&
     (!baselinePresent || isRecord(baseline)) &&
     (!latestPresent || isRecord(latest))
-  ) {
-    const baselineRecord = isRecord(baseline) ? baseline : {}
-    const latestRecord = isRecord(latest) ? latest : {}
-    const keys = new Set([
-      ...Object.keys(baselineRecord),
-      ...Object.keys(draft),
-      ...Object.keys(latestRecord),
-    ])
-    const merged: Record<string, unknown> = {}
+  )
+}
 
-    for (const key of keys) {
-      const result = mergeNode(
-        Object.hasOwn(baselineRecord, key),
-        baselineRecord[key],
-        Object.hasOwn(draft, key),
-        draft[key],
-        Object.hasOwn(latestRecord, key),
-        latestRecord[key]
-      )
-      if (result.present) merged[key] = result.value
-    }
-
-    return { present: true, value: merged }
+function mergeRecords(
+  baseline: unknown,
+  draft: Record<string, unknown>,
+  latest: unknown
+): Record<string, unknown> {
+  const baselineRecord = isRecord(baseline) ? baseline : {}
+  const latestRecord = isRecord(latest) ? latest : {}
+  const keys = new Set([
+    ...Object.keys(baselineRecord),
+    ...Object.keys(draft),
+    ...Object.keys(latestRecord),
+  ])
+  const merged: Record<string, unknown> = {}
+  for (const key of keys) {
+    const result = mergeNode(
+      Object.hasOwn(baselineRecord, key),
+      baselineRecord[key],
+      Object.hasOwn(draft, key),
+      draft[key],
+      Object.hasOwn(latestRecord, key),
+      latestRecord[key]
+    )
+    if (result.present) merged[key] = result.value
   }
-
-  return draftPresent ? { present: true, value: draft } : { present: false }
+  return merged
 }
 
 function mergeObject<T extends object>(baseline: T, draft: T, latest: T): T {
@@ -254,17 +261,104 @@ function replaceConfiguration(
   }
 }
 
-export function optionsConfigurationReducer(
-  state: OptionsConfigurationState,
+type DraftAction = Extract<
+  OptionsConfigurationAction,
+  {
+    type:
+      | "edit-settings"
+      | "set-override"
+      | "set-enablement"
+      | "set-integration-setting"
+  }
+>
+type HydrationAction = Extract<
+  OptionsConfigurationAction,
+  { type: "load-start" | "hydrate" | "hydrate-error" }
+>
+type ReconciliationAction = Exclude<
+  OptionsConfigurationAction,
+  DraftAction | HydrationAction
+>
+
+function isDraftAction(
   action: OptionsConfigurationAction
+): action is DraftAction {
+  return (
+    action.type === "edit-settings" ||
+    action.type === "set-override" ||
+    action.type === "set-enablement" ||
+    action.type === "set-integration-setting"
+  )
+}
+
+function isHydrationAction(
+  action: OptionsConfigurationAction
+): action is HydrationAction {
+  return (
+    action.type === "load-start" ||
+    action.type === "hydrate" ||
+    action.type === "hydrate-error"
+  )
+}
+
+function editOverride(
+  draft: OptionsConfigurationSnapshot,
+  action: Extract<DraftAction, { type: "set-override" }>
+): OptionsConfigurationSnapshot {
+  const overrides = { ...draft.overrides }
+  if (action.override === null || Object.keys(action.override).length === 0)
+    delete overrides[action.siteIntegrationId]
+  else overrides[action.siteIntegrationId] = { ...action.override }
+  return { ...draft, overrides }
+}
+
+function editIntegrationSetting(
+  draft: OptionsConfigurationSnapshot,
+  action: Extract<DraftAction, { type: "set-integration-setting" }>
+): OptionsConfigurationSnapshot {
+  const integrationSettings = { ...draft.integrationSettings }
+  const settings = { ...(integrationSettings[action.siteIntegrationId] ?? {}) }
+  if (action.enabled) settings[action.settingId] = action.value
+  else delete settings[action.settingId]
+  if (Object.keys(settings).length === 0)
+    delete integrationSettings[action.siteIntegrationId]
+  else integrationSettings[action.siteIntegrationId] = settings
+  return { ...draft, integrationSettings }
+}
+
+function reduceDraft(
+  state: OptionsConfigurationState,
+  action: DraftAction
+): OptionsConfigurationState {
+  if (!state.draft) return state
+  switch (action.type) {
+    case "edit-settings":
+      return withDraftEdit(state, {
+        ...state.draft,
+        settings: { ...state.draft.settings, ...action.updates },
+      })
+    case "set-override":
+      return withDraftEdit(state, editOverride(state.draft, action))
+    case "set-enablement":
+      return withDraftEdit(state, {
+        ...state.draft,
+        enablement: {
+          ...state.draft.enablement,
+          [action.siteIntegrationId]: action.enabled,
+        },
+      })
+    case "set-integration-setting":
+      return withDraftEdit(state, editIntegrationSetting(state.draft, action))
+  }
+}
+
+function reduceHydration(
+  state: OptionsConfigurationState,
+  action: HydrationAction
 ): OptionsConfigurationState {
   switch (action.type) {
     case "load-start":
-      return {
-        ...state,
-        hydration: { status: "loading", error: null },
-      }
-
+      return { ...state, hydration: { status: "loading", error: null } }
     case "hydrate":
       return {
         ...state,
@@ -274,71 +368,69 @@ export function optionsConfigurationReducer(
         externalChangeKeys: [],
         draftDirty: false,
       }
-
     case "hydrate-error":
-      return {
-        ...state,
-        hydration: { status: "error", error: action.error },
-      }
+      return { ...state, hydration: { status: "error", error: action.error } }
+  }
+}
 
-    case "edit-settings": {
-      if (!state.draft) return state
-      return withDraftEdit(state, {
-        ...state.draft,
-        settings: { ...state.draft.settings, ...action.updates },
-      })
-    }
+function keepLocalChanges(
+  state: OptionsConfigurationState,
+  latest: OptionsConfigurationSnapshot
+): OptionsConfigurationState {
+  if (!state.saved || !state.draft) return state
+  const draft = mergeOptionsDraftOntoLatest(state.saved, state.draft, latest)
+  return {
+    ...state,
+    saved: latest,
+    draft,
+    externalChangeKeys: [],
+    draftRevision: state.draftRevision + 1,
+    draftDirty: !optionsConfigurationSnapshotsEqual(draft, latest),
+  }
+}
 
-    case "set-override": {
-      if (!state.draft) return state
-      const overrides = { ...state.draft.overrides }
-      if (
-        action.override === null ||
-        Object.keys(action.override).length === 0
-      ) {
-        delete overrides[action.siteIntegrationId]
-      } else {
-        overrides[action.siteIntegrationId] = { ...action.override }
-      }
-      return withDraftEdit(state, { ...state.draft, overrides })
-    }
+function commitSave(
+  state: OptionsConfigurationState,
+  action: Extract<OptionsConfigurationAction, { type: "save-commit" }>
+): OptionsConfigurationState {
+  if (!state.draft) return state
+  const reconciliation = reconcileOptionsSave({
+    submitted: action.submitted,
+    persisted: action.persisted,
+    submittedRevision: action.submittedRevision,
+    currentRevision: state.draftRevision,
+  })
+  return {
+    ...state,
+    saved: reconciliation.saved,
+    draft: reconciliation.clearTransientDraft
+      ? reconciliation.saved
+      : state.draft,
+    // Preserve conflicts recorded while the submitted snapshot was in flight.
+    externalChangeKeys: state.externalChangeKeys,
+    draftDirty: reconciliation.hasUnsavedChanges,
+  }
+}
 
-    case "set-enablement": {
-      if (!state.draft) return state
-      return withDraftEdit(state, {
-        ...state.draft,
-        enablement: {
-          ...state.draft.enablement,
-          [action.siteIntegrationId]: action.enabled,
-        },
-      })
-    }
+function discardDraft(
+  state: OptionsConfigurationState
+): OptionsConfigurationState {
+  if (!state.saved) return state
+  return {
+    ...state,
+    draft: state.saved,
+    externalChangeKeys: [],
+    draftRevision: state.draftRevision + 1,
+    draftDirty: false,
+  }
+}
 
-    case "set-integration-setting": {
-      if (!state.draft) return state
-      const integrationSettings = {
-        ...state.draft.integrationSettings,
-      }
-      const settings = {
-        ...(integrationSettings[action.siteIntegrationId] ?? {}),
-      }
-
-      if (action.enabled) {
-        settings[action.settingId] = action.value
-      } else {
-        delete settings[action.settingId]
-      }
-
-      if (Object.keys(settings).length === 0) {
-        delete integrationSettings[action.siteIntegrationId]
-      } else {
-        integrationSettings[action.siteIntegrationId] = settings
-      }
-
-      return withDraftEdit(state, { ...state.draft, integrationSettings })
-    }
-
-    case "record-external-conflict": {
+function reduceReconciliation(
+  state: OptionsConfigurationState,
+  action: ReconciliationAction
+): OptionsConfigurationState {
+  switch (action.type) {
+    case "record-external-conflict":
       if (action.keys.length === 0) return state
       return {
         ...state,
@@ -346,64 +438,25 @@ export function optionsConfigurationReducer(
           ...new Set([...state.externalChangeKeys, ...action.keys]),
         ],
       }
-    }
-
     case "sync-external":
       return replaceConfiguration(state, action.latest, false)
-
     case "replace-from-external":
-      return replaceConfiguration(state, action.latest, true)
-
-    case "merge-latest-keeping-local": {
-      if (!state.saved || !state.draft) return state
-      const draft = mergeOptionsDraftOntoLatest(
-        state.saved,
-        state.draft,
-        action.latest
-      )
-      return {
-        ...state,
-        saved: action.latest,
-        draft,
-        externalChangeKeys: [],
-        draftRevision: state.draftRevision + 1,
-        draftDirty: !optionsConfigurationSnapshotsEqual(draft, action.latest),
-      }
-    }
-
-    case "discard-to-saved":
-      if (!state.saved) return state
-      return {
-        ...state,
-        draft: state.saved,
-        externalChangeKeys: [],
-        draftRevision: state.draftRevision + 1,
-        draftDirty: false,
-      }
-
     case "discard-to-latest":
       return replaceConfiguration(state, action.latest, true)
-
-    case "save-commit": {
-      if (!state.draft) return state
-      const reconciliation = reconcileOptionsSave({
-        submitted: action.submitted,
-        persisted: action.persisted,
-        submittedRevision: action.submittedRevision,
-        currentRevision: state.draftRevision,
-      })
-      return {
-        ...state,
-        saved: reconciliation.saved,
-        draft: reconciliation.clearTransientDraft
-          ? reconciliation.saved
-          : state.draft,
-        // A storage event may have been recorded while the durable save was
-        // in flight. Committing the submitted snapshot must not erase that
-        // conflict; the user must resolve the newer external state.
-        externalChangeKeys: state.externalChangeKeys,
-        draftDirty: reconciliation.hasUnsavedChanges,
-      }
-    }
+    case "merge-latest-keeping-local":
+      return keepLocalChanges(state, action.latest)
+    case "discard-to-saved":
+      return discardDraft(state)
+    case "save-commit":
+      return commitSave(state, action)
   }
+}
+
+export function optionsConfigurationReducer(
+  state: OptionsConfigurationState,
+  action: OptionsConfigurationAction
+): OptionsConfigurationState {
+  if (isDraftAction(action)) return reduceDraft(state, action)
+  if (isHydrationAction(action)) return reduceHydration(state, action)
+  return reduceReconciliation(state, action)
 }
