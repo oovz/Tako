@@ -15,6 +15,19 @@ export const PublusConfigPageSchema = z.looseObject({
   BlockHeight: z.number().optional(),
 })
 
+export const PublusReconstructionFieldsSchema = PublusConfigPageSchema.pick({
+  NS: true,
+  PS: true,
+  RS: true,
+  BlockWidth: true,
+  BlockHeight: true,
+})
+  .required()
+  .extend({
+    BlockWidth: z.number().positive(),
+    BlockHeight: z.number().positive(),
+  })
+
 const PublusConfigPageEntrySchema = z.looseObject({
   Page: PublusConfigPageSchema.optional(),
 })

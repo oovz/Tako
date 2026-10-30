@@ -8,6 +8,7 @@ import { ProviderContractError } from "../provider-contract-error"
 import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 import {
   parsePublusConfig,
+  PublusReconstructionFieldsSchema,
   type PublusConfig,
   type PublusConfigContent,
   type PublusConfigFile,
@@ -113,6 +114,110 @@ function runRc4(
   return [data, length, key1, key2, key3]
 }
 
+function readBase64Quartet(
+  encoded: string,
+  offset: number,
+  purpose: string
+): [number, number, number, number] {
+  const codes: [number, number, number, number] = [
+    encoded.charCodeAt(offset),
+    encoded.charCodeAt(offset + 1),
+    encoded.charCodeAt(offset + 2),
+    encoded.charCodeAt(offset + 3),
+  ]
+  if (!codes.every((code) => BASE64_LOOKUP.valid[code])) {
+    throw new Error(`Invalid Comic Nettai PUBLUS ${purpose} encoding`)
+  }
+  return codes
+}
+
+function decodeBase64Keys(encoded: string, offset: number): number[][] {
+  const keys: number[] = []
+  const end = offset + 128
+  for (; offset < end; offset += 4) {
+    const [first, second, third, fourth] = readBase64Quartet(
+      encoded,
+      offset,
+      "key"
+    )
+    keys.push(
+      BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second],
+      BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third],
+      BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
+    )
+  }
+  return [keys.slice(0, 32), keys.slice(32, 64), keys.slice(64, 96)]
+}
+
+function base64BodyByteLength(
+  encoded: string,
+  start: number,
+  end: number
+): number {
+  const length = (3 * (end - start)) >> 2
+  if (encoded.charCodeAt(end - 2) === 61) return length - 2
+  if (encoded.charCodeAt(end - 1) === 61) return length - 1
+  return length
+}
+
+function decodeBase64Ending(
+  encoded: string,
+  offset: number,
+  data: Uint8Array,
+  writeIndex: number
+): void {
+  const first = encoded.charCodeAt(offset)
+  const second = encoded.charCodeAt(offset + 1)
+  const third = encoded.charCodeAt(offset + 2)
+  const fourth = encoded.charCodeAt(offset + 3)
+  if (!BASE64_LOOKUP.valid[first] || !BASE64_LOOKUP.valid[second]) {
+    throw new Error("Invalid Comic Nettai PUBLUS data ending")
+  }
+
+  data[writeIndex] = BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second]
+  if (!BASE64_LOOKUP.valid[third]) {
+    if (third !== 61 || fourth !== 61) {
+      throw new Error("Invalid Comic Nettai PUBLUS data padding")
+    }
+    return
+  }
+
+  data[writeIndex + 1] =
+    BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third]
+  if (BASE64_LOOKUP.valid[fourth]) {
+    data[writeIndex + 2] =
+      BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
+  } else if (fourth !== 61) {
+    throw new Error("Invalid Comic Nettai PUBLUS data padding")
+  }
+}
+
+function decodeBase64Body(
+  encoded: string,
+  start: number,
+  end: number
+): Uint8Array {
+  if (start === end) return new Uint8Array(0)
+
+  const data = new Uint8Array(base64BodyByteLength(encoded, start, end))
+  let writeIndex = 0
+  for (; start < end - 4; start += 4) {
+    const [first, second, third, fourth] = readBase64Quartet(
+      encoded,
+      start,
+      "data"
+    )
+    data[writeIndex++] =
+      BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second]
+    data[writeIndex++] =
+      BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third]
+    data[writeIndex++] =
+      BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
+  }
+  decodeBase64Ending(encoded, start, data, writeIndex)
+  return data
+}
+
 function decodeBase64Pack(
   encoded: string,
   dataOffset: number,
@@ -124,101 +229,9 @@ function decodeBase64Pack(
     throw new Error("Invalid Comic Nettai PUBLUS configuration pack")
   }
 
-  const key1 = new Array<number>(32)
-  const key2 = new Array<number>(32)
-  const key3 = new Array<number>(32)
-  let target = key1
-  let targetIndex = 0
-
-  for (let index = dataOffset; index < keyEnd;) {
-    const first = encoded.charCodeAt(index++)
-    const second = encoded.charCodeAt(index++)
-    const third = encoded.charCodeAt(index++)
-    const fourth = encoded.charCodeAt(index++)
-    if (
-      !BASE64_LOOKUP.valid[first] ||
-      !BASE64_LOOKUP.valid[second] ||
-      !BASE64_LOOKUP.valid[third] ||
-      !BASE64_LOOKUP.valid[fourth]
-    ) {
-      throw new Error("Invalid Comic Nettai PUBLUS key encoding")
-    }
-
-    target[targetIndex++] =
-      BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second]
-    if (index === dataOffset + 88) {
-      target = key3
-      targetIndex = 0
-    }
-    target[targetIndex++] =
-      BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third]
-    if (index === dataOffset + 44) {
-      target = key2
-      targetIndex = 0
-    }
-    target[targetIndex++] =
-      BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
-  }
-
-  if (bodyBase64Length === 0) {
-    return [new Uint8Array(0), 0, key1, key2, key3]
-  }
-
-  let byteLength = (3 * bodyBase64Length) >> 2
-  if (encoded.charCodeAt(dataEndOffset - 2) === 61) {
-    byteLength -= 2
-  } else if (encoded.charCodeAt(dataEndOffset - 1) === 61) {
-    byteLength -= 1
-  }
-
-  const data = new Uint8Array(byteLength)
-  let writeIndex = 0
-  let readIndex = keyEnd
-  while (readIndex < dataEndOffset - 4) {
-    const first = encoded.charCodeAt(readIndex++)
-    const second = encoded.charCodeAt(readIndex++)
-    const third = encoded.charCodeAt(readIndex++)
-    const fourth = encoded.charCodeAt(readIndex++)
-    if (
-      !BASE64_LOOKUP.valid[first] ||
-      !BASE64_LOOKUP.valid[second] ||
-      !BASE64_LOOKUP.valid[third] ||
-      !BASE64_LOOKUP.valid[fourth]
-    ) {
-      throw new Error("Invalid Comic Nettai PUBLUS data encoding")
-    }
-
-    data[writeIndex++] =
-      BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second]
-    data[writeIndex++] =
-      BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third]
-    data[writeIndex++] =
-      BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
-  }
-
-  const first = encoded.charCodeAt(readIndex)
-  const second = encoded.charCodeAt(readIndex + 1)
-  const third = encoded.charCodeAt(readIndex + 2)
-  const fourth = encoded.charCodeAt(readIndex + 3)
-  if (!BASE64_LOOKUP.valid[first] || !BASE64_LOOKUP.valid[second]) {
-    throw new Error("Invalid Comic Nettai PUBLUS data ending")
-  }
-
-  data[writeIndex] = BASE64_LOOKUP.left2[first] | BASE64_LOOKUP.right4[second]
-  if (BASE64_LOOKUP.valid[third]) {
-    data[writeIndex + 1] =
-      BASE64_LOOKUP.left4[second] | BASE64_LOOKUP.right2[third]
-    if (BASE64_LOOKUP.valid[fourth]) {
-      data[writeIndex + 2] =
-        BASE64_LOOKUP.left6[third] | BASE64_LOOKUP.value[fourth]
-    } else if (fourth !== 61) {
-      throw new Error("Invalid Comic Nettai PUBLUS data padding")
-    }
-  } else if (third !== 61 || fourth !== 61) {
-    throw new Error("Invalid Comic Nettai PUBLUS data padding")
-  }
-
-  return [data, byteLength, key1, key2, key3]
+  const [key1, key2, key3] = decodeBase64Keys(encoded, dataOffset)
+  const data = decodeBase64Body(encoded, keyEnd, dataEndOffset)
+  return [data, data.length, key1, key2, key3]
 }
 
 function sumAndXor(
@@ -243,221 +256,139 @@ function hasBit(value: number, bit: number): boolean {
   return (value & bit) === bit
 }
 
+type PublusShuffleInput = {
+  values: number[] | Uint8Array
+  valuesLength: number
+  keys: number[][]
+}
+
+function selectShuffleInput(
+  selector: 0 | 1 | 2 | 3,
+  [data, length, key1, key2, key3]: PublusDecodeState
+): PublusShuffleInput {
+  switch (selector) {
+    case 3:
+      return { values: key1, valuesLength: 32, keys: [key2, key3] }
+    case 2:
+      return { values: key2, valuesLength: 32, keys: [key1, key3] }
+    case 1:
+      return { values: key3, valuesLength: 32, keys: [key1, key2] }
+    case 0:
+      return { values: data, valuesLength: length, keys: [key1, key2, key3] }
+  }
+}
+
+function shuffleByteBits(value: number, seed: number): number {
+  if (!hasBit(seed, 2)) value = ((value & 85) << 1) | ((value >>> 1) & 85)
+  if (!hasBit(seed, 4)) value = ((value & 51) << 2) | ((value >>> 2) & 51)
+  if (!hasBit(seed, 8)) value = ((value & 15) << 4) | ((value >>> 4) & 15)
+  return value
+}
+
+function readShuffleChunk(
+  values: number[] | Uint8Array,
+  offset: number,
+  end: number,
+  seed: number,
+  mask: number
+): { scratch: number[]; sum: number; mask: number } {
+  const scratch: number[] = []
+  let sum = seed
+  for (; offset < end; offset += 1) {
+    const value = shuffleByteBits(values[offset] ?? 0, seed)
+    scratch.push(value)
+    sum = (sum + value) & 255
+    mask ^= value
+  }
+  return { scratch, sum, mask }
+}
+
+function permuteShuffleChunk(scratch: number[], sum: number): void {
+  for (let local = 0; local < scratch.length; local += 1) {
+    for (let bit = 1; bit <= 6; bit += 1) {
+      const power = Math.pow(2, bit)
+      if (!hasBit(local, power - 1)) break
+      if (!hasBit(sum, power)) {
+        reverseRange(local - Math.pow(2, bit - 1), local, scratch)
+      }
+    }
+  }
+}
+
+function writeShuffleChunk(
+  values: number[] | Uint8Array,
+  offset: number,
+  end: number,
+  scratch: number[],
+  jump: number,
+  rotateBits: number
+): void {
+  const chunkLength = scratch.length
+  if (rotateBits === 0) {
+    for (let local = chunkLength - jump; offset < end;) {
+      if (local === chunkLength) local = 0
+      values[offset++] = scratch[local++]!
+    }
+    return
+  }
+
+  const inverseRotateBits = 8 - rotateBits
+  for (let local = chunkLength - jump - 1; offset < end;) {
+    let value = scratch[local] << inverseRotateBits
+    local += 1
+    if (local === chunkLength) local = 0
+    value |= scratch[local] >>> rotateBits
+    values[offset++] = value & 255
+  }
+}
+
 function shuffleBytes(
   selector: 0 | 1 | 2 | 3,
   state: PublusDecodeState
 ): PublusDecodeState {
-  const [data, length, key1, key2, key3] = state
-  let values: number[] | Uint8Array
-  let valuesLength: number
-  let firstKey: number[]
-  let secondKey: number[]
-  let thirdKey: number[] | null
+  const { values, valuesLength, keys } = selectShuffleInput(selector, state)
+  const [seed, mask] = keys.reduce(
+    ([seed, mask], key) => sumAndXor(seed, mask, key),
+    [0, 0]
+  )
 
-  switch (selector) {
-    case 3:
-      values = key1
-      valuesLength = 32
-      firstKey = key2
-      secondKey = key3
-      thirdKey = null
-      break
-    case 2:
-      values = key2
-      valuesLength = 32
-      firstKey = key1
-      secondKey = key3
-      thirdKey = null
-      break
-    case 1:
-      values = key3
-      valuesLength = 32
-      firstKey = key1
-      secondKey = key2
-      thirdKey = null
-      break
-    case 0:
-      values = data
-      valuesLength = length
-      firstKey = key1
-      secondKey = key2
-      thirdKey = key3
-      break
-  }
-
-  let [seed, mask] = sumAndXor(0, 0, firstKey)
-  ;[seed, mask] = sumAndXor(seed, mask, secondKey)
-  if (thirdKey) {
-    ;[seed, mask] = sumAndXor(seed, mask, thirdKey)
-  }
-
-  const rotateBits = mask >>> 5
-  const inverseRotateBits = 8 - rotateBits
-  const swapPairs = !hasBit(seed, 2)
-  const swapNibbles = !hasBit(seed, 4)
-  const swapHalves = !hasBit(seed, 8)
-  const scratch: number[] = []
-
-  for (let offset = 0; offset < valuesLength;) {
-    const partialBlock = offset + 32 > valuesLength
+  for (let offset = 0; offset < valuesLength; offset += 32) {
     const end = Math.min(offset + 32, valuesLength)
-    const chunkLength = end - offset
-    let chunkSum = seed
-    let chunkMask = mask
-
-    for (let local = 0, source = offset; local < chunkLength;) {
-      let value = values[source++] ?? 0
-      if (swapPairs) value = ((value & 85) << 1) | ((value >>> 1) & 85)
-      if (swapNibbles) value = ((value & 51) << 2) | ((value >>> 2) & 51)
-      if (swapHalves) value = ((value & 15) << 4) | ((value >>> 4) & 15)
-      scratch[local++] = value
-      chunkSum = (chunkSum + value) & 255
-      chunkMask ^= value
-    }
-
-    for (let local = 0; local < chunkLength; local += 1) {
-      for (let bit = 1; bit <= 6; bit += 1) {
-        const power = Math.pow(2, bit)
-        if (!hasBit(local, power - 1)) break
-        if (!hasBit(chunkSum, power)) {
-          reverseRange(local - Math.pow(2, bit - 1), local, scratch)
-        }
-      }
-    }
-
-    let jump = chunkMask >>> 3
-    jump = partialBlock ? jump % chunkLength : jump & 31
-
-    if (rotateBits === 0) {
-      for (let target = offset, local = chunkLength - jump; target < end;) {
-        if (local === chunkLength) local = 0
-        values[target++] = scratch[local++]!
-      }
-    } else {
-      for (let target = offset, local = chunkLength - jump - 1; target < end;) {
-        let value = scratch[local] << inverseRotateBits
-        local += 1
-        if (local === chunkLength) local = 0
-        value |= scratch[local] >>> rotateBits
-        values[target++] = value & 255
-      }
-    }
-
-    offset = end
+    const chunk = readShuffleChunk(values, offset, end, seed, mask)
+    permuteShuffleChunk(chunk.scratch, chunk.sum)
+    const jump = chunk.mask >>> 3
+    writeShuffleChunk(
+      values,
+      offset,
+      end,
+      chunk.scratch,
+      offset + 32 > valuesLength ? jump % chunk.scratch.length : jump & 31,
+      mask >>> 5
+    )
   }
+  return state
+}
 
-  return [data, length, key1, key2, key3]
+function swapKeyBytes(
+  left: number[] | Uint8Array,
+  right: number[] | Uint8Array,
+  index: number
+): void {
+  const selected = left[index]
+  left[index] = right[index]
+  right[index] = selected
 }
 
 function mixKeys(state: PublusDecodeState): PublusDecodeState {
   const [data, length, key1, key2, key3] = state
+  const values = [key1, key2, key3, data]
   const count = Math.min(32, length)
-
   for (let index = 0; index < count; index += 1) {
     const code = (data[index] ?? 0) ^ key1[index] ^ key2[index] ^ key3[index]
-    let selected: number
-    let replaced: number
-
-    switch (code & 12) {
-      case 0:
-        selected = key1[index]!
-        break
-      case 4:
-        selected = key2[index]!
-        break
-      case 8:
-        selected = key3[index]!
-        break
-      default:
-        selected = data[index]!
-        break
-    }
-
-    switch (code & 3) {
-      case 0:
-        replaced = key1[index]!
-        key1[index] = selected
-        break
-      case 1:
-        replaced = key2[index]!
-        key2[index] = selected
-        break
-      case 2:
-        replaced = key3[index]!
-        key3[index] = selected
-        break
-      default:
-        replaced = data[index]!
-        data[index] = selected
-        break
-    }
-
-    switch (code & 12) {
-      case 0:
-        key1[index] = replaced
-        break
-      case 4:
-        key2[index] = replaced
-        break
-      case 8:
-        key3[index] = replaced
-        break
-      default:
-        data[index] = replaced
-        break
-    }
-
-    switch (code & 192) {
-      case 0:
-        selected = key1[index]!
-        break
-      case 64:
-        selected = key2[index]!
-        break
-      case 128:
-        selected = key3[index]!
-        break
-      default:
-        selected = data[index]!
-        break
-    }
-
-    switch (code & 48) {
-      case 0:
-        replaced = key1[index]!
-        key1[index] = selected
-        break
-      case 16:
-        replaced = key2[index]!
-        key2[index] = selected
-        break
-      case 32:
-        replaced = key3[index]!
-        key3[index] = selected
-        break
-      default:
-        replaced = data[index]!
-        data[index] = selected
-        break
-    }
-
-    switch (code & 192) {
-      case 0:
-        key1[index] = replaced
-        break
-      case 64:
-        key2[index] = replaced
-        break
-      case 128:
-        key3[index] = replaced
-        break
-      default:
-        data[index] = replaced
-        break
-    }
+    swapKeyBytes(values[(code >>> 2) & 3], values[code & 3], index)
+    swapKeyBytes(values[(code >>> 6) & 3], values[(code >>> 4) & 3], index)
   }
-
-  return [data, length, key1, key2, key3]
+  return state
 }
 
 function xorWithKey(
@@ -639,10 +570,10 @@ function xorLeadingKeyWords(key: number[]): number {
   let result = 0
   const length = Math.min(key.length & -4, 32)
   for (let index = 0; index < length;) {
-    result ^= (key[index++] ?? 0) << 24
-    result ^= (key[index++] ?? 0) << 16
-    result ^= (key[index++] ?? 0) << 8
-    result ^= key[index++] ?? 0
+    result ^= key[index++] << 24
+    result ^= key[index++] << 16
+    result ^= key[index++] << 8
+    result ^= key[index++]
   }
   return result >>> 0
 }
@@ -663,22 +594,8 @@ function buildPublusImageMetadata(input: {
   key3: number[]
 }): PublusImageMetadata | null {
   const { page, pageId, key1, key2, key3 } = input
-  if (
-    typeof page.NS !== "number" ||
-    typeof page.PS !== "number" ||
-    typeof page.RS !== "number" ||
-    typeof page.BlockWidth !== "number" ||
-    typeof page.BlockHeight !== "number" ||
-    !Number.isFinite(page.NS) ||
-    !Number.isFinite(page.PS) ||
-    !Number.isFinite(page.RS) ||
-    !Number.isFinite(page.BlockWidth) ||
-    !Number.isFinite(page.BlockHeight) ||
-    page.BlockWidth <= 0 ||
-    page.BlockHeight <= 0
-  ) {
-    return null
-  }
+  const fields = PublusReconstructionFieldsSchema.safeParse(page)
+  if (!fields.success) return null
 
   const pageNumber = String(page.No ?? "")
   const pageSeed =
@@ -692,29 +609,21 @@ function buildPublusImageMetadata(input: {
 
   return {
     mode: pageSeed % PUBLUS_MODE_COUNT,
-    seed1: (mask ^ xorLeadingKeyWords(key1) ^ page.NS) >>> 0,
-    seed2: (mask ^ xorLeadingKeyWords(key2) ^ page.PS) >>> 0,
-    seed3: (mask ^ xorLeadingKeyWords(key3) ^ page.RS) >>> 0,
-    tileWidth: page.BlockWidth,
-    tileHeight: page.BlockHeight,
+    seed1: (mask ^ xorLeadingKeyWords(key1) ^ fields.data.NS) >>> 0,
+    seed2: (mask ^ xorLeadingKeyWords(key2) ^ fields.data.PS) >>> 0,
+    seed3: (mask ^ xorLeadingKeyWords(key3) ^ fields.data.RS) >>> 0,
+    tileWidth: fields.data.BlockWidth,
+    tileHeight: fields.data.BlockHeight,
   }
 }
 
 const PUBLUS_IMAGE_TYPES = new Set(["jpg", "jpeg", "png", "webp", "gif"])
 
 function assertPublusContentPath(file: string): void {
-  const segments = file.split("/")
+  const invalidSegments = new Set(["", ".", ".."])
   if (
-    file.length === 0 ||
-    file.startsWith("/") ||
-    file.startsWith("\\") ||
-    file.includes("\\") ||
-    file.includes("?") ||
-    file.includes("#") ||
-    /^[a-z][a-z\d+.-]*:/i.test(file) ||
-    segments.some(
-      (segment) => segment === "" || segment === "." || segment === ".."
-    )
+    /(?:^[a-z][a-z\d+.-]*:)|[\\?#]/i.test(file) ||
+    file.split("/").some((segment) => invalidSegments.has(segment))
   ) {
     throw new ProviderContractError(
       `Comic Nettai PUBLUS content has an invalid content path: ${file}`
@@ -821,25 +730,29 @@ function buildPublusImageHash(input: {
   return String.fromCharCode(...output)
 }
 
-export function buildPublusImageUrlsFromConfig(
-  contentBaseUrl: string,
-  config: PublusConfig
-): string[] {
-  const trustedBaseUrl = parseTrustedComicNettaiCdnUrl(
-    contentBaseUrl,
-    "Comic Nettai PUBLUS content base URL"
-  )
+type PublusImageKeys = {
+  key1: number[]
+  key2: number[]
+  key3: number[]
+  key: number[]
+}
+type PublusImageContent = PublusConfigContent & { file: string; type: string }
+type PublusImagePage = PublusConfigPage & { No: number | string }
+
+function readPublusImageKeys(config: PublusConfig): PublusImageKeys {
   const keys = config.configuration?.keys
   if (!keys?.key1 || !keys.key2 || !keys.key3) {
     throw new ProviderContractError(
       "Comic Nettai PUBLUS configuration keys are missing"
     )
   }
-
   const key1 = hexToBytes(keys.key1)
   const key2 = hexToBytes(keys.key2)
   const key3 = hexToBytes(keys.key3)
-  const key = xorKeys(key1, key2, key3)
+  return { key1, key2, key3, key: xorKeys(key1, key2, key3) }
+}
+
+function readPublusImageContents(config: PublusConfig): PublusImageContent[] {
   const rawContents = config.configuration?.contents ?? []
   if (rawContents.length > MAX_CHAPTER_IMAGES) {
     throw new ProviderContractError(
@@ -852,55 +765,75 @@ export function buildPublusImageUrlsFromConfig(
         "Comic Nettai PUBLUS content is missing its file or image type."
       )
     }
-    return item as PublusConfigContent & { file: string; type: string }
+    return item as PublusImageContent
   })
-  contents.sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+  return contents.sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+}
 
-  const urls: string[] = []
-  for (const item of contents) {
-    assertPublusContentPath(item.file)
-    const imageType = item.type.toLowerCase()
-    if (!PUBLUS_IMAGE_TYPES.has(imageType)) {
-      throw new ProviderContractError(
-        `Comic Nettai PUBLUS content uses an unsupported image type: ${item.type}`
-      )
-    }
-
-    const fileConfig = config[item.file] as PublusConfigFile | undefined
-    const page = fileConfig?.FileLinkInfo?.PageLinkInfoList?.[0]?.Page
-    const pageNumber = page?.No
-    if (
-      !page ||
-      (typeof pageNumber !== "number" && typeof pageNumber !== "string")
-    ) {
-      throw new ProviderContractError(
-        `Comic Nettai PUBLUS reconstruction metadata is missing for ${item.file}`
-      )
-    }
-
-    const hash = `${encodePublusPageNumber(pageNumber)}${buildPublusImageHash({
-      imgName: item.file,
-      no: pageNumber,
-      key,
-    })}`
-    const imageUrl = parseTrustedComicNettaiCdnUrl(
-      new URL(`${item.file}/${hash}.${imageType}`, trustedBaseUrl).toString(),
-      "Comic Nettai PUBLUS image URL"
-    ).toString()
-    const metadata = buildPublusImageMetadata({
-      pageId: item.file,
-      page,
-      key1,
-      key2,
-      key3,
-    })
-    if (!metadata) {
-      throw new ProviderContractError(
-        `Comic Nettai PUBLUS reconstruction metadata is invalid for ${item.file}`
-      )
-    }
-    urls.push(appendPublusImageMetadata(imageUrl, metadata))
+function readPublusImagePage(
+  config: PublusConfig,
+  file: string
+): PublusImagePage {
+  const fileConfig = config[file] as PublusConfigFile | undefined
+  const page = fileConfig?.FileLinkInfo?.PageLinkInfoList?.[0]?.Page
+  const pageNumber = page?.No
+  if (
+    !page ||
+    (typeof pageNumber !== "number" && typeof pageNumber !== "string")
+  ) {
+    throw new ProviderContractError(
+      `Comic Nettai PUBLUS reconstruction metadata is missing for ${file}`
+    )
   }
+  return page as PublusImagePage
+}
 
-  return urls
+function buildPublusContentImageUrl(
+  trustedBaseUrl: URL,
+  config: PublusConfig,
+  keys: PublusImageKeys,
+  item: PublusImageContent
+): string {
+  assertPublusContentPath(item.file)
+  const imageType = item.type.toLowerCase()
+  if (!PUBLUS_IMAGE_TYPES.has(imageType)) {
+    throw new ProviderContractError(
+      `Comic Nettai PUBLUS content uses an unsupported image type: ${item.type}`
+    )
+  }
+  const page = readPublusImagePage(config, item.file)
+  const hash = `${encodePublusPageNumber(page.No)}${buildPublusImageHash({
+    imgName: item.file,
+    no: page.No,
+    key: keys.key,
+  })}`
+  const imageUrl = parseTrustedComicNettaiCdnUrl(
+    new URL(`${item.file}/${hash}.${imageType}`, trustedBaseUrl).toString(),
+    "Comic Nettai PUBLUS image URL"
+  ).toString()
+  const metadata = buildPublusImageMetadata({
+    pageId: item.file,
+    page,
+    ...keys,
+  })
+  if (!metadata) {
+    throw new ProviderContractError(
+      `Comic Nettai PUBLUS reconstruction metadata is invalid for ${item.file}`
+    )
+  }
+  return appendPublusImageMetadata(imageUrl, metadata)
+}
+
+export function buildPublusImageUrlsFromConfig(
+  contentBaseUrl: string,
+  config: PublusConfig
+): string[] {
+  const trustedBaseUrl = parseTrustedComicNettaiCdnUrl(
+    contentBaseUrl,
+    "Comic Nettai PUBLUS content base URL"
+  )
+  const keys = readPublusImageKeys(config)
+  return readPublusImageContents(config).map((item) =>
+    buildPublusContentImageUrl(trustedBaseUrl, config, keys, item)
+  )
 }

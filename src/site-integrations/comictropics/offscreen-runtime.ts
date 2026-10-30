@@ -16,44 +16,50 @@ import {
   extractComicNettaiSeriesMetadataFromDocument,
 } from "./series-dom"
 
+type ComicNettaiSeriesResolutionInput = Parameters<
+  NonNullable<OffscreenIntegration["series"]>["resolveSeriesData"]
+>[0]
+
+async function resolveComicNettaiSeriesData({
+  seriesUrl,
+  document,
+  language,
+  signal,
+  rateLimitService,
+}: ComicNettaiSeriesResolutionInput): Promise<SeriesDataResolutionResult> {
+  const result: SeriesDataResolutionResult = {}
+  try {
+    result.seriesMetadata =
+      extractComicNettaiSeriesMetadataFromDocument(document)
+  } catch (error) {
+    result.metadataError =
+      error instanceof Error ? error.message : String(error)
+  }
+  try {
+    result.chapterList = await extractComicNettaiChapterListWithPagination(
+      document,
+      seriesUrl,
+      rateLimitService,
+      undefined,
+      signal
+    )
+  } catch (error) {
+    result.chapterListError =
+      error instanceof Error ? error.message : String(error)
+  }
+  if (result.seriesMetadata && language) {
+    result.seriesMetadata.language = language
+  }
+  return result
+}
+
 const offscreen: OffscreenIntegration = {
   name: "Comic Nettai Offscreen",
   cover: {
     downloadImage: downloadComicNettaiCoverImage,
   },
   series: {
-    async resolveSeriesData({
-      seriesUrl,
-      document,
-      language,
-      signal,
-      rateLimitService,
-    }): Promise<SeriesDataResolutionResult> {
-      const result: SeriesDataResolutionResult = {}
-      try {
-        result.seriesMetadata =
-          extractComicNettaiSeriesMetadataFromDocument(document)
-      } catch (error) {
-        result.metadataError =
-          error instanceof Error ? error.message : String(error)
-      }
-      try {
-        result.chapterList = await extractComicNettaiChapterListWithPagination(
-          document,
-          seriesUrl,
-          rateLimitService,
-          undefined,
-          signal
-        )
-      } catch (error) {
-        result.chapterListError =
-          error instanceof Error ? error.message : String(error)
-      }
-      if (result.seriesMetadata && language) {
-        result.seriesMetadata.language = language
-      }
-      return result
-    },
+    resolveSeriesData: resolveComicNettaiSeriesData,
   },
   chapter: {
     async resolveChapterPlan(chapter, input) {

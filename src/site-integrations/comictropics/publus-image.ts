@@ -3,8 +3,12 @@ import {
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
 import { withRendererPixelBudget } from "@/src/runtime/renderer-budget"
+import { isImageBitmapRenderingAvailable } from "@/src/runtime/image-rendering-capability"
 import { ProviderContractError } from "../provider-contract-error"
-import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
+import {
+  MAX_DECODED_IMAGE_PIXELS,
+  MAX_IMAGE_BYTES,
+} from "@/src/constants/timeouts"
 import type {
   OffscreenLiveResourceLedger,
   OffscreenLiveResourceLease,
@@ -223,6 +227,47 @@ function selectExcluding(
   return selected < excluded ? selected : selected + 1
 }
 
+type PublusPartitionAxis = {
+  remaining: number
+  start: number
+  pivot: number
+  length: number
+  cuts: number[]
+}
+
+function selectPartitionCut(
+  next: (limit: number) => number,
+  other: PublusPartitionAxis,
+  edge: number,
+  leading: boolean
+): number {
+  const containsEdge = leading
+    ? (cut: number) => edge >= cut
+    : (cut: number) => edge <= cut
+  let start = other.start
+  while (start > 0 && !containsEdge(other.cuts[start - 1])) start -= 1
+  let end = other.start + other.remaining
+  while (end < other.length && !containsEdge(other.cuts[end])) end += 1
+  return next(end - start) + start
+}
+
+function partitionAxis(
+  next: (limit: number) => number,
+  axis: PublusPartitionAxis,
+  other: PublusPartitionAxis,
+  selected: number
+): void {
+  const leading = selected < axis.pivot
+  const position = leading ? axis.start : axis.start + axis.remaining - 1
+  const edge = leading ? axis.start : axis.start + axis.remaining
+  axis.cuts[position] = selectPartitionCut(next, other, edge, leading)
+  if (leading) {
+    axis.start += 1
+    axis.pivot -= 1
+  }
+  axis.remaining -= 1
+}
+
 function buildAxisPartitions(
   next: (limit: number) => number,
   horizontal: number[],
@@ -232,74 +277,37 @@ function buildAxisPartitions(
   columns: number,
   rows: number
 ): void {
-  let remainingColumns = columns
-  let remainingRows = rows
-  let leftColumn = 0
-  let topRow = 0
-
-  while (remainingColumns + remainingRows > 0) {
-    const selected = next(remainingColumns + remainingRows)
-    if (selected < remainingColumns) {
-      if (selected < horizontalPivot) {
-        let start = topRow
-        for (; start > 0 && !(leftColumn >= horizontal[start - 1]); start -= 1);
-        let end = topRow + remainingRows
-        for (; end < rows && !(leftColumn >= horizontal[end]); end += 1);
-        vertical[leftColumn] = next(end - start) + start
-        leftColumn += 1
-        horizontalPivot -= 1
-      } else {
-        let start = topRow
-        for (
-          ;
-          start > 0 &&
-          !(leftColumn + remainingColumns <= horizontal[start - 1]);
-          start -= 1
-        );
-        let end = topRow + remainingRows
-        for (
-          ;
-          end < rows && !(leftColumn + remainingColumns <= horizontal[end]);
-          end += 1
-        );
-        vertical[leftColumn + remainingColumns - 1] = next(end - start) + start
-      }
-      remainingColumns -= 1
+  const columnAxis = {
+    remaining: columns,
+    start: 0,
+    pivot: horizontalPivot,
+    length: columns,
+    cuts: vertical,
+  }
+  const rowAxis = {
+    remaining: rows,
+    start: 0,
+    pivot: verticalPivot,
+    length: rows,
+    cuts: horizontal,
+  }
+  while (columnAxis.remaining + rowAxis.remaining > 0) {
+    const selected = next(columnAxis.remaining + rowAxis.remaining)
+    if (selected < columnAxis.remaining) {
+      partitionAxis(next, columnAxis, rowAxis, selected)
     } else {
-      if (selected - remainingColumns < verticalPivot) {
-        let start = leftColumn
-        for (; start > 0 && !(topRow >= vertical[start - 1]); start -= 1);
-        let end = leftColumn + remainingColumns
-        for (; end < columns && !(topRow >= vertical[end]); end += 1);
-        horizontal[topRow] = next(end - start) + start
-        topRow += 1
-        verticalPivot -= 1
-      } else {
-        let start = leftColumn
-        for (
-          ;
-          start > 0 && !(topRow + remainingRows <= vertical[start - 1]);
-          start -= 1
-        );
-        let end = leftColumn + remainingColumns
-        for (
-          ;
-          end < columns && !(topRow + remainingRows <= vertical[end]);
-          end += 1
-        );
-        horizontal[topRow + remainingRows - 1] = next(end - start) + start
-      }
-      remainingRows -= 1
+      partitionAxis(next, rowAxis, columnAxis, selected - columnAxis.remaining)
     }
   }
 }
 
-function buildPublusPermutation(
+function buildPublusPermutationLayout(
   seed: number,
   columnSeed: number,
   rowSeed: number,
-  modeSeed: number
-): number[] {
+  modeSeed: number,
+  grid: PublusTileGrid
+) {
   const random = new PublusRandom()
   const mixedSeed = (columnSeed ^ rowSeed ^ modeSeed) >>> 0
   const seedHigh = Math.floor(seed / 65536)
@@ -322,8 +330,8 @@ function buildPublusPermutation(
   random.seed(mixedSeed)
 
   const whiteningSeed = random.next(65536) | (random.next(65536) << 16)
-  const columns = columnHigh >>> 16
-  const rows = rowHigh >>> 16
+  // Seeds select the permutation; the admitted grid owns every allocation and loop.
+  const { columns, rows } = grid
 
   columnMask = (columnMask ^ whiteningSeed) >>> 0
   rowMask = (rowMask ^ whiteningSeed) >>> 0
@@ -373,59 +381,172 @@ function buildPublusPermutation(
     rows
   )
 
-  const output: number[] = []
-  const columnWrap = columns + 1
-  const rowWrap = rows + 1
-  const encodedColumns = columnWrap << 1
-  const encodedRows = rowWrap << 1
+  return {
+    columns,
+    rows,
+    cellShuffle,
+    rightPivot,
+    bottomPivot,
+    rightEdgeColumn,
+    bottomEdgeRow,
+    horizontalCuts,
+    verticalCuts,
+    horizontalShuffle,
+    verticalShuffle,
+    rightHorizontalCuts,
+    bottomVerticalCuts,
+  }
+}
 
+type PublusPermutationLayout = ReturnType<typeof buildPublusPermutationLayout>
+
+function encodePartitionPosition(
+  value: number,
+  cut: number,
+  length: number
+): number {
+  return value < cut ? value : value + length + 1
+}
+
+function appendPublusCellPairs(
+  output: number[],
+  layout: PublusPermutationLayout
+): void {
+  const {
+    columns,
+    rows,
+    cellShuffle,
+    horizontalCuts,
+    verticalCuts,
+    bottomVerticalCuts,
+    rightHorizontalCuts,
+  } = layout
+  const encodedColumns = (columns + 1) << 1
+  const encodedRows = (rows + 1) << 1
   for (let column = 0; column < columns; column += 1) {
     for (let row = 0; row < rows; row += 1) {
       const shuffled = cellShuffle[column + row * columns] ?? 0
       const sourceColumn = shuffled % columns
       const sourceRow = Math.floor((shuffled - sourceColumn) / columns)
-      const encodedColumn =
-        column < horizontalCuts[row] ? column : column + columnWrap
-      const encodedRow = row < verticalCuts[column] ? row : row + rowWrap
-      const targetColumn =
-        sourceColumn < bottomVerticalCuts[sourceRow]
-          ? sourceColumn
-          : sourceColumn + columnWrap
-      const targetRow =
-        sourceRow < rightHorizontalCuts[sourceColumn]
-          ? sourceRow
-          : sourceRow + rowWrap
+      const encodedColumn = encodePartitionPosition(
+        column,
+        horizontalCuts[row],
+        columns
+      )
+      const encodedRow = encodePartitionPosition(
+        row,
+        verticalCuts[column],
+        rows
+      )
+      const targetColumn = encodePartitionPosition(
+        sourceColumn,
+        bottomVerticalCuts[sourceRow],
+        columns
+      )
+      const targetRow = encodePartitionPosition(
+        sourceRow,
+        rightHorizontalCuts[sourceColumn],
+        rows
+      )
       output.push(targetRow * encodedColumns + encodedColumn)
       output.push(targetColumn * encodedRows + encodedRow)
     }
   }
+}
 
-  output.push(bottomEdgeRow * encodedColumns + rightPivot)
-  output.push(rightEdgeColumn * encodedRows + bottomPivot)
+type PublusEdgePermutation = {
+  length: number
+  shuffle: number[]
+  pivot: number
+  edge: number
+  cuts: number[]
+  oppositeCuts: number[]
+  encodedAxis: number
+  encodedOpposite: number
+  transposed: boolean
+}
 
-  for (let column = 0; column < columns; column += 1) {
-    const shuffledColumn = horizontalShuffle[column] ?? 0
-    const encodedColumn = column < rightPivot ? column : column + columnWrap
-    const targetColumn =
-      shuffledColumn < rightEdgeColumn
-        ? shuffledColumn
-        : shuffledColumn + columnWrap
-    output.push(
-      rightHorizontalCuts[shuffledColumn] * encodedColumns + encodedColumn
-    )
-    output.push(targetColumn * encodedRows + verticalCuts[column])
+function appendPublusEdgePairs(
+  output: number[],
+  axis: PublusEdgePermutation
+): void {
+  for (let index = 0; index < axis.length; index += 1) {
+    const shuffled = axis.shuffle[index] ?? 0
+    const encoded = encodePartitionPosition(index, axis.pivot, axis.length)
+    const target = encodePartitionPosition(shuffled, axis.edge, axis.length)
+    const ownCoordinate = axis.cuts[shuffled] * axis.encodedAxis + encoded
+    const oppositeCoordinate =
+      target * axis.encodedOpposite + axis.oppositeCuts[index]
+    if (axis.transposed) output.push(oppositeCoordinate, ownCoordinate)
+    else output.push(ownCoordinate, oppositeCoordinate)
   }
+}
 
-  for (let row = 0; row < rows; row += 1) {
-    const shuffledRow = verticalShuffle[row] ?? 0
-    const encodedRow = row < bottomPivot ? row : row + rowWrap
-    const targetRow =
-      shuffledRow < bottomEdgeRow ? shuffledRow : shuffledRow + rowWrap
-    output.push(targetRow * encodedColumns + horizontalCuts[row])
-    output.push(bottomVerticalCuts[shuffledRow] * encodedRows + encodedRow)
-  }
-
+function buildPublusPermutation(
+  seed: number,
+  columnSeed: number,
+  rowSeed: number,
+  modeSeed: number,
+  grid: PublusTileGrid
+): number[] {
+  const layout = buildPublusPermutationLayout(
+    seed,
+    columnSeed,
+    rowSeed,
+    modeSeed,
+    grid
+  )
+  const output: number[] = []
+  appendPublusCellPairs(output, layout)
+  output.push(
+    layout.bottomEdgeRow * ((layout.columns + 1) << 1) + layout.rightPivot
+  )
+  output.push(
+    layout.rightEdgeColumn * ((layout.rows + 1) << 1) + layout.bottomPivot
+  )
+  appendPublusEdgePairs(output, {
+    length: layout.columns,
+    shuffle: layout.horizontalShuffle,
+    pivot: layout.rightPivot,
+    edge: layout.rightEdgeColumn,
+    cuts: layout.rightHorizontalCuts,
+    oppositeCuts: layout.verticalCuts,
+    encodedAxis: (layout.columns + 1) << 1,
+    encodedOpposite: (layout.rows + 1) << 1,
+    transposed: false,
+  })
+  appendPublusEdgePairs(output, {
+    length: layout.rows,
+    shuffle: layout.verticalShuffle,
+    pivot: layout.bottomPivot,
+    edge: layout.bottomEdgeRow,
+    cuts: layout.bottomVerticalCuts,
+    oppositeCuts: layout.horizontalCuts,
+    encodedAxis: (layout.rows + 1) << 1,
+    encodedOpposite: (layout.columns + 1) << 1,
+    transposed: true,
+  })
   return output
+}
+
+type PublusTileDimensions = {
+  tileWidth: number
+  tileHeight: number
+  columns: number
+  rows: number
+  encodedColumns: number
+  encodedRows: number
+  overflowWidthOffset: number
+  overflowHeightOffset: number
+}
+
+function tileAxisOffset(
+  index: number,
+  tileSize: number,
+  count: number,
+  overflow: number
+): number {
+  return index * tileSize - (index > count ? overflow : 0)
 }
 
 function appendTileRects(
@@ -435,16 +556,7 @@ function appendTileRects(
   end: number,
   width: number,
   height: number,
-  dimensions: {
-    tileWidth: number
-    tileHeight: number
-    columns: number
-    rows: number
-    encodedColumns: number
-    encodedRows: number
-    overflowWidthOffset: number
-    overflowHeightOffset: number
-  }
+  dimensions: PublusTileDimensions
 ): void {
   if (width === 0 || height === 0) {
     return
@@ -464,39 +576,118 @@ function appendTileRects(
     )
 
     output.push({
-      srcX:
-        targetColumn * dimensions.tileWidth -
-        (targetColumn > dimensions.columns
-          ? dimensions.overflowWidthOffset
-          : 0),
-      srcY:
-        targetRow * dimensions.tileHeight -
-        (targetRow > dimensions.rows ? dimensions.overflowHeightOffset : 0),
-      destX:
-        sourceColumn * dimensions.tileWidth -
-        (sourceColumn > dimensions.columns
-          ? dimensions.overflowWidthOffset
-          : 0),
-      destY:
-        sourceRow * dimensions.tileHeight -
-        (sourceRow > dimensions.rows ? dimensions.overflowHeightOffset : 0),
+      srcX: tileAxisOffset(
+        targetColumn,
+        dimensions.tileWidth,
+        dimensions.columns,
+        dimensions.overflowWidthOffset
+      ),
+      srcY: tileAxisOffset(
+        targetRow,
+        dimensions.tileHeight,
+        dimensions.rows,
+        dimensions.overflowHeightOffset
+      ),
+      destX: tileAxisOffset(
+        sourceColumn,
+        dimensions.tileWidth,
+        dimensions.columns,
+        dimensions.overflowWidthOffset
+      ),
+      destY: tileAxisOffset(
+        sourceRow,
+        dimensions.tileHeight,
+        dimensions.rows,
+        dimensions.overflowHeightOffset
+      ),
       width,
       height,
     })
   }
 }
 
-export function buildPublusPageTileRects(
-  input: PublusPageTileRectInput
-): PublusTileRect[] {
+type PublusTileGridInput = Pick<
+  PublusPageTileRectInput,
+  "tileWidth" | "tileHeight" | "sourceWidth" | "sourceHeight"
+>
+
+type PublusTileGrid = { columns: number; rows: number }
+
+// At peak, the numeric layout/pairs coexist, followed by pairs/rectangle objects.
+// Include array growth and per-object overhead in a conservative working envelope.
+const PUBLUS_TILE_PLAN_CELL_BYTES = 256
+const PUBLUS_TILE_PLAN_FIXED_BYTES = 4 * 1024
+
+function retainPublusTilePlan(
+  grid: PublusTileGrid,
+  liveResourceLedger: OffscreenLiveResourceLedger,
+  retained?: OffscreenLiveResourceLease
+): OffscreenLiveResourceLease {
+  const bytes =
+    PUBLUS_TILE_PLAN_FIXED_BYTES +
+    (grid.columns + 1) * (grid.rows + 1) * PUBLUS_TILE_PLAN_CELL_BYTES
+  if (retained) {
+    retained.resize(bytes)
+    return retained
+  }
+  return liveResourceLedger.reserve(
+    bytes,
+    "Comic Nettai tile reconstruction plan"
+  )
+}
+
+function assertPublusGridWithinLimits(
+  columns: number,
+  rows: number,
+  sourcePixels: number
+): void {
+  // The protocol represents each axis in 16 bits above its 32-bit seed.
+  if (
+    !Number.isSafeInteger(columns) ||
+    !Number.isSafeInteger(rows) ||
+    columns > 0xffff ||
+    rows > 0xffff
+  ) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS tile grid exceeds its 16-bit axis representation"
+    )
+  }
+  if (columns * rows > Math.min(sourcePixels, MAX_DECODED_IMAGE_PIXELS)) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS tile grid exceeds its source-pixel work limit"
+    )
+  }
+}
+
+function readPublusTileGrid(input: PublusTileGridInput): PublusTileGrid | null {
   const { tileWidth, tileHeight, sourceWidth, sourceHeight } = input
   const columns = Math.floor(sourceWidth / tileWidth)
   const rows = Math.floor(sourceHeight / tileHeight)
+  if (tileWidth <= 0 || tileHeight <= 0 || columns <= 0 || rows <= 0)
+    return null
+  assertPublusGridWithinLimits(columns, rows, sourceWidth * sourceHeight)
+  return { columns, rows }
+}
+
+function requirePublusTileGrid(input: PublusTileGridInput): PublusTileGrid {
+  const grid = readPublusTileGrid(input)
+  if (!grid) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS image reconstruction produced no valid tiles"
+    )
+  }
+  return grid
+}
+
+export function buildPublusPageTileRects(
+  input: PublusPageTileRectInput
+): PublusTileRect[] {
+  const grid = readPublusTileGrid(input)
+  if (!grid) return []
+  const { columns, rows } = grid
+  const { tileWidth, tileHeight, sourceWidth, sourceHeight } = input
   const remainderWidth = sourceWidth % tileWidth
   const remainderHeight = sourceHeight % tileHeight
-  if (tileWidth <= 0 || tileHeight <= 0 || columns <= 0 || rows <= 0) {
-    return []
-  }
 
   const encodedColumns = (columns + 1) << 1
   const encodedRows = (rows + 1) << 1
@@ -521,7 +712,8 @@ export function buildPublusPageTileRects(
     permutationSeed,
     columnSeed,
     rowSeed,
-    modeSeed
+    modeSeed,
+    grid
   )
   const rects: PublusTileRect[] = []
   const dimensions = {
@@ -675,6 +867,172 @@ export function parsePublusImageTransportUrl(imageUrl: string): {
   }
 }
 
+function assertPublusRendererAvailable(): void {
+  if (!isImageBitmapRenderingAvailable()) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS image reconstruction is unavailable in this browser context"
+    )
+  }
+}
+
+function drawPublusImage(
+  bitmap: ImageBitmap,
+  metadata: PublusImageMetadata
+): OffscreenCanvas {
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+  const context = canvas.getContext("2d")
+  if (!context) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS image reconstruction could not create a canvas context"
+    )
+  }
+  context.imageSmoothingEnabled = false
+  const rects = buildPublusPageTileRects({
+    ...metadata,
+    sourceWidth: bitmap.width,
+    sourceHeight: bitmap.height,
+  })
+  if (rects.length === 0) {
+    throw new ProviderContractError(
+      "Comic Nettai PUBLUS image reconstruction produced no valid tiles"
+    )
+  }
+  for (const rect of rects) {
+    // The viewer's rect names are source-oriented: destX/destY point into the shuffled bitmap,
+    // while srcX/srcY are the ordered canvas coordinates.
+    context.drawImage(
+      bitmap,
+      rect.destX,
+      rect.destY,
+      rect.width,
+      rect.height,
+      rect.srcX,
+      rect.srcY,
+      rect.width,
+      rect.height
+    )
+  }
+  return canvas
+}
+
+type PublusReconstructedImage = {
+  data: ArrayBuffer
+  mimeType: string
+  liveResourceLease: OffscreenLiveResourceLease
+}
+
+async function encodePublusImage(
+  canvas: OffscreenCanvas,
+  dimensions: { width: number; height: number },
+  mimeType: string,
+  liveResourceLedger: OffscreenLiveResourceLedger
+): Promise<PublusReconstructedImage> {
+  const outputMimeType = mimeType.startsWith("image/") ? mimeType : "image/png"
+  let outputBlobLease: OffscreenLiveResourceLease | undefined =
+    liveResourceLedger.reserve(
+      Math.max(MAX_IMAGE_BYTES, dimensions.width * dimensions.height * 4),
+      "Comic Nettai encoded output Blob"
+    )
+  let outputBufferLease: OffscreenLiveResourceLease | undefined
+  try {
+    const outputBlob = await canvas.convertToBlob({
+      type: outputMimeType,
+      quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
+    })
+    if (outputBlob.size > MAX_IMAGE_BYTES) {
+      throw new ProviderContractError(
+        `Comic Nettai encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${outputBlob.size})`
+      )
+    }
+    outputBlobLease.resize(outputBlob.size)
+    outputBufferLease = liveResourceLedger.reserve(
+      outputBlob.size,
+      "Comic Nettai encoded output ArrayBuffer"
+    )
+    const data = await outputBlob.arrayBuffer()
+    outputBlobLease.release()
+    outputBlobLease = undefined
+    const liveResourceLease = outputBufferLease.transfer(
+      "retained Comic Nettai encoded output"
+    )
+    outputBufferLease = undefined
+    return {
+      data,
+      mimeType: outputBlob.type || outputMimeType,
+      liveResourceLease,
+    }
+  } finally {
+    outputBlobLease?.release()
+    outputBufferLease?.release()
+  }
+}
+
+async function reconstructPublusImage(
+  buffer: ArrayBuffer,
+  mimeType: string,
+  metadata: PublusImageMetadata,
+  dimensions: { width: number; height: number },
+  liveResourceLedger: OffscreenLiveResourceLedger
+): Promise<PublusReconstructedImage> {
+  const encodedGrid = readPublusTileGrid({
+    ...metadata,
+    sourceWidth: dimensions.width,
+    sourceHeight: dimensions.height,
+  })
+  let tilePlanLease = encodedGrid
+    ? retainPublusTilePlan(encodedGrid, liveResourceLedger)
+    : undefined
+  let decodedSurfaceLease: OffscreenLiveResourceLease | undefined
+  let sourceBlobLease: OffscreenLiveResourceLease | undefined
+  try {
+    decodedSurfaceLease = liveResourceLedger.reserve(
+      dimensions.width * dimensions.height * 8,
+      "Comic Nettai decoded source and destination surfaces"
+    )
+    sourceBlobLease = liveResourceLedger.reserve(
+      buffer.byteLength,
+      "Comic Nettai encoded source Blob"
+    )
+    const bitmap = await createImageBitmap(
+      new Blob([buffer], { type: mimeType })
+    )
+    sourceBlobLease.release()
+    sourceBlobLease = undefined
+    try {
+      assertDecodedImageWithinLimits(
+        bitmap.width,
+        bitmap.height,
+        "Comic Nettai"
+      )
+      const bitmapGrid = requirePublusTileGrid({
+        ...metadata,
+        sourceWidth: bitmap.width,
+        sourceHeight: bitmap.height,
+      })
+      tilePlanLease = retainPublusTilePlan(
+        bitmapGrid,
+        liveResourceLedger,
+        tilePlanLease
+      )
+      const canvas = drawPublusImage(bitmap, metadata)
+      tilePlanLease.release()
+      tilePlanLease = undefined
+      return await encodePublusImage(
+        canvas,
+        bitmap,
+        mimeType,
+        liveResourceLedger
+      )
+    } finally {
+      bitmap.close()
+    }
+  } finally {
+    sourceBlobLease?.release()
+    decodedSurfaceLease?.release()
+    tilePlanLease?.release()
+  }
+}
+
 export async function descramblePublusImage(
   buffer: ArrayBuffer,
   mimeType: string,
@@ -682,25 +1040,9 @@ export async function descramblePublusImage(
   signal: AbortSignal | undefined,
   liveResourceLedger: OffscreenLiveResourceLedger,
   sourceLease: OffscreenLiveResourceLease
-): Promise<{
-  data: ArrayBuffer
-  mimeType: string
-  liveResourceLease: OffscreenLiveResourceLease
-}> {
-  const encodedSourceLease = sourceLease
-  let sourceBlobLease: OffscreenLiveResourceLease | undefined
-  let decodedSurfaceLease: OffscreenLiveResourceLease | undefined
-  let outputBlobLease: OffscreenLiveResourceLease | undefined
-  let outputBufferLease: OffscreenLiveResourceLease | undefined
+): Promise<PublusReconstructedImage> {
   try {
-    if (
-      typeof createImageBitmap !== "function" ||
-      typeof OffscreenCanvas === "undefined"
-    ) {
-      throw new ProviderContractError(
-        "Comic Nettai PUBLUS image reconstruction is unavailable in this browser context"
-      )
-    }
+    assertPublusRendererAvailable()
     const dimensions = readEncodedImageDimensions(
       buffer,
       mimeType,
@@ -714,105 +1056,16 @@ export async function descramblePublusImage(
     return await withRendererPixelBudget(
       dimensions.width * dimensions.height,
       signal,
-      async () => {
-        decodedSurfaceLease = liveResourceLedger.reserve(
-          dimensions.width * dimensions.height * 8,
-          "Comic Nettai decoded source and destination surfaces"
+      () =>
+        reconstructPublusImage(
+          buffer,
+          mimeType,
+          metadata,
+          dimensions,
+          liveResourceLedger
         )
-        sourceBlobLease = liveResourceLedger.reserve(
-          buffer.byteLength,
-          "Comic Nettai encoded source Blob"
-        )
-        const blob = new Blob([buffer], { type: mimeType })
-        const bitmap = await createImageBitmap(blob)
-        sourceBlobLease?.release()
-        sourceBlobLease = undefined
-
-        try {
-          assertDecodedImageWithinLimits(
-            bitmap.width,
-            bitmap.height,
-            "Comic Nettai"
-          )
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
-          const context = canvas.getContext("2d")
-          if (!context) {
-            throw new ProviderContractError(
-              "Comic Nettai PUBLUS image reconstruction could not create a canvas context"
-            )
-          }
-
-          context.imageSmoothingEnabled = false
-          const rects = buildPublusPageTileRects({
-            ...metadata,
-            sourceWidth: bitmap.width,
-            sourceHeight: bitmap.height,
-          })
-          if (rects.length === 0) {
-            throw new ProviderContractError(
-              "Comic Nettai PUBLUS image reconstruction produced no valid tiles"
-            )
-          }
-
-          for (const rect of rects) {
-            // The viewer's rect names are source-oriented: destX/destY point into the shuffled bitmap,
-            // while srcX/srcY are the ordered canvas coordinates.
-            context.drawImage(
-              bitmap,
-              rect.destX,
-              rect.destY,
-              rect.width,
-              rect.height,
-              rect.srcX,
-              rect.srcY,
-              rect.width,
-              rect.height
-            )
-          }
-
-          const outputMimeType = mimeType.startsWith("image/")
-            ? mimeType
-            : "image/png"
-          outputBlobLease = liveResourceLedger.reserve(
-            Math.max(MAX_IMAGE_BYTES, bitmap.width * bitmap.height * 4),
-            "Comic Nettai encoded output Blob"
-          )
-          const outputBlob = await canvas.convertToBlob({
-            type: outputMimeType,
-            quality: outputMimeType === "image/jpeg" ? 0.92 : undefined,
-          })
-          if (outputBlob.size > MAX_IMAGE_BYTES) {
-            throw new ProviderContractError(
-              `Comic Nettai encoded output exceeds ${MAX_IMAGE_BYTES} byte limit (got ${outputBlob.size})`
-            )
-          }
-          outputBlobLease?.resize(outputBlob.size)
-          outputBufferLease = liveResourceLedger.reserve(
-            outputBlob.size,
-            "Comic Nettai encoded output ArrayBuffer"
-          )
-          const data = await outputBlob.arrayBuffer()
-          outputBlobLease?.release()
-          outputBlobLease = undefined
-          const liveResourceLease = outputBufferLease?.transfer(
-            "retained Comic Nettai encoded output"
-          )
-          outputBufferLease = undefined
-          return {
-            data,
-            mimeType: outputBlob.type || outputMimeType,
-            liveResourceLease,
-          }
-        } finally {
-          bitmap.close()
-        }
-      }
     )
   } finally {
-    encodedSourceLease?.release()
-    sourceBlobLease?.release()
-    decodedSurfaceLease?.release()
-    outputBlobLease?.release()
-    outputBufferLease?.release()
+    sourceLease.release()
   }
 }

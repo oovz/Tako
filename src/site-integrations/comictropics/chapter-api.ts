@@ -43,20 +43,26 @@ type ComicNettaiViewerContentResponse = {
   cti?: string
 }
 
-function assertViewerContentResponse(value: unknown): string {
+function readViewerContentResponse(
+  value: unknown
+): ComicNettaiViewerContentResponse {
   if (!value || typeof value !== "object") {
     throw new ProviderContractError(
       "Comic Nettai chapter returned an invalid viewer response (HTTP 422)."
     )
   }
-
   const response = value as ComicNettaiViewerContentResponse
   if (response.status === undefined || response.status === null) {
     throw new ProviderContractError(
       "Comic Nettai chapter returned an invalid viewer response (HTTP 422)."
     )
   }
-  const viewerStatus = String(response.status ?? "missing")
+  return response
+}
+
+function assertViewerContentResponse(value: unknown): string {
+  const response = readViewerContentResponse(value)
+  const viewerStatus = String(response.status)
   if (viewerStatus !== "200") {
     const httpStatus = /^\d{3}$/.test(viewerStatus) ? viewerStatus : "422"
     throw Object.assign(

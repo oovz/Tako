@@ -111,68 +111,91 @@ export function extractComicNettaiSeriesMetadataFromDocument(
   }
 }
 
+function readComicNettaiChapterAccess(item: HTMLElement): {
+  chapterUrl: string | null
+  cid: string | null
+  isClosed: boolean
+} {
+  const rawHref = item.getAttribute("href")
+  const chapterUrl = rawHref ? normalizeComicNettaiChapterUrl(rawHref) : null
+  const cid = chapterUrl ? parseComicNettaiViewerCid(chapterUrl) : null
+  const isClosed = item.classList.contains("is-close")
+  if ((!chapterUrl || !cid) && !isClosed) {
+    throw new Error("Comic Nettai open chapter is missing a valid viewer URL")
+  }
+  return { chapterUrl, cid, isClosed }
+}
+
+function readComicNettaiChapterIdentity(item: HTMLElement) {
+  const access = readComicNettaiChapterAccess(item)
+  const thumbnail = item.querySelector<HTMLImageElement>(
+    ".detail--product__thum"
+  )
+  const thumbnailUrl =
+    thumbnail?.getAttribute("data-src") || thumbnail?.src || ""
+  const id = extractComicNettaiBookContentId(thumbnailUrl) ?? access.cid
+  if (!id) throw new Error("Comic Nettai chapter identity is missing")
+  return { ...access, thumbnail, thumbnailUrl, id }
+}
+
+function readComicNettaiChapterTitle(
+  item: HTMLElement,
+  thumbnail: HTMLImageElement | null,
+  id: string
+): string {
+  return (
+    sanitizeLabel(
+      item.querySelector(".detail--product__item__title")?.textContent ?? ""
+    ) ||
+    sanitizeLabel(thumbnail?.alt ?? "") ||
+    `Chapter ${id}`
+  )
+}
+
+function buildComicNettaiChapter(
+  item: HTMLElement,
+  identity: ReturnType<typeof readComicNettaiChapterIdentity>
+): Chapter {
+  const { id, chapterUrl, cid, isClosed, thumbnail, thumbnailUrl } = identity
+  const url =
+    chapterUrl && cid
+      ? new URL(chapterUrl, COMICNETTAI_ORIGIN).toString()
+      : buildLockedComicNettaiChapterUrl(thumbnailUrl, id)
+  if (!url)
+    throw new Error("Comic Nettai chapter URL could not be reconstructed")
+  const title = readComicNettaiChapterTitle(item, thumbnail, id)
+  const chapterNumber = parseChapterNumber(title)
+  return {
+    id,
+    url,
+    title,
+    locked: isClosed || !item.classList.contains("is-open"),
+    chapterLabel: title,
+    chapterNumber,
+    language: "ja",
+    comicInfo: {
+      Title: title,
+      Number:
+        typeof chapterNumber === "number" ? String(chapterNumber) : undefined,
+      LanguageISO: "ja",
+      Manga: "YesAndRightToLeft",
+    },
+  }
+}
+
 export function extractComicNettaiChapterListFromDocument(
   document: Document
 ): SeriesChapterListResult {
   const chapters: Chapter[] = []
   const seen = new Set<string>()
-
   for (const item of document.querySelectorAll<HTMLElement>(
     ".detail--product__item"
   )) {
-    const rawHref = item.getAttribute("href")
-    const chapterUrl = rawHref ? normalizeComicNettaiChapterUrl(rawHref) : null
-    const isClosed = item.classList.contains("is-close")
-    const cid = chapterUrl ? parseComicNettaiViewerCid(chapterUrl) : null
-    if ((!chapterUrl || !cid) && !isClosed) {
-      throw new Error("Comic Nettai open chapter is missing a valid viewer URL")
-    }
-
-    const thumbnail = item.querySelector<HTMLImageElement>(
-      ".detail--product__thum"
-    )
-    const thumbnailUrl =
-      thumbnail?.getAttribute("data-src") || thumbnail?.src || ""
-    const id = extractComicNettaiBookContentId(thumbnailUrl) ?? cid
-    if (!id) {
-      throw new Error("Comic Nettai chapter identity is missing")
-    }
-    if (seen.has(id)) continue
-
-    const url =
-      chapterUrl && cid
-        ? new URL(chapterUrl, COMICNETTAI_ORIGIN).toString()
-        : buildLockedComicNettaiChapterUrl(thumbnailUrl, id)
-    if (!url) {
-      throw new Error("Comic Nettai chapter URL could not be reconstructed")
-    }
-
-    const title =
-      sanitizeLabel(
-        item.querySelector(".detail--product__item__title")?.textContent ?? ""
-      ) ||
-      sanitizeLabel(thumbnail?.alt ?? "") ||
-      `Chapter ${id}`
-    const chapterNumber = parseChapterNumber(title)
-    seen.add(id)
-    chapters.push({
-      id,
-      url,
-      title,
-      locked: isClosed || !item.classList.contains("is-open"),
-      chapterLabel: title,
-      chapterNumber,
-      language: "ja",
-      comicInfo: {
-        Title: title,
-        Number:
-          typeof chapterNumber === "number" ? String(chapterNumber) : undefined,
-        LanguageISO: "ja",
-        Manga: "YesAndRightToLeft",
-      },
-    })
+    const identity = readComicNettaiChapterIdentity(item)
+    if (seen.has(identity.id)) continue
+    chapters.push(buildComicNettaiChapter(item, identity))
+    seen.add(identity.id)
   }
-
   return { chapters, volumes: [] }
 }
 
@@ -257,6 +280,32 @@ function discoverPaginationUrls(
   return discovered
 }
 
+function getPaginationRequestError(
+  error: unknown,
+  requestSignal: AbortSignal,
+  externalSignal?: AbortSignal
+): unknown {
+  if (!requestSignal.aborted) return error
+  if (externalSignal?.aborted) {
+    return externalSignal.reason instanceof Error
+      ? externalSignal.reason
+      : new Error("Comic Nettai series resolution was canceled", {
+          cause: error,
+        })
+  }
+  return new Error("Comic Nettai pagination request timed out", {
+    cause: error,
+  })
+}
+
+function assertComicNettaiResolutionActive(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new Error("Comic Nettai series resolution was canceled")
+  }
+}
+
 export async function loadComicNettaiPaginationDocument(
   url: string,
   rateLimitService: RateLimitService,
@@ -297,32 +346,23 @@ export async function loadComicNettaiPaginationDocument(
     const html = await readResponseText(response)
     return new DOMParser().parseFromString(html, "text/html")
   } catch (error) {
-    if (controller.signal.aborted) {
-      if (signal?.aborted) {
-        throw signal.reason instanceof Error
-          ? signal.reason
-          : new Error("Comic Nettai series resolution was canceled", {
-              cause: error,
-            })
-      }
-      throw new Error("Comic Nettai pagination request timed out", {
-        cause: error,
-      })
-    }
-    throw error
+    throw getPaginationRequestError(error, controller.signal, signal)
   } finally {
     globalThis.clearTimeout(timeout)
     signal?.removeEventListener("abort", abortExternal)
   }
 }
 
-export async function extractComicNettaiChapterListWithPagination(
+type ComicNettaiPaginationState = {
+  documents: Map<number, Document>
+  queuedUrls: Map<number, string>
+}
+type ComicNettaiLoadedPage = { page: number; url: string; document: Document }
+
+function createComicNettaiPaginationState(
   currentDocument: Document,
-  currentUrl: string,
-  rateLimitService: RateLimitService,
-  loadDocument: ComicNettaiDocumentLoader = loadComicNettaiPaginationDocument,
-  signal?: AbortSignal
-): Promise<SeriesChapterListResult> {
+  currentUrl: string
+): ComicNettaiPaginationState {
   const listingUrl = new URL(currentUrl)
   if (
     listingUrl.origin !== COMICNETTAI_ORIGIN ||
@@ -330,58 +370,61 @@ export async function extractComicNettaiChapterListWithPagination(
   ) {
     throw new Error(`Invalid Comic Nettai series URL: ${currentUrl}`)
   }
-
   const currentPage = getPaginationPageNumber(listingUrl)
   const documents = new Map<number, Document>([[currentPage, currentDocument]])
   const queuedUrls = discoverPaginationUrls(currentDocument, listingUrl)
-
   if (currentPage > 1 && !queuedUrls.has(1)) {
     const firstPageUrl = new URL(listingUrl)
     firstPageUrl.searchParams.delete("page")
     queuedUrls.set(1, firstPageUrl.toString())
   }
   queuedUrls.delete(currentPage)
+  return { documents, queuedUrls }
+}
 
-  while (queuedUrls.size > 0) {
-    if (signal?.aborted) {
-      throw signal.reason instanceof Error
-        ? signal.reason
-        : new Error("Comic Nettai series resolution was canceled")
-    }
-    const batch = [...queuedUrls.entries()]
-      .sort(([left], [right]) => left - right)
-      .slice(0, COMICNETTAI_PAGINATION_CONCURRENCY)
-    for (const [page] of batch) {
-      queuedUrls.delete(page)
-    }
+async function loadComicNettaiPaginationBatch(
+  state: ComicNettaiPaginationState,
+  loadDocument: ComicNettaiDocumentLoader,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
+): Promise<ComicNettaiLoadedPage[]> {
+  const batch = [...state.queuedUrls.entries()]
+    .sort(([left], [right]) => left - right)
+    .slice(0, COMICNETTAI_PAGINATION_CONCURRENCY)
+  for (const [page] of batch) state.queuedUrls.delete(page)
+  return Promise.all(
+    batch
+      .filter(([page]) => !state.documents.has(page))
+      .map(async ([page, url]) => ({
+        page,
+        url,
+        document: await loadDocument(url, rateLimitService, signal),
+      }))
+  )
+}
 
-    const loadedDocuments = await Promise.all(
-      batch
-        .filter(([page]) => !documents.has(page))
-        .map(async ([page, url]) => ({
-          page,
-          url,
-          document: await loadDocument(url, rateLimitService, signal),
-        }))
-    )
-    for (const loaded of loadedDocuments) {
-      if (signal?.aborted) {
-        throw signal.reason instanceof Error
-          ? signal.reason
-          : new Error("Comic Nettai series resolution was canceled")
-      }
-      documents.set(loaded.page, loaded.document)
-      for (const [page, url] of discoverPaginationUrls(
-        loaded.document,
-        new URL(loaded.url)
-      )) {
-        if (!documents.has(page) && !queuedUrls.has(page)) {
-          queuedUrls.set(page, url)
-        }
+function acceptComicNettaiPaginationPages(
+  state: ComicNettaiPaginationState,
+  loadedPages: ComicNettaiLoadedPage[],
+  signal?: AbortSignal
+): void {
+  for (const loaded of loadedPages) {
+    assertComicNettaiResolutionActive(signal)
+    state.documents.set(loaded.page, loaded.document)
+    for (const [page, url] of discoverPaginationUrls(
+      loaded.document,
+      new URL(loaded.url)
+    )) {
+      if (!state.documents.has(page) && !state.queuedUrls.has(page)) {
+        state.queuedUrls.set(page, url)
       }
     }
   }
+}
 
+function mergeComicNettaiPaginationChapters(
+  documents: Map<number, Document>
+): Chapter[] {
   const chapters: Chapter[] = []
   const seen = new Set<string>()
   for (const [, pageDocument] of [...documents].sort(
@@ -398,6 +441,29 @@ export async function extractComicNettaiChapterListWithPagination(
       }
     }
   }
+  return chapters
+}
 
-  return { chapters, volumes: [] }
+export async function extractComicNettaiChapterListWithPagination(
+  currentDocument: Document,
+  currentUrl: string,
+  rateLimitService: RateLimitService,
+  loadDocument: ComicNettaiDocumentLoader = loadComicNettaiPaginationDocument,
+  signal?: AbortSignal
+): Promise<SeriesChapterListResult> {
+  const state = createComicNettaiPaginationState(currentDocument, currentUrl)
+  while (state.queuedUrls.size > 0) {
+    assertComicNettaiResolutionActive(signal)
+    const loaded = await loadComicNettaiPaginationBatch(
+      state,
+      loadDocument,
+      rateLimitService,
+      signal
+    )
+    acceptComicNettaiPaginationPages(state, loaded, signal)
+  }
+  return {
+    chapters: mergeComicNettaiPaginationChapters(state.documents),
+    volumes: [],
+  }
 }
