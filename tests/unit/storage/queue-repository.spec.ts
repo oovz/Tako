@@ -77,6 +77,16 @@ function createTask(
   }
 }
 
+function createFolderTask(): DownloadTaskState {
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  settings.downloads.destination = "file-system-access"
+  settings.downloads.customDirectoryHandleId = "folder"
+  settings.downloads.allowChromeFallback = false
+  return createTask({
+    settingsSnapshot: createTaskSettingsSnapshot(settings, "mangadex"),
+  })
+}
+
 type TaskSettingsMutation = (task: DownloadTaskState) => void
 
 const malformedTaskSettingsCases: Array<{
@@ -197,6 +207,190 @@ describe("QueueRepository", () => {
         setBadgeBackgroundColor: vi.fn(async () => undefined),
       },
     } as unknown as typeof chrome)
+  })
+
+  it("allows a restarted task to be restarted after another interruption", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.interruptDownloadTask({
+        taskId: "task-1",
+        errorMessage: "Worker stopped",
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.restartDownloadTask({
+        taskId: "task-1",
+        restartTaskId: "first-restart",
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    const cold = new QueueRepository()
+    await expect(
+      cold.startDownloadTask({ taskId: "first-restart", now: 500 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      cold.interruptDownloadTask({
+        taskId: "first-restart",
+        errorMessage: "Worker stopped again",
+        now: 600,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      cold.restartDownloadTask({
+        taskId: "first-restart",
+        restartTaskId: "second-restart",
+        now: 700,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      new QueueRepository().getTask("second-restart")
+    ).resolves.toMatchObject({ id: "second-restart", status: "queued" })
+  })
+
+  it("resumes a cold task started before its first chapter dispatch", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    const cold = new QueueRepository()
+    await expect(
+      cold.recoverQueueAfterStartup({
+        normalizationTime: 300,
+        interruptedAt: 300,
+        observedLease: null,
+        offscreenJob: null,
+        nativeOutputTaskIds: [],
+      })
+    ).resolves.toMatchObject({
+      outcome: "unchanged",
+      resumeTaskId: "task-1",
+      interruptedTaskIds: [],
+      leaseCleared: false,
+    })
+    await expect(cold.getTask("task-1")).resolves.toMatchObject({
+      status: "downloading",
+      chapters: [{ id: "chapter-1", status: "queued" }],
+    })
+    await expect(
+      cold.beginChapterDispatch({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        lease: createBoundDispatchLease({
+          jobId: "first-job",
+          taskId: "task-1",
+          chapterId: "chapter-1",
+          attempt: 1,
+          now: 400,
+        }),
+        expectedPreviousLease: null,
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+  })
+
+  it("returns the completed chapter count after successful folder settlements", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createFolderTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    const lease: ActiveDispatchLease = {
+      ...createBoundDispatchLease({
+        jobId: "saved-job",
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        attempt: 1,
+        now: 300,
+      }),
+      saveMode: "fsa",
+      destinationHandleId: "folder",
+    }
+    await expect(
+      repository.beginChapterDispatch({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        lease,
+        expectedPreviousLease: null,
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.settleTaskChapter({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        status: "completed",
+        lease: fullLeaseIdentity(lease),
+        now: 400,
+        updates: {
+          outputs: { requested: 1, committed: 1, failed: 0 },
+          outputDestination: "fsa",
+          saveConfirmedAt: 400,
+        },
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.clearDispatchLease(fullLeaseIdentity(lease))
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.finalizeDownloadTask({
+        taskId: "task-1",
+        chapterOutcomesByIndex: [
+          { chapterId: "chapter-1", status: "completed" },
+        ],
+        completedAt: 500,
+      })
+    ).resolves.toMatchObject({
+      outcome: "applied",
+      completedCount: 1,
+      finalStatus: "completed",
+    })
+  })
+
+  it("hydrates a restarted folder task with automatic Chrome fallback disabled", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createFolderTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.interruptDownloadTask({
+        taskId: "task-1",
+        errorMessage: "Worker stopped",
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.restartDownloadTask({
+        taskId: "task-1",
+        restartTaskId: "folder-restart",
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    await expect(
+      new QueueRepository().getTask("folder-restart")
+    ).resolves.toMatchObject({
+      status: "queued",
+      settingsSnapshot: {
+        destination: { kind: "file-system-access", handleId: "folder" },
+      },
+    })
   })
 
   it.each(["retry", "restart"] as const)(
