@@ -13,7 +13,7 @@ function assertValidRequestDomain(domain: string): void {
   }
 }
 
-export function assertValidSessionRefererRuleDeclaration(
+function assertValidRuleIdentity(
   declaration: SessionRefererRuleDeclaration
 ): void {
   if (
@@ -31,6 +31,11 @@ export function assertValidSessionRefererRuleDeclaration(
   ) {
     throw new Error(`Invalid DNR rule priority: ${declaration.priority}`)
   }
+}
+
+function assertValidRuleTargets(
+  declaration: SessionRefererRuleDeclaration
+): void {
   if (declaration.requestDomains.length === 0) {
     throw new Error(`DNR rule ${declaration.id} requires request domains`)
   }
@@ -47,6 +52,13 @@ export function assertValidSessionRefererRuleDeclaration(
       )
     }
   }
+}
+
+export function assertValidSessionRefererRuleDeclaration(
+  declaration: SessionRefererRuleDeclaration
+): void {
+  assertValidRuleIdentity(declaration)
+  assertValidRuleTargets(declaration)
   const referer = new URL(declaration.referer)
   if (referer.protocol !== "https:" || referer.username || referer.password) {
     throw new Error(`DNR rule ${declaration.id} requires an HTTPS referer`)

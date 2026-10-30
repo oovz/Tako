@@ -1,6 +1,7 @@
 import logger from "@/src/runtime/logger"
 import type { SiteIntegrationEnablementMap } from "@/src/domain/site-integrations/storage-schemas"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
+import { clearProviderPolicyAlarm } from "./session-rule-manager-alarms"
 
 export const SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM =
   "site-integration-session-rule-continuation"
@@ -122,45 +123,23 @@ export class ProviderNetworkPolicyContinuationCoordinator {
   }
 
   isContinuationCurrent(revision: number): boolean {
-    const snapshot = this.state()
-    return (
-      !snapshot.dirty &&
-      snapshot.successfulRevision === snapshot.requestedRevision &&
-      snapshot.successfulRevision === revision
-    )
+    return this.state().isRevisionCurrent(revision)
   }
 
   private async clearContinuationAlarm(): Promise<void> {
     this.continuationAlarmScheduled = false
-    if (!chrome.alarms?.clear) return
-    try {
-      await chrome.alarms.clear(
-        SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM
-      )
-    } catch (error) {
-      logger.warn("Unable to clear provider queue continuation alarm", error)
-    }
+    await clearProviderPolicyAlarm(
+      SITE_INTEGRATION_SESSION_RULE_CONTINUATION_ALARM,
+      "Unable to clear provider queue continuation alarm"
+    )
   }
 
-  private async clearContinuationAlarmIfCurrent(
-    revision?: number
-  ): Promise<void> {
+  private async clearOrphanedContinuationAlarm(): Promise<void> {
     const mutation = this.mutationTail.then(async () => {
       const snapshot = this.state()
-      if (
-        revision !== undefined
-          ? !snapshot.isRevisionCurrent(revision)
-          : snapshot.dirty
-      ) {
-        return
-      }
+      if (snapshot.dirty) return
       const continuation = await this.readContinuation()
-      if (
-        continuation &&
-        (revision === undefined || continuation.revision !== revision)
-      ) {
-        return
-      }
+      if (continuation) return
       await this.clearContinuationAlarm()
     })
     this.mutationTail = mutation.catch(() => undefined)
@@ -184,6 +163,65 @@ export class ProviderNetworkPolicyContinuationCoordinator {
     this.continuationAlarmScheduled = true
   }
 
+  private async recoverMissingContinuation(): Promise<void> {
+    const snapshot = this.state()
+    if (this.consumedContinuationRevision === snapshot.successfulRevision) {
+      await this.clearOrphanedContinuationAlarm()
+      return
+    }
+    if (
+      snapshot.lastSuccessfulEnablement &&
+      !snapshot.dirty &&
+      snapshot.successfulRevision === snapshot.requestedRevision
+    ) {
+      // The alarm can fire in the crash window after its creation but before
+      // the session marker is persisted. Recreate both durable pieces from
+      // the already successful in-memory revision instead of clearing the
+      // only wakeup.
+      await this.scheduleContinuationAlarm()
+      await this.persistContinuation(snapshot.successfulRevision)
+      return
+    }
+    if (
+      snapshot.dirty ||
+      snapshot.successfulRevision < snapshot.requestedRevision
+    ) {
+      // A worker restart may deliver an orphaned continuation alarm before
+      // initial reconciliation has rebuilt the in-memory revision. Keep the
+      // alarm useful by rebuilding the durable marker through reconciliation.
+      await this.reconcile()
+      return
+    }
+    await this.clearOrphanedContinuationAlarm()
+  }
+
+  private async resumeContinuation(
+    continuation: ProviderNetworkPolicyContinuation,
+    suppliedEnablement: SiteIntegrationEnablementMap | undefined
+  ): Promise<void> {
+    if (
+      continuation.consumed ||
+      !this.isContinuationCurrent(continuation.revision)
+    ) {
+      await this.clearContinuation(continuation.revision)
+      return
+    }
+    const enablement =
+      suppliedEnablement ?? this.state().lastSuccessfulEnablement
+    if (!enablement) {
+      return
+    }
+    await this.onQueueResume(enablement)
+    // The queue callback owns acknowledgement. It clears the marker only
+    // after a durable queued-task admission, or when it proves that no
+    // runnable work remains. Keep the continuation alarm alive across the
+    // in-memory scheduler handoff so worker termination can replay it.
+    const remaining = await this.readContinuation()
+    if (remaining?.revision === continuation.revision) {
+      await this.scheduleContinuationAlarm()
+    }
+  }
+
   private async runContinuation(input?: {
     revision: number
     enablement: SiteIntegrationEnablementMap
@@ -193,59 +231,10 @@ export class ProviderNetworkPolicyContinuationCoordinator {
         ? { revision: input.revision, consumed: false }
         : await this.readContinuation()
       if (!continuation) {
-        const snapshot = this.state()
-        if (this.consumedContinuationRevision === snapshot.successfulRevision) {
-          await this.clearContinuationAlarmIfCurrent()
-          return
-        }
-        if (
-          snapshot.lastSuccessfulEnablement &&
-          !snapshot.dirty &&
-          snapshot.successfulRevision === snapshot.requestedRevision
-        ) {
-          // The alarm can fire in the crash window after its creation but before
-          // the session marker is persisted. Recreate both durable pieces from
-          // the already successful in-memory revision instead of clearing the
-          // only wakeup.
-          await this.scheduleContinuationAlarm()
-          await this.persistContinuation(snapshot.successfulRevision)
-          return
-        }
-        if (
-          snapshot.dirty ||
-          snapshot.successfulRevision < snapshot.requestedRevision
-        ) {
-          // A worker restart may deliver an orphaned continuation alarm before
-          // initial reconciliation has rebuilt the in-memory revision. Keep the
-          // alarm useful by rebuilding the durable marker through reconciliation.
-          await this.reconcile()
-          return
-        }
-        await this.clearContinuationAlarmIfCurrent()
+        await this.recoverMissingContinuation()
         return
       }
-      if (continuation.consumed) {
-        await this.clearContinuation(continuation.revision)
-        return
-      }
-      if (!this.isContinuationCurrent(continuation.revision)) {
-        await this.clearContinuation(continuation.revision)
-        return
-      }
-      const enablement =
-        input?.enablement ?? this.state().lastSuccessfulEnablement
-      if (!enablement) {
-        return
-      }
-      await this.onQueueResume(enablement)
-      // The queue callback owns acknowledgement. It clears the marker only
-      // after a durable queued-task admission, or when it proves that no
-      // runnable work remains. Keep the continuation alarm alive across the
-      // in-memory scheduler handoff so worker termination can replay it.
-      const remaining = await this.readContinuation()
-      if (remaining?.revision === continuation.revision) {
-        await this.scheduleContinuationAlarm()
-      }
+      await this.resumeContinuation(continuation, input?.enablement)
     } catch (error) {
       try {
         await this.scheduleContinuationAlarm()

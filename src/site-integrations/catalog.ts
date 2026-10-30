@@ -82,43 +82,78 @@ export function requiresBroadHttpsPermission(
   )
 }
 
+function isValidOptionSelection(
+  schema: Extract<
+    SiteIntegrationSettingsField,
+    { type: "select" | "multiselect" }
+  >,
+  value: unknown
+): boolean {
+  const allowedValues = new Set(schema.options.map((option) => option.value))
+  if (schema.type === "select") {
+    return typeof value === "string" && allowedValues.has(value)
+  }
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) => typeof entry === "string" && allowedValues.has(entry)
+    ) &&
+    new Set(value).size === value.length
+  )
+}
+
+function isValidSettingsFieldValue(
+  schema: SiteIntegrationSettingsField,
+  value: unknown
+): boolean {
+  switch (schema.type) {
+    case "boolean":
+      return typeof value === "boolean"
+    case "string":
+      return typeof value === "string"
+    case "number":
+      return typeof value === "number" && Number.isFinite(value)
+    case "select":
+    case "multiselect":
+      return isValidOptionSelection(schema, value)
+  }
+}
+
 export function assertValidSettingsFieldValue(
   schema: SiteIntegrationSettingsField,
   value: unknown
 ): void {
-  const invalid = () => {
+  if (!isValidSettingsFieldValue(schema, value)) {
     throw new Error(
       `Invalid value for site integration setting "${schema.id}" (${schema.type})`
     )
   }
+}
 
-  if (schema.type === "boolean") {
-    if (typeof value !== "boolean") invalid()
-    return
+function assertValidSettingsOptions(
+  schema: Extract<
+    SiteIntegrationSettingsField,
+    { type: "select" | "multiselect" }
+  >
+): void {
+  if (!Array.isArray(schema.options) || schema.options.length === 0) {
+    throw new Error(
+      `Site integration setting "${schema.id}" requires non-empty options`
+    )
   }
-  if (schema.type === "string") {
-    if (typeof value !== "string") invalid()
-    return
-  }
-  if (schema.type === "number") {
-    if (typeof value !== "number" || !Number.isFinite(value)) invalid()
-    return
-  }
-
-  const allowedValues = new Set(schema.options.map((option) => option.value))
-  if (schema.type === "select") {
-    if (typeof value !== "string" || !allowedValues.has(value)) invalid()
-    return
-  }
-
-  if (
-    !Array.isArray(value) ||
-    value.some(
-      (entry) => typeof entry !== "string" || !allowedValues.has(entry)
-    ) ||
-    new Set(value).size !== value.length
-  ) {
-    invalid()
+  const values = new Set<string>()
+  for (const option of schema.options) {
+    if (!option.labelKey.trim() || !option.value.trim()) {
+      throw new Error(
+        `Site integration setting "${schema.id}" has an invalid option`
+      )
+    }
+    if (values.has(option.value)) {
+      throw new Error(
+        `Site integration setting "${schema.id}" has duplicate option value "${option.value}"`
+      )
+    }
+    values.add(option.value)
   }
 }
 
@@ -130,25 +165,7 @@ export function assertValidSettingsFieldSchema(
   }
 
   if (schema.type === "select" || schema.type === "multiselect") {
-    if (!Array.isArray(schema.options) || schema.options.length === 0) {
-      throw new Error(
-        `Site integration setting "${schema.id}" requires non-empty options`
-      )
-    }
-    const values = new Set<string>()
-    for (const option of schema.options) {
-      if (!option.labelKey.trim() || !option.value.trim()) {
-        throw new Error(
-          `Site integration setting "${schema.id}" has an invalid option`
-        )
-      }
-      if (values.has(option.value)) {
-        throw new Error(
-          `Site integration setting "${schema.id}" has duplicate option value "${option.value}"`
-        )
-      }
-      values.add(option.value)
-    }
+    assertValidSettingsOptions(schema)
   }
 
   assertValidSettingsFieldValue(schema, schema.defaultValue)

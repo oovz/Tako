@@ -112,6 +112,21 @@ function testPatterns(pathname: string, patterns: RegExp[]): boolean {
   return patterns.some((regex) => regex.test(pathname))
 }
 
+function matchesSeriesPage(
+  candidate: CompiledPattern,
+  url: URL,
+  pathname: string,
+  options: MatchUrlOptions
+): boolean {
+  if (!isDomainMatch(url.hostname, candidate.domains)) return false
+  if (!options.includeDisabled && !isEnabled(candidate.integrationId))
+    return false
+  return (
+    testPatterns(pathname, candidate.seriesRegex) &&
+    !testPatterns(pathname, candidate.excludeRegex)
+  )
+}
+
 /**
  * Match a URL against a shipped integration's declared series patterns.
  *
@@ -131,47 +146,17 @@ export function matchUrl(
   }
   if (parsedUrl.protocol !== "https:") return null
 
-  const hostname = parsedUrl.hostname
   let pathname = parsedUrl.pathname
   if (pathname.length > 1 && pathname.endsWith("/")) {
     pathname = pathname.replace(/\/+$/, "")
   }
 
-  // Get compiled patterns
-  const patterns = ensurePatternsCompiled()
-
-  // Filter candidates by their compiled exact/wildcard domain policy.
-  const candidates = patterns.filter((pattern) =>
-    isDomainMatch(hostname, pattern.domains)
+  const candidate = ensurePatternsCompiled().find((pattern) =>
+    matchesSeriesPage(pattern, parsedUrl, pathname, options)
   )
-
-  if (candidates.length === 0) {
-    return null
-  }
-
-  // Test each candidate site integration for series pages
-  for (const candidate of candidates) {
-    if (!options.includeDisabled && !isEnabled(candidate.integrationId)) {
-      continue
-    }
-
-    if (testPatterns(pathname, candidate.seriesRegex)) {
-      // Apply the integration's exclusions.
-      if (
-        candidate.excludeRegex.length > 0 &&
-        testPatterns(pathname, candidate.excludeRegex)
-      ) {
-        continue // Skip this match, it's excluded
-      }
-
-      return {
-        integrationId: candidate.integrationId,
-        role: "series",
-      }
-    }
-  }
-
-  return null
+  return candidate
+    ? { integrationId: candidate.integrationId, role: "series" }
+    : null
 }
 
 /**

@@ -60,6 +60,37 @@ function assertResponseContentLength(response: Response, maxBytes: number) {
   }
 }
 
+const RESPONSE_MEDIA_TYPES: Record<
+  SiteIntegrationResponseType,
+  { exact: readonly string[]; prefix?: string; suffix?: string }
+> = {
+  json: { exact: ["application/json"], suffix: "+json" },
+  html: { exact: ["text/html", "application/xhtml+xml"] },
+  text: {
+    exact: ["application/javascript", "application/x-javascript"],
+    prefix: "text/",
+  },
+  bytes: {
+    exact: [
+      "application/octet-stream",
+      "binary/octet-stream",
+      "application/protobuf",
+      "application/x-protobuf",
+    ],
+    prefix: "image/",
+  },
+}
+
+function matchesResponseMediaType(
+  contentType: string,
+  expectedType: SiteIntegrationResponseType
+): boolean {
+  const media = RESPONSE_MEDIA_TYPES[expectedType]
+  if (media.exact.includes(contentType)) return true
+  if (media.prefix && contentType.startsWith(media.prefix)) return true
+  return media.suffix !== undefined && contentType.endsWith(media.suffix)
+}
+
 function assertResponseType(
   response: Response,
   expectedType: SiteIntegrationResponseType
@@ -72,21 +103,7 @@ function assertResponseType(
       ?.split(";", 1)[0]
       ?.trim()
       .toLowerCase() ?? ""
-  const accepted =
-    expectedType === "json"
-      ? contentType === "application/json" || contentType.endsWith("+json")
-      : expectedType === "html"
-        ? contentType === "text/html" || contentType === "application/xhtml+xml"
-        : expectedType === "text"
-          ? contentType.startsWith("text/") ||
-            contentType === "application/javascript" ||
-            contentType === "application/x-javascript"
-          : contentType.startsWith("image/") ||
-            contentType === "application/octet-stream" ||
-            contentType === "binary/octet-stream" ||
-            contentType === "application/protobuf" ||
-            contentType === "application/x-protobuf"
-  if (!accepted) {
+  if (!matchesResponseMediaType(contentType, expectedType)) {
     throw new Error(
       `Response Content-Type ${contentType || "<missing>"} does not match declared ${expectedType} endpoint.`
     )

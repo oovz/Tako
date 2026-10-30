@@ -3,77 +3,50 @@ import { siteIntegrationCatalogById } from "@/src/runtime/generated/site-integra
 import type { SiteIntegrationEndpointPolicy } from "./definition-types"
 
 function parseIpv4(hostname: string): number[] | null {
-  const parts = hostname.split(".")
-  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) {
-    return null
-  }
-  const octets = parts.map(Number)
-  return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : null
+  // URL has already validated and canonicalized numeric IPv4 hostnames.
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return null
+  return hostname.split(".").map(Number)
 }
 
+const NON_PUBLIC_IPV4_NETWORKS = [
+  [0x00000000, 8], // Current network
+  [0x0a000000, 8], // Private
+  [0x7f000000, 8], // Loopback
+  [0x64400000, 10], // Shared address space
+  [0xa9fe0000, 16], // Link-local
+  [0xac100000, 12], // Private
+  [0xc0000000, 24], // IETF protocol assignments
+  [0xc0000200, 24], // Documentation
+  [0xc0a80000, 16], // Private
+  [0xc6120000, 15], // Benchmarking
+  [0xc6336400, 24], // Documentation
+  [0xcb007100, 24], // Documentation
+  [0xe0000000, 3], // Multicast and reserved
+] as const
+
 function isNonPublicIpv4(octets: number[]): boolean {
-  const [a, b, c] = octets
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 0 && c === 0) ||
-    (a === 192 && b === 0 && c === 2) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19)) ||
-    (a === 198 && b === 51 && c === 100) ||
-    (a === 203 && b === 0 && c === 113) ||
-    a >= 224
+  const address = octets.reduce((value, octet) => value * 256 + octet, 0)
+  return NON_PUBLIC_IPV4_NETWORKS.some(
+    ([network, prefix]) =>
+      address >>> (32 - prefix) === network >>> (32 - prefix)
   )
 }
 
 function parseIpv6(hostname: string): number[] | null {
-  let input = hostname.replace(/^\[|\]$/g, "").toLowerCase()
-  if (!input.includes(":") || input.includes("%")) return null
-
-  const embeddedIpv4Match = input.match(/(^|:)(\d+\.\d+\.\d+\.\d+)$/)
-  if (embeddedIpv4Match) {
-    const ipv4 = parseIpv4(embeddedIpv4Match[2])
-    if (!ipv4) return null
-    input = `${input.slice(0, -embeddedIpv4Match[2].length)}${(
-      (ipv4[0] << 8) |
-      ipv4[1]
-    ).toString(16)}:${((ipv4[2] << 8) | ipv4[3]).toString(16)}`
-  }
-
-  const halves = input.split("::")
-  if (halves.length > 2) return null
+  if (!hostname.startsWith("[")) return null
+  // URL validates IPv6 syntax and renders embedded IPv4 as hexadecimal groups.
+  const halves = hostname.slice(1, -1).split("::")
   const left = halves[0] ? halves[0].split(":") : []
   const right = halves[1] ? halves[1].split(":") : []
   const missing = 8 - left.length - right.length
-  if ((halves.length === 1 && missing !== 0) || missing < 0) return null
-
   const raw = [...left, ...Array.from({ length: missing }, () => "0"), ...right]
-  if (raw.length !== 8 || raw.some((part) => !/^[0-9a-f]{1,4}$/.test(part))) {
-    return null
-  }
   return raw.map((part) => Number.parseInt(part, 16))
 }
 
-function isNonPublicIpv6(segments: number[]): boolean {
+function isReservedIpv6(segments: number[]): boolean {
   const allZero = segments.every((segment) => segment === 0)
   const loopback =
     segments.slice(0, 7).every((segment) => segment === 0) && segments[7] === 1
-  const mappedIpv4 =
-    segments.slice(0, 5).every((segment) => segment === 0) &&
-    segments[5] === 0xffff
-  if (mappedIpv4) {
-    return isNonPublicIpv4([
-      segments[6] >>> 8,
-      segments[6] & 0xff,
-      segments[7] >>> 8,
-      segments[7] & 0xff,
-    ])
-  }
-
   return (
     allZero ||
     loopback ||
@@ -82,6 +55,30 @@ function isNonPublicIpv6(segments: number[]): boolean {
     (segments[0] & 0xff00) === 0xff00 ||
     (segments[0] === 0x2001 && segments[1] === 0x0db8)
   )
+}
+
+function isNonPublicIpv6(segments: number[]): boolean {
+  const mappedIpv4 =
+    segments.slice(0, 5).every((segment) => segment === 0) &&
+    segments[5] === 0xffff
+  if (!mappedIpv4) return isReservedIpv6(segments)
+  return isNonPublicIpv4([
+    segments[6] >>> 8,
+    segments[6] & 0xff,
+    segments[7] >>> 8,
+    segments[7] & 0xff,
+  ])
+}
+
+function isNonPublicHost(hostname: string): boolean {
+  const reservedNames = ["localhost", "home.arpa"]
+  const reservedSuffixes = [".localhost", ".local", ".internal", ".home.arpa"]
+  if (reservedNames.includes(hostname)) return true
+  if (reservedSuffixes.some((suffix) => hostname.endsWith(suffix))) return true
+  const ipv4 = parseIpv4(hostname)
+  if (ipv4) return isNonPublicIpv4(ipv4)
+  const ipv6 = parseIpv6(hostname)
+  return ipv6 !== null && isNonPublicIpv6(ipv6)
 }
 
 export function assertSafePublicHttpsUrl(
@@ -103,23 +100,7 @@ export function assertSafePublicHttpsUrl(
   }
 
   const hostname = parsed.hostname.toLowerCase().replace(/\.+$/, "")
-  if (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname.endsWith(".internal") ||
-    hostname === "home.arpa" ||
-    hostname.endsWith(".home.arpa")
-  ) {
-    throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
-  }
-
-  const ipv4 = parseIpv4(hostname)
-  if (ipv4 && isNonPublicIpv4(ipv4)) {
-    throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
-  }
-  const ipv6 = parseIpv6(hostname)
-  if (ipv6 && isNonPublicIpv6(ipv6)) {
+  if (isNonPublicHost(hostname)) {
     throw new ProviderContractError(`Blocked non-public ${purpose} host.`)
   }
 
