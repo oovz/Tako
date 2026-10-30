@@ -955,34 +955,115 @@ describe("migrateDurableStateForCurrentSchema", () => {
     ])
   })
 
-  it("preserves a valid epoch-2 dispatch lease while removing only obsolete documents", async () => {
-    local = {
-      stateSchemaEpoch: 2,
-      downloadQueue: [],
-      pendingUndoActions: [],
-      activeDispatchLease: {
-        jobId: "job-valid",
-        taskId: "task-valid",
-        chapterId: "chapter-valid",
-        attempt: 1,
-        fingerprint: "a".repeat(64),
-        documentInstanceId: "document-valid",
-        saveMode: "fsa",
-        stage: "saving",
-        startedAt: 1,
-        lastActivityAt: 2,
-        leaseExpiresAt: 3,
-        sequence: 1,
-      },
+  it.each([
+    { saved: 0, status: "failed" },
+    { saved: 1, status: "completed" },
+  ] as const)(
+    "restores a legacy dispatch with $saved saved outputs as $status",
+    async ({ saved, status }) => {
+      const task = legacyTask()
+      task.taskSettingsSnapshot.destination = "downloads-api"
+      local = {
+        downloadQueue: [
+          {
+            ...task,
+            chapters: task.chapters.map((chapter) => ({
+              ...chapter,
+              dispatchAttempt: 1,
+              outputs: { requested: saved, committed: saved, failed: 0 },
+            })),
+          },
+        ],
+        activeDispatchLease: {
+          jobId: "job-1",
+          taskId: task.id,
+          chapterId: task.chapters[0].id,
+          attempt: 1,
+          stage: "dispatching",
+          startedAt: 1,
+          lastActivityAt: 1,
+          leaseExpiresAt: 45_001,
+          sequence: 0,
+        },
+      }
+
+      await expect(
+        migrateDurableStateForCurrentSchema()
+      ).resolves.toBeUndefined()
+
+      expect(local.downloadQueue).toEqual([
+        expect.objectContaining({
+          status,
+          chapters: [
+            expect.objectContaining({
+              status,
+              outputs: { requested: saved, committed: saved, failed: 0 },
+            }),
+          ],
+        }),
+      ])
+      expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
+      expect(local).not.toHaveProperty("activeDispatchLease")
     }
+  )
 
-    await migrateDurableStateForCurrentSchema()
+  it.each([false, true])(
+    "preserves a valid epoch-2 dispatch lease with prepared-journal recovery %s",
+    async (interruptAfterPreparation) => {
+      local = {
+        stateSchemaEpoch: 2,
+        downloadQueue: [],
+        pendingUndoActions: [],
+        activeDispatchLease: {
+          jobId: "job-valid",
+          taskId: "task-valid",
+          chapterId: "chapter-valid",
+          attempt: 1,
+          fingerprint: "a".repeat(64),
+          documentInstanceId: "document-valid",
+          saveMode: "fsa",
+          stage: "saving",
+          startedAt: 1,
+          lastActivityAt: 2,
+          leaseExpiresAt: 3,
+          sequence: 1,
+        },
+      }
 
-    expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
-    expect(local.activeDispatchLease).toEqual(
-      expect.objectContaining({ jobId: "job-valid" })
-    )
-  })
+      const lease = structuredClone(local.activeDispatchLease)
+      if (interruptAfterPreparation) {
+        const set = vi.mocked(chrome.storage.local.set)
+        const originalSet = set.getMockImplementation()!
+        set.mockImplementation(async (values, callback) => {
+          if (Object.hasOwn(values, "downloadQueue")) {
+            throw new Error("canonical write interrupted")
+          }
+          return originalSet(values, callback)
+        })
+
+        await expect(migrateDurableStateForCurrentSchema()).rejects.toThrow(
+          "canonical write interrupted"
+        )
+        expect(local.stateSchemaEpoch).toBe(2)
+        expect(local.stateSchemaMigrationJournal).toEqual(
+          expect.objectContaining({
+            sourceEpoch: 2,
+            targetEpoch: 3,
+            phase: "prepared",
+          })
+        )
+        set.mockImplementation(originalSet)
+      }
+
+      await expect(
+        migrateDurableStateForCurrentSchema()
+      ).resolves.toBeUndefined()
+
+      expect(local.stateSchemaEpoch).toBe(CURRENT_STATE_SCHEMA_EPOCH)
+      expect(local.activeDispatchLease).toEqual(lease)
+      expect(local).not.toHaveProperty("stateSchemaMigrationJournal")
+    }
+  )
 })
 
 describe("ordered stored-state migration steps", () => {
