@@ -1,5 +1,9 @@
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
+import type {
+  RuntimeMessageRequest,
+  RuntimeMessageResponse,
+} from "@/src/runtime/runtime-message-contracts"
 import { StartDownloadRejectedError } from "@/src/runtime/start-download-errors"
 
 type QueueMessageType =
@@ -16,24 +20,7 @@ export function createBackgroundQueueMessageHandlers(
   deps: BackgroundRuntimeHandlerDependencies
 ): Pick<RuntimeMessageHandlerMap<"background">, QueueMessageType> {
   return {
-    START_DOWNLOAD: async (message) => {
-      try {
-        const result = await deps.queueApplicationCommands.startDownload(
-          message.payload,
-          message.commandId
-        )
-        return { success: true, taskId: result.taskId }
-      } catch (error) {
-        if (error instanceof StartDownloadRejectedError) {
-          return { success: false, error: error.message, code: error.code }
-        }
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-          code: "durable_state_failure",
-        }
-      }
-    },
+    START_DOWNLOAD: (message) => handleStartDownload(deps, message),
     RETRY_FAILED_CHAPTERS: async (message) => {
       await deps.queueApplicationCommands.retryFailedChapters(
         message.payload.taskId,
@@ -79,5 +66,27 @@ export function createBackgroundQueueMessageHandlers(
       await deps.queueApplicationCommands.undoQueueAction(message.payload.token)
       return { success: true }
     },
+  }
+}
+
+async function handleStartDownload(
+  deps: BackgroundRuntimeHandlerDependencies,
+  message: RuntimeMessageRequest<"START_DOWNLOAD">
+): Promise<RuntimeMessageResponse<"START_DOWNLOAD">> {
+  try {
+    const result = await deps.queueApplicationCommands.startDownload(
+      message.payload,
+      message.commandId
+    )
+    return { success: true, taskId: result.taskId }
+  } catch (error) {
+    if (error instanceof StartDownloadRejectedError) {
+      return { success: false, error: error.message, code: error.code }
+    }
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      code: "durable_state_failure",
+    }
   }
 }

@@ -59,7 +59,7 @@ function rejected(
   return new StartDownloadRejectedError(code, message)
 }
 
-function resolveSelectedChapters(
+function requireCurrentSeriesContext(
   current: CurrentSeriesContext | undefined,
   payload: StartDownloadPayload
 ) {
@@ -75,10 +75,18 @@ function resolveSelectedChapters(
     throw rejected("stale_series_context", STALE_SERIES_CONTEXT_ERROR)
   }
 
+  return current
+}
+
+function resolveSelectedChapters(
+  current: CurrentSeriesContext | undefined,
+  payload: StartDownloadPayload
+) {
+  const { context } = requireCurrentSeriesContext(current, payload)
   const chaptersById = new Map(
-    current.context.chapters.map((chapter) => [chapter.id, chapter])
+    context.chapters.map((chapter) => [chapter.id, chapter])
   )
-  if (chaptersById.size !== current.context.chapters.length) {
+  if (chaptersById.size !== context.chapters.length) {
     throw rejected("stale_series_context", STALE_SERIES_CONTEXT_ERROR)
   }
 
@@ -102,7 +110,7 @@ function resolveSelectedChapters(
   })
 
   return {
-    context: current.context,
+    context,
     chapters: selectedChapters,
   }
 }
@@ -184,28 +192,15 @@ export class QueueApplicationCommands {
       })
     )
     if (result.outcome !== "applied") {
-      if (
-        result.reason === "already-retried" ||
-        result.reason === "retry-task-id-conflict"
-      ) {
-        const convergedRetryTask =
-          await this.deps.queueRepository.getTask(retryTaskId)
-        if (convergedRetryTask) return { newTaskId: retryTaskId }
-        throw new Error(
-          result.reason === "already-retried"
-            ? "Failed chapters were already retried by another command"
-            : "Retry task identity already exists"
-        )
-      }
-      throw new Error(
-        result.reason === "task-not-found"
-          ? "Task not found"
-          : result.reason === "invalid-status"
-            ? "Retry failed chapters is only available for partial-success tasks"
-            : result.reason === "no-failed-chapters"
-              ? "No failed chapters to retry"
-              : "Retry task identity already exists"
-      )
+      return await this.resolveChildTaskRejection(retryTaskId, result.reason, {
+        "already-retried":
+          "Failed chapters were already retried by another command",
+        "retry-task-id-conflict": "Retry task identity already exists",
+        "task-not-found": "Task not found",
+        "invalid-status":
+          "Retry failed chapters is only available for partial-success tasks",
+        "no-failed-chapters": "No failed chapters to retry",
+      })
     }
     logger.info("[Queue]", {
       event: "RETRY_FAILED_CHAPTERS",
@@ -234,25 +229,16 @@ export class QueueApplicationCommands {
       })
     )
     if (result.outcome !== "applied") {
-      if (
-        result.reason === "already-retried" ||
-        result.reason === "restart-task-id-conflict"
-      ) {
-        const convergedRestartTask =
-          await this.deps.queueRepository.getTask(restartTaskId)
-        if (convergedRestartTask) return { newTaskId: restartTaskId }
-        throw new Error(
-          result.reason === "already-retried"
-            ? "Task was already restarted by another command"
-            : "Restart task identity already exists"
-        )
-      }
-      throw new Error(
-        result.reason === "task-not-found"
-          ? "Task not found"
-          : result.reason === "invalid-status"
-            ? "Restart is only available for failed, partial-success, or canceled tasks"
-            : "Restart task identity already exists"
+      return await this.resolveChildTaskRejection(
+        restartTaskId,
+        result.reason,
+        {
+          "already-retried": "Task was already restarted by another command",
+          "restart-task-id-conflict": "Restart task identity already exists",
+          "task-not-found": "Task not found",
+          "invalid-status":
+            "Restart is only available for failed, partial-success, or canceled tasks",
+        }
       )
     }
     logger.info("[Queue]", {
@@ -321,20 +307,7 @@ export class QueueApplicationCommands {
     const result = await runDestinationAccessExclusive(() =>
       restorePendingUndo(this.deps.queueRepository, token)
     )
-    if (
-      (result.outcome !== "applied" && result.outcome !== "unchanged") ||
-      !result.restored
-    ) {
-      throw new Error(
-        result.outcome === "applied" && result.reason === "expired"
-          ? "The Undo period has ended."
-          : "This action can no longer be undone."
-      )
-    }
-
-    const restoredQueuedTask =
-      (result.outcome === "applied" ? result.action.type : result.type) ===
-      "cancel_queued"
+    const restoredQueuedTask = restoredUndoType(result) === "cancel_queued"
     if (restoredQueuedTask) await this.activateQueue()
     return { restoredQueuedTask }
   }
@@ -376,7 +349,41 @@ export class QueueApplicationCommands {
     }
   }
 
+  private async resolveChildTaskRejection<TReason extends string>(
+    childTaskId: string,
+    reason: TReason,
+    messages: Record<TReason, string>
+  ): Promise<{ newTaskId: string }> {
+    if (CHILD_TASK_REPLAY_REASONS.has(reason)) {
+      const existing = await this.deps.queueRepository.getTask(childTaskId)
+      if (existing) return { newTaskId: childTaskId }
+    }
+    throw new Error(messages[reason])
+  }
+
   private async activateQueue(): Promise<void> {
     await this.deps.queueScheduler.activate()
   }
+}
+
+const CHILD_TASK_REPLAY_REASONS = new Set([
+  "already-retried",
+  "retry-task-id-conflict",
+  "restart-task-id-conflict",
+])
+
+function restoredUndoType(
+  result: Awaited<ReturnType<typeof restorePendingUndo>>
+): PendingUndoReceipt["type"] {
+  if (
+    (result.outcome !== "applied" && result.outcome !== "unchanged") ||
+    !result.restored
+  ) {
+    throw new Error(
+      result.outcome === "applied" && result.reason === "expired"
+        ? "The Undo period has ended."
+        : "This action can no longer be undone."
+    )
+  }
+  return result.outcome === "applied" ? result.action.type : result.type
 }

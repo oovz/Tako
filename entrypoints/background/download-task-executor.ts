@@ -1,6 +1,9 @@
 import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import logger from "@/src/runtime/logger"
-import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
+import type {
+  DispatchLeaseAuthority,
+  DownloadTaskState,
+} from "@/src/domain/queue/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
 import { clearActiveTaskProgress } from "./active-task-progress-bus"
 import {
@@ -25,6 +28,12 @@ import type {
 } from "./chapter-dispatch-coordinator"
 
 export type TaskExecutionResult = "active" | "queue-continuation" | "wait"
+
+interface TaskExecution {
+  taskId: string
+  currentLeaseForTask?: DispatchLeaseAuthority
+  dispatchSession?: ChapterDispatchSession
+}
 
 export class DownloadTaskExecutor {
   private readonly activeTasks = new Map<string, Promise<TaskExecutionResult>>()
@@ -51,19 +60,7 @@ export class DownloadTaskExecutor {
     const existing = this.activeTasks.get(taskId)
     if (existing) return await existing
 
-    const pending = runDownloadTask(
-      this.stateManager,
-      taskId,
-      this.ensureOffscreenReady,
-      this.cancellationCoordinator,
-      this.providerPolicyCoordinator,
-      this.chapterDispatchCoordinator,
-      this.sessionRuleManager,
-      this.destinationService,
-      this.siteIntegrationEnablementService,
-      this.finalizationDependencies,
-      resumeExistingTask
-    )
+    const pending = this.runDownloadTask(taskId, resumeExistingTask)
     this.activeTasks.set(taskId, pending)
     try {
       return await pending
@@ -77,271 +74,183 @@ export class DownloadTaskExecutor {
   isActive(taskId: string): boolean {
     return this.activeTasks.has(taskId)
   }
-}
 
-async function runDownloadTask(
-  stateManager: QueueRepository,
-  taskId: string,
-  ensureOffscreenReady: () => Promise<void>,
-  cancellationCoordinator: DownloadTaskCancellationCoordinator,
-  providerPolicyCoordinator: ProviderPolicyQueueCoordinator,
-  chapterDispatchCoordinator: ChapterDispatchCoordinator,
-  sessionRuleManager: SiteIntegrationSessionRuleManager,
-  destinationService: DestinationService,
-  siteIntegrationEnablementService: Pick<
-    SiteIntegrationEnablementService,
-    "getAll"
-  >,
-  finalizationDependencies: DownloadQueueFinalizationDependencies,
-  resumeExistingTask: boolean = false
-): Promise<TaskExecutionResult> {
-  let currentLeaseForTask: DispatchLeaseAuthority | undefined
-  let dispatchSession: ChapterDispatchSession | undefined
-  try {
-    logger.info("[Queue]", {
-      event: "STARTED",
-      taskId,
-    })
+  private async runDownloadTask(
+    taskId: string,
+    resumeExistingTask: boolean
+  ): Promise<TaskExecutionResult> {
+    const execution: TaskExecution = { taskId }
+    try {
+      logger.info("[Queue]", { event: "STARTED", taskId })
+      const task = await this.admitTask(taskId, resumeExistingTask)
+      if (!task) return "wait"
+      await this.providerPolicyCoordinator.acknowledgeAfterAdmission()
 
-    let task = await stateManager.getTask(taskId)
-
-    if (!task) {
-      throw new Error(`Task not found: ${taskId}`)
-    }
-
-    if (!resumeExistingTask) {
-      const startTransition = await stateManager.startDownloadTask({
-        taskId,
-        now: Date.now(),
-      })
-      if (startTransition.outcome !== "applied") {
-        logger.info("[Queue]", {
-          event: "START_SKIPPED",
+      const canReuseEntryLease = await this.prepareEntryLease(
+        task,
+        resumeExistingTask,
+        execution
+      )
+      // Disabled integrations fail before destination preflight can retain the
+      // queue slot for a resumed task with stale FSA permissions.
+      const enablement = await this.siteIntegrationEnablementService.getAll()
+      if (!isEnabled(task.siteIntegrationId, enablement)) {
+        const interruption = await this.cancellationCoordinator.interruptTask({
           taskId,
-          reason: startTransition.reason,
+          errorMessage: "Integration disabled",
         })
-        return "wait"
+        return interruption === "settled" ? "queue-continuation" : "wait"
       }
-      task = startTransition.task
+
+      await this.prepareProviderPolicy(task, canReuseEntryLease)
+      await this.preflightDestination(task, canReuseEntryLease)
+      await this.ensureOffscreenReady()
+      const session = createDispatchSession(task, execution.currentLeaseForTask)
+      execution.dispatchSession = session
+      if (await this.dispatchChapters(session)) return "active"
+      return await this.completeTask(session)
+    } catch (error) {
+      return await this.settleExecutionFailure(error, execution)
     }
-    await providerPolicyCoordinator.acknowledgeAfterAdmission()
+  }
 
-    // Seed the exact failure-boundary lease at entry. Each successful chapter
-    // admission replaces it below so later failures cannot strand a new lease.
-    const entryDispatchLease = await stateManager.getActiveDispatchLease()
-    const taskEntryLease =
-      entryDispatchLease?.taskId === taskId ? entryDispatchLease : undefined
-    currentLeaseForTask = taskEntryLease
-    const entryLeaseChapter = taskEntryLease
-      ? task.chapters.find(
-          (chapter) =>
-            chapter.id === taskEntryLease.chapterId &&
-            chapter.status === "downloading"
-        )
-      : undefined
-    const canReuseEntryLease =
-      resumeExistingTask &&
-      task.status === "downloading" &&
-      entryLeaseChapter !== undefined
+  private async admitTask(
+    taskId: string,
+    resumeExistingTask: boolean
+  ): Promise<DownloadTaskState | undefined> {
+    const task = await this.stateManager.getTask(taskId)
+    if (!task) throw new Error(`Task not found: ${taskId}`)
+    if (resumeExistingTask) return task
+    const transition = await this.stateManager.startDownloadTask({
+      taskId,
+      now: Date.now(),
+    })
+    if (transition.outcome === "applied") return transition.task
+    logger.info("[Queue]", {
+      event: "START_SKIPPED",
+      taskId,
+      reason: transition.reason,
+    })
+    return undefined
+  }
 
-    if (taskEntryLease && !canReuseEntryLease) {
-      const cleared =
-        (await cancellationCoordinator.cancelProducerAndClearLease(
-          taskEntryLease
-        )) !== undefined
-      if (cleared) currentLeaseForTask = undefined
+  private async prepareEntryLease(
+    task: DownloadTaskState,
+    resumeExistingTask: boolean,
+    execution: TaskExecution
+  ): Promise<boolean> {
+    const activeLease = await this.stateManager.getActiveDispatchLease()
+    const lease = activeLease?.taskId === task.id ? activeLease : undefined
+    // Preserve the failure-boundary lease until exact producer cancellation
+    // succeeds. Chapter admission replaces it on the dispatch session.
+    execution.currentLeaseForTask = lease
+    const canReuse = canResumeLease(task, lease, resumeExistingTask)
+    if (lease && !canReuse) {
+      const canceled =
+        await this.cancellationCoordinator.cancelProducerAndClearLease(lease)
+      if (canceled) execution.currentLeaseForTask = undefined
     }
+    return canReuse
+  }
 
-    // An integration being disabled is a definitive task failure. Check it
-    // before destination preflight so a stale FSA permission issue cannot
-    // leave a resumed task occupying the only active queue slot forever.
-    const integrationEnablement =
-      await siteIntegrationEnablementService.getAll()
-    if (!isEnabled(task.siteIntegrationId, integrationEnablement)) {
-      const interruption = await cancellationCoordinator.interruptTask({
-        taskId,
-        errorMessage: "Integration disabled",
-      })
-      return interruption === "settled" ? "queue-continuation" : "wait"
-    }
-
-    // Session-scoped DNR rules are cleared on browser shutdown and extension
-    // update. DNR-dependent providers must not start destination/offscreen work
-    // until their current network policy has been installed. Providers without
-    // declared session rules return immediately.
+  private async prepareProviderPolicy(
+    task: DownloadTaskState,
+    canReuseEntryLease: boolean
+  ): Promise<void> {
+    // Session rules disappear at browser shutdown and extension update.
+    // Install them before destination and offscreen work for a new producer.
     if (!canReuseEntryLease) {
-      await sessionRuleManager.ensureNetworkReady(task.siteIntegrationId)
+      await this.sessionRuleManager.ensureNetworkReady(task.siteIntegrationId)
     }
     if (
       task.activeBlock === "provider_network_policy_pending" ||
       task.activeBlock === "provider_network_policy_action_required"
     ) {
-      await stateManager.releaseProviderPolicyBlock(taskId)
+      await this.stateManager.releaseProviderPolicyBlock(task.id)
     }
+  }
 
-    const taskDestinationContext = {
-      taskId,
+  private async preflightDestination(
+    task: DownloadTaskState,
+    canReuseEntryLease: boolean
+  ): Promise<void> {
+    if (canReuseEntryLease || !task.chapters.some(isDispatchableChapter)) return
+    const context = {
+      taskId: task.id,
       destination: getEffectiveTaskDestination(task),
     } as const
-    if (
-      !canReuseEntryLease &&
-      task.chapters.some(
-        (chapter) =>
-          chapter.status === "queued" || chapter.status === "downloading"
-      )
-    ) {
-      const destinationPreflight = await destinationService.preflight(
-        taskDestinationContext
-      )
-      if (!destinationPreflight.ready)
-        throw new DestinationPreflightError(
-          taskDestinationContext,
-          destinationPreflight
-        )
-    }
+    const preflight = await this.destinationService.preflight(context)
+    if (!preflight.ready)
+      throw new DestinationPreflightError(context, preflight)
+  }
 
-    await ensureOffscreenReady()
-
-    const settingsSnapshot = task.settingsSnapshot
-    const chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined> =
-      task.chapters.map((chapter) =>
-        chapter.status === "completed" ||
-        chapter.status === "failed" ||
-        chapter.status === "partial_success"
-          ? {
-              chapterId: chapter.id,
-              status: chapter.status,
-              errorMessage: chapter.errorMessage,
-              errorCategory: chapter.errorCategory,
-              imagesFailed: chapter.imagesFailed,
-            }
-          : undefined
-      )
-    dispatchSession = {
-      task,
-      taskId,
-      settingsSnapshot,
-      chapterOutcomesByIndex,
-      shouldStopDispatch: false,
-      lastDownloadMode: "browser",
-      currentLeaseForTask,
-    }
-
-    // Complete each chapter dispatch before starting the next.
-    const chapterIndicesToDispatch = task.chapters
+  private async dispatchChapters(
+    session: ChapterDispatchSession
+  ): Promise<boolean> {
+    const indices = session.task.chapters
       .map((chapter, index) => ({ chapter, index }))
-      .filter(
-        ({ chapter }) =>
-          chapter.status === "queued" || chapter.status === "downloading"
-      )
+      .filter(({ chapter }) => isDispatchableChapter(chapter))
       .map(({ index }) => index)
-    for (
-      let position = 0;
-      position < chapterIndicesToDispatch.length;
-      position++
-    ) {
-      if (dispatchSession.shouldStopDispatch) {
-        break
-      }
-
-      const chapterIndex = chapterIndicesToDispatch[position]
-      if (chapterIndex === undefined) break
-      const settledDispatchLease = await chapterDispatchCoordinator.dispatch(
-        dispatchSession,
-        chapterIndex
-      )
-      if (settledDispatchLease) {
-        return "active"
-      }
+    // Complete each chapter dispatch before starting the next.
+    for (const index of indices) {
+      if (session.shouldStopDispatch) break
+      if (await this.chapterDispatchCoordinator.dispatch(session, index))
+        return true
     }
+    return false
+  }
 
-    if (dispatchSession.shouldStopDispatch) {
+  private async completeTask(
+    session: ChapterDispatchSession
+  ): Promise<TaskExecutionResult> {
+    if (session.shouldStopDispatch) {
       await clearActiveTaskProgress()
       return "queue-continuation"
     }
-
-    const latestTaskAfterDispatch = await stateManager.getTask(taskId)
-    if (
-      !latestTaskAfterDispatch ||
-      latestTaskAfterDispatch.status !== "downloading"
-    ) {
+    const { taskId, chapterOutcomesByIndex } = session
+    const latestTask = await this.stateManager.getTask(taskId)
+    if (!latestTask || latestTask.status !== "downloading") {
       await clearActiveTaskProgress()
       return "queue-continuation"
     }
-
     const finalization = await finalizeDownloadTaskAfterDispatch({
-      stateManager,
+      stateManager: this.stateManager,
       taskId,
       chapterOutcomesByIndex,
-      finalizationDependencies,
+      finalizationDependencies: this.finalizationDependencies,
     })
     await clearActiveTaskProgress()
-
-    if (!finalization.finalized) {
-      return "queue-continuation"
-    }
-
+    if (!finalization.finalized) return "queue-continuation"
     const { chapterOutcomes, completedCount, finalStatus } = finalization
-
     await notifyDownloadTaskCompletion({
-      stateManager,
+      stateManager: this.stateManager,
       taskId,
       finalStatus,
       completedCount,
       totalChapters: chapterOutcomes.length,
-      settingsRepository: finalizationDependencies.settingsRepository,
+      settingsRepository: this.finalizationDependencies.settingsRepository,
     })
-
     logger.info("[Queue]", {
       event: "OFFSCREEN_DISPATCHED",
       taskId,
       jobId: `dispatch_loop_${taskId}`,
-      mode: dispatchSession.lastDownloadMode,
-      chapters: task.chapters.length,
+      mode: session.lastDownloadMode,
+      chapters: session.task.chapters.length,
     })
     return "queue-continuation"
-  } catch (error) {
+  }
+
+  private async settleExecutionFailure(
+    error: unknown,
+    execution: TaskExecution
+  ): Promise<TaskExecutionResult> {
     if (error instanceof DestinationPreflightError) {
-      const fallback = await stateManager.selectChromeFallback({
-        taskId,
-        now: Date.now(),
-      })
-      if (fallback.outcome === "applied") {
-        await clearActiveTaskProgress()
-        return "queue-continuation"
-      }
-      const failure = await cancellationCoordinator.failTaskForSave({
-        taskId,
-        chapterId: error.context.chapterId,
-        errorMessage: error.message,
-        errorCategory: error.errorCategory,
-      })
-      return failure === "quarantined" ? "wait" : "queue-continuation"
+      return await this.settleDestinationFailure(error, execution.taskId)
     }
     if (error instanceof ProviderNetworkPolicyPendingError) {
-      const blockTransition = await stateManager.blockTaskForProviderPolicy({
-        taskId,
-        block: "provider_network_policy_pending",
-      })
-      await clearActiveTaskProgress()
-      const leaseForFailure =
-        dispatchSession?.currentLeaseForTask ?? currentLeaseForTask
-      if (leaseForFailure) {
-        await cancellationCoordinator.cancelProducerAndClearLease(
-          leaseForFailure
-        )
-      }
-      logger.warn("[Queue]", {
-        event: "PROVIDER_NETWORK_POLICY_PENDING",
-        taskId,
-        siteIntegrationId: error.siteIntegrationId,
-        reason: error.message,
-      })
-      return blockTransition.outcome === "applied"
-        ? "queue-continuation"
-        : "wait"
+      return await this.blockForProviderPolicy(error, execution)
     }
-
+    const taskId = execution.taskId
     logger.error("[Queue]", {
       event: "FAILED",
       taskId,
@@ -353,10 +262,103 @@ async function runDownloadTask(
     })
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error"
-    const failureTransition = await cancellationCoordinator.interruptTask({
+    const interruption = await this.cancellationCoordinator.interruptTask({
       taskId,
       errorMessage,
     })
-    return failureTransition === "settled" ? "queue-continuation" : "wait"
+    return interruption === "settled" ? "queue-continuation" : "wait"
+  }
+
+  private async settleDestinationFailure(
+    error: DestinationPreflightError,
+    taskId: string
+  ): Promise<TaskExecutionResult> {
+    const fallback = await this.stateManager.selectChromeFallback({
+      taskId,
+      now: Date.now(),
+    })
+    if (fallback.outcome === "applied") {
+      await clearActiveTaskProgress()
+      return "queue-continuation"
+    }
+    const failure = await this.cancellationCoordinator.failTaskForSave({
+      taskId,
+      chapterId: error.context.chapterId,
+      errorMessage: error.message,
+      errorCategory: error.errorCategory,
+    })
+    return failure === "quarantined" ? "wait" : "queue-continuation"
+  }
+
+  private async blockForProviderPolicy(
+    error: ProviderNetworkPolicyPendingError,
+    execution: TaskExecution
+  ): Promise<TaskExecutionResult> {
+    const { taskId } = execution
+    const block = await this.stateManager.blockTaskForProviderPolicy({
+      taskId,
+      block: "provider_network_policy_pending",
+    })
+    await clearActiveTaskProgress()
+    const lease =
+      execution.dispatchSession?.currentLeaseForTask ??
+      execution.currentLeaseForTask
+    if (lease)
+      await this.cancellationCoordinator.cancelProducerAndClearLease(lease)
+    logger.warn("[Queue]", {
+      event: "PROVIDER_NETWORK_POLICY_PENDING",
+      taskId,
+      siteIntegrationId: error.siteIntegrationId,
+      reason: error.message,
+    })
+    return block.outcome === "applied" ? "queue-continuation" : "wait"
+  }
+}
+
+function canResumeLease(
+  task: DownloadTaskState,
+  lease: DispatchLeaseAuthority | undefined,
+  resumeExistingTask: boolean
+): boolean {
+  if (!resumeExistingTask || task.status !== "downloading" || !lease)
+    return false
+  return task.chapters.some(
+    (chapter) =>
+      chapter.id === lease.chapterId && chapter.status === "downloading"
+  )
+}
+
+function isDispatchableChapter(
+  chapter: DownloadTaskState["chapters"][number]
+): boolean {
+  return chapter.status === "queued" || chapter.status === "downloading"
+}
+
+function createDispatchSession(
+  task: DownloadTaskState,
+  currentLeaseForTask: DispatchLeaseAuthority | undefined
+): ChapterDispatchSession {
+  const chapterOutcomesByIndex: Array<ChapterDispatchOutcome | undefined> =
+    task.chapters.map((chapter) =>
+      chapter.status === "completed" ||
+      chapter.status === "failed" ||
+      chapter.status === "partial_success"
+        ? {
+            chapterId: chapter.id,
+            status: chapter.status,
+            errorMessage: chapter.errorMessage,
+            errorCategory: chapter.errorCategory,
+            imagesFailed: chapter.imagesFailed,
+          }
+        : undefined
+    )
+  return {
+    task,
+    taskId: task.id,
+    settingsSnapshot: task.settingsSnapshot,
+    chapterOutcomesByIndex,
+    shouldStopDispatch: false,
+    lastDownloadMode: "browser",
+    currentLeaseForTask,
   }
 }
