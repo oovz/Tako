@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   __resetI18nForTests,
   applyUiLanguagePreference,
+  getI18nSnapshot,
   getUILanguage,
   subscribeI18n,
   t,
@@ -53,9 +54,21 @@ describe("UI catalog request lifetime", () => {
     )
     await applyUiLanguagePreference("ja")
     expect(t("greeting")).toBe("English")
+    const listener = vi.fn()
+    subscribeI18n(listener)
+    const fallbackSnapshot = getI18nSnapshot()
     failSelected = false
     await applyUiLanguagePreference("ja")
     expect(t("greeting")).toBe("Japanese")
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(getI18nSnapshot()).toBeGreaterThan(fallbackSnapshot)
+    const recoveredSnapshot = getI18nSnapshot()
+
+    await applyUiLanguagePreference("ja")
+    expect(t("greeting")).toBe("Japanese")
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(getI18nSnapshot()).toBe(recoveredSnapshot)
+
     await applyUiLanguagePreference("auto")
     expect(t("greeting")).toBe("greeting")
   })
