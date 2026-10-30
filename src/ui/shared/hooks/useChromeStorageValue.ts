@@ -23,6 +23,12 @@ interface StorageSnapshot<T> {
   status: StorageReadStatus
 }
 
+interface ChromeStorageSubscription<T> {
+  getSnapshot: () => StorageSnapshot<T>
+  subscribe: (listener: () => void) => () => void
+  refresh: () => Promise<void>
+}
+
 function getStorageArea(
   areaName: "session" | "local"
 ): chrome.storage.StorageArea {
@@ -40,74 +46,92 @@ function hasRelevantKeyChange(
   return key in changes
 }
 
-function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
-  const { areaName, key, initialValue, parse } = options
+class ChromeStorageStore<T> {
+  readonly subscription: ChromeStorageSubscription<T>
+  private readonly storageListener: Parameters<
+    typeof chrome.storage.onChanged.addListener
+  >[0]
+  private snapshot: StorageSnapshot<T>
+  private listening = false
+  private latestReadId = 0
+  private deferredRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly listeners = new Set<() => void>()
 
-  let snapshot: StorageSnapshot<T> = {
-    value: initialValue,
-    hydrated: false,
-    status: "loading",
+  constructor(private readonly options: UseChromeStorageValueOptions<T>) {
+    this.snapshot = {
+      value: options.initialValue,
+      hydrated: false,
+      status: "loading",
+    }
+    this.subscription = {
+      getSnapshot: this.getSnapshot.bind(this),
+      subscribe: this.subscribe.bind(this),
+      refresh: this.refresh.bind(this),
+    }
+    this.storageListener = this.handleStorageChange.bind(this)
   }
-  let listening = false
-  let latestReadId = 0
-  let deferredRefreshTimer: ReturnType<typeof setTimeout> | null = null
-  const listeners = new Set<() => void>()
 
-  const emit = (): void => {
-    for (const listener of listeners) {
+  private getSnapshot(): StorageSnapshot<T> {
+    return this.snapshot
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) {
       listener()
     }
   }
 
-  const setSnapshot = (
+  private setSnapshot(
     value: T,
     hydrated: boolean,
     status: StorageReadStatus
-  ): void => {
+  ): void {
     if (
-      snapshot.hydrated === hydrated &&
-      snapshot.status === status &&
-      Object.is(snapshot.value, value)
+      this.snapshot.hydrated === hydrated &&
+      this.snapshot.status === status &&
+      Object.is(this.snapshot.value, value)
     )
       return
-    snapshot = { value, hydrated, status }
-    emit()
+    this.snapshot = { value, hydrated, status }
+    this.emit()
   }
 
-  const fail = (): void => {
-    setSnapshot(
-      snapshot.value,
+  private fail(): void {
+    this.setSnapshot(
+      this.snapshot.value,
       true,
-      snapshot.status === "ready" || snapshot.status === "stale"
+      this.snapshot.status === "ready" || this.snapshot.status === "stale"
         ? "stale"
         : "error"
     )
   }
 
-  const readCurrentValue = async (): Promise<void> => {
-    const readId = ++latestReadId
+  private async readCurrentValue(): Promise<void> {
+    const { areaName, key, parse } = this.options
+    const readId = ++this.latestReadId
 
     try {
       const result = await getStorageArea(areaName).get(key)
-      if (readId !== latestReadId) {
+      if (readId !== this.latestReadId) {
         return
       }
 
       const raw = Array.isArray(key) ? result : result[key]
-      setSnapshot(parse(raw), true, "ready")
+      this.setSnapshot(parse(raw), true, "ready")
     } catch {
-      if (readId !== latestReadId) {
+      if (readId !== this.latestReadId) {
         return
       }
 
-      fail()
+      this.fail()
     }
   }
 
-  const handleStorageChange = (
+  private handleStorageChange(
     changes: Record<string, chrome.storage.StorageChange>,
     changedAreaName: chrome.storage.AreaName
-  ): void => {
+  ): void {
+    const { areaName, key } = this.options
     if (changedAreaName !== areaName) {
       return
     }
@@ -116,71 +140,67 @@ function createChromeStorageStore<T>(options: UseChromeStorageValueOptions<T>) {
       return
     }
 
-    void readCurrentValue()
+    void this.readCurrentValue()
   }
 
-  const ensureListening = (): boolean => {
-    if (listening) return true
+  private ensureListening(): boolean {
+    if (this.listening) return true
 
     try {
-      chrome.storage.onChanged.addListener(handleStorageChange)
-      listening = true
+      chrome.storage.onChanged.addListener(this.storageListener)
+      this.listening = true
     } catch {
-      fail()
+      this.fail()
       return false
     }
     return true
   }
 
-  const refresh = async (): Promise<void> => {
-    if (!ensureListening()) return
-    if (snapshot.status === "error")
-      setSnapshot(snapshot.value, snapshot.hydrated, "loading")
-    await readCurrentValue()
+  private async refresh(): Promise<void> {
+    if (!this.ensureListening()) return
+    if (this.snapshot.status === "error")
+      this.setSnapshot(this.snapshot.value, this.snapshot.hydrated, "loading")
+    await this.readCurrentValue()
   }
 
-  const start = (): void => {
-    if (!ensureListening()) return
-    void readCurrentValue()
+  private start(): void {
+    if (!this.ensureListening()) return
+    void this.readCurrentValue()
 
-    deferredRefreshTimer = setTimeout(() => {
-      deferredRefreshTimer = null
-      void readCurrentValue()
+    this.deferredRefreshTimer = setTimeout(() => {
+      this.deferredRefreshTimer = null
+      void this.readCurrentValue()
     }, 0)
   }
 
-  const cleanup = (): void => {
-    latestReadId += 1
-    if (listening) {
-      listening = false
+  private cleanup(): void {
+    this.latestReadId += 1
+    if (this.listening) {
+      this.listening = false
 
       try {
-        chrome.storage.onChanged.removeListener(handleStorageChange)
+        chrome.storage.onChanged.removeListener(this.storageListener)
       } catch {
         // The extension may already be shutting down.
       }
     }
 
-    if (deferredRefreshTimer !== null) {
-      clearTimeout(deferredRefreshTimer)
-      deferredRefreshTimer = null
+    if (this.deferredRefreshTimer !== null) {
+      clearTimeout(this.deferredRefreshTimer)
+      this.deferredRefreshTimer = null
     }
   }
 
-  return {
-    getSnapshot: (): StorageSnapshot<T> => snapshot,
-    refresh,
-    subscribe: (listener: () => void): (() => void) => {
-      listeners.add(listener)
-      if (listeners.size === 1) start()
+  private subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    if (this.listeners.size === 1) this.start()
 
-      return () => {
-        listeners.delete(listener)
-        if (listeners.size === 0) {
-          cleanup()
-        }
+    return () => {
+      this.listeners.delete(listener)
+      if (this.listeners.size === 0) {
+        this.cleanup()
       }
-    },
+    }
   }
 }
 
@@ -193,12 +213,12 @@ export function useChromeStorageValue<T>(
 
   const store = useMemo(() => {
     const stableKey = JSON.parse(keySignature) as string | string[]
-    return createChromeStorageStore({
+    return new ChromeStorageStore({
       areaName,
       key: stableKey,
       initialValue: stableInitialValue,
       parse,
-    })
+    }).subscription
   }, [areaName, keySignature, parse, stableInitialValue])
 
   const snapshot = useSyncExternalStore(
