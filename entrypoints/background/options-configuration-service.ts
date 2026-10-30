@@ -110,32 +110,7 @@ export class OptionsConfigurationService {
       return await this.mutations.run(() =>
         runDestinationAccessExclusive(async () => {
           try {
-            if (
-              submitted.settings.downloads.destination === "file-system-access"
-            ) {
-              let handle: FileSystemDirectoryHandle | undefined
-              try {
-                handle = await loadDownloadRootHandle(
-                  submitted.settings.downloads.customDirectoryHandleId
-                )
-                if (handle && handle.kind === "directory")
-                  await checkPermissionBeforeWrite(handle)
-              } catch (error) {
-                logger.warn(
-                  "[OPTIONS] Saved folder capability validation failed",
-                  error
-                )
-                const message =
-                  error instanceof PermissionExpiredError
-                    ? "settings_customFolderPermissionDenied"
-                    : error instanceof DirectoryNotFoundError
-                      ? "settings_customFolderNotFound"
-                      : "options_savedFolderRepairRequired"
-                throw new Error(t(message), { cause: error })
-              }
-              if (!handle || handle.kind !== "directory")
-                throw new Error(t("settings_customFolderRequired"))
-            }
+            await this.validateDestination(submitted.settings)
             const previous = await this.deps.configurationRepository.get()
             const previousId =
               previous.settings.downloads.customDirectoryHandleId
@@ -161,6 +136,34 @@ export class OptionsConfigurationService {
       } catch (error) {
         logger.warn("Could not collect unused folder capabilities", error)
       }
+    }
+  }
+  private async validateDestination(
+    settings: OptionsConfigurationSnapshot["settings"]
+  ): Promise<void> {
+    if (settings.downloads.destination === "file-system-access") {
+      let handle: FileSystemDirectoryHandle | undefined
+      try {
+        handle = await loadDownloadRootHandle(
+          settings.downloads.customDirectoryHandleId
+        )
+        if (handle && handle.kind === "directory")
+          await checkPermissionBeforeWrite(handle)
+      } catch (error) {
+        logger.warn(
+          "[OPTIONS] Saved folder capability validation failed",
+          error
+        )
+        const message =
+          error instanceof PermissionExpiredError
+            ? "settings_customFolderPermissionDenied"
+            : error instanceof DirectoryNotFoundError
+              ? "settings_customFolderNotFound"
+              : "options_savedFolderRepairRequired"
+        throw new Error(t(message), { cause: error })
+      }
+      if (!handle || handle.kind !== "directory")
+        throw new Error(t("settings_customFolderRequired"))
     }
   }
 }

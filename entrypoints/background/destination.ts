@@ -56,16 +56,7 @@ export class DestinationService {
       const handle = await loadDownloadRootHandle(destination.handleId)
       if (!handle) return { ready: false, reason: "not_configured" }
       const permission = await queryFsaPermission(handle, true)
-      if (permission === "granted") return { ready: true }
-      if (permission === "prompt")
-        return { ready: false, reason: "permission_prompt" }
-      if (permission === "denied")
-        return { ready: false, reason: "permission_denied" }
-      return {
-        ready: false,
-        reason:
-          permission === "unsupported" ? "unsupported" : "folder_unavailable",
-      }
+      return destinationPermissionResult(permission)
     } catch (error) {
       return {
         ready: false,
@@ -73,5 +64,19 @@ export class DestinationService {
         message: error instanceof Error ? error.message : String(error),
       }
     }
+  }
+}
+
+function destinationPermissionResult(
+  permission: Awaited<ReturnType<typeof queryFsaPermission>>
+): DestinationPreflight {
+  if (permission === "granted") return { ready: true }
+  if (permission === "prompt")
+    return { ready: false, reason: "permission_prompt" }
+  if (permission === "denied")
+    return { ready: false, reason: "permission_denied" }
+  return {
+    ready: false,
+    reason: permission === "unsupported" ? "unsupported" : "folder_unavailable",
   }
 }

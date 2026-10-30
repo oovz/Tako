@@ -33,33 +33,33 @@ export type CoverPreviewHandlers = Pick<
   "GET_COVER_PREVIEW" | "CANCEL_COVER_PREVIEW"
 >
 
-export function createBackgroundCoverPreviewMessageHandlers(
-  deps: CoverPreviewDependencies
-): CoverPreviewHandlers {
-  const pending = new Map<
+class BackgroundCoverPreviewHandlers {
+  constructor(private readonly deps: CoverPreviewDependencies) {}
+  private readonly pending = new Map<
     string,
-    { owner: string; controller: AbortController; dispatched: boolean }
+    {
+      owner: string
+      controller: AbortController
+      dispatched: boolean
+    }
   >()
-  const failure = () => ({
-    success: false as const,
-    error: "Cover preview is unavailable",
-  })
-  const owner = (sender: chrome.runtime.MessageSender) =>
-    sender.documentId ?? sender.url ?? ""
 
-  async function resolveCover(
+  private failure() {
+    return {
+      success: false as const,
+      error: "Cover preview is unavailable",
+    }
+  }
+
+  private owner(sender: chrome.runtime.MessageSender) {
+    return sender.documentId ?? sender.url ?? ""
+  }
+
+  private async resolveCover(
     source: RuntimeMessageRequest<"GET_COVER_PREVIEW">["payload"]["source"]
   ) {
-    if (source.kind === "task") {
-      const task = await deps.queueRepository.getTask(source.taskId)
-      return task?.seriesCoverUrl
-        ? {
-            integrationId: task.siteIntegrationId,
-            coverUrl: task.seriesCoverUrl,
-          }
-        : undefined
-    }
-    const current = await deps.getCurrentSeriesContext(
+    if (source.kind === "task") return this.resolveTaskCover(source.taskId)
+    const current = await this.deps.getCurrentSeriesContext(
       source.tabId,
       source.windowId
     )
@@ -78,96 +78,147 @@ export function createBackgroundCoverPreviewMessageHandlers(
       : undefined
   }
 
-  return {
-    GET_COVER_PREVIEW: async (message, sender) => {
-      const { requestId, source } = message.payload
-      if (pending.has(requestId) || pending.size >= 16) return failure()
-      const entry = {
-        owner: owner(sender),
-        controller: new AbortController(),
-        dispatched: false,
-      }
-      pending.set(requestId, entry)
-      const cancel = () => {
-        if (entry.dispatched)
-          void sendRuntimeMessage({
-            target: "offscreen",
-            type: "OFFSCREEN_CANCEL_COVER_PREVIEW",
-            payload: { requestId },
-          }).catch(() => undefined)
-      }
-      entry.controller.signal.addEventListener("abort", cancel, { once: true })
-      let timeout: ReturnType<typeof setTimeout> | undefined
-      const aborted = new Promise<never>((_, reject) => {
-        entry.controller.signal.addEventListener(
-          "abort",
-          () => reject(new Error("Cover preview canceled")),
-          { once: true }
-        )
-        timeout = setTimeout(
-          () => entry.controller.abort(),
-          COVER_PREVIEW_TIMEOUT_MS
-        )
+  private async resolveTaskCover(taskId: string) {
+    const task = await this.deps.queueRepository.getTask(taskId)
+    return task?.seriesCoverUrl
+      ? {
+          integrationId: task.siteIntegrationId,
+          coverUrl: task.seriesCoverUrl,
+        }
+      : undefined
+  }
+
+  async handleGetCoverPreview(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["GET_COVER_PREVIEW"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["GET_COVER_PREVIEW"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<RuntimeMessageHandlerMap<"background">["GET_COVER_PREVIEW"]>
+    >
+  > {
+    const { requestId, source } = message.payload
+    if (this.pending.has(requestId) || this.pending.size >= 16)
+      return this.failure()
+    const entry = {
+      owner: this.owner(sender),
+      controller: new AbortController(),
+      dispatched: false,
+    }
+    this.pending.set(requestId, entry)
+    const cancel = () => {
+      if (entry.dispatched)
+        void sendRuntimeMessage({
+          target: "offscreen",
+          type: "OFFSCREEN_CANCEL_COVER_PREVIEW",
+          payload: { requestId },
+        }).catch(() => undefined)
+    }
+    entry.controller.signal.addEventListener("abort", cancel, { once: true })
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const aborted = new Promise<never>((_, reject) => {
+      entry.controller.signal.addEventListener(
+        "abort",
+        () => reject(new Error("Cover preview canceled")),
+        { once: true }
+      )
+      timeout = setTimeout(
+        () => entry.controller.abort(),
+        COVER_PREVIEW_TIMEOUT_MS
+      )
+    })
+
+    try {
+      return await Promise.race([
+        this.loadPreview(requestId, source, entry),
+        aborted,
+      ])
+    } catch {
+      return this.failure()
+    } finally {
+      clearTimeout(timeout)
+      entry.controller.signal.removeEventListener("abort", cancel)
+      this.pending.delete(requestId)
+    }
+  }
+
+  private async loadPreview(
+    requestId: string,
+    source: RuntimeMessageRequest<"GET_COVER_PREVIEW">["payload"]["source"],
+    entry: { controller: AbortController; dispatched: boolean }
+  ) {
+    await this.deps.ensureRuntimeReady()
+    entry.controller.signal.throwIfAborted()
+    const cover = await this.resolveCover(source)
+    if (
+      !cover ||
+      !getDefinition(cover.integrationId)?.shipped ||
+      !isEnabled(
+        cover.integrationId,
+        await this.deps.siteIntegrationEnablementService.getAll()
+      ) ||
+      !(await hasIntegrationHostPermission(cover.integrationId))
+    )
+      return this.failure()
+    await this.deps.ensureNetworkReady(cover.integrationId)
+    const rateLimitSettings = {
+      image: await this.deps.rateLimitService.resolveEffectivePolicy(
+        cover.integrationId,
+        "image"
+      ),
+      chapter: await this.deps.rateLimitService.resolveEffectivePolicy(
+        cover.integrationId,
+        "chapter"
+      ),
+    }
+    entry.controller.signal.throwIfAborted()
+    const admitted = await this.deps.admit((context) => {
+      entry.controller.signal.throwIfAborted()
+      const reservation = context.reserveTransientWork()
+      entry.dispatched = true
+      const response = sendRuntimeMessage({
+        target: "offscreen",
+        type: "OFFSCREEN_FETCH_COVER_PREVIEW",
+        payload: { requestId, ...cover, rateLimitSettings },
       })
-      const loadPreview = async () => {
-        await deps.ensureRuntimeReady()
-        entry.controller.signal.throwIfAborted()
-        const cover = await resolveCover(source)
-        if (
-          !cover ||
-          !getDefinition(cover.integrationId)?.shipped ||
-          !isEnabled(
-            cover.integrationId,
-            await deps.siteIntegrationEnablementService.getAll()
-          ) ||
-          !(await hasIntegrationHostPermission(cover.integrationId))
-        )
-          return failure()
-        await deps.ensureNetworkReady(cover.integrationId)
-        const rateLimitSettings = {
-          image: await deps.rateLimitService.resolveEffectivePolicy(
-            cover.integrationId,
-            "image"
-          ),
-          chapter: await deps.rateLimitService.resolveEffectivePolicy(
-            cover.integrationId,
-            "chapter"
-          ),
-        }
-        entry.controller.signal.throwIfAborted()
-        const admitted = await deps.admit((context) => {
-          entry.controller.signal.throwIfAborted()
-          const reservation = context.reserveTransientWork()
-          entry.dispatched = true
-          const response = sendRuntimeMessage({
-            target: "offscreen",
-            type: "OFFSCREEN_FETCH_COVER_PREVIEW",
-            payload: { requestId, ...cover, rateLimitSettings },
-          })
-          return Promise.resolve({ response, reservation })
-        })
-        try {
-          const response = await admitted.response
-          entry.controller.signal.throwIfAborted()
-          return response
-        } finally {
-          admitted.reservation.release()
-        }
-      }
-      try {
-        return await Promise.race([loadPreview(), aborted])
-      } catch {
-        return failure()
-      } finally {
-        clearTimeout(timeout)
-        entry.controller.signal.removeEventListener("abort", cancel)
-        pending.delete(requestId)
-      }
-    },
-    CANCEL_COVER_PREVIEW: (message, sender) => {
-      const entry = pending.get(message.payload.requestId)
-      if (entry?.owner === owner(sender)) entry.controller.abort()
-      return { success: true }
-    },
+      return Promise.resolve({ response, reservation })
+    })
+    try {
+      const response = await admitted.response
+      entry.controller.signal.throwIfAborted()
+      return response
+    } finally {
+      admitted.reservation.release()
+    }
+  }
+
+  handleCancelCoverPreview(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["CANCEL_COVER_PREVIEW"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["CANCEL_COVER_PREVIEW"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<RuntimeMessageHandlerMap<"background">["CANCEL_COVER_PREVIEW"]>
+    >
+  > {
+    const entry = this.pending.get(message.payload.requestId)
+    if (entry?.owner === this.owner(sender)) entry.controller.abort()
+    return Promise.resolve({ success: true })
+  }
+}
+
+export function createBackgroundCoverPreviewMessageHandlers(
+  deps: CoverPreviewDependencies
+): CoverPreviewHandlers {
+  const handlers = new BackgroundCoverPreviewHandlers(deps)
+  return {
+    GET_COVER_PREVIEW: handlers.handleGetCoverPreview.bind(handlers),
+    CANCEL_COVER_PREVIEW: handlers.handleCancelCoverPreview.bind(handlers),
   }
 }

@@ -16,132 +16,250 @@ type OffscreenEventMessageType =
   | "OFFSCREEN_DOWNLOAD_PROGRESS"
   | "OFFSCREEN_INITIALIZATION_FAILED"
 
+class BackgroundOffscreenEventHandlers {
+  constructor(private readonly deps: BackgroundRuntimeHandlerDependencies) {}
+  async handleOffscreenBeginFsaWrite(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_BEGIN_FSA_WRITE"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_BEGIN_FSA_WRITE"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_BEGIN_FSA_WRITE"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender)))
+      return { success: true, permitted: false }
+    return await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () => {
+        const result = await this.deps.queueRepository.beginFsaWrite(
+          message.payload
+        )
+        return { success: true, permitted: result.outcome !== "rejected" }
+      }
+    )
+  }
+
+  async handleOffscreenJobAccepted(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_ACCEPTED"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_ACCEPTED"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_ACCEPTED"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender))) {
+      return { success: true, disposition: "lease_not_current" }
+    }
+    return await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () => {
+        if (!(await isActiveJobOwner(this.deps, message.payload))) {
+          return { success: true, disposition: "lease_not_current" }
+        }
+        const renewal = await this.deps.queueRepository.renewDispatchLease({
+          ...message.payload,
+          stage: "accepted",
+          activityAt: message.payload.acceptedAt,
+          eventSignature: JSON.stringify(message.payload),
+        })
+        return renewalResponse(renewal)
+      }
+    )
+  }
+
+  async handleOffscreenJobHeartbeat(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_HEARTBEAT"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_HEARTBEAT"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_HEARTBEAT"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender))) {
+      return { success: true, disposition: "lease_not_current" }
+    }
+    return await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () => {
+        if (!(await isActiveJobOwner(this.deps, message.payload))) {
+          return { success: true, disposition: "lease_not_current" }
+        }
+        const renewal = await this.deps.queueRepository.renewDispatchLease({
+          ...message.payload,
+          activityAt: message.payload.sentAt,
+          eventSignature: JSON.stringify(message.payload),
+        })
+        return renewalResponse(renewal)
+      }
+    )
+  }
+
+  async handleOffscreenJobTerminal(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_TERMINAL"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_TERMINAL"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_JOB_TERMINAL"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender))) {
+      return { success: true, disposition: "lease_not_current" }
+    }
+    const terminal = await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () => {
+        // Terminal events may race with durable cancellation. The lease
+        // renewal below validates the full job incarnation; requiring the
+        // task to still be active would prevent exact terminal evidence
+        // from releasing a canceled task's retained lease.
+        const renewal = await this.deps.queueRepository.renewDispatchLease({
+          ...message.payload,
+          activityAt: message.payload.terminalAt,
+          eventSignature: JSON.stringify(message.payload),
+          requireSequenceAdvance: true,
+        })
+        const response = renewalResponse(renewal)
+        if (!response.success || response.disposition !== "renewed") {
+          return { response }
+        }
+        const settlement = await this.deps.terminalCoordinator.settle(
+          message.payload
+        )
+        return { response, settlement }
+      }
+    )
+    if (terminal.settlement) {
+      await this.deps.terminalCoordinator.afterSettlement(
+        message.payload.taskId,
+        terminal.settlement
+      )
+    }
+    return terminal.response
+  }
+
+  async handleOffscreenOutputReady(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_OUTPUT_READY"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_OUTPUT_READY"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_OUTPUT_READY"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender))) {
+      return {
+        success: true,
+        disposition: "not_persisted",
+        reason: "stale-offscreen-document",
+      }
+    }
+    const result = await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () =>
+        await this.deps.nativeOutputCoordinator.handleOutputReady(
+          message.payload
+        )
+    )
+    await this.deps.terminalCoordinator.continueAfterNativeOutputSettlement(
+      result.effects
+    )
+    return result.response
+  }
+
+  async handleOffscreenDownloadProgress(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_DOWNLOAD_PROGRESS"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_DOWNLOAD_PROGRESS"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_DOWNLOAD_PROGRESS"]
+      >
+    >
+  > {
+    if (!(await isCurrentOffscreenSender(sender))) {
+      return { success: true, disposition: "lease_not_current" }
+    }
+    return await runTaskSideEffectExclusive(
+      message.payload.taskId,
+      async () =>
+        await handleOffscreenDownloadProgress(
+          this.deps.queueRepository,
+          message
+        )
+    )
+  }
+
+  async handleOffscreenInitializationFailed(
+    message: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_INITIALIZATION_FAILED"]
+    >[0],
+    sender: Parameters<
+      RuntimeMessageHandlerMap<"background">["OFFSCREEN_INITIALIZATION_FAILED"]
+    >[1]
+  ): Promise<
+    Awaited<
+      ReturnType<
+        RuntimeMessageHandlerMap<"background">["OFFSCREEN_INITIALIZATION_FAILED"]
+      >
+    >
+  > {
+    await closeOffscreenDocumentIfCurrent({
+      documentInstanceId: message.payload.documentInstanceId,
+      browserDocumentId: sender.documentId,
+    })
+    return { success: true }
+  }
+}
+
 export function createBackgroundOffscreenEventMessageHandlers(
   deps: BackgroundRuntimeHandlerDependencies
 ): Pick<RuntimeMessageHandlerMap<"background">, OffscreenEventMessageType> {
+  const handlers = new BackgroundOffscreenEventHandlers(deps)
   return {
-    OFFSCREEN_BEGIN_FSA_WRITE: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender)))
-        return { success: true, permitted: false }
-      return await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () => {
-          const result = await deps.queueRepository.beginFsaWrite(
-            message.payload
-          )
-          return { success: true, permitted: result.outcome !== "rejected" }
-        }
-      )
-    },
-    OFFSCREEN_JOB_ACCEPTED: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender))) {
-        return { success: true, disposition: "lease_not_current" }
-      }
-      return await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () => {
-          if (!(await isActiveJobOwner(deps, message.payload))) {
-            return { success: true, disposition: "lease_not_current" }
-          }
-          const renewal = await deps.queueRepository.renewDispatchLease({
-            ...message.payload,
-            stage: "accepted",
-            activityAt: message.payload.acceptedAt,
-            eventSignature: JSON.stringify(message.payload),
-          })
-          return renewalResponse(renewal)
-        }
-      )
-    },
-    OFFSCREEN_JOB_HEARTBEAT: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender))) {
-        return { success: true, disposition: "lease_not_current" }
-      }
-      return await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () => {
-          if (!(await isActiveJobOwner(deps, message.payload))) {
-            return { success: true, disposition: "lease_not_current" }
-          }
-          const renewal = await deps.queueRepository.renewDispatchLease({
-            ...message.payload,
-            activityAt: message.payload.sentAt,
-            eventSignature: JSON.stringify(message.payload),
-          })
-          return renewalResponse(renewal)
-        }
-      )
-    },
-    OFFSCREEN_JOB_TERMINAL: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender))) {
-        return { success: true, disposition: "lease_not_current" }
-      }
-      const terminal = await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () => {
-          // Terminal events may race with durable cancellation. The lease
-          // renewal below validates the full job incarnation; requiring the
-          // task to still be active would prevent exact terminal evidence
-          // from releasing a canceled task's retained lease.
-          const renewal = await deps.queueRepository.renewDispatchLease({
-            ...message.payload,
-            activityAt: message.payload.terminalAt,
-            eventSignature: JSON.stringify(message.payload),
-            requireSequenceAdvance: true,
-          })
-          const response = renewalResponse(renewal)
-          if (!response.success || response.disposition !== "renewed") {
-            return { response }
-          }
-          const settlement = await deps.terminalCoordinator.settle(
-            message.payload
-          )
-          return { response, settlement }
-        }
-      )
-      if (terminal.settlement) {
-        await deps.terminalCoordinator.afterSettlement(
-          message.payload.taskId,
-          terminal.settlement
-        )
-      }
-      return terminal.response
-    },
-    OFFSCREEN_OUTPUT_READY: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender))) {
-        return {
-          success: true,
-          disposition: "not_persisted",
-          reason: "stale-offscreen-document",
-        }
-      }
-      const result = await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () =>
-          await deps.nativeOutputCoordinator.handleOutputReady(message.payload)
-      )
-      await deps.terminalCoordinator.continueAfterNativeOutputSettlement(
-        result.effects
-      )
-      return result.response
-    },
-    OFFSCREEN_DOWNLOAD_PROGRESS: async (message, sender) => {
-      if (!(await isCurrentOffscreenSender(sender))) {
-        return { success: true, disposition: "lease_not_current" }
-      }
-      return await runTaskSideEffectExclusive(
-        message.payload.taskId,
-        async () =>
-          await handleOffscreenDownloadProgress(deps.queueRepository, message)
-      )
-    },
-    OFFSCREEN_INITIALIZATION_FAILED: async (message, sender) => {
-      await closeOffscreenDocumentIfCurrent({
-        documentInstanceId: message.payload.documentInstanceId,
-        browserDocumentId: sender.documentId,
-      })
-      return { success: true }
-    },
+    OFFSCREEN_BEGIN_FSA_WRITE:
+      handlers.handleOffscreenBeginFsaWrite.bind(handlers),
+    OFFSCREEN_JOB_ACCEPTED: handlers.handleOffscreenJobAccepted.bind(handlers),
+    OFFSCREEN_JOB_HEARTBEAT:
+      handlers.handleOffscreenJobHeartbeat.bind(handlers),
+    OFFSCREEN_JOB_TERMINAL: handlers.handleOffscreenJobTerminal.bind(handlers),
+    OFFSCREEN_OUTPUT_READY: handlers.handleOffscreenOutputReady.bind(handlers),
+    OFFSCREEN_DOWNLOAD_PROGRESS:
+      handlers.handleOffscreenDownloadProgress.bind(handlers),
+    OFFSCREEN_INITIALIZATION_FAILED:
+      handlers.handleOffscreenInitializationFailed.bind(handlers),
   }
 }
 

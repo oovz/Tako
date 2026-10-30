@@ -3,7 +3,6 @@ import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
 
 import logger from "@/src/runtime/logger"
-import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { createRuntimeMessageListener } from "@/src/runtime/runtime-message-dispatcher"
 import { classifyRuntimeMessagePrincipal } from "@/src/runtime/runtime-message-sender"
 import { QueueRepository } from "@/src/storage/queue-repository"
@@ -31,11 +30,13 @@ import { includesManagedHostPermission } from "@/src/site-integrations/host-perm
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
-import type { NativeOutputRecord } from "@/src/domain/native-output/state"
 
 import { BackgroundRuntimeKernel } from "@/entrypoints/background/background-runtime-kernel"
 import { createBackgroundRuntimeMessageHandlers } from "@/entrypoints/background/background-runtime-message-handlers"
-import { registerBackgroundNavigationListeners } from "@/entrypoints/background/background-navigation-listeners"
+import {
+  registerBackgroundNavigationListeners,
+  reconcileIntegrationSupportAfterPermissionRemoval,
+} from "@/entrypoints/background/background-navigation-listeners"
 import { registerBackgroundRuntimeListeners } from "@/entrypoints/background/background-runtime-listeners"
 import {
   ensureOffscreenDocumentReady,
@@ -47,6 +48,7 @@ import {
   setLivenessAlarmArmed,
 } from "@/entrypoints/background/offscreen-lifecycle"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
+import { requestBlobRevocation } from "@/entrypoints/background/native-output-blob-revocation"
 import { tabContextCache } from "@/entrypoints/background/tab-cache"
 import { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import { createTabUiCoordinator } from "@/entrypoints/background/tab-ui-coordinator"
@@ -146,36 +148,6 @@ const destinationHandleCollector: DestinationHandleCollector =
     settingsRepository,
     pendingHandleIds: () => optionsConfigurationService.getPendingHandleIds(),
   })
-async function requestBlobRevocation(
-  record: Pick<
-    NativeOutputRecord,
-    | "jobId"
-    | "attempt"
-    | "taskId"
-    | "chapterId"
-    | "fingerprint"
-    | "documentInstanceId"
-    | "outputId"
-    | "blobUrl"
-  >
-): Promise<void> {
-  const response = await sendRuntimeMessage({
-    target: "offscreen",
-    type: "REVOKE_BLOB_URL",
-    payload: {
-      jobId: record.jobId,
-      attempt: record.attempt,
-      taskId: record.taskId,
-      chapterId: record.chapterId,
-      fingerprint: record.fingerprint,
-      documentInstanceId: record.documentInstanceId,
-      outputId: record.outputId,
-      blobUrl: record.blobUrl,
-    },
-  })
-  if (!response.success) throw new Error(response.error)
-}
-
 const nativeOutputCoordinator = new NativeOutputCoordinator({
   settingsRepository,
   repository: nativeOutputRepository,
@@ -308,40 +280,6 @@ const backgroundRuntimeMessageListener = createRuntimeMessageListener({
   reportError: (message, error) => logger.error(message, error),
 })
 
-async function reconcileIntegrationSupportAfterPermissionRemoval(): Promise<void> {
-  await runtimeKernel.refreshIntegrations()
-  await runtimeKernel.ensure("runtime-ready")
-
-  const tabs = await chrome.tabs.query({})
-  const outcomes = await Promise.allSettled(
-    tabs.flatMap((tab) => {
-      if (typeof tab.id !== "number") return []
-      const url = tab.url ?? tab.pendingUrl ?? ""
-      const refreshes: Promise<unknown>[] = [
-        tabUiCoordinator.updateActionForTab(tab.id, url),
-        tabUiCoordinator.updateSidePanelForTab(tab.id),
-      ]
-      if (tab.active) {
-        refreshes.push(
-          tabContextResolver.resolveTabContext(tab.id, {
-            windowId: tab.windowId,
-            allowCached: false,
-          })
-        )
-      }
-      return refreshes
-    })
-  )
-  for (const outcome of outcomes) {
-    if (outcome.status === "rejected") {
-      logger.debug(
-        "Failed to refresh tab support after permission removal",
-        outcome.reason
-      )
-    }
-  }
-}
-
 export default defineBackground({
   type: "module",
   main() {
@@ -429,14 +367,17 @@ export default defineBackground({
 
     chrome.permissions.onRemoved.addListener((permissions) => {
       if (!includesManagedHostPermission(permissions)) return
-      void reconcileIntegrationSupportAfterPermissionRemoval().catch(
-        (error) => {
-          logger.error(
-            "Failed to reconcile integration enablement after permission removal",
-            error
-          )
-        }
-      )
+      void reconcileIntegrationSupportAfterPermissionRemoval({
+        refreshIntegrations: () => runtimeKernel.refreshIntegrations(),
+        ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
+        tabUiCoordinator,
+        tabContextResolver,
+      }).catch((error) => {
+        logger.error(
+          "Failed to reconcile integration enablement after permission removal",
+          error
+        )
+      })
     })
 
     siteIntegrationSessionRuleManager.registerListeners()
