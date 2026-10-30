@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type {
+  SiteOverrideRecord,
+  SiteOverridesMap,
+} from "@/src/domain/site-integrations/storage-schemas"
 import {
   initialOptionsConfigurationState,
   optionsConfigurationReducer,
@@ -321,5 +325,88 @@ describe("options configuration reducer", () => {
     expect(
       optionsConfigurationSnapshotsEqual(createSnapshot(), createSnapshot())
     ).toBe(true)
+  })
+
+  const overrideRebases: Array<{
+    name: string
+    baseline: SiteOverridesMap
+    local: { siteIntegrationId: string; override: SiteOverrideRecord | null }
+    latest: SiteOverridesMap
+    expected: SiteOverridesMap
+  }> = [
+    {
+      name: "accepts deletion of an unedited provider while editing another",
+      baseline: { mangadex: { outputFormat: "zip" } },
+      local: {
+        siteIntegrationId: "pixiv-comic",
+        override: { pathTemplate: "Local/<SERIES_TITLE>" },
+      },
+      latest: {},
+      expected: { "pixiv-comic": { pathTemplate: "Local/<SERIES_TITLE>" } },
+    },
+    {
+      name: "keeps a local provider deletion when external state edits it",
+      baseline: { mangadex: { outputFormat: "zip" } },
+      local: { siteIntegrationId: "mangadex", override: null },
+      latest: { mangadex: { outputFormat: "cbz" } },
+      expected: {},
+    },
+    {
+      name: "combines independent scalar additions to a new provider",
+      baseline: {},
+      local: {
+        siteIntegrationId: "mangadex",
+        override: { outputFormat: "zip" },
+      },
+      latest: { mangadex: { pathTemplate: "External/<SERIES_TITLE>" } },
+      expected: {
+        mangadex: {
+          outputFormat: "zip",
+          pathTemplate: "External/<SERIES_TITLE>",
+        },
+      },
+    },
+    {
+      name: "combines independent policy fields added to a new provider",
+      baseline: {},
+      local: {
+        siteIntegrationId: "mangadex",
+        override: { imagePolicy: { delayMs: 125 } },
+      },
+      latest: { mangadex: { imagePolicy: { concurrency: 4 } } },
+      expected: { mangadex: { imagePolicy: { delayMs: 125, concurrency: 4 } } },
+    },
+    {
+      name: "restores only locally edited fields when external state deletes a provider",
+      baseline: {
+        mangadex: { pathTemplate: "Base", retries: { image: 2 } },
+      },
+      local: {
+        siteIntegrationId: "mangadex",
+        override: { pathTemplate: "Local", retries: { image: 2 } },
+      },
+      latest: {},
+      expected: { mangadex: { pathTemplate: "Local" } },
+    },
+  ]
+
+  it.each(overrideRebases)("$name", ({ baseline, local, latest, expected }) => {
+    const edited = optionsConfigurationReducer(
+      hydratedState(createSnapshot({ overrides: baseline })),
+      { type: "set-override", ...local }
+    )
+    const external = createSnapshot({ overrides: latest })
+    let merged: OptionsConfigurationState | undefined
+
+    expect(() => {
+      merged = optionsConfigurationReducer(edited, {
+        type: "merge-latest-keeping-local",
+        latest: external,
+      })
+    }).not.toThrow()
+
+    expect(merged?.draft?.overrides).toStrictEqual(expected)
+    expect(merged?.saved).toBe(external)
+    expect(merged?.externalChangeKeys).toEqual([])
   })
 })
