@@ -44,13 +44,6 @@ type SelectorRow =
       chapter: SidePanelChapter
     }
 
-function getGroupKey(item: VolumeOrChapter): string {
-  if ("chapters" in item) {
-    return item.groupId
-  }
-  return `standalone-${item.id}`
-}
-
 function flattenRows(
   items: VolumeOrChapter[],
   viewMode: "volumes" | "chapters",
@@ -75,7 +68,7 @@ function flattenRows(
   const rows: SelectorRow[] = []
   items.forEach((item) => {
     if ("chapters" in item) {
-      const groupKey = getGroupKey(item)
+      const groupKey = item.groupId
       const selectableChapters = item.chapters.filter(
         (chapter) => chapter.locked !== true
       )
@@ -128,6 +121,162 @@ function countPotentialRows(items: VolumeOrChapter[]): number {
   )
 }
 
+type SelectorActions = Pick<
+  ChapterSelectorProps,
+  "isEnqueuing" | "onToggleGroup" | "onToggleChapter" | "onVolumeSelectAll"
+>
+
+function ChapterDownloadMarker({ chapter }: { chapter: SidePanelChapter }) {
+  if (chapter.downloaded !== true) return null
+  const label = getOutputResultLabel(
+    chapter.outputDestination,
+    chapter.saveConfirmedAt
+  )
+
+  return (
+    <span
+      data-downloaded-marker
+      className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
+      title={label}
+    >
+      <CheckCircle2 className="size-4" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+function ChapterRow({
+  row,
+  isEnqueuing,
+  onToggleChapter,
+}: Pick<SelectorActions, "isEnqueuing" | "onToggleChapter"> & {
+  row: Exclude<SelectorRow, { kind: "volume-header" }>
+}) {
+  const isChapterDisabled = isEnqueuing || row.chapter.locked === true
+
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-2 border-b border-border/40 px-3 py-2 text-sm transition-colors duration-150",
+        isChapterDisabled
+          ? "cursor-default"
+          : "cursor-pointer hover:bg-muted/35"
+      )}
+      data-testid={
+        row.kind === "standalone-chapter" ? "inline-item" : undefined
+      }
+      data-kind={row.kind === "standalone-chapter" ? "standalone" : undefined}
+      onClick={() => {
+        if (isChapterDisabled) return
+        onToggleChapter(row.chapter.id, !row.chapter.selected)
+      }}
+    >
+      <Checkbox
+        id={row.chapter.id}
+        aria-label={row.chapter.title}
+        checked={row.chapter.selected}
+        onCheckedChange={() =>
+          onToggleChapter(row.chapter.id, !row.chapter.selected)
+        }
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        disabled={isChapterDisabled}
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="w-7 shrink-0 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">
+          {row.chapter.index}
+        </span>
+        <span className="flex-1 truncate text-sm leading-5 text-foreground">
+          {row.chapter.title}
+        </span>
+        {row.chapter.locked === true && (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {t("common_locked")}
+          </span>
+        )}
+        <ChapterDownloadMarker chapter={row.chapter} />
+      </div>
+    </div>
+  )
+}
+
+function VolumeHeaderRow({
+  row,
+  isEnqueuing,
+  onToggleGroup,
+  onVolumeSelectAll,
+}: Omit<SelectorActions, "onToggleChapter"> & {
+  row: Extract<SelectorRow, { kind: "volume-header" }>
+}) {
+  const isDisclosureDisabled = isEnqueuing || row.chapterCount === 0
+
+  return (
+    <div
+      className="flex items-center border-b border-border/30 bg-muted/20"
+      data-testid="inline-item"
+      data-kind="volume"
+    >
+      <button
+        type="button"
+        aria-expanded={row.isExpanded}
+        aria-label={t("sidepanel_volumeToggleAria", [row.title])}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors duration-150",
+          isDisclosureDisabled
+            ? "cursor-default bg-muted/20"
+            : "cursor-pointer bg-muted/20 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        )}
+        disabled={isDisclosureDisabled}
+        onClick={() => {
+          onToggleGroup(row.groupKey)
+        }}
+      >
+        <ChevronRight
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
+            row.isExpanded && "rotate-90"
+          )}
+        />
+        <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
+          <span className="truncate">{row.title}</span>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {row.chapterCount}
+        </span>
+      </button>
+      <Checkbox
+        className="mr-3"
+        checked={row.chapterCount > 0 && row.allSelected}
+        onCheckedChange={() => onVolumeSelectAll(row.groupId)}
+        // Keep checkbox activation isolated from the adjacent volume toggle.
+        // Radix emits keyboard and pointer events from the checkbox root;
+        // without stopping them here a bubbled activation can also toggle the
+        // volume disclosure in layouts where the row receives the event.
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        disabled={row.selectableChapterCount === 0 || isEnqueuing}
+        aria-label={t("sidepanel_volumeSelectAllAria", [
+          row.title,
+          String(row.chapterCount),
+        ])}
+      />
+    </div>
+  )
+}
+
+function ChapterSelectorRow({
+  row,
+  ...actions
+}: SelectorActions & {
+  row: SelectorRow
+}) {
+  return row.kind === "volume-header" ? (
+    <VolumeHeaderRow row={row} {...actions} />
+  ) : (
+    <ChapterRow row={row} {...actions} />
+  )
+}
+
 export function ChapterSelector({
   items,
   viewMode,
@@ -161,127 +310,11 @@ export function ChapterSelector({
     [items]
   )
 
-  const renderRow = (row: SelectorRow) => {
-    if (row.kind !== "volume-header") {
-      const isChapterDisabled = isEnqueuing || row.chapter.locked === true
-
-      return (
-        <div
-          className={cn(
-            "group flex items-center gap-2 border-b border-border/40 px-3 py-2 text-sm transition-colors duration-150",
-            isChapterDisabled
-              ? "cursor-default"
-              : "cursor-pointer hover:bg-muted/35"
-          )}
-          data-testid={
-            row.kind === "standalone-chapter" ? "inline-item" : undefined
-          }
-          data-kind={
-            row.kind === "standalone-chapter" ? "standalone" : undefined
-          }
-          onClick={() => {
-            if (isChapterDisabled) return
-            onToggleChapter(row.chapter.id, !row.chapter.selected)
-          }}
-        >
-          <Checkbox
-            id={row.chapter.id}
-            aria-label={row.chapter.title}
-            checked={row.chapter.selected}
-            onCheckedChange={() =>
-              onToggleChapter(row.chapter.id, !row.chapter.selected)
-            }
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-            disabled={isChapterDisabled}
-          />
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="w-7 shrink-0 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">
-              {row.chapter.index}
-            </span>
-            <span className="flex-1 truncate text-sm leading-5 text-foreground">
-              {row.chapter.title}
-            </span>
-            {row.chapter.locked === true && (
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {t("common_locked")}
-              </span>
-            )}
-            {row.chapter.downloaded === true && (
-              <span
-                data-downloaded-marker
-                className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
-                title={getOutputResultLabel(
-                  row.chapter.outputDestination,
-                  row.chapter.saveConfirmedAt
-                )}
-              >
-                <CheckCircle2 className="size-4" aria-hidden="true" />
-                <span className="sr-only">
-                  {getOutputResultLabel(
-                    row.chapter.outputDestination,
-                    row.chapter.saveConfirmedAt
-                  )}
-                </span>
-              </span>
-            )}
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div
-        className="flex items-center border-b border-border/30 bg-muted/20"
-        data-testid="inline-item"
-        data-kind="volume"
-      >
-        <button
-          type="button"
-          aria-expanded={row.isExpanded}
-          aria-label={t("sidepanel_volumeToggleAria", [row.title])}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors duration-150",
-            isEnqueuing || row.chapterCount === 0
-              ? "cursor-default bg-muted/20"
-              : "cursor-pointer bg-muted/20 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          )}
-          disabled={isEnqueuing || row.chapterCount === 0}
-          onClick={() => {
-            onToggleGroup(row.groupKey)
-          }}
-        >
-          <ChevronRight
-            className={cn(
-              "size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
-              row.isExpanded && "rotate-90"
-            )}
-          />
-          <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
-            <span className="truncate">{row.title}</span>
-          </div>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {row.chapterCount}
-          </span>
-        </button>
-        <Checkbox
-          className="mr-3"
-          checked={row.chapterCount > 0 && row.allSelected}
-          onCheckedChange={() => onVolumeSelectAll(row.groupId)}
-          // Keep checkbox activation isolated from the adjacent volume toggle.
-          // Radix emits keyboard and pointer events from the checkbox root;
-          // without stopping them here a bubbled activation can also toggle the
-          // volume disclosure in layouts where the row receives the event.
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-          disabled={row.selectableChapterCount === 0 || isEnqueuing}
-          aria-label={t("sidepanel_volumeSelectAllAria", [
-            row.title,
-            String(row.chapterCount),
-          ])}
-        />
-      </div>
-    )
+  const actions = {
+    isEnqueuing,
+    onToggleGroup,
+    onToggleChapter,
+    onVolumeSelectAll,
   }
 
   return (
@@ -291,7 +324,11 @@ export function ChapterSelector({
       className="flex-1 min-h-0 border-b border-border bg-background overflow-y-auto"
     >
       {!shouldVirtualize ? (
-        rows.map((row) => <div key={row.key}>{renderRow(row)}</div>)
+        rows.map((row) => (
+          <div key={row.key}>
+            <ChapterSelectorRow row={row} {...actions} />
+          </div>
+        ))
       ) : (
         <div
           style={{
@@ -314,7 +351,7 @@ export function ChapterSelector({
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
               >
-                {renderRow(row)}
+                <ChapterSelectorRow row={row} {...actions} />
               </div>
             )
           })}
