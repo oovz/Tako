@@ -331,4 +331,102 @@ describe("chapter dispatch authority", () => {
     expect(await repository.getActiveDispatchLease()).toBeNull()
     expect(session.currentLeaseForTask).toBeUndefined()
   })
+
+  it.each([
+    ["jobId", "other-job"],
+    ["attempt", 2],
+    ["taskId", "other-task"],
+    ["chapterId", "other-chapter"],
+  ] as const)(
+    "rejects an acknowledgement with a different %s before binding its incarnation",
+    async (field, value) => {
+      send.mockImplementationOnce(async (message: DispatchMessage) => ({
+        ...acknowledge(message),
+        [field]: value,
+      }))
+
+      const authority = await coordinator().dispatch(session, 0)
+      const lease = await repository.getActiveDispatchLease()
+
+      expect(send).toHaveBeenCalledOnce()
+      expect(lease).toMatchObject({
+        taskId: "task",
+        chapterId: "chapter",
+        attempt: 1,
+      })
+      expect(lease!.documentInstanceId).toBeUndefined()
+      expect(authority).toEqual(lease)
+      expect((await repository.getTask("task"))!.chapters[0]!.status).toBe(
+        "failed"
+      )
+    }
+  )
+
+  it("dispatches the captured folder target through its command and durable lease", async () => {
+    await repository.cancelDownloadTask({
+      taskId: "task",
+      commandId: "cancel-before-folder-task",
+      now: 2,
+    })
+    const folderTask: DownloadTaskState = {
+      ...task(),
+      id: "folder-task",
+      status: "queued",
+      settingsSnapshot: createTaskSettingsSnapshot(
+        {
+          ...DEFAULT_SETTINGS,
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            destination: "file-system-access",
+            customDirectoryHandleId: "selected-folder",
+          },
+        },
+        "mangadex"
+      ),
+    }
+    expect(await repository.enqueueDownloadTask(folderTask)).toMatchObject({
+      outcome: "applied",
+    })
+    expect(
+      await repository.startDownloadTask({ taskId: folderTask.id, now: 3 })
+    ).toMatchObject({ outcome: "applied" })
+    const startedTask = (await repository.getTask(folderTask.id))!
+    const folderSession: ChapterDispatchSession = {
+      task: startedTask,
+      taskId: startedTask.id,
+      settingsSnapshot: startedTask.settingsSnapshot,
+      chapterOutcomesByIndex: [],
+      shouldStopDispatch: false,
+      lastDownloadMode: "browser",
+    }
+
+    const authority = await coordinator().dispatch(folderSession, 0)
+
+    expect(send).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        target: "offscreen",
+        type: "OFFSCREEN_DOWNLOAD_CHAPTER",
+        payload: expect.objectContaining({
+          taskId: folderTask.id,
+          saveMode: "fsa",
+          directoryHandleId: "selected-folder",
+          settingsSnapshot: expect.objectContaining({
+            destination: {
+              kind: "file-system-access",
+              handleId: "selected-folder",
+            },
+          }),
+        }),
+      })
+    )
+    expect(authority).toMatchObject({
+      taskId: folderTask.id,
+      chapterId: "chapter",
+      saveMode: "fsa",
+      destinationHandleId: "selected-folder",
+      documentInstanceId: "document",
+    })
+    expect(await repository.getActiveDispatchLease()).toEqual(authority)
+    expect(folderSession.currentLeaseForTask).toEqual(authority)
+  })
 })
