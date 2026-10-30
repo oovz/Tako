@@ -126,12 +126,3 @@ export function canReleaseNativeOutputBlob(
     isNativeOutputTerminal(record) || record.erasedByBrowserAt !== undefined
   )
 }
-
-export function isNativeOutputLive(record: NativeOutputRecord): boolean {
-  return (
-    !isNativeOutputTerminal(record) ||
-    record.accountingDisposition === "pending" ||
-    record.blobReleasedAt === undefined ||
-    record.dependencyReleasedAt === undefined
-  )
-}

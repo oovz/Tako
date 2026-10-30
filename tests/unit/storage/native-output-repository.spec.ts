@@ -140,6 +140,7 @@ describe("NativeOutputRepository", () => {
   it("rewrites the index when removal-only pruning deletes the last records", async () => {
     const repository = new NativeOutputRepository()
     await repository.prepare({ ...identity, now: 10 })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.markAcceptanceUnknown({
       outputId: identity.outputId,
       now: 11,
@@ -153,6 +154,7 @@ describe("NativeOutputRepository", () => {
       phase: "complete",
       now: 12,
     })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.sealManifest({
       jobId: identity.jobId,
       attempt: identity.attempt,
@@ -165,12 +167,15 @@ describe("NativeOutputRepository", () => {
       now: 13,
       error: "no output failed",
     })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.markAccountingDisposition({
       outputId: identity.outputId,
       disposition: "accounted",
       now: 14,
     })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.markBlobReleased({ outputId: identity.outputId, now: 15 })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.markDependencyReleased({
       outputId: identity.outputId,
       now: 16,
@@ -184,8 +189,10 @@ describe("NativeOutputRepository", () => {
       downloadIdToOutputId: {},
     })
     expect(local["pendingOutputs:output:output-1"]).toBeUndefined()
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
 
     await repository.acknowledgeSettlement({ jobId: identity.jobId, now: 17 })
+    await expect(repository.hasLiveDependencies()).resolves.toBe(true)
     await repository.markJobDependencyReleased({
       jobId: identity.jobId,
       now: 17,
@@ -200,6 +207,9 @@ describe("NativeOutputRepository", () => {
     })
     expect(local["pendingOutputs:manifest:job-1"]).toBeUndefined()
     await expect(repository.hasLiveDependencies()).resolves.toBe(false)
+    await expect(
+      new NativeOutputRepository().hasLiveDependencies()
+    ).resolves.toBe(false)
   })
 
   it("repairs a stale durable index during hydration", async () => {

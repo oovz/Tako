@@ -24,7 +24,6 @@ import {
   createEmptyNativeOutputState,
   canReleaseNativeOutputBlob,
   canAccountNativeOutput,
-  isNativeOutputLive,
   isNativeOutputTerminal,
   nativeOutputJobIdentityMatches,
   type NativeOutputManifest,
@@ -940,11 +939,6 @@ export class NativeOutputRepository {
       const value = stored[manifestStorageKey(jobId)]
       return value === undefined ? undefined : parseManifest(value)
     })
-  }
-
-  async listLiveOutputs(): Promise<NativeOutputRecord[]> {
-    const state = await this.snapshot()
-    return Object.values(state.outputsByOutputId).filter(isNativeOutputLive)
   }
 
   async hasLiveDependencies(): Promise<boolean> {

@@ -531,7 +531,9 @@ describe("native producer cancellation recovery", () => {
         })
       ).toMatchObject({ status: "canceled" })
       expect(await runtime.queue.getActiveDispatchLease()).toBeNull()
-      const [output] = await runtime.nativeRepository.listLiveOutputs()
+      const [output] = Object.values(
+        (await runtime.nativeRepository.snapshot()).outputsByOutputId
+      )
       expect(output.phase).toBe("waiting")
       expect(output.blobReleasedAt).toBeUndefined()
       expect(output.dependencyReleasedAt).toBeUndefined()
@@ -628,7 +630,9 @@ describe("native producer cancellation recovery", () => {
       expect(
         await runtime.nativeRepository.getManifest(runtime.lease.jobId)
       ).toMatchObject({ phase: "open" })
-      const [output] = await runtime.nativeRepository.listLiveOutputs()
+      const [output] = Object.values(
+        (await runtime.nativeRepository.snapshot()).outputsByOutputId
+      )
       expect(output.phase).toBe("waiting")
       expect(output.blobReleasedAt).toBeUndefined()
       expect(output.dependencyReleasedAt).toBeUndefined()

@@ -15,7 +15,6 @@ import {
 } from "@/src/domain/native-output/kernel"
 import {
   createEmptyNativeOutputState,
-  isNativeOutputLive,
   type NativeOutputIdentity,
   type NativeOutputState,
 } from "@/src/domain/native-output/state"
@@ -234,12 +233,10 @@ describe("native output ownership boundaries", () => {
     ).toEqual({ outcome: "rejected", reason: "accounting-conflict" })
   })
 
-  it("holds job liveness through terminal accounting and every resource release", () => {
+  it("requires terminal accounting and output cleanup before job dependency release", () => {
     let state = prepared()
-    const record = () => state.outputsByOutputId.output!
     const releaseJob = () =>
       markNativeOutputJobDependencyReleased(state, { jobId: "job", now: 20 })
-    expect(isNativeOutputLive(record())).toBe(true)
     expect(releaseJob().result).toEqual({
       outcome: "rejected",
       reason: "invalid-transition",
@@ -264,7 +261,6 @@ describe("native output ownership boundaries", () => {
       phase: "complete",
       now: 4,
     }).next
-    expect(isNativeOutputLive(record())).toBe(true)
     state = markNativeOutputAccountingDisposition(state, {
       outputId: "output",
       disposition: "accounted",
@@ -274,18 +270,15 @@ describe("native output ownership boundaries", () => {
       jobId: "job",
       now: 6,
     }).next
-    expect(isNativeOutputLive(record())).toBe(true)
     expect(releaseJob().result.outcome).toBe("rejected")
     state = markNativeOutputBlobReleased(state, {
       outputId: "output",
       now: 7,
     }).next
-    expect(isNativeOutputLive(record())).toBe(true)
     state = markNativeOutputDependencyReleased(state, {
       outputId: "output",
       now: 8,
     }).next
-    expect(isNativeOutputLive(record())).toBe(false)
     state = releaseJob().next
     const replay = releaseJob()
     expect(replay.result.outcome).toBe("unchanged")
