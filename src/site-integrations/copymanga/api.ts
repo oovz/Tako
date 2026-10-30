@@ -83,6 +83,72 @@ export function readCopyKey(html: string, variable: "ccz" | "cct"): string {
   return key
 }
 
+type CopyCatalog = ReturnType<typeof CopyCatalogSchema.parse>
+type CopyChapter = CopyCatalog["groups"][string]["chapters"][number]
+
+function readChapter(
+  chapter: CopyChapter,
+  typeName: string,
+  groupId: string,
+  groupName: string,
+  slug: string,
+  source: URL
+): Chapter {
+  const volumeMatch =
+    chapter.type === 2
+      ? normalizeNumericText(chapter.name).match(/^第\s*(\d+)\s*卷$/)
+      : null
+  const volumeNumber = volumeMatch
+    ? parseChapterNumber(volumeMatch[1])
+    : undefined
+  const chapterNumber =
+    chapter.type === 1 ? parseChapterNumber(chapter.name) : undefined
+  return {
+    id: chapter.id,
+    title: chapter.name,
+    url: new URL(`/comic/${slug}/chapter/${chapter.id}`, source.origin).href,
+    language: "zh",
+    chapterLabel:
+      chapter.type === 1 || chapter.type === 3 ? chapter.name : undefined,
+    chapterNumber,
+    volumeId: `copy:${groupId}:${chapter.type}`,
+    volumeLabel: `${groupName} · ${typeName}`,
+    volumeNumber,
+    comicInfo: { Title: chapter.name, Volume: volumeNumber },
+  }
+}
+
+function assertCatalogBounds(
+  catalog: CopyCatalog,
+  groups: [string, CopyCatalog["groups"][string]][]
+): void {
+  if (new Set(catalog.build.type.map((type) => type.id)).size !== 3)
+    throw new ProviderContractError("Copy catalog categories are unavailable")
+  if (Object.keys(catalog.groups).length > 100)
+    throw new ProviderContractError("Copy catalog contains too many groups")
+  if (
+    groups.reduce((total, [, group]) => total + group.chapters.length, 0) >
+    20_000
+  ) {
+    throw new ProviderContractError(
+      "Copy chapter catalog exceeds the supported size"
+    )
+  }
+}
+
+function readGroupVolumes(
+  groupId: string,
+  groupName: string,
+  types: CopyCatalog["build"]["type"]
+): VolumeState[] {
+  const volumes: VolumeState[] = []
+  for (const type of types) {
+    const label = `${groupName} · ${type.name}`
+    volumes.push({ id: `copy:${groupId}:${type.id}`, title: label, label })
+  }
+  return volumes
+}
+
 export function parseCopyChapterCatalog(
   value: unknown,
   source: URL
@@ -96,26 +162,12 @@ export function parseCopyChapterCatalog(
   const chapters: Chapter[] = []
   const volumes: VolumeState[] = []
   const seen = new Set<string>()
-  if (new Set(catalog.build.type.map((type) => type.id)).size !== 3)
-    throw new ProviderContractError("Copy catalog categories are unavailable")
-  if (Object.keys(catalog.groups).length > 100)
-    throw new ProviderContractError("Copy catalog contains too many groups")
   const groups = Object.entries(catalog.groups)
-  if (
-    groups.reduce((total, [, group]) => total + group.chapters.length, 0) >
-    20_000
-  ) {
-    throw new ProviderContractError(
-      "Copy chapter catalog exceeds the supported size"
-    )
-  }
+  assertCatalogBounds(catalog, groups)
   for (const [groupId, group] of groups) {
     if (group.count !== group.chapters.length)
       throw new ProviderContractError("Copy chapter catalog is incomplete")
-    for (const type of catalog.build.type) {
-      const label = `${group.name} · ${type.name}`
-      volumes.push({ id: `copy:${groupId}:${type.id}`, title: label, label })
-    }
+    volumes.push(...readGroupVolumes(groupId, group.name, catalog.build.type))
     // Keep each category contiguous while preserving its source entry order.
     for (const type of catalog.build.type) {
       for (const chapter of group.chapters.filter(
@@ -123,31 +175,16 @@ export function parseCopyChapterCatalog(
       )) {
         if (seen.has(chapter.id)) continue
         seen.add(chapter.id)
-        const volumeMatch =
-          chapter.type === 2
-            ? normalizeNumericText(chapter.name).match(/^第\s*(\d+)\s*卷$/)
-            : null
-        const volumeNumber = volumeMatch
-          ? parseChapterNumber(volumeMatch[1])
-          : undefined
-        const chapterNumber =
-          chapter.type === 1 ? parseChapterNumber(chapter.name) : undefined
-        chapters.push({
-          id: chapter.id,
-          title: chapter.name,
-          url: new URL(
-            `/comic/${route.slug}/chapter/${chapter.id}`,
-            source.origin
-          ).href,
-          language: "zh",
-          chapterLabel:
-            chapter.type === 1 || chapter.type === 3 ? chapter.name : undefined,
-          chapterNumber,
-          volumeId: `copy:${groupId}:${chapter.type}`,
-          volumeLabel: `${group.name} · ${type.name}`,
-          volumeNumber,
-          comicInfo: { Title: chapter.name, Volume: volumeNumber },
-        })
+        chapters.push(
+          readChapter(
+            chapter,
+            type.name,
+            groupId,
+            group.name,
+            route.slug,
+            source
+          )
+        )
       }
     }
   }

@@ -6,17 +6,11 @@ import {
 } from "@/src/shared/site-integration-utils"
 import { ProviderContractError } from "../provider-contract-error"
 import { aimanhuaPage, aimanhuaImage } from "./reader"
-export function resolveAimanhuaSeries(
+function readChapters(
   document: Document,
-  seriesUrl: string
-): SeriesDataResolutionResult {
-  const seriesId =
-    aimanhuaPage(seriesUrl).pathname.match(/^\/comic\/(\d+)\/?$/)?.[1]
-  const title = sanitizeLabel(
-    document.querySelector(".detail-main-info-title")?.textContent ?? ""
-  )
-  if (!seriesId || !title)
-    throw new ProviderContractError("Aimanhua series is missing or unavailable")
+  seriesUrl: string,
+  seriesId: string
+): Chapter[] {
   const links = [
     ...document.querySelectorAll(".detail-list-select a.chapteritem[href]"),
   ]
@@ -46,33 +40,54 @@ export function resolveAimanhuaSeries(
       comicInfo: {},
     })
   }
-  const cover = document
-    .querySelector(".detail-main-cover img")
-    ?.getAttribute("src")
-  const author = Array.from(
-    document.querySelectorAll(".detail-main-info-author")
-  )
+  return chapters
+}
+
+function readAuthor(document: Document): string | undefined {
+  return Array.from(document.querySelectorAll(".detail-main-info-author"))
     .map((node) => sanitizeLabel(node.textContent ?? ""))
     .find((text) => /^作者[：:]/.test(text))
     ?.replace(/^作者[：:]\s*/, "")
+}
+
+function readMetadata(document: Document, title: string) {
+  const cover = document
+    .querySelector(".detail-main-cover img")
+    ?.getAttribute("src")
+  const author = readAuthor(document)
   const genres = Array.from(
     document.querySelectorAll(".detail-main-info-class a")
   )
     .map((node) => sanitizeLabel(node.textContent ?? ""))
     .filter(Boolean)
   return {
+    title,
+    language: "zh",
+    author: author || undefined,
+    genres: genres.length ? [...new Set(genres)] : undefined,
+    description:
+      sanitizeLabel(
+        document.querySelector(".detail-desc")?.textContent ?? ""
+      ) || undefined,
+    coverUrl: cover ? aimanhuaImage(cover) : undefined,
+  }
+}
+
+export function resolveAimanhuaSeries(
+  document: Document,
+  seriesUrl: string
+): SeriesDataResolutionResult {
+  const seriesId =
+    aimanhuaPage(seriesUrl).pathname.match(/^\/comic\/(\d+)\/?$/)?.[1]
+  const title = sanitizeLabel(
+    document.querySelector(".detail-main-info-title")?.textContent ?? ""
+  )
+  if (!seriesId || !title)
+    throw new ProviderContractError("Aimanhua series is missing or unavailable")
+  const chapters = readChapters(document, seriesUrl, seriesId)
+  return {
     seriesId,
-    seriesMetadata: {
-      title,
-      language: "zh",
-      author: author || undefined,
-      genres: genres.length ? [...new Set(genres)] : undefined,
-      description:
-        sanitizeLabel(
-          document.querySelector(".detail-desc")?.textContent ?? ""
-        ) || undefined,
-      coverUrl: cover ? aimanhuaImage(cover) : undefined,
-    },
+    seriesMetadata: readMetadata(document, title),
     chapterList: chapters,
   }
 }

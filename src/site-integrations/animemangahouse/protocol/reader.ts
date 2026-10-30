@@ -39,7 +39,7 @@ function encodedWord(value: number, radix: number): string {
 }
 
 /** Decode the sites' packed data by dictionary substitution; no site code executes. */
-function unpackResponse(script: string): string {
+function packedResponseParts(script: string) {
   if (script.length > 1024 * 1024) invalid()
   const match = script.match(
     /\}\('((?:\\.|[^'\\])*)',(\d+),(\d+),'((?:\\.|[^'\\])*)'\.split\('\|'\),0,\{\}\)\)/
@@ -50,11 +50,15 @@ function unpackResponse(script: string): string {
   if (radix < 2 || radix > 62 || count < 1 || count > 4096) invalid()
   const dictionary = decodeLiteral(match[4]).split("|")
   if (dictionary.length !== count) invalid()
+  return { dictionary, radix, template: decodeLiteral(match[1]) }
+}
+
+function unpackResponse(script: string): string {
+  const { dictionary, radix, template } = packedResponseParts(script)
   const replacements = new Map<string, string>()
   dictionary.forEach((word, index) => {
     if (word) replacements.set(encodedWord(index, radix), word)
   })
-  const template = decodeLiteral(match[1])
   let outputLength = template.length
   const decoded = template.replace(/\b\w+\b/g, (word) => {
     const replacement = replacements.get(word) ?? word
@@ -92,22 +96,7 @@ export function assertImageUrl(site: SignedReaderSite, value: string): URL {
   return url
 }
 
-export function readSignedImageResponse(
-  site: SignedReaderSite,
-  script: string
-): string[] {
-  const decoded = unpackResponse(script)
-  if (/\bd_c\s*=/.test(decoded) || /\bd_c\s*=/.test(script))
-    throw new ProviderContractError(
-      `${site.name} reader reports an unavailable error image`
-    )
-  if (/\bhd_c\s*=/.test(decoded))
-    throw new ProviderContractError(
-      `${site.name} alternate reader image mode is unsupported`
-    )
-  const base = literalAssignment(decoded, "pix")
-  const array = decoded.match(/\bpvalue\s*=\s*\[([^\]]*)\]/)?.[1]
-  if (array === undefined) invalid()
+function readImageValues(array: string): string[] {
   const values: string[] = []
   let remainder = array
   const itemPattern = /^\s*(["'])((?:\\.|(?!\1)[^\\])*)\1\s*(,|$)/
@@ -118,6 +107,34 @@ export function readSignedImageResponse(
     remainder = remainder.slice(item[0].length)
     if (values.length > MAX_CHAPTER_IMAGES) invalid()
   }
+  return values
+}
+
+function assertImageMode(
+  site: SignedReaderSite,
+  script: string,
+  decoded: string
+): void {
+  if (/\bd_c\s*=/.test(decoded) || /\bd_c\s*=/.test(script))
+    throw new ProviderContractError(
+      `${site.name} reader reports an unavailable error image`
+    )
+  if (/\bhd_c\s*=/.test(decoded))
+    throw new ProviderContractError(
+      `${site.name} alternate reader image mode is unsupported`
+    )
+}
+
+export function readSignedImageResponse(
+  site: SignedReaderSite,
+  script: string
+): string[] {
+  const decoded = unpackResponse(script)
+  assertImageMode(site, script, decoded)
+  const base = literalAssignment(decoded, "pix")
+  const array = decoded.match(/\bpvalue\s*=\s*\[([^\]]*)\]/)?.[1]
+  if (array === undefined) invalid()
+  const values = readImageValues(array)
   const suffix = decoded.match(
     /pvalue\[i\]\s*=\s*pix\s*\+\s*pvalue\[i\]\s*\+\s*(["'])((?:\\.|(?!\1)[^\\])*)\1/
   )?.[2]
@@ -131,6 +148,20 @@ export function readSignedImageResponse(
           : base + value + decodeLiteral(suffix)
       ).href
   )
+}
+
+function assertSigningFields(sign: string, date: string): void {
+  if (!sign || !date || sign.length > 256 || date.length > 128) invalid()
+}
+
+function readReaderKey(html: string): string {
+  const document = new DOMParser().parseFromString(html, "text/html")
+  const key =
+    document
+      .querySelector<HTMLInputElement>("#dm5_key")
+      ?.getAttribute("value") ?? ""
+  if (key.length > 1024) invalid()
+  return key
 }
 
 export function readReaderConfiguration(
@@ -160,12 +191,7 @@ export function readReaderConfiguration(
     )
   const sign = literalAssignment(html, `${site.prefix}_VIEWSIGN`),
     date = literalAssignment(html, `${site.prefix}_VIEWSIGN_DT`)
-  if (!sign || !date || sign.length > 256 || date.length > 128) invalid()
-  const document = new DOMParser().parseFromString(html, "text/html")
-  const key =
-    document
-      .querySelector<HTMLInputElement>("#dm5_key")
-      ?.getAttribute("value") ?? ""
-  if (key.length > 1024) invalid()
+  assertSigningFields(sign, date)
+  const key = readReaderKey(html)
   return { cid, mid, count, sign, date, key }
 }

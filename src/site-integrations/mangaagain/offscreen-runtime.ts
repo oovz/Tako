@@ -1,8 +1,5 @@
-import type {
-  OffscreenIntegration,
-  OffscreenSiteAdapter,
-} from "@/src/types/site-integrations"
-import { fetchImageWithStallDetection } from "@/src/runtime/fetch-image"
+import type { OffscreenSiteAdapter } from "@/src/types/site-integrations"
+import { createImageDownloadAdapter } from "../image-download-adapter"
 import { ProviderContractError } from "../provider-contract-error"
 import {
   parseZaimanhuaChapter,
@@ -11,24 +8,12 @@ import {
   zaimanhuaApiUrl,
 } from "./api"
 
-const downloadImage: OffscreenIntegration["chapter"]["downloadImage"] = async (
-  imageUrl,
-  opts
-) => {
-  const result = await fetchImageWithStallDetection(imageUrl, {
-    integrationId: "mangaagain",
-    endpointId: "mangaagain-image",
-    rateLimitService: opts.runtime.rateLimitService,
-    skipRateLimit: true,
-    signal: opts.signal,
-    onBytesReceived: opts.onBytesReceived,
-    liveResourceLedger: opts.liveResourceLedger,
-  })
-  return {
-    ...result,
-    filename: new URL(imageUrl).pathname.split("/").pop() || "page.jpg",
-  }
-}
+const downloadImage = createImageDownloadAdapter({
+  integrationId: "mangaagain",
+  endpointId: "mangaagain-image",
+  skipRateLimit: true,
+  filename: "page",
+})
 
 export const offscreenSiteAdapter: OffscreenSiteAdapter = {
   offscreen: {

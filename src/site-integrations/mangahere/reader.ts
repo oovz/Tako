@@ -39,7 +39,9 @@ function unpackString(value: string): string {
   return value.replace(/\\([\\'"])/g, "$1")
 }
 
-export function parseMangaHerePackedImages(html: string): string[] {
+type PackedReaderData = MangaHerePackedReaderData & { keys: string[] }
+
+function readPackedData(html: string): PackedReaderData {
   if (html.length > 10_000_000)
     throw new ProviderContractError(
       "MangaHere reader exceeds the supported size"
@@ -55,8 +57,16 @@ export function parseMangaHerePackedImages(html: string): string[] {
     tokenCount: Number(tuple[3]),
     encodedDictionary: tuple[4],
   }
-  const { radix, tokenCount: count } = data
   const keys = unpackString(data.encodedDictionary).split("|")
+  assertPackedDataBounds(data, keys)
+  return { ...data, keys }
+}
+
+function assertPackedDataBounds(
+  data: MangaHerePackedReaderData,
+  keys: string[]
+): void {
+  const { radix, tokenCount: count } = data
   if (
     radix < 2 ||
     radix > 62 ||
@@ -69,9 +79,12 @@ export function parseMangaHerePackedImages(html: string): string[] {
       "MangaHere packed reader data exceeds its limits"
     )
   }
+}
+
+function tokenIndexer(radix: number, count: number) {
   const alphabet =
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  const indexFor = (token: string): number => {
+  return (token: string): number => {
     let value = 0
     for (const char of token) {
       const digit = alphabet.indexOf(char)
@@ -81,6 +94,11 @@ export function parseMangaHerePackedImages(html: string): string[] {
     }
     return value
   }
+}
+
+function unpackReader(data: PackedReaderData): string {
+  const { keys } = data
+  const indexFor = tokenIndexer(data.radix, data.tokenCount)
   const template = unpackString(data.encodedPayload)
   let decodedLength = template.length
   const decoded = template.replace(/\b[0-9a-zA-Z]+\b/g, (token) => {
@@ -93,6 +111,10 @@ export function parseMangaHerePackedImages(html: string): string[] {
     }
     return replacement
   })
+  return decoded
+}
+
+function readImageValues(decoded: string): string[] {
   const list = decoded.match(
     /\bvar\s+newImgs\s*=\s*\[((?:\s*'[^'<>\\]*'\s*,?\s*)*)\]/
   )?.[1]
@@ -109,6 +131,12 @@ export function parseMangaHerePackedImages(html: string): string[] {
     }
     values.push(mangaHereImage(match[1]))
   }
+  return values
+}
+
+export function parseMangaHerePackedImages(html: string): string[] {
+  const decoded = unpackReader(readPackedData(html))
+  const values = readImageValues(decoded)
   const countMatch = html.match(/\bvar\s+imagecount\s*=\s*(\d+)\s*;/)
   if (
     !values.length ||

@@ -45,8 +45,7 @@ export function readBoyloveImageLayout(url: URL): BoyloveImageLayout {
   })
 }
 
-export function parseBoyloveReader(html: string) {
-  const document = new DOMParser().parseFromString(html, "text/html")
+function readReaderData(document: Document) {
   const scripts = Array.from(document.scripts).map(
     (script) => script.textContent ?? ""
   )
@@ -69,7 +68,46 @@ export function parseBoyloveReader(html: string) {
   } catch (error) {
     throw new ProviderContractError("BoyLove reader data is malformed.", error)
   }
-  const pages = BoyloveReaderPagesSchema.parse(payload)
+  return {
+    pages: BoyloveReaderPagesSchema.parse(payload),
+    columns: Number(columnsText),
+  }
+}
+
+type BoyloveReaderPage = ReturnType<
+  typeof BoyloveReaderPagesSchema.parse
+>[number]
+
+function readPageUrl(
+  page: BoyloveReaderPage,
+  index: number,
+  imageElement: Element,
+  columns: number
+): string {
+  const sourceUrl = assertBoyloveImageUrl(page.src)
+  const image = imageElement.querySelector("img")
+  if (
+    page.id !== index ||
+    imageElement.getAttribute("data-page") !== String(index + 1) ||
+    image?.getAttribute("data-original") !== page.src ||
+    sourceUrl.hash
+  ) {
+    throw new ProviderContractError(
+      "BoyLove reader page order or image source is inconsistent."
+    )
+  }
+  const layout = validateLayout({
+    columns,
+    width: page.width,
+    height: Number(page.height),
+  })
+  sourceUrl.hash = `boylove=${layout.columns},${layout.width},${layout.height}`
+  return sourceUrl.href
+}
+
+export function parseBoyloveReader(html: string) {
+  const document = new DOMParser().parseFromString(html, "text/html")
+  const { pages, columns } = readReaderData(document)
   const images = Array.from(
     document.querySelectorAll(
       ".reader-cartoon-chapter > .reader-cartoon-image[data-page]"
@@ -78,26 +116,8 @@ export function parseBoyloveReader(html: string) {
   if (pages.length !== images.length)
     throw new ProviderContractError("BoyLove reader page list is incomplete.")
   return ChapterImagePlanSchema.parse({
-    imageUrls: pages.map((page, index) => {
-      const sourceUrl = assertBoyloveImageUrl(page.src)
-      const image = images[index].querySelector("img")
-      if (
-        page.id !== index ||
-        images[index].getAttribute("data-page") !== String(index + 1) ||
-        image?.getAttribute("data-original") !== page.src ||
-        sourceUrl.hash
-      ) {
-        throw new ProviderContractError(
-          "BoyLove reader page order or image source is inconsistent."
-        )
-      }
-      const layout = validateLayout({
-        columns: Number(columnsText),
-        width: page.width,
-        height: Number(page.height),
-      })
-      sourceUrl.hash = `boylove=${layout.columns},${layout.width},${layout.height}`
-      return sourceUrl.href
-    }),
+    imageUrls: pages.map((page, index) =>
+      readPageUrl(page, index, images[index], columns)
+    ),
   })
 }

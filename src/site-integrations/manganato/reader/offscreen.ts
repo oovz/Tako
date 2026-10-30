@@ -22,37 +22,123 @@ import {
   type ManganatoSite,
 } from "./protocol"
 
-function readMetadata(document: Document): SeriesMetadata {
-  const title = sanitizeLabel(
-    document.querySelector(".manga-info-text h1")?.textContent ?? ""
-  )
-  if (!title) throw new ProviderContractError("Series title is unavailable")
+function readDetails(document: Document) {
   const details = Array.from(
     document.querySelectorAll(".manga-info-text > li")
   ).map((item) => sanitizeLabel(item.textContent ?? ""))
-  const coverUrl = document
-    .querySelector('meta[property="og:image"]')
-    ?.getAttribute("content")
-  const alternative = sanitizeLabel(
-    document.querySelector(".story-alternative")?.textContent ?? ""
-  ).replace(/^Alternative\s*:\s*/, "")
   return {
-    title,
     author: details
       .find((value) => /^Author\(s\)\s*:/.test(value))
       ?.replace(/^Author\(s\)\s*:\s*/, ""),
     status: details
       .find((value) => /^Status\s*:/.test(value))
       ?.replace(/^Status\s*:\s*/, ""),
+  }
+}
+
+function readText(document: Document, selector: string): string {
+  return sanitizeLabel(document.querySelector(selector)?.textContent ?? "")
+}
+
+function readMetadata(document: Document): SeriesMetadata {
+  const title = readText(document, ".manga-info-text h1")
+  if (!title) throw new ProviderContractError("Series title is unavailable")
+  const details = readDetails(document)
+  const coverUrl = document
+    .querySelector('meta[property="og:image"]')
+    ?.getAttribute("content")
+  const alternative = readText(document, ".story-alternative").replace(
+    /^Alternative\s*:\s*/,
+    ""
+  )
+  return {
+    title,
+    ...details,
     coverUrl: coverUrl ? assertManganatoImageUrl(coverUrl).href : undefined,
-    description:
-      sanitizeLabel(document.querySelector("#contentBox")?.textContent ?? "") ||
-      undefined,
+    description: readText(document, "#contentBox") || undefined,
     genres: Array.from(document.querySelectorAll(".manga-info-text .genres a"))
       .map((item) => sanitizeLabel(item.textContent ?? ""))
       .filter(Boolean),
     alternativeTitles: alternative ? [alternative] : undefined,
     language: "en",
+  }
+}
+
+type ChapterPage = ReturnType<typeof parseManganatoChapterPage>["data"]
+
+async function requestChapterPage(
+  site: ManganatoSite,
+  url: URL,
+  slug: string,
+  offset: number,
+  rateLimitService: RateLimitService,
+  signal?: AbortSignal
+): Promise<ChapterPage> {
+  const apiUrl = new URL(`/api/manga/${slug}/chapters`, url)
+  apiUrl.searchParams.set("offset", String(offset))
+  apiUrl.searchParams.set("limit", "50")
+  const response = await integrationHttpClient.request({
+    integrationId: site.id,
+    endpointId: `${site.id}-chapters`,
+    url: apiUrl.href,
+    scope: "chapter",
+    rateLimitService,
+    init: { signal },
+  })
+  if (!response.ok) {
+    cancelResponseBody(response)
+    throw Object.assign(
+      new Error(`Chapter catalog request failed (HTTP ${response.status})`),
+      { status: response.status }
+    )
+  }
+  return parseManganatoChapterPage(await response.json()).data
+}
+
+function assertPagination(
+  data: ChapterPage,
+  offset: number,
+  total: number
+): void {
+  const page = data.pagination
+  if (
+    page.total !== total ||
+    page.offset !== offset ||
+    data.chapters.length > page.limit ||
+    (page.has_more && data.chapters.length === 0)
+  ) {
+    throw new ProviderContractError(
+      "Chapter catalog pagination is inconsistent"
+    )
+  }
+}
+
+function appendChapters(
+  chapters: Chapter[],
+  ids: Set<string>,
+  entries: ChapterPage["chapters"],
+  slug: string,
+  url: URL
+): void {
+  for (const chapter of entries) {
+    if (ids.has(chapter.chapter_slug))
+      throw new ProviderContractError(
+        "Chapter catalog contains duplicate identities"
+      )
+    ids.add(chapter.chapter_slug)
+    chapters.push({
+      id: chapter.chapter_slug,
+      url: new URL(`/manga/${slug}/${chapter.chapter_slug}`, url).href,
+      title: chapter.chapter_name,
+      chapterLabel: String(chapter.chapter_num),
+      chapterNumber: chapter.chapter_num,
+      language: "en",
+      comicInfo: {
+        Title: chapter.chapter_name,
+        Number: String(chapter.chapter_num),
+        LanguageISO: "en",
+      },
+    })
   }
 }
 
@@ -78,63 +164,54 @@ async function readChapters(
   let total: number | undefined
   for (;;) {
     signal?.throwIfAborted()
-    const apiUrl = new URL(`/api/manga/${slug}/chapters`, url)
-    apiUrl.searchParams.set("offset", String(offset))
-    apiUrl.searchParams.set("limit", "50")
-    const response = await integrationHttpClient.request({
-      integrationId: site.id,
-      endpointId: `${site.id}-chapters`,
-      url: apiUrl.href,
-      scope: "chapter",
+    const data = await requestChapterPage(
+      site,
+      url,
+      slug,
+      offset,
       rateLimitService,
-      init: { signal },
-    })
-    if (!response.ok) {
-      cancelResponseBody(response)
-      throw Object.assign(
-        new Error(`Chapter catalog request failed (HTTP ${response.status})`),
-        { status: response.status }
-      )
-    }
-    const { data } = parseManganatoChapterPage(await response.json())
+      signal
+    )
     const page = data.pagination
     total ??= page.total
-    if (
-      page.total !== total ||
-      page.offset !== offset ||
-      data.chapters.length > page.limit ||
-      (page.has_more && data.chapters.length === 0)
-    ) {
-      throw new ProviderContractError(
-        "Chapter catalog pagination is inconsistent"
-      )
-    }
-    for (const chapter of data.chapters) {
-      if (ids.has(chapter.chapter_slug))
-        throw new ProviderContractError(
-          "Chapter catalog contains duplicate identities"
-        )
-      ids.add(chapter.chapter_slug)
-      chapters.push({
-        id: chapter.chapter_slug,
-        url: new URL(`/manga/${slug}/${chapter.chapter_slug}`, url).href,
-        title: chapter.chapter_name,
-        chapterLabel: String(chapter.chapter_num),
-        chapterNumber: chapter.chapter_num,
-        language: "en",
-        comicInfo: {
-          Title: chapter.chapter_name,
-          Number: String(chapter.chapter_num),
-          LanguageISO: "en",
-        },
-      })
-    }
+    assertPagination(data, offset, total)
+    appendChapters(chapters, ids, data.chapters, slug, url)
     offset += data.chapters.length
     if (offset > total || page.has_more !== offset < total)
       throw new ProviderContractError("Chapter catalog is incomplete")
     if (!page.has_more) break
   }
   return chapters.reverse()
+}
+
+type SeriesInput = Parameters<
+  NonNullable<OffscreenSiteAdapter["offscreen"]["series"]>["resolveSeriesData"]
+>[0]
+
+async function resolveSeriesData(
+  site: ManganatoSite,
+  input: SeriesInput
+): Promise<SeriesDataResolutionResult> {
+  const result: SeriesDataResolutionResult = {}
+  try {
+    result.seriesMetadata = readMetadata(input.document)
+  } catch (error) {
+    result.metadataError =
+      error instanceof Error ? error.message : String(error)
+  }
+  try {
+    result.chapterList = await readChapters(
+      site,
+      input.document,
+      input.seriesUrl,
+      input.rateLimitService,
+      input.signal
+    )
+  } catch (error) {
+    result.chapterListError =
+      error instanceof Error ? error.message : String(error)
+  }
+  return result
 }
 
 export function createManganatoOffscreenAdapter(
@@ -165,26 +242,7 @@ export function createManganatoOffscreenAdapter(
       name: `${site.name} Offscreen`,
       series: {
         async resolveSeriesData(input) {
-          const result: SeriesDataResolutionResult = {}
-          try {
-            result.seriesMetadata = readMetadata(input.document)
-          } catch (error) {
-            result.metadataError =
-              error instanceof Error ? error.message : String(error)
-          }
-          try {
-            result.chapterList = await readChapters(
-              site,
-              input.document,
-              input.seriesUrl,
-              input.rateLimitService,
-              input.signal
-            )
-          } catch (error) {
-            result.chapterListError =
-              error instanceof Error ? error.message : String(error)
-          }
-          return result
+          return resolveSeriesData(site, input)
         },
       },
       cover: { downloadImage },

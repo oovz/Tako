@@ -11,14 +11,7 @@ import { ProviderContractError } from "../provider-contract-error"
 import type { Chapter } from "@/src/types/chapter"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
-export function parseZaimanhuaUrl(value: string): {
-  url: URL
-  slug: string
-  variant: "comic1" | "comic2"
-  seriesId?: string
-  chapterId?: string
-} {
-  const url = new URL(value)
+function assertZaimanhuaOrigin(url: URL): void {
   if (
     url.protocol !== "https:" ||
     !["www.zaimanhua.com", "manhua.zaimanhua.com"].includes(url.hostname) ||
@@ -28,6 +21,17 @@ export function parseZaimanhuaUrl(value: string): {
   ) {
     throw new ProviderContractError("Zaimanhua origin is unavailable")
   }
+}
+
+export function parseZaimanhuaUrl(value: string): {
+  url: URL
+  slug: string
+  variant: "comic1" | "comic2"
+  seriesId?: string
+  chapterId?: string
+} {
+  const url = new URL(value)
+  assertZaimanhuaOrigin(url)
   const series = url.pathname.match(/^\/info\/([a-z0-9_-]+)\.html\/?$/)
   const reader = url.pathname.match(/^\/view\/([a-z0-9_-]+)\/(\d+)\/(\d+)\/?$/)
   const slug = series?.[1] ?? reader?.[1]
@@ -49,17 +53,11 @@ function envelope(value: unknown): unknown {
   return result.data
 }
 
-export function parseZaimanhuaSeries(value: unknown, source: URL) {
-  const route = parseZaimanhuaUrl(source.href)
-  const info = ZaimanhuaSeriesDataSchema.parse(envelope(value)).comicInfo
-  if (
-    info.comicPy !== route.slug ||
-    (route.seriesId && String(info.id) !== route.seriesId)
-  ) {
-    throw new ProviderContractError(
-      "Zaimanhua series identity does not match the requested work"
-    )
-  }
+type SeriesInfo = ReturnType<
+  typeof ZaimanhuaSeriesDataSchema.parse
+>["comicInfo"]
+
+function readChapters(info: SeriesInfo, source: URL): Chapter[] {
   if (
     info.chapterList.reduce((total, group) => total + group.data.length, 0) >
     20_000
@@ -96,20 +94,39 @@ export function parseZaimanhuaSeries(value: unknown, source: URL) {
   }
   if (!chapters.length || chapters.length > 20_000)
     throw new ProviderContractError("Zaimanhua chapter catalog is unavailable")
+  return chapters
+}
+
+function readMetadata(info: SeriesInfo) {
+  return {
+    title: info.title,
+    author:
+      info.authorInfo?.authorName ||
+      info.authorsTagList?.map((author) => author.tagName).join(", "),
+    description: info.description,
+    coverUrl: info.cover,
+    genres:
+      info.themeTagList?.map((theme) => theme.tagName) ??
+      info.types?.split(","),
+    language: "zh",
+  }
+}
+
+export function parseZaimanhuaSeries(value: unknown, source: URL) {
+  const route = parseZaimanhuaUrl(source.href)
+  const info = ZaimanhuaSeriesDataSchema.parse(envelope(value)).comicInfo
+  if (
+    info.comicPy !== route.slug ||
+    (route.seriesId && String(info.id) !== route.seriesId)
+  ) {
+    throw new ProviderContractError(
+      "Zaimanhua series identity does not match the requested work"
+    )
+  }
+  const chapters = readChapters(info, source)
   return {
     seriesId: String(info.id),
-    seriesMetadata: {
-      title: info.title,
-      author:
-        info.authorInfo?.authorName ||
-        info.authorsTagList?.map((author) => author.tagName).join(", "),
-      description: info.description,
-      coverUrl: info.cover,
-      genres:
-        info.themeTagList?.map((theme) => theme.tagName) ??
-        info.types?.split(","),
-      language: "zh",
-    },
+    seriesMetadata: readMetadata(info),
     chapterList: chapters,
   }
 }

@@ -42,16 +42,11 @@ export function assertBoyloveImageUrl(value: string): URL {
   return url
 }
 
-export function resolveBoyloveSeries(document: Document) {
-  const title = sanitizeLabel(
-    document.querySelector(".stui-content__detail h1")?.textContent ?? ""
-  )
-  if (!title)
-    throw new ProviderContractError("BoyLove series title is missing.")
+function readMetadata(document: Document, title: string): SeriesMetadata {
   const cover = document
     .querySelector(".stui-content__thumb .play")
     ?.getAttribute("data-original")
-  const seriesMetadata: SeriesMetadata = {
+  return {
     title,
     author:
       sanitizeLabel(
@@ -66,6 +61,9 @@ export function resolveBoyloveSeries(document: Document) {
     coverUrl: cover ? assertBoyloveImageUrl(cover).href : undefined,
     language: "zh",
   }
+}
+
+function readCatalog(document: Document) {
   const catalogScript = Array.from(document.scripts)
     .map((script) => script.textContent ?? "")
     .find((script) => /function\s+getChapterList\s*\(/.test(script))
@@ -88,7 +86,17 @@ export function resolveBoyloveSeries(document: Document) {
       error
     )
   }
-  const catalog = BoyloveCatalogSchema.parse(payload)
+  return BoyloveCatalogSchema.parse(payload)
+}
+
+export function resolveBoyloveSeries(document: Document) {
+  const title = sanitizeLabel(
+    document.querySelector(".stui-content__detail h1")?.textContent ?? ""
+  )
+  if (!title)
+    throw new ProviderContractError("BoyLove series title is missing.")
+  const seriesMetadata = readMetadata(document, title)
+  const catalog = readCatalog(document)
   const seen = new Set<number>()
   const chapters: Chapter[] = catalog.list.map((item) => {
     if (seen.has(item.id))

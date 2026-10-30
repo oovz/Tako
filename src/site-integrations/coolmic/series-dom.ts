@@ -5,11 +5,10 @@ import { assertIntegrationEndpointRequestUrl } from "../request-policy"
 import { CoolmicTitleBootstrapSchema } from "./contracts"
 import { COOLMIC_ORIGIN, parseCoolmicId } from "./api"
 
-export function resolveCoolmicDocument(
-  document: Document,
-  seriesUrl: string
-): SeriesDataResolutionResult {
-  const id = parseCoolmicId(seriesUrl, "titles")
+type TitleBootstrap = ReturnType<typeof CoolmicTitleBootstrapSchema.parse>
+type Episode = TitleBootstrap["episodes"][number]
+
+function readTitleBootstrap(document: Document): TitleBootstrap {
   const raw = document
     .querySelector("title-page")
     ?.getAttribute(":page-objects")
@@ -24,21 +23,30 @@ export function resolveCoolmicDocument(
   const parsed = CoolmicTitleBootstrapSchema.safeParse(source)
   if (!parsed.success)
     throw new ProviderContractError("Coolmic title response has changed")
-  const { title, episodes, user, unreadable_title_error_code } = parsed.data
-  if (
-    String(title.id) !== id ||
-    unreadable_title_error_code ||
-    title.is_hidden ||
-    title.all_closed
-  )
-    throw new ProviderContractError(
-      "Coolmic title is unavailable for this site session"
+  return parsed.data
+}
+
+function isEpisodeLocked(
+  episode: Episode,
+  user: TitleBootstrap["user"]
+): boolean {
+  return (
+    episode.is_closed ||
+    episode.images_count === 0 ||
+    !(
+      episode.is_free ||
+      (user.is_login && episode.was_purchased) ||
+      (user.is_login &&
+        user.is_monthly_ticket_subscribed &&
+        episode.is_subscription_free)
     )
-  const coverUrl = assertIntegrationEndpointRequestUrl(
-    "coolmic",
-    "coolmic-cover",
-    title.vertical_thumbnail_url
-  ).href
+  )
+}
+
+function readChapters(
+  episodes: Episode[],
+  user: TitleBootstrap["user"]
+): Chapter[] {
   const seen = new Set<number>()
   const chapterList: Chapter[] = [...episodes]
     .sort((a, b) => a.display_order - b.display_order)
@@ -56,19 +64,35 @@ export function resolveCoolmicDocument(
         chapterNumber: /^\d+(?:\.\d+)?$/.test(episode.number)
           ? Number(episode.number)
           : undefined,
-        locked:
-          episode.is_closed ||
-          episode.images_count === 0 ||
-          !(
-            episode.is_free ||
-            (user.is_login && episode.was_purchased) ||
-            (user.is_login &&
-              user.is_monthly_ticket_subscribed &&
-              episode.is_subscription_free)
-          ),
+        locked: isEpisodeLocked(episode, user),
         comicInfo: {},
       }
     })
+  return chapterList
+}
+
+export function resolveCoolmicDocument(
+  document: Document,
+  seriesUrl: string
+): SeriesDataResolutionResult {
+  const id = parseCoolmicId(seriesUrl, "titles")
+  const { title, episodes, user, unreadable_title_error_code } =
+    readTitleBootstrap(document)
+  if (
+    String(title.id) !== id ||
+    unreadable_title_error_code ||
+    title.is_hidden ||
+    title.all_closed
+  )
+    throw new ProviderContractError(
+      "Coolmic title is unavailable for this site session"
+    )
+  const coverUrl = assertIntegrationEndpointRequestUrl(
+    "coolmic",
+    "coolmic-cover",
+    title.vertical_thumbnail_url
+  ).href
+  const chapterList = readChapters(episodes, user)
   return {
     seriesId: id,
     seriesMetadata: {

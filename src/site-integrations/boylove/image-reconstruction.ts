@@ -11,6 +11,76 @@ import type {
 import { ProviderContractError } from "../provider-contract-error"
 import type { BoyloveImageLayout } from "./chapter-reader"
 
+function drawReconstructedPage(
+  bitmap: ImageBitmap,
+  layout: BoyloveImageLayout
+) {
+  const canvas = new OffscreenCanvas(layout.width, Math.floor(layout.height))
+  const context = canvas.getContext("2d")
+  if (!context)
+    throw new ProviderContractError(
+      "BoyLove image reconstruction canvas is unavailable."
+    )
+  context.imageSmoothingEnabled = false
+  const stripWidth = Math.floor(layout.width / layout.columns)
+  // This is the site's do_mergeImg mapping: short pages reverse vertical
+  // strips, with the remainder moved from the left edge to the right.
+  if (layout.height >= 4000) {
+    context.drawImage(bitmap, 0, 0)
+  } else {
+    for (let column = 1; column <= layout.columns; column += 1) {
+      const last = column === layout.columns
+      const width = last
+        ? layout.width - stripWidth * (layout.columns - 1)
+        : stripWidth
+      context.drawImage(
+        bitmap,
+        last ? 0 : layout.width - stripWidth * column,
+        0,
+        width,
+        layout.height,
+        stripWidth * (column - 1),
+        0,
+        width,
+        layout.height
+      )
+    }
+  }
+  return canvas
+}
+
+async function encodeReconstructedPage(
+  canvas: OffscreenCanvas,
+  layout: BoyloveImageLayout,
+  signal: AbortSignal | undefined,
+  ledger: OffscreenLiveResourceLedger,
+  leases: OffscreenLiveResourceLease[]
+) {
+  const blobLease = ledger.reserve(
+    Math.max(MAX_IMAGE_BYTES, layout.width * Math.floor(layout.height) * 4),
+    "BoyLove encoded output Blob"
+  )
+  leases.push(blobLease)
+  const blob = await canvas.convertToBlob({ type: "image/png" })
+  signal?.throwIfAborted()
+  if (blob.size === 0 || blob.size > MAX_IMAGE_BYTES)
+    throw new ProviderContractError(
+      "BoyLove reconstructed image exceeds the output byte limit."
+    )
+  blobLease.resize(blob.size)
+  const outputLease = ledger.reserve(blob.size, "BoyLove encoded output buffer")
+  leases.push(outputLease)
+  const data = await blob.arrayBuffer()
+  signal?.throwIfAborted()
+  return {
+    data,
+    mimeType: "image/png",
+    liveResourceLease: outputLease.transfer(
+      "retained BoyLove reconstructed image"
+    ),
+  }
+}
+
 export async function reconstructBoyloveImage(
   buffer: ArrayBuffer,
   mimeType: string,
@@ -64,69 +134,14 @@ export async function reconstructBoyloveImage(
             throw new ProviderContractError(
               "BoyLove decoded image dimensions changed."
             )
-          const canvas = new OffscreenCanvas(
-            layout.width,
-            Math.floor(layout.height)
+          const canvas = drawReconstructedPage(bitmap, layout)
+          return await encodeReconstructedPage(
+            canvas,
+            layout,
+            signal,
+            ledger,
+            leases
           )
-          const context = canvas.getContext("2d")
-          if (!context)
-            throw new ProviderContractError(
-              "BoyLove image reconstruction canvas is unavailable."
-            )
-          context.imageSmoothingEnabled = false
-          const stripWidth = Math.floor(layout.width / layout.columns)
-          // This is the site's do_mergeImg mapping: short pages reverse vertical
-          // strips, with the remainder moved from the left edge to the right.
-          if (layout.height >= 4000) {
-            context.drawImage(bitmap, 0, 0)
-          } else {
-            for (let column = 1; column <= layout.columns; column += 1) {
-              const last = column === layout.columns
-              const width = last
-                ? layout.width - stripWidth * (layout.columns - 1)
-                : stripWidth
-              context.drawImage(
-                bitmap,
-                last ? 0 : layout.width - stripWidth * column,
-                0,
-                width,
-                layout.height,
-                stripWidth * (column - 1),
-                0,
-                width,
-                layout.height
-              )
-            }
-          }
-          const blobLease = ledger.reserve(
-            Math.max(
-              MAX_IMAGE_BYTES,
-              layout.width * Math.floor(layout.height) * 4
-            ),
-            "BoyLove encoded output Blob"
-          )
-          leases.push(blobLease)
-          const blob = await canvas.convertToBlob({ type: "image/png" })
-          signal?.throwIfAborted()
-          if (blob.size === 0 || blob.size > MAX_IMAGE_BYTES)
-            throw new ProviderContractError(
-              "BoyLove reconstructed image exceeds the output byte limit."
-            )
-          blobLease.resize(blob.size)
-          const outputLease = ledger.reserve(
-            blob.size,
-            "BoyLove encoded output buffer"
-          )
-          leases.push(outputLease)
-          const data = await blob.arrayBuffer()
-          signal?.throwIfAborted()
-          return {
-            data,
-            mimeType: "image/png",
-            liveResourceLease: outputLease.transfer(
-              "retained BoyLove reconstructed image"
-            ),
-          }
         } finally {
           bitmap.close()
         }
