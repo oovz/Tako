@@ -7,56 +7,53 @@ import {
 
 /** This function is serialized by chrome.scripting.executeScript. */
 function collectMangadexPageProbe(): unknown {
-  const result: { url: string; data?: unknown } = {
-    url: globalThis.location.href,
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return Object.prototype.toString.call(value) === "[object Object]"
   }
-  try {
-    const raw = globalThis.localStorage.getItem("md")
-    if (!raw) return result
 
-    const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return result
-    }
+  function selectPreferences(
+    parsed: unknown
+  ): Record<string, unknown> | undefined {
+    if (!isRecord(parsed)) return undefined
+    return [parsed.userPreferences, parsed.settings].find(isRecord) ?? parsed
+  }
 
-    const parsedRecord = parsed as Record<string, unknown>
-    const userPreferences = parsedRecord.userPreferences
-    const settings = parsedRecord.settings
-    const source =
-      userPreferences &&
-      typeof userPreferences === "object" &&
-      !Array.isArray(userPreferences)
-        ? userPreferences
-        : settings && typeof settings === "object" && !Array.isArray(settings)
-          ? settings
-          : parsedRecord
-    const sourceRecord = source as Record<string, unknown>
-    const data: MangadexPageProbeData = {}
-
-    for (const key of [
+  function collectPreferences(
+    source: Record<string, unknown>
+  ): MangadexPageProbeData {
+    const booleanKeys = [
       "dataSaver",
       "showSafe",
       "showSuggestive",
       "showErotic",
       "showHentai",
-    ] as const) {
-      if (typeof sourceRecord[key] === "boolean") {
-        data[key] = sourceRecord[key]
-      }
-    }
-
-    if (Array.isArray(sourceRecord.filteredLanguages)) {
-      data.filteredLanguages = sourceRecord.filteredLanguages
+    ] as const
+    const data: MangadexPageProbeData = Object.fromEntries(
+      booleanKeys
+        .filter((key) => typeof source[key] === "boolean")
+        .map((key) => [key, source[key]])
+    )
+    if (Array.isArray(source.filteredLanguages)) {
+      data.filteredLanguages = source.filteredLanguages
         .filter(
           (language): language is string =>
             typeof language === "string" && language.length <= 32
         )
         .slice(0, 32)
     }
+    return data
+  }
 
-    if (Object.keys(data).length > 0) {
-      result.data = data
-    }
+  const result: { url: string; data?: unknown } = {
+    url: globalThis.location.href,
+  }
+  try {
+    const raw = globalThis.localStorage.getItem("md")
+    if (!raw) return result
+    const source = selectPreferences(JSON.parse(raw))
+    if (!source) return result
+    const data = collectPreferences(source)
+    if (Object.keys(data).length > 0) result.data = data
   } catch {
     // Website storage is optional and cannot prevent normal resolution.
   }
