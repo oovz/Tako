@@ -70,6 +70,51 @@ function originCoversOrigin(requiredOrigin, candidateOrigin) {
   )
 }
 
+function assertChoiceDefault(id, field, values) {
+  if (field.type === "select") {
+    assert(
+      typeof field.defaultValue === "string" && values.has(field.defaultValue),
+      `${id} setting ${field.id} has an invalid default`
+    )
+    return
+  }
+  assert(
+    Array.isArray(field.defaultValue),
+    `${id} setting ${field.id} has an invalid multiselect default`
+  )
+  assert(
+    field.defaultValue.every((value) => values.has(value)),
+    `${id} setting ${field.id} has an invalid multiselect default`
+  )
+}
+
+function assertChoiceSetting(id, field) {
+  assert(
+    Array.isArray(field.options) && field.options.length > 0,
+    `${id} setting ${field.id} requires options`
+  )
+  const values = new Set()
+  for (const option of field.options) {
+    assert(
+      !values.has(option.value),
+      `${id} setting ${field.id} has duplicate option ${option.value}`
+    )
+    values.add(option.value)
+  }
+  assertChoiceDefault(id, field, values)
+}
+
+function assertScalarSetting(id, field) {
+  assert(
+    field.options === undefined,
+    `${id} setting ${field.id} cannot declare options`
+  )
+  const validDefault =
+    typeof field.defaultValue === field.type &&
+    (field.type !== "number" || Number.isFinite(field.defaultValue))
+  assert(validDefault, `${id} setting ${field.id} has an invalid default`)
+}
+
 function assertSettings(id, settings) {
   const ids = new Set()
   for (const field of settings) {
@@ -79,51 +124,14 @@ function assertSettings(id, settings) {
     )
     ids.add(field.id)
     if (field.type === "select" || field.type === "multiselect") {
-      assert(
-        Array.isArray(field.options) && field.options.length > 0,
-        `${id} setting ${field.id} requires options`
-      )
-      const values = new Set()
-      for (const option of field.options) {
-        assert(
-          !values.has(option.value),
-          `${id} setting ${field.id} has duplicate option ${option.value}`
-        )
-        values.add(option.value)
-      }
-      if (field.type === "select") {
-        assert(
-          typeof field.defaultValue === "string" &&
-            values.has(field.defaultValue),
-          `${id} setting ${field.id} has an invalid default`
-        )
-      } else {
-        assert(
-          Array.isArray(field.defaultValue),
-          `${id} setting ${field.id} has an invalid multiselect default`
-        )
-        assert(
-          field.defaultValue.every((value) => values.has(value)),
-          `${id} setting ${field.id} has an invalid multiselect default`
-        )
-      }
+      assertChoiceSetting(id, field)
     } else {
-      assert(
-        field.options === undefined,
-        `${id} setting ${field.id} cannot declare options`
-      )
-      const validDefault =
-        (field.type === "boolean" && typeof field.defaultValue === "boolean") ||
-        (field.type === "string" && typeof field.defaultValue === "string") ||
-        (field.type === "number" &&
-          typeof field.defaultValue === "number" &&
-          Number.isFinite(field.defaultValue))
-      assert(validDefault, `${id} setting ${field.id} has an invalid default`)
+      assertScalarSetting(id, field)
     }
   }
 }
 
-function assertSettingsFieldLocalization(id, definition) {
+function readSettingsCatalogs() {
   const catalogs = new Map()
   for (const locale of supportedLocales) {
     const catalogPath = path.join(localesDir, locale, "messages.json")
@@ -136,15 +144,22 @@ function assertSettingsFieldLocalization(id, definition) {
     const catalog = readJson(catalogPath) ?? {}
     catalogs.set(locale, catalog)
   }
+  return catalogs
+}
 
+function settingsFieldKeys(settings) {
   const usedKeys = new Set()
-  for (const field of definition.customSettings) {
+  for (const field of settings) {
     usedKeys.add(field.labelKey)
     if (field.descriptionKey) usedKeys.add(field.descriptionKey)
     for (const option of field.options ?? []) usedKeys.add(option.labelKey)
   }
+  return usedKeys
+}
 
-  for (const key of usedKeys) {
+function assertSettingsFieldLocalization(id, definition) {
+  const catalogs = readSettingsCatalogs()
+  for (const key of settingsFieldKeys(definition.customSettings)) {
     for (const locale of supportedLocales) {
       const message = catalogs.get(locale)?.[key]?.message
       if (typeof message !== "string" || message.trim().length === 0) {
@@ -156,10 +171,11 @@ function assertSettingsFieldLocalization(id, definition) {
   }
 }
 
-function assertDefinition(id, definition, definitionPath) {
-  const providerDirectory = path.dirname(definitionPath)
-  const contractsDirectory = path.join(providerDirectory, "contracts")
-  const fixturesDirectory = path.join(fixturesDir, id)
+function assertContractSource(id, definitionPath) {
+  const contractsDirectory = path.join(
+    path.dirname(definitionPath),
+    "contracts"
+  )
   assert(
     fs.existsSync(contractsDirectory) &&
       fs
@@ -167,10 +183,9 @@ function assertDefinition(id, definition, definitionPath) {
         .some((entry) => entry.isFile() && entry.name.endsWith(".ts")),
     `${id} must include at least one TypeScript contract`
   )
-  assert(
-    definition.id === id,
-    `${relativePath(definitionPath)} id must match directory ${id}`
-  )
+}
+
+function assertPageDomains(id, definition) {
   assert(
     definition.requiredOrigins.length > 0,
     `${id} must declare requiredOrigins`
@@ -187,6 +202,9 @@ function assertDefinition(id, definition, definitionPath) {
       `${id} domain ${domain} is not covered by requiredOrigins`
     )
   }
+}
+
+function assertRuntimeDefinition(id, definition) {
   if (definition.runtimes.dispatchContext.mode === "none") {
     assert(
       definition.runtimes.dispatchContext.schemaVersion === undefined,
@@ -219,6 +237,31 @@ function assertDefinition(id, definition, definitionPath) {
       `${id} declares a page probe but the bundled probe.ts file is missing`
     )
   }
+}
+
+function assertEndpointOrigins(id, definition, endpoint) {
+  for (const origin of endpoint.origins) {
+    assert(
+      definition.requiredOrigins.some((required) =>
+        originCoversOrigin(required, origin)
+      ) ||
+        definition.optionalOrigins.some((optional) =>
+          originCoversOrigin(optional, origin)
+        ),
+      `${id} endpoint ${endpoint.id} origin ${origin} is not covered by declared origins`
+    )
+    if (endpoint.originKind === "fixed") {
+      assert(
+        definition.requiredOrigins.some((required) =>
+          originCoversOrigin(required, origin)
+        ),
+        `${id} fixed endpoint ${endpoint.id} origin ${origin} must be covered by requiredOrigins`
+      )
+    }
+  }
+}
+
+function assertEndpointPolicies(id, definition) {
   const endpointIds = new Set()
   for (const endpoint of definition.endpointPolicies) {
     assert(
@@ -226,26 +269,11 @@ function assertDefinition(id, definition, definitionPath) {
       `${id} has duplicate endpoint id ${endpoint.id}`
     )
     endpointIds.add(endpoint.id)
-    for (const origin of endpoint.origins) {
-      assert(
-        definition.requiredOrigins.some((required) =>
-          originCoversOrigin(required, origin)
-        ) ||
-          definition.optionalOrigins.some((optional) =>
-            originCoversOrigin(optional, origin)
-          ),
-        `${id} endpoint ${endpoint.id} origin ${origin} is not covered by declared origins`
-      )
-      if (endpoint.originKind === "fixed") {
-        assert(
-          definition.requiredOrigins.some((required) =>
-            originCoversOrigin(required, origin)
-          ),
-          `${id} fixed endpoint ${endpoint.id} origin ${origin} must be covered by requiredOrigins`
-        )
-      }
-    }
+    assertEndpointOrigins(id, definition, endpoint)
   }
+}
+
+function assertSessionRules(id, definition) {
   for (const rule of definition.sessionRefererRules) {
     assert(
       rule.id >= 41000 && rule.id <= 41999,
@@ -265,8 +293,38 @@ function assertDefinition(id, definition, definitionPath) {
       `${id} DNR rule ${rule.id} referer host ${referer.hostname} is not a declared page domain`
     )
   }
-  assertSettings(id, definition.customSettings)
-  assertSettingsFieldLocalization(id, definition)
+}
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+}
+
+function assertFixtureContract(id, fixturePath) {
+  const fixture = readJson(fixturePath)
+  const object = isObject(fixture)
+  const isContract =
+    path.basename(fixturePath) === "contract.json" ||
+    (object && ("schemaVersion" in fixture || "providerId" in fixture))
+  if (!isContract) return
+  const displayPath = relativePath(fixturePath)
+  assert(object, `${id} fixture must be an object: ${displayPath}`)
+  if (!object) return
+  assert(
+    fixture.schemaVersion === 1,
+    `${id} fixture must use schemaVersion 1: ${displayPath}`
+  )
+  assert(
+    fixture.providerId === id,
+    `${id} fixture providerId mismatch: ${displayPath}`
+  )
+  assert(
+    isObject(fixture.data),
+    `${id} fixture data must be an object: ${displayPath}`
+  )
+}
+
+function assertFixtures(id) {
+  const fixturesDirectory = path.join(fixturesDir, id)
   const fixtureFiles = fs.existsSync(fixturesDirectory)
     ? fs.readdirSync(fixturesDirectory).filter((file) => file.endsWith(".json"))
     : []
@@ -275,32 +333,23 @@ function assertDefinition(id, definition, definitionPath) {
     `${id} must include tests/fixtures/site-integrations/${id}/contract.json`
   )
   for (const fixtureFile of fixtureFiles) {
-    const fixturePath = path.join(fixturesDirectory, fixtureFile)
-    const fixture = readJson(fixturePath)
-    const isObject =
-      fixture !== null && typeof fixture === "object" && !Array.isArray(fixture)
-    const isContract =
-      fixtureFile === "contract.json" ||
-      (isObject && ("schemaVersion" in fixture || "providerId" in fixture))
-    if (!isContract) continue
-    const displayPath = relativePath(fixturePath)
-    assert(isObject, `${id} fixture must be an object: ${displayPath}`)
-    if (!isObject) continue
-    assert(
-      fixture.schemaVersion === 1,
-      `${id} fixture must use schemaVersion 1: ${displayPath}`
-    )
-    assert(
-      fixture.providerId === id,
-      `${id} fixture providerId mismatch: ${displayPath}`
-    )
-    assert(
-      typeof fixture.data === "object" &&
-        fixture.data !== null &&
-        !Array.isArray(fixture.data),
-      `${id} fixture data must be an object: ${displayPath}`
-    )
+    assertFixtureContract(id, path.join(fixturesDirectory, fixtureFile))
   }
+}
+
+function assertDefinition(id, definition, definitionPath) {
+  assertContractSource(id, definitionPath)
+  assert(
+    definition.id === id,
+    `${relativePath(definitionPath)} id must match directory ${id}`
+  )
+  assertPageDomains(id, definition)
+  assertRuntimeDefinition(id, definition)
+  assertEndpointPolicies(id, definition)
+  assertSessionRules(id, definition)
+  assertSettings(id, definition.customSettings)
+  assertSettingsFieldLocalization(id, definition)
+  assertFixtures(id)
 }
 
 function readDefinitions() {
@@ -374,33 +423,39 @@ function generateCatalog(definitions) {
   return `${generatedHeader()}import type { SiteIntegrationDefinition } from '@/src/site-integrations/definition-types'\n\nexport const siteIntegrationCatalog = ${JSON.stringify(definitions, null, 2)} as const satisfies readonly SiteIntegrationDefinition[]\n\nexport const siteIntegrationCatalogById = Object.fromEntries(\n  siteIntegrationCatalog.map((integration) => [integration.id, integration]),\n) as Readonly<Record<string, SiteIntegrationDefinition>>\n`
 }
 
+const runtimeRegistryNames = {
+  background: {
+    typeName: "BackgroundSiteAdapter",
+    exportName: "backgroundSiteAdapter",
+    collectionName: "backgroundSiteAdapters",
+    byIdName: "backgroundSiteAdaptersById",
+    aliasSuffix: "BackgroundAdapter",
+  },
+  offscreen: {
+    typeName: "OffscreenSiteAdapter",
+    exportName: "offscreenSiteAdapter",
+    collectionName: "offscreenSiteAdapters",
+    byIdName: "offscreenSiteAdaptersById",
+    aliasSuffix: "OffscreenAdapter",
+  },
+}
+
 function generateRuntimeRegistry(definitions, context) {
-  const typeName =
-    context === "background" ? "BackgroundSiteAdapter" : "OffscreenSiteAdapter"
-  const exportName =
-    context === "background" ? "backgroundSiteAdapter" : "offscreenSiteAdapter"
-  const collectionName =
-    context === "background"
-      ? "backgroundSiteAdapters"
-      : "offscreenSiteAdapters"
-  const byIdName =
-    context === "background"
-      ? "backgroundSiteAdaptersById"
-      : "offscreenSiteAdaptersById"
+  const { typeName, exportName, collectionName, byIdName, aliasSuffix } =
+    runtimeRegistryNames[context]
   const selected = definitions.filter(
     (definition) => definition.shipped && definition.runtimes[context]
   )
   const imports = selected.map((definition) => {
-    const alias = `${identifier(definition.id)}${context === "background" ? "Background" : "Offscreen"}Adapter`
+    const alias = `${identifier(definition.id)}${aliasSuffix}`
     return `import { ${exportName} as ${alias} } from '@/src/site-integrations/${definition.id}/${context}-runtime'`
   })
   const values = selected.map(
-    (definition) =>
-      `${identifier(definition.id)}${context === "background" ? "Background" : "Offscreen"}Adapter`
+    (definition) => `${identifier(definition.id)}${aliasSuffix}`
   )
   const entries = selected.map(
     (definition) =>
-      `  ${JSON.stringify(definition.id)}: ${identifier(definition.id)}${context === "background" ? "Background" : "Offscreen"}Adapter,`
+      `  ${JSON.stringify(definition.id)}: ${identifier(definition.id)}${aliasSuffix},`
   )
   return `${generatedHeader()}import type { ${typeName} } from '@/src/types/site-integrations'\n${imports.join("\n")}\n\nexport const ${collectionName} = [\n${values.map((value) => `  ${value},`).join("\n")}\n] as const satisfies readonly ${typeName}[]\n\nexport const ${byIdName} = {\n${entries.join("\n")}\n} as Readonly<Record<string, ${typeName}>>\n`
 }

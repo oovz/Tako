@@ -24,85 +24,68 @@ Options:
 `)
 }
 
-function parseArgs(args) {
-  let id = null
-  let name = null
-  let englishName = null
-  let contributor = null
-  let outDir = null
-  let fixturesDir = null
+const argumentOptions = new Map([
+  ["--id", { key: "id" }],
+  ["--name", { key: "name" }],
+  ["--english-name", { key: "englishName" }],
+  ["--contributor", { key: "contributor", name: "--contributor" }],
+  ["--contributors", { key: "contributor", name: "--contributor" }],
+  ["--out-dir", { key: "outDir" }],
+  ["--fixtures-dir", { key: "fixturesDir" }],
+])
 
+function argumentError(message, showUsage = false) {
+  console.error(`Error: ${message}`)
+  if (showUsage) printUsage()
+  process.exit(1)
+}
+
+function readOptionValue(args, index, option) {
+  const arg = args[index]
+  const equals = arg.indexOf("=")
+  if (equals !== -1) {
+    return {
+      value:
+        option.key === "contributor"
+          ? arg.split("=")[1]
+          : arg.slice(equals + 1),
+      consumed: 0,
+    }
+  }
+  if (index + 1 >= args.length || args[index + 1].startsWith("-")) {
+    argumentError(`Missing value for ${option.name ?? arg} option.`)
+  }
+  return { value: args[index + 1], consumed: 1 }
+}
+
+function parseArgs(args) {
+  const values = {
+    id: null,
+    name: null,
+    englishName: null,
+    contributor: null,
+    outDir: null,
+    fixturesDir: null,
+  }
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--help" || arg === "-h") {
       printUsage()
       process.exit(0)
-    } else if (arg === "--id") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --id option.")
-        process.exit(1)
-      }
-      id = args[++i]
-    } else if (arg.startsWith("--id=")) {
-      id = arg.slice(5)
-    } else if (arg === "--name") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --name option.")
-        process.exit(1)
-      }
-      name = args[++i]
-    } else if (arg.startsWith("--name=")) {
-      name = arg.slice(7)
-    } else if (arg === "--english-name") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --english-name option.")
-        process.exit(1)
-      }
-      englishName = args[++i]
-    } else if (arg.startsWith("--english-name=")) {
-      englishName = arg.slice(15)
-    } else if (arg === "--contributor" || arg === "--contributors") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --contributor option.")
-        process.exit(1)
-      }
-      contributor = args[++i]
-    } else if (
-      arg.startsWith("--contributor=") ||
-      arg.startsWith("--contributors=")
-    ) {
-      contributor = arg.split("=")[1]
-    } else if (arg === "--out-dir") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --out-dir option.")
-        process.exit(1)
-      }
-      outDir = args[++i]
-    } else if (arg.startsWith("--out-dir=")) {
-      outDir = arg.slice(10)
-    } else if (arg === "--fixtures-dir") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --fixtures-dir option.")
-        process.exit(1)
-      }
-      fixturesDir = args[++i]
-    } else if (arg.startsWith("--fixtures-dir=")) {
-      fixturesDir = arg.slice(15)
+    }
+    const option = argumentOptions.get(arg.split("=")[0])
+    if (option) {
+      const { value, consumed } = readOptionValue(args, i, option)
+      values[option.key] = value
+      i += consumed
     } else if (arg.startsWith("-")) {
-      console.error(`Error: Unknown option "${arg}".`)
-      printUsage()
-      process.exit(1)
+      argumentError(`Unknown option "${arg}".`, true)
     } else {
-      if (id) {
-        console.error(`Error: Unexpected argument "${arg}".`)
-        printUsage()
-        process.exit(1)
-      }
-      id = arg
+      if (values.id) argumentError(`Unexpected argument "${arg}".`, true)
+      values.id = arg
     }
   }
-
-  return { id, name, englishName, contributor, outDir, fixturesDir }
+  return values
 }
 
 function getGitUser() {
@@ -118,18 +101,11 @@ function getGitUser() {
   return process.env.USER || process.env.USERNAME || "Contributor"
 }
 
-function toPascalCase(str) {
+function capitalizeIdentifier(str, separator) {
   return str
     .split(/[-_]/)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join("")
-}
-
-function toTitleCase(str) {
-  return str
-    .split(/[-_]/)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ")
+    .join(separator)
 }
 
 function resolveNewDirectory(directory) {
@@ -194,76 +170,72 @@ function directoryContains(parent, child) {
   }
 }
 
-function main() {
-  const rawArgs = process.argv.slice(2)
+function readScaffoldOptions(rawArgs) {
   if (rawArgs.length === 0) {
     printUsage()
     process.exit(1)
   }
-
-  const {
-    id,
-    name: customName,
-    englishName: customEnglishName,
-    contributor: customContributor,
-    outDir,
-    fixturesDir,
-  } = parseArgs(rawArgs)
-
-  if (!id) {
-    console.error("Error: Missing required site integration <id>.")
-    printUsage()
-    process.exit(1)
+  const options = parseArgs(rawArgs)
+  if (!options.id) {
+    argumentError("Missing required site integration <id>.", true)
   }
-
-  const idPattern = /^[a-z0-9][a-z0-9-]*$/
-  if (!idPattern.test(id)) {
-    console.error(
-      `Error: Invalid site integration id "${id}". Must match pattern ^[a-z0-9][a-z0-9-]*$`
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(options.id)) {
+    argumentError(
+      `Invalid site integration id "${options.id}". Must match pattern ^[a-z0-9][a-z0-9-]*$`
     )
-    process.exit(1)
   }
+  return options
+}
 
-  let targetDir
-  let targetFixturesDir
-  try {
-    targetDir = resolveNewDirectory(
+function pathContains(parent, child) {
+  const relative = path.relative(parent, child)
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`))
+  )
+}
+
+function assertSeparateOutputs(directories, contains) {
+  if (
+    contains(directories.targetDir, directories.targetFixturesDir) ||
+    contains(directories.targetFixturesDir, directories.targetDir)
+  ) {
+    throw new Error("Source and fixture output directories must be separate.")
+  }
+}
+
+function planOutputDirectories({ id, outDir, fixturesDir }) {
+  const directories = {
+    targetDir: resolveNewDirectory(
       outDir ? path.resolve(root, outDir) : path.join(integrationsDir, id)
-    )
-    targetFixturesDir = resolveNewDirectory(
+    ),
+    targetFixturesDir: resolveNewDirectory(
       fixturesDir
         ? path.resolve(root, fixturesDir)
         : path.join(root, "tests/fixtures/site-integrations", id)
-    )
-  } catch (error) {
-    console.error(`Error: ${error.message}`)
-    process.exit(1)
+    ),
   }
-  const sourceToFixtures = path.relative(targetDir, targetFixturesDir)
-  const fixturesToSource = path.relative(targetFixturesDir, targetDir)
-  const overlaps = [sourceToFixtures, fixturesToSource].some(
-    (relative) =>
-      relative === "" ||
-      (!path.isAbsolute(relative) &&
-        relative !== ".." &&
-        !relative.startsWith(`..${path.sep}`))
-  )
-  if (overlaps) {
-    console.error(
-      "Error: Source and fixture output directories must be separate."
-    )
-    process.exit(1)
-  }
+  assertSeparateOutputs(directories, pathContains)
+  return directories
+}
 
-  const siteName = customName || toTitleCase(id)
-  const contributorName = customContributor || getGitUser()
-  const pascalId = toPascalCase(id)
-
+function scaffoldContents({
+  id,
+  name,
+  englishName: customEnglishName,
+  contributor,
+}) {
+  const siteName = name || capitalizeIdentifier(id, " ")
+  const englishName = customEnglishName || capitalizeIdentifier(id, " ")
+  const contributorName = contributor || getGitUser()
+  const pascalId = capitalizeIdentifier(id, "")
   const definitionJson = {
     schemaVersion: 1,
     id,
     name: siteName,
-    englishName: customEnglishName || toTitleCase(id),
+    englishName,
     contributors: [contributorName],
     version: "0.1.0",
     shipped: false,
@@ -376,35 +348,58 @@ export type ${pascalId}Contract = Record<string, unknown>
     data: {},
   }
 
-  const createdDirectories = []
-  try {
-    targetDir = claimOutputDirectory(targetDir, createdDirectories)
-    targetFixturesDir = claimOutputDirectory(
-      targetFixturesDir,
-      createdDirectories
-    )
-    if (
-      directoryContains(targetDir, targetFixturesDir) ||
-      directoryContains(targetFixturesDir, targetDir)
-    ) {
-      throw new Error("Source and fixture output directories must be separate.")
-    }
-  } catch (error) {
-    for (const directory of createdDirectories.reverse()) {
-      try {
-        fs.rmdirSync(directory)
-      } catch (cleanupError) {
-        if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(cleanupError.code)) {
-          console.error(
-            `Unable to remove empty output directory ${directory}: ${cleanupError.message}`
-          )
-        }
+  return {
+    definitionJson,
+    backgroundRuntimeTs,
+    offscreenRuntimeTs,
+    contractsTs,
+    fixtureJson,
+  }
+}
+
+function cleanupOutputDirectories(createdDirectories) {
+  for (const directory of createdDirectories.reverse()) {
+    try {
+      fs.rmdirSync(directory)
+    } catch (error) {
+      if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) {
+        console.error(
+          `Unable to remove empty output directory ${directory}: ${error.message}`
+        )
       }
     }
-    console.error(`Error: ${error.message}`)
-    process.exit(1)
   }
+}
 
+function claimScaffoldDirectories(directories) {
+  const createdDirectories = []
+  try {
+    const claimed = {
+      targetDir: claimOutputDirectory(
+        directories.targetDir,
+        createdDirectories
+      ),
+      targetFixturesDir: claimOutputDirectory(
+        directories.targetFixturesDir,
+        createdDirectories
+      ),
+    }
+    assertSeparateOutputs(claimed, directoryContains)
+    return claimed
+  } catch (error) {
+    cleanupOutputDirectories(createdDirectories)
+    throw error
+  }
+}
+
+function writeScaffold({ targetDir, targetFixturesDir }, contents) {
+  const {
+    definitionJson,
+    backgroundRuntimeTs,
+    offscreenRuntimeTs,
+    contractsTs,
+    fixtureJson,
+  } = contents
   fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true })
 
   // Write files
@@ -425,7 +420,9 @@ export type ${pascalId}Contract = Record<string, unknown>
     path.join(targetFixturesDir, "contract.json"),
     JSON.stringify(fixtureJson, null, 2) + "\n"
   )
+}
 
+function reportScaffold({ targetDir, targetFixturesDir }) {
   const displayTarget = path.relative(root, targetDir).replaceAll(path.sep, "/")
   const displayFixtures = path
     .relative(root, targetFixturesDir)
@@ -450,6 +447,24 @@ Next steps:
   6. When implementation and fixtures are complete, set "shipped": true in ${displayTarget}/definition.json
   7. Re-run "pnpm generate:site-integrations && pnpm test:unit" to compile the new integration into runtime registries and verify all tests pass
 `)
+}
+
+function main() {
+  const options = readScaffoldOptions(process.argv.slice(2))
+  let directories
+  try {
+    directories = planOutputDirectories(options)
+  } catch (error) {
+    argumentError(error.message)
+  }
+  const contents = scaffoldContents(options)
+  try {
+    directories = claimScaffoldDirectories(directories)
+  } catch (error) {
+    argumentError(error.message)
+  }
+  writeScaffold(directories, contents)
+  reportScaffold(directories)
 }
 
 main()
