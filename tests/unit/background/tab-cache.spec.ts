@@ -314,6 +314,67 @@ describe("tab context cache", () => {
     expect(getProjectedContext()).toEqual(sessionStore.tab_11)
   })
 
+  it("keeps active-window revisions stable when another tab navigates", async () => {
+    const cache = createTabContextCache({
+      readSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+    await cache.handleTabActivated(11, 1)
+    const projection =
+      sessionStore[SESSION_STORAGE_KEYS.activeTabContextByWindow]
+
+    await cache.handleTabUpdated(12, { url: "https://example.com/redirect" })
+
+    expect(sessionStore[SESSION_STORAGE_KEYS.activeTabContextByWindow]).toEqual(
+      projection
+    )
+  })
+
+  it("updates only the navigating tab's active window", async () => {
+    sessionStore.tab_22 = {
+      sourceUrl: "https://mangadex.org/title/series-22",
+      siteIntegrationId: "mangadex",
+      mangaId: "series-22",
+      seriesTitle: "Series 22",
+      chapters: [],
+      volumes: [],
+      lastUpdated: 1,
+    }
+    queryActiveTabs.mockResolvedValue([
+      { id: 11, windowId: 1 },
+      { id: 22, windowId: 2 },
+    ])
+    getTab.mockImplementation(async (id) => ({
+      id,
+      url: `https://mangadex.org/title/series-${id}`,
+      active: true,
+      windowId: id === 11 ? 1 : 2,
+    }))
+    const cache = createTabContextCache({
+      readSession,
+      writeSession,
+      queryActiveTabs,
+      getTab,
+    })
+    await cache.handleTabActivated(11, 1)
+    await cache.handleTabActivated(22, 2)
+    const before = sessionStore[
+      SESSION_STORAGE_KEYS.activeTabContextByWindow
+    ] as Record<number, { revision: number }>
+
+    await cache.handleTabUpdated(22, {
+      url: "https://mangadex.org/title/new-series",
+    })
+
+    const after = sessionStore[
+      SESSION_STORAGE_KEYS.activeTabContextByWindow
+    ] as Record<number, { revision: number }>
+    expect(after[1]).toEqual(before[1])
+    expect(after[2].revision).toBe(before[2].revision + 1)
+  })
+
   it("transfers cached context on tab replacement", async () => {
     const cache = createTabContextCache({
       readSession,

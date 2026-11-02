@@ -11,7 +11,7 @@ export interface OffscreenDocumentLifecycleReservation {
 }
 
 export interface OffscreenDocumentAdmissionContext {
-  reserveSeriesResolution: () => OffscreenDocumentLifecycleReservation
+  reserveTransientWork: () => OffscreenDocumentLifecycleReservation
 }
 
 type OffscreenDocumentAdmission = <T>(
@@ -77,7 +77,7 @@ export async function resolveSeriesDataViaOffscreen(
     input.signal?.throwIfAborted()
     admitted = await runOffscreenDocumentAdmissionExclusive((context) => {
       input.signal?.throwIfAborted()
-      const reservation = context.reserveSeriesResolution()
+      const reservation = context.reserveTransientWork()
       parseSent = true
       const response = sendRuntimeMessage({
         target: "offscreen",
@@ -100,6 +100,12 @@ export async function resolveSeriesDataViaOffscreen(
     input.signal?.removeEventListener("abort", cancel)
   }
 
+  return readSeriesParseResponse(response)
+}
+
+function readSeriesParseResponse(
+  response: RuntimeMessageResponse<"OFFSCREEN_PARSE_SERIES_HTML"> | undefined
+): SeriesDataResolutionResult {
   if (!response) {
     throw new Error("No response from offscreen series HTML parser")
   }
@@ -109,6 +115,7 @@ export async function resolveSeriesDataViaOffscreen(
   }
 
   return {
+    seriesId: response.seriesId,
     seriesMetadata: response.seriesMetadata,
     chapterList: response.chapterList,
     metadataError: response.metadataError,

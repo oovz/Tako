@@ -14,6 +14,26 @@ function assertSuccess(response: { success: boolean; error?: string }): void {
   }
 }
 
+type RetainedQueueAction =
+  | {
+      type: "RETRY_FAILED_CHAPTERS" | "RESTART_TASK"
+      payload: { taskId: string }
+    }
+  | { type: "UNDO_QUEUE_ACTION"; payload: { token: string } }
+
+async function sendRetainedQueueAction(
+  action: RetainedQueueAction
+): Promise<void> {
+  const subject =
+    "taskId" in action.payload ? action.payload.taskId : action.payload.token
+  assertSuccess(
+    await sendRuntimeMessageWithRetry(
+      { target: "background", ...createCommandEnvelope(), ...action },
+      { retentionKey: `${action.type}:${subject}` }
+    )
+  )
+}
+
 export const queueCommandClient = {
   async cancelTask(taskId: string): Promise<CancelQueueTaskResult> {
     const response = await sendRuntimeMessageWithRetry(
@@ -31,47 +51,15 @@ export const queueCommandClient = {
       : { kind: "active" }
   },
 
-  async forgetUnobservableOutputs(
-    taskId: string
-  ): Promise<{ surrendered: number }> {
-    const response = await sendRuntimeMessage({
-      target: "background",
-      type: "FORGET_UNOBSERVABLE_OUTPUTS",
-      ...createCommandEnvelope(),
+  async retryFailedChapters(taskId: string): Promise<void> {
+    await sendRetainedQueueAction({
+      type: "RETRY_FAILED_CHAPTERS",
       payload: { taskId },
     })
-    if (!response.success) {
-      throw new Error(response.error ?? "Queue command failed")
-    }
-    return { surrendered: response.surrendered }
-  },
-
-  async retryFailedChapters(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "RETRY_FAILED_CHAPTERS",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `RETRY_FAILED_CHAPTERS:${taskId}` }
-      )
-    )
   },
 
   async restartTask(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "RESTART_TASK",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `RESTART_TASK:${taskId}` }
-      )
-    )
+    await sendRetainedQueueAction({ type: "RESTART_TASK", payload: { taskId } })
   },
 
   async moveTaskToTop(taskId: string): Promise<void> {
@@ -100,45 +88,10 @@ export const queueCommandClient = {
   },
 
   async undoQueueAction(token: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "UNDO_QUEUE_ACTION",
-          ...createCommandEnvelope(),
-          payload: { token },
-        },
-        { retentionKey: `UNDO_QUEUE_ACTION:${token}` }
-      )
-    )
-  },
-
-  async retryDestination(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "RETRY_DESTINATION",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `RETRY_DESTINATION:${taskId}` }
-      )
-    )
-  },
-
-  async continueDownload(taskId: string): Promise<void> {
-    assertSuccess(
-      await sendRuntimeMessageWithRetry(
-        {
-          target: "background",
-          type: "CONTINUE_DOWNLOAD",
-          ...createCommandEnvelope(),
-          payload: { taskId },
-        },
-        { retentionKey: `CONTINUE_DOWNLOAD:${taskId}` }
-      )
-    )
+    await sendRetainedQueueAction({
+      type: "UNDO_QUEUE_ACTION",
+      payload: { token },
+    })
   },
 
   async clearTerminalHistory(): Promise<void> {

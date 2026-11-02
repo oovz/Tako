@@ -1,9 +1,12 @@
 import {
+  beginFsaWrite as decideFsaWrite,
+  selectChromeFallback as decideChromeFallback,
+} from "@/src/domain/queue/kernel"
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
+import {
   applyNativeOutputSettlement as decideNativeOutputSettlement,
   bindDispatchLeaseIncarnation as decideLeaseIncarnationBinding,
   beginChapterDispatch as decideChapterDispatch,
-  blockTaskForDestination as decideDestinationBlock,
-  blockTaskForNativeOutputAction as decideNativeOutputActionBlock,
   blockTaskForProviderPolicy as decideProviderPolicyBlock,
   cancelDownloadTask as decideTaskCancellation,
   clearDispatchLease as decideLeaseClear,
@@ -12,19 +15,17 @@ import {
   finalizeDownloadTask as decideTaskFinalization,
   finalizePendingUndoAction as decidePendingUndoFinalization,
   interruptDownloadTask as decideTaskInterruption,
+  failTaskForSave as decideSaveFailure,
   moveQueuedTaskToTop as decideMoveQueuedTaskToTop,
   reconcileExpiredPendingUndoActions as decideExpiredPendingUndoReconciliation,
   recoverQueueAfterStartup as decideStartupRecovery,
   recordTaskDispatchError as decideTaskDispatchError,
-  releaseDestinationBlock as decideDestinationBlockRelease,
-  releaseNativeOutputActionBlock as decideNativeOutputActionBlockRelease,
   releaseProviderPolicyBlock as decideProviderPolicyBlockRelease,
   releaseProviderPolicyBlocks as decideProviderPolicyBlocksRelease,
   removeTerminalDownloadTask as decideTerminalTaskRemoval,
   renewDispatchLease as decideLeaseRenewal,
   restartDownloadTask as decideTaskRestart,
   restorePendingUndoAction as decidePendingUndoRestore,
-  resumeDestinationTask as decideDestinationResume,
   retryFailedChapters as decideFailedChapterRetry,
   setNextChapterDispatchAt as decideNextChapterDispatch,
   settleTaskChapter as decideChapterSettlement,
@@ -49,6 +50,15 @@ import {
   parseCurrentPendingUndoActions,
 } from "./queue-state-codecs"
 import logger from "@/src/runtime/logger"
+import type { HistoryRepository } from "@/src/storage/history-repository"
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
+import { lostCompletedChapterSources } from "./queue-repository-history-retention"
+
+const QUEUE_STORAGE_KEYS = {
+  queue: LOCAL_STORAGE_KEYS.downloadQueue,
+  lease: LOCAL_STORAGE_KEYS.activeDispatchLease,
+  pendingUndoActions: LOCAL_STORAGE_KEYS.pendingUndoActions,
+} as const
 
 export class QueueRepository {
   private readonly mutations = new StorageMutationQueue()
@@ -57,7 +67,10 @@ export class QueueRepository {
   private leaseCache: ActiveDispatchLease | null = null
   private pendingUndoCache: QueueAggregateState["pendingUndoActions"] = []
 
-  constructor(private readonly projectionService: QueueProjectionService) {}
+  constructor(
+    private readonly projectionService: QueueProjectionService,
+    private readonly historyRepository: HistoryRepository
+  ) {}
 
   private invalidate(): void {
     this.hydrated = false
@@ -130,37 +143,9 @@ export class QueueRepository {
   private async executeDecision<TResult>(
     decide: (state: QueueAggregateState) => QueueKernelDecision<TResult>
   ): Promise<TResult> {
-    const committed = await this.mutations.run(async () => {
-      const state = await this.hydrateLocked()
-      const decision = decide(state)
-      if (decision.changedKeys.length === 0) {
-        return { result: decision.result, queue: null }
-      }
-
-      const values: Record<string, unknown> = {}
-      for (const key of decision.changedKeys) {
-        switch (key) {
-          case "queue":
-            values[LOCAL_STORAGE_KEYS.downloadQueue] = decision.next.queue
-            break
-          case "lease":
-            values[LOCAL_STORAGE_KEYS.activeDispatchLease] = decision.next.lease
-            break
-          case "pendingUndoActions":
-            values[LOCAL_STORAGE_KEYS.pendingUndoActions] =
-              decision.next.pendingUndoActions
-            break
-        }
-      }
-
-      await this.writeLocked(values, decision.next)
-      return {
-        result: decision.result,
-        queue: decision.changedKeys.includes("queue")
-          ? decision.next.queue
-          : null,
-      }
-    })
+    const committed = await this.mutations.run(() =>
+      this.commitDecision(decide)
+    )
     if (committed.queue) {
       try {
         await this.projectionService.publish(committed.queue)
@@ -172,6 +157,41 @@ export class QueueRepository {
       }
     }
     return structuredClone(committed.result)
+  }
+
+  private async commitDecision<TResult>(
+    decide: (state: QueueAggregateState) => QueueKernelDecision<TResult>
+  ): Promise<{ result: TResult; queue: DownloadTaskState[] | null }> {
+    const state = await this.hydrateLocked()
+    const decision = decide(state)
+    if (decision.changedKeys.length === 0) {
+      return { result: decision.result, queue: null }
+    }
+
+    const lostHistorySources = lostCompletedChapterSources(state, decision.next)
+    // Store chapter history before deleting its last durable repair source.
+    // A failed history write aborts this queue/Undo mutation.
+    if (lostHistorySources.length > 0) {
+      await reconcileCompletedChapterHistory(
+        lostHistorySources,
+        this.historyRepository
+      )
+    }
+
+    const values = Object.fromEntries(
+      decision.changedKeys.map((key) => [
+        QUEUE_STORAGE_KEYS[key],
+        decision.next[key],
+      ])
+    )
+
+    await this.writeLocked(values, decision.next)
+    return {
+      result: decision.result,
+      queue: decision.changedKeys.includes("queue")
+        ? decision.next.queue
+        : null,
+    }
   }
 
   async initialize(): Promise<void> {
@@ -190,9 +210,46 @@ export class QueueRepository {
     })
   }
 
+  async getRetainedHandleIds(): Promise<Set<string>> {
+    return this.mutations.run(async () => {
+      const state = await this.hydrateLocked()
+      const ids = new Set(
+        [
+          ...state.queue,
+          ...state.pendingUndoActions.map((action) => action.taskSnapshot),
+        ].flatMap((task) => {
+          const destination = getEffectiveTaskDestination(task)
+          return destination.kind === "file-system-access" &&
+            destination.handleId
+            ? [destination.handleId]
+            : []
+        })
+      )
+      if (state.lease?.destinationHandleId)
+        ids.add(state.lease.destinationHandleId)
+      return ids
+    })
+  }
+
   async getTask(taskId: string): Promise<DownloadTaskState | undefined> {
     const queue = await this.getQueue()
     return queue.find((task) => task.id === taskId)
+  }
+
+  async beginFsaWrite(input: Parameters<typeof decideFsaWrite>[1]) {
+    const detachedInput = structuredClone(input)
+    return await this.executeDecision((state) =>
+      decideFsaWrite(state, detachedInput)
+    )
+  }
+
+  async selectChromeFallback(
+    input: Parameters<typeof decideChromeFallback>[1]
+  ) {
+    const detachedInput = structuredClone(input)
+    return await this.executeDecision((state) =>
+      decideChromeFallback(state, detachedInput)
+    )
   }
 
   async getActiveDispatchLease(): Promise<ActiveDispatchLease | null> {
@@ -302,18 +359,6 @@ export class QueueRepository {
     return await this.executeDecision(decideClearTerminalHistory)
   }
 
-  async resumeDestinationTask(input: {
-    taskId: string
-    commandId: string
-    destinationOverride: "downloads-api" | undefined
-    now: number
-  }): Promise<ReturnType<typeof decideDestinationResume>["result"]> {
-    const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideDestinationResume(state, detachedInput)
-    )
-  }
-
   async updateChapterProgress(input: {
     taskId: string
     chapterId: string
@@ -396,23 +441,6 @@ export class QueueRepository {
     )
   }
 
-  async blockTaskForDestination(
-    input: Parameters<typeof decideDestinationBlock>[1]
-  ): Promise<ReturnType<typeof decideDestinationBlock>["result"]> {
-    const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideDestinationBlock(state, detachedInput)
-    )
-  }
-
-  async releaseDestinationBlock(
-    taskId: string
-  ): Promise<ReturnType<typeof decideDestinationBlockRelease>["result"]> {
-    return await this.executeDecision((state) =>
-      decideDestinationBlockRelease(state, { taskId })
-    )
-  }
-
   async blockTaskForProviderPolicy(input: {
     taskId: string
     block:
@@ -433,23 +461,12 @@ export class QueueRepository {
     )
   }
 
-  async blockTaskForNativeOutputAction(input: {
-    taskId: string
-    errorMessage: string
-  }): Promise<ReturnType<typeof decideNativeOutputActionBlock>["result"]> {
+  async failTaskForSave(
+    input: Parameters<typeof decideSaveFailure>[1]
+  ): Promise<ReturnType<typeof decideSaveFailure>["result"]> {
     const detachedInput = structuredClone(input)
-    return await this.executeDecision((state) =>
-      decideNativeOutputActionBlock(state, detachedInput)
-    )
-  }
-
-  async releaseNativeOutputActionBlock(
-    taskId: string
-  ): Promise<
-    ReturnType<typeof decideNativeOutputActionBlockRelease>["result"]
-  > {
-    return await this.executeDecision((state) =>
-      decideNativeOutputActionBlockRelease(state, { taskId })
+    return this.executeDecision((state) =>
+      decideSaveFailure(state, detachedInput)
     )
   }
 

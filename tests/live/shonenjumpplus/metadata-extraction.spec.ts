@@ -6,7 +6,7 @@ import {
 } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("Shonen Jump+ metadata extraction (live)", () => {
-  test("extracts chapter numbers and preserves absent volume numbers from live Shonen Jump+ state", async ({
+  test("extracts chapter numbers without adding volume numbers", async ({
     context,
     extensionId,
   }) => {

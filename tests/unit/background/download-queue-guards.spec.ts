@@ -1,6 +1,3 @@
-/**
- * Download queue scheduling and chapter-delay behavior.
- */
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { QueueRepository } from "@/src/storage/queue-repository"
@@ -504,7 +501,7 @@ describe("Download Queue Guards", () => {
         started: Date.now() - 5_000,
         settingsSnapshot: {
           ...createTaskSettingsSnapshot(testSettings, "mangadex"),
-          destination: "file-system-access",
+          destination: { kind: "file-system-access", handleId: "test-folder" },
         },
       })
       mockGlobalState.downloadQueue = [resumedTask]

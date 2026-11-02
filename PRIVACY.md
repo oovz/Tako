@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: September 14, 2026
+Last updated: October 28, 2026
 
 Tako Manga Downloader is a browser extension for saving chapters from supported manga sites for offline reading. Download controls are available in Chrome's Side Panel.
 
@@ -19,19 +19,19 @@ While you use the extension, Tako may access:
 The extension stores the following data locally:
 
 - Extension settings
-- Queue state and recent task history
+- Queue state, task history, chapter history, and download locations
 - Site-specific preferences and overrides
-- Optional custom-folder permission handles when the user enables that feature
+- References to folders you choose, kept while your saved settings or downloads need them
 
 ## What Tako sends over the network
 
 Tako sends network requests directly to supported sites and their image services to show series information and download chapters.
 
-Cover previews use Chrome's image loading. These requests can include cookies for the image host and follow redirects under the browser's rules. Download requests use each integration's configured credential and redirect policy.
+Cover previews and chapter downloads connect to the site's image services. Requests may include browser-managed cookies when required by the site, subject to Chrome's cookie rules.
 
 The extension does not collect browsing history, reading activity, or download contents for a developer-run analytics backend.
 
-When you enable the disabled-by-default MangaDex integration, downloads from MangaDex@Home nodes are reported directly to MangaDex as required by that API. A report may include the full image URL, success status, transferred byte count, transfer duration, and cache status. A reporting failure does not change the requested download result.
+When you enable the disabled-by-default MangaDex integration, downloads from MangaDex@Home nodes are reported directly to MangaDex as required by that API. A report may include the full image URL, success status, transferred byte count, transfer duration, and cache status.
 
 ## What Tako does not do
 
@@ -49,7 +49,7 @@ You can:
 - Remove the extension at any time
 - Clear local history stored by the extension
 - Disable supported-site integrations
-- Revoke or replace a custom-folder permission by changing browser or extension settings
+- Change the default save folder for new tasks in Options; existing tasks keep their original folder
 
 ## Contact
 

@@ -9,7 +9,7 @@ import {
 import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 import { Manhuagui } from "./fixtures/mock-data"
 
-test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
+test.describe("Manhuagui navigation", () => {
   test("front page -> series page initializes tab state", async ({
     context,
     extensionId,
@@ -39,7 +39,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     expect(state?.metadata?.coverUrl).toBe(series.coverUrl)
 
     const cover = sp.getByRole("img", { name: series.seriesTitle })
-    await expect(cover).toHaveAttribute("src", series.coverUrl!)
+    await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
         cover.evaluate(
@@ -92,7 +92,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     expect(state?.chapterListNotice).toBe("adult-consent-required")
     await expect(
       sp.getByText(
-        "Accept Manhuagui’s adult-content prompt, then reload this page."
+        "Accept 看漫画’s adult-content prompt, then reload this page."
       )
     ).toBeVisible()
 
@@ -138,7 +138,7 @@ test.describe("Manhuagui side panel navigation workflows (mocked)", () => {
     await expect(page.locator("#checkAdult")).toHaveCount(0)
     await expect(
       sp.getByText(
-        "Accept Manhuagui’s adult-content prompt, then reload this page."
+        "Accept 看漫画’s adult-content prompt, then reload this page."
       )
     ).toHaveCount(0)
 

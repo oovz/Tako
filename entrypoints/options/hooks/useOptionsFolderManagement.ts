@@ -1,177 +1,99 @@
 import { useCallback, useRef, useState, type RefObject } from "react"
-import { toast } from "sonner"
-import logger from "@/src/runtime/logger"
-import { t } from "@/src/runtime/i18n"
-import {
-  DOWNLOAD_ROOT_HANDLE_ID,
-  type DirHandle,
-} from "@/src/storage/fs-access"
+import type { DirHandle } from "@/src/storage/fs-access"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import type { OptionsFsaController } from "../controllers/options-fsa-controller"
+import { useOptionsSavedFolder } from "./useOptionsFolderManagement-saved"
+import {
+  grantOptionsFolderAccess,
+  pickOptionsFolder,
+} from "./useOptionsFolderManagement-actions"
 
 export interface UseOptionsFolderManagementOptions {
   fsaController: OptionsFsaController
   isSavingRef: RefObject<boolean>
+  savedHandleId: string | null
   settingsBuffer: ExtensionSettings | null
   onSettingsChange: (updates: Partial<ExtensionSettings>) => void
 }
 
-export function useOptionsFolderManagement(
-  options: UseOptionsFolderManagementOptions
-) {
-  const { fsaController, isSavingRef, settingsBuffer, onSettingsChange } =
-    options
-  const [savedFolderHandle, setSavedFolderHandle] = useState<DirHandle | null>(
-    null
-  )
-  const [pendingFolderHandle, setPendingFolderHandle] =
-    useState<DirHandle | null>(null)
+function useFolderActionLifetime(isSavingRef: RefObject<boolean>) {
   const [isPickingFolder, setIsPickingFolder] = useState(false)
   const isPickingFolderRef = useRef(false)
-  const folderDraftRevisionRef = useRef(0)
-
-  const selectedFolderName =
-    pendingFolderHandle?.name ?? savedFolderHandle?.name ?? null
-
-  const getFolderDraftRevision = useCallback((): number => {
-    return folderDraftRevisionRef.current
-  }, [])
-
-  const bumpFolderDraftRevision = useCallback((): void => {
-    folderDraftRevisionRef.current++
-  }, [])
-
-  const clearPendingFolder = useCallback((): void => {
-    folderDraftRevisionRef.current++
-    setPendingFolderHandle(null)
-  }, [])
-
-  const beginFolderAction = useCallback((): boolean => {
+  const begin = useCallback(() => {
     if (isSavingRef.current || isPickingFolderRef.current) return false
     isPickingFolderRef.current = true
     setIsPickingFolder(true)
     return true
   }, [isSavingRef])
-
-  const endFolderAction = useCallback((): void => {
+  const end = useCallback(() => {
     isPickingFolderRef.current = false
     setIsPickingFolder(false)
   }, [])
+  return { isPickingFolder, isPickingFolderRef, begin, end }
+}
 
-  const pickDownloadFolder = useCallback(async (): Promise<void> => {
-    if (!beginFolderAction()) return
-    try {
-      const result = await fsaController.requestFromUser()
-      if (result.status === "unsupported") {
-        toast.error(t("options_toastFsaNotSupported"))
-        return
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return
-      }
-      if (result.status === "aborted") return
-      if (result.status !== "granted") return
-      const handle = result.handle
-
-      folderDraftRevisionRef.current++
-      setPendingFolderHandle(handle)
-
-      if (settingsBuffer) {
-        onSettingsChange({
-          downloads: {
-            ...settingsBuffer.downloads,
-            destination: "file-system-access",
-            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
-          },
-        })
-      }
-
-      toast.success(t("options_toastCustomFolderSet", [handle.name]))
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        toast.error(t("options_toastSetFolderFailed"))
-      }
-    } finally {
-      endFolderAction()
-    }
-  }, [
-    beginFolderAction,
-    endFolderAction,
-    fsaController,
-    onSettingsChange,
-    settingsBuffer,
-  ])
-
-  const repairDownloadFolder = useCallback(async (): Promise<boolean> => {
-    if (!beginFolderAction()) return false
-    try {
-      const result = await fsaController.requestFromUser()
-      if (result.status === "unsupported") {
-        toast.error(t("options_toastFsaNotSupported"))
-        return false
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return false
-      }
-      if (result.status === "aborted") return false
-      if (result.status !== "granted") return false
-      const handle = result.handle
-
-      await fsaController.save(handle)
-      folderDraftRevisionRef.current++
-      setSavedFolderHandle(handle)
-      setPendingFolderHandle(null)
-      toast.success(t("options_toastCustomFolderSet", [handle.name]))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to repair custom folder:", error)
-      toast.error(t("options_toastSetFolderFailed"))
-      return false
-    } finally {
-      endFolderAction()
-    }
-  }, [beginFolderAction, endFolderAction, fsaController])
-
-  const grantDownloadFolderAccess = useCallback(async (): Promise<boolean> => {
-    if (!beginFolderAction()) return false
-    try {
-      const result = await fsaController.grantSavedAccess()
-      if (result.status === "missing") {
-        toast.error(t("settings_customFolderRequired"))
-        return false
-      }
-      if (result.status === "denied") {
-        toast.error(t("options_toastPermissionDenied"))
-        return false
-      }
-      const handle = result.handle
-      setSavedFolderHandle(handle)
-      toast.success(t("destinationIssue_accessGranted"))
-      return true
-    } catch (error) {
-      logger.error("[OPTIONS] Failed to grant custom-folder access:", error)
-      toast.error(t("options_toastPermissionDenied"))
-      return false
-    } finally {
-      endFolderAction()
-    }
-  }, [beginFolderAction, endFolderAction, fsaController])
-
+export function useOptionsFolderManagement(
+  options: UseOptionsFolderManagementOptions
+) {
+  const { fsaController, settingsBuffer, onSettingsChange, savedHandleId } =
+    options
+  const saved = useOptionsSavedFolder(fsaController, savedHandleId)
+  const [pendingFolderHandle, setPendingFolderHandle] =
+    useState<DirHandle | null>(null)
+  const lifetime = useFolderActionLifetime(options.isSavingRef)
+  const { begin, end } = lifetime
+  const { savedFolderOwner, setSavedFolderHandle, setFolderAccessRequired } =
+    saved
+  const clearPendingFolder = useCallback(() => setPendingFolderHandle(null), [])
+  const pickDownloadFolder = useCallback(
+    () =>
+      pickOptionsFolder({
+        begin,
+        end,
+        controller: fsaController,
+        settings: settingsBuffer,
+        onSettingsChange,
+        setPending: setPendingFolderHandle,
+      }),
+    [begin, end, fsaController, settingsBuffer, onSettingsChange]
+  )
+  const grantDownloadFolderAccess = useCallback(
+    () =>
+      grantOptionsFolderAccess({
+        begin,
+        end,
+        controller: fsaController,
+        handleId: savedHandleId,
+        owner: savedFolderOwner.current,
+        isCurrent: (owner) => savedFolderOwner.current === owner,
+        onGranted: (handle) => {
+          setSavedFolderHandle(handle)
+          setFolderAccessRequired(false)
+        },
+      }),
+    [
+      begin,
+      end,
+      fsaController,
+      savedHandleId,
+      savedFolderOwner,
+      setSavedFolderHandle,
+      setFolderAccessRequired,
+    ]
+  )
   return {
-    savedFolderHandle,
+    savedFolderHandle: saved.savedFolderHandle,
     setSavedFolderHandle,
     pendingFolderHandle,
     setPendingFolderHandle,
-    isPickingFolder,
-    isPickingFolderRef,
-    getFolderDraftRevision,
-    bumpFolderDraftRevision,
+    isPickingFolder: lifetime.isPickingFolder,
+    isPickingFolderRef: lifetime.isPickingFolderRef,
     clearPendingFolder,
-    selectedFolderName,
+    selectedFolderName:
+      pendingFolderHandle?.name ?? saved.savedFolderHandle?.name ?? null,
+    folderAccessRequired:
+      saved.folderAccessRequired && pendingFolderHandle === null,
     pickDownloadFolder,
-    repairDownloadFolder,
     grantDownloadFolderAccess,
   }
 }

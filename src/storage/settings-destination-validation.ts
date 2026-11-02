@@ -4,6 +4,32 @@ import {
   verifyPermission,
   type DirHandle,
 } from "@/src/storage/fs-access"
+import { probeDirectory } from "./fs-access-directory-probe"
+
+function isMissingDirectory(error: unknown): error is Error {
+  return error instanceof Error && error.name === "NotFoundError"
+}
+
+async function deniedDirectoryError(handle: DirHandle): Promise<string> {
+  try {
+    await probeDirectory(handle)
+  } catch (error) {
+    if (isMissingDirectory(error)) return t("settings_customFolderNotFound")
+  }
+  return t("settings_customFolderPermissionDenied")
+}
+
+function destinationFailure(error: unknown): { isValid: false; error: string } {
+  if (isMissingDirectory(error)) {
+    return { isValid: false, error: t("settings_customFolderNotFound") }
+  }
+  return {
+    isValid: false,
+    error: t("settings_validateCustomFolderFailed", [
+      error instanceof Error ? error.message : t("settings_unknownError"),
+    ]),
+  }
+}
 
 export async function validateSettingsDestination(
   destination: string,
@@ -22,50 +48,17 @@ export async function validateSettingsDestination(
       handleOverride !== undefined
         ? handleOverride
         : await loadDownloadRootHandle()
-    if (!handle) {
-      return { isValid: false, error: t("settings_customFolderRequired") }
-    }
-    if (handle.kind !== "directory") {
+    if (!handle || handle.kind !== "directory") {
       return { isValid: false, error: t("settings_customFolderRequired") }
     }
     if (!(await verifyPermission(handle, true))) {
-      try {
-        if (typeof handle.entries === "function") {
-          const entries = handle.entries()
-          await entries.next()
-        } else if (typeof handle.values === "function") {
-          const values = handle.values()
-          await values.next()
-        }
-      } catch (probeError) {
-        if (
-          probeError instanceof Error &&
-          probeError.name === "NotFoundError"
-        ) {
-          return {
-            isValid: false,
-            error: t("settings_customFolderNotFound"),
-          }
-        }
-      }
       return {
         isValid: false,
-        error: t("settings_customFolderPermissionDenied"),
+        error: await deniedDirectoryError(handle),
       }
     }
     return { isValid: true }
   } catch (error) {
-    if (error instanceof Error && error.name === "NotFoundError") {
-      return {
-        isValid: false,
-        error: t("settings_customFolderNotFound"),
-      }
-    }
-    return {
-      isValid: false,
-      error: t("settings_validateCustomFolderFailed", [
-        error instanceof Error ? error.message : t("settings_unknownError"),
-      ]),
-    }
+    return destinationFailure(error)
   }
 }

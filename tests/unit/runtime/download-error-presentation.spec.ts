@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   getDownloadCancelPresentation,
   getDownloadErrorMessage,
+  getDownloadFailureMessage,
 } from "@/src/runtime/download-error-presentation"
 import { DOWNLOAD_ERROR_CATEGORIES } from "@/src/shared/download-contract"
 
@@ -28,10 +29,6 @@ describe("download error presentation", () => {
       "browser_download_interrupted",
       "downloadError_browserDownloadInterrupted",
     ],
-    [
-      "browser_download_unobservable",
-      "downloadError_browserDownloadUnobservable",
-    ],
     ["archive_creation_failed", "downloadError_archiveCreationFailed"],
     ["unknown", "downloadError_unknown"],
   ] as const)("maps %s to packaged copy", (category, expectedKey) => {
@@ -55,26 +52,39 @@ describe("download error presentation", () => {
     expect(getDownloadErrorMessage(raw)).not.toContain("token=secret")
   })
 
-  it("uses explicit task-wide forget copy for unobservable downloads", () => {
-    expect(
-      getDownloadCancelPresentation("browser_download_unobservable")
-    ).toEqual({
-      title: "sidepanel_forgetUnobservableDownload",
-      description: "sidepanel_forgetUnobservableWarning",
-      confirmLabel: "sidepanel_forgetDownload",
-    })
-  })
+  it.each([
+    {
+      label: "a confirmed interruption",
+      category: "browser_download_interrupted",
+      outputUncertain: false,
+      expectedKeys: ["downloadError_browserDownloadInterrupted"],
+    },
+    {
+      label: "an interruption with other unconfirmed output",
+      category: "browser_download_interrupted",
+      outputUncertain: true,
+      expectedKeys: [
+        "downloadError_browserDownloadInterrupted",
+        "downloadError_browserOutputUnconfirmed",
+      ],
+    },
+    {
+      label: "an already unconfirmed failure",
+      category: "browser_output_unconfirmed",
+      outputUncertain: true,
+      expectedKeys: ["downloadError_browserOutputUnconfirmed"],
+    },
+  ] as const)(
+    "shows uncertainty recovery guidance once for $label",
+    ({ category, outputUncertain, expectedKeys }) => {
+      expect(getDownloadFailureMessage(category, outputUncertain)).toBe(
+        expectedKeys.join(" ")
+      )
+    }
+  )
 
-  it("uses task-wide forget copy when another chapter owns the unobservable output", () => {
-    expect(getDownloadCancelPresentation("network_unavailable", true)).toEqual({
-      title: "sidepanel_forgetUnobservableDownload",
-      description: "sidepanel_forgetUnobservableWarning",
-      confirmLabel: "sidepanel_forgetDownload",
-    })
-  })
-
-  it("keeps ordinary cancellation copy for other failures", () => {
-    expect(getDownloadCancelPresentation("network_unavailable")).toEqual({
+  it("describes the scope of task cancellation", () => {
+    expect(getDownloadCancelPresentation()).toEqual({
       title: "sidepanel_cancelThisDownload",
       description: "sidepanel_cancelProgressWarning",
       confirmLabel: "common_yes",

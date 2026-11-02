@@ -14,23 +14,10 @@ interface InlineConfirmationProps {
   onCancel: () => void
 }
 
-export function InlineConfirmation({
-  title,
-  description,
-  confirmLabel = "Yes",
-  pendingLabel,
-  cancelLabel = "No",
-  isPending = false,
-  errorMessage,
-  onConfirm,
-  onCancel,
-}: InlineConfirmationProps) {
+function useConfirmationFocus() {
   const cancelRef = useRef<HTMLButtonElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
-  const titleId = useId()
-  const descriptionId = useId()
-
   useEffect(() => {
     triggerRef.current = document.activeElement as HTMLElement | null
     cancelRef.current?.focus()
@@ -45,29 +32,55 @@ export function InlineConfirmation({
     }
   }, [])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      if (!isPending) {
-        onCancel()
-      }
-      return
+  return { cancelRef, confirmRef }
+}
+
+function handleConfirmationKeyDown(
+  event: React.KeyboardEvent,
+  { cancelRef, confirmRef }: ReturnType<typeof useConfirmationFocus>,
+  isPending: boolean,
+  onCancel: () => void
+) {
+  if (event.key === "Escape") {
+    if (!isPending) {
+      onCancel()
     }
-    if (e.key === "Tab") {
-      e.preventDefault()
-      if (document.activeElement === cancelRef.current) {
-        confirmRef.current?.focus()
-      } else {
-        cancelRef.current?.focus()
-      }
+    return
+  }
+  if (event.key === "Tab") {
+    event.preventDefault()
+    if (document.activeElement === cancelRef.current) {
+      confirmRef.current?.focus()
+    } else {
+      cancelRef.current?.focus()
     }
   }
+}
+
+export function InlineConfirmation({
+  title,
+  description,
+  confirmLabel = "Yes",
+  pendingLabel,
+  cancelLabel = "No",
+  isPending = false,
+  errorMessage,
+  onConfirm,
+  onCancel,
+}: InlineConfirmationProps) {
+  const focus = useConfirmationFocus()
+  const { cancelRef, confirmRef } = focus
+  const titleId = useId()
+  const descriptionId = useId()
 
   return (
     <div
       role="group"
       aria-labelledby={titleId}
       aria-describedby={description || errorMessage ? descriptionId : undefined}
-      onKeyDown={handleKeyDown}
+      onKeyDown={(event) =>
+        handleConfirmationKeyDown(event, focus, isPending, onCancel)
+      }
       aria-busy={isPending}
       className="absolute inset-0 z-20 rounded-md border border-border bg-background/95 p-2 backdrop-blur-sm"
     >

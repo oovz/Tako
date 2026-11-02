@@ -1,8 +1,4 @@
-/**
- * Leaf module for the page-probe contract. Neither the generated probe
- * registry nor any provider probe may import a module that imports them;
- * hosting the contract here keeps the import graph acyclic.
- */
+/** Page-probe contracts shared by providers and the generated registry. */
 
 /**
  * A provider-owned page probe. `collect` is serialized by Chrome

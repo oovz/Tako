@@ -11,6 +11,7 @@ import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { writeBlobToPath } from "@/src/storage/fs-access"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import { ZIP_WORKER_FINALIZATION_TIMEOUT_MS } from "@/src/constants/timeouts"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
 const workerState = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const workerState = vi.hoisted(() => ({
   finalizeBehavior: "success" as
     "success" | "failure" | "error-event" | "silent",
   terminateThrows: false,
+  reportedImageCount: undefined as number | undefined,
 }))
 
 const buildComicInfoMock = vi.hoisted(() => vi.fn())
@@ -100,7 +102,10 @@ vi.mock("@/entrypoints/offscreen/archive-worker-factory", () => ({
             filename: "chapter.cbz",
             size: 4,
             buffer: new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer,
-            imageCount: 1,
+            imageCount:
+              workerState.reportedImageCount ??
+              this.messages.filter(({ message }) => message.type === "addImage")
+                .length,
             format: "cbz",
           },
         } as MessageEvent<unknown>)
@@ -122,6 +127,7 @@ function createRuntime(): ChapterProcessingRuntime {
     liveResourceLedger: new OffscreenLiveResourceLedger(),
     rateLimitService,
     withImageRetries: async (fn) => fn(),
+    beginFsaWrite: async () => {},
     resolveWritableDownloadRoot: vi.fn(),
     requestBrowserBlobDownload: vi.fn(
       async () =>
@@ -157,10 +163,10 @@ function createOptions<TFormat extends "cbz" | "zip" | "none">(
     onProgress: vi.fn(async () => undefined),
     onArchiveProgress: vi.fn(async () => undefined),
     abortSignal: new AbortController().signal,
-    normalizeImageFilenames: true,
-    imagePaddingDigits: 3,
     settingsSnapshot: {
       ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+      normalizeImageFilenames: true,
+      imagePaddingDigits: 3,
       archiveFormat: format,
       rateLimitSettings: {
         image: { concurrency: 1, delayMs: 0 },
@@ -223,6 +229,7 @@ beforeEach(() => {
   workerState.instances.length = 0
   workerState.finalizeBehavior = "success"
   workerState.terminateThrows = false
+  workerState.reportedImageCount = undefined
   vi.mocked(writeBlobToPath).mockReset()
   vi.mocked(writeBlobToPath).mockResolvedValue({ status: "written" })
   buildComicInfoMock.mockReset()
@@ -235,6 +242,30 @@ beforeEach(() => {
 })
 
 describe("archive chapter edge cases", () => {
+  it.each(["browser", "custom"] as const)(
+    "rejects a successful worker result missing a page before %s output",
+    async (downloadMode) => {
+      const runtime = createRuntime()
+      vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
+        {} as FileSystemDirectoryHandle
+      )
+      const input = archiveInput({
+        ...createOptions("cbz"),
+        downloadMode,
+        directoryHandleId: "selected-id",
+      })
+      input.urls.push("https://example.com/2.jpg")
+      workerState.reportedImageCount = 1
+
+      await expect(processArchiveFormatChapter(runtime, input)).rejects.toThrow(
+        "Archive creation failed: image count mismatch: expected 2, got 1"
+      )
+      expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+      expect(writeBlobToPath).not.toHaveBeenCalled()
+      expect(runtime.liveResourceLedger.getUsedBytes()).toBe(0)
+    }
+  )
+
   it("streams ComicInfo, cover, and image entries in archive order and terminates the worker", async () => {
     const runtime = createRuntime()
     const opts = {
@@ -326,6 +357,36 @@ describe("archive chapter edge cases", () => {
     expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
   })
 
+  it("stops a stalled archive at the finalization deadline", async () => {
+    vi.useFakeTimers()
+    workerState.finalizeBehavior = "silent"
+    const runtime = createRuntime()
+    try {
+      const pending = processArchiveFormatChapter(
+        runtime,
+        archiveInput(createOptions("cbz"))
+      )
+      const outcome = expect(pending).rejects.toThrow("Zip worker timed out")
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(workerState.instances[0]?.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ message: { type: "finalize" } }),
+        ])
+      )
+      await vi.advanceTimersByTimeAsync(ZIP_WORKER_FINALIZATION_TIMEOUT_MS - 1)
+      expect(workerState.instances[0]?.terminate).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+
+      await outcome
+      expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
+      expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+      expect(runtime.liveResourceLedger.getUsedBytes()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("rejects an unsuccessful archive result after consulting memory statistics", async () => {
     workerState.finalizeBehavior = "failure"
     const runtime = createRuntime()
@@ -374,7 +435,7 @@ describe("archive chapter edge cases", () => {
     expect(workerState.instances[0]?.terminate).toHaveBeenCalledOnce()
   })
 
-  it("treats a malformed downloaded image as a failed image instead of finalizing", async () => {
+  it("rejects malformed images before archive finalization", async () => {
     const malformedDownload = vi.fn(
       async () => null
     ) as unknown as ChapterDownloadImageFn
@@ -451,6 +512,7 @@ describe("archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockResolvedValue({ status: "written" })
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       settingsSnapshot: {
         ...createOptions("cbz").settingsSnapshot,
@@ -484,6 +546,7 @@ describe("archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockRejectedValue(new Error("disk full"))
     const opts = {
       ...createOptions("zip"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -492,7 +555,7 @@ describe("archive chapter edge cases", () => {
     ).rejects.toMatchObject({
       name: "FsaWriteError",
       category: "disk_full",
-      message: "There is not enough disk space in the selected folder.",
+      message: "disk full",
     })
     expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
@@ -504,6 +567,7 @@ describe("archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -524,6 +588,7 @@ describe("archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       abortSignal: controller.signal,
     }
@@ -554,6 +619,7 @@ describe("archive chapter edge cases", () => {
     })
     const opts = {
       ...createOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       abortSignal: controller.signal,
     }
@@ -663,6 +729,7 @@ describe("no-archive chapter edge cases", () => {
     vi.mocked(writeBlobToPath).mockRejectedValue(new Error("write failed"))
     const opts = {
       ...createOptions("none"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -670,12 +737,75 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts))
     ).resolves.toMatchObject({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: 1,
       outputsRequested: 1,
       outputsCommitted: 0,
     })
+    expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
+  })
+
+  it("cancels concurrent file writers on the first native saving failure", async () => {
+    const runtime = createRuntime()
+    runtime.liveResourceLedger = new OffscreenLiveResourceLedger(12)
+    vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
+      {} as FileSystemDirectoryHandle
+    )
+    const opts = {
+      ...createOptions("none"),
+      directoryHandleId: "selected-id",
+      downloadMode: "custom" as const,
+    }
+    opts.settingsSnapshot.rateLimitSettings.image.concurrency = 2
+    let secondStarted!: () => void
+    const second = new Promise<void>((resolve) => {
+      secondStarted = resolve
+    })
+    const original = new DOMException(
+      "Native file handle rejected the write",
+      "NotAllowedError"
+    )
+    const aborted = vi.fn()
+    vi.mocked(writeBlobToPath)
+      .mockImplementationOnce(async () => {
+        await second
+        throw original
+      })
+      .mockImplementationOnce(
+        async (_root, _path, _blob, _policy, writeOptions) => {
+          secondStarted()
+          await new Promise<void>((_resolve, reject) => {
+            writeOptions?.signal?.addEventListener(
+              "abort",
+              () => {
+                aborted()
+                reject(writeOptions.signal?.reason)
+              },
+              { once: true }
+            )
+          })
+          return { status: "written" }
+        }
+      )
+    const input = noneInput(opts)
+    input.urls = [
+      "https://example.com/1",
+      "https://example.com/2",
+      "https://example.com/3",
+    ]
+    const result = await processNoneFormatChapter(runtime, input)
+    expect(result).toMatchObject({
+      status: "failed",
+      errorCategory: "folder_permission_required",
+      errorMessage: original.message,
+      outputsCommitted: 0,
+    })
+    expect(aborted).toHaveBeenCalledOnce()
+    expect(writeBlobToPath).toHaveBeenCalledTimes(2)
+    const later = runtime.liveResourceLedger.reserve(12, "later chapter")
+    expect(later.bytes).toBe(12)
+    later.release()
     expect(runtime.requestBrowserBlobDownload).not.toHaveBeenCalled()
   })
 
@@ -690,6 +820,7 @@ describe("no-archive chapter edge cases", () => {
     )
     const opts = {
       ...createOptions("none"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       coverImage: {
         data: new Uint8Array([4]).buffer,
@@ -702,7 +833,7 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts, downloadImage))
     ).resolves.toEqual({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "cover write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: 1,
       outputsRequested: 2,
@@ -775,6 +906,7 @@ describe("no-archive chapter edge cases", () => {
     const opts = {
       ...createOptions("none"),
       includeComicInfo: true,
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
     }
 
@@ -782,7 +914,7 @@ describe("no-archive chapter edge cases", () => {
       processNoneFormatChapter(runtime, noneInput(opts))
     ).resolves.toEqual({
       status: "partial_success",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "metadata write failed",
       errorCategory: "folder_write_failed",
       imagesFailed: undefined,
       outputsRequested: 2,
@@ -801,6 +933,7 @@ describe("no-archive chapter edge cases", () => {
     const opts = {
       ...createOptions("none"),
       includeComicInfo: true,
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       coverImage: {
         data: new Uint8Array([4]).buffer,

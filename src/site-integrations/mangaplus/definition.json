@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "mangaplus",
+  "name": "MANGA Plus by SHUEISHA",
+  "englishName": "MANGA Plus by SHUEISHA",
+  "contributors": ["Otaro"],
+  "version": "1.0.0",
+  "shipped": true,
+  "enabledByDefault": true,
+  "patterns": {
+    "domains": ["mangaplus.shueisha.co.jp"],
+    "seriesMatches": ["/titles/*"],
+    "excludeMatches": []
+  },
+  "requiredOrigins": [
+    "https://mangaplus.shueisha.co.jp/*",
+    "https://jumpg-webapi.tokyo-cdn.com/*",
+    "https://jumpg-assets.tokyo-cdn.com/*",
+    "https://jumpg-assets3.tokyo-cdn.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": {
+      "concurrency": 2,
+      "delayMs": 500
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": {
+      "mode": "none"
+    }
+  },
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 100
+  },
+  "endpointPolicies": [
+    {
+      "id": "mangaplus-api",
+      "purpose": "MANGA Plus website title and viewer protocol",
+      "origins": ["https://jumpg-webapi.tokyo-cdn.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 15000000
+    },
+    {
+      "id": "mangaplus-image",
+      "purpose": "MANGA Plus title and chapter images",
+      "origins": [
+        "https://jumpg-assets.tokyo-cdn.com/*",
+        "https://jumpg-assets3.tokyo-cdn.com/*"
+      ],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "sessionRefererRules": [],
+  "customSettings": []
+}

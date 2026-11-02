@@ -1,81 +1,47 @@
-/**
- * @file chapter-data.ts
- * @description Pixiv Comic chapter mock data.
- *
- * Chapter URLs follow: https://comic.pixiv.net/viewer/stories/{episodeId}
- * The `id` field is the numeric episode id used by Pixiv APIs.
- */
-
 import type { SiteIntegrationChapterDataset } from "../../types"
-
-function buildStoryUrl(id: string): string {
-  return `https://comic.pixiv.net/viewer/stories/${id}`
-}
+import captured from "@/tests/fixtures/site-integrations/pixiv-comic/captured-work.json" with { type: "json" }
 
 export const BASIC_CHAPTERS: SiteIntegrationChapterDataset = {
   id: "PIXIV_COMIC_BASIC",
-  description: "Basic 5-chapter Pixiv Comic work with sequential numbering",
-  chapters: [
-    {
-      id: "70001",
-      url: buildStoryUrl("70001"),
-      title: "第1話 出発",
-      index: 1,
-      chapterNumber: 1,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "70002",
-      url: buildStoryUrl("70002"),
-      title: "第2話 邂逅",
-      index: 2,
-      chapterNumber: 2,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "70003",
-      url: buildStoryUrl("70003"),
-      title: "第3話 嵐の夜",
-      index: 3,
-      chapterNumber: 3,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "70004",
-      url: buildStoryUrl("70004"),
-      title: "第4話 選択",
-      index: 4,
-      chapterNumber: 4,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-    {
-      id: "70005",
-      url: buildStoryUrl("70005"),
-      title: "第5話 新たな旅立ち",
-      index: 5,
-      chapterNumber: 5,
-      status: "queued",
-      lastUpdated: Date.now(),
-    },
-  ],
+  description: "Six captured readable episodes in the source catalog order",
+  chapters: captured.data.episodesV2.data.episodes
+    .flatMap((entry) => {
+      if (!("episode" in entry) || !entry.episode) return []
+      const episode = entry.episode
+      return [
+        {
+          id: String(episode.id),
+          url: `https://comic.pixiv.net${episode.viewer_path}`,
+          title: [episode.numbering_title, episode.sub_title]
+            .filter(Boolean)
+            .join(" "),
+          index: 0,
+          chapterLabel: episode.numbering_title,
+          chapterNumber: Number(
+            episode.numbering_title.match(/第(\d+)話/)?.[1]
+          ),
+          locked: entry.state !== "readable",
+          status: "queued" as const,
+          lastUpdated: 0,
+        },
+      ]
+    })
+    .map((chapter, index) => ({ ...chapter, index: index + 1 })),
 }
 
+// Synthetic second work used to exercise navigation between different work IDs.
 export const SMALL_SERIES: SiteIntegrationChapterDataset = {
   id: "PIXIV_COMIC_SMALL",
-  description: "Single-chapter Pixiv Comic work",
+  description: "Synthetic single-chapter navigation control",
   chapters: [
     {
       id: "70101",
-      url: buildStoryUrl("70101"),
+      url: "https://comic.pixiv.net/viewer/stories/70101",
       title: "第1話",
       index: 1,
       chapterNumber: 1,
       status: "queued",
-      lastUpdated: Date.now(),
+      lastUpdated: 0,
     },
   ],
 }

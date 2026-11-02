@@ -3,7 +3,6 @@ import { z } from "zod"
 import {
   ArchiveFormatSchema,
   ConflictPolicySchema,
-  DownloadDestinationSchema,
   DownloadErrorCategorySchema,
   DownloadProgressStatusSchema,
   ImagePaddingDigitsSchema,
@@ -24,7 +23,6 @@ import {
   SeriesMetadataSchema,
   SeriesMetadataSnapshotSchema,
 } from "@/src/runtime/series-data-schemas"
-import { DestinationIssueSchema } from "@/src/runtime/destination-issue-state"
 import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import { DownloadedChapterRecordSchema } from "@/src/domain/history/schema"
 import { ExtensionSettingsSchema } from "@/src/domain/settings/schema"
@@ -36,6 +34,11 @@ import {
 } from "@/src/domain/site-integrations/storage-schemas"
 import { PersistentErrorsSchema } from "@/src/runtime/persistent-error-schema"
 import { StartDownloadFailureCodeSchema } from "@/src/runtime/start-download-errors"
+
+import {
+  CoverPreviewSourceSchema,
+  CoverPreviewResponseSchema,
+} from "./cover-preview-contracts"
 
 export type RuntimeMessageTarget = "background" | "offscreen"
 export type RuntimeMessageKind = "command" | "query" | "event"
@@ -62,13 +65,11 @@ const RuntimeFailureSchema = z.strictObject({
 
 export const OptionsDownloadStateSchema = z.strictObject({
   tasks: z.array(DownloadTaskStateSchema),
-  destinationIssue: DestinationIssueSchema.nullable(),
   queueStorageBytes: z.number().int().nonnegative(),
 })
 
 export const SidepanelDownloadStateSchema = z.strictObject({
   downloadedChapters: z.array(DownloadedChapterRecordSchema),
-  destinationIssue: DestinationIssueSchema.nullable(),
 })
 
 export const OptionsConfigurationSnapshotSchema = z.strictObject({
@@ -154,8 +155,15 @@ const RateLimitSnapshotSchema = z.strictObject({
 })
 
 export const OffscreenChapterSettingsSnapshotSchema = z.strictObject({
+  allowChromeFallback: z.literal(true).optional(),
   archiveFormat: ArchiveFormatSchema,
-  destination: DownloadDestinationSchema,
+  destination: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("downloads-api") }),
+    z.strictObject({
+      kind: z.literal("file-system-access"),
+      handleId: z.string().min(1).nullable(),
+    }),
+  ]),
   conflictPolicy: ConflictPolicySchema,
   pathTemplate: z.string(),
   fileNameTemplate: z.string().min(1),
@@ -176,41 +184,52 @@ export const OffscreenChapterSettingsSnapshotSchema = z.strictObject({
   siteIntegrationId: z.string().min(1),
 })
 
-const OffscreenDownloadChapterPayloadSchema = z.strictObject({
-  jobId: z.string().min(1),
-  attempt: z.number().int().nonnegative(),
-  taskId: z.string().min(1),
-  fingerprint: OffscreenJobFingerprintSchema,
-  seriesKey: z.string().min(1),
-  book: z.strictObject({
-    siteIntegrationId: z.string().min(1),
-    seriesTitle: z.string().min(1),
-    coverUrl: PublicHttpsUrlSchema.optional(),
-    metadata: SeriesMetadataSnapshotSchema.optional(),
-  }),
-  chapter: z.strictObject({
-    id: z.string().min(1),
-    title: z.string().min(1),
-    url: z.string().url(),
-    index: z.number().int().positive(),
-    chapterLabel: z.string().optional(),
-    chapterNumber: z.number().optional(),
-    volumeId: z.string().optional(),
-    volumeNumber: z.number().optional(),
-    volumeLabel: z.string().optional(),
-    language: z.string().optional(),
-    resolvedPath: z.string().min(1),
-  }),
-  settingsSnapshot: OffscreenChapterSettingsSnapshotSchema,
-  saveMode: z.enum(["fsa", "downloads-api"]),
-  notBefore: z.number().finite().nonnegative().optional(),
-  integrationContext: z
-    .strictObject({
-      schemaVersion: z.number().int().positive(),
-      data: z.record(z.string(), z.json()),
-    })
-    .optional(),
-})
+const OffscreenDownloadChapterPayloadSchema = z
+  .strictObject({
+    jobId: z.string().min(1),
+    attempt: z.number().int().nonnegative(),
+    taskId: z.string().min(1),
+    fingerprint: OffscreenJobFingerprintSchema,
+    seriesKey: z.string().min(1),
+    book: z.strictObject({
+      siteIntegrationId: z.string().min(1),
+      seriesTitle: z.string().min(1),
+      coverUrl: PublicHttpsUrlSchema.optional(),
+      metadata: SeriesMetadataSnapshotSchema.optional(),
+    }),
+    chapter: z.strictObject({
+      id: z.string().min(1),
+      title: z.string().min(1),
+      url: z.string().url(),
+      index: z.number().int().positive(),
+      chapterLabel: z.string().optional(),
+      chapterNumber: z.number().optional(),
+      volumeId: z.string().optional(),
+      volumeNumber: z.number().optional(),
+      volumeLabel: z.string().optional(),
+      language: z.string().optional(),
+      resolvedPath: z.string().min(1),
+    }),
+    settingsSnapshot: OffscreenChapterSettingsSnapshotSchema,
+    saveMode: z.enum(["fsa", "downloads-api"]),
+    directoryHandleId: z.string().min(1).optional(),
+    notBefore: z.number().finite().nonnegative().optional(),
+    integrationContext: z
+      .strictObject({
+        schemaVersion: z.number().int().positive(),
+        data: z.record(z.string(), z.json()),
+      })
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.saveMode === "fsa" && value.directoryHandleId === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["directoryHandleId"],
+        message: "FSA dispatch requires a directory handle ID",
+      })
+    }
+  })
 
 const OffscreenParseSeriesHtmlPayloadSchema = z.strictObject({
   requestId: z.string().uuid(),
@@ -281,6 +300,7 @@ const OffscreenRenewalResponseSchema = z.union([
 
 const OffscreenParseSeriesHtmlSuccessSchema = z.strictObject({
   success: z.literal(true),
+  seriesId: z.string().min(1).optional(),
   seriesMetadata: SeriesMetadataSchema.optional(),
   chapterList: SeriesChapterListSchema.optional(),
   metadataError: z.string().optional(),
@@ -306,6 +326,65 @@ function defineRuntimeMessage<const TEntry extends RegistryEntry>(
 const successOrFailure = () => z.union([SuccessSchema, RuntimeFailureSchema])
 
 export const runtimeMessageRegistry = {
+  GET_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("GET_COVER_PREVIEW"),
+      payload: z.strictObject({
+        requestId: z.string().uuid(),
+        source: CoverPreviewSourceSchema,
+      }),
+    }),
+    response: CoverPreviewResponseSchema,
+    target: "background",
+    kind: "query",
+    allowedSenders: ["sidepanel"],
+    readiness: "control-ready",
+  }),
+  CANCEL_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("CANCEL_COVER_PREVIEW"),
+      payload: z.strictObject({ requestId: z.string().uuid() }),
+    }),
+    response: successOrFailure(),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["sidepanel"],
+    readiness: "control-ready",
+  }),
+  OFFSCREEN_FETCH_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("OFFSCREEN_FETCH_COVER_PREVIEW"),
+      payload: z.strictObject({
+        requestId: z.string().uuid(),
+        integrationId: z.string().min(1),
+        coverUrl: PublicHttpsUrlSchema,
+        rateLimitSettings: z.strictObject({
+          image: RateLimitSnapshotSchema,
+          chapter: RateLimitSnapshotSchema,
+        }),
+      }),
+    }),
+    response: CoverPreviewResponseSchema,
+    target: "offscreen",
+    kind: "query",
+    allowedSenders: ["background"],
+    readiness: "runtime-ready",
+  }),
+  OFFSCREEN_CANCEL_COVER_PREVIEW: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("offscreen"),
+      type: z.literal("OFFSCREEN_CANCEL_COVER_PREVIEW"),
+      payload: z.strictObject({ requestId: z.string().uuid() }),
+    }),
+    response: successOrFailure(),
+    target: "offscreen",
+    kind: "command",
+    allowedSenders: ["background"],
+    readiness: "runtime-ready",
+  }),
   REQUEST_TAB_CONTEXT_REFRESH: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),
@@ -557,51 +636,7 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
-  FORGET_UNOBSERVABLE_OUTPUTS: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("FORGET_UNOBSERVABLE_OUTPUTS"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: z.union([
-      z.strictObject({
-        success: z.literal(true),
-        surrendered: z.number().int().nonnegative(),
-      }),
-      RuntimeFailureSchema,
-    ]),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["sidepanel", "options"],
-    readiness: "runtime-ready",
-  }),
-  RETRY_DESTINATION: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("RETRY_DESTINATION"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: successOrFailure(),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["options"],
-    readiness: "runtime-ready",
-  }),
-  CONTINUE_DOWNLOAD: defineRuntimeMessage({
-    request: z.strictObject({
-      target: z.literal("background"),
-      type: z.literal("CONTINUE_DOWNLOAD"),
-      ...CommandEnvelopeShape,
-      payload: z.strictObject({ taskId: z.string().min(1) }),
-    }),
-    response: successOrFailure(),
-    target: "background",
-    kind: "command",
-    allowedSenders: ["sidepanel", "options"],
-    readiness: "runtime-ready",
-  }),
+
   UNDO_QUEUE_ACTION: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),
@@ -663,6 +698,21 @@ export const runtimeMessageRegistry = {
     kind: "command",
     allowedSenders: ["sidepanel"],
     readiness: "control-ready",
+  }),
+  OFFSCREEN_BEGIN_FSA_WRITE: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("OFFSCREEN_BEGIN_FSA_WRITE"),
+      payload: OffscreenJobIncarnationSchema,
+    }),
+    response: z.union([
+      z.strictObject({ success: z.literal(true), permitted: z.boolean() }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["offscreen"],
+    readiness: "queue-hydrated",
   }),
   OFFSCREEN_JOB_ACCEPTED: defineRuntimeMessage({
     request: z.strictObject({
@@ -726,12 +776,11 @@ export const runtimeMessageRegistry = {
         phase: z.enum([
           "prepared",
           "acceptance_unknown",
+          "outcome_unknown",
           "waiting",
           "complete",
           "interrupted",
-          "surrendered",
         ]),
-        terminalOutcome: z.enum(["complete", "interrupted"]).optional(),
       }),
       z.strictObject({
         success: z.literal(true),
@@ -800,7 +849,7 @@ export const runtimeMessageRegistry = {
         initializationState: OffscreenInitializationStateSchema,
         documentInstanceId: z.string().min(1),
         activeJobCount: z.number().int().nonnegative(),
-        activeSeriesResolutionCount: z.number().int().nonnegative(),
+        activeTransientWorkCount: z.number().int().nonnegative(),
         activeTaskIds: z.array(z.string().min(1)),
       }),
       RuntimeFailureSchema,

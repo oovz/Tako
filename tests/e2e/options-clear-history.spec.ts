@@ -1,12 +1,36 @@
 import { test, expect } from "./fixtures/extension"
-import { seedDownloadQueueState } from "./fixtures/state-helpers"
+import {
+  seedDownloadQueueState,
+  setDownloadedChapterHistory,
+} from "./fixtures/state-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
 import type { ChapterState } from "../../src/types/tab-state"
+import type {
+  DownloadedChapterRecord,
+  DownloadHistoryClearCutoffs,
+} from "../../src/domain/history/types"
 
-function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
+function chapterRecord(): DownloadedChapterRecord {
   return {
+    siteIntegrationId: "mangadex",
+    chapterId: "done",
+    url: "https://example.com/done",
+    title: "Chapter done",
+    seriesId: "series-done",
+    seriesTitle: "Series done",
+    downloadedAt: Date.now(),
+    format: "cbz",
+  }
+}
+
+function makeChapter(
+  id: string,
+  status: ChapterState["status"]
+): ChapterState & { requestedPath: string } {
+  return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: `Chapter ${id}`,
@@ -45,7 +69,7 @@ function makeTask(
 }
 
 test.describe("Options Downloads history management", () => {
-  test("clear all history removes only terminal tasks and keeps active/queued", async ({
+  test("clearing task history preserves chapter history and current work", async ({
     page,
     extensionId,
   }) => {
@@ -65,14 +89,24 @@ test.describe("Options Downloads history management", () => {
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
 
     await seedDownloadQueueState(page, seededQueue)
+    const record = chapterRecord()
+    await setDownloadedChapterHistory(page.context(), [record])
 
     await page.getByRole("button", { name: /Activity/i }).click()
     await expect(page.getByText("Series done")).toBeVisible()
     await expect(page.getByText("Series failed")).toBeVisible()
     await expect(page.getByText("Series active")).toBeVisible()
 
-    await page.getByRole("button", { name: "Clear All History" }).click()
-    await page.getByRole("button", { name: "Yes, Clear All" }).click()
+    await page
+      .getByRole("button", { name: "Clear task history", exact: true })
+      .click()
+    const dialog = page.getByRole("alertdialog", {
+      name: "Clear task history?",
+    })
+    await dialog
+      .getByRole("button", { name: "Clear task history", exact: true })
+      .click()
+    await expect(dialog).toHaveCount(0)
 
     await expect(page.getByText("Series done")).toHaveCount(0)
     await expect(page.getByText("Series failed")).toHaveCount(0)
@@ -89,6 +123,11 @@ test.describe("Options Downloads history management", () => {
     })
 
     expect(remainingStatuses).toEqual(["downloading", "queued"])
+    const history = await page.evaluate(async () => {
+      const result = await chrome.storage.local.get("downloadedChapters")
+      return result.downloadedChapters
+    })
+    expect(history).toContainEqual(record)
   })
 
   test("rejects CLEAR_ALL_HISTORY from sidepanel sender context", async ({
@@ -101,7 +140,7 @@ test.describe("Options Downloads history management", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       { waitUntil: "domcontentloaded" }
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
@@ -142,4 +181,176 @@ test.describe("Options Downloads history management", () => {
 
     expect(remainingStatuses).toEqual(["downloading", "completed"])
   })
+
+  test("clearing chapter history preserves task records through reload and later task clearing", async ({
+    page,
+    extensionId,
+  }) => {
+    await page.goto(
+      `chrome-extension://${extensionId}/options.html?tab=activity`
+    )
+    await seedDownloadQueueState(page, [
+      makeTask("active", "downloading"),
+      makeTask("queued", "queued"),
+      makeTask("done", "completed"),
+    ])
+    await setDownloadedChapterHistory(page.context(), [chapterRecord()])
+    await page.reload()
+
+    await page
+      .getByRole("button", { name: "Clear chapter history", exact: true })
+      .click()
+    const dialog = page.getByRole("alertdialog", {
+      name: "Clear chapter history?",
+    })
+    await dialog
+      .getByRole("button", { name: "Clear chapter history", exact: true })
+      .click()
+    await expect(dialog).toHaveCount(0)
+    await expect(
+      page.getByText("Chapter history cleared", { exact: true })
+    ).toBeVisible()
+
+    const stored = await page.evaluate(async () => {
+      const result = await chrome.storage.local.get([
+        "downloadedChapters",
+        "downloadQueue",
+        "downloadHistoryClearCutoffs",
+      ])
+      return {
+        chapters: result.downloadedChapters,
+        taskIds: (result.downloadQueue as Array<{ id: string }>).map(
+          (task) => task.id
+        ),
+        clearCutoffs:
+          result.downloadHistoryClearCutoffs as DownloadHistoryClearCutoffs,
+      }
+    })
+    expect(stored.chapters).toEqual([])
+    expect(stored.taskIds).toEqual(["active", "queued", "done"])
+    expect(stored.clearCutoffs.allBefore).toBeGreaterThan(0)
+
+    await page.reload()
+    await expect(page.getByText("Series done")).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: "Clear chapter history", exact: true })
+    ).toBeDisabled()
+    await page
+      .getByRole("button", { name: "Clear task history", exact: true })
+      .click()
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Clear task history", exact: true })
+      .click()
+    await expect(page.getByText("Series done")).toHaveCount(0)
+    await expect(page.getByText("Series active")).toBeVisible()
+    await expect(page.getByText("Series queued")).toBeVisible()
+    expect(
+      await page.evaluate(
+        async () =>
+          (await chrome.storage.local.get("downloadedChapters"))
+            .downloadedChapters
+      )
+    ).toEqual([])
+  })
+
+  for (const scope of ["task", "chapter"] as const) {
+    test(`failed ${scope}-history clearing keeps its confirmation open and can be retried`, async ({
+      page,
+      extensionId,
+      _extensionContextState,
+    }) => {
+      await page.goto(
+        `chrome-extension://${extensionId}/options.html?tab=activity`
+      )
+      await seedDownloadQueueState(page, [
+        makeTask("active", "downloading"),
+        makeTask("queued", "queued"),
+        makeTask("done", "completed"),
+      ])
+      const record = chapterRecord()
+      await setDownloadedChapterHistory(page.context(), [record])
+      await page.reload()
+      await expect(page.getByText("Series done")).toBeVisible()
+
+      await _extensionContextState.backgroundWorker.evaluate(
+        (key) => {
+          const persist = chrome.storage.local.set.bind(chrome.storage.local)
+          Object.defineProperty(chrome.storage.local, "set", {
+            configurable: true,
+            value: async (values: Record<string, unknown>) => {
+              if (key in values) {
+                Object.defineProperty(chrome.storage.local, "set", {
+                  value: persist,
+                })
+                throw new Error("History storage unavailable")
+              }
+              await persist(values)
+            },
+          })
+        },
+        scope === "task" ? "downloadQueue" : "downloadedChapters"
+      )
+
+      const label = `Clear ${scope} history`
+      await page.getByRole("button", { name: label, exact: true }).click()
+      const dialog = page.getByRole("alertdialog", { name: `${label}?` })
+      const confirm = dialog.getByRole("button", { name: label, exact: true })
+      await confirm.click()
+      await expect(dialog.getByRole("alert")).toHaveText(
+        "History could not be cleared. Try again."
+      )
+      await expect(confirm).toBeEnabled()
+      await expect(
+        page.getByText("Task history cleared", { exact: true })
+      ).toHaveCount(0)
+      await expect(
+        page.getByText("Chapter history cleared", { exact: true })
+      ).toHaveCount(0)
+      const retained = await page.evaluate(async () => {
+        const result = await chrome.storage.local.get([
+          "downloadedChapters",
+          "downloadQueue",
+        ])
+        return {
+          chapters: result.downloadedChapters,
+          taskIds: (result.downloadQueue as Array<{ id: string }>).map(
+            (task) => task.id
+          ),
+        }
+      })
+      expect(retained.chapters).toEqual([record])
+      expect(retained.taskIds).toEqual(["active", "queued", "done"])
+
+      await confirm.click()
+      await expect(dialog).toHaveCount(0)
+      await expect(
+        page.getByText(
+          `${scope === "task" ? "Task" : "Chapter"} history cleared`,
+          { exact: true }
+        )
+      ).toBeVisible()
+      await expect(page.getByText("Series active")).toBeVisible()
+      await expect(page.getByText("Series queued")).toBeVisible()
+      if (scope === "task") {
+        await expect(page.getByText("Series done")).toHaveCount(0)
+        expect(
+          await page.evaluate(
+            async () =>
+              (await chrome.storage.local.get("downloadedChapters"))
+                .downloadedChapters
+          )
+        ).toEqual([record])
+      } else {
+        await expect(page.getByText("Series done")).toBeVisible()
+        expect(
+          await page.evaluate(
+            async () =>
+              (await chrome.storage.local.get("downloadedChapters"))
+                .downloadedChapters
+          )
+        ).toEqual([])
+      }
+    })
+  }
 })

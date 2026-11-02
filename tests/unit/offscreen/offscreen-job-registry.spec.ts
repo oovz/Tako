@@ -58,7 +58,7 @@ vi.mock("@/src/runtime/logger", () => ({
   },
 }))
 
-let OffscreenWorker: typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+let OffscreenWorker: typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
 
 async function request(
   overrides: Partial<Omit<OffscreenDownloadChapterPayload, "fingerprint">> = {}
@@ -111,7 +111,7 @@ describe("offscreen job registry", () => {
     vi.stubGlobal("document", {
       addEventListener: vi.fn(),
     })
-    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main"))
+    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main-worker"))
   })
 
   beforeEach(() => {
@@ -325,13 +325,13 @@ describe("offscreen job registry", () => {
     })
     await vi.waitFor(() => expect(enablementMocks.load).toHaveBeenCalledOnce())
 
-    expect(worker.getActiveSeriesResolutionCount()).toBe(1)
+    expect(worker.getActiveTransientWorkCount()).toBe(1)
     releaseEnablement?.({ mangadex: false })
     await expect(parsing).resolves.toEqual({
       success: false,
       error: "Site integration mangadex is disabled",
     })
-    expect(worker.getActiveSeriesResolutionCount()).toBe(0)
+    expect(worker.getActiveTransientWorkCount()).toBe(0)
   })
 
   it("keeps a canceled series resolution active until its parser settles", () => {

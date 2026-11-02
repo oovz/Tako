@@ -10,17 +10,8 @@ let offscreenInitialized = false
 let offscreenInitPromise: Promise<void> | null = null
 
 /**
- * Offscreen-context enablement loader.
- *
- * The offscreen document only has access to `chrome.runtime`; `chrome.storage`
- * is NOT available there. We must request the site integration enablement map
- * from the background service worker via messaging instead of reading storage
- * directly. The background handler for `GET_SITE_INTEGRATION_ENABLEMENT` reads
- * `chrome.storage.local` and returns the normalized map.
- *
- * Initialization fails when the background cannot provide the persisted map.
- * Treating an unreadable setting as "all defaults" could enable an integration
- * the user explicitly disabled.
+ * Load persisted enablement through the background; offscreen has no storage API.
+ * Read failures stop initialization so disabled integrations stay disabled.
  */
 const offscreenEnablementLoader: SiteIntegrationEnablementLoader = async () => {
   const response = await sendRuntimeMessage({
@@ -50,7 +41,6 @@ async function registerOffscreenSiteIntegrations(): Promise<void> {
 
   logger.info("🔌 Initializing offscreen site integrations...")
 
-  // Offscreen must NOT read chrome.storage directly; route through background.
   await initializeSiteIntegrationEnablement(offscreenEnablementLoader)
 
   offscreenInitialized = true

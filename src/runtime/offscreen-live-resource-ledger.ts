@@ -95,6 +95,14 @@ export class OffscreenLiveResourceLedger {
       return Promise.resolve(this.createLease(bytes, owner))
     }
 
+    return this.enqueueAcquisition(owner, bytes, signal)
+  }
+
+  private enqueueAcquisition(
+    owner: string,
+    bytes: number,
+    signal: AbortSignal | undefined
+  ): Promise<OffscreenLiveResourceLease> {
     return new Promise<OffscreenLiveResourceLease>((resolve, reject) => {
       const request: PendingAcquisition = {
         owner,
@@ -102,20 +110,23 @@ export class OffscreenLiveResourceLedger {
         signal,
         resolve,
         reject,
-        onAbort: () => {
-          if (!signal) return
-          const index = this.pendingAcquisitions.indexOf(request)
-          if (index === -1) return
-          this.pendingAcquisitions.splice(index, 1)
-          signal.removeEventListener("abort", request.onAbort)
-          reject(this.readAbortReason(signal))
-          this.drainPendingAcquisitions()
-        },
+        onAbort: () => this.cancelAcquisition(request),
       }
       this.pendingAcquisitions.push(request)
       signal?.addEventListener("abort", request.onAbort, { once: true })
       if (signal?.aborted) request.onAbort()
     })
+  }
+
+  private cancelAcquisition(request: PendingAcquisition): void {
+    const { signal } = request
+    if (!signal) return
+    const index = this.pendingAcquisitions.indexOf(request)
+    if (index === -1) return
+    this.pendingAcquisitions.splice(index, 1)
+    signal.removeEventListener("abort", request.onAbort)
+    request.reject(this.readAbortReason(signal))
+    this.drainPendingAcquisitions()
   }
 
   private createLease(

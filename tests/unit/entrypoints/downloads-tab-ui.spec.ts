@@ -1,26 +1,21 @@
-/**
- * Unit tests for DownloadsTab UI components
- *
- * Tests for:
- * - Task status summary label generation
- * - Chapter status badge class mapping
- */
-
 import { describe, it, expect } from "vitest"
 import {
   chapterStatusBadgeClass,
   getTaskStatusSummaryLabel,
-} from "@/entrypoints/options/tabs/DownloadsTab"
+} from "@/entrypoints/options/components/downloads-tab-helpers"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? "ch-1",
     url: overrides.url ?? "https://example.com/chapter/1",
     title: overrides.title ?? "Chapter 1",
     index: overrides.index ?? 1,
     status: overrides.status ?? "queued",
     lastUpdated: overrides.lastUpdated ?? Date.now(),
+    outputDestination: overrides.outputDestination,
+    saveConfirmedAt: overrides.saveConfirmedAt,
     errorMessage: overrides.errorMessage,
     imagesFailed: overrides.imagesFailed,
     totalImages: overrides.totalImages,
@@ -37,7 +32,7 @@ function makeTask(
   }
 }
 
-describe("DownloadsTab status summary behavior", () => {
+describe("Activity task status summary behavior", () => {
   it("renders plural completed summary when all chapters completed", () => {
     const label = getTaskStatusSummaryLabel(
       makeTask("completed", [
@@ -45,7 +40,46 @@ describe("DownloadsTab status summary behavior", () => {
         makeChapter({ id: "ch-2", status: "completed" }),
       ])
     )
-    expect(label).toBe("Completed (2 chapters)")
+    expect(label).toBe("Previously processed (2 chapters)")
+  })
+
+  it("describes completed output using save evidence", () => {
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({
+            status: "completed",
+            outputDestination: "downloads-api",
+          }),
+        ])
+      )
+    ).toBe("Previously processed (1 chapter)")
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({
+            status: "completed",
+            outputDestination: "fsa",
+            saveConfirmedAt: 42,
+          }),
+        ])
+      )
+    ).toBe("Saved to folder (1 chapter)")
+    expect(
+      getTaskStatusSummaryLabel(
+        makeTask("completed", [
+          makeChapter({
+            status: "completed",
+            outputDestination: "downloads-api",
+          }),
+          makeChapter({
+            id: "ch-2",
+            status: "completed",
+            outputDestination: "fsa",
+          }),
+        ])
+      )
+    ).toBe("Previously processed (2 chapters)")
   })
 
   it("renders single-chapter completed summary for one chapter", () => {
@@ -53,7 +87,7 @@ describe("DownloadsTab status summary behavior", () => {
       makeTask("completed", [makeChapter({ status: "completed" })])
     )
 
-    expect(label).toBe("Completed (1 chapters)")
+    expect(label).toBe("Previously processed (1 chapter)")
   })
 
   it("uses completed chapter count in failed/partial summaries", () => {
@@ -65,11 +99,11 @@ describe("DownloadsTab status summary behavior", () => {
     ]
 
     expect(getTaskStatusSummaryLabel(makeTask("failed", chapters))).toBe(
-      "Failed (2 of 4 chapters saved)"
+      "Failed (2 of 4 chapters processed)"
     )
     expect(
       getTaskStatusSummaryLabel(makeTask("partial_success", chapters))
-    ).toBe("Partial (2 of 4 chapters saved)")
+    ).toBe("Partial (2 of 4 chapters processed)")
   })
 
   it("renders queued/downloading/canceled summaries with expected wording", () => {
@@ -86,12 +120,12 @@ describe("DownloadsTab status summary behavior", () => {
       "Downloading 1 of 3 chapters"
     )
     expect(getTaskStatusSummaryLabel(makeTask("canceled", chapters))).toBe(
-      "Canceled (1 of 3 chapters saved)"
+      "Canceled (1 of 3 chapters processed)"
     )
   })
 })
 
-describe("DownloadsTab chapter status badge behavior", () => {
+describe("Activity task chapter status badge behavior", () => {
   it("maps chapter statuses to expected badge classes", () => {
     expect(chapterStatusBadgeClass("completed")).toBe(
       "bg-primary/10 text-primary"

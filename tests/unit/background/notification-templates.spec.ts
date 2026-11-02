@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { NotificationService } from "@/entrypoints/background/notification-service"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
-import { QueueRepository } from "@/src/storage/queue-repository"
-import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
+
+const chromeI18n = chrome.i18n
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -22,11 +22,14 @@ vi.mock("@/src/site-integrations/catalog", () => ({
 
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? "ch-1",
     url: overrides.url ?? "https://example.com/ch-1",
     title: overrides.title ?? "Chapter 1",
     index: overrides.index ?? 1,
     status: overrides.status ?? "completed",
+    outputDestination: overrides.outputDestination,
+    saveConfirmedAt: overrides.saveConfirmedAt,
     lastUpdated: overrides.lastUpdated ?? Date.now(),
   }
 }
@@ -72,6 +75,7 @@ describe("notification content templates", () => {
     windowsUpdate.mockResolvedValue(undefined)
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       runtime: { getURL: runtimeGetUrl },
       storage: {
         local: { get: vi.fn().mockResolvedValue({ downloadQueue: [] }) },
@@ -88,72 +92,76 @@ describe("notification content templates", () => {
     })
   })
 
-  describe("destination action notifications", () => {
-    it("shows one persistent, actionable notification when enabled", () => {
-      const service = new NotificationService()
-
-      service.notifyDestinationActionRequired({
-        issue: {
-          id: "task-1:chapter-1:fsa_permission_required",
-          taskId: "task-1",
-          chapterId: "chapter-1",
-          kind: "fsa_permission_required",
-          occurredAt: 1,
-        },
-        notificationsEnabled: true,
-      })
-
-      expect(notificationsCreate).toHaveBeenCalledWith(
-        "destination_issue_task-1:chapter-1:fsa_permission_required",
-        expect.objectContaining({
-          title: "Download folder needs attention",
-          message: expect.stringContaining("Grant access"),
-          requireInteraction: true,
-        })
-      )
-    })
-
-    it("does not show destination notifications when notifications are disabled", () => {
-      new NotificationService().notifyDestinationActionRequired({
-        issue: {
-          id: "task-1::fsa_unsupported",
-          taskId: "task-1",
-          kind: "fsa_unsupported",
-          occurredAt: 1,
-        },
-        notificationsEnabled: false,
-      })
-
-      expect(notificationsCreate).not.toHaveBeenCalled()
-    })
-
-    it("focuses an existing Downloads options page when the notification is clicked", async () => {
-      tabsQuery.mockResolvedValue([{ id: 12, windowId: 34 }])
-
-      await new NotificationService().handleNotificationClick(
-        "destination_issue_task-1::fsa_folder_missing",
-        new QueueRepository(new QueueProjectionService())
-      )
-
-      const targetUrl = "chrome-extension://test/options.html?tab=activity"
-      expect(tabsUpdate).toHaveBeenCalledWith(12, {
-        active: true,
-        url: targetUrl,
-      })
-      expect(windowsUpdate).toHaveBeenCalledWith(34, { focused: true })
-      expect(tabsCreate).not.toHaveBeenCalled()
-      expect(notificationsClear).toHaveBeenCalledWith(
-        "destination_issue_task-1::fsa_folder_missing"
-      )
-    })
-  })
-
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
   describe("completed task notification", () => {
-    it('uses title "Download complete" with series title and chapter count', () => {
+    it.each([
+      {
+        destinations: ["downloads-api"],
+        proof: undefined,
+        title: "Previously processed",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["fsa"],
+        proof: undefined,
+        title: "Previously processed",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["downloads-api"],
+        proof: 42,
+        title: "Saved",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["fsa"],
+        proof: 42,
+        title: "Saved to folder",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: [undefined],
+        proof: undefined,
+        title: "Previously processed",
+        count: "1/1 chapters",
+      },
+      {
+        destinations: ["downloads-api", "fsa"],
+        proof: 42,
+        title: "Saved",
+        count: "2/2 chapters",
+      },
+    ] as const)(
+      "describes completed output as $title for $destinations with proof=$proof",
+      async ({ destinations, title, count, proof }) => {
+        const task = makeTask({
+          seriesTitle: "Known Series",
+          chapters: destinations.map((outputDestination, index) =>
+            makeChapter({
+              id: `ch-${index}`,
+              outputDestination,
+              saveConfirmedAt: proof,
+            })
+          ),
+        })
+        await new NotificationService().notifyTaskCompleted({
+          task,
+          notificationsEnabled: true,
+        })
+        expect(notificationsCreate).toHaveBeenCalledWith(
+          `task_complete_${task.id}`,
+          expect.objectContaining({
+            title,
+            message: `Known Series: ${count}${proof === undefined ? "\nThis record shows earlier processing. Final saving was not confirmed." : ""}`,
+          })
+        )
+      }
+    )
+
+    it("uses the generic completion title with series title and chapter count", () => {
       const service = new NotificationService()
       const task = makeTask({
         seriesTitle: "Kemutai Hanashi",
@@ -177,7 +185,7 @@ describe("notification content templates", () => {
       expect(notificationOptions.iconUrl).toBe(
         "chrome-extension://test/icon/128.png"
       )
-      expect(notificationOptions.title).toBe("Download complete")
+      expect(notificationOptions.title).toBe("Previously processed")
       expect(notificationOptions.message).toContain("Kemutai Hanashi")
       expect(notificationOptions.message).toContain("3")
       expect(notificationOptions.requireInteraction).toBe(false)
@@ -268,7 +276,7 @@ describe("notification content templates", () => {
 
       expect(notificationsCreate).toHaveBeenCalledTimes(1)
       const [, options] = notificationsCreate.mock.calls[0]
-      expect(options.title).toBe("Download complete")
+      expect(options.title).toBe("Previously processed")
       expect(options.message).toContain("Canceled Series")
     })
 

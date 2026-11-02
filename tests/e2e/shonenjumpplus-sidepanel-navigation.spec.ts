@@ -8,7 +8,7 @@ import {
 import { SHONENJUMPPLUS_BASE_URL } from "./fixtures/test-domains-constants"
 import { ShonenJumpPlus } from "./fixtures/mock-data"
 
-test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
+test.describe("Shonen Jump+ navigation", () => {
   test("front page -> episode page initializes tab state", async ({
     context,
     extensionId,
@@ -33,7 +33,7 @@ test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
 
     const series = ShonenJumpPlus.BASIC_SERIES.series
     const cover = sp.getByRole("img", { name: series.seriesTitle })
-    await expect(cover).toHaveAttribute("src", series.coverUrl!)
+    await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
         cover.evaluate(
@@ -43,10 +43,10 @@ test.describe("Shonen Jump+ side panel navigation workflows (mocked)", () => {
       .toBe(true)
 
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
-    const lockedChapter = sp.getByRole("checkbox", { name: /第4話/ })
+    const lockedChapter = sp.getByRole("checkbox", { name: /^140話$/ })
     await expect(lockedChapter).toBeDisabled()
-    await expect(sp.getByText("Locked", { exact: true })).toBeVisible()
-    await expect(sp.getByRole("checkbox", { name: /第1話/ })).toBeEnabled()
+    await expect(sp.getByText("Locked", { exact: true }).first()).toBeVisible()
+    await expect(sp.getByRole("checkbox", { name: /^142話$/ })).toBeEnabled()
 
     await sp.close()
   })

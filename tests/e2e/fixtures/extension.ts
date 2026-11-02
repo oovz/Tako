@@ -20,13 +20,28 @@ import {
   type LocalMockServerHandle,
 } from "./local-mock-server"
 import { registerMangadexLocalServerHandlers } from "./mock-data/site-integrations/mangadex/local-server"
-import { registerManhuaguiLocalServerHandlers } from "./mock-data/site-integrations/manhuagui/local-server"
+import { registerManhuaguiLocalServerHandlers } from "./mock-data/site-integrations/readmanga/local-server"
 import { registerPixivComicLocalServerHandlers } from "./mock-data/site-integrations/pixiv-comic/local-server"
 import { registerShonenJumpPlusLocalServerHandlers } from "./mock-data/site-integrations/shonenjumpplus/local-server"
-import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comicnettai/local-server"
+import { registerComicNettaiLocalServerHandlers } from "./mock-data/site-integrations/comictropics/local-server"
 import { registerMangaMillionLocalServerHandlers } from "./mock-data/site-integrations/mangamillion/local-server"
+import { registerManganatoLocalServerHandlers } from "./mock-data/site-integrations/manganato/routes"
+import { registerMangakakalotLocalServerHandlers } from "./mock-data/site-integrations/mangakakalot/routes"
+import { registerBoyloveLocalServerHandlers } from "./mock-data/site-integrations/boylove/routes"
+import { registerCopyLocalServerHandlers } from "./mock-data/site-integrations/copymanga/routes"
+import { registerMycomicLocalServerHandlers } from "./mock-data/site-integrations/mycomic/routes"
+import { registerDm5LocalServerHandlers } from "./mock-data/site-integrations/animemangahouse/routes"
+import { registerMangabzLocalServerHandlers } from "./mock-data/site-integrations/mangabz/routes"
+import { registerZaimanhuaLocalServerHandlers } from "./mock-data/site-integrations/mangaagain/routes"
+import { registerAimanhuaLocalServerHandlers } from "./mock-data/site-integrations/lovemanga/routes"
+import { registerMangahereLocalServerHandlers } from "./mock-data/site-integrations/mangahere/routes"
+import { registerMangagoLocalServerHandlers } from "./mock-data/site-integrations/mangago/routes"
+import { registerCoolmicLocalServerHandlers } from "./mock-data/site-integrations/coolmic/routes"
+import { registerMangaplusLocalServerHandlers } from "./mock-data/site-integrations/mangaplus/routes"
 import { registerTestRoutes } from "./routes"
 import { siteIntegrationCatalog as SITE_INTEGRATION_MANIFESTS } from "../../../src/runtime/generated/site-integration-catalog"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
 import {
   redactDiagnostic,
   redactDiagnosticText,
@@ -38,12 +53,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
 const shouldAllowNetwork = process.env.TMD_TEST_E2E_ALLOW_NETWORK === "true"
 const shouldEnableLiveIntegrations = process.env.TMD_TEST_E2E_LIVE === "true"
-// CI uses Playwright's Chromium 151 canary because the extension requires
-// Chrome 150+. Developers can select a compatible installed browser channel
-// through TMD_TEST_E2E_BROWSER_CHANNEL when their environment cannot use the
-// Playwright-managed channel.
-const e2eBrowserChannel =
-  process.env.TMD_TEST_E2E_BROWSER_CHANNEL ?? "chromium-tip-of-tree"
+// The bundled Chromium channel supports extensions in new headless mode.
+const e2eBrowserChannel = process.env.TMD_TEST_E2E_BROWSER_CHANNEL ?? "chromium"
 const pathToExtension = path.resolve(
   __dirname,
   shouldEnableLiveIntegrations
@@ -240,6 +251,31 @@ async function initializeDeterministicMockProfile(
           "success" in response &&
           response.success === true
         ) {
+          // UI assertions use English; Chrome's macOS UI locale follows the host.
+          await probePage.evaluate(async (command) => {
+            const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+              await chrome.runtime.sendMessage({
+                target: "background",
+                type: "GET_OPTIONS_CONFIGURATION",
+              })
+            if (!current.success) throw new Error(current.error)
+            const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+              await chrome.runtime.sendMessage({
+                target: "background",
+                type: "SAVE_OPTIONS_CONFIGURATION",
+                ...command,
+                payload: {
+                  configuration: {
+                    ...current.data.configuration,
+                    settings: {
+                      ...current.data.configuration.settings,
+                      uiLanguage: "en",
+                    },
+                  },
+                },
+              })
+            if (!saved.success) throw new Error(saved.error)
+          }, createCommandEnvelope())
           return
         }
 
@@ -269,12 +305,7 @@ async function initializeDeterministicMockProfile(
   }
 }
 
-/**
- * Shared context + fixture state for a single test. Fixtures hand
- * instances of this down through `context`/`extensionId` so teardown can
- * run in reverse setup order (DNR rules cleared → local server closed →
- * Chromium closed → user-data dir removed).
- */
+/** Per-test browser, worker, mock server, and disposable profile resources. */
 interface ExtensionContextState {
   context: BrowserContext
   extensionId: string
@@ -310,9 +341,19 @@ export async function teardownExtensionResources(
     dnrRulesToInstall,
   } = resources
 
-  if (dnrRulesToInstall.length > 0 && backgroundWorker) {
+  if (dnrRulesToInstall.length > 0 && context && backgroundWorker) {
     try {
-      await clearDnrRedirectRules(backgroundWorker)
+      // A restarted worker invalidates its Playwright execution handle. Use a
+      // fresh extension document for privileged cleanup of this temp profile.
+      const cleanupPage = await context.newPage()
+      try {
+        await cleanupPage.goto(
+          new URL("/options.html", backgroundWorker.url()).href
+        )
+        await clearDnrRedirectRules(cleanupPage)
+      } finally {
+        await cleanupPage.close()
+      }
     } catch (error) {
       errors.push(error as Error)
       console.warn(
@@ -357,7 +398,12 @@ export async function teardownExtensionResources(
   }
 
   try {
-    await fs.rm(userDataDir, { recursive: true, force: true })
+    await fs.rm(userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    })
   } catch (error) {
     errors.push(error as Error)
     console.warn(
@@ -383,6 +429,18 @@ async function setupExtensionContext(
   const userDataDir = await fs.mkdtemp(
     path.join(os.tmpdir(), "tmd-playwright-")
   )
+  const downloadDirectory = path.join(userDataDir, "Downloads")
+  await fs.mkdir(path.join(userDataDir, "Default"))
+  await fs.mkdir(downloadDirectory)
+  await fs.writeFile(
+    path.join(userDataDir, "Default", "Preferences"),
+    JSON.stringify({
+      download: {
+        default_directory: downloadDirectory,
+        prompt_for_download: false,
+      },
+    })
+  )
 
   // Download-workflow specs need to intercept offscreen-initiated
   // fetches. Playwright's context.route doesn't cover those, so we spin up
@@ -403,14 +461,23 @@ async function setupExtensionContext(
         ...registerShonenJumpPlusLocalServerHandlers(localMockServer),
         ...registerComicNettaiLocalServerHandlers(localMockServer),
         ...registerMangaMillionLocalServerHandlers(localMockServer),
+        ...registerManganatoLocalServerHandlers(localMockServer),
+        ...registerMangakakalotLocalServerHandlers(localMockServer),
+        ...registerBoyloveLocalServerHandlers(localMockServer),
+        ...registerCopyLocalServerHandlers(localMockServer),
+        ...registerMycomicLocalServerHandlers(localMockServer),
+        ...registerDm5LocalServerHandlers(localMockServer),
+        ...registerMangabzLocalServerHandlers(localMockServer),
+        ...registerZaimanhuaLocalServerHandlers(localMockServer),
+        ...registerAimanhuaLocalServerHandlers(localMockServer),
+        ...registerMangahereLocalServerHandlers(localMockServer),
+        ...registerMangagoLocalServerHandlers(localMockServer),
+        ...registerCoolmicLocalServerHandlers(localMockServer),
+        ...registerMangaplusLocalServerHandlers(localMockServer),
       ]
     }
 
     const context = await chromium.launchPersistentContext(userDataDir, {
-      // The extension manifest targets Chrome 150+. Playwright 1.61's default
-      // Chromium is 149, so use its hermetic tip-of-tree channel (currently
-      // Chrome for Testing 151) by default instead of waiting for an
-      // incompatible browser to time out while attempting to load the extension.
       channel: e2eBrowserChannel,
       headless: testInfoHeadless,
       args: [
@@ -422,20 +489,8 @@ async function setupExtensionContext(
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
         "--disable-backgrounding-occluded-windows",
-        // Chromium 142+ enforces Local Network Access (LNA): fetches
-        // from public origins (e.g. mangadex.org, comic.pixiv.net) to
-        // loopback/private addresses (127.0.0.1) are blocked with
-        // "Permission was denied for this request to access the
-        // `loopback` address space" unless the user grants an
-        // interactive prompt. DNR rules in the test fixtures redirect
-        // public URLs to the local mock server on 127.0.0.1, and the
-        // prompt can't be auto-accepted in a persistent context, so we
-        // disable the enforcement feature (and the earlier PNA features
-        // it replaced, for older Chrome channels).
-        //
-        // See https://developer.chrome.com/blog/local-network-access
-        // and https://chromestatus.com/feature/5085655327047680 for the
-        // feature definitions.
+        // Permit fixture redirects to loopback without an interactive LNA prompt.
+        // See https://developer.chrome.com/blog/local-network-access.
         "--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests",
       ],
     })
@@ -543,11 +598,8 @@ export const test = base.extend<{
 }>({
   // eslint-disable-next-line no-empty-pattern
   _extensionContextState: async ({}, use, testInfo) => {
-    // Chromium does not expose a loadable MV3 extension worker through the
-    // headless shell used by this test channel. E2E configurations therefore
-    // default to headed mode (CI supplies Xvfb); callers can still opt in to
-    // headed explicitly without changing fixture behavior.
-    const headless = testInfo.project.use.headless ?? false
+    // Respect the configured headless mode and the CLI --headed override.
+    const headless = testInfo.project.use.headless ?? true
     const state = await setupExtensionContext(headless)
     try {
       await use(state)
@@ -565,8 +617,7 @@ export const test = base.extend<{
   },
 
   page: async ({ context }, use) => {
-    // Reuse the first page that launchPersistentContext creates
-    // This prevents creating unnecessary tabs (launchPersistentContext already opens one tab)
+    // Reuse the tab created with the persistent context.
     const page = context.pages()[0] || (await context.newPage())
 
     await use(page)

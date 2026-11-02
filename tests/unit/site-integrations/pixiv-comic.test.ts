@@ -316,7 +316,7 @@ describe("Pixiv Comic site integration", () => {
       expect(chapters).toEqual([])
     })
 
-    it("throws when the episodes field is missing instead of treating schema drift as an empty work", async () => {
+    it("rejects responses without an episodes field", async () => {
       const apiUrl = `${PIXIV_BASE_URL}/api/app/works/${PIXIV_WORK_ID}/episodes/v2?order=asc`
       mockFetchResponse(apiUrl, { data: {} })
 
@@ -360,7 +360,7 @@ describe("Pixiv Comic site integration", () => {
   })
 
   describe("chapter-api utilities", () => {
-    it("rejects malformed chapter plans instead of filtering provider output", () => {
+    it("rejects malformed chapter plans", () => {
       expect(() =>
         ChapterImagePlanSchema.parse({
           imageUrls: ["https://img.pixiv.net/page1.jpg", "not-a-url"],

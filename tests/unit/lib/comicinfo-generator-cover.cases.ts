@@ -147,7 +147,7 @@ export function registerComicInfoCoverCases(): void {
         expect(result).toMatch(/<Page Image="0" Type="FrontCover" \/>/)
       })
 
-      it("serializes explicit Pages metadata as Page elements instead of a JSON string", () => {
+      it("serializes page metadata as XML Page elements", () => {
         const metadata: ComicInfoV2 = {
           Series: "Test",
           Pages: [

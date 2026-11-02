@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { ProviderContractError } from "@/src/site-integrations/provider-contract-error"
 import { DEFAULT_FETCH_TIMEOUT_MS } from "@/src/constants/timeouts"
@@ -7,6 +8,7 @@ import type {
   MangaMillionChapterList,
   MangaMillionTitleDetail,
   MangaMillionViewer,
+  MangaMillionResponse,
 } from "./contracts/api"
 import { MANGAMILLION_API_ORIGIN } from "./urls"
 
@@ -18,14 +20,6 @@ type DeviceTokenRegistration = {
 }
 
 let inFlightTokenRegistration: DeviceTokenRegistration | null = null
-
-function cancelResponseBody(response: Response, reason: unknown): void {
-  try {
-    void response.body?.cancel(reason).catch(() => undefined)
-  } catch {
-    // Preserve the provider error; body cancellation is best effort.
-  }
-}
 
 function getAbortReason(signal: AbortSignal | undefined): Error {
   return signal?.reason instanceof Error
@@ -40,6 +34,63 @@ function abandonDeviceTokenRegistration(
   if (inFlightTokenRegistration !== registration) return
   inFlightTokenRegistration = null
   registration.controller.abort(reason)
+}
+
+function decodeSuccessfulResponse(
+  buffer: ArrayBuffer,
+  failurePrefix: string
+): MangaMillionResponse {
+  const decoded = decodeMangaMillionResponse(buffer)
+  if (decoded.status !== 0) {
+    throw new ProviderContractError(
+      `${failurePrefix}: ${decoded.errorMessage || `status ${decoded.status}`}`
+    )
+  }
+  return decoded
+}
+
+async function registerDeviceToken(
+  rateLimitService: RateLimitService,
+  signal: AbortSignal
+): Promise<string> {
+  const registerUrl = `${MANGAMILLION_API_ORIGIN}/api/register`
+  const response = await integrationHttpClient.request({
+    integrationId: "mangamillion",
+    endpointId: "mangamillion-api",
+    url: registerUrl,
+    scope: "chapter",
+    rateLimitService,
+    init: {
+      method: "POST",
+      credentials: "omit",
+      signal,
+    },
+  })
+
+  if (!response.ok) {
+    cancelResponseBody(
+      response,
+      `MangaMillion registration HTTP ${response.status}`
+    )
+    throw new ProviderContractError(
+      `MangaMillion device registration failed with HTTP ${response.status}.`
+    )
+  }
+
+  const buffer = await response.arrayBuffer()
+  const decoded = decodeSuccessfulResponse(
+    buffer,
+    "MangaMillion device registration failed"
+  )
+
+  const token = decoded.deviceTokenRegister?.token
+  if (!token) {
+    throw new ProviderContractError(
+      "MangaMillion device registration did not return a valid token."
+    )
+  }
+
+  return token
 }
 
 function createDeviceTokenRegistration(
@@ -61,51 +112,10 @@ function createDeviceTokenRegistration(
   }
   controller.signal.addEventListener("abort", onAbort, { once: true })
 
-  const perform = async (): Promise<string> => {
-    const registerUrl = `${MANGAMILLION_API_ORIGIN}/api/register`
-    const response = await integrationHttpClient.request({
-      integrationId: "mangamillion",
-      endpointId: "mangamillion-api",
-      url: registerUrl,
-      scope: "chapter",
-      rateLimitService,
-      init: {
-        method: "POST",
-        credentials: "omit",
-        signal: controller.signal,
-      },
-    })
-
-    if (!response.ok) {
-      cancelResponseBody(
-        response,
-        `MangaMillion registration HTTP ${response.status}`
-      )
-      throw new ProviderContractError(
-        `MangaMillion device registration failed with HTTP ${response.status}.`
-      )
-    }
-
-    const buffer = await response.arrayBuffer()
-    const decoded = decodeMangaMillionResponse(buffer)
-
-    if (decoded.status !== 0) {
-      throw new ProviderContractError(
-        `MangaMillion device registration failed: ${decoded.errorMessage || `status ${decoded.status}`}`
-      )
-    }
-
-    const token = decoded.deviceTokenRegister?.token
-    if (!token) {
-      throw new ProviderContractError(
-        "MangaMillion device registration did not return a valid token."
-      )
-    }
-
-    return token
-  }
-
-  const operation = Promise.race([perform(), abortedPromise])
+  const operation = Promise.race([
+    registerDeviceToken(rateLimitService, controller.signal),
+    abortedPromise,
+  ])
   const registration: DeviceTokenRegistration = {
     controller,
     promise: operation
@@ -130,6 +140,12 @@ function createDeviceTokenRegistration(
   return registration
 }
 
+function registrationError(error: unknown): Error {
+  return error instanceof Error
+    ? error
+    : new Error("MangaMillion device registration failed.", { cause: error })
+}
+
 function waitForDeviceToken(
   registration: DeviceTokenRegistration,
   signal: AbortSignal | undefined
@@ -141,19 +157,20 @@ function waitForDeviceToken(
 
   return new Promise<string>((resolve, reject) => {
     let settled = false
-    const cleanup = () => {
-      signal?.removeEventListener("abort", onAbort)
-      registration.waiters.delete(waiter)
-    }
-    const onAbort = () => {
+    const settle = (complete: () => void) => {
       if (settled) return
       settled = true
-      cleanup()
-      if (registration.waiters.size === 0) {
-        abandonDeviceTokenRegistration(registration, getAbortReason(signal))
-      }
-      reject(getAbortReason(signal))
+      signal?.removeEventListener("abort", onAbort)
+      registration.waiters.delete(waiter)
+      complete()
     }
+    const onAbort = () =>
+      settle(() => {
+        if (registration.waiters.size === 0) {
+          abandonDeviceTokenRegistration(registration, getAbortReason(signal))
+        }
+        reject(getAbortReason(signal))
+      })
 
     signal?.addEventListener("abort", onAbort, { once: true })
     if (signal?.aborted) {
@@ -162,24 +179,8 @@ function waitForDeviceToken(
     }
 
     void registration.promise.then(
-      (token) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve(token)
-      },
-      (error: unknown) => {
-        if (settled) return
-        settled = true
-        cleanup()
-        reject(
-          error instanceof Error
-            ? error
-            : new Error("MangaMillion device registration failed.", {
-                cause: error,
-              })
-        )
-      }
+      (token) => settle(() => resolve(token)),
+      (error: unknown) => settle(() => reject(registrationError(error)))
     )
   })
 }
@@ -296,12 +297,10 @@ export async function fetchTitleDetail(
     signal
   )
 
-  const decoded = decodeMangaMillionResponse(buffer)
-  if (decoded.status !== 0) {
-    throw new ProviderContractError(
-      `MangaMillion title detail error: ${decoded.errorMessage || `status ${decoded.status}`}`
-    )
-  }
+  const decoded = decodeSuccessfulResponse(
+    buffer,
+    "MangaMillion title detail error"
+  )
 
   if (!decoded.titleDetail) {
     throw new ProviderContractError(
@@ -330,12 +329,10 @@ export async function fetchChapterList(
     signal
   )
 
-  const decoded = decodeMangaMillionResponse(buffer)
-  if (decoded.status !== 0) {
-    throw new ProviderContractError(
-      `MangaMillion chapter list error: ${decoded.errorMessage || `status ${decoded.status}`}`
-    )
-  }
+  const decoded = decodeSuccessfulResponse(
+    buffer,
+    "MangaMillion chapter list error"
+  )
 
   if (!decoded.chapterList) {
     throw new ProviderContractError(
@@ -365,12 +362,7 @@ export async function fetchViewer(
     signal
   )
 
-  const decoded = decodeMangaMillionResponse(buffer)
-  if (decoded.status !== 0) {
-    throw new ProviderContractError(
-      `MangaMillion viewer error: ${decoded.errorMessage || `status ${decoded.status}`}`
-    )
-  }
+  const decoded = decodeSuccessfulResponse(buffer, "MangaMillion viewer error")
 
   if (!decoded.viewer) {
     throw new ProviderContractError(

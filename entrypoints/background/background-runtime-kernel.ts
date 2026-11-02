@@ -1,9 +1,9 @@
+import { cancelOffscreenJob } from "./offscreen-lifecycle"
 import logger from "@/src/runtime/logger"
 import { applyUiLanguagePreference } from "@/src/runtime/i18n"
 import type { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import type { RuntimeMessageReadiness } from "@/src/runtime/runtime-message-contracts"
 import {
-  InvalidDurableStateError,
   RuntimePhaseError,
   isFatalRuntimeInitializationError,
   type BackgroundRuntimePhase,
@@ -28,7 +28,7 @@ import {
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
 import type { StartupQueueActivation } from "@/src/domain/queue/scheduler-policy"
 import { recoverPendingUndoActions } from "@/entrypoints/background/pending-undo-coordinator"
-import { reconcileCompletedChapterHistory } from "@/entrypoints/background/download-queue-finalization"
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 
 interface PhaseState {
@@ -55,7 +55,7 @@ export interface BackgroundRuntimeKernelInput {
   /**
    * Durable-state schema migration gate. Every readiness phase above listener
    * registration awaits this before any storage-backed service hydrates or
-   * mutates state. On rejection the failure is sticky and fatal.
+   * mutates state. Invalid durable state is fatal; storage I/O can be retried.
    */
   awaitSchemaMigration: () => Promise<void>
 }
@@ -65,6 +65,7 @@ function createPhaseState(): PhaseState {
 }
 
 export class BackgroundRuntimeKernel {
+  private readonly schemaPhase = createPhaseState()
   private readonly statePhase = createPhaseState()
   private readonly queuePhase = createPhaseState()
   private readonly runtimePhase = createPhaseState()
@@ -96,6 +97,7 @@ export class BackgroundRuntimeKernel {
   async ensure(readiness: RuntimeMessageReadiness): Promise<void> {
     switch (readiness) {
       case "control-ready":
+        await this.ensureSchemaMigrated()
         await this.controlReadyPromise
         return
       case "queue-hydrated":
@@ -145,22 +147,18 @@ export class BackgroundRuntimeKernel {
     return this.tabContextStateService
   }
 
+  async ensureSchemaMigrated(): Promise<void> {
+    await this.runStickyPhase("schema-migrated", this.schemaPhase, () =>
+      this.input.awaitSchemaMigration()
+    )
+  }
+
   private async ensureInternalStateReady(): Promise<void> {
+    await this.ensureSchemaMigrated()
     await this.runStickyPhase(
       "internal-state-ready",
       this.statePhase,
       async () => {
-        // The one-time schema migration must complete before ANY storage-backed
-        // service hydrates. A migration failure is a durable-state failure and is
-        // therefore sticky and fatal, not a retryable transient error.
-        try {
-          await this.input.awaitSchemaMigration()
-        } catch (cause) {
-          throw new InvalidDurableStateError(
-            "Retained state could not be migrated; refusing to initialize",
-            { cause }
-          )
-        }
         await this.input.tabContextStateService.initialize()
         this.tabContextStateService = this.input.tabContextStateService
       }
@@ -258,6 +256,7 @@ export class BackgroundRuntimeKernel {
       hasOffscreenDocument,
       terminateOffscreenDocumentForUnboundLease,
       getOffscreenJobState: queryOffscreenJob,
+      cancelOffscreenJob,
       setLivenessAlarmArmed: this.input.setLivenessAlarmArmed,
       getOffscreenActiveTaskIds: async () => {
         const status = await queryOffscreenStatus()
@@ -268,10 +267,10 @@ export class BackgroundRuntimeKernel {
     })
 
     try {
-      await reconcileCompletedChapterHistory(startupRecovery.queue, {
-        settingsRepository: this.input.settingsRepository,
-        historyRepository: this.input.historyRepository,
-      })
+      await reconcileCompletedChapterHistory(
+        startupRecovery.queue,
+        this.input.historyRepository
+      )
     } catch (error) {
       logger.warn(
         "Failed to reconcile completed chapter history during startup",

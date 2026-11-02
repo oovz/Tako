@@ -79,7 +79,16 @@ describe("Offscreen resource lifecycles", () => {
     )
 
     expect(session.getState()).toBe("settled")
-    await expect(session.finalize()).rejects.toThrow(failure)
+    expect(session.failureSignal.reason).toBe(failure)
+    worker.onmessage?.call(
+      worker as unknown as Worker,
+      {
+        data: { success: false, error: "later worker failure" },
+      } as MessageEvent
+    )
+    expect(() => session.post({ type: "addImage" })).toThrow(failure)
+    expect(session.failureSignal.reason).toBe(failure)
+    await expect(session.finalize()).rejects.toBe(failure)
     session.dispose()
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
@@ -394,6 +403,105 @@ describe("Offscreen resource lifecycles", () => {
     expect(ledger.getUsedBytes()).toBe(0)
   })
 
+  it.each([
+    {
+      description: "missing identity",
+      inputId: undefined,
+      buffer: new ArrayBuffer(3),
+    },
+    {
+      description: "non-ArrayBuffer payload",
+      inputId: "input-1",
+      buffer: new Uint8Array(3),
+    },
+    {
+      description: "lease and payload size mismatch",
+      inputId: "input-1",
+      buffer: new ArrayBuffer(2),
+    },
+  ])(
+    "preserves caller ownership when a leased input is invalid: $description",
+    ({ inputId, buffer }) => {
+      const ledger = new OffscreenLiveResourceLedger(3)
+      const inputLease = ledger.reserve(3, "caller input")
+      const worker = new WorkerStub()
+      const session = new ArchiveWorkerSession(worker as unknown as Worker)
+
+      expect(() =>
+        session.post(
+          { type: "addImage", inputId, buffer },
+          undefined,
+          inputLease
+        )
+      ).toThrow(Error)
+      expect(worker.postMessage).not.toHaveBeenCalled()
+      expect(session.getState()).toBe("collecting")
+      expect(inputLease.bytes).toBe(3)
+      session.dispose()
+      expect(ledger.getUsedBytes()).toBe(3)
+      inputLease.release()
+      expect(ledger.getUsedBytes()).toBe(0)
+    }
+  )
+
+  it("rejects an input identity collision while preserving both owners", () => {
+    const ledger = new OffscreenLiveResourceLedger(6)
+    const firstLease = ledger.reserve(3, "first input")
+    const secondLease = ledger.reserve(3, "second input")
+    const worker = new WorkerStub()
+    const session = new ArchiveWorkerSession(worker as unknown as Worker)
+    const message = {
+      type: "addImage" as const,
+      inputId: "input-1",
+      buffer: new ArrayBuffer(3),
+    }
+
+    session.post(message, undefined, firstLease)
+    expect(() => session.post(message, undefined, secondLease)).toThrow(Error)
+    expect(() => session.post(message)).toThrow(Error)
+    expect(worker.postMessage).toHaveBeenCalledOnce()
+    expect(firstLease.bytes).toBe(0)
+    expect(secondLease.bytes).toBe(3)
+    expect(ledger.getUsedBytes()).toBe(6)
+
+    worker.onmessage?.call(
+      worker as unknown as Worker,
+      { data: { type: "input-consumed", inputId: "input-1" } } as MessageEvent
+    )
+    expect(ledger.getUsedBytes()).toBe(3)
+    session.dispose()
+    expect(ledger.getUsedBytes()).toBe(3)
+    secondLease.release()
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("releases transferred input ownership when worker posting fails", () => {
+    const ledger = new OffscreenLiveResourceLedger(3)
+    const inputLease = ledger.reserve(3, "caller input")
+    const worker = new WorkerStub()
+    const failure = new Error("Worker message transfer failed")
+    worker.postMessage.mockImplementationOnce(() => {
+      throw failure
+    })
+    const session = new ArchiveWorkerSession(worker as unknown as Worker)
+
+    expect(() =>
+      session.post(
+        { type: "addImage", inputId: "input-1", buffer: new ArrayBuffer(3) },
+        undefined,
+        inputLease
+      )
+    ).toThrow(failure)
+    expect(inputLease.bytes).toBe(0)
+    expect(ledger.getUsedBytes()).toBe(0)
+    expect(session.getState()).toBe("settled")
+    expect(session.failureSignal.reason).toBe(failure)
+    expect(() => session.post({ type: "addImage" })).toThrow(failure)
+    expect(worker.postMessage).toHaveBeenCalledOnce()
+    session.dispose()
+    expect(worker.terminate).toHaveBeenCalledOnce()
+  })
+
   it("releases retained encoded ownership when renderer validation fails", async () => {
     const ledger = new OffscreenLiveResourceLedger(4)
     const sourceLease = ledger.reserve(4, "invalid encoded image")
@@ -457,6 +565,7 @@ describe("Offscreen resource lifecycles", () => {
         liveResourceLedger: ledger,
         rateLimitService,
         withImageRetries: async (operation) => operation(),
+        beginFsaWrite: async () => {},
         resolveWritableDownloadRoot: vi.fn(),
         requestBrowserBlobDownload,
         getMemoryStats: () => null,
@@ -677,6 +786,7 @@ describe("Offscreen resource lifecycles", () => {
           liveResourceLedger: ledger,
           rateLimitService,
           withImageRetries: async (operation) => operation(),
+          beginFsaWrite: async () => {},
           resolveWritableDownloadRoot: vi.fn(),
           requestBrowserBlobDownload: vi.fn(),
           getMemoryStats: () => null,
@@ -723,7 +833,16 @@ describe("Offscreen resource lifecycles", () => {
           },
         }
       )
-    ).rejects.toThrow("Offscreen live resource cap exceeded")
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining(
+        "Offscreen live resource cap exceeded"
+      ),
+      imagesFailed: 1,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 1,
+      outputsCommitted: 0,
+    })
 
     expect(blobConstructor).not.toHaveBeenCalled()
     expect(registry.getRetainedCount()).toBe(1)
@@ -737,6 +856,151 @@ describe("Offscreen resource lifecycles", () => {
     expect(registry.revoke(browserIdentity)).toBe(true)
     vi.unstubAllGlobals()
 
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("counts an accepted cover before a resource abort on the first page", async () => {
+    const coverData = new Uint8Array(8).buffer
+    const ledger = new OffscreenLiveResourceLedger(16)
+    const coverLease = ledger.reserve(coverData.byteLength, "retained cover")
+    const requestBrowserBlobDownload = vi.fn(async () => ({
+      success: true as const,
+      disposition: "tracked" as const,
+      phase: "prepared" as const,
+    }))
+    const outcome = await processNoneFormatChapter(
+      {
+        liveResourceLedger: ledger,
+        rateLimitService,
+        withImageRetries: async (operation) => operation(),
+        beginFsaWrite: async () => {},
+        resolveWritableDownloadRoot: vi.fn(),
+        requestBrowserBlobDownload,
+        getMemoryStats: () => null,
+      },
+      {
+        opts: {
+          taskId: "task-cover",
+          jobId: "job-cover",
+          attempt: 1,
+          chapter: {
+            id: "chapter-cover",
+            title: "Cover",
+            url: "https://example.com/cover",
+            comicInfo: {},
+          },
+          seriesTitle: "Series",
+          format: "none",
+          includeComicInfo: false,
+          downloadMode: "browser",
+          comicInfoVersion: "2.0",
+          onProgress: vi.fn(async () => undefined),
+          onArchiveProgress: vi.fn(async () => undefined),
+          abortSignal: new AbortController().signal,
+          coverImage: {
+            data: coverData,
+            mimeType: "image/png",
+            liveResourceLease: coverLease,
+          },
+          settingsSnapshot: {
+            ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+            archiveFormat: "none",
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
+        },
+        urls: ["https://images.example/page.png"],
+        integrationId: "test-site",
+        downloadImage: vi.fn(async () => {
+          ledger.reserve(16, "page")
+          throw new Error("unreachable")
+        }),
+        normalizeSettings: {
+          normalizeImageFilenames: true,
+          imagePaddingDigits: "auto",
+        },
+      }
+    )
+
+    expect(outcome).toMatchObject({
+      status: "partial_success",
+      errorMessage: expect.stringContaining(
+        "Offscreen live resource cap exceeded"
+      ),
+      imagesFailed: 1,
+      outputsRequested: 2,
+      outputsFailedBeforeHandoff: 1,
+      outputsCommitted: 0,
+    })
+    expect(requestBrowserBlobDownload).toHaveBeenCalledOnce()
+    coverLease.release()
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("reports cancellation with its resource cause when the job aborts", async () => {
+    const controller = new AbortController()
+    const ledger = new OffscreenLiveResourceLedger(8)
+    const onProgress = vi.fn(async (pct: number) => {
+      if (pct === 100) controller.abort()
+    })
+    const processing = processNoneFormatChapter(
+      {
+        liveResourceLedger: ledger,
+        rateLimitService,
+        withImageRetries: async (operation) => operation(),
+        beginFsaWrite: async () => {},
+        resolveWritableDownloadRoot: vi.fn(),
+        requestBrowserBlobDownload: vi.fn(),
+        getMemoryStats: () => null,
+      },
+      {
+        opts: {
+          taskId: "task-cancel",
+          jobId: "job-cancel",
+          attempt: 1,
+          chapter: {
+            id: "chapter-cancel",
+            title: "Cancel",
+            url: "https://example.com/cancel",
+            comicInfo: {},
+          },
+          seriesTitle: "Series",
+          format: "none",
+          includeComicInfo: false,
+          downloadMode: "browser",
+          comicInfoVersion: "2.0",
+          onProgress,
+          onArchiveProgress: vi.fn(async () => undefined),
+          abortSignal: controller.signal,
+          settingsSnapshot: {
+            ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+            archiveFormat: "none",
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
+        },
+        urls: ["https://images.example/page.png"],
+        integrationId: "test-site",
+        downloadImage: vi.fn(async () => {
+          ledger.reserve(16, "page")
+          throw new Error("unreachable")
+        }),
+        normalizeSettings: {
+          normalizeImageFilenames: true,
+          imagePaddingDigits: "auto",
+        },
+      }
+    )
+
+    await expect(processing).rejects.toThrow("job-cancelled")
+    const error = (await processing.catch((caught: unknown) => caught)) as Error
+    expect((error.cause as Error).message).toContain(
+      "Offscreen live resource cap exceeded"
+    )
     expect(ledger.getUsedBytes()).toBe(0)
   })
 })

@@ -75,7 +75,7 @@ describe("series resolution and offscreen lifecycle", () => {
           initializationState: "ready",
           documentInstanceId: "document-1",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       }
@@ -164,7 +164,7 @@ describe("series resolution and offscreen lifecycle", () => {
             initializationState: "ready",
             documentInstanceId: "document-1",
             activeJobCount: 0,
-            activeSeriesResolutionCount: 0,
+            activeTransientWorkCount: 0,
             activeTaskIds: [],
           }
         }
@@ -231,7 +231,7 @@ describe("series resolution and offscreen lifecycle", () => {
           initializationState: "ready",
           documentInstanceId: "document-1",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       }
@@ -278,7 +278,7 @@ describe("series resolution and offscreen lifecycle", () => {
           initializationState: "ready",
           documentInstanceId: "document-2",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       }
@@ -321,7 +321,7 @@ describe("series resolution and offscreen lifecycle", () => {
           initializationState: "ready",
           documentInstanceId: "document-1",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       }
@@ -360,7 +360,7 @@ describe("series resolution and offscreen lifecycle", () => {
       initializationState: "ready",
       documentInstanceId: "document-2",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
     await scheduleOffscreenCloseIfIdle(
@@ -386,13 +386,13 @@ describe("series resolution and offscreen lifecycle", () => {
       initializationState: "ready",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
     let oldReservation: { release: () => void } | undefined
     await runOffscreenDocumentAdmissionExclusive(async (context) => {
-      oldReservation = context.reserveSeriesResolution()
+      oldReservation = context.reserveTransientWork()
     })
     oldReservation?.release()
 
@@ -407,7 +407,7 @@ describe("series resolution and offscreen lifecycle", () => {
     let newReservation: { release: () => void } | undefined
     await expect(
       runOffscreenDocumentAdmissionExclusive(async (context) => {
-        newReservation = context.reserveSeriesResolution()
+        newReservation = context.reserveTransientWork()
         return "admitted"
       })
     ).resolves.toBe("admitted")

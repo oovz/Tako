@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "id": "copymanga",
+  "name": "拷貝漫畫",
+  "englishName": "CopyManga",
+  "contributors": ["Otaro"],
+  "version": "1.0.0",
+  "shipped": true,
+  "enabledByDefault": true,
+  "patterns": {
+    "domains": ["www.copy3000.com", "www.copy4000.com"],
+    "seriesMatches": ["/comic/*"],
+    "excludeMatches": []
+  },
+  "requiredOrigins": [
+    "https://www.copy3000.com/*",
+    "https://www.copy4000.com/*",
+    "https://sy.mangafunb.fun/*",
+    "https://sd.mangafunb.fun/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": {
+      "mode": "none"
+    }
+  },
+  "imageTransform": {
+    "kind": "none",
+    "estimatedCostMs": 0
+  },
+  "endpointPolicies": [
+    {
+      "id": "copy-page",
+      "purpose": "Copy page",
+      "origins": ["https://www.copy3000.com/*", "https://www.copy4000.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "copy-catalog",
+      "purpose": "Copy catalog",
+      "origins": ["https://www.copy3000.com/*", "https://www.copy4000.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "copy-image",
+      "purpose": "Copy chapter and cover images",
+      "origins": ["https://sy.mangafunb.fun/*", "https://sd.mangafunb.fun/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "sessionRefererRules": [],
+  "customSettings": []
+}

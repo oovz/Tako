@@ -1,22 +1,3 @@
-/**
- * @file shonenjumpplus-download-workflow.spec.ts
- * @description Download-workflow coverage for the Shonen Jump+
- * integration.
- *
- * Exercises the pipeline end-to-end without live network:
- *
- *   series/episode page -> tab state -> episode-json script parsing
- *       -> pageStructure.pages[] -> cdn-ak-img.shonenjumpplus.com
- *       -> offscreen archive -> OPFS cbz
- *
- * Regression targets:
- * - `extractImageUrlsFromEpisodeJsonScript` (HTML attribute decoding).
- * - the integration endpoint client fetching chapter HTML with an
- *   embedded episode-json script (not a separate JSON endpoint).
- * - Tile-based image reconstruction through `descrambleGigaviewerImage`.
- * - Archive output pixel integrity, not merely creation of a non-empty CBZ.
- */
-
 import { unzipSync } from "fflate"
 
 import { test, expect } from "./fixtures/extension"
@@ -40,10 +21,10 @@ import {
 import { decodeRgbaPng } from "./fixtures/png-decoder"
 import { SHONEN_JUMP_PLUS_EXPECTED_TILE_COLORS } from "./fixtures/mock-data/site-integrations/shonenjumpplus/scrambled-image-fixture"
 
-test.describe("Shonen Jump+ download workflow (mocked)", () => {
+test.describe("Shonen Jump+ downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
-  test("completes a single-chapter download through the episode-json pipeline", async ({
+  test("reconstructs chapter images and saves a complete CBZ", async ({
     context,
     extensionId,
     page,
@@ -66,7 +47,7 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
     )
 
     const firstChapter = tabState.chapters.find(
-      (chapter) => chapter.locked !== true
+      (chapter) => chapter.id === series.seriesId
     )
     if (!firstChapter) {
       throw new Error(
@@ -82,7 +63,7 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
       const taskId = await startSingleChapterDownload(optionsPage, {
         sourceTabId: tabId,
         siteIntegrationId: "shonenjumpplus",
-        mangaId: series.seriesId,
+        mangaId: tabState.mangaId,
         seriesTitle: series.seriesTitle,
         chapter: {
           id: firstChapter.id,
@@ -113,12 +94,12 @@ test.describe("Shonen Jump+ download workflow (mocked)", () => {
         archive!.path
       )
       const archiveEntries = unzipSync(archiveBytes)
-      const imageEntry = Object.entries(archiveEntries).find(([path]) =>
-        path.toLowerCase().endsWith(".png")
-      )
+      // The normalized cover occupies page 1. Inspect a chapter page, which
+      // passes through the integration's tile reconstruction.
+      const imageEntry = archiveEntries["02.png"]
       expect(imageEntry).toBeDefined()
 
-      const image = decodeRgbaPng(imageEntry![1])
+      const image = decodeRgbaPng(imageEntry!)
       expect([image.width, image.height]).toEqual([32, 32])
       for (const expectedTile of SHONEN_JUMP_PLUS_EXPECTED_TILE_COLORS) {
         const sampleX = expectedTile.x * 8 + 4

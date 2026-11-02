@@ -1,18 +1,13 @@
-/**
- * MangaDex Site Integration Tests
- *
- * Tests for the MangaDex API site integration including:
- * - Chapter list extraction
- * - External chapter filtering
- * - Pagination limit warning
- * - Series metadata extraction
- * - X-RateLimit-Retry-After header parsing
- * - Rate limit 429 response handling
- * - User preferences reading
- * - PageCount extraction
- */
-
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import {
+  buildMangadexSeriesResponse,
+  buildMangadexSeriesFeedResponse,
+  buildMangadexStatisticsResponse,
+} from "@/tests/e2e/fixtures/mock-data/site-integrations/mangadex/api-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_READER_ID,
+} from "@/tests/e2e/fixtures/mock-data/site-integrations/mangadex/image-fixtures"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { backgroundSiteAdapter } from "@/src/site-integrations/mangadex/background-runtime"
@@ -151,6 +146,112 @@ describe("MangaDex site integration", () => {
       },
     },
   }
+
+  describe("captured Hunter x Hunter API contracts", () => {
+    const seriesId = "db692d58-4b13-4174-ae8c-30c515c0689c"
+
+    it("resolves captured title metadata and the incomplete multilingual catalog window", async () => {
+      ;(global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        async (value: string) => {
+          const pathname = new URL(value).pathname
+          const body = pathname.endsWith("/feed")
+            ? buildMangadexSeriesFeedResponse(seriesId)
+            : pathname.startsWith("/statistics/")
+              ? buildMangadexStatisticsResponse(seriesId)
+              : buildMangadexSeriesResponse(seriesId)
+          return new Response(JSON.stringify(body), {
+            headers: { "content-type": "application/json" },
+          })
+        }
+      )
+
+      const result = await backgroundSiteAdapter.background.series!
+        .resolveSeriesData!({
+        seriesUrl: `https://mangadex.org/title/${seriesId}/hunter-x-hunter`,
+        rateLimitService,
+        siteIntegrationSettingsReader,
+      })
+      expect(result.metadataError).toBeUndefined()
+      expect(result.chapterListError).toBeUndefined()
+      expect(result.seriesMetadata).toMatchObject({
+        title: "Hunter x Hunter",
+        author: "Togashi Yoshihiro",
+        artist: "Togashi Yoshihiro",
+        status: "hiatus",
+        year: 1998,
+        language: "ja",
+        communityRating: 4.76,
+        coverUrl: `https://uploads.mangadex.org/covers/${seriesId}/aa112927-f1e5-4fe4-a4db-7fd4a1536e3c.jpg`,
+      })
+      expect(result.chapterList).toMatchObject({ truncated: true, volumes: [] })
+      if (!result.chapterList || Array.isArray(result.chapterList)) {
+        throw new Error("Expected a paginated MangaDex chapter result")
+      }
+      expect(result.chapterList?.chapters).toHaveLength(82)
+      expect(result.chapterList?.chapters.slice(0, 2)).toMatchObject([
+        {
+          id: "bb5ca282-3fe6-45cf-a028-1b48eeff3b03",
+          title: "Tao ngộ",
+          chapterNumber: 420,
+          language: "vi",
+        },
+        {
+          id: MANGADEX_CAPTURED_READER_ID,
+          title: "Encuentro",
+          chapterNumber: 420,
+          language: "es-la",
+        },
+      ])
+      expect(result.chapterList?.chapters.at(-1)).toMatchObject({
+        id: "77232c7e-9493-4f3e-a1e3-b3bd04588877",
+        chapterNumber: 400.5,
+      })
+      expect(
+        result.chapterList?.chapters.some(
+          (chapter) => chapter.id === "67a2a00d-f3ed-420d-9bd9-8456d2892a26"
+        )
+      ).toBe(false)
+    })
+
+    it.each([
+      [
+        "data",
+        "1-734d42a9487a811b22ad0066df3b0263e6f896489282b3f929798718df517489.png",
+      ],
+      [
+        "data-saver",
+        "1-fbff72a72bea903b8616c6254b05b8f3526e50ec23b54a5cc6497c9ba11f706f.jpg",
+      ],
+    ] as const)(
+      "resolves all 18 captured %s pages on the issued node",
+      async (quality, firstFile) => {
+        ;(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+          new Response(
+            JSON.stringify(
+              buildAtHomeServerResponse(MANGADEX_CAPTURED_READER_ID)
+            ),
+            {
+              headers: { "content-type": "application/json" },
+            }
+          )
+        )
+        const plan =
+          await offscreenSiteAdapter.offscreen.chapter.resolveChapterPlan(
+            {
+              id: MANGADEX_CAPTURED_READER_ID,
+              url: `https://mangadex.org/chapter/${MANGADEX_CAPTURED_READER_ID}`,
+            },
+            {
+              dispatchContext: { mangadexConfiguredImageQuality: quality },
+            }
+          )
+        expect(plan.imageUrls).toHaveLength(18)
+        expect(plan.imageUrls[0]).toBe(
+          `https://cmdxd98sb0x3yprd.mangadex.network/${quality}/c285608214694b55e98564be6f7f27f5/${firstFile}`
+        )
+      }
+    )
+  })
 
   describe("fetchChapterList via api.fetchChapterList", () => {
     it("filters external and unavailable chapters from the downloadable list", async () => {
@@ -1731,7 +1832,7 @@ describe("MangaDex site integration", () => {
       expect(logger.default.error).toHaveBeenCalled()
     })
 
-    it("rejects malformed chapter plans instead of filtering provider output", () => {
+    it("rejects malformed chapter plans", () => {
       expect(() =>
         ChapterImagePlanSchema.parse({
           imageUrls: [
@@ -2103,6 +2204,53 @@ describe("MangaDex site integration", () => {
         "https://new-node.mangadex.network/data/hash456/1-new.png",
         expect.objectContaining({ credentials: "omit" })
       )
+    })
+
+    it("preserves the selected later page when recovery refreshes every filename", async () => {
+      const firstPage = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1])
+      const secondPage = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 2])
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url === "https://uploads.mangadex.org/data/hash123/2-old.png")
+          return new Response(null, { status: 404 })
+        if (url === "https://api.mangadex.org/at-home/server/ch-1")
+          return Response.json({
+            baseUrl: "https://new-node.mangadex.network",
+            chapter: {
+              hash: "hash456",
+              data: ["1-new.png", "2-new.png"],
+              dataSaver: ["1-new.jpg", "2-new.jpg"],
+            },
+          })
+        if (url === "https://new-node.mangadex.network/data/hash456/1-new.png")
+          return new Response(firstPage, {
+            headers: { "content-type": "image/png" },
+          })
+        if (url === "https://new-node.mangadex.network/data/hash456/2-new.png")
+          return new Response(secondPage, {
+            headers: { "content-type": "image/png" },
+          })
+        if (url.includes("mangadex.network/report"))
+          return new Response(null, { status: 204 })
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+      const result = await offscreenSiteAdapter.offscreen.chapter.downloadImage(
+        "https://uploads.mangadex.org/data/hash123/2-old.png",
+        {
+          runtime: {
+            chapterId: "ch-1",
+            rateLimitService,
+            rateLimitSettings: MANGADEX_RATE_LIMIT_SETTINGS,
+          },
+        }
+      )
+      try {
+        expect(result.filename).toBe("2-new.png")
+        expect(new Uint8Array(result.data)).toEqual(secondPage)
+      } finally {
+        result.liveResourceLease.release()
+      }
     })
 
     it("aborts a stalled at-home recovery request with the owning image signal", async () => {

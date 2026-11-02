@@ -1,59 +1,45 @@
 # Permissions
 
-Tako requests only the permissions needed for its download, queue, and library organization features.
+[English](Permissions) · [日本語](Permissions.ja) · [简体中文](Permissions.zh-CN) · [繁體中文](Permissions.zh-TW) · [한국어](Permissions.ko)
 
-## Optional provider host access
+Chrome asks for permissions so Tako can identify a manga, download its images, and save files. This page explains what each permission is used for.
 
-Disabled integrations request their declared site, API, and CDN origins when you enable them. MangaDex also declares optional `https://*/*` access because it serves manga pages from dynamic community nodes (MangaDex@Home). If you decline access or disable an integration, Tako revokes optional host access that is no longer needed.
+## Website access
 
-## Fixed host access
+Tako needs access to supported sites and their image services to load series information and chapters.
 
-Allows network requests to the fixed website, API, and image CDN origins defined by enabled site integrations.
+Site access covers supported websites, their APIs and image services, including alternative domains. See [Supported Sites](Supported-Sites) for the pages and domains Tako recognizes.
 
-## `storage`
+When a site requires an existing session, Tako can use the browser-managed cookies from your sign-in on that site.
 
-Used to save your settings, active download queue, history, and site preferences locally in your browser profile.
+MangaDex is disabled by default. If you enable it in **Options → Site Integrations**, Chrome asks for access to HTTPS sites because MangaDex uses community image servers whose addresses change. If you decline, MangaDex stays disabled.
 
-## `unlimitedStorage`
+Optional website access that is no longer needed is removed when you disable the relevant integration. Access included with the extension's fixed site permissions remains declared. You can also review site access in Chrome's extension settings.
 
-Removes Chrome's default quota for extension local storage, allowing larger download queues and history records.
+## Browser permissions
 
-## `sidePanel`
+| Permission                            | Why Tako uses it                                                                              |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `storage`                             | Keep settings, queue records, and history in your browser profile                             |
+| `unlimitedStorage`                    | Allow queue and history records to grow beyond Chrome's default extension-storage quota       |
+| `sidePanel`                           | Show chapter selection and download progress beside your reading tab                          |
+| `tabs`                                | Read the tab URL and title to identify a supported manga page                                 |
+| `webNavigation`                       | Update the chapter list when you move to another page                                         |
+| `scripting`                           | Read necessary page information on supported sites when a URL or fetched page is insufficient |
+| `offscreen`                           | Process images, create archives, and write to a selected folder in the background             |
+| `downloads`                           | Save files through Chrome Downloads and check whether saving finished                         |
+| `notifications`                       | Show download notifications when notifications are enabled                                    |
+| `alarms`                              | Check ongoing downloads                                                                       |
+| `declarativeNetRequestWithHostAccess` | Set headers required by supported image servers, such as the referring page                   |
 
-Allows Tako to open its user interface inside Chrome's Side Panel, enabling you to browse chapters, select downloads, and monitor progress right next to your reading tab.
+## Folder access
 
-## `offscreen`
+Choosing a custom folder opens Chrome's folder picker. Tako can then save to that folder and its subfolders. Your folder choice is saved locally for your settings and downloads.
 
-Enables background image downloading, rate limiting, image descrambling, archive packaging (CBZ/ZIP), and local folder writes without blocking the main browser interface.
+Changing the default folder affects new tasks. Existing tasks keep their original folder, and **Grant access again** renews access to that folder. See [Troubleshooting](Troubleshooting#folder-access-was-lost) if a task cannot save.
 
-## `downloads`
+## Privacy
 
-Used to save completed chapter files to your computer when using standard Chrome Downloads.
+Settings, queue records, and download history stay local. Download requests go directly to the supported sites and their image services. Tako runs without developer analytics or a server that receives chapter contents.
 
-## `tabs`
-
-Reads the active tab's URL and title to detect when you are viewing a supported manga page, allowing Tako to display the correct chapter list in the Side Panel.
-
-## `scripting`
-
-Enables a lightweight, read-only page helper on supported sites when URL and page metadata alone are insufficient to resolve the chapter list.
-
-## `webNavigation`
-
-Detects page navigation and single-page application (SPA) route changes to keep the chapter list updated in the Side Panel.
-
-## `notifications`
-
-Allows Tako to show optional desktop notifications when batch downloads complete or when a task needs your attention.
-
-## `alarms`
-
-Wakes the extension periodically so it can continue queue processing and scheduled work across browser sessions.
-
-## `declarativeNetRequestWithHostAccess`
-
-Sets required request headers, such as `Referer`, for image servers that need them. Rules are scoped to extension requests on supported domains.
-
-## File System Access
-
-Allows you to select a custom local folder where Tako can save your manga directly. Access is granted through a standard browser folder picker, and can be changed or revoked at any time in extension settings.
+When MangaDex is enabled, Tako sends the delivery reports required by MangaDex@Home directly to MangaDex. The [privacy policy](https://github.com/oovz/Tako/blob/main/PRIVACY.md) explains what those reports contain.

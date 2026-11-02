@@ -1,11 +1,14 @@
-import React, { useState } from "react"
+import React, { useState, type Dispatch, type SetStateAction } from "react"
 import { toast } from "sonner"
 
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import { CommandCenterTaskRow } from "@/entrypoints/sidepanel/components/CommandCenterTaskRow"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
-import { shouldConfirmTaskCancellation } from "@/entrypoints/sidepanel/components/command-center-queue-helpers"
+import {
+  shouldConfirmTaskCancellation,
+  type CommandCenterTaskActionHandler,
+} from "@/entrypoints/sidepanel/components/command-center-queue-helpers"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
 
 export interface CommandCenterQueueProps {
@@ -14,16 +17,14 @@ export interface CommandCenterQueueProps {
     taskId: string
   ) => CancelTaskResult | Promise<CancelTaskResult>
   cancelingTaskIds?: Set<string>
-  onForgetUnobservable?: (taskId: string) => void | Promise<void>
-  forgettingTaskIds?: Set<string>
   retryingTaskIds?: Set<string>
   restartingTaskIds?: Set<string>
   removingTaskIds?: Set<string>
   movingTaskIds?: Set<string>
-  onRetryFailed?: (taskId: string) => void
-  onRestartTask?: (taskId: string) => void
-  onMoveTaskToTop?: (taskId: string) => void
-  onRemoveTask?: (taskId: string) => void
+  onRetryFailed?: CommandCenterTaskActionHandler
+  onRestartTask?: CommandCenterTaskActionHandler
+  onMoveTaskToTop?: CommandCenterTaskActionHandler
+  onRemoveTask?: CommandCenterTaskActionHandler
   emptyState?: React.ReactNode
   activeTaskProgress?: ActiveTaskProgressState | null
   showActiveProgress?: boolean
@@ -32,179 +33,147 @@ export interface CommandCenterQueueProps {
 
 export { getRetryAvailability } from "@/entrypoints/sidepanel/components/command-center-queue-helpers"
 
-export function CommandCenterQueue({
-  tasks,
-  onCancelTask,
-  cancelingTaskIds,
-  onForgetUnobservable,
-  forgettingTaskIds,
-  retryingTaskIds,
-  restartingTaskIds,
-  removingTaskIds,
-  movingTaskIds,
-  onRetryFailed,
-  onRestartTask,
-  onMoveTaskToTop,
-  onRemoveTask,
-  emptyState,
-  activeTaskProgress,
-  showActiveProgress = false,
-  firstQueuedTaskId,
-}: CommandCenterQueueProps) {
-  const [confirmingCancelTaskId, setConfirmingCancelTaskId] = useState<
-    string | null
-  >(null)
-  const [confirmingForgetTaskId, setConfirmingForgetTaskId] = useState<
-    string | null
-  >(null)
-  const [coverLoadFailures, setCoverLoadFailures] = useState<
-    Record<string, true>
-  >({})
-  const [cancelErrorsByTaskId, setCancelErrorsByTaskId] = useState<
-    Record<string, string>
-  >({})
-  const [forgetErrorsByTaskId, setForgetErrorsByTaskId] = useState<
-    Record<string, string>
-  >({})
+type CancelErrors = Record<string, string>
+type StateSetter<T> = Dispatch<SetStateAction<T>>
 
-  if (tasks.length === 0) {
+function clearCancelError(errors: CancelErrors, taskId: string): CancelErrors {
+  if (!(taskId in errors)) return errors
+  const nextErrors = { ...errors }
+  delete nextErrors[taskId]
+  return nextErrors
+}
+
+function beginTaskCancellation(
+  task: QueueTaskSummary,
+  onCancelTask: CommandCenterQueueProps["onCancelTask"],
+  setConfirming: StateSetter<string | null>,
+  setErrors: StateSetter<CancelErrors>
+) {
+  setErrors((errors) => clearCancelError(errors, task.id))
+  if (shouldConfirmTaskCancellation(task)) {
+    setConfirming(task.id)
+    return
+  }
+  void Promise.resolve(onCancelTask?.(task.id)).then((result) => {
+    if (result?.kind === "failed") toast.error(result.message)
+  })
+}
+
+async function confirmTaskCancellation(
+  taskId: string,
+  onCancelTask: CommandCenterQueueProps["onCancelTask"],
+  setConfirming: StateSetter<string | null>,
+  setErrors: StateSetter<CancelErrors>
+) {
+  const result = await onCancelTask?.(taskId)
+  if (result?.kind === "failed") {
+    setErrors((errors) => ({ ...errors, [taskId]: result.message }))
+    return
+  }
+  if (result?.kind === "already-pending") return
+  setConfirming((currentTaskId) =>
+    currentTaskId === taskId ? null : currentTaskId
+  )
+}
+
+function dismissTaskCancellation(
+  taskId: string | null,
+  setConfirming: StateSetter<string | null>,
+  setErrors: StateSetter<CancelErrors>
+) {
+  if (taskId) setErrors((errors) => clearCancelError(errors, taskId))
+  setConfirming(null)
+}
+
+interface QueueCancellation {
+  confirmingTaskId: string | null
+  errors: CancelErrors
+  begin: (task: QueueTaskSummary) => void
+  confirm: (taskId: string) => void
+  dismiss: () => void
+}
+
+function QueueTaskRow({
+  task,
+  queue,
+  cancellation,
+}: {
+  task: QueueTaskSummary
+  queue: CommandCenterQueueProps
+  cancellation: QueueCancellation
+}) {
+  return (
+    <div>
+      <CommandCenterTaskRow
+        task={task}
+        isCanceling={queue.cancelingTaskIds?.has(task.id) === true}
+        isRetrying={queue.retryingTaskIds?.has(task.id) === true}
+        isRestarting={queue.restartingTaskIds?.has(task.id) === true}
+        isRemoving={queue.removingTaskIds?.has(task.id) === true}
+        isMoving={queue.movingTaskIds?.has(task.id) === true}
+        isConfirmingCancel={cancellation.confirmingTaskId === task.id}
+        cancelError={cancellation.errors[task.id] ?? null}
+        activeTaskProgress={queue.activeTaskProgress}
+        showActiveProgress={queue.showActiveProgress === true}
+        isFirstQueuedTask={queue.firstQueuedTaskId === task.id}
+        onBeginCancel={() => cancellation.begin(task)}
+        onConfirmCancel={cancellation.confirm}
+        onDismissCancel={cancellation.dismiss}
+        onCancelTask={queue.onCancelTask}
+        onRetryFailed={queue.onRetryFailed}
+        onRestartTask={queue.onRestartTask}
+        onMoveTaskToTop={queue.onMoveTaskToTop}
+        onRemoveTask={queue.onRemoveTask}
+      />
+    </div>
+  )
+}
+
+export function CommandCenterQueue(props: CommandCenterQueueProps) {
+  const [confirmingTaskId, setConfirmingTaskId] = useState<string | null>(null)
+  const [cancelErrors, setCancelErrors] = useState<CancelErrors>({})
+  const cancellation: QueueCancellation = {
+    confirmingTaskId,
+    errors: cancelErrors,
+    begin: (task) =>
+      beginTaskCancellation(
+        task,
+        props.onCancelTask,
+        setConfirmingTaskId,
+        setCancelErrors
+      ),
+    confirm: (taskId) => {
+      void confirmTaskCancellation(
+        taskId,
+        props.onCancelTask,
+        setConfirmingTaskId,
+        setCancelErrors
+      )
+    },
+    dismiss: () =>
+      dismissTaskCancellation(
+        confirmingTaskId,
+        setConfirmingTaskId,
+        setCancelErrors
+      ),
+  }
+  if (props.tasks.length === 0) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        {emptyState ?? t("sidepanel_emptyQueue")}
+        {props.emptyState ?? t("sidepanel_emptyQueue")}
       </div>
     )
   }
-
   return (
     <div>
-      {tasks.map((task) => {
-        const isCanceling = cancelingTaskIds?.has(task.id) ?? false
-
-        return (
-          <div key={task.id}>
-            <CommandCenterTaskRow
-              task={task}
-              isCanceling={isCanceling}
-              isForgettingUnobservable={
-                forgettingTaskIds?.has(task.id) ?? false
-              }
-              isRetrying={retryingTaskIds?.has(task.id) ?? false}
-              isRestarting={restartingTaskIds?.has(task.id) ?? false}
-              isRemoving={removingTaskIds?.has(task.id) ?? false}
-              isMoving={movingTaskIds?.has(task.id) ?? false}
-              isConfirmingCancel={confirmingCancelTaskId === task.id}
-              isConfirmingForget={confirmingForgetTaskId === task.id}
-              cancelError={cancelErrorsByTaskId[task.id] ?? null}
-              forgetError={forgetErrorsByTaskId[task.id] ?? null}
-              coverFailed={coverLoadFailures[task.id] === true}
-              activeTaskProgress={activeTaskProgress}
-              showActiveProgress={showActiveProgress}
-              isFirstQueuedTask={firstQueuedTaskId === task.id}
-              onBeginCancel={(taskId) => {
-                setCancelErrorsByTaskId((previousErrors) => {
-                  if (!(taskId in previousErrors)) return previousErrors
-                  const nextErrors = { ...previousErrors }
-                  delete nextErrors[taskId]
-                  return nextErrors
-                })
-                if (!shouldConfirmTaskCancellation(task)) {
-                  void Promise.resolve(onCancelTask?.(taskId)).then(
-                    (result) => {
-                      if (result?.kind === "failed") {
-                        toast.error(result.message)
-                      }
-                    }
-                  )
-                  return
-                }
-                setConfirmingCancelTaskId(taskId)
-              }}
-              onConfirmCancel={(taskId) => {
-                void (async () => {
-                  const result = await onCancelTask?.(taskId)
-                  if (result?.kind === "failed") {
-                    setCancelErrorsByTaskId((previousErrors) => ({
-                      ...previousErrors,
-                      [taskId]: result.message,
-                    }))
-                    return
-                  }
-
-                  if (result?.kind === "already-pending") return
-
-                  setConfirmingCancelTaskId((currentTaskId) =>
-                    currentTaskId === taskId ? null : currentTaskId
-                  )
-                })()
-              }}
-              onDismissCancel={() => {
-                if (confirmingCancelTaskId) {
-                  const taskId = confirmingCancelTaskId
-                  setCancelErrorsByTaskId((previousErrors) => {
-                    if (!(taskId in previousErrors)) return previousErrors
-                    const nextErrors = { ...previousErrors }
-                    delete nextErrors[taskId]
-                    return nextErrors
-                  })
-                }
-                setConfirmingCancelTaskId(null)
-              }}
-              onBeginForgetUnobservable={(taskId) => {
-                setForgetErrorsByTaskId((previousErrors) => {
-                  if (!(taskId in previousErrors)) return previousErrors
-                  const nextErrors = { ...previousErrors }
-                  delete nextErrors[taskId]
-                  return nextErrors
-                })
-                setConfirmingForgetTaskId(taskId)
-              }}
-              onConfirmForgetUnobservable={(taskId) => {
-                void (async () => {
-                  try {
-                    await onForgetUnobservable?.(taskId)
-                  } catch (error) {
-                    setForgetErrorsByTaskId((previousErrors) => ({
-                      ...previousErrors,
-                      [taskId]:
-                        error instanceof Error
-                          ? error.message
-                          : t("sidepanel_toastForgetFailed"),
-                    }))
-                    return
-                  }
-                  setConfirmingForgetTaskId((currentTaskId) =>
-                    currentTaskId === taskId ? null : currentTaskId
-                  )
-                })()
-              }}
-              onDismissForgetUnobservable={() => {
-                if (confirmingForgetTaskId) {
-                  const taskId = confirmingForgetTaskId
-                  setForgetErrorsByTaskId((previousErrors) => {
-                    if (!(taskId in previousErrors)) return previousErrors
-                    const nextErrors = { ...previousErrors }
-                    delete nextErrors[taskId]
-                    return nextErrors
-                  })
-                }
-                setConfirmingForgetTaskId(null)
-              }}
-              onCoverError={(taskId) => {
-                setCoverLoadFailures((previousFailures) => ({
-                  ...previousFailures,
-                  [taskId]: true,
-                }))
-              }}
-              onCancelTask={onCancelTask}
-              onForgetUnobservable={onForgetUnobservable}
-              onRetryFailed={onRetryFailed}
-              onRestartTask={onRestartTask}
-              onMoveTaskToTop={onMoveTaskToTop}
-              onRemoveTask={onRemoveTask}
-            />
-          </div>
-        )
-      })}
+      {props.tasks.map((task) => (
+        <QueueTaskRow
+          key={task.id}
+          task={task}
+          queue={props}
+          cancellation={cancellation}
+        />
+      ))}
     </div>
   )
 }

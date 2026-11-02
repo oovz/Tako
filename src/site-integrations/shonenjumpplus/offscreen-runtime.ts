@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import type {
   OffscreenIntegration,
   OffscreenSiteAdapter,
@@ -113,6 +114,7 @@ const offscreen: OffscreenIntegration = {
         ),
       })
       if (!response.ok) {
+        cancelResponseBody(response)
         throw Object.assign(
           new Error(
             `Shonen Jump+ chapter page could not be loaded (HTTP ${response.status}).`

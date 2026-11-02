@@ -5,6 +5,8 @@ import { NotificationService } from "@/entrypoints/background/notification-servi
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 
+const chromeI18n = chrome.i18n
+
 vi.mock("@/src/runtime/logger", () => ({
   default: {
     info: vi.fn(),
@@ -45,6 +47,7 @@ describe("completion notification chapter counts", () => {
     vi.clearAllMocks()
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       runtime: {
         getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
       },
@@ -64,6 +67,7 @@ describe("completion notification chapter counts", () => {
     const task = makeTask({
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -72,6 +76,7 @@ describe("completion notification chapter counts", () => {
           lastUpdated: Date.now(),
         },
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-2",
           url: "https://example.com/ch-2",
           title: "Chapter 2",
@@ -88,7 +93,7 @@ describe("completion notification chapter counts", () => {
     expect(notificationsCreate).toHaveBeenCalledWith(
       `task_complete_${task.id}`,
       expect.objectContaining({
-        message: `${task.seriesTitle}: 2/2 chapters saved`,
+        message: `${task.seriesTitle}: 2/2 chapters\nThis record shows earlier processing. Final saving was not confirmed.`,
       })
     )
   })

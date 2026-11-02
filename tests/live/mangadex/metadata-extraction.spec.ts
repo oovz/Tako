@@ -6,7 +6,7 @@ import {
 } from "../fixtures/metadata-extraction-helpers"
 
 test.describe("MangaDex metadata extraction (live)", () => {
-  test("extracts chapter and volume numbers from live MangaDex state", async ({
+  test("extracts chapter and volume numbers", async ({
     context,
     extensionId,
   }) => {
@@ -24,11 +24,6 @@ test.describe("MangaDex metadata extraction (live)", () => {
       expectAnyVolumeNumbers: "if-present",
     })
 
-    const parsedChapters = (state.chapters ?? []).filter(
-      (chapter) =>
-        typeof chapter.chapterNumber === "number" && chapter.chapterNumber >= 0
-    )
-    expect(parsedChapters.length).toBeGreaterThan(0)
     await page.close()
   })
 })

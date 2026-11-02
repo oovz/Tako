@@ -13,9 +13,9 @@ import {
 import {
   extractChapterListFromDocument,
   extractSeriesMetadataFromDocument,
-} from "@/src/site-integrations/manhuagui/series-dom"
-import { parseSeriesIdFromPath } from "@/src/site-integrations/manhuagui/shared"
-import { offscreenSiteAdapter } from "@/src/site-integrations/manhuagui/offscreen-runtime"
+} from "@/src/site-integrations/readmanga/series-dom"
+import { parseSeriesIdFromPath } from "@/src/site-integrations/readmanga/shared"
+import { offscreenSiteAdapter } from "@/src/site-integrations/readmanga/offscreen-runtime"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 type MockChapterGroup = {
@@ -764,8 +764,8 @@ export function registerManhuaguiCases(): void {
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({
-          integrationId: "manhuagui",
-          endpointId: "manhuagui-series-html",
+          integrationId: "readmanga",
+          endpointId: "readmanga-series-html",
           url: "https://www.manhuagui.com/comic/28004/760111.html",
           scope: "chapter",
           init: { credentials: "include" },
@@ -774,8 +774,8 @@ export function registerManhuaguiCases(): void {
       expect(mockRateLimitedFetch).toHaveBeenNthCalledWith(
         2,
         expect.objectContaining({
-          integrationId: "manhuagui",
-          endpointId: "manhuagui-reader-config",
+          integrationId: "readmanga",
+          endpointId: "readmanga-reader-config",
           url: "https://cf.mhgui.com/scripts/config_TEST.js",
           scope: "chapter",
           init: { credentials: "omit" },
@@ -783,7 +783,7 @@ export function registerManhuaguiCases(): void {
       )
     })
 
-    it("relies on DNR rather than ineffective Fetch referrer options for Hamreus images", async () => {
+    it("leaves Hamreus image referrers to the network rules", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,
         headers: {
@@ -816,8 +816,8 @@ export function registerManhuaguiCases(): void {
           init?: RequestInit
         },
       ]
-      expect(request.integrationId).toBe("manhuagui")
-      expect(request.endpointId).toBe("manhuagui-image-cdn")
+      expect(request.integrationId).toBe("readmanga")
+      expect(request.endpointId).toBe("readmanga-image-cdn")
       expect(request.url).toBe(
         "https://us.hamreus.com/ps4/g/h/i/003.jpg?e=1712345679&m=def456"
       )

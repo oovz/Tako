@@ -1,4 +1,5 @@
 import logger from "@/src/runtime/logger"
+import { isFatalRuntimeInitializationError } from "@/src/runtime/runtime-phase-errors"
 import {
   SITE_INTEGRATION_ENABLEMENT_STORAGE_KEY,
   type SiteIntegrationEnablementService,
@@ -14,6 +15,7 @@ import type {
 } from "./definition-types"
 import { assertValidSessionRefererRuleDeclaration } from "./definition-validation"
 import { isEnabled } from "./catalog"
+import { clearProviderPolicyAlarm } from "./session-rule-manager-alarms"
 import {
   ProviderNetworkPolicyContinuationCoordinator,
   type ProviderNetworkPolicyStateSnapshot,
@@ -241,13 +243,10 @@ export class SiteIntegrationSessionRuleManager {
   private async clearRetryAlarmAfterSuccess(): Promise<void> {
     this.retryAttempt = 0
     this.retryAlarmScheduled = false
-    if (!chrome.alarms?.clear) return
-
-    try {
-      await chrome.alarms.clear(SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM)
-    } catch (error) {
-      logger.warn("Unable to clear the provider DNR retry alarm", error)
-    }
+    await clearProviderPolicyAlarm(
+      SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM,
+      "Unable to clear the provider DNR retry alarm"
+    )
   }
 
   private async scheduleRetryAlarm(): Promise<void> {
@@ -275,31 +274,28 @@ export class SiteIntegrationSessionRuleManager {
 
   private async runRequestedReconciliations(): Promise<void> {
     try {
-      while (true) {
-        while (this.successfulRevision < this.requestedRevision) {
-          const targetRevision = this.requestedRevision
-          const enablement = this.requestedEnablement
-          const outcome = await this.reconcileSessionRulesNow(enablement)
-          this.installedManagedRuleIds = outcome.installedRuleIds
-          this.lastSuccessfulEnablement = outcome.enablement
-          this.successfulRevision = targetRevision
-          this.lastSuccessfulAt = Date.now()
-        }
-
-        if (this.successfulRevision === this.requestedRevision) {
-          this.reconciliationDirty = false
-          if (this.lastSuccessfulEnablement) {
-            await this.continuation.noteReconciliationSucceeded(
-              this.successfulRevision,
-              this.lastSuccessfulEnablement
-            )
-          }
-          await this.clearRetryAlarmAfterSuccess()
-          return
-        }
+      await this.awaitSchemaMigration()
+      while (this.successfulRevision < this.requestedRevision) {
+        const targetRevision = this.requestedRevision
+        const enablement = this.requestedEnablement
+        const outcome = await this.reconcileSessionRulesNow(enablement)
+        this.installedManagedRuleIds = outcome.installedRuleIds
+        this.lastSuccessfulEnablement = outcome.enablement
+        this.successfulRevision = targetRevision
+        this.lastSuccessfulAt = Date.now()
       }
+
+      this.reconciliationDirty = false
+      if (this.lastSuccessfulEnablement) {
+        await this.continuation.noteReconciliationSucceeded(
+          this.successfulRevision,
+          this.lastSuccessfulEnablement
+        )
+      }
+      await this.clearRetryAlarmAfterSuccess()
     } catch (error) {
       this.reconciliationDirty = true
+      if (isFatalRuntimeInitializationError(error)) throw error
       try {
         await this.scheduleRetryAlarm()
       } catch (alarmError) {
@@ -313,12 +309,10 @@ export class SiteIntegrationSessionRuleManager {
 
   /**
    * Serialize and coalesce DNR updates so storage, permission, alarm, and
-   * dispatch-time readiness requests cannot race. Waits for the destructive
-   * schema reset so enablement reads and continuation state never touch
-   * pre-reset storage.
+   * dispatch-time readiness requests cannot race. Schema migration completes
+   * before enablement reads and continuation state access retained storage.
    */
   async reconcile(enablement?: SiteIntegrationEnablementMap): Promise<void> {
-    await this.awaitSchemaMigration()
     this.requestedRevision += 1
     this.requestedEnablement = enablement
     this.reconciliationDirty = true
@@ -376,12 +370,7 @@ export class SiteIntegrationSessionRuleManager {
     )
   }
 
-  /**
-   * Register lifecycle listeners synchronously from the service-worker
-   * entrypoint. This method intentionally performs no asynchronous work.
-   */
-  registerListeners(): void {
-    if (this.listenersRegistered) return
+  private registerStorageListener(): void {
     chrome.storage?.onChanged?.addListener((changes, areaName) => {
       if (
         areaName !== "local" ||
@@ -399,7 +388,9 @@ export class SiteIntegrationSessionRuleManager {
         )
       })
     })
+  }
 
+  private registerPermissionListeners(): void {
     const reconcileAfterPermissionChange = (
       permissions: chrome.permissions.Permissions
     ) => {
@@ -413,7 +404,9 @@ export class SiteIntegrationSessionRuleManager {
     }
     chrome.permissions?.onAdded?.addListener(reconcileAfterPermissionChange)
     chrome.permissions?.onRemoved?.addListener(reconcileAfterPermissionChange)
+  }
 
+  private registerRetryAlarmListener(): void {
     chrome.alarms?.onAlarm?.addListener((alarm) => {
       if (alarm.name !== SITE_INTEGRATION_SESSION_RULE_RETRY_ALARM) return
       this.retryAlarmScheduled = false
@@ -421,6 +414,14 @@ export class SiteIntegrationSessionRuleManager {
         logger.warn("Failed to reconcile DNR rules from retry alarm", error)
       })
     })
+  }
+
+  /** Register lifecycle listeners synchronously from the service-worker entrypoint. */
+  registerListeners(): void {
+    if (this.listenersRegistered) return
+    this.registerStorageListener()
+    this.registerPermissionListeners()
+    this.registerRetryAlarmListener()
     this.continuation.registerListeners()
     this.listenersRegistered = true
   }
@@ -433,19 +434,11 @@ export class SiteIntegrationSessionRuleManager {
     return this.initialReconciliation
   }
 
-  /**
-   * Block only providers that declare session-scoped network rules. A fresh
-   * enablement read closes enable-and-dispatch races; DNR is rewritten only when
-   * that input changed or the current service-worker revision is dirty.
-   */
-  async ensureNetworkReady(siteIntegrationId: string): Promise<void> {
-    const manifest = getDefinition(siteIntegrationId)
-    const declarations = manifest?.sessionRefererRules ?? []
-    if (declarations.length === 0) return
-
-    let currentEnablement: SiteIntegrationEnablementMap
+  private async readReadinessEnablement(
+    siteIntegrationId: string
+  ): Promise<SiteIntegrationEnablementMap> {
     try {
-      currentEnablement = await this.service.getAll()
+      return await this.service.getAll()
     } catch (error) {
       let cause = error
       try {
@@ -457,7 +450,12 @@ export class SiteIntegrationSessionRuleManager {
       }
       throw new ProviderNetworkPolicyPendingError(siteIntegrationId, cause)
     }
+  }
 
+  private async reconcileReadiness(
+    siteIntegrationId: string,
+    currentEnablement: SiteIntegrationEnablementMap
+  ): Promise<void> {
     try {
       if (
         !this.hasSameEnablement(
@@ -477,8 +475,13 @@ export class SiteIntegrationSessionRuleManager {
     } catch (error) {
       throw new ProviderNetworkPolicyPendingError(siteIntegrationId, error)
     }
+  }
 
-    const missingRuleIds = declarations
+  private async assertRequiredRulesInstalled(
+    manifest: SiteIntegrationDefinition
+  ): Promise<void> {
+    const siteIntegrationId = manifest.id
+    const missingRuleIds = manifest.sessionRefererRules
       .map((declaration) => declaration.id)
       .filter((ruleId) => !this.installedManagedRuleIds.has(ruleId))
     if (missingRuleIds.length > 0) {
@@ -490,7 +493,7 @@ export class SiteIntegrationSessionRuleManager {
       }
       let hostAccess: boolean
       try {
-        hostAccess = manifest ? await hasRequiredHostAccess(manifest) : false
+        hostAccess = await hasRequiredHostAccess(manifest)
       } catch (error) {
         throw new ProviderNetworkPolicyPendingError(siteIntegrationId, error)
       }
@@ -504,5 +507,18 @@ export class SiteIntegrationSessionRuleManager {
         `Provider network policy is not ready for ${siteIntegrationId}; missing DNR rule(s): ${missingRuleIds.join(", ")}`
       )
     }
+  }
+
+  /**
+   * Block only providers that declare session-scoped network rules. A fresh
+   * enablement read closes enable-and-dispatch races; DNR is rewritten only when
+   * that input changed or the current service-worker revision is dirty.
+   */
+  async ensureNetworkReady(siteIntegrationId: string): Promise<void> {
+    const manifest = getDefinition(siteIntegrationId)
+    if (!manifest || manifest.sessionRefererRules.length === 0) return
+    const enablement = await this.readReadinessEnablement(siteIntegrationId)
+    await this.reconcileReadiness(siteIntegrationId, enablement)
+    await this.assertRequiredRulesInstalled(manifest)
   }
 }

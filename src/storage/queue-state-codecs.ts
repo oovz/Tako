@@ -5,46 +5,43 @@ import type {
   DownloadTaskState,
   PendingUndoAction,
 } from "@/src/domain/queue/state"
-import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
+import { parseDurableState } from "./durable-state-codecs"
 import {
   ActiveDispatchLeaseSchema,
   DownloadTaskStateSchema,
   PendingUndoActionSchema,
 } from "@/src/runtime/queue-state-schemas"
 
-function parseOrThrow<T>(
-  schema: z.ZodType<T>,
-  value: unknown,
-  description: string
-): T {
-  const parsed = schema.safeParse(value)
-  if (!parsed.success) {
-    throw new InvalidDurableStateError(`Invalid durable ${description}`, {
-      cause: parsed.error,
-    })
-  }
-  return parsed.data
-}
-
 export function parseCurrentDownloadQueue(value: unknown): DownloadTaskState[] {
-  if (value === undefined) return []
-  return parseOrThrow(z.array(DownloadTaskStateSchema), value, "download queue")
+  return parseCurrentArray(DownloadTaskStateSchema, value, "download queue")
 }
 
 export function parseCurrentActiveDispatchLease(
   value: unknown
 ): ActiveDispatchLease | null {
   if (value === undefined || value === null) return null
-  return parseOrThrow(ActiveDispatchLeaseSchema, value, "active dispatch lease")
+  return parseDurableState(
+    ActiveDispatchLeaseSchema,
+    value,
+    "active dispatch lease"
+  )
 }
 
 export function parseCurrentPendingUndoActions(
   value: unknown
 ): PendingUndoAction[] {
-  if (value === undefined) return []
-  return parseOrThrow(
-    z.array(PendingUndoActionSchema),
+  return parseCurrentArray(
+    PendingUndoActionSchema,
     value,
     "pending Undo actions"
   )
+}
+
+function parseCurrentArray<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+  description: string
+): T[] {
+  if (value === undefined) return []
+  return parseDurableState(z.array(schema), value, description)
 }

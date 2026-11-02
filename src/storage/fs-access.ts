@@ -1,20 +1,25 @@
-/*
-  File System Access helpers for selecting a download root and writing files.
-  - Stores FileSystemDirectoryHandle in IndexedDB (structured clone via IDB allowed).
-  - Provides writeBlobToPath() to save at subpaths under the chosen root.
-  - No implicit fallbacks: callers must surface errors (permission denied, missing handle) explicitly.
-*/
+import {
+  DirectoryNotFoundError,
+  PermissionExpiredError,
+} from "@/src/types/errors"
+/**
+ * Store directory handles in IndexedDB and write beneath the selected root.
+ * Permission and write failures propagate without changing the destination.
+ */
 
+import { parseSettingsDocument } from "@/src/domain/settings/schema"
+import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import logger from "@/src/runtime/logger"
 import type { ConflictPolicy } from "@/src/shared/download-contract"
+import { probeDirectory } from "./fs-access-directory-probe"
 
-// Types for TS without DOM lib: declare minimal types
-// These are standard in modern browsers; MV3 offscreen/options have DOM.
 export type DirHandle = FileSystemDirectoryHandle
 export type FileHandle = FileSystemFileHandle
 
 export const DOWNLOAD_ROOT_DB_NAME = "tako-fs"
 export const DOWNLOAD_ROOT_STORE_NAME = "handles"
+export const MANAGED_DOWNLOAD_ROOT_STORE_NAME = "managed-handles"
+export const DOWNLOAD_ROOT_DB_VERSION = 2
 export const DOWNLOAD_ROOT_HANDLE_ID = "download-root"
 
 export interface FsaCapabilities {
@@ -78,12 +83,14 @@ export async function queryFsaPermission(
 // Open IndexedDB
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DOWNLOAD_ROOT_DB_NAME, 1)
+    const req = indexedDB.open(DOWNLOAD_ROOT_DB_NAME, DOWNLOAD_ROOT_DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(DOWNLOAD_ROOT_STORE_NAME)) {
         db.createObjectStore(DOWNLOAD_ROOT_STORE_NAME)
       }
+      if (!db.objectStoreNames.contains(MANAGED_DOWNLOAD_ROOT_STORE_NAME))
+        db.createObjectStore(MANAGED_DOWNLOAD_ROOT_STORE_NAME)
     }
     req.onsuccess = () => {
       const db = req.result
@@ -97,59 +104,65 @@ function openDB(): Promise<IDBDatabase> {
 
 async function runTransaction<T>(
   mode: IDBTransactionMode,
-  requestFactory: (store: IDBObjectStore) => IDBRequest,
-  getResult: (request: IDBRequest) => T
+  requestFactory: (
+    store: IDBObjectStore,
+    transaction: IDBTransaction
+  ) => IDBRequest,
+  getResult: (request: IDBRequest) => T,
+  stores: string[] = [DOWNLOAD_ROOT_STORE_NAME]
 ): Promise<T> {
   const db = await openDB()
   try {
-    return await new Promise<T>((resolve, reject) => {
-      let result!: T
-      let requestError: DOMException | null = null
-      let settled = false
-
-      const rejectOnce = (error: unknown): void => {
-        if (settled) return
-        settled = true
-        reject(error instanceof Error ? error : new Error(String(error)))
-      }
-
-      try {
-        const tx = db.transaction(DOWNLOAD_ROOT_STORE_NAME, mode)
-        const request = requestFactory(tx.objectStore(DOWNLOAD_ROOT_STORE_NAME))
-        request.onsuccess = () => {
-          result = getResult(request)
-        }
-        request.onerror = () => {
-          requestError = request.error
-        }
-        tx.oncomplete = () => {
-          if (requestError) {
-            rejectOnce(requestError)
-            return
-          }
-          if (settled) return
-          settled = true
-          resolve(result)
-        }
-        tx.onerror = () =>
-          rejectOnce(
-            requestError ??
-              tx.error ??
-              new Error("IndexedDB transaction failed")
-          )
-        tx.onabort = () =>
-          rejectOnce(
-            requestError ??
-              tx.error ??
-              new Error("IndexedDB transaction aborted")
-          )
-      } catch (error) {
-        rejectOnce(error)
-      }
-    })
+    const tx = db.transaction(stores, mode)
+    const request = requestFactory(tx.objectStore(stores[0]), tx)
+    return await waitForTransaction(tx, request, getResult)
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error))
   } finally {
     db.close()
   }
+}
+
+function waitForTransaction<T>(
+  tx: IDBTransaction,
+  request: IDBRequest,
+  getResult: (request: IDBRequest) => T
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let result!: T
+    let requestError: DOMException | null = null
+    let settled = false
+
+    const rejectOnce = (error: Error): void => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+
+    request.onsuccess = () => {
+      result = getResult(request)
+    }
+    request.onerror = () => {
+      requestError = request.error
+    }
+    tx.oncomplete = () => {
+      if (requestError) {
+        rejectOnce(requestError)
+        return
+      }
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+    tx.onerror = () =>
+      rejectOnce(
+        requestError ?? tx.error ?? new Error("IndexedDB transaction failed")
+      )
+    tx.onabort = () =>
+      rejectOnce(
+        requestError ?? tx.error ?? new Error("IndexedDB transaction aborted")
+      )
+  })
 }
 
 async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
@@ -160,33 +173,72 @@ async function idbGet<T = unknown>(key: string): Promise<T | undefined> {
   )
 }
 
-async function idbSet(key: string, value: unknown): Promise<void> {
+async function idbAdd(key: string, value: unknown): Promise<void> {
   await runTransaction(
     "readwrite",
-    (store) => store.put(value, key),
+    (store) => store.add(value, key),
     () => undefined
   )
 }
 
-async function idbDelete(key: string): Promise<void> {
+// A settings save stages a fresh ID, then commits that ID with the complete
+// configuration. The selected capability is already durable at commit, so
+// reopening Options or restarting the worker only needs to read the saved ID.
+export async function saveDownloadRootHandle(
+  handle: DirHandle,
+  handleId: string
+): Promise<void> {
+  await idbAdd(handleId, handle)
+}
+
+/** Register a capability once the background accepts it as a durable reference. */
+export async function adoptDownloadRootHandle(handleId: string): Promise<void> {
   await runTransaction(
     "readwrite",
-    (store) => store.delete(key),
-    () => undefined
+    (store) => store.put(true, handleId),
+    () => undefined,
+    [MANAGED_DOWNLOAD_ROOT_STORE_NAME]
   )
 }
 
-export async function saveDownloadRootHandle(handle: DirHandle): Promise<void> {
-  // FileSystem handles are serializable via structured cloning into IndexedDB
-  await idbSet(DOWNLOAD_ROOT_HANDLE_ID, handle)
+/** Staged picker selections stay outside managed collection until accepted. */
+export async function collectUnusedDownloadRootHandles(
+  retainedIds: ReadonlySet<string>
+): Promise<void> {
+  const managed = await runTransaction(
+    "readonly",
+    (store) => store.getAllKeys(),
+    (request) => request.result as string[],
+    [MANAGED_DOWNLOAD_ROOT_STORE_NAME]
+  )
+  const unused = managed.filter((id) => !retainedIds.has(id))
+  if (unused.length === 0) return
+  await runTransaction(
+    "readwrite",
+    (handles, tx) => {
+      const markers = tx.objectStore(MANAGED_DOWNLOAD_ROOT_STORE_NAME)
+      let last!: IDBRequest
+      for (const id of unused) {
+        handles.delete(id)
+        last = markers.delete(id)
+      }
+      return last
+    },
+    () => undefined,
+    [DOWNLOAD_ROOT_STORE_NAME, MANAGED_DOWNLOAD_ROOT_STORE_NAME]
+  )
 }
 
-export async function loadDownloadRootHandle(): Promise<DirHandle | undefined> {
-  return idbGet<DirHandle>(DOWNLOAD_ROOT_HANDLE_ID)
-}
-
-export async function clearDownloadRootHandle(): Promise<void> {
-  await idbDelete(DOWNLOAD_ROOT_HANDLE_ID)
+export async function loadDownloadRootHandle(
+  handleId?: string | null
+): Promise<DirHandle | undefined> {
+  if (handleId === undefined) {
+    const stored = await chrome.storage.local.get(SETTINGS_STORAGE_KEYS.global)
+    handleId = parseSettingsDocument(stored[SETTINGS_STORAGE_KEYS.global])
+      .downloads.customDirectoryHandleId
+  }
+  if (handleId === null) return undefined
+  return idbGet<DirHandle>(handleId)
 }
 
 export async function verifyPermission(
@@ -215,13 +267,7 @@ export async function verifyPermission(
     }
     if (perm !== "granted") return false
 
-    if (typeof dir.entries === "function") {
-      const entries = dir.entries()
-      await entries.next()
-    } else if (typeof dir.values === "function") {
-      const values = dir.values()
-      await values.next()
-    }
+    await probeDirectory(dir)
 
     return true
   } catch (error) {
@@ -246,58 +292,15 @@ async function ensureSubdir(
   return dir
 }
 
-/**
- * Check directory permissions before write operation
- * Throws specific error types for better UX:
- * - PermissionExpiredError: Permission was granted but expired
- * - DirectoryNotFoundError: Handle exists but directory was deleted
- * - Generic Error: Permission query/request failed
- */
+/** Check write access and distinguish expired permission from a missing directory. */
 export async function checkPermissionBeforeWrite(
   dir: DirHandle
 ): Promise<void> {
-  // Import error types dynamically to avoid circular dependency
-  const { PermissionExpiredError, DirectoryNotFoundError } =
-    await import("@/src/types/errors")
-
   try {
     // Directory enumeration itself is permission-gated. Query the stored
     // handle first so revoked access is not misreported as a missing folder.
-    const permission = await queryFsaPermission(dir, true)
-    if (permission === "prompt" || permission === "denied") {
-      throw new PermissionExpiredError({
-        component: "fs-access",
-        operation: "checkPermissionBeforeWrite",
-      })
-    }
-    if (permission !== "granted") {
-      throw new Error("Unable to query directory write permission")
-    }
-
-    try {
-      const entries = dir.entries()
-      await entries.next()
-    } catch (error) {
-      if (isNotFoundError(error)) {
-        throw new DirectoryNotFoundError(
-          dir.name,
-          { component: "fs-access", operation: "checkPermissionBeforeWrite" },
-          error
-        )
-      }
-      if (isNamedError(error, "NotAllowedError")) {
-        // Permission can be revoked between queryPermission() and the first
-        // directory operation.
-        throw new PermissionExpiredError(
-          { component: "fs-access", operation: "checkPermissionBeforeWrite" },
-          error
-        )
-      }
-      if (isNamedError(error, "AbortError")) {
-        throw error
-      }
-      throw error
-    }
+    await assertWritePermission(dir)
+    await probeWritableDirectory(dir)
   } catch (e) {
     // Re-throw our custom errors
     if (
@@ -314,6 +317,38 @@ export async function checkPermissionBeforeWrite(
       `Permission check failed: ${e instanceof Error ? e.message : String(e)}`,
       { cause: e }
     )
+  }
+}
+
+async function assertWritePermission(dir: DirHandle): Promise<void> {
+  const permission = await queryFsaPermission(dir, true)
+  if (permission === "prompt" || permission === "denied") {
+    throw new PermissionExpiredError({
+      component: "fs-access",
+      operation: "checkPermissionBeforeWrite",
+    })
+  }
+  if (permission !== "granted") {
+    throw new Error("Unable to query directory write permission")
+  }
+}
+
+async function probeWritableDirectory(dir: DirHandle): Promise<void> {
+  try {
+    await dir.entries().next()
+  } catch (error) {
+    const context = {
+      component: "fs-access",
+      operation: "checkPermissionBeforeWrite",
+    }
+    if (isNotFoundError(error)) {
+      throw new DirectoryNotFoundError(dir.name, context, error)
+    }
+    if (isNamedError(error, "NotAllowedError")) {
+      // Access can be revoked after queryPermission succeeds.
+      throw new PermissionExpiredError(context, error)
+    }
+    throw error
   }
 }
 
@@ -344,6 +379,44 @@ async function fileExists(dir: DirHandle, fileName: string): Promise<boolean> {
   }
 }
 
+async function resolveWriteTarget(
+  dir: DirHandle,
+  fileName: string,
+  collisionPolicy: ConflictPolicy
+): Promise<{ fileName: string; existed: boolean }> {
+  const existed = await fileExists(dir, fileName)
+  if (collisionPolicy !== "uniquify" || !existed) return { fileName, existed }
+
+  const extensionIndex = fileName.lastIndexOf(".")
+  const hasExtension = extensionIndex > 0
+  const baseName = hasExtension ? fileName.slice(0, extensionIndex) : fileName
+  const extension = hasExtension ? fileName.slice(extensionIndex) : ""
+  for (let suffix = 1; ; suffix++) {
+    const candidate = `${baseName} (${suffix})${extension}`
+    if (!(await fileExists(dir, candidate))) {
+      return { fileName: candidate, existed: false }
+    }
+  }
+}
+
+async function cleanupFailedWrite(
+  dir: DirHandle,
+  target: { fileName: string; existed: boolean },
+  stream: FileSystemWritableFileStream | undefined
+): Promise<void> {
+  try {
+    await stream?.abort()
+  } catch {
+    // Cleanup preserves the original write, close or cancellation error.
+  }
+  if (target.existed) return
+  try {
+    await dir.removeEntry(target.fileName)
+  } catch {
+    // A failed new entry may remain when the directory is unavailable.
+  }
+}
+
 export async function writeBlobToPath(
   root: DirHandle,
   fullPath: string,
@@ -351,26 +424,20 @@ export async function writeBlobToPath(
   collisionPolicy: ConflictPolicy,
   options: WriteBlobToPathOptions = {}
 ): Promise<WriteBlobToPathResult> {
-  // fullPath like "Root/Series/Vol/File.cbz" relative to chosen root; we ignore first path if redundant.
+  // Every nonempty path segment is relative to the selected root.
   throwIfAborted(options.signal)
   const parts = fullPath.split("/").filter(Boolean)
-  let fileName = parts.pop()!
+  const requestedFileName = parts.pop()!
   const dir = await ensureSubdir(root, parts)
 
   throwIfAborted(options.signal)
-  if (collisionPolicy === "uniquify" && (await fileExists(dir, fileName))) {
-    const extensionIndex = fileName.lastIndexOf(".")
-    const hasExtension = extensionIndex > 0
-    const baseName = hasExtension ? fileName.slice(0, extensionIndex) : fileName
-    const extension = hasExtension ? fileName.slice(extensionIndex) : ""
-    for (let suffix = 1; ; suffix++) {
-      const candidate = `${baseName} (${suffix})${extension}`
-      if (!(await fileExists(dir, candidate))) {
-        fileName = candidate
-        break
-      }
-    }
-  }
+  const target = await resolveWriteTarget(
+    dir,
+    requestedFileName,
+    collisionPolicy
+  )
+
+  throwIfAborted(options.signal)
 
   // Type assertion for FileSystemFileHandle with createWritable method
   type FileHandleWithWritable = FileSystemFileHandle & {
@@ -379,18 +446,25 @@ export async function writeBlobToPath(
     }): Promise<FileSystemWritableFileStream>
   }
 
-  const fh = await dir.getFileHandle(fileName, { create: true })
-  const ws = await (fh as FileHandleWithWritable).createWritable({
-    keepExistingData: false,
-  })
-  if (!options.signal && !options.onBytesWritten) {
-    await ws.write(blob)
+  const fh = await dir.getFileHandle(target.fileName, { create: true })
+  let ws: FileSystemWritableFileStream | undefined
+  try {
+    ws = await (fh as FileHandleWithWritable).createWritable({
+      keepExistingData: false,
+    })
+    throwIfAborted(options.signal)
+    if (!options.signal && !options.onBytesWritten) {
+      await ws.write(blob)
+    } else {
+      await writeBlobStream(ws, blob, options)
+    }
+    throwIfAborted(options.signal)
     await ws.close()
     return { status: "written" }
+  } catch (error) {
+    await cleanupFailedWrite(dir, target, ws)
+    throw error
   }
-
-  await writeBlobStream(ws, blob, options)
-  return { status: "written" }
 }
 
 async function writeBlobStream(
@@ -419,20 +493,17 @@ async function writeBlobStream(
     }
     completed = true
   } finally {
+    if (!completed) {
+      try {
+        await reader.cancel()
+      } catch {
+        // Preserve the stream's original failure.
+      }
+    }
     try {
       reader.releaseLock()
     } catch {
       // no-op
-    }
-
-    if (completed) {
-      await ws.close()
-    } else {
-      try {
-        await ws.abort()
-      } catch {
-        // no-op
-      }
     }
   }
 }

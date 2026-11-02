@@ -130,8 +130,17 @@ export async function removeUnusedHostPermissions(
 ): Promise<boolean> {
   const managedOrigins = removableManagedHostOrigins()
   const requiredOrigins = enabledPermissionOrigins(enablement)
-  const removableOrigins = [...managedOrigins].filter(
+  const unusedOrigins = [...managedOrigins].filter(
     (origin) => !requiredOrigins.has(origin)
+  )
+  if (unusedOrigins.length === 0) return false
+
+  const grantedOrigins = new Set(
+    (await chrome.permissions.getAll()).origins ?? []
+  )
+  // Removing an absent wildcard can revoke narrower runtime host grants.
+  const removableOrigins = unusedOrigins.filter((origin) =>
+    grantedOrigins.has(origin)
   )
   if (removableOrigins.length === 0) return false
 

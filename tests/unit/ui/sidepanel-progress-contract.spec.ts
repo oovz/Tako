@@ -7,6 +7,7 @@ import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<QueueTaskSummary> = {}): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id: "task-1",
     seriesKey: "mangadex#manga-1",
     seriesTitle: "Series 1",
@@ -68,6 +69,36 @@ describe("ActiveTaskProgress", () => {
     expect(html).toContain("2 chapters downloading")
     expect(html).toContain("12/40 images")
   })
+
+  it.each([
+    ["downloads-api", "Sending to Chrome"],
+    ["fsa", "Saving to folder"],
+    [undefined, "Saving output"],
+  ] as const)(
+    "describes saving using the active output mode %s",
+    (outputMode, label) => {
+      const html = renderToStaticMarkup(
+        React.createElement(ActiveTaskProgress, {
+          task: makeTask({ outputMode }),
+          progress: {
+            generation: "generation-1",
+            revision: 1,
+            updatedAt: 1,
+            taskId: "task-1",
+            status: "downloading",
+            stage: "saving",
+            phaseFraction: 0.5,
+            outputCommitted: false,
+            imagesProcessed: 10,
+            totalImages: 10,
+            activeChapterCount: 1,
+            activeChapters: [],
+          },
+        })
+      )
+      expect(html).toContain(label)
+    }
+  )
 
   it("shows single chapter title suffix when totalChapters is one", () => {
     const html = renderToStaticMarkup(

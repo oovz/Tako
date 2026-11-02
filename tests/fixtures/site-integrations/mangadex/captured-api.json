@@ -1,0 +1,1397 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangadex",
+  "data": {
+    "metadata": {
+      "result": "ok",
+      "data": {
+        "id": "db692d58-4b13-4174-ae8c-30c515c0689c",
+        "type": "manga",
+        "attributes": {
+          "title": {
+            "en": "Hunter x Hunter"
+          },
+          "altTitles": [
+            {
+              "de": "Jäger x Jäger"
+            },
+            {
+              "lt": "Medžiotojas x Medžiotojas"
+            },
+            {
+              "ru": "Охотник х Охотник"
+            },
+            {
+              "ar": "القناص"
+            },
+            {
+              "ar": "هنتر x هنتر"
+            },
+            {
+              "ja": "ハンター×ハンター"
+            },
+            {
+              "zh": "全职猎人"
+            },
+            {
+              "zh": "猎人"
+            },
+            {
+              "hi": "हन्टर x हन्टर"
+            },
+            {
+              "fa": "هانتر x هانتر"
+            },
+            {
+              "tr": "Avcı x Avcı"
+            },
+            {
+              "es-la": "Cazador X"
+            },
+            {
+              "vi": "HUNTER×HUNTER"
+            },
+            {
+              "bn": "ব্যাধ × ব্যাধ"
+            }
+          ],
+          "description": {
+            "en": "From Viz:\nGon might be a country boy, but he has high aspirations. Despite his Aunt Mito's protests, Gon decides to follow in his father's footsteps and become a legendary Hunter. The Hunter hopefuls begin their journey by storm-tossed ship, where Gon meets Leorio and Kurapika, the only other applicants who aren't devastated by bouts of seasickness. Having survived the terrors of the high seas, Gon and his companions now have to prove their worth in a variety of tests in order to find the elusive Exam Hall. And once they get there, will they ever leave alive?"
+          },
+          "contentRating": "suggestive",
+          "originalLanguage": "ja",
+          "publicationDemographic": "shounen",
+          "status": "hiatus",
+          "year": 1998,
+          "tags": [
+            {
+              "attributes": {
+                "name": {
+                  "en": "Award Winning"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Action"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Psychological"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Animals"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Martial Arts"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Adventure"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Philosophical"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Gore"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Drama"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Fantasy"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Mystery"
+                }
+              }
+            },
+            {
+              "attributes": {
+                "name": {
+                  "en": "Tragedy"
+                }
+              }
+            }
+          ]
+        },
+        "relationships": [
+          {
+            "id": "00345ac8-e515-458d-a11d-56cfd1cb253b",
+            "type": "author",
+            "attributes": {
+              "name": "Togashi Yoshihiro"
+            }
+          },
+          {
+            "id": "00345ac8-e515-458d-a11d-56cfd1cb253b",
+            "type": "artist",
+            "attributes": {
+              "name": "Togashi Yoshihiro"
+            }
+          },
+          {
+            "id": "b5eec839-f2ed-4f7b-a10c-805973ae01bc",
+            "type": "cover_art",
+            "attributes": {
+              "fileName": "aa112927-f1e5-4fe4-a4db-7fd4a1536e3c.jpg"
+            }
+          }
+        ]
+      }
+    },
+    "statistics": {
+      "result": "ok",
+      "statistics": {
+        "db692d58-4b13-4174-ae8c-30c515c0689c": {
+          "rating": {
+            "average": 9.5576,
+            "bayesian": 9.52992961735065
+          }
+        }
+      }
+    },
+    "feed": {
+      "result": "ok",
+      "limit": 96,
+      "offset": 0,
+      "total": 2806,
+      "data": [
+        {
+          "id": "242cec97-222a-44e9-9a54-c0330baaa794",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "420",
+            "title": "Combat réel",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002689",
+            "pages": 0
+          }
+        },
+        {
+          "id": "bb5ca282-3fe6-45cf-a028-1b48eeff3b03",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "420",
+            "title": "Tao ngộ",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "86a76ac5-9ea9-4fec-bc23-0720d1ac6f32",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "420",
+            "title": "Encuentro",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 18
+          }
+        },
+        {
+          "id": "67a2a00d-f3ed-420d-9bd9-8456d2892a26",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "420",
+            "title": "Encounter",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1030376",
+            "pages": 0
+          }
+        },
+        {
+          "id": "7437bd48-7382-456b-8320-c5838816e943",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "419",
+            "title": "Práctica",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "9d703587-ae8d-4a5d-a3cd-815f090b01cd",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "419",
+            "title": "Combat réel",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002645",
+            "pages": 0
+          }
+        },
+        {
+          "id": "894525aa-3ed3-409a-a477-c60783b602aa",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "419",
+            "title": "Implementation",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1029887",
+            "pages": 0
+          }
+        },
+        {
+          "id": "c43b5e79-a300-4263-823a-5ebf6d9f8788",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "419",
+            "title": "Thực tiễn",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "cc4be17b-68b7-417a-a01e-2dcdc4ec16b8",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "418",
+            "title": "Suppositions",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002644",
+            "pages": 0
+          }
+        },
+        {
+          "id": "8f3768dc-3bab-4054-b1d6-8743a2e50944",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "418",
+            "title": "Giả định",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "bc997aaf-218c-4f13-8ff4-1dfc0d2f4eec",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "418",
+            "title": "Hypothesis",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1029886",
+            "pages": 0
+          }
+        },
+        {
+          "id": "cdd6810b-d0c3-4f96-ad0c-4abc64feb9ee",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "418",
+            "title": "Suposición ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "fbfae2cc-fa98-4a1b-8949-80f59c5498cc",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "417",
+            "title": "Situation de crise",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002643",
+            "pages": 1
+          }
+        },
+        {
+          "id": "b2f4533a-e933-4bd0-bdf7-722f41ed0200",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "417",
+            "title": "Estado de Emergencia",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "48a0fa16-43ea-4d30-a185-a542e2fa60b0",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "417",
+            "title": "Khẩn cấp",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "6a788a24-ffbe-4ff3-b293-bd7082658624",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "417",
+            "title": "Contingency",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1029885",
+            "pages": 0
+          }
+        },
+        {
+          "id": "ec3bd700-98f7-4bf9-8232-710f9582a6cd",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "416",
+            "title": "Proclamation",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002642",
+            "pages": 1
+          }
+        },
+        {
+          "id": "5711eb9a-8a03-45e7-817e-dc16d05e939b",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "416",
+            "title": "Orden",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "242d9ada-b921-426b-a465-780bf201f0b5",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "416",
+            "title": "Phát lệnh",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "77316b18-1ad9-4e60-82c7-46a6f655bcbe",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "416",
+            "title": "Proclamation",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1029884",
+            "pages": 1
+          }
+        },
+        {
+          "id": "e7fc53e0-b489-4c8e-ba2e-06d745001774",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "415",
+            "title": "Verdades y Mentiras",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "cc3bae7e-e532-4d50-b042-759c05bd676b",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "415",
+            "title": "Xác thực",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "51d68bc5-7764-400c-8902-4911ed0c54a6",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "415",
+            "title": "Vérité",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7002641",
+            "pages": 1
+          }
+        },
+        {
+          "id": "6e2f52b3-9439-4d36-a90c-0eccc9f516fb",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "415",
+            "title": "Authenticity",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1029883",
+            "pages": 1
+          }
+        },
+        {
+          "id": "1382fc5a-6a6a-4b5c-918f-606c2647b9b8",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "414",
+            "title": "Amigos.",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "b6d94d33-41f4-4d0f-bfd6-fc81438309b9",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "414",
+            "title": "Bạn bè",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "36876fbe-bbd2-4e72-a625-ccfe82a70351",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "413",
+            "title": "Lealtad",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "5f149a0c-d675-4402-8f81-f26d85aa6bda",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "413",
+            "title": "Trung thành",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "51139f94-bd7b-4a11-a9e7-9de21f63b628",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "412",
+            "title": "Chất vấn",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 18
+          }
+        },
+        {
+          "id": "d024c779-8396-456d-8626-da0195afd998",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "412",
+            "title": "Pregunta",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "8adebf21-085a-4994-b285-bbcf92140beb",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "411",
+            "title": "Thông báo",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "cb18ad7d-a07d-4e25-ad11-f95b012b5d49",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "411",
+            "title": "Anuncio ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 23
+          }
+        },
+        {
+          "id": "117477c8-3fed-493a-910b-d9d745e89f15",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "410",
+            "title": "Negotiation ④",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "23095448-6116-47d4-86d3-fff4cb6d4802",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "410",
+            "title": "Negociación (Parte 4).",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "311b0fd9-affd-49af-9008-169ad3cc763f",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "410",
+            "title": "Negociação : Parte 4",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "325c9fc9-7c8f-4ba4-a4e3-aaa31f5ec0af",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "410",
+            "title": "Đàm Phán ④",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "d7acb348-0f5f-494d-a5a9-e770d6f3a694",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "410",
+            "title": "UZLAŞMA PART 4",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 16
+          }
+        },
+        {
+          "id": "358f28f1-1aec-4a36-bfa2-6955516ee170",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "409",
+            "title": "Negociação : Parte 3",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "0330ca14-5d64-4fde-877b-f858f7f87cba",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "409",
+            "title": "Negociación (Parte 3).",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "c09b063b-dd7f-4f60-a238-637150e01934",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "409",
+            "title": "Negotiation ③",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "5a0f17e2-4864-41f4-8126-dcc96b4e26be",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "409",
+            "title": "Đàm Phán ③",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "5ea3a5aa-4af1-4278-a2ff-3c6804c2972e",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "409",
+            "title": "UZLAŞMA PART 3",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "06a7ff5d-6275-40ff-8579-619aa6d44eeb",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "UZLAŞMA PART 2",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "5c078eb2-e459-4855-8848-b1756a345364",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Negociación (Parte 2). ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 23
+          }
+        },
+        {
+          "id": "ecf0ab88-b1fb-4e11-85f8-1a401438721f",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Negociação : Parte 2",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "1cace9ce-dbbd-4bf8-bc24-e5e2e87fc45d",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Đàm phán ②",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "d2f5fcd9-eca5-42dc-8252-d10f43df55f0",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Negotiation ②",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "e0a80674-00d5-4e9e-8f7f-de2b2ebcd876",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Négociations②",
+            "translatedLanguage": "fr",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/7001588",
+            "pages": 1
+          }
+        },
+        {
+          "id": "e517bfc8-6cdb-4d17-8250-0148f1f22c7d",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Negotiation: Part 2",
+            "translatedLanguage": "en",
+            "externalUrl": "https://mangaplus.shueisha.co.jp/viewer/1022806",
+            "pages": 1
+          }
+        },
+        {
+          "id": "0929a2fd-4fa9-43f7-8c3a-a065b43e9cd2",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "408",
+            "title": "Đàm Phán ②",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "ddd0e5f0-1b8c-4c18-8af6-a1d4e5b8fd7f",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "Đàm Phán ①",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "0625df14-4261-438d-a33d-ff066af39636",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "Negotiation",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "65d8d2d2-5a0a-43b4-b7a7-2661b55ba0a1",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "Đàm phán",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "51a36b4e-28e7-494d-a096-fa5c51d81ab9",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "UZLAŞMALAR",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 18
+          }
+        },
+        {
+          "id": "3effc8b0-f2da-4352-9da4-7e895b126abc",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "Negociación. ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "85258226-b665-4281-bb1f-4d1b09446fb2",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "407",
+            "title": "Negociação",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "adf4a381-ce16-462a-9134-baf68aede9d3",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "Thần khí",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "118d4612-b694-4cf5-a71f-0686ccbde024",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "Sacred Treasures",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 18
+          }
+        },
+        {
+          "id": "016fb8d0-ac04-4bd7-aa09-55a6c9e46ada",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "Tesoro Sagrado.",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "b37b3eca-f5e3-40f7-a36c-61296625d6f6",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "Thần Khí",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 18
+          }
+        },
+        {
+          "id": "02740c4c-600e-408d-9094-8a29dfe80d19",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "KUTSAL HAZİNELER",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 17
+          }
+        },
+        {
+          "id": "68dff048-223d-4614-8f71-e3e5466a73d9",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "406",
+            "title": "Tesouros Imperiais",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "3cbed145-bf20-47e5-bd23-3cd7cd09e1e1",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "Performance",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "6d8950c5-521f-409d-ae4d-162dcbb17c6d",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "MASKELİ BALO",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "b94d6c8e-e0b8-472e-b62b-1334fff6ec55",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "Masquerade",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "4f7fe6ef-1ca1-4775-b12a-547b95c0f33f",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "Vở Kịch",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "ed03a916-2459-49cf-8e7c-6495d394e040",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "Actuación. ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "4fee29ae-f8ab-4048-83b1-4d27501d826c",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "405",
+            "title": "Vở kịch",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "9a9c9276-8bf9-452e-872d-5a7aba6ab053",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Speculation",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "a7962a3c-b823-4571-b396-4b42838884c4",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Especulação",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "bea498b3-0f43-49d4-ac3d-3320e75809e3",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Spekülasyon",
+            "translatedLanguage": "tr",
+            "externalUrl": null,
+            "pages": 19
+          }
+        },
+        {
+          "id": "b939dba9-1044-484f-81da-1ac039426782",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Expectativa",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "303f0259-6187-409f-93ab-81539fec0743",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Suy đoán",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "d5ce5f7c-d78c-4ead-89a5-f0215acc3d65",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "404",
+            "title": "Suy Đoán",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "127113cc-3e43-4b84-8694-141d933c1e3e",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "403",
+            "title": "Resultados. ",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "843c8e03-865d-4c57-95dd-c93a78fd5fd3",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "403",
+            "title": "Resultado",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "abeb1b55-0460-4314-86ec-4ec2e58f8c5e",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "403",
+            "title": "Results",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "888f3940-c50f-4ccb-bde7-c4aa5c0513f3",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "403",
+            "title": "Kết quả",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "d931048e-6211-45ac-a84d-a503c1dfd3b5",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "403",
+            "title": "Kết Quả",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "21e6fb90-6ef3-48e2-9b22-4efceea93041",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "Lá Thư",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "b61beaed-21d5-4d5b-aeb1-73c1c31ab862",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "Cartas",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "61c916d6-6ab4-4a0a-b825-9945f4bab975",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "Lá thư",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "0ed7f11e-2564-496a-8ead-f40d4384337c",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "رسالة",
+            "translatedLanguage": "ar",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "a26f6c1d-cf37-4bff-a078-15a4a83ca366",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "رسالة",
+            "translatedLanguage": "ar",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "889e8ef5-1496-414d-9f5d-6bbf47a23e26",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "Letter",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 20
+          }
+        },
+        {
+          "id": "6058b15e-ca84-4c8d-ba00-af1d240a2bb5",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "402",
+            "title": "Carta",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "61edffff-15be-4dfd-9da3-0b772d931b79",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Luz de Luna",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 25
+          }
+        },
+        {
+          "id": "ecdee139-f14a-479c-bd81-316651ecf7d0",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": null,
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "f341ff0d-1918-44b7-8913-00c9426e872f",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Moonlight",
+            "translatedLanguage": "en",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "fea959ce-0ca6-49d8-baec-2c9d17cafe31",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Ánh Trăng",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "d582011f-b600-4fb8-b69c-3a458945452e",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Luz da Lua",
+            "translatedLanguage": "pt-br",
+            "externalUrl": null,
+            "pages": 22
+          }
+        },
+        {
+          "id": "60c88895-f4d2-403a-b7a3-37dac55fcff2",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Ánh trăng",
+            "translatedLanguage": "vi",
+            "externalUrl": null,
+            "pages": 30
+          }
+        },
+        {
+          "id": "09223d8f-0a23-4532-9a5d-1d0953129fcd",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "Moonlight",
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 21
+          }
+        },
+        {
+          "id": "6bff9fe6-b47f-4266-b6ff-db37551ed9af",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "401",
+            "title": "نور القمر",
+            "translatedLanguage": "ar",
+            "externalUrl": null,
+            "pages": 23
+          }
+        },
+        {
+          "id": "0ec80730-f91f-4ecf-9bdc-dff05dc7d080",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "400.5",
+            "title": null,
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 1
+          }
+        },
+        {
+          "id": "77232c7e-9493-4f3e-a1e3-b3bd04588877",
+          "type": "chapter",
+          "attributes": {
+            "volume": null,
+            "chapter": "400.5",
+            "title": null,
+            "translatedLanguage": "es-la",
+            "externalUrl": null,
+            "pages": 2
+          }
+        }
+      ]
+    },
+    "atHome": {
+      "result": "ok",
+      "baseUrl": "https://cmdxd98sb0x3yprd.mangadex.network",
+      "chapter": {
+        "hash": "c285608214694b55e98564be6f7f27f5",
+        "data": [
+          "1-734d42a9487a811b22ad0066df3b0263e6f896489282b3f929798718df517489.png",
+          "2-1a34029b59f13e51bc8f302098326145c5b44c77842dcd94309c763f54621d11.png",
+          "3-42fe1c43c9093871324fb3ec0c959a18802c2d58750385f00cecea9961a59a00.png",
+          "4-f07cf4aca468ac22deb0c2e81f278119dd1193c7d2b990307115ae5599ccfd14.png",
+          "5-7175ca78a9929dd552247cb5c902f52c7f70e0db68402184789072fdc56b6ef9.png",
+          "6-283a3b99dbbb4bd492a32b0cd328524a5b0ecd10a2d579c1f538a544c0ba10a1.png",
+          "7-636b196759122b2b3082de2a785e52ea68472a028ce1ce14371df64727feae15.png",
+          "8-33ae44a20769812ca04b0ce970411336fcb773f8dac4551b19b09d0be136f44a.png",
+          "9-afbbee7df4267c00193f115803db21088d67aba73f06a94fd930e58413215ab5.png",
+          "10-6f4f03dfe3622aeb0d47e40dde919a5b2677dc04bf6e524c42e12b4a2783f563.png",
+          "11-05a8ea98e78dda49a6e696f7dcbc7ba84348dff98fcb835e742629b16f68b6c1.png",
+          "12-5c74034bcb63e96be8986c022eab4ad1ff0fbb4ab3873579fdb1d1a00ac89f6b.png",
+          "13-1b9cd83e97ac39389debb0d45494714aa4c18e693a16c9daeb5bb73f5b2718e5.png",
+          "14-f7fa520954b00f5912d1ea44967e7ea5730db9ee5a85aeac46de47a0d47451d3.png",
+          "15-0ea48c0792e602518104dc6a67ef186f5da69a30e13db261239687e3500d62d6.png",
+          "16-daff6b4f3be2e42c8de9381b1a25c127166e2fec66b937336e01331805c1b2d4.png",
+          "17-fe86a95b8f11241888db26949549a0e62a516f3d84866859376814dcfa3c98fc.png",
+          "18-a2b1e0912008af1c6bb68dd26c19cde63baea0c4aac783722b79fbfb15e07811.png"
+        ],
+        "dataSaver": [
+          "1-fbff72a72bea903b8616c6254b05b8f3526e50ec23b54a5cc6497c9ba11f706f.jpg",
+          "2-373ec393678e519ed1e2ef16530262edc949cc3160adeaf350d57b1d7a40b784.jpg",
+          "3-4e66ec10b413c4625e4a1dcf1b35337377d198f5e92f33857319197a6781ec2c.jpg",
+          "4-454e29ae7279b10db1d9aa03043ce7bcd798553ecd20a34d6d7a49d6c1ecdfc8.jpg",
+          "5-d01244c61077b442d06b3af5ea56efdc754bbac270930bc5ab35389d9b6ee223.jpg",
+          "6-bb0f23f7db17417d018f1f80bf0e02616f9b8fe376e650a8b16c86596cad0281.jpg",
+          "7-e8c8804517a5c1673f4891d79e017f9967862fc055af9f24d9ee59eec0f0637e.jpg",
+          "8-79edaad9f8dabfb428b3470daba2436fbb8c785d06b331f0aed35bd461da5dc1.jpg",
+          "9-2ebdcbf87d9b7e264dd3a71e0606fe05a51df200d2c8f46c94dfae9971a74c1b.jpg",
+          "10-95b26a2dc875e72493b242f3a8a0c766dee0153cc0691dd5a2ea7d69302bd6bd.jpg",
+          "11-acce848f4f75221c1da2d846044240b60d200012bbac3a85d5416de15756c1e2.jpg",
+          "12-4d5c240937651be61660b4660642e35bd19bebc130023664c3511b955ff911b3.jpg",
+          "13-af95310c3e45030d7cf8d512e31d9e3fea848aaa533fec69dbf423bac4503d1a.jpg",
+          "14-8e83df50f62a8b8c144e9dece5e386371ae2e8552e359304838569c6a8cb8647.jpg",
+          "15-d914a45ef9b2974480b68614cfafc19ce078888439fa9ac6b2884d915da9ef25.jpg",
+          "16-9d3075ab6360c8d4315888a46af7e8bf7c8946f2b74586f2e30c793b61d3b708.jpg",
+          "17-4b026d36f3c0e5709e26443f5bd75b1a3323bf76edf3773237b57f49d561f10b.jpg",
+          "18-d74380b49bcaf6e6568450e63edb98704e2b2255038f902d9281fb307849e24d.jpg"
+        ]
+      }
+    }
+  }
+}

@@ -5,8 +5,188 @@ import type { SiteIntegrationDefinition } from '@/src/site-integrations/definiti
 export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
-    "id": "comicnettai",
-    "name": "Comic Nettai",
+    "id": "animemangahouse",
+    "name": "动漫屋",
+    "englishName": "Anime Manga House",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.dm5.com"
+      ],
+      "seriesMatches": [
+        "/manhua-*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.dm5.com/*",
+      "https://*.cdndm5.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "animemangahouse-page",
+        "purpose": "DM5 series and reader HTML",
+        "origins": [
+          "https://www.dm5.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "animemangahouse-signed-images",
+        "purpose": "DM5 signed reader response",
+        "origins": [
+          "https://www.dm5.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 1048576
+      },
+      {
+        "id": "animemangahouse-image",
+        "purpose": "DM5 chapter and cover images",
+        "origins": [
+          "https://*.cdndm5.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41120,
+        "requestDomains": [
+          "www.dm5.com",
+          "cdndm5.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.dm5.com/m1/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "boylove",
+    "name": "香香腐宅BoyLove",
+    "englishName": "BoyLove",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "boylove.cc"
+      ],
+      "seriesMatches": [
+        "/home/book/index/id/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://boylove.cc/*",
+      "https://img.boylove.cc/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 1000
+    },
+    "endpointPolicies": [
+      {
+        "id": "boylove-page",
+        "purpose": "BoyLove series catalogs and chapter readers",
+        "origins": [
+          "https://boylove.cc/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "boylove-image",
+        "purpose": "BoyLove chapter and cover images",
+        "origins": [
+          "https://img.boylove.cc/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "comictropics",
+    "name": "COMIC熱帯",
+    "englishName": "Comic Nettai",
     "contributors": [
       "TMD Team"
     ],
@@ -54,7 +234,7 @@ export const siteIntegrationCatalog = [
     },
     "endpointPolicies": [
       {
-        "id": "comicnettai-viewer-page",
+        "id": "comictropics-viewer-page",
         "purpose": "Comic Nettai viewer session",
         "origins": [
           "https://www.comicnettai.com/*"
@@ -66,7 +246,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 15000000
       },
       {
-        "id": "comicnettai-viewer-api",
+        "id": "comictropics-viewer-api",
         "purpose": "Comic Nettai viewer protocol",
         "origins": [
           "https://www.comicnettai.com/*"
@@ -78,7 +258,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 10000000
       },
       {
-        "id": "comicnettai-cdn-config",
+        "id": "comictropics-cdn-config",
         "purpose": "Comic Nettai CDN configuration",
         "origins": [
           "https://cdn.comicnettai.com/*"
@@ -90,7 +270,7 @@ export const siteIntegrationCatalog = [
         "maxResponseBytes": 10000000
       },
       {
-        "id": "comicnettai-cdn-image",
+        "id": "comictropics-cdn-image",
         "purpose": "Comic Nettai CDN images",
         "origins": [
           "https://cdn.comicnettai.com/*"
@@ -103,18 +283,486 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/comicnettai/fixtures/contract.json"
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "coolmic",
+    "name": "Coolmic",
+    "englishName": "Coolmic",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "coolmic.me"
       ],
-      "liveFreshnessDays": 30
-    }
+      "seriesMatches": [
+        "/titles/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://coolmic.me/*",
+      "https://en-contents.coolmic.me/*",
+      "https://en-img.coolmic.me/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "coolmic-page",
+        "purpose": "Coolmic website title bootstrap",
+        "origins": [
+          "https://coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "coolmic-viewer",
+        "purpose": "Coolmic accessible episode image metadata",
+        "origins": [
+          "https://coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "coolmic-image",
+        "purpose": "Coolmic episode content CDN",
+        "origins": [
+          "https://en-contents.coolmic.me/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      },
+      {
+        "id": "coolmic-cover",
+        "purpose": "Coolmic cover images",
+        "origins": [
+          "https://en-img.coolmic.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "copymanga",
+    "name": "拷貝漫畫",
+    "englishName": "CopyManga",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.copy3000.com",
+        "www.copy4000.com"
+      ],
+      "seriesMatches": [
+        "/comic/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.copy3000.com/*",
+      "https://www.copy4000.com/*",
+      "https://sy.mangafunb.fun/*",
+      "https://sd.mangafunb.fun/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "copy-page",
+        "purpose": "Copy page",
+        "origins": [
+          "https://www.copy3000.com/*",
+          "https://www.copy4000.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "copy-catalog",
+        "purpose": "Copy catalog",
+        "origins": [
+          "https://www.copy3000.com/*",
+          "https://www.copy4000.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "copy-image",
+        "purpose": "Copy chapter and cover images",
+        "origins": [
+          "https://sy.mangafunb.fun/*",
+          "https://sd.mangafunb.fun/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "lovemanga",
+    "name": "爱漫画",
+    "englishName": "Love Manga",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.aimanhua.org"
+      ],
+      "seriesMatches": [
+        "/comic/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.aimanhua.org/*",
+      "https://img1.baipiaoguai.org/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "lovemanga-page",
+        "purpose": "Aimanhua series and reader HTML",
+        "origins": [
+          "https://www.aimanhua.org/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "lovemanga-image",
+        "purpose": "Aimanhua chapter and cover images",
+        "origins": [
+          "https://img1.baipiaoguai.org/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41014,
+        "priority": 1,
+        "requestDomains": [
+          "img1.baipiaoguai.org"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.aimanhua.org/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangaagain",
+    "name": "再漫画",
+    "englishName": "Manga Again",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.zaimanhua.com",
+        "manhua.zaimanhua.com"
+      ],
+      "seriesMatches": [
+        "/info/*.html",
+        "/view/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.zaimanhua.com/*",
+      "https://manhua.zaimanhua.com/*",
+      "https://images.zaimanhua.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangaagain-api",
+        "purpose": "Zaimanhua api",
+        "origins": [
+          "https://www.zaimanhua.com/*",
+          "https://manhua.zaimanhua.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangaagain-image",
+        "purpose": "Zaimanhua chapter and cover images",
+        "origins": [
+          "https://images.zaimanhua.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangabz",
+    "name": "Māngabz",
+    "englishName": "Māngabz",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.mangabz.com"
+      ],
+      "seriesMatches": [
+        "/*bz"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://www.mangabz.com/*",
+      "https://image.mangabz.com/*",
+      "https://cover.mangabz.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangabz-page",
+        "purpose": "Mangabz series and reader HTML",
+        "origins": [
+          "https://www.mangabz.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangabz-signed-images",
+        "purpose": "Mangabz signed reader response",
+        "origins": [
+          "https://www.mangabz.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 1048576
+      },
+      {
+        "id": "mangabz-image",
+        "purpose": "Mangabz chapter and cover images",
+        "origins": [
+          "https://image.mangabz.com/*",
+          "https://cover.mangabz.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41121,
+        "requestDomains": [
+          "www.mangabz.com",
+          "image.mangabz.com",
+          "cover.mangabz.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.mangabz.com/"
+      }
+    ],
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "mangadex",
-    "name": "MangaDex API",
+    "name": "MangaDex",
+    "englishName": "MangaDex",
     "contributors": [
       "TMD Team"
     ],
@@ -255,18 +903,314 @@ export const siteIntegrationCatalog = [
         "type": "boolean",
         "defaultValue": true
       }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangago",
+    "name": "Mangago",
+    "englishName": "Mangago",
+    "contributors": [
+      "Otaro"
     ],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/mangadex/fixtures/contract.json"
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mangago.me",
+        "www.mangago.me"
       ],
-      "liveFreshnessDays": 30
-    }
+      "seriesMatches": [
+        "/read-manga/*"
+      ],
+      "excludeMatches": [
+        "/read-manga/*/*/*"
+      ]
+    },
+    "requiredOrigins": [
+      "https://mangago.me/*",
+      "https://www.mangago.me/*",
+      "https://pic1.mangapicgallery.com/*",
+      "https://*.mangapicgallery.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 500
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangago-page",
+        "purpose": "Series metadata, complete chapter catalog and reader data",
+        "origins": [
+          "https://mangago.me/*",
+          "https://www.mangago.me/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "mangago-script",
+        "purpose": "Current public reader image protocol",
+        "origins": [
+          "https://pic1.mangapicgallery.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 2000000
+      },
+      {
+        "id": "mangago-image",
+        "purpose": "Chapter images and series covers",
+        "origins": [
+          "https://*.mangapicgallery.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangahere",
+    "name": "MangaHere",
+    "englishName": "MangaHere",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "newm.mangahere.cc"
+      ],
+      "seriesMatches": [
+        "/manga/*"
+      ],
+      "excludeMatches": [
+        "/manga/*/c*",
+        "/manga/*/v*/c*"
+      ]
+    },
+    "requiredOrigins": [
+      "https://newm.mangahere.cc/*",
+      "https://zjcdn.mangahere.org/*",
+      "https://fmcdn.mangahere.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangahere-page",
+        "purpose": "MangaHere series and reader HTML",
+        "origins": [
+          "https://newm.mangahere.cc/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangahere-image",
+        "purpose": "MangaHere chapter and cover images",
+        "origins": [
+          "https://zjcdn.mangahere.org/*",
+          "https://fmcdn.mangahere.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41013,
+        "priority": 1,
+        "requestDomains": [
+          "zjcdn.mangahere.org",
+          "fmcdn.mangahere.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://newm.mangahere.cc/"
+      }
+    ],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangakakalot",
+    "name": "MangaKakalot",
+    "englishName": "MangaKakalot",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mangakakalove.com",
+        "www.mangakakalove.com"
+      ],
+      "seriesMatches": [
+        "/manga/*"
+      ],
+      "excludeMatches": [
+        "/manga/*/*"
+      ]
+    },
+    "requiredOrigins": [
+      "https://mangakakalove.com/*",
+      "https://www.mangakakalove.com/*",
+      "https://*.2xstorage.com/*",
+      "https://storage.waitst.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangakakalot-page",
+        "purpose": "Series and reader HTML",
+        "origins": [
+          "https://mangakakalove.com/*",
+          "https://www.mangakakalove.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangakakalot-chapters",
+        "purpose": "Paginated chapter catalog",
+        "origins": [
+          "https://mangakakalove.com/*",
+          "https://www.mangakakalove.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "mangakakalot-image",
+        "purpose": "Reader and cover images",
+        "origins": [
+          "https://*.2xstorage.com/*",
+          "https://storage.waitst.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41012,
+        "requestDomains": [
+          "2xstorage.com",
+          "storage.waitst.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.mangakakalove.com/"
+      }
+    ],
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "mangamillion",
-    "name": "MangaMillion",
+    "name": "MANGA MILLION",
+    "englishName": "MANGA MILLION",
     "contributors": [
       "TMD Team"
     ],
@@ -339,48 +1283,42 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/mangamillion/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
-    "id": "manhuagui",
-    "name": "Manhuagui",
+    "id": "manganato",
+    "name": "MangaNato",
+    "englishName": "MangaNato",
     "contributors": [
-      "TMD Team"
+      "Otaro"
     ],
-    "version": "1.1.0",
+    "version": "1.0.0",
     "shipped": true,
     "enabledByDefault": true,
     "patterns": {
       "domains": [
-        "www.manhuagui.com",
-        "manhuagui.com"
+        "manganato.gg",
+        "www.manganato.gg"
       ],
       "seriesMatches": [
-        "/comic/*"
+        "/manga/*"
       ],
       "excludeMatches": [
-        "/comic/*/*.html"
+        "/manga/*/*"
       ]
     },
     "requiredOrigins": [
-      "https://www.manhuagui.com/*",
-      "https://manhuagui.com/*",
-      "https://cf.mhgui.com/*",
-      "https://hamreus.com/*",
-      "https://*.hamreus.com/*"
+      "https://manganato.gg/*",
+      "https://www.manganato.gg/*",
+      "https://*.2xstorage.com/*",
+      "https://storage.waitst.com/*"
     ],
     "optionalOrigins": [],
     "policyDefaults": {
       "image": {
         "concurrency": 2,
-        "delayMs": 1000
+        "delayMs": 500
       },
       "chapter": {
         "concurrency": 1,
@@ -388,7 +1326,7 @@ export const siteIntegrationCatalog = [
       }
     },
     "retryOwner": "platform",
-    "pageProbe": "optional",
+    "pageProbe": "none",
     "runtimes": {
       "background": true,
       "offscreen": true,
@@ -402,36 +1340,37 @@ export const siteIntegrationCatalog = [
     },
     "endpointPolicies": [
       {
-        "id": "manhuagui-series-html",
-        "purpose": "Manhuagui series page HTML",
+        "id": "manganato-page",
+        "purpose": "Series and reader HTML",
         "origins": [
-          "https://www.manhuagui.com/*",
-          "https://manhuagui.com/*"
+          "https://manganato.gg/*",
+          "https://www.manganato.gg/*"
         ],
         "originKind": "fixed",
-        "credentials": "include",
-        "redirect": "error",
-        "responseType": "html",
-        "maxResponseBytes": 15000000
-      },
-      {
-        "id": "manhuagui-reader-config",
-        "purpose": "Manhuagui reader configuration",
-        "origins": [
-          "https://cf.mhgui.com/*"
-        ],
-        "originKind": "provider-issued",
         "credentials": "omit",
         "redirect": "error",
-        "responseType": "text",
-        "maxResponseBytes": 5000000
+        "responseType": "html",
+        "maxResponseBytes": 10000000
       },
       {
-        "id": "manhuagui-image-cdn",
-        "purpose": "Manhuagui image CDN",
+        "id": "manganato-chapters",
+        "purpose": "Paginated chapter catalog",
         "origins": [
-          "https://hamreus.com/*",
-          "https://*.hamreus.com/*"
+          "https://manganato.gg/*",
+          "https://www.manganato.gg/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "json",
+        "maxResponseBytes": 10000000
+      },
+      {
+        "id": "manganato-image",
+        "purpose": "Reader and cover images",
+        "origins": [
+          "https://*.2xstorage.com/*",
+          "https://storage.waitst.com/*"
         ],
         "originKind": "provider-issued",
         "credentials": "omit",
@@ -442,37 +1381,195 @@ export const siteIntegrationCatalog = [
     ],
     "sessionRefererRules": [
       {
-        "id": 41002,
-        "priority": 1,
+        "id": 41011,
         "requestDomains": [
-          "i.hamreus.com",
-          "eu.hamreus.com",
-          "eu1.hamreus.com",
-          "eu2.hamreus.com",
-          "us.hamreus.com",
-          "us1.hamreus.com",
-          "us2.hamreus.com",
-          "us3.hamreus.com"
+          "2xstorage.com",
+          "storage.waitst.com"
         ],
         "resourceTypes": [
           "xmlhttprequest",
           "other"
         ],
-        "referer": "https://www.manhuagui.com/"
+        "referer": "https://www.manganato.gg/"
       }
     ],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/manhuagui/fixtures/contract.json"
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mangaplus",
+    "name": "MANGA Plus by SHUEISHA",
+    "englishName": "MANGA Plus by SHUEISHA",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mangaplus.shueisha.co.jp"
       ],
-      "liveFreshnessDays": 30
-    }
+      "seriesMatches": [
+        "/titles/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://mangaplus.shueisha.co.jp/*",
+      "https://jumpg-webapi.tokyo-cdn.com/*",
+      "https://jumpg-assets.tokyo-cdn.com/*",
+      "https://jumpg-assets3.tokyo-cdn.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "integrated-descramble",
+      "estimatedCostMs": 100
+    },
+    "endpointPolicies": [
+      {
+        "id": "mangaplus-api",
+        "purpose": "MANGA Plus website title and viewer protocol",
+        "origins": [
+          "https://jumpg-webapi.tokyo-cdn.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 15000000
+      },
+      {
+        "id": "mangaplus-image",
+        "purpose": "MANGA Plus title and chapter images",
+        "origins": [
+          "https://jumpg-assets.tokyo-cdn.com/*",
+          "https://jumpg-assets3.tokyo-cdn.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [],
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "mycomic",
+    "name": "MYCOMIC",
+    "englishName": "MYCOMIC",
+    "contributors": [
+      "Otaro"
+    ],
+    "version": "1.0.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "mycomic.com"
+      ],
+      "seriesMatches": [
+        "/comics/*",
+        "/cn/comics/*"
+      ],
+      "excludeMatches": []
+    },
+    "requiredOrigins": [
+      "https://mycomic.com/*",
+      "https://biccam.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 500
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "none",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "mycomic-page",
+        "purpose": "Series metadata, complete chapter catalogs and reader pages",
+        "origins": [
+          "https://mycomic.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "mycomic-image",
+        "purpose": "Chapter images and covers",
+        "origins": [
+          "https://biccam.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41015,
+        "requestDomains": [
+          "biccam.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://mycomic.com/"
+      }
+    ],
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "pixiv-comic",
-    "name": "Pixiv Comic",
+    "name": "pixivコミック",
+    "englishName": "pixiv Comic",
     "contributors": [
       "TMD Team"
     ],
@@ -583,18 +1680,146 @@ export const siteIntegrationCatalog = [
         "referer": "https://comic.pixiv.net/"
       }
     ],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/pixiv-comic/fixtures/contract.json"
+    "customSettings": []
+  },
+  {
+    "schemaVersion": 1,
+    "id": "readmanga",
+    "name": "看漫画",
+    "englishName": "Manhuagui",
+    "contributors": [
+      "TMD Team"
+    ],
+    "version": "1.1.0",
+    "shipped": true,
+    "enabledByDefault": true,
+    "patterns": {
+      "domains": [
+        "www.manhuagui.com",
+        "manhuagui.com"
       ],
-      "liveFreshnessDays": 14
-    }
+      "seriesMatches": [
+        "/comic/*"
+      ],
+      "excludeMatches": [
+        "/comic/*/*.html"
+      ]
+    },
+    "requiredOrigins": [
+      "https://www.manhuagui.com/*",
+      "https://manhuagui.com/*",
+      "https://cf.mhgui.com/*",
+      "https://hamreus.com/*",
+      "https://*.hamreus.com/*"
+    ],
+    "optionalOrigins": [],
+    "policyDefaults": {
+      "image": {
+        "concurrency": 2,
+        "delayMs": 1000
+      },
+      "chapter": {
+        "concurrency": 1,
+        "delayMs": 1000
+      }
+    },
+    "retryOwner": "platform",
+    "pageProbe": "optional",
+    "runtimes": {
+      "background": true,
+      "offscreen": true,
+      "dispatchContext": {
+        "mode": "none"
+      }
+    },
+    "imageTransform": {
+      "kind": "none",
+      "estimatedCostMs": 0
+    },
+    "endpointPolicies": [
+      {
+        "id": "readmanga-series-html",
+        "purpose": "Manhuagui series page HTML",
+        "origins": [
+          "https://www.manhuagui.com/*",
+          "https://manhuagui.com/*"
+        ],
+        "originKind": "fixed",
+        "credentials": "include",
+        "redirect": "error",
+        "responseType": "html",
+        "maxResponseBytes": 15000000
+      },
+      {
+        "id": "readmanga-reader-config",
+        "purpose": "Manhuagui reader configuration",
+        "origins": [
+          "https://cf.mhgui.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "text",
+        "maxResponseBytes": 5000000
+      },
+      {
+        "id": "readmanga-image-cdn",
+        "purpose": "Manhuagui image CDN",
+        "origins": [
+          "https://hamreus.com/*",
+          "https://*.hamreus.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      },
+      {
+        "id": "readmanga-cover-image",
+        "purpose": "Manhuagui cover images",
+        "origins": [
+          "https://www.manhuagui.com/*",
+          "https://manhuagui.com/*",
+          "https://cf.mhgui.com/*",
+          "https://hamreus.com/*",
+          "https://*.hamreus.com/*"
+        ],
+        "originKind": "provider-issued",
+        "credentials": "omit",
+        "redirect": "error",
+        "responseType": "bytes",
+        "maxResponseBytes": 50000000
+      }
+    ],
+    "sessionRefererRules": [
+      {
+        "id": 41002,
+        "priority": 1,
+        "requestDomains": [
+          "i.hamreus.com",
+          "eu.hamreus.com",
+          "eu1.hamreus.com",
+          "eu2.hamreus.com",
+          "us.hamreus.com",
+          "us1.hamreus.com",
+          "us2.hamreus.com",
+          "us3.hamreus.com"
+        ],
+        "resourceTypes": [
+          "xmlhttprequest",
+          "other"
+        ],
+        "referer": "https://www.manhuagui.com/"
+      }
+    ],
+    "customSettings": []
   },
   {
     "schemaVersion": 1,
     "id": "shonenjumpplus",
-    "name": "Shonen Jump+",
+    "name": "少年ジャンプ＋",
+    "englishName": "Shonen Jump+",
     "contributors": [
       "TMD Team"
     ],
@@ -612,7 +1837,8 @@ export const siteIntegrationCatalog = [
     "requiredOrigins": [
       "https://shonenjumpplus.com/*",
       "https://cdn-ak-img.shonenjumpplus.com/*",
-      "https://cdn-ak.shonenjumpplus.com/*"
+      "https://cdn-ak.shonenjumpplus.com/*",
+      "https://cdn-scissors.gigaviewer.com/*"
     ],
     "optionalOrigins": [],
     "policyDefaults": {
@@ -668,7 +1894,8 @@ export const siteIntegrationCatalog = [
         "purpose": "Shonen Jump+ image CDN",
         "origins": [
           "https://cdn-ak-img.shonenjumpplus.com/*",
-          "https://cdn-ak.shonenjumpplus.com/*"
+          "https://cdn-ak.shonenjumpplus.com/*",
+          "https://cdn-scissors.gigaviewer.com/*"
         ],
         "originKind": "provider-issued",
         "credentials": "omit",
@@ -678,13 +1905,7 @@ export const siteIntegrationCatalog = [
       }
     ],
     "sessionRefererRules": [],
-    "customSettings": [],
-    "fixtures": {
-      "paths": [
-        "src/site-integrations/shonenjumpplus/fixtures/contract.json"
-      ],
-      "liveFreshnessDays": 30
-    }
+    "customSettings": []
   }
 ] as const satisfies readonly SiteIntegrationDefinition[]
 

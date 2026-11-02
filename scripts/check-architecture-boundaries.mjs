@@ -100,21 +100,19 @@ function sourceMetadata(filePath) {
   return sourceFiles.get(normalizeAbsolute(filePath))
 }
 
-function resolveImport(fromFile, specifier) {
-  let candidate
-  if (specifier === "@") {
-    candidate = root
-  } else if (specifier.startsWith("@/")) {
-    candidate = path.join(root, specifier.slice(2))
-  } else if (specifier.startsWith(".")) {
-    candidate = path.resolve(path.dirname(fromFile), specifier)
-  } else {
-    return undefined
+function importBasePath(fromFile, specifier) {
+  if (specifier === "@") return root
+  if (specifier.startsWith("@/")) return path.join(root, specifier.slice(2))
+  if (specifier.startsWith(".")) {
+    return path.resolve(path.dirname(fromFile), specifier)
   }
+  return undefined
+}
 
+function importCandidates(candidate) {
   const candidates = [candidate]
   const extension = path.extname(candidate)
-  if (extension === ".js" || extension === ".jsx" || extension === ".mjs") {
+  if ([".js", ".jsx", ".mjs"].includes(extension)) {
     candidates.push(candidate.slice(0, -extension.length) + ".ts")
     candidates.push(candidate.slice(0, -extension.length) + ".tsx")
   }
@@ -124,12 +122,16 @@ function resolveImport(fromFile, specifier) {
   }
   candidates.push(path.join(candidate, "index.ts"))
   candidates.push(path.join(candidate, "index.tsx"))
+  return candidates
+}
 
-  for (const possiblePath of candidates) {
+function resolveImport(fromFile, specifier) {
+  const candidate = importBasePath(fromFile, specifier)
+  if (candidate === undefined) return undefined
+  for (const possiblePath of importCandidates(candidate)) {
     const metadata = sourceMetadata(possiblePath)
     if (metadata) return metadata
   }
-
   return undefined
 }
 
@@ -202,256 +204,264 @@ function addGraphEdge(metadata, node, specifier) {
   internalImportCount += 1
 }
 
+const allowedFetchFiles = new Set([
+  "src/site-integrations/http-client.ts",
+  "src/runtime/i18n.ts",
+])
+const allowedConstructorFile = "entrypoints/background/index.ts"
+const allowedProjectionFile = "src/storage/queue-projection-service.ts"
+const forbiddenDomainImportPrefixes = [
+  "src/storage/",
+  "src/runtime/",
+  "src/site-integrations/",
+  "entrypoints/",
+  "components/",
+]
+const domainClockCalls = new Set(["Date.now", "Math.random", "performance.now"])
+const domainCryptoCalls = new Set([
+  "crypto.randomUUID",
+  "crypto.getRandomValues",
+])
+
+function declarationModuleReference(node) {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+    const specifier = node.moduleSpecifier
+    if (specifier && ts.isStringLiteral(specifier)) return specifier
+  }
+  if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference) &&
+    ts.isStringLiteral(node.moduleReference.expression)
+  ) {
+    return node.moduleReference
+  }
+  return undefined
+}
+
+function expressionModuleReference(node) {
+  if (
+    ts.isCallExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+    node.arguments.length >= 1 &&
+    ts.isStringLiteralLike(node.arguments[0])
+  ) {
+    return node.arguments[0]
+  }
+  if (
+    ts.isImportTypeNode(node) &&
+    ts.isLiteralTypeNode(node.argument) &&
+    ts.isStringLiteral(node.argument.literal)
+  ) {
+    return node.argument.literal
+  }
+  return undefined
+}
+
+function inspectModuleReference(metadata, node) {
+  const reference =
+    declarationModuleReference(node) ?? expressionModuleReference(node)
+  if (!reference) return
+  const specifier = ts.isExternalModuleReference(reference)
+    ? reference.expression.text
+    : reference.text
+  addGraphEdge(metadata, reference, specifier)
+  if (metadata.relativePath.startsWith("src/domain/")) {
+    inspectDomainImport(metadata, reference, specifier)
+  }
+}
+
+function inspectDomainImport(metadata, node, specifier) {
+  const imported = resolveImport(metadata.absolutePath, specifier)
+  if (
+    imported &&
+    forbiddenDomainImportPrefixes.some((prefix) =>
+      imported.relativePath.startsWith(prefix)
+    )
+  ) {
+    report(
+      metadata,
+      node,
+      `Domain code must not import resolved ${imported.relativePath}.`
+    )
+  }
+  if (/(?:^|\/)logger(?:\.[cm]?js|\.ts)?$/.test(specifier)) {
+    report(metadata, node, "Domain code must not import the runtime logger.")
+  }
+}
+
+function inspectDomainIdentifier(metadata, node) {
+  if (!ts.isIdentifier(node) || isImportSyntax(node)) return
+  if (domainAmbientNames.has(node.text)) {
+    report(
+      metadata,
+      node,
+      `Domain code must not use ambient ${node.text}; inject this dependency instead.`
+    )
+  }
+  if (node.text === "logger") {
+    report(metadata, node, "Domain code must not use the runtime logger.")
+  }
+}
+
+function inspectDomainEnvironment(metadata, node) {
+  if (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === "env" &&
+    ts.isMetaProperty(node.expression) &&
+    node.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+  ) {
+    report(metadata, node, "Domain code must not read import.meta.env.")
+  }
+}
+
+function inspectDomainCall(metadata, node, chain) {
+  const call = chain?.join(".")
+  if (domainClockCalls.has(call)) {
+    report(
+      metadata,
+      node,
+      "Domain code must not use ambient Date.now(), Math.random(), or performance.now()."
+    )
+  }
+  if (domainCryptoCalls.has(call)) {
+    report(
+      metadata,
+      node,
+      "Domain code must not use ambient crypto randomness."
+    )
+  }
+}
+
+function isLocalStorageMutation(chain) {
+  if (chain?.length !== 4) return false
+  return (
+    ["chrome", "browser"].includes(chain[0]) &&
+    chain[1] === "storage" &&
+    chain[2] === "local" &&
+    ["set", "remove", "clear"].includes(chain[3])
+  )
+}
+
+function inspectStorageCall(metadata, node, chain) {
+  if (
+    isLocalStorageMutation(chain) &&
+    !metadata.relativePath.startsWith("src/storage/") &&
+    !allowedLocalMutationFiles.has(metadata.relativePath)
+  ) {
+    report(
+      metadata,
+      node,
+      "Durable local storage mutations belong in src/storage/; composition, migration and isolated E2E seeding are explicit exceptions."
+    )
+  }
+}
+
+function inspectBrowserCall(metadata, node, chain) {
+  const call = chain?.join(".")
+  if (
+    call === "chrome.runtime.sendMessage" &&
+    metadata.relativePath !== "src/runtime/send-runtime-message.ts"
+  ) {
+    report(
+      metadata,
+      node,
+      "Direct chrome.runtime.sendMessage calls belong only in src/runtime/send-runtime-message.ts."
+    )
+  }
+  if (
+    ["chrome.downloads.download", "chrome.downloads.search"].includes(call) &&
+    metadata.relativePath !==
+      "entrypoints/background/native-output-coordinator.ts"
+  ) {
+    report(
+      metadata,
+      node,
+      "chrome.downloads.download/search calls belong only in entrypoints/background/native-output-coordinator.ts."
+    )
+  }
+}
+
+function inspectFetchCall(metadata, node) {
+  if (
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "fetch" &&
+    !allowedFetchFiles.has(metadata.relativePath)
+  ) {
+    report(
+      metadata,
+      node,
+      "Raw fetch() calls belong only in src/site-integrations/http-client.ts or src/runtime/i18n.ts."
+    )
+  }
+}
+
+function inspectProjectionCall(metadata, node, chain) {
+  const calledName = chain?.at(-1)
+  if (
+    calledName &&
+    projectionFunctions.has(calledName) &&
+    metadata.relativePath !== allowedProjectionFile
+  ) {
+    report(
+      metadata,
+      node,
+      `${calledName} calls belong only in ${allowedProjectionFile}.`
+    )
+  }
+  if (
+    calledName === "setEnablementMap" &&
+    !allowedSetEnablementMapFiles.has(metadata.relativePath)
+  ) {
+    report(
+      metadata,
+      node,
+      "setEnablementMap() calls belong only in runtime initialization modules (entrypoints/background/background-runtime-kernel.ts, src/runtime/site-integration-initialization.ts) and E2E state seed (entrypoints/background/e2e-state-seed.ts)."
+    )
+  }
+}
+
+function inspectConstructor(metadata, node) {
+  if (!ts.isNewExpression(node) || !ts.isIdentifier(node.expression)) return
+  const constructorName = node.expression.text
+  if (!constructorOwners.has(constructorName)) return
+  const allowed =
+    metadata.relativePath === allowedConstructorFile ||
+    (constructorName === "RateLimitService" &&
+      metadata.relativePath === "entrypoints/offscreen/main-worker.ts")
+  if (!allowed) {
+    report(
+      metadata,
+      node,
+      `Only ${allowedConstructorFile}${
+        constructorName === "RateLimitService"
+          ? " (and entrypoints/offscreen/main-worker.ts for RateLimitService)"
+          : ""
+      } may construct ${constructorName}.`
+    )
+  }
+}
+
+function inspectNode(metadata, node) {
+  inspectModuleReference(metadata, node)
+  const isDomain = metadata.relativePath.startsWith("src/domain/")
+  if (isDomain) {
+    inspectDomainIdentifier(metadata, node)
+    inspectDomainEnvironment(metadata, node)
+  }
+  if (ts.isCallExpression(node)) {
+    const chain = propertyChain(node.expression)
+    if (isDomain) inspectDomainCall(metadata, node, chain)
+    inspectStorageCall(metadata, node, chain)
+    inspectBrowserCall(metadata, node, chain)
+    inspectFetchCall(metadata, node)
+    inspectProjectionCall(metadata, node, chain)
+  }
+  inspectConstructor(metadata, node)
+  ts.forEachChild(node, (child) => inspectNode(metadata, child))
+}
+
 function inspectSourceFile(metadata) {
-  const { source, relativePath } = metadata
-  const isDomain = relativePath.startsWith("src/domain/")
-  const allowedDirectMessageFile =
-    relativePath === "src/runtime/send-runtime-message.ts"
-  const allowedDownloadsFile =
-    relativePath === "entrypoints/background/native-output-coordinator.ts"
-  const allowedFetchFiles = new Set([
-    "src/site-integrations/http-client.ts",
-    "src/runtime/i18n.ts",
-  ])
-  const allowedConstructorFile = "entrypoints/background/index.ts"
-  const allowedProjectionFile = "src/storage/queue-projection-service.ts"
-
-  function recordModuleReference(node, specifier) {
-    addGraphEdge(metadata, node, specifier)
-    if (!isDomain) return
-
-    const imported = resolveImport(metadata.absolutePath, specifier)
-    if (
-      imported &&
-      [
-        "src/storage/",
-        "src/runtime/",
-        "src/site-integrations/",
-        "entrypoints/",
-        "components/",
-      ].some((prefix) => imported.relativePath.startsWith(prefix))
-    ) {
-      report(
-        metadata,
-        node,
-        `Domain code must not import resolved ${imported.relativePath}.`
-      )
-    }
-    if (/(?:^|\/)logger(?:\.[cm]?js|\.ts)?$/.test(specifier)) {
-      report(metadata, node, "Domain code must not import the runtime logger.")
-    }
-  }
-
-  function visit(node) {
-    if (
-      ts.isImportDeclaration(node) &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      recordModuleReference(node.moduleSpecifier, node.moduleSpecifier.text)
-    }
-
-    if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
-      if (ts.isStringLiteral(node.moduleSpecifier)) {
-        recordModuleReference(node.moduleSpecifier, node.moduleSpecifier.text)
-      }
-    }
-
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      ts.isStringLiteral(node.moduleReference.expression)
-    ) {
-      recordModuleReference(
-        node.moduleReference,
-        node.moduleReference.expression.text
-      )
-    }
-
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length >= 1 &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
-      recordModuleReference(node.arguments[0], node.arguments[0].text)
-    }
-
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteral(node.argument.literal)
-    ) {
-      recordModuleReference(node.argument.literal, node.argument.literal.text)
-    }
-
-    if (isDomain) {
-      if (
-        ts.isIdentifier(node) &&
-        domainAmbientNames.has(node.text) &&
-        !isImportSyntax(node)
-      ) {
-        report(
-          metadata,
-          node,
-          `Domain code must not use ambient ${node.text}; inject this dependency instead.`
-        )
-      }
-
-      if (
-        ts.isIdentifier(node) &&
-        node.text === "logger" &&
-        !isImportSyntax(node)
-      ) {
-        report(metadata, node, "Domain code must not use the runtime logger.")
-      }
-
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        node.name.text === "env" &&
-        ts.isMetaProperty(node.expression) &&
-        node.expression.keywordToken === ts.SyntaxKind.ImportKeyword
-      ) {
-        report(metadata, node, "Domain code must not read import.meta.env.")
-      }
-
-      if (
-        ts.isCallExpression(node) &&
-        (JSON.stringify(propertyChain(node.expression)) ===
-          JSON.stringify(["Date", "now"]) ||
-          JSON.stringify(propertyChain(node.expression)) ===
-            JSON.stringify(["Math", "random"]) ||
-          JSON.stringify(propertyChain(node.expression)) ===
-            JSON.stringify(["performance", "now"]))
-      ) {
-        report(
-          metadata,
-          node,
-          "Domain code must not use ambient Date.now(), Math.random(), or performance.now()."
-        )
-      }
-
-      if (
-        ts.isCallExpression(node) &&
-        (JSON.stringify(propertyChain(node.expression)) ===
-          JSON.stringify(["crypto", "randomUUID"]) ||
-          JSON.stringify(propertyChain(node.expression)) ===
-            JSON.stringify(["crypto", "getRandomValues"]))
-      ) {
-        report(
-          metadata,
-          node,
-          "Domain code must not use ambient crypto randomness."
-        )
-      }
-    }
-
-    if (ts.isCallExpression(node)) {
-      const chain = propertyChain(node.expression)
-      if (
-        chain?.length === 4 &&
-        (chain[0] === "chrome" || chain[0] === "browser") &&
-        chain[1] === "storage" &&
-        chain[2] === "local" &&
-        ["set", "remove", "clear"].includes(chain[3]) &&
-        !relativePath.startsWith("src/storage/") &&
-        !allowedLocalMutationFiles.has(relativePath)
-      ) {
-        report(
-          metadata,
-          node,
-          "Durable local storage mutations belong in src/storage/; composition, migration and isolated E2E seeding are explicit exceptions."
-        )
-      }
-      if (
-        JSON.stringify(chain) ===
-        JSON.stringify(["chrome", "runtime", "sendMessage"])
-      ) {
-        if (!allowedDirectMessageFile) {
-          report(
-            metadata,
-            node,
-            "Direct chrome.runtime.sendMessage calls belong only in src/runtime/send-runtime-message.ts."
-          )
-        }
-      }
-
-      if (
-        (JSON.stringify(chain) ===
-          JSON.stringify(["chrome", "downloads", "download"]) ||
-          JSON.stringify(chain) ===
-            JSON.stringify(["chrome", "downloads", "search"])) &&
-        !allowedDownloadsFile
-      ) {
-        report(
-          metadata,
-          node,
-          "chrome.downloads.download/search calls belong only in entrypoints/background/native-output-coordinator.ts."
-        )
-      }
-
-      if (
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "fetch" &&
-        !allowedFetchFiles.has(relativePath)
-      ) {
-        report(
-          metadata,
-          node,
-          "Raw fetch() calls belong only in src/site-integrations/http-client.ts or src/runtime/i18n.ts."
-        )
-      }
-
-      const calledName = chain?.at(-1)
-      if (
-        calledName &&
-        projectionFunctions.has(calledName) &&
-        relativePath !== allowedProjectionFile
-      ) {
-        report(
-          metadata,
-          node,
-          `${calledName} calls belong only in ${allowedProjectionFile}.`
-        )
-      }
-      if (
-        calledName === "setEnablementMap" &&
-        !allowedSetEnablementMapFiles.has(relativePath)
-      ) {
-        report(
-          metadata,
-          node,
-          "setEnablementMap() calls belong only in runtime initialization modules (entrypoints/background/background-runtime-kernel.ts, src/runtime/site-integration-initialization.ts) and E2E state seed (entrypoints/background/e2e-state-seed.ts)."
-        )
-      }
-    }
-
-    if (
-      ts.isNewExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      constructorOwners.has(node.expression.text)
-    ) {
-      const constructorName = node.expression.text
-      const allowed =
-        relativePath === allowedConstructorFile ||
-        (constructorName === "RateLimitService" &&
-          relativePath === "entrypoints/offscreen/main.ts")
-      if (!allowed) {
-        report(
-          metadata,
-          node,
-          `Only ${allowedConstructorFile}${
-            constructorName === "RateLimitService"
-              ? " (and entrypoints/offscreen/main.ts for RateLimitService)"
-              : ""
-          } may construct ${constructorName}.`
-        )
-      }
-    }
-
-    ts.forEachChild(node, visit)
-  }
-
-  visit(source)
+  inspectNode(metadata, metadata.source)
 }
 
 function findCycles() {

@@ -1,0 +1,64 @@
+# 対応サイト
+
+[English](Supported-Sites) · [日本語](Supported-Sites.ja) · [简体中文](Supported-Sites.zh-CN) · [繁體中文](Supported-Sites.zh-TW) · [한국어](Supported-Sites.ko)
+
+このページは[英語版](Supported-Sites)から機械翻訳されています。
+
+利用するサイトに対応するページを下の表で確認し、そのページを開き、Tako アイコンをクリックして話を選んでください。
+
+## 対応サイト一覧
+
+| サイト                                                     | 開くページ                                                    | 初期状態で利用可能     |
+| ---------------------------------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| [MangaDex](https://mangadex.org)                           | 漫画の作品ページ                                              | オプションで有効にする |
+| [pixivコミック](https://comic.pixiv.net)                   | 作品ページ                                                    | はい                   |
+| [少年ジャンプ＋](https://shonenjumpplus.com)               | エピソードページ                                              | はい                   |
+| [Manhuagui（看漫画）](https://www.manhuagui.com)           | 漫画の詳細ページ                                              | はい                   |
+| [COMIC熱帯](https://www.comicnettai.com)                   | 書籍ページ                                                    | はい                   |
+| [MANGA MILLION](https://mangamillion.shueisha.co.jp)       | 作品ページ                                                    | はい                   |
+| [BoyLove（香香腐宅）](https://boylove.cc)                  | `/home/book/index/id/{id}` の書籍詳細                         | はい                   |
+| [Mangago](https://www.mangago.me)                          | `/read-manga/{series}/` の作品ページ                          | はい                   |
+| [MangaNato](https://manganato.gg)                          | `/manga/{series}` の作品ページ                                | はい                   |
+| [MangaKakalot](https://mangakakalove.com)                  | `/manga/{series}` の作品ページ                                | はい                   |
+| [Coolmic](https://coolmic.me)                              | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
+| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
+| [Anime Manga House（动漫屋）](https://www.dm5.com)         | `/manhua-{series}/` の作品ページ                              | はい                   |
+| [Manga Again（再漫画）](https://www.zaimanhua.com)         | `/info/{series}.html` の漫画詳細または `/view/...` のリーダー | はい                   |
+| [CopyManga（拷貝漫畫）](https://www.copy3000.com)          | `/comic/{series}` の作品ページ                                | はい                   |
+| [MYCOMIC](https://mycomic.com)                             | `/comics/{id}` または `/cn/comics/{id}` の作品ページ          | はい                   |
+| [Māngabz](https://www.mangabz.com)                         | `/{id}bz/` の作品ページ                                       | はい                   |
+| [MangaHere](https://newm.mangahere.cc)                     | `/manga/{series}/` の作品ページ                               | はい                   |
+| [Love Manga（爱漫画）](https://www.aimanhua.org)           | `/comic/{id}` の漫画詳細                                      | はい                   |
+
+## ドメインとエピソード履歴
+
+- **Manga Again（再漫画）：** 同じ作品・話の履歴は、`www.zaimanhua.com` と `manhua.zaimanhua.com` で共通です。
+- **CopyManga（拷貝漫畫）：** 同じ作品・話の履歴は、`www.copy3000.com` と `www.copy4000.com` で共通です。
+- **MangaHere：** `newm.mangahere.cc` を開いてください。旧 `m.mangahere.cc` リーダーは未対応です。
+- **MangaNato と MangaKakalot：** **オプション → サイト統合**にそれぞれ有効・無効のスイッチがあり、エピソード履歴も独立しています。
+- **Manhuagui（看漫画）：** `www.manhuagui.com` と `manhuagui.com` の両方を認識します。話を選択するには漫画の詳細ページを開いてください。
+
+## MangaDex を有効にする
+
+1. Tako の**オプション → サイト統合**を開きます。
+2. MangaDex を有効にして、Chrome の確認画面でサイトへのアクセスを許可します。
+3. **変更を保存**をクリックします。
+4. MangaDex の作品ページに戻り、Tako を開きます。
+
+MangaDex はアドレスが変わる画像サーバーを使用するため、Chrome は HTTPS サイトへのアクセス権を求めます。詳しくは[権限](Permissions.ja)をご覧ください。MangaDex を無効のままにして、ほかのサイトを使うこともできます。
+
+## ウェブサイトへのアクセスと利用できない話
+
+話を利用できる範囲は、サイトのウェブ版リーダーでの提供状況、利用者のアクセス権、地域やアカウントの制限によって変わります。一部のサイト統合では、そのサイトの既存のブラウザセッションを利用します。必要に応じてサイトにログインし、ダウンロード中はそのセッションを維持してください。有料または制限のある話は、ウェブ版リーダーでも閲覧できる必要があります。ウェブ版とアプリ版の購読条件は異なる場合があります。
+
+Manhuagui（看漫画）には、アカウントへのログインとは別に成人向けコンテンツへの同意画面があります。サイトで同意を済ませてから、Tako で漫画の詳細ページを開き直してください。
+
+CopyManga（拷貝漫畫）では、ログインしていない状態のウェブ版リーダーを含め、一時的に話の一覧が空になることがあります。その場合は、サイト側で話の一覧が表示されるようになるまで待ってから、Tako で作品ページを再読み込みしてください。
+
+作品が見つからない場合は、上の表でページの種類を確認してください。例えば、MangaDex は作品ページ、Manhuagui（看漫画）は漫画の詳細ページを使います。それでも読み込めない場合は、[トラブルシューティング](Troubleshooting.ja)をご覧ください。
+
+サイトのページや画像配信サービスは変更されることがあります。問題が起きた場合は、サイト名と公開ページの URL を添えて、[不具合報告フォーム](https://github.com/oovz/Tako/issues/new?template=bug_report.md)からお知らせください。
+
+## サイトの追加をリクエストする
+
+[GitHub でサイトを提案](https://github.com/oovz/Tako/issues/new?template=feature_request.md)できます。開発に参加する方は、[サイト統合ガイド](Site-Integration-Guide.ja)に沿って対応サイトを追加できます。

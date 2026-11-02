@@ -3,6 +3,7 @@ import { expect } from "@playwright/test"
 import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import { resolveCandidateTabIds } from "./download-workflow-helpers"
 import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
+import type { SeriesMetadataSnapshot } from "@/src/types/state-snapshots"
 
 export type LiveChapter = {
   id: string
@@ -30,7 +31,7 @@ export type LiveTabState = {
   seriesTitle?: string
   chapters?: LiveChapter[]
   volumes?: LiveVolume[]
-  metadata?: { coverUrl?: string }
+  metadata?: SeriesMetadataSnapshot
 }
 
 export function extractNumericValue(
@@ -129,8 +130,6 @@ export function assertNumericChapterProjection(
   chapters: LiveChapter[],
   options: {
     minNumberedChapters: number
-    expectedSampleNumber?: number
-    expectedSampleLabel?: RegExp
     expectAnyVolumeNumbers: boolean | "if-present"
   }
 ): void {
@@ -155,22 +154,6 @@ export function assertNumericChapterProjection(
         ? chapter.chapterLabel
         : chapter.title
     expect(chapter.chapterNumber).toBe(extractNumericValue(source))
-  }
-
-  if (options.expectedSampleNumber !== undefined) {
-    const sample = chapters.find(
-      (chapter) => chapter.chapterNumber === options.expectedSampleNumber
-    )
-    expect(sample).toBeTruthy()
-    expect(sample?.chapterNumber).toBe(options.expectedSampleNumber)
-
-    if (options.expectedSampleLabel) {
-      expect(
-        options.expectedSampleLabel.test(
-          sample?.chapterLabel ?? sample?.title ?? ""
-        )
-      ).toBe(true)
-    }
   }
 
   const chaptersWithVolumeLabels = chapters.filter((chapter) =>

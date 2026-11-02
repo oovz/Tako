@@ -1,7 +1,4 @@
-/**
- * Single source of truth for download path template macros
- * Defines all supported macros with their descriptions and capabilities
- */
+/** Supported path-template macros and their preview values. */
 
 export interface TemplateMacro {
   name: string
@@ -11,10 +8,7 @@ export interface TemplateMacro {
   category: "date" | "manga" | "site"
 }
 
-/**
- * Definitive list of all supported template macros
- */
-export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
+export const TEMPLATE_MACROS = [
   // Date macros - can be resolved anywhere
   {
     name: "YYYY",
@@ -113,7 +107,7 @@ export const TEMPLATE_MACROS: readonly TemplateMacro[] = [
     requiresMangaMetadata: true,
     category: "manga",
   },
-] as const
+] as const satisfies readonly TemplateMacro[]
 
 export type TemplateMacroName = (typeof TEMPLATE_MACROS)[number]["name"]
 
@@ -126,46 +120,11 @@ export const IMPLEMENTED_MACRO_NAMES: readonly string[] = TEMPLATE_MACROS.map(
   (macro) => macro.name
 )
 
-/** Get all registered macro names as an array. */
-export function getSupportedMacroNames(): TemplateMacroName[] {
-  return TEMPLATE_MACROS.map((macro) => macro.name)
-}
-
 /**
  * Get all IMPLEMENTED macro names as array
  */
 export function getImplementedMacroNames(): readonly string[] {
   return IMPLEMENTED_MACRO_NAMES
-}
-
-/**
- * Check if a macro name is supported
- */
-export function isSupportedMacro(macroName: string): boolean {
-  return getSupportedMacroNames().includes(macroName)
-}
-
-/**
- * Get macro information by name
- */
-export function getMacroInfo(macroName: string): TemplateMacro | undefined {
-  return TEMPLATE_MACROS.find((macro) => macro.name === macroName)
-}
-
-/**
- * Get macros grouped by category
- */
-export function getMacrosByCategory(): Record<string, TemplateMacro[]> {
-  const grouped: Record<string, TemplateMacro[]> = {}
-
-  for (const macro of TEMPLATE_MACROS) {
-    if (!grouped[macro.category]) {
-      grouped[macro.category] = []
-    }
-    grouped[macro.category].push(macro)
-  }
-
-  return grouped
 }
 
 /**

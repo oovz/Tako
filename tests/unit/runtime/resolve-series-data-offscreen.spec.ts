@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
-  const reserveSeriesResolution = vi.fn(() => ({ release: vi.fn() }))
+  const reserveTransientWork = vi.fn(() => ({ release: vi.fn() }))
   return {
-    reserveSeriesResolution,
+    reserveTransientWork,
     runOffscreenDocumentAdmissionExclusive: vi.fn(
       async <T>(
         operation: (context: {
-          reserveSeriesResolution: () => { release: () => void }
+          reserveTransientWork: () => { release: () => void }
         }) => Promise<T>
-      ): Promise<T> => await operation({ reserveSeriesResolution })
+      ): Promise<T> => await operation({ reserveTransientWork })
     ),
     sendMessage: vi.fn(),
   }
@@ -52,6 +52,7 @@ describe("resolveSeriesDataViaOffscreen", () => {
   it("admits the parse send with the offscreen lifecycle and maps a successful response", async () => {
     mocks.sendMessage.mockResolvedValue({
       success: true,
+      seriesId: "series-1",
       seriesMetadata: { title: "Series" },
       chapterList: { chapters: [], volumes: [] },
       metadataError: undefined,
@@ -68,6 +69,7 @@ describe("resolveSeriesDataViaOffscreen", () => {
         rateLimitService,
       })
     ).resolves.toEqual({
+      seriesId: "series-1",
       seriesMetadata: { title: "Series" },
       chapterList: { chapters: [], volumes: [] },
       metadataError: undefined,

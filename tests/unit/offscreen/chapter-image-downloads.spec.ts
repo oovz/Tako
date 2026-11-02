@@ -41,6 +41,73 @@ const rateLimitService = {
 } as unknown as RateLimitService
 
 describe("downloadChapterImages", () => {
+  it("reports half and full progress as two images finish", async () => {
+    const started = [
+      Promise.withResolvers<void>(),
+      Promise.withResolvers<void>(),
+    ]
+    const completed = [
+      Promise.withResolvers<ChapterDownloadImageResult>(),
+      Promise.withResolvers<ChapterDownloadImageResult>(),
+    ]
+    const progress = [
+      Promise.withResolvers<void>(),
+      Promise.withResolvers<void>(),
+    ]
+    const onProgress = vi.fn(
+      async (
+        _pct: number,
+        _label?: string,
+        imageProgress?: { current: number; total: number }
+      ) => {
+        if (imageProgress && imageProgress.current > 0) {
+          progress[imageProgress.current - 1].resolve()
+        }
+      }
+    )
+    const runtime: ChapterProcessingRuntime = {
+      liveResourceLedger: new OffscreenLiveResourceLedger(),
+      rateLimitService,
+      withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
+      resolveWritableDownloadRoot: vi.fn(),
+      requestBrowserBlobDownload: vi.fn(),
+      getMemoryStats: () => null,
+    }
+    let nextImage = 0
+    const result = downloadChapterImages(runtime, {
+      urls: ["https://example.com/1.jpg", "https://example.com/2.jpg"],
+      integrationId: "test-site",
+      chapterId: "chapter-1",
+      rateLimitSettings: RATE_LIMIT_SETTINGS,
+      rateLimitService,
+      onProgress,
+      downloadImage: async () => {
+        const index = nextImage++
+        started[index].resolve()
+        return completed[index].promise
+      },
+      onDownloaded: async () => {},
+      onDownloadFailed: vi.fn(),
+    })
+    await Promise.all(started.map((image) => image.promise))
+    for (let index = 0; index < completed.length; index++) {
+      completed[index].resolve({
+        filename: `${index + 1}.jpg`,
+        data: new ArrayBuffer(1),
+        mimeType: "image/jpeg",
+        liveResourceLease: runtime.liveResourceLedger.reserve(1, "test image"),
+      })
+      await progress[index].promise
+    }
+    await expect(result).resolves.toMatchObject({ succeeded: 2, failed: 0 })
+    expect(onProgress.mock.calls).toEqual([
+      [50, undefined, { current: 1, total: 2 }],
+      [100, undefined, { current: 2, total: 2 }],
+    ])
+    expect(runtime.liveResourceLedger.getUsedBytes()).toBe(0)
+  })
+
   it("rejects a chapter whose declared image count exceeds the job budget", async () => {
     const downloadImage = vi.fn()
     const runtime = {
@@ -72,6 +139,7 @@ describe("downloadChapterImages", () => {
       liveResourceLedger: new OffscreenLiveResourceLedger(),
       rateLimitService,
       withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
       getMemoryStats: vi.fn(() => null),
@@ -108,6 +176,7 @@ describe("downloadChapterImages", () => {
       liveResourceLedger: new OffscreenLiveResourceLedger(),
       rateLimitService,
       withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
       getMemoryStats: vi.fn(() => null),
@@ -183,6 +252,7 @@ describe("downloadChapterImages", () => {
       liveResourceLedger: new OffscreenLiveResourceLedger(),
       rateLimitService,
       withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
       getMemoryStats: vi.fn(() => null),
@@ -276,6 +346,7 @@ describe("downloadChapterImages", () => {
       liveResourceLedger: ledger,
       rateLimitService,
       withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
       getMemoryStats: vi.fn(() => null),
@@ -349,6 +420,7 @@ describe("downloadChapterImages", () => {
       liveResourceLedger: new OffscreenLiveResourceLedger(),
       rateLimitService,
       withImageRetries: async (fn) => fn(),
+      beginFsaWrite: async () => {},
       resolveWritableDownloadRoot: vi.fn(),
       requestBrowserBlobDownload: vi.fn(),
       getMemoryStats: vi.fn(() => null),
@@ -410,6 +482,7 @@ describe("downloadChapterImages", () => {
           await hooks?.onAttemptStart?.(1)
           return fn()
         },
+        beginFsaWrite: async () => {},
         resolveWritableDownloadRoot: vi.fn(),
         requestBrowserBlobDownload: vi.fn(),
         getMemoryStats: vi.fn(() => null),

@@ -58,7 +58,7 @@ export function registerSiteOverridesCrudCases(): void {
 
       const newMap = {
         mangadex: { outputFormat: "zip" as const },
-        comicnettai: { pathTemplate: "/new/path" },
+        comictropics: { pathTemplate: "/new/path" },
       }
 
       await siteOverridesService.setAll(newMap)
@@ -189,7 +189,7 @@ export function registerSiteOverridesCrudCases(): void {
 
     it("should handle removal from empty overrides", async () => {
       await expect(
-        siteOverridesService.removeSite("comicnettai")
+        siteOverridesService.removeSite("comictropics")
       ).resolves.not.toThrow()
 
       const overrides = await siteOverridesService.getAll()
@@ -202,7 +202,7 @@ export function registerSiteOverridesCrudCases(): void {
       mockStorageData.siteOverrides = {
         "pixiv-comic": { outputFormat: "cbz" as const },
         mangadex: { outputFormat: "zip" as const },
-        comicnettai: { pathTemplate: "/path" },
+        comictropics: { pathTemplate: "/path" },
       }
 
       await siteOverridesService.clear()

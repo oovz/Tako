@@ -20,6 +20,7 @@ export interface AdvancedSettings {
 }
 
 export interface DownloadSettings {
+  allowChromeFallback: boolean
   destination: DownloadDestination
   customDirectoryHandleId: string | null
   pathTemplate: string

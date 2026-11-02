@@ -7,8 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   ...liveConfig,
-  // CI continuously checks a bounded, read-only external API canary. Browser
-  // extraction and real downloads remain in the explicit full live suite.
+  // Keep the CI canary limited to public API requests.
   projects: [
     {
       name: "mangadex-canary",
@@ -16,7 +15,7 @@ export default defineConfig({
       testMatch: ["api-contract.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
   ],

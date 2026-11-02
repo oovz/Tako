@@ -40,44 +40,46 @@ export async function runActiveTaskProgressExclusive<T>(
 async function hydrateCurrentProgress(): Promise<void> {
   if (hydrated) return
   if (!hydrationPromise) {
-    hydrationPromise = (async () => {
-      try {
-        const stored = await chrome.storage.session.get([
-          SESSION_STORAGE_KEYS.activeTaskProgress,
-          SESSION_STORAGE_KEYS.activeTaskProgressRevision,
-        ])
-        const hydratedProgress = normalizeActiveTaskProgress(
-          stored[SESSION_STORAGE_KEYS.activeTaskProgress]
-        )
-        currentProgress = hydratedProgress
-          ? { ...hydratedProgress, generation: currentGeneration }
-          : null
-        const storedRevision =
-          stored[SESSION_STORAGE_KEYS.activeTaskProgressRevision]
-        currentRevision = Math.max(
-          hydratedProgress?.revision ?? 0,
-          typeof storedRevision === "number" && Number.isInteger(storedRevision)
-            ? Math.max(0, storedRevision)
-            : 0
-        )
-      } catch (error) {
-        // The Port is the live transport. A missing recovery snapshot must not
-        // interrupt an otherwise healthy download.
-        logger.debug(
-          "Failed to hydrate active progress snapshot (non-fatal):",
-          error
-        )
-        currentProgress = null
-        currentRevision = 0
-      } finally {
-        hydrated = true
-      }
-    })()
+    hydrationPromise = readRecoverySnapshot()
   }
   await hydrationPromise
   hydrationPromise = null
   lastPersistedAt = currentProgress?.updatedAt ?? 0
   lastPersistedStage = currentProgress?.stage ?? null
+}
+
+async function readRecoverySnapshot(): Promise<void> {
+  try {
+    const stored = await chrome.storage.session.get([
+      SESSION_STORAGE_KEYS.activeTaskProgress,
+      SESSION_STORAGE_KEYS.activeTaskProgressRevision,
+    ])
+    const hydratedProgress = normalizeActiveTaskProgress(
+      stored[SESSION_STORAGE_KEYS.activeTaskProgress]
+    )
+    currentProgress = hydratedProgress
+      ? { ...hydratedProgress, generation: currentGeneration }
+      : null
+    const storedRevision =
+      stored[SESSION_STORAGE_KEYS.activeTaskProgressRevision]
+    currentRevision = Math.max(
+      hydratedProgress?.revision ?? 0,
+      typeof storedRevision === "number" && Number.isInteger(storedRevision)
+        ? Math.max(0, storedRevision)
+        : 0
+    )
+  } catch (error) {
+    // The Port is the live transport. A missing recovery snapshot must not
+    // interrupt an otherwise healthy download.
+    logger.debug(
+      "Failed to hydrate active progress snapshot (non-fatal):",
+      error
+    )
+    currentProgress = null
+    currentRevision = 0
+  } finally {
+    hydrated = true
+  }
 }
 
 function queueSnapshotWrite(values: Record<string, unknown>): Promise<void> {
@@ -144,13 +146,11 @@ export async function publishActiveTaskProgress(
         updatedAt: now,
       }
     : null
-  const stageChanged = nextProgress?.stage !== lastPersistedStage
-  const shouldPersist =
-    options.forcePersist === true ||
-    nextProgress === null ||
-    lastPersistedAt === 0 ||
-    stageChanged ||
-    now - lastPersistedAt >= ACTIVE_TASK_PROGRESS_SNAPSHOT_INTERVAL_MS
+  const shouldPersist = shouldPersistProgress(
+    nextProgress,
+    options.forcePersist,
+    now
+  )
 
   currentRevision = revision
   currentProgress = nextProgress
@@ -175,6 +175,21 @@ export async function publishActiveTaskProgress(
   return nextProgress ? structuredClone(nextProgress) : null
 }
 
+function shouldPersistProgress(
+  nextProgress: ActiveTaskProgressSnapshot | null,
+  forcePersist: boolean | undefined,
+  now: number
+): boolean {
+  const stageChanged = nextProgress?.stage !== lastPersistedStage
+  return (
+    forcePersist === true ||
+    nextProgress === null ||
+    lastPersistedAt === 0 ||
+    stageChanged ||
+    now - lastPersistedAt >= ACTIVE_TASK_PROGRESS_SNAPSHOT_INTERVAL_MS
+  )
+}
+
 export async function clearActiveTaskProgress(): Promise<void> {
   await runActiveTaskProgressExclusive(async () => {
     await publishActiveTaskProgress(null, { forcePersist: true })
@@ -194,20 +209,10 @@ export async function settleActiveTaskProgressChapter(input: {
     const activeChapters = progress.activeChapters.filter(
       (chapter) => chapter.chapterId !== input.chapterId
     )
-    const settledCount = input.chapters.filter(
-      (chapter) =>
-        chapter.status !== "queued" && chapter.status !== "downloading"
-    ).length
-    const totalChapters = Math.max(1, input.chapters.length)
-    const rawOverallFraction = Math.max(
-      progress.overallFraction ?? 0,
-      settledCount / totalChapters
+    const { overallFraction, allChaptersSettled } = settledProgressFraction(
+      input,
+      progress
     )
-    const allChaptersSettled = settledCount >= totalChapters
-    const overallFraction =
-      input.destinationCommitted && allChaptersSettled
-        ? 1
-        : Math.min(rawOverallFraction, 0.99)
     const currentChapter = activeChapters.reduce(
       (latest, chapter) =>
         !latest || chapter.updatedAt >= latest.updatedAt ? chapter : latest,
@@ -217,8 +222,7 @@ export async function settleActiveTaskProgressChapter(input: {
     await publishActiveTaskProgress(
       {
         taskId: input.taskId,
-        chapterId: currentChapter?.chapterId,
-        chapterTitle: currentChapter?.chapterTitle,
+        ...settledChapterProjection(currentChapter, allChaptersSettled),
         imagesProcessed: activeChapters.reduce(
           (sum, chapter) => sum + chapter.imagesProcessed,
           0
@@ -229,10 +233,6 @@ export async function settleActiveTaskProgressChapter(input: {
         ),
         activeChapterCount: activeChapters.length,
         activeChapters,
-        stage:
-          currentChapter?.stage ?? (allChaptersSettled ? "saving" : "accepted"),
-        phaseFraction:
-          currentChapter?.phaseFraction ?? (allChaptersSettled ? 1 : 0),
         overallFraction,
         outputCommitted: input.destinationCommitted,
         status: "downloading",
@@ -262,4 +262,39 @@ export function registerActiveTaskProgressPort(
     .catch((error) => {
       logger.debug("Failed to hydrate progress Port snapshot:", error)
     })
+}
+
+function settledProgressFraction(
+  input: Parameters<typeof settleActiveTaskProgressChapter>[0],
+  progress: ActiveTaskProgressSnapshot
+) {
+  const settledCount = input.chapters.filter(
+    (chapter) => chapter.status !== "queued" && chapter.status !== "downloading"
+  ).length
+  const totalChapters = Math.max(1, input.chapters.length)
+  const rawOverallFraction = Math.max(
+    progress.overallFraction ?? 0,
+    settledCount / totalChapters
+  )
+  const allChaptersSettled = settledCount >= totalChapters
+  const overallFraction =
+    input.destinationCommitted && allChaptersSettled
+      ? 1
+      : Math.min(rawOverallFraction, 0.99)
+
+  return { overallFraction, allChaptersSettled }
+}
+
+function settledChapterProjection(
+  chapter: ActiveTaskProgressSnapshot["activeChapters"][number] | undefined,
+  allSettled: boolean
+) {
+  return {
+    chapterId: chapter?.chapterId,
+    chapterTitle: chapter?.chapterTitle,
+    stage:
+      chapter?.stage ??
+      (allSettled ? ("saving" as const) : ("accepted" as const)),
+    phaseFraction: chapter?.phaseFraction ?? (allSettled ? 1 : 0),
+  }
 }

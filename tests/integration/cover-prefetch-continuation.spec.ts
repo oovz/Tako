@@ -1,9 +1,9 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import { DownloadTaskCancellationCoordinator } from "@/entrypoints/background/download-task-cancellation-coordinator"
-import { DestinationService } from "@/entrypoints/background/destination"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
@@ -159,6 +159,7 @@ function createChapter(
   status: TaskChapter["status"]
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: CHAPTER_PAGE_URL,
     title,
@@ -211,6 +212,7 @@ async function createDispatchRequest(): Promise<{
     },
     settingsSnapshot,
     saveMode: "fsa" as const,
+    directoryHandleId: "selected-id",
   }
   const fingerprint = await createOffscreenDispatchFingerprint(unsigned)
   const payload = { ...unsigned, fingerprint }
@@ -271,7 +273,7 @@ const sendMessage = vi.fn(async (message: OffscreenMessage) => {
   throw new Error(`Unexpected runtime message: ${message.type}`)
 })
 
-let OffscreenWorker: typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+let OffscreenWorker: typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
 
 describe("cover prefetch and chapter processing", () => {
   beforeEach(async () => {
@@ -296,7 +298,7 @@ describe("cover prefetch and chapter processing", () => {
         },
       },
     })
-    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main"))
+    ;({ OffscreenWorker } = await import("@/entrypoints/offscreen/main-worker"))
   })
 
   afterEach(() => {
@@ -354,7 +356,10 @@ describe("cover prefetch and chapter processing", () => {
         },
       })
 
-      const queueRepository = new QueueRepository(new QueueProjectionService())
+      const queueRepository = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
       await queueRepository.initialize()
       await queueRepository.enqueueDownloadTask(
         createTask(
@@ -443,18 +448,11 @@ describe("cover prefetch and chapter processing", () => {
         nativeCoordinator,
         finalizationDependencies
       )
-      const destinationService = new DestinationService({
-        queueRepository,
-        settingsReader: settingsRepository,
-        notifier: {
-          notifyDestinationActionRequired: vi.fn(async () => undefined),
-        },
-      })
+
       const terminalCoordinator = new OffscreenJobTerminalCoordinator(
         queueRepository,
         nativeCoordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies
       )
       offscreenEventHandlers = createBackgroundOffscreenEventMessageHandlers({

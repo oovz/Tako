@@ -1,3 +1,5 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+
 export type NativeOutputKind = "archive" | "image"
 
 export interface NativeOutputJobIdentity {
@@ -32,17 +34,21 @@ export interface NativeOutputManifest extends NativeOutputJobIdentity {
   outputsFailedBeforeHandoff: number
   slots: Array<NativeOutputManifestSlot | null>
   createdAt: number
+  errorMessage?: string
+  errorCategory?: DownloadErrorCategory
   sealedAt?: number
+  settlementAcknowledgedAt?: number
   dependencyReleasedAt?: number
 }
 
 export type NativeOutputPhase =
   | "prepared"
   | "acceptance_unknown"
+  // An unknown outcome is actionable while its Blob remains owned for observation.
+  | "outcome_unknown"
   | "waiting"
   | "complete"
   | "interrupted"
-  | "surrendered"
 
 export type NativeOutputAccountingDisposition =
   "pending" | "accounted" | "not_owner"
@@ -55,8 +61,8 @@ export interface NativeOutputRecord extends NativeOutputIdentity {
   terminalAt?: number
   error?: string
   erasedAt?: number
-  /** Set when the user surrenders observation of an erased download (FORGET). */
-  surrenderedAt?: number
+  /** Exact Chrome erasure confirms that its underlying download was canceled. */
+  erasedByBrowserAt?: number
   accountingDisposition: NativeOutputAccountingDisposition
   accountingDispositionAt?: number
   blobReleasedAt?: number
@@ -108,30 +114,15 @@ export function isNativeOutputTerminal(record: NativeOutputRecord): boolean {
   return record.phase === "complete" || record.phase === "interrupted"
 }
 
-export function isNativeOutputAcceptanceProvenAbsent(
-  record: NativeOutputRecord
-): boolean {
-  if (record.phase === "surrendered") return true
-  return (
-    record.downloadId === undefined &&
-    (record.phase === "prepared" || record.phase === "interrupted")
-  )
+export function canAccountNativeOutput(record: NativeOutputRecord): boolean {
+  return record.phase === "outcome_unknown" || isNativeOutputTerminal(record)
 }
 
-/** True when the record is waiting on an erased Chrome download the user has not resolved yet. */
-export function isNativeOutputUnobservable(
+/** Browser consumption determines Blob lifetime independently of accounting. */
+export function canReleaseNativeOutputBlob(
   record: NativeOutputRecord
 ): boolean {
-  return record.phase === "waiting" && record.erasedAt !== undefined
-}
-
-export function isNativeOutputLive(record: NativeOutputRecord): boolean {
   return (
-    record.phase === "acceptance_unknown" ||
-    record.phase === "waiting" ||
-    !isNativeOutputTerminal(record) ||
-    record.accountingDisposition === "pending" ||
-    record.blobReleasedAt === undefined ||
-    record.dependencyReleasedAt === undefined
+    isNativeOutputTerminal(record) || record.erasedByBrowserAt !== undefined
   )
 }

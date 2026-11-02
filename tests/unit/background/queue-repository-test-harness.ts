@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { vi } from "vitest"
 
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -38,5 +39,8 @@ export function createQueueRepositoryTestHarness(
     },
   } as unknown as typeof chrome)
 
-  return new QueueRepository(new QueueProjectionService())
+  return new QueueRepository(
+    new QueueProjectionService(),
+    new HistoryRepository()
+  )
 }

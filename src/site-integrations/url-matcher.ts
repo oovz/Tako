@@ -1,16 +1,4 @@
-/**
- * Unified URL Matcher - Context-Agnostic URL Pattern Matching
- *
- * This module provides URL matching functionality that works consistently
- * across all extension contexts: popup, content scripts, background/service workers,
- * and offscreen documents.
- *
- * Features:
- * - Pure function with no side effects or dependencies
- * - Precompiled domain and path filtering
- * - Supports multiple site integrations per domain
- * - Works in service worker context (no DOM access)
- */
+/** Match HTTPS URLs against packaged site-integration patterns. */
 
 import {
   getDefinitions,
@@ -124,9 +112,23 @@ function testPatterns(pathname: string, patterns: RegExp[]): boolean {
   return patterns.some((regex) => regex.test(pathname))
 }
 
+function matchesSeriesPage(
+  candidate: CompiledPattern,
+  url: URL,
+  pathname: string,
+  options: MatchUrlOptions
+): boolean {
+  if (!isDomainMatch(url.hostname, candidate.domains)) return false
+  if (!options.includeDisabled && !isEnabled(candidate.integrationId))
+    return false
+  return (
+    testPatterns(pathname, candidate.seriesRegex) &&
+    !testPatterns(pathname, candidate.excludeRegex)
+  )
+}
+
 /**
- * Match a URL against registered site integration patterns
- * Only matches series pages (chapter matching removed per architecture simplification)
+ * Match a URL against a shipped integration's declared series patterns.
  *
  * @param url - Full URL to match
  * @returns Match result with site integration ID and role, or null if no match
@@ -144,67 +146,21 @@ export function matchUrl(
   }
   if (parsedUrl.protocol !== "https:") return null
 
-  const hostname = parsedUrl.hostname
   let pathname = parsedUrl.pathname
   if (pathname.length > 1 && pathname.endsWith("/")) {
     pathname = pathname.replace(/\/+$/, "")
   }
 
-  // Get compiled patterns
-  const patterns = ensurePatternsCompiled()
-
-  // Filter candidates by their compiled exact/wildcard domain policy.
-  const candidates = patterns.filter((pattern) =>
-    isDomainMatch(hostname, pattern.domains)
+  const candidate = ensurePatternsCompiled().find((pattern) =>
+    matchesSeriesPage(pattern, parsedUrl, pathname, options)
   )
-
-  if (candidates.length === 0) {
-    return null
-  }
-
-  // Test each candidate site integration for series pages
-  for (const candidate of candidates) {
-    if (!options.includeDisabled && !isEnabled(candidate.integrationId)) {
-      continue
-    }
-
-    if (testPatterns(pathname, candidate.seriesRegex)) {
-      // Check pre-compiled exclude patterns (FAST - no regex compilation)
-      if (
-        candidate.excludeRegex.length > 0 &&
-        testPatterns(pathname, candidate.excludeRegex)
-      ) {
-        continue // Skip this match, it's excluded
-      }
-
-      return {
-        integrationId: candidate.integrationId,
-        role: "series",
-      }
-    }
-  }
-
-  return null
+  return candidate
+    ? { integrationId: candidate.integrationId, role: "series" }
+    : null
 }
 
 /**
- * Check if a domain is supported by any site integration
- */
-export function isSupportedDomain(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url)
-    if (parsedUrl.protocol !== "https:") return false
-    const hostname = parsedUrl.hostname
-    const patterns = ensurePatternsCompiled()
-
-    return patterns.some((pattern) => isDomainMatch(hostname, pattern.domains))
-  } catch {
-    return false
-  }
-}
-
-/**
- * Get all pattern metadata (for options/popup display)
+ * Get the packaged URL-pattern metadata.
  */
 export function getAllPatternMetadata() {
   return Object.entries(SITE_PATTERNS).map(([integrationId, patterns]) => ({
@@ -212,11 +168,4 @@ export function getAllPatternMetadata() {
     domains: patterns.domains,
     seriesMatches: patterns.seriesMatches.map((path) => `https://*${path}`),
   }))
-}
-
-/**
- * Reset compiled patterns cache (for testing)
- */
-export function resetPatternsCache(): void {
-  compiledPatterns = null
 }

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "comictropics",
+  "name": "COMIC熱帯",
+  "englishName": "Comic Nettai",
+  "contributors": ["TMD Team"],
+  "version": "1.1.0",
+  "shipped": true,
+  "enabledByDefault": true,
+  "patterns": {
+    "domains": ["www.comicnettai.com"],
+    "seriesMatches": ["/book/*"],
+    "excludeMatches": ["/publus/*"]
+  },
+  "requiredOrigins": [
+    "https://www.comicnettai.com/*",
+    "https://cdn.comicnettai.com/*"
+  ],
+  "optionalOrigins": [],
+  "policyDefaults": {
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 1000
+    }
+  },
+  "retryOwner": "platform",
+  "pageProbe": "none",
+  "runtimes": {
+    "background": true,
+    "offscreen": true,
+    "dispatchContext": {
+      "mode": "none"
+    }
+  },
+  "imageTransform": {
+    "kind": "integrated-descramble",
+    "estimatedCostMs": 3000
+  },
+  "endpointPolicies": [
+    {
+      "id": "comictropics-viewer-page",
+      "purpose": "Comic Nettai viewer session",
+      "origins": ["https://www.comicnettai.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "html",
+      "maxResponseBytes": 15000000
+    },
+    {
+      "id": "comictropics-viewer-api",
+      "purpose": "Comic Nettai viewer protocol",
+      "origins": ["https://www.comicnettai.com/*"],
+      "originKind": "fixed",
+      "credentials": "include",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "comictropics-cdn-config",
+      "purpose": "Comic Nettai CDN configuration",
+      "origins": ["https://cdn.comicnettai.com/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "json",
+      "maxResponseBytes": 10000000
+    },
+    {
+      "id": "comictropics-cdn-image",
+      "purpose": "Comic Nettai CDN images",
+      "origins": ["https://cdn.comicnettai.com/*"],
+      "originKind": "provider-issued",
+      "credentials": "omit",
+      "redirect": "error",
+      "responseType": "bytes",
+      "maxResponseBytes": 50000000
+    }
+  ],
+  "sessionRefererRules": [],
+  "customSettings": []
+}

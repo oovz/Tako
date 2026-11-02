@@ -1,10 +1,18 @@
+import type { DispatchLeaseAuthority } from "@/src/domain/queue/state"
+import {
+  canAccountNativeOutput,
+  nativeOutputJobIdentityMatches,
+} from "@/src/domain/native-output/state"
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 import type {
   RuntimeMessageRequest,
   RuntimeMessageResponse,
 } from "@/src/runtime/runtime-message-contracts"
 import type {
   NativeOutputIdentity,
+  NativeOutputJobIdentity,
   NativeOutputManifest,
+  NativeOutputState,
   NativeOutputRecord,
 } from "@/src/domain/native-output/state"
 import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
@@ -13,6 +21,17 @@ export type OutputReadyPayload =
   RuntimeMessageRequest<"OFFSCREEN_OUTPUT_READY">["payload"]
 export type OutputReadyResponse =
   RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY">
+
+export function ownsNativeOutputProducer(
+  lease: DispatchLeaseAuthority | null,
+  identity: NativeOutputJobIdentity
+): boolean {
+  if (!lease || lease.documentInstanceId === undefined) return false
+  return nativeOutputJobIdentityMatches(
+    { ...lease, documentInstanceId: lease.documentInstanceId },
+    identity
+  )
+}
 
 export function toIdentity(payload: OutputReadyPayload): NativeOutputIdentity {
   return {
@@ -34,14 +53,6 @@ export function toIdentity(payload: OutputReadyPayload): NativeOutputIdentity {
 export function trackedResponse(
   record: NativeOutputRecord
 ): OutputReadyResponse {
-  if (record.phase === "complete" || record.phase === "interrupted") {
-    return {
-      success: true,
-      disposition: "tracked",
-      phase: record.phase,
-      terminalOutcome: record.phase,
-    }
-  }
   return { success: true, disposition: "tracked", phase: record.phase }
 }
 
@@ -67,9 +78,25 @@ export function manifestTrackedOutputIds(
 
 export interface NativeOutputSettlementStats {
   completed: number
-  surrendered: number
   interrupted: number
+  outputUncertain: boolean
   lastSuccessfulDownloadId: number | undefined
+  errorMessage: string | undefined
+  errorCategory: DownloadErrorCategory | undefined
+}
+
+function lastCompletedDownloadId(
+  records: NativeOutputRecord[]
+): number | undefined {
+  return records.reduce<number | undefined>(
+    (latest, record) =>
+      record.phase === "complete" &&
+      record.downloadId !== undefined &&
+      (latest === undefined || record.downloadId > latest)
+        ? record.downloadId
+        : latest,
+    undefined
+  )
 }
 
 export function calculateNativeOutputSettlementStats(
@@ -79,24 +106,25 @@ export function calculateNativeOutputSettlementStats(
   const completed = records.filter(
     (record) => record.phase === "complete"
   ).length
-  const surrendered = records.filter(
-    (record) => record.phase === "surrendered"
-  ).length
-  const interrupted = manifest.outputsRequested - completed - surrendered
-  const lastSuccessfulDownloadId = records.reduce<number | undefined>(
-    (latest, record) =>
-      record.phase === "complete" &&
-      record.downloadId !== undefined &&
-      (latest === undefined || record.downloadId > latest)
-        ? record.downloadId
-        : latest,
-    undefined
-  )
+  const firstUnsuccessful =
+    records.find((record) => record.phase === "interrupted") ??
+    records.find((record) => record.phase === "outcome_unknown")
+  const interrupted = manifest.outputsRequested - completed
   return {
     completed,
-    surrendered,
     interrupted,
-    lastSuccessfulDownloadId,
+    outputUncertain: records.some(
+      (record) => record.phase === "outcome_unknown"
+    ),
+    lastSuccessfulDownloadId: lastCompletedDownloadId(records),
+    errorMessage: manifest.errorMessage ?? firstUnsuccessful?.error,
+    errorCategory:
+      manifest.errorCategory ??
+      (firstUnsuccessful?.phase === "outcome_unknown"
+        ? "browser_output_unconfirmed"
+        : firstUnsuccessful
+          ? "browser_download_interrupted"
+          : undefined),
   }
 }
 
@@ -110,4 +138,64 @@ export function classifyProducerStoppedError(
     return "Offscreen producer stopped before every output was handed off"
   }
   return "Offscreen producer was absent during native output reconciliation"
+}
+
+export function manifestRecords(
+  snapshot: NativeOutputState,
+  manifest: NativeOutputManifest
+): NativeOutputRecord[] {
+  return manifestTrackedOutputIds(manifest).flatMap((outputId) => {
+    const record = snapshot.outputsByOutputId[outputId]
+    return record ? [record] : []
+  })
+}
+
+export function allTrackedDependenciesReleased(
+  snapshot: NativeOutputState,
+  manifest: NativeOutputManifest
+): boolean {
+  return manifestTrackedOutputIds(manifest).every((outputId) => {
+    const record = snapshot.outputsByOutputId[outputId]
+    return record === undefined || record.dependencyReleasedAt !== undefined
+  })
+}
+
+export function manifestAccountingResolved(
+  manifest: NativeOutputManifest,
+  records: NativeOutputRecord[]
+): boolean {
+  return (
+    manifest.settlementAcknowledgedAt !== undefined ||
+    (records.length === manifestTrackedOutputIds(manifest).length &&
+      records.length > 0 &&
+      records.every((record) => record.accountingDisposition !== "pending"))
+  )
+}
+
+export function manifestReadyForAccounting(
+  manifest: NativeOutputManifest,
+  records: NativeOutputRecord[],
+  settlementResolved: boolean
+): boolean {
+  return (
+    manifest.phase === "sealed" &&
+    !settlementResolved &&
+    records.length === manifestTrackedOutputIds(manifest).length &&
+    records.every(canAccountNativeOutput)
+  )
+}
+
+export function settlementContinuationReady(
+  manifest: NativeOutputManifest,
+  queueSettlementProven: boolean,
+  settlementResolved: boolean,
+  dependenciesReleased: boolean
+): boolean {
+  return (
+    manifest.phase === "sealed" &&
+    manifest.dependencyReleasedAt === undefined &&
+    (queueSettlementProven ||
+      settlementResolved ||
+      (manifestTrackedOutputIds(manifest).length > 0 && dependenciesReleased))
+  )
 }

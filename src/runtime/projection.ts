@@ -45,15 +45,14 @@ function assertNeverStatus(status: never): never {
   throw new Error(`Unhandled queue status: ${String(status)}`)
 }
 
-export function projectToQueueView(
-  downloadQueue: DownloadTaskState[]
-): QueueViewProjection {
-  const summaries = downloadQueue.map((task) => toQueueTaskSummary(task))
-
+function partitionQueueSummaries(summaries: QueueTaskSummary[]): {
+  active: QueueTaskSummary[]
+  queued: QueueTaskSummary[]
+  terminal: QueueTaskSummary[]
+} {
   const active: QueueTaskSummary[] = []
   const queued: QueueTaskSummary[] = []
   const terminal: QueueTaskSummary[] = []
-
   for (const task of summaries) {
     switch (task.status) {
       case "downloading":
@@ -72,6 +71,16 @@ export function projectToQueueView(
         assertNeverStatus(task.status)
     }
   }
+
+  return { active, queued, terminal }
+}
+
+export function projectToQueueView(
+  downloadQueue: DownloadTaskState[]
+): QueueViewProjection {
+  const { active, queued, terminal } = partitionQueueSummaries(
+    downloadQueue.map(toQueueTaskSummary)
+  )
 
   active.sort((a, b) => a.timestamps.created - b.timestamps.created)
   // Queued tasks preserve array order from downloadQueue (FIFO by default,

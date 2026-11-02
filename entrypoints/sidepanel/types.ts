@@ -4,6 +4,7 @@
  * These types define the UI state for the Command Center Side Panel.
  */
 
+import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import type { ChapterState } from "@/src/types/tab-state"
 
 export interface SidePanelChapter {
@@ -17,6 +18,8 @@ export interface SidePanelChapter {
   volumeLabel?: string
   locked?: boolean
   downloaded?: boolean
+  outputDestination?: DownloadedChapterRecord["outputDestination"]
+  saveConfirmedAt?: DownloadedChapterRecord["saveConfirmedAt"]
   selected: boolean
   url: string
   status: ChapterState["status"]
@@ -36,12 +39,7 @@ export interface StandaloneChapter extends SidePanelChapter {
 
 export type VolumeOrChapter = Volume | StandaloneChapter
 
-/**
- * Presentation state that belongs to a series-specific chapter selection
- * session. It deliberately lives above the collapsible selector so closing
- * and reopening that region does not discard the user's chosen view or
- * expanded groups.
- */
+/** Series selection presentation persists while the selector is collapsed. */
 export type InlineSelectionViewMode = "volumes" | "chapters"
 
 export interface InlineSelectionPresentationState {
@@ -54,11 +52,7 @@ export type InlineSelectionPresentationBySeries = Record<
   InlineSelectionPresentationState
 >
 
-/**
- * A cancellation request can either complete, already be in flight, or fail.
- * Keeping these states distinct prevents a duplicate click from being
- * presented as an error to the user.
- */
+/** Repeated cancellation clicks report pending work separately from failure. */
 export type CancelTaskResult =
   | { kind: "completed" }
   | { kind: "already-pending" }

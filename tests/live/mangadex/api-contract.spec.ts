@@ -1,99 +1,31 @@
 import { test, expect } from "../../e2e/fixtures/extension"
-import type { BrowserContext } from "@playwright/test"
+import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
+import {
+  mangadexFetchViaBrowser,
+  type MangadexFetchResult,
+} from "../fixtures/mangadex-request-helpers"
 
 const MANGA_ID = "db692d58-4b13-4174-ae8c-30c515c0689c"
-const MANGADEX_LIVE_REQUEST_RETRIES = 3
-const MANGADEX_LIVE_RETRY_DELAY_MS = 2_000
-
-interface MangadexFetchResult {
-  status: number
-  ok: boolean
-  headers: Record<string, string>
-  data: unknown
-}
-
-async function mangadexFetchViaBrowser(
-  context: BrowserContext,
-  url: string
-): Promise<MangadexFetchResult> {
-  const page = await context.newPage()
-  try {
-    for (let attempt = 1; attempt <= MANGADEX_LIVE_REQUEST_RETRIES; attempt++) {
-      await page.goto("https://mangadex.org", {
-        waitUntil: "domcontentloaded",
-      })
-
-      const result = await page.evaluate(async (fetchUrl: string) => {
-        try {
-          const response = await fetch(fetchUrl, {
-            headers: {
-              Accept: "application/json",
-            },
-          })
-          const headers: Record<string, string> = {}
-          response.headers.forEach((value, key) => {
-            headers[key] = value
-          })
-          let data: unknown = null
-          try {
-            data = await response.json()
-          } catch {
-            data = null
-          }
-          return {
-            status: response.status,
-            ok: response.ok,
-            headers,
-            data,
-          }
-        } catch (error) {
-          return {
-            status: 0,
-            ok: false,
-            headers: {},
-            data: error instanceof Error ? error.message : String(error),
-          }
-        }
-      }, url)
-
-      if (result.status !== 429 && result.status !== 503) {
-        return result
-      }
-
-      if (attempt < MANGADEX_LIVE_REQUEST_RETRIES) {
-        const retryAfterSec = parseInt(result.headers["retry-after"] ?? "2", 10)
-        const delayMs = Number.isFinite(retryAfterSec)
-          ? retryAfterSec * 1_000
-          : MANGADEX_LIVE_RETRY_DELAY_MS
-        await page.waitForTimeout(delayMs)
-      }
-    }
-
-    return {
-      status: 429,
-      ok: false,
-      headers: {},
-      data: "Rate-limited after all retries",
-    }
-  } finally {
-    await page.close()
-  }
-}
 
 function assertMangadexResponseIsUsable(
   result: MangadexFetchResult,
-  _endpointName: string
+  endpointName: string
 ): void {
   if (result.status === 429) {
     test.skip(true, "MangaDex API rate limit reached (HTTP 429)")
     return
   }
 
-  expect(result.ok).toBe(true)
+  expect(
+    result.ok,
+    result.status === 0
+      ? `MangaDex ${endpointName} request failed: ${redactDiagnosticText(result.data)}`
+      : `MangaDex ${endpointName} returned HTTP ${result.status}`
+  ).toBe(true)
 }
 
 test.describe("MangaDex API contract (live)", () => {
-  test("manga endpoint returns expected core fields", async ({ context }) => {
+  test("returns the manga ID and English title", async ({ context }) => {
     const url = `https://api.mangadex.org/manga/${MANGA_ID}?includes[]=cover_art`
     const result = await mangadexFetchViaBrowser(context, url)
     assertMangadexResponseIsUsable(result, "manga")
@@ -105,22 +37,7 @@ test.describe("MangaDex API contract (live)", () => {
         type?: string
         attributes?: {
           title?: Record<string, string>
-          description?: Record<string, string>
-          originalLanguage?: string
-          status?: string
-          publicationDemographic?: string
-          contentRating?: string
-          tags?: Array<{
-            id?: string
-            type?: string
-            attributes?: { name?: Record<string, string> }
-          }>
         }
-        relationships?: Array<{
-          id?: string
-          type?: string
-          attributes?: { fileName?: string }
-        }>
       }
     }
 
@@ -131,7 +48,7 @@ test.describe("MangaDex API contract (live)", () => {
     expect(typeof payload.data?.attributes?.title?.en).toBe("string")
   })
 
-  test("manga feed endpoint returns chapter payload shape", async ({
+  test("returns chapter IDs and numbers from the manga feed", async ({
     context,
   }) => {
     const url =
@@ -146,17 +63,10 @@ test.describe("MangaDex API contract (live)", () => {
         id?: string
         type?: string
         attributes?: {
-          volume?: string | null
           chapter?: string | null
-          title?: string | null
-          translatedLanguage?: string
-          externalUrl?: string | null
-          pages?: number
         }
       }>
       total?: number
-      limit?: number
-      offset?: number
     }
 
     expect(payload.result).toBe("ok")
@@ -171,9 +81,7 @@ test.describe("MangaDex API contract (live)", () => {
     expect(typeof firstChapter?.attributes?.chapter).toBe("string")
   })
 
-  test("at-home endpoint returns server data or rate-limit headers", async ({
-    context,
-  }) => {
+  test("returns an image server and chapter filenames", async ({ context }) => {
     const feedUrl =
       `https://api.mangadex.org/manga/${MANGA_ID}/feed?` +
       "limit=1&translatedLanguage[]=en&order[chapter]=desc&includeExternalUrl=0"

@@ -1,7 +1,6 @@
 import type {
   ArchiveFormat,
   ConflictPolicy,
-  DownloadDestination,
   ImagePaddingDigits,
 } from "@/src/shared/download-contract"
 import type { RateScopePolicy } from "@/src/types/rate-policy"
@@ -14,9 +13,14 @@ export interface RetrySettingsSnapshot {
   chapter: number
 }
 
+export type TaskDestination =
+  | { kind: "downloads-api" }
+  | { kind: "file-system-access"; handleId: string | null }
+
 export interface TaskSettingsSnapshot {
   archiveFormat: ArchiveFormat
-  destination: DownloadDestination
+  allowChromeFallback?: true
+  destination: TaskDestination
   conflictPolicy: ConflictPolicy
   pathTemplate: string
   fileNameTemplate: string

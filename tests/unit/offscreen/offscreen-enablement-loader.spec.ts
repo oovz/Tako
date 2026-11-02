@@ -1,18 +1,5 @@
-/**
- * Guards offscreen site-integration enablement loading. The offscreen document
- * only exposes chrome.runtime. Reading chrome.storage.local there throws a
- * TypeError and silently falls back to defaults, so user-disabled integrations
- * can be ignored in the offscreen context.
- *
- * The fix routes the offscreen enablement read through chrome.runtime messaging
- * (GET_SITE_INTEGRATION_ENABLEMENT) to the background service worker, which
- * DOES have chrome.storage access. These tests assert:
- *   1. The offscreen init never touches chrome.storage (it is absent).
- *   2. It sends GET_SITE_INTEGRATION_ENABLEMENT via chrome.runtime.sendMessage.
- *   3. User-disabled integrations from the background response are honored.
- *   4. A failed/non-success background response fails initialization and can
- *      be retried instead of silently enabling default integrations.
- */
+// Offscreen reads integration settings through background messages.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const setEnablementMapMock = vi.fn()
@@ -32,7 +19,6 @@ vi.mock("@/src/runtime/logger", () => ({
 
 describe("offscreen site integration enablement loader", () => {
   const runtimeSendMessage = vi.fn()
-  // Storage spies are sentinels only. The offscreen loader must not call them.
   const storageLocalGet = vi.fn()
   const storageLocalSet = vi.fn()
 
@@ -41,12 +27,10 @@ describe("offscreen site integration enablement loader", () => {
     vi.clearAllMocks()
 
     vi.stubGlobal("chrome", {
-      // Only chrome.runtime is available in the offscreen document.
       runtime: {
         sendMessage: runtimeSendMessage,
       },
-      // Sentinel to prove the loader never reaches storage: if it did, these
-      // would be invoked and the tests below would fail.
+      // These spies detect direct storage access from offscreen.
       storage: {
         local: {
           get: storageLocalGet,
@@ -60,7 +44,7 @@ describe("offscreen site integration enablement loader", () => {
     vi.unstubAllGlobals()
   })
 
-  it("routes enablement read through chrome.runtime.sendMessage and honors user-disabled integrations", async () => {
+  it("loads user enablement through background messaging", async () => {
     runtimeSendMessage.mockResolvedValueOnce({
       success: true,
       enablement: { mangadex: false, "pixiv-comic": true },
@@ -71,25 +55,22 @@ describe("offscreen site integration enablement loader", () => {
 
     await initializeOffscreenSiteIntegrations()
 
-    // Must have asked the background for the enablement map.
     expect(runtimeSendMessage).toHaveBeenCalledTimes(1)
     expect(runtimeSendMessage).toHaveBeenCalledWith({
       target: "background",
       type: "GET_SITE_INTEGRATION_ENABLEMENT",
     })
 
-    // Must NOT have touched chrome.storage.local at all.
     expect(storageLocalGet).not.toHaveBeenCalled()
     expect(storageLocalSet).not.toHaveBeenCalled()
 
-    // User-disabled integrations must be propagated (not silently defaulted).
     expect(setEnablementMapMock).toHaveBeenCalledWith({
       mangadex: false,
       "pixiv-comic": true,
     })
   })
 
-  it("loads fresh enablement for each offscreen data-plane admission", async () => {
+  it("loads current enablement for each request", async () => {
     runtimeSendMessage
       .mockResolvedValueOnce({
         success: true,

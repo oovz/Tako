@@ -1,27 +1,6 @@
 /**
- * @file routes.ts
- * @description Playwright route registrar for the MangaDex integration.
- *
- * Two overlapping concerns are handled here:
- *
- * 1. **Main-frame HTML navigations** to `mangadex.org/title/{id}` and
- *    `mangadex.org/chapter/{id}` — served inline so Playwright keeps the
- *    real hostname in the address bar (important for the content-script
- *    URL matcher).
- *
- * 2. **Content-script API/uploads fetches** issued from the
- *    `mangadex.org` page origin. These go through Playwright's
- *    `context.route` (which intercepts renderer-initiated requests) and
- *    return the same mock data the local HTTP server serves for
- *    extension-context fetches. Keeping both layers in sync lets the
- *    content script succeed identically to how the download pipeline
- *    does, while deliberately leaving content-script fetches unscoped
- *    from the DNR rules (those use `initiatorDomains: [extensionId]`
- *    so they apply only to SW/offscreen/popup/options fetches — see
- *    `dnr-test-redirects.ts` for the rationale).
- *
- * The same JSON responses are used by the local mock server; the
- * builders live in `./api-fixtures.ts` / `./image-fixtures.ts`.
+ * Mock MangaDex page navigations and page-origin requests. Extension-origin
+ * requests use DNR redirects to the local server with the same response builders.
  */
 
 import type { Route } from "@playwright/test"
@@ -29,11 +8,14 @@ import type { RouteRegistrar } from "../../types"
 import { MANGADEX_TEST_DOMAIN } from "../../../test-domains-constants"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 import {
-  buildMangadexFeedResponse,
+  buildMangadexSeriesFeedResponse,
+  buildMangadexStatisticsResponse,
   buildMangadexSeriesResponse,
-  resolveMangadexChapterDataset,
 } from "./api-fixtures"
-import { buildAtHomeServerResponse } from "./image-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_IMAGE_DOMAIN,
+} from "./image-fixtures"
 import { CHAPTER_PAGE_HTML, SERIES_PAGE_HTML } from "./html-fixtures"
 
 const MANGADEX_API_DOMAIN = "api.mangadex.org"
@@ -68,7 +50,7 @@ async function handleMangadexApiFetch(route: Route): Promise<void> {
     parts[1] === "manga" &&
     typeof parts[2] === "string"
   ) {
-    await fulfillJson(route, { result: "ok", statistics: {} })
+    await fulfillJson(route, buildMangadexStatisticsResponse(parts[2]))
     return
   }
 
@@ -76,10 +58,7 @@ async function handleMangadexApiFetch(route: Route): Promise<void> {
     const mangaId = parts[1]
     const isFeed = parts.length >= 3 && parts[2] === "feed"
     if (isFeed) {
-      await fulfillJson(
-        route,
-        buildMangadexFeedResponse(resolveMangadexChapterDataset(mangaId))
-      )
+      await fulfillJson(route, buildMangadexSeriesFeedResponse(mangaId))
       return
     }
     await fulfillJson(route, buildMangadexSeriesResponse(mangaId))
@@ -128,10 +107,7 @@ export const registerMangadexRoutes: RouteRegistrar = async (
     }
   )
 
-  // Content-script fetches from mangadex.org pages reach the API hosts
-  // as standard cross-origin requests. Playwright intercepts those at
-  // the renderer level; DNR-backed mocks only cover extension-context
-  // fetches (see `dnr-test-redirects.ts`'s initiator scoping).
+  // DNR redirects cover extension-origin requests; page requests are mocked here.
   await context.route(
     `https://${MANGADEX_API_DOMAIN}/**`,
     handleMangadexApiFetch
@@ -144,14 +120,16 @@ export const registerMangadexRoutes: RouteRegistrar = async (
     }
   )
 
-  await context.route(
-    `https://${MANGADEX_UPLOADS_DOMAIN}/**`,
-    async (route: Route) => {
+  for (const imageDomain of [
+    MANGADEX_UPLOADS_DOMAIN,
+    MANGADEX_CAPTURED_IMAGE_DOMAIN,
+  ]) {
+    await context.route(`https://${imageDomain}/**`, async (route: Route) => {
       await route.fulfill({
         status: 200,
         contentType: SMALL_PNG_MIME_TYPE,
         body: Buffer.from(cloneSmallPngBytes()),
       })
-    }
-  )
+    })
+  }
 }

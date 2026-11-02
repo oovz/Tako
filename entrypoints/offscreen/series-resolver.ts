@@ -51,67 +51,72 @@ export class OffscreenSeriesResolver {
     const controller = new AbortController()
     this.seriesResolutionControllers.set(request.requestId, controller)
     try {
-      const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
-      if (controller.signal.aborted) {
-        return {
-          success: false,
-          error: "Series HTML parsing was canceled",
-        }
-      }
-      if (!isEnabled(request.siteIntegrationId, currentEnablement)) {
-        return {
-          success: false,
-          error: `Site integration ${request.siteIntegrationId} is disabled`,
-        }
-      }
-
-      const integration =
-        offscreenSiteAdaptersById[request.siteIntegrationId]?.offscreen
-      if (!integration?.series?.resolveSeriesData) {
-        return {
-          success: false,
-          error: `Site integration ${request.siteIntegrationId} does not implement offscreen series resolution`,
-        }
-      }
-
-      const document = new DOMParser().parseFromString(
-        request.html,
-        "text/html"
-      )
-      if (!document.body || document.body.childElementCount === 0) {
-        return {
-          success: false,
-          error: "Parsed series HTML document is empty",
-        }
-      }
-
-      const rateLimitService = this.createRateLimitService(
-        request.rateLimitSettings
-      )
-
-      const result = await integration.series.resolveSeriesData({
-        requestId: request.requestId,
-        seriesUrl: request.seriesUrl,
-        html: request.html,
-        document,
-        language: request.language,
-        signal: controller.signal,
-        rateLimitService,
-      })
-      return {
-        success: true,
-        seriesMetadata: result.seriesMetadata,
-        chapterList: result.chapterList,
-        metadataError: result.metadataError,
-        chapterListError: result.chapterListError,
-        chapterListNotice: result.chapterListNotice,
-      }
+      return await this.resolveSeriesHtml(request, controller.signal)
     } finally {
       if (
         this.seriesResolutionControllers.get(request.requestId) === controller
       ) {
         this.seriesResolutionControllers.delete(request.requestId)
       }
+    }
+  }
+
+  private async resolveSeriesHtml(
+    request: OffscreenParseSeriesHtmlPayload,
+    signal: AbortSignal
+  ): Promise<OffscreenParseSeriesHtmlResponse> {
+    const currentEnablement = await loadOffscreenSiteIntegrationEnablement()
+    if (signal.aborted) {
+      return {
+        success: false,
+        error: "Series HTML parsing was canceled",
+      }
+    }
+    if (!isEnabled(request.siteIntegrationId, currentEnablement)) {
+      return {
+        success: false,
+        error: `Site integration ${request.siteIntegrationId} is disabled`,
+      }
+    }
+
+    const integration =
+      offscreenSiteAdaptersById[request.siteIntegrationId]?.offscreen
+    if (!integration?.series?.resolveSeriesData) {
+      return {
+        success: false,
+        error: `Site integration ${request.siteIntegrationId} does not implement offscreen series resolution`,
+      }
+    }
+
+    const document = new DOMParser().parseFromString(request.html, "text/html")
+    if (!document.body || document.body.childElementCount === 0) {
+      return {
+        success: false,
+        error: "Parsed series HTML document is empty",
+      }
+    }
+
+    const rateLimitService = this.createRateLimitService(
+      request.rateLimitSettings
+    )
+
+    const result = await integration.series.resolveSeriesData({
+      requestId: request.requestId,
+      seriesUrl: request.seriesUrl,
+      html: request.html,
+      document,
+      language: request.language,
+      signal: signal,
+      rateLimitService,
+    })
+    return {
+      success: true,
+      seriesId: result.seriesId,
+      seriesMetadata: result.seriesMetadata,
+      chapterList: result.chapterList,
+      metadataError: result.metadataError,
+      chapterListError: result.chapterListError,
+      chapterListNotice: result.chapterListNotice,
     }
   }
 

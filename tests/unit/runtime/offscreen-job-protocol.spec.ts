@@ -61,6 +61,35 @@ describe("Offscreen job protocol", () => {
     expect(fingerprint).toMatch(/^[0-9a-f]{64}$/)
   })
 
+  it("requires and fingerprints the selected folder identity for FSA dispatch", async () => {
+    const payload = {
+      ...dispatchPayload(),
+      saveMode: "fsa" as const,
+      directoryHandleId: "selected-id",
+    }
+    const request = {
+      target: "offscreen",
+      type: "OFFSCREEN_DOWNLOAD_CHAPTER",
+      payload: { ...payload, fingerprint: "a".repeat(64) },
+    }
+    const schema = runtimeMessageRegistry.OFFSCREEN_DOWNLOAD_CHAPTER.request
+    expect(schema.safeParse(request).success).toBe(true)
+    for (const directoryHandleId of [undefined, ""]) {
+      expect(
+        schema.safeParse({
+          ...request,
+          payload: { ...request.payload, directoryHandleId },
+        }).success
+      ).toBe(false)
+    }
+    expect(
+      await createOffscreenDispatchFingerprint({
+        ...payload,
+        directoryHandleId: "another-id",
+      })
+    ).not.toBe(await createOffscreenDispatchFingerprint(payload))
+  })
+
   it("requires exact full query identity and returns only the matching incarnation", () => {
     const identity = {
       jobId: "job-1",

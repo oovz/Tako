@@ -1,19 +1,11 @@
-/**
- * Download path validation utilities
- * Centralized validation logic for download path templates
- */
+/** Validate relative download paths and template syntax. */
 
 export interface ValidationResult {
   isValid: boolean
   error?: string
 }
 
-/**
- * Validates a download path for basic filesystem and template requirements
- *
- * @param path - The download path to validate
- * @returns ValidationResult with isValid boolean and optional error message
- */
+/** Validate a relative path before template expansion. */
 export function validateDownloadPath(path: string): ValidationResult {
   if (!path || path.trim() === "") {
     return {
@@ -24,8 +16,7 @@ export function validateDownloadPath(path: string): ValidationResult {
 
   const trimmedPath = path.trim()
 
-  // Check for invalid filesystem characters
-  // Allow letters, numbers, spaces, hyphens, underscores, dots, slashes, and template brackets
+  // Reject reserved filename characters while allowing template brackets.
   if (!/^[^:"|?*]*$/.test(trimmedPath)) {
     return {
       isValid: false,
@@ -58,27 +49,22 @@ export function validateDownloadPath(path: string): ValidationResult {
     }
   }
 
-  // Check for basic template syntax balance
-  const openBrackets = (trimmedPath.match(/</g) || []).length
-  const closeBrackets = (trimmedPath.match(/>/g) || []).length
+  return validateTemplateBrackets(trimmedPath)
+}
 
+function validateTemplateBrackets(path: string): ValidationResult {
+  const openBrackets = (path.match(/</g) || []).length
+  const closeBrackets = (path.match(/>/g) || []).length
   if (openBrackets !== closeBrackets) {
     return {
       isValid: false,
       error: "Download path has unmatched template brackets < >",
     }
   }
-
   return { isValid: true }
 }
 
-/**
- * Validates a resolved download path (after template expansion)
- * More strict validation for final paths before actual download
- *
- * @param resolvedPath - The path after template variables have been expanded
- * @returns ValidationResult with isValid boolean and optional error message
- */
+/** Validate an expanded path with no remaining template tokens. */
 export function validateResolvedPath(resolvedPath: string): ValidationResult {
   const basicValidation = validateDownloadPath(resolvedPath)
   if (!basicValidation.isValid) {
@@ -95,8 +81,8 @@ export function validateResolvedPath(resolvedPath: string): ValidationResult {
     }
   }
 
-  // Check for double slashes (except for Windows drive paths)
-  if (trimmedPath.includes("//") && !trimmedPath.match(/^[A-Za-z]:\//)) {
+  // Resolved paths cannot contain empty components.
+  if (trimmedPath.includes("//")) {
     return {
       isValid: false,
       error: "Download path contains invalid double slashes",

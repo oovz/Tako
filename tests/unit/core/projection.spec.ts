@@ -32,7 +32,7 @@ afterEach(() => {
 })
 
 describe("projectToQueueView", () => {
-  it("projects all six canonical statuses into expected buckets", () => {
+  it("groups tasks by queue and history status", () => {
     const tasks: DownloadTaskState[] = [
       makeTask({ id: "queued", status: "queued", created: 1 }),
       makeTask({ id: "downloading", status: "downloading", created: 2 }),
@@ -73,6 +73,20 @@ describe("projectToQueueView", () => {
       "queued",
     ])
   })
+
+  it.each(["waiting", "pending"])(
+    "rejects unknown task status %s",
+    (status) => {
+      const task = {
+        ...makeTask({ status: "queued" }),
+        status,
+      } as unknown as DownloadTaskState
+
+      expect(() => projectToQueueView([task])).toThrow(
+        `Unhandled queue status: ${status}`
+      )
+    }
+  )
 
   it("orders active first, queued next, and terminal by most recent completion", () => {
     const tasks: DownloadTaskState[] = [
@@ -129,17 +143,6 @@ describe("projectToQueueView", () => {
       "queued-1",
       "queued-2",
     ])
-  })
-
-  it("counts queued status as queued in the six-status command-center model", () => {
-    const tasks: DownloadTaskState[] = [
-      makeTask({ id: "queued-task", status: "queued", created: 1 }),
-    ]
-
-    const result = projectToQueueView(tasks)
-
-    expect(result.queueView[0]?.status).toBe("queued")
-    expect(result.queuedCount).toBe(1)
   })
 
   it("preserves series cover URLs for queue task media rendering", () => {

@@ -8,7 +8,7 @@ import {
 import { MANGAMILLION_BASE_URL } from "./fixtures/test-domains-constants"
 import { MangaMillion } from "./fixtures/mock-data"
 
-test.describe("MangaMillion side panel navigation workflows (mocked)", () => {
+test.describe("MangaMillion navigation", () => {
   test("front page -> title page initializes tab state", async ({
     context,
     extensionId,

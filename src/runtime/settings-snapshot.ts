@@ -10,6 +10,59 @@ type SitePolicyDefaults = {
   chapter?: Partial<ExtensionSettings["globalPolicy"]["chapter"]>
 }
 
+function resolveImagePolicy(
+  settings: ExtensionSettings,
+  siteOverride: SiteOverrideRecord | undefined,
+  sitePolicyDefaults: SitePolicyDefaults | undefined
+): TaskSettingsSnapshot["rateLimitSettings"]["image"] {
+  return {
+    ...settings.globalPolicy.image,
+    ...(sitePolicyDefaults?.image ?? {}),
+    ...(siteOverride?.imagePolicy ?? {}),
+  }
+}
+
+function resolveChapterPolicy(
+  settings: ExtensionSettings,
+  siteOverride: SiteOverrideRecord | undefined,
+  sitePolicyDefaults: SitePolicyDefaults | undefined
+): TaskSettingsSnapshot["rateLimitSettings"]["chapter"] {
+  return {
+    concurrency: 1,
+    delayMs:
+      siteOverride?.chapterPolicy?.delayMs ??
+      sitePolicyDefaults?.chapter?.delayMs ??
+      settings.globalPolicy.chapter.delayMs,
+  }
+}
+
+function resolveRetrySettings(
+  settings: ExtensionSettings,
+  siteOverride: SiteOverrideRecord | undefined
+): TaskSettingsSnapshot["retrySettings"] {
+  return {
+    image: siteOverride?.retries?.image ?? settings.globalRetries.image,
+    chapter: siteOverride?.retries?.chapter ?? settings.globalRetries.chapter,
+  }
+}
+
+function captureDestination(
+  settings: ExtensionSettings
+): Pick<TaskSettingsSnapshot, "destination" | "allowChromeFallback"> {
+  if (settings.downloads.destination === "downloads-api") {
+    return { destination: { kind: "downloads-api" } }
+  }
+  return {
+    destination: {
+      kind: "file-system-access",
+      handleId: settings.downloads.customDirectoryHandleId,
+    },
+    ...(settings.downloads.allowChromeFallback
+      ? { allowChromeFallback: true as const }
+      : {}),
+  }
+}
+
 export function createTaskSettingsSnapshot(
   settings: ExtensionSettings,
   siteIntegrationId: string,
@@ -28,45 +81,30 @@ export function createTaskSettingsSnapshot(
     sitePolicyDefaults,
     comicInfo,
   } = options
-  const canonicalSiteOverride = siteOverride
-  const imagePolicy = {
-    ...canonicalSettings.globalPolicy.image,
-    ...(sitePolicyDefaults?.image ?? {}),
-    ...(canonicalSiteOverride?.imagePolicy ?? {}),
-  }
-  const chapterPolicy = {
-    concurrency: 1 as const,
-    delayMs:
-      canonicalSiteOverride?.chapterPolicy?.delayMs ??
-      sitePolicyDefaults?.chapter?.delayMs ??
-      canonicalSettings.globalPolicy.chapter.delayMs,
-  }
-
   return {
+    ...captureDestination(canonicalSettings),
     archiveFormat:
-      canonicalSiteOverride?.outputFormat ??
-      canonicalSettings.downloads.defaultFormat,
-    destination: canonicalSettings.downloads.destination,
+      siteOverride?.outputFormat ?? canonicalSettings.downloads.defaultFormat,
     conflictPolicy: canonicalSettings.downloads.conflictPolicy,
     pathTemplate:
-      canonicalSiteOverride?.pathTemplate ??
-      canonicalSettings.downloads.pathTemplate,
+      siteOverride?.pathTemplate ?? canonicalSettings.downloads.pathTemplate,
     fileNameTemplate: canonicalSettings.downloads.fileNameTemplate,
     includeComicInfo: canonicalSettings.downloads.includeComicInfo,
     includeCoverImage: canonicalSettings.downloads.includeCoverImage,
     siteSettings: { ...siteSettings },
     rateLimitSettings: {
-      image: imagePolicy,
-      chapter: chapterPolicy,
+      image: resolveImagePolicy(
+        canonicalSettings,
+        siteOverride,
+        sitePolicyDefaults
+      ),
+      chapter: resolveChapterPolicy(
+        canonicalSettings,
+        siteOverride,
+        sitePolicyDefaults
+      ),
     },
-    retrySettings: {
-      image:
-        canonicalSiteOverride?.retries?.image ??
-        canonicalSettings.globalRetries.image,
-      chapter:
-        canonicalSiteOverride?.retries?.chapter ??
-        canonicalSettings.globalRetries.chapter,
-    },
+    retrySettings: resolveRetrySettings(canonicalSettings, siteOverride),
     normalizeImageFilenames:
       canonicalSettings.downloads.normalizeImageFilenames,
     imagePaddingDigits: canonicalSettings.downloads.imagePaddingDigits,

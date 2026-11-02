@@ -15,6 +15,7 @@ export type ChapterOutcomeStatus = "completed" | "partial_success" | "failed"
 export type ErrorCategory = DownloadErrorCategory
 
 export type ChapterOutcome = {
+  destinationUnavailable?: true
   status: ChapterOutcomeStatus
   errorMessage?: string
   errorCategory?: ErrorCategory
@@ -56,6 +57,7 @@ export type ProcessChapterStreamingOptions = {
   format: "cbz" | "zip" | "none"
   includeComicInfo: boolean
   downloadMode: "browser" | "custom"
+  directoryHandleId?: string
   comicInfoVersion: "2.0"
   onProgress: (
     pct: number,
@@ -64,8 +66,6 @@ export type ProcessChapterStreamingOptions = {
   ) => Promise<void>
   onArchiveProgress: (pct: number, label?: string) => Promise<void>
   abortSignal: AbortSignal
-  normalizeImageFilenames?: boolean
-  imagePaddingDigits?: "auto" | 2 | 3 | 4 | 5
   coverImage?: {
     data: ArrayBuffer
     mimeType: string
@@ -83,6 +83,8 @@ export type ProcessDownloadChapterSettingsSnapshot = Pick<
   | "conflictPolicy"
   | "includeComicInfo"
   | "includeCoverImage"
+  | "normalizeImageFilenames"
+  | "imagePaddingDigits"
   | "rateLimitSettings"
   | "retrySettings"
 >
@@ -109,17 +111,19 @@ export type BrowserBlobDownloadResponse =
   RuntimeMessageResponse<"OFFSCREEN_OUTPUT_READY"> | undefined
 
 export interface ChapterProcessingRuntime {
+  beginFsaWrite: () => Promise<void>
   liveResourceLedger: OffscreenLiveResourceLedger
   rateLimitService: RateLimitService
   withImageRetries: <T>(
     fn: () => Promise<T>,
-    hooks?: { onAttemptStart?: (attempt: number) => void | Promise<void> }
+    hooks:
+      | { onAttemptStart?: (attempt: number) => void | Promise<void> }
+      | undefined,
+    signal: AbortSignal
   ) => Promise<T>
-  resolveWritableDownloadRoot: (input: {
-    taskId: string
-    chapter: Chapter
-    totalImages: number
-  }) => Promise<FileSystemDirectoryHandle>
+  resolveWritableDownloadRoot: (
+    directoryHandleId: string
+  ) => Promise<FileSystemDirectoryHandle>
   requestBrowserBlobDownload: (input: {
     jobId: string
     attempt: number

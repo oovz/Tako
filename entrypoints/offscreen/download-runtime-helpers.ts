@@ -4,10 +4,7 @@ import type {
   RateLimitPolicySnapshot,
   RateLimitService,
 } from "@/src/runtime/rate-limit"
-import {
-  loadDownloadRootHandle,
-  queryFsaPermission,
-} from "@/src/storage/fs-access"
+import { loadDownloadRootHandle } from "@/src/storage/fs-access"
 import { sendDownloadApiRequest } from "./helpers"
 import type { ChapterDownloadImageResult } from "./chapter-processing"
 import type {
@@ -25,6 +22,11 @@ export type CoverImageAsset = {
 
 type ImageRetryHooks = {
   onAttemptStart?: (attempt: number) => void | Promise<void>
+}
+
+function resolveCoverDownloader(integrationId: string) {
+  const integration = offscreenSiteAdaptersById[integrationId]?.offscreen
+  return integration?.cover?.downloadImage ?? integration?.chapter.downloadImage
 }
 
 export async function prefetchCoverImage(input: {
@@ -57,17 +59,11 @@ export async function prefetchCoverImage(input: {
   }
 
   try {
-    const OffscreenIntegration =
-      offscreenSiteAdaptersById[integrationId]?.offscreen
-    if (!OffscreenIntegration) {
-      return undefined
-    }
+    const downloadCoverImage = resolveCoverDownloader(integrationId)
+    if (!downloadCoverImage) return undefined
     const reportActivity = async () => {
       await onActivity?.()
     }
-    const downloadCoverImage =
-      OffscreenIntegration.cover?.downloadImage ??
-      OffscreenIntegration.chapter.downloadImage
     const result = await withImageRetries<ChapterDownloadImageResult>(
       () =>
         rateLimitService.scheduleForIntegrationScope(
@@ -144,24 +140,12 @@ export async function prefetchOptionalCoverImage(input: {
   })
 }
 
-export async function resolveWritableDownloadRoot(_input?: {
-  taskId?: string
-  chapter?: unknown
-  totalImages?: number
-}): Promise<FileSystemDirectoryHandle> {
-  void _input
-  const dir = await loadDownloadRootHandle()
+export async function resolveWritableDownloadRoot(
+  directoryHandleId: string
+): Promise<FileSystemDirectoryHandle> {
+  const dir = await loadDownloadRootHandle(directoryHandleId)
   if (!dir) {
     throw new Error("Custom folder is not configured")
-  }
-
-  const permission = await queryFsaPermission(dir, true)
-  if (permission !== "granted") {
-    throw new Error(
-      permission === "prompt"
-        ? "Custom folder permission is required"
-        : "Custom folder is unavailable"
-    )
   }
 
   return dir

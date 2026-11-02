@@ -20,14 +20,12 @@ function substitutePlaceholders(
   placeholders?: Record<string, { content: string }>
 ): string {
   if (!placeholders) return template
-  let result = template
-  for (const [name, def] of Object.entries(placeholders)) {
-    const token = `$${name.toUpperCase()}$`
-    const index = parseInt(def.content.replace("$", ""), 10) - 1
-    const value = substitutions[index] ?? ""
-    result = result.replaceAll(token, value)
-  }
-  return result
+  return template.replace(/\$([A-Za-z0-9_]+)\$/g, (token, name: string) => {
+    const placeholder = placeholders[name.toLowerCase()]
+    if (!placeholder) return token
+    const index = parseInt(placeholder.content.replace("$", ""), 10) - 1
+    return substitutions[index] ?? ""
+  })
 }
 
 function getMessageMock(

@@ -1,14 +1,6 @@
 /**
- * @file manhuagui-compress.ts
- * @description lz-string compressor used to synthesize Manhuagui
- * `__VIEWSTATE` payloads and packed image data for both unit tests
- * (`tests/unit/integrations/manhuagui-test-setup.ts`) and e2e fixtures
- * (`tests/e2e/fixtures/mock-data/site-integrations/manhuagui`).
- *
- * This is the forward counterpart of
- * `@/src/site-integrations/manhuagui/lz-string.ts`'s `decompressFromBase64`.
- * Keep the two algorithms byte-compatible — the test-shared compressor and
- * the production decompressor must round-trip every input.
+ * Build Manhuagui fixture payloads with the inverse of the production
+ * lz-string decompressor. The two formats must remain byte-compatible.
  */
 
 function compress(

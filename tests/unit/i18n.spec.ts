@@ -1,4 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest"
+import { readFile } from "node:fs/promises"
+
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { parseSettingsDocument } from "@/src/domain/settings/schema"
 
 import {
   t,
@@ -45,12 +49,25 @@ describe("i18n infrastructure", () => {
     it("handles single string substitution", () => {
       expect(t("sidepanel_chaptersCount", "42")).toBe("42 Chapters")
     })
+
+    it.each(["$$", "$&", "$`", "$'"])(
+      "preserves literal substitution %s",
+      (value) => {
+        expect(t("sidepanel_chaptersCount", value)).toBe(`${value} Chapters`)
+      }
+    )
+
+    it("does not expand placeholders inside substitutions", () => {
+      expect(t("options_chaptersCount", ["$TOTAL$", "10"])).toBe(
+        "$TOTAL$/10 chapters"
+      )
+    })
   })
 
   describe("SUPPORTED_LOCALES", () => {
-    it("declares exactly the four fully supported locales", () => {
+    it("declares the fully supported locales", () => {
       expect(new Set(SUPPORTED_LOCALES)).toEqual(
-        new Set(["en", "ja", "zh_CN", "zh_TW"])
+        new Set(["en", "ja", "zh_CN", "zh_TW", "ko"])
       )
     })
   })
@@ -89,12 +106,49 @@ describe("i18n infrastructure", () => {
       expect(getLocaleDisplayName("ja")).toBe("日本語")
     })
 
+    it("returns the Korean language name", () => {
+      expect(getLocaleDisplayName("ko")).toBe("한국어")
+    })
+
     it("returns the code itself for unknown locales", () => {
       expect(getLocaleDisplayName("fr")).toBe("fr")
     })
   })
 
   describe("manual UI language", () => {
+    it("loads the persisted Korean preference and substitutes its packaged messages", async () => {
+      const settings = parseSettingsDocument({
+        ...DEFAULT_SETTINGS,
+        uiLanguage: "ko",
+      })
+      const fetchMock = vi.fn(async (url: string) => {
+        const pathname = new URL(url).pathname
+        const content = await readFile(
+          new URL(`../../public${pathname}`, import.meta.url),
+          "utf8"
+        )
+        return { ok: true, json: async () => JSON.parse(content) }
+      })
+      vi.stubGlobal("fetch", fetchMock)
+      vi.stubGlobal("chrome", {
+        runtime: {
+          getURL: (path: string) => `chrome-extension://test/${path}`,
+        },
+      })
+
+      await applyUiLanguagePreference(settings.uiLanguage)
+
+      expect(getUILanguage()).toBe("ko")
+      expect(t("common_cancel")).toBe("취소")
+      expect(t("sidepanel_chaptersCount", "42")).toBe("42개 챕터")
+      expect(t("progressStage_downloading", ["2", "10"])).toBe(
+        "이미지 다운로드 중: 2/10"
+      )
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/_locales/ko/messages.json")
+      )
+    })
+
     it("uses the selected packaged catalog with English fallback and placeholders", async () => {
       const catalogs = {
         ja: {

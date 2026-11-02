@@ -24,7 +24,7 @@ vi.mock("@/src/runtime/logger", () => ({
 }))
 
 const settingsDependencies = {
-  settingsRepository: { getSettings: settingsMocks.getSettings },
+  settingsRepository: { reload: settingsMocks.getSettings },
   siteOverridesService: { getAll: vi.fn(async () => ({})) },
   siteIntegrationSettingsService: {
     getForSite: vi.fn(async () => ({})),
@@ -118,10 +118,42 @@ async function buildAndEnqueue(
   return await queueRepository.enqueueDownloadTask(task)
 }
 
-describe("settings snapshot isolation (behavior-based)", () => {
+describe("queued settings isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     settingsMocks.getSettings.mockReset()
+  })
+
+  it("captures affirmative fallback consent only for new folder tasks", async () => {
+    expect(DEFAULT_SETTINGS.downloads.allowChromeFallback).toBe(false)
+    const settingsRef = {
+      current: makeSettings({
+        downloads: {
+          destination: "file-system-access",
+          customDirectoryHandleId: "captured-folder",
+        },
+      }),
+    }
+    const enqueue = vi.fn(async (task: unknown) => ({
+      outcome: "applied",
+      task,
+    }))
+    const queue = createQueueRepository(settingsRef, enqueue)
+    await buildAndEnqueue(queue, START_CONTEXT, 1)
+    settingsRef.current.downloads.allowChromeFallback = true
+    await buildAndEnqueue(queue, START_CONTEXT, 2)
+    settingsRef.current.downloads.destination = "downloads-api"
+    await buildAndEnqueue(queue, START_CONTEXT, 3)
+    const tasks = enqueue.mock.calls.map(
+      ([task]) => task as import("@/src/domain/queue/state").DownloadTaskState
+    )
+    expect(tasks[0]?.settingsSnapshot).not.toHaveProperty("allowChromeFallback")
+    expect(tasks[0]).not.toHaveProperty("fsaFallbackEligible")
+    expect(tasks[1]).toMatchObject({
+      fsaFallbackEligible: true,
+      settingsSnapshot: { allowChromeFallback: true },
+    })
+    expect(tasks[2]?.settingsSnapshot).not.toHaveProperty("allowChromeFallback")
   })
 
   it("captures enqueue-time task settings snapshot for created task", async () => {
@@ -130,6 +162,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
         downloads: {
           defaultFormat: "none",
           destination: "file-system-access",
+          customDirectoryHandleId: "captured-folder",
           conflictPolicy: "overwrite",
           pathTemplate: "Library/<SERIES_TITLE>",
           fileNameTemplate: "<CHAPTER_NUMBER>-<CHAPTER_TITLE>",
@@ -162,7 +195,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     const createdTask = createdTaskRaw as {
       settingsSnapshot: {
         archiveFormat: string
-        destination: string
+        destination: import("@/src/types/state-snapshots").TaskDestination
         conflictPolicy: string
         pathTemplate: string
         fileNameTemplate: string
@@ -174,7 +207,10 @@ describe("settings snapshot isolation (behavior-based)", () => {
     }
 
     expect(createdTask.settingsSnapshot.archiveFormat).toBe("none")
-    expect(createdTask.settingsSnapshot.destination).toBe("file-system-access")
+    expect(createdTask.settingsSnapshot.destination).toEqual({
+      kind: "file-system-access",
+      handleId: "captured-folder",
+    })
     expect(createdTask.settingsSnapshot.conflictPolicy).toBe("overwrite")
     expect(createdTask.settingsSnapshot.pathTemplate).toBe(
       "Library/<SERIES_TITLE>"
@@ -192,7 +228,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     })
   })
 
-  it("keeps first task snapshot isolated from later settings mutation while new task uses updated values", async () => {
+  it("keeps existing task settings while new tasks use updated defaults", async () => {
     const settingsRef = {
       current: makeSettings({
         downloads: {
@@ -219,6 +255,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
 
     settingsRef.current.downloads.defaultFormat = "zip"
     settingsRef.current.downloads.destination = "file-system-access"
+    settingsRef.current.downloads.customDirectoryHandleId = "captured-folder"
     settingsRef.current.downloads.conflictPolicy = "overwrite"
     settingsRef.current.globalPolicy.image.concurrency = 9
     settingsRef.current.globalPolicy.chapter.delayMs = 250
@@ -238,7 +275,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
       firstTaskRaw as {
         settingsSnapshot: {
           archiveFormat: string
-          destination: string
+          destination: import("@/src/types/state-snapshots").TaskDestination
           conflictPolicy: string
           rateLimitSettings: {
             image: { concurrency: number; delayMs: number }
@@ -252,7 +289,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
       secondTaskRaw as {
         settingsSnapshot: {
           archiveFormat: string
-          destination: string
+          destination: import("@/src/types/state-snapshots").TaskDestination
           conflictPolicy: string
           rateLimitSettings: {
             image: { concurrency: number; delayMs: number }
@@ -263,7 +300,7 @@ describe("settings snapshot isolation (behavior-based)", () => {
     ).settingsSnapshot
 
     expect(firstTaskSnapshot.archiveFormat).toBe("cbz")
-    expect(firstTaskSnapshot.destination).toBe("downloads-api")
+    expect(firstTaskSnapshot.destination).toEqual({ kind: "downloads-api" })
     expect(firstTaskSnapshot.conflictPolicy).toBe("uniquify")
     expect(firstTaskSnapshot.rateLimitSettings.image).toEqual({
       concurrency: 2,
@@ -275,7 +312,10 @@ describe("settings snapshot isolation (behavior-based)", () => {
     })
 
     expect(secondTaskSnapshot.archiveFormat).toBe("zip")
-    expect(secondTaskSnapshot.destination).toBe("file-system-access")
+    expect(secondTaskSnapshot.destination).toEqual({
+      kind: "file-system-access",
+      handleId: "captured-folder",
+    })
     expect(secondTaskSnapshot.conflictPolicy).toBe("overwrite")
     expect(secondTaskSnapshot.rateLimitSettings.image).toEqual({
       concurrency: 2,

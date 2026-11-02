@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/background/background-offscreen-event-message-handlers"
@@ -7,6 +8,8 @@ import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscr
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
 import { runTaskSideEffectExclusive } from "@/entrypoints/background/download-task-side-effect-gate"
+import { BrowserBlobLeaseRegistry } from "@/entrypoints/offscreen/browser-blob-lease-registry"
+import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 import type {
   ActiveDispatchLease,
   DownloadTaskState,
@@ -48,6 +51,7 @@ function task(): DownloadTaskState {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: identity.chapterId,
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -57,6 +61,7 @@ function task(): DownloadTaskState {
         lastUpdated: 1,
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-2",
         url: "https://mangadex.org/chapter/chapter-2",
         title: "Chapter 2",
@@ -102,6 +107,7 @@ function downloadItem(
 
 describe("native output continuation boundaries", () => {
   let local: Record<string, unknown>
+  let historyRepository: HistoryRepository
   let queueRepository: QueueRepository
   let nativeRepository: NativeOutputRepository
   let nativeCoordinator: NativeOutputCoordinator
@@ -112,6 +118,9 @@ describe("native output continuation boundaries", () => {
   let taskState: DownloadTaskState
   let search: ReturnType<typeof vi.fn>
   let taskGateAcquired: ReturnType<typeof vi.fn<() => void>>
+  let blobs: BrowserBlobLeaseRegistry
+  let resources: OffscreenLiveResourceLedger
+  let revokeObjectURL: ReturnType<typeof vi.fn<(url: string) => void>>
 
   beforeEach(async () => {
     taskState = task()
@@ -136,7 +145,9 @@ describe("native output continuation boundaries", () => {
           get: vi.fn(async (keys: string | string[]) => {
             const requested = Array.isArray(keys) ? keys : [keys]
             return Object.fromEntries(
-              requested.map((key) => [key, structuredClone(local[key])])
+              requested
+                .filter((key) => key in local)
+                .map((key) => [key, structuredClone(local[key])])
             )
           }),
           set: vi.fn(async (values: Record<string, unknown>) => {
@@ -156,8 +167,30 @@ describe("native output continuation boundaries", () => {
       downloads: { search },
     } as unknown as typeof chrome)
 
-    queueRepository = new QueueRepository(new QueueProjectionService())
+    historyRepository = new HistoryRepository()
+    queueRepository = new QueueRepository(
+      new QueueProjectionService(),
+      historyRepository
+    )
     nativeRepository = new NativeOutputRepository()
+    resources = new OffscreenLiveResourceLedger(6)
+    revokeObjectURL = vi.fn()
+    blobs = new BrowserBlobLeaseRegistry(
+      { maxCount: 2, maxBytes: 6 },
+      {
+        createObjectURL: vi
+          .fn()
+          .mockReturnValueOnce(output.blobUrl)
+          .mockReturnValue("blob:later-output"),
+        revokeObjectURL,
+      },
+      resources
+    )
+    blobs.retain({
+      ...output,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "prepared output"),
+    })
     const settingsRepository = new SettingsRepository("warn")
     vi.spyOn(settingsRepository, "getSettings").mockResolvedValue(
       DEFAULT_SETTINGS
@@ -187,21 +220,18 @@ describe("native output continuation boundaries", () => {
         stage: "saving" as const,
         lastSequence: 1,
       })),
-      requestBlobRevocation: vi.fn(async () => undefined),
+      requestBlobRevocation: async (record) => {
+        if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+      },
       ensureLivenessAlarm: vi.fn(async () => undefined),
     })
     terminalCoordinator = new OffscreenJobTerminalCoordinator(
       queueRepository,
       nativeCoordinator,
       queueScheduler,
-      {} as never,
       {
         settingsRepository,
-        historyRepository: {
-          getDownloadedChapters: vi.fn(async () => []),
-          restoreChapterFromCompletedTask: vi.fn(async () => true),
-          markChapterAsDownloaded: vi.fn(async () => undefined),
-        },
+        historyRepository,
       }
     )
 
@@ -238,6 +268,62 @@ describe("native output continuation boundaries", () => {
     }
   }
 
+  it.each(["complete", "interrupted"] as const)(
+    "waits for Chrome before recording a final %s result and continuing",
+    async (phase) => {
+      await terminalCoordinator.handle(terminalPayload())
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        status: "downloading",
+        chapters: [{ status: "downloading" }, { status: "queued" }],
+      })
+      expect(await historyRepository.getDownloadedChapters()).toEqual([])
+      expect(taskGateAcquired).not.toHaveBeenCalled()
+      expect(resources.getUsedBytes()).toBe(3)
+      expect(revokeObjectURL).not.toHaveBeenCalled()
+      expect(
+        await nativeRepository.getByOutputId(output.outputId)
+      ).toMatchObject({
+        phase: "waiting",
+        accountingDisposition: "pending",
+      })
+      const result = await nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: phase },
+        ...(phase === "interrupted"
+          ? { error: { current: "USER_CANCELED" } }
+          : {}),
+      })
+      await terminalCoordinator.continueAfterNativeOutputSettlement(
+        result.effects
+      )
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        chapters: [
+          {
+            status: phase === "complete" ? "completed" : "failed",
+            outputs: {
+              requested: 1,
+              committed: phase === "complete" ? 1 : 0,
+              failed: phase === "complete" ? 0 : 1,
+            },
+            ...(phase === "interrupted"
+              ? {
+                  errorMessage: "USER_CANCELED",
+                  errorCategory: "browser_download_interrupted",
+                }
+              : { saveConfirmedAt: expect.any(Number) }),
+          },
+          { status: "queued" },
+        ],
+      })
+      expect(await historyRepository.getDownloadedChapters()).toHaveLength(
+        phase === "complete" ? 1 : 0
+      )
+      expect(taskGateAcquired).toHaveBeenCalledOnce()
+      expect(resources.getUsedBytes()).toBe(0)
+      expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    }
+  )
+
   it("rejects native queue settlement while the real producer lease is active", async () => {
     await nativeRepository.markTerminal({
       downloadId: 42,
@@ -249,7 +335,6 @@ describe("native output continuation boundaries", () => {
       requested: 1,
       completed: 1,
       interrupted: 0,
-      surrendered: 0,
       now: 6,
     })
 
@@ -258,6 +343,279 @@ describe("native output continuation boundaries", () => {
       reason: "lease-conflict",
     })
     expect(activeLease).not.toBeNull()
+  })
+
+  it("releases terminal Blob bytes while the producer still owns queue accounting", async () => {
+    expect(
+      await nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).toEqual({ handled: true, effects: [] })
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    expect(resources.getUsedBytes()).toBe(0)
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        phase: "complete",
+        accountingDisposition: "pending",
+        blobReleasedAt: expect.any(Number),
+      }
+    )
+    expect(await queueRepository.getActiveDispatchLease()).not.toBeNull()
+    expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+      chapters: [{ status: "downloading" }, { status: "queued" }],
+    })
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+  })
+
+  it("keeps canceled output bounded across task removal and cold recovery until Chrome stops consuming it", async () => {
+    await queueRepository.cancelDownloadTask({
+      taskId: identity.taskId,
+      commandId: "cancel-with-retained-output",
+      now: 7,
+    })
+    await nativeCoordinator.cancelTask(identity.taskId, identity)
+    await queueRepository.clearTerminalHistory()
+    expect(await queueRepository.getTask(identity.taskId)).toBeUndefined()
+    expect(
+      await new HistoryRepository().isChapterDownloaded(
+        "mangadex",
+        "series-1",
+        identity.chapterId
+      )
+    ).toBe(false)
+
+    const later = { ...output, jobId: "later-job", outputId: "later-output" }
+    const laterBlob = blobs.retain({
+      ...later,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "later output"),
+    })
+    expect(blobs.getRetainedCount()).toBe(2)
+    expect(blobs.getRetainedBytes()).toBe(6)
+    expect(() => resources.reserve(1, "overflow")).toThrow("resource cap")
+    expect(() =>
+      blobs.retain({
+        ...later,
+        outputId: "overflow",
+        blob: new Blob([]),
+      })
+    ).toThrow("count limit")
+
+    const coldRepository = new NativeOutputRepository()
+    const coldQueue = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
+    const cold = new NativeOutputCoordinator({
+      settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
+      repository: coldRepository,
+      queueRepository: coldQueue,
+      queryOffscreenJob: async () => null,
+      requestBlobRevocation: async (record) => {
+        if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+      },
+      ensureLivenessAlarm: async () => undefined,
+    })
+    await cold.initialize()
+    expect(resources.getUsedBytes()).toBe(6)
+    expect(await cold.hasLiveDependencies()).toBe(true)
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+
+    const { effects } = await cold.handleDownloadChanged({
+      id: 42,
+      state: { current: "interrupted" },
+      error: { current: "USER_CANCELED" },
+    })
+    for (const effect of effects) await cold.acknowledgeSettlement(effect)
+    await cold.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(output.blobUrl)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(await cold.hasLiveDependencies()).toBe(false)
+    expect(blobs.revoke({ ...laterBlob, attempt: 2 })).toBe(false)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(blobs.revoke(laterBlob)).toBe(true)
+    expect(blobs.revoke(laterBlob)).toBe(true)
+    expect(resources.getUsedBytes()).toBe(0)
+  })
+
+  it("releases terminal bytes before a queue-accounting write fails and recovers accounting durably", async () => {
+    await terminalCoordinator.settle(terminalPayload())
+    vi.spyOn(
+      queueRepository,
+      "applyNativeOutputSettlement"
+    ).mockRejectedValueOnce(new Error("queue storage unavailable"))
+    await expect(
+      nativeCoordinator.handleDownloadChanged({
+        id: 42,
+        state: { current: "complete" },
+      })
+    ).rejects.toThrow("queue storage unavailable")
+    expect(resources.getUsedBytes()).toBe(0)
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        accountingDisposition: "pending",
+        blobReleasedAt: expect.any(Number),
+      }
+    )
+    const effects = await nativeCoordinator.reconcile()
+    await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
+    expect(
+      await nativeRepository.getByOutputId(output.outputId)
+    ).toBeUndefined()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+  })
+
+  it.each(["complete", "interrupted", "erased"] as const)(
+    "keeps an unknown save outcome fixed while late Chrome %s evidence releases its Blob",
+    async (observation) => {
+      await terminalCoordinator.settle(terminalPayload())
+      search.mockResolvedValue([])
+      await nativeCoordinator.reconcile()
+      const effects = await nativeCoordinator.reconcile()
+      for (const effect of effects)
+        await nativeCoordinator.acknowledgeSettlement(effect)
+      expect(resources.getUsedBytes()).toBe(3)
+      expect(revokeObjectURL).not.toHaveBeenCalled()
+      expect(
+        await nativeRepository.getByOutputId(output.outputId)
+      ).toMatchObject({
+        phase: "outcome_unknown",
+        accountingDisposition: "accounted",
+      })
+      const coldRepository = new NativeOutputRepository()
+      const cold = new NativeOutputCoordinator({
+        settingsRepository: { getSettings: async () => DEFAULT_SETTINGS },
+        repository: coldRepository,
+        queueRepository: new QueueRepository(
+          new QueueProjectionService(),
+          new HistoryRepository()
+        ),
+        queryOffscreenJob: async () => null,
+        requestBlobRevocation: async (record) => {
+          if (!blobs.revoke(record)) throw new Error("Blob identity mismatch")
+        },
+        ensureLivenessAlarm: async () => undefined,
+      })
+      await cold.initialize()
+      expect(await cold.getLiveTaskIds()).toEqual([])
+      expect(resources.getUsedBytes()).toBe(3)
+      if (observation === "erased") {
+        await cold.handleDownloadErased(42)
+      } else {
+        await cold.handleDownloadChanged({
+          id: 42,
+          state: { current: observation },
+        })
+      }
+      expect(resources.getUsedBytes()).toBe(0)
+      expect(revokeObjectURL).toHaveBeenCalledOnce()
+      expect(await cold.hasLiveDependencies()).toBe(false)
+      expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+        chapters: [
+          {
+            status: "failed",
+            nativeOutputSettlement: { completed: 0, outputUncertain: true },
+          },
+          {},
+        ],
+      })
+    }
+  )
+
+  it("bounds multiple retained outputs while acceptance is uncertain and recovers an exact browser match", async () => {
+    const uncertain = {
+      ...output,
+      jobId: "uncertain-job",
+      outputId: "uncertain-output",
+      blobUrl: "blob:later-output",
+    }
+    blobs.retain({
+      ...uncertain,
+      blob: new Blob([new Uint8Array(3)]),
+      resourceLease: resources.reserve(3, "uncertain output"),
+    })
+    await nativeRepository.prepare({ ...uncertain, now: 5 })
+    await nativeRepository.markAcceptanceUnknown({
+      outputId: uncertain.outputId,
+      now: 6,
+    })
+    search.mockImplementation(async (query) =>
+      query.id === 42 ? [downloadItem("in_progress")] : []
+    )
+    await nativeCoordinator.reconcile()
+    expect(
+      await nativeRepository.getByOutputId(uncertain.outputId)
+    ).toMatchObject({
+      phase: "outcome_unknown",
+    })
+    expect(blobs.getRetainedCount()).toBe(2)
+    expect(blobs.getRetainedBytes()).toBe(6)
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+    expect(() => resources.reserve(1, "later allocation")).toThrow(
+      "resource cap"
+    )
+
+    search.mockImplementation(async (query) =>
+      query.id === 42
+        ? [downloadItem("in_progress")]
+        : [{ ...downloadItem("complete"), id: 43, url: uncertain.blobUrl }]
+    )
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith(uncertain.blobUrl)
+    expect(resources.getUsedBytes()).toBe(3)
+    expect(
+      await nativeRepository.getByOutputId(uncertain.outputId)
+    ).toMatchObject({
+      phase: "complete",
+      downloadId: 43,
+      accountingDisposition: "pending",
+      blobReleasedAt: expect.any(Number),
+    })
+  })
+
+  it("replays lost Blob-release persistence without releasing the allocation twice", async () => {
+    const persist = chrome.storage.local.set
+    await nativeRepository.markTerminal({
+      downloadId: 42,
+      phase: "complete",
+      now: 5,
+    })
+    vi.mocked(persist).mockImplementationOnce(async () => {
+      throw new Error("release receipt unavailable")
+    })
+    await nativeCoordinator.reconcile()
+    expect(resources.getUsedBytes()).toBe(0)
+    await nativeCoordinator.reconcile()
+    expect(revokeObjectURL).toHaveBeenCalledOnce()
+    expect(await nativeRepository.getByOutputId(output.outputId)).toMatchObject(
+      {
+        blobReleasedAt: expect.any(Number),
+        accountingDisposition: "pending",
+      }
+    )
+  })
+
+  it("keeps a later chapter runnable when acknowledged browser history disappears", async () => {
+    await terminalCoordinator.handle(terminalPayload())
+    search.mockResolvedValue([])
+    await terminalCoordinator.continueAfterNativeOutputSettlement(
+      await nativeCoordinator.reconcile()
+    )
+    await nativeCoordinator.handleDownloadErased(42)
+    expect(await queueRepository.getTask(identity.taskId)).toMatchObject({
+      status: "downloading",
+      chapters: [
+        { status: "failed", nativeOutputSettlement: { outputUncertain: true } },
+        { status: "queued" },
+      ],
+    })
+    expect(
+      (await queueRepository.getTask(identity.taskId))?.activeBlock
+    ).toBeUndefined()
+    expect(resources.getUsedBytes()).toBe(0)
+    expect(taskGateAcquired).toHaveBeenCalledOnce()
   })
 
   it("continues after a terminal native completion without holding the task gate", async () => {
@@ -302,7 +660,7 @@ describe("native output continuation boundaries", () => {
     })
   })
 
-  it("returns a native settlement effect after terminal-before-complete ordering", async () => {
+  it("continues only after final browser completion", async () => {
     const handlers = createBackgroundOffscreenEventMessageHandlers({
       queueRepository,
       nativeOutputCoordinator: nativeCoordinator,
@@ -326,40 +684,17 @@ describe("native output continuation boundaries", () => {
       id: 42,
       state: { current: "complete" },
     })
-    expect(result.effects).toEqual([
-      {
-        jobId: identity.jobId,
-        attempt: identity.attempt,
-        taskId: identity.taskId,
-        chapterId: identity.chapterId,
-      },
-    ])
+    expect(result.effects).toHaveLength(1)
     await terminalCoordinator.continueAfterNativeOutputSettlement(
       result.effects
     )
     expect(taskGateAcquired).toHaveBeenCalledOnce()
   })
 
-  it("keeps the sealed manifest replayable until continuation succeeds", async () => {
-    const handlers = createBackgroundOffscreenEventMessageHandlers({
-      queueRepository,
-      nativeOutputCoordinator: nativeCoordinator,
-      terminalCoordinator,
-    } as never)
-
-    await handlers.OFFSCREEN_JOB_TERMINAL(
-      {
-        target: "background",
-        type: "OFFSCREEN_JOB_TERMINAL",
-        payload: terminalPayload(),
-      },
-      { documentId: undefined }
-    )
+  it("keeps final settlement replayable until continuation succeeds", async () => {
+    await terminalCoordinator.settle(terminalPayload())
     search.mockResolvedValue([downloadItem("complete")])
-    const result = await nativeCoordinator.handleDownloadChanged({
-      id: 42,
-      state: { current: "complete" },
-    })
+    const effects = await nativeCoordinator.reconcile()
 
     const failingContinuation = new OffscreenJobTerminalCoordinator(
       queueRepository,
@@ -370,19 +705,16 @@ describe("native output continuation boundaries", () => {
         }),
         requestContinuation: vi.fn(),
       } as unknown as QueueScheduler,
-      {} as never,
       {} as never
     )
     await expect(
-      failingContinuation.continueAfterNativeOutputSettlement(result.effects)
+      failingContinuation.continueAfterNativeOutputSettlement(effects)
     ).rejects.toThrow("queue continuation unavailable")
     await expect(
       nativeRepository.getManifest(identity.jobId)
     ).resolves.toBeDefined()
 
-    await terminalCoordinator.continueAfterNativeOutputSettlement(
-      result.effects
-    )
+    await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
     await expect(
       nativeRepository.getManifest(identity.jobId)
     ).resolves.toBeUndefined()
@@ -453,6 +785,16 @@ describe("native output continuation boundaries", () => {
         )
       }
       expect(await queueRepository.getTask(identity.taskId)).toBeUndefined()
+      if (removal === "remove") {
+        await queueRepository.finalizePendingUndoAction("remove-output-owner")
+      }
+      expect(
+        await new HistoryRepository().isChapterDownloaded(
+          "mangadex",
+          "series-1",
+          identity.chapterId
+        )
+      ).toBe(true)
       const nextTaskId =
         removal === "same-id-replacement" ? identity.taskId : "next-task"
       if (removal === "same-id-replacement") {
@@ -464,7 +806,10 @@ describe("native output continuation boundaries", () => {
       }
 
       const replayQueue = coldReplay
-        ? new QueueRepository(new QueueProjectionService())
+        ? new QueueRepository(
+            new QueueProjectionService(),
+            new HistoryRepository()
+          )
         : queueRepository
       const replayRepository = coldReplay
         ? new NativeOutputRepository()
@@ -483,7 +828,6 @@ describe("native output continuation boundaries", () => {
         replayQueue,
         replayNative,
         new QueueScheduler(replayQueue, taskExecutor, async () => undefined),
-        {} as never,
         {} as never
       )
       const continuation = coldReplay ? await replayNative.reconcile() : effects
@@ -491,7 +835,7 @@ describe("native output continuation boundaries", () => {
       await replayTerminal.continueAfterNativeOutputSettlement(continuation)
 
       expect(await replayRepository.getManifest(identity.jobId)).toBeUndefined()
-      expect(await replayNative.hasReconcilableLiveDependencies()).toBe(false)
+      expect(await replayNative.hasLiveDependencies()).toBe(false)
       expect(await replayNative.getLiveTaskIds()).toEqual([])
       await vi.waitFor(() =>
         expect(taskExecutor.execute).toHaveBeenCalledWith(nextTaskId)
@@ -548,20 +892,8 @@ describe("native output continuation boundaries", () => {
     expect(await nativeRepository.getManifest(identity.jobId)).toBeUndefined()
   })
 
-  it("finishes concurrent cancellation after continuation prepares the next dispatch", async () => {
-    const handlers = createBackgroundOffscreenEventMessageHandlers({
-      queueRepository,
-      nativeOutputCoordinator: nativeCoordinator,
-      terminalCoordinator,
-    } as never)
-    await handlers.OFFSCREEN_JOB_TERMINAL(
-      {
-        target: "background",
-        type: "OFFSCREEN_JOB_TERMINAL",
-        payload: terminalPayload(),
-      },
-      { documentId: undefined }
-    )
+  it("finishes concurrent cancellation after acknowledgement prepares the next dispatch", async () => {
+    await terminalCoordinator.settle(terminalPayload())
     let prepared!: () => void
     const preparedPromise = new Promise<void>((resolve) => {
       prepared = resolve
@@ -600,13 +932,8 @@ describe("native output continuation boundaries", () => {
     )
     search.mockResolvedValue([downloadItem("complete")])
     const completion = (async () => {
-      const result = await nativeCoordinator.handleDownloadChanged({
-        id: 42,
-        state: { current: "complete" },
-      })
-      await terminalCoordinator.continueAfterNativeOutputSettlement(
-        result.effects
-      )
+      const effects = await nativeCoordinator.reconcile()
+      await terminalCoordinator.continueAfterNativeOutputSettlement(effects)
     })()
     await preparedPromise
     const canceling = cancellation.cancelTask(

@@ -1,0 +1,212 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
+import type {
+  EffectivePolicy,
+  RateLimitService,
+} from "@/src/runtime/rate-limit"
+import { integrationHttpClient } from "../http-client"
+import {
+  MANHUAGUI_CONFIG_HOST,
+  MANHUAGUI_IMAGE_HOSTS,
+  toAbsoluteUrl,
+} from "./shared"
+import { sanitizeLabel } from "@/src/shared/site-integration-utils"
+import { MANHUAGUI_CREDENTIAL_POLICY } from "./policy"
+import { readResponseBytes } from "@/src/shared/html-response-decoder"
+import { ProviderContractError } from "../provider-contract-error"
+
+/**
+ * Weighted image host (e.g. `eu`, `us1`) used to build `{host}.hamreus.com`
+ * image URLs. Hosts with weight <= 0 are skipped during host selection.
+ */
+export type ReaderHostConfig = {
+  name: string
+  weight: number
+}
+
+/**
+ * Logical service that groups hosts (e.g. "自动" / "电信" / "联通"). The chapter
+ * HTML's `curServ` index selects which service's host list to use.
+ */
+export type ReaderServiceConfig = {
+  name: string
+  hosts: ReaderHostConfig[]
+}
+
+/**
+ * Fully-resolved reader configuration derived from the live `config_*.js`
+ * script. The reader viewer exposes `curServ`/`curHost` indexes that pin the
+ * selected service and host at page load time.
+ */
+export type ReaderConfig = {
+  curHost: number
+  curServ: number
+  services: ReaderServiceConfig[]
+}
+
+const CONFIG_SCRIPT_URL_REGEX =
+  /<script[^>]+src=["']([^"'<>]*\/scripts\/config_[^"'<>]+\.js)["'][^>]*>/i
+
+/**
+ * Decode arbitrary response bytes using the encoding declared by the
+ * `Content-Type` charset, defaulting to UTF-8. Used for the `config_*.js`
+ * JavaScript response where we cannot rely on `<meta charset>` inspection.
+ */
+function decodeTextBytes(
+  bytes: Uint8Array,
+  contentType: string | null
+): string {
+  const encodingMatch = contentType?.match(/charset\s*=\s*([^;\s]+)/i)?.[1]
+  const encoding = sanitizeLabel(encodingMatch ?? "") || "utf-8"
+
+  try {
+    return new TextDecoder(encoding).decode(bytes)
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes)
+  }
+}
+
+function extractConfigScriptUrl(chapterHtml: string): string | undefined {
+  const url = toAbsoluteUrl(chapterHtml.match(CONFIG_SCRIPT_URL_REGEX)?.[1])
+  if (!url) return undefined
+  const parsed = new URL(url)
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== MANHUAGUI_CONFIG_HOST
+  ) {
+    throw new ProviderContractError(
+      "Manhuagui reader config origin is not allowed"
+    )
+  }
+  return parsed.toString()
+}
+
+function parseHostWeight(value: string): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+/**
+ * Read the picserv service list from the `{name:"…",hosts:[…]}` literals in
+ * `config_*.js`.
+ */
+function parseReaderConfigScript(scriptText: string): ReaderConfig {
+  const serviceMatches = [
+    ...scriptText.matchAll(
+      /\{name:"([^"]+)",hosts:\[((?:\{h:"[^"]+",w:[0-9.]+\},?)+)\]\}/g
+    ),
+  ]
+  if (serviceMatches.length === 0) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
+  }
+
+  const services = serviceMatches.map(parseReaderService)
+
+  const curServ = Number.parseInt(
+    scriptText.match(/curServ:(\d+)/)?.[1] ?? "",
+    10
+  )
+  const curHost = Number.parseInt(
+    scriptText.match(/curHost:(\d+)/)?.[1] ?? "",
+    10
+  )
+
+  return {
+    curHost: Number.isFinite(curHost) ? curHost : 0,
+    curServ: Number.isFinite(curServ) ? curServ : 0,
+    services,
+  }
+}
+
+function parseReaderService(
+  serviceMatch: RegExpMatchArray
+): ReaderServiceConfig {
+  const [, serviceName, hostsBlock] = serviceMatch
+  const hosts = [...(hostsBlock ?? "").matchAll(/\{h:"([^"]+)",w:([0-9.]+)\}/g)]
+    .map((hostMatch) => ({
+      name: hostMatch[1] ?? "",
+      weight: parseHostWeight(hostMatch[2] ?? "0"),
+    }))
+    .filter(
+      (host) =>
+        host.name && MANHUAGUI_IMAGE_HOSTS.has(`${host.name}.hamreus.com`)
+    )
+
+  if (!serviceName || hosts.length === 0) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
+  }
+  return { name: serviceName, hosts }
+}
+
+/**
+ * Fetch the current Manhuagui reader config by locating the `config_*.js`
+ * script reference in chapter HTML and parsing it. Failures are surfaced so a
+ * stale host map cannot mask a site format or delivery change.
+ */
+export async function fetchReaderConfig(
+  chapterHtml: string,
+  rateLimitService: RateLimitService,
+  chapterPolicy?: EffectivePolicy,
+  signal?: AbortSignal
+): Promise<ReaderConfig> {
+  const configScriptUrl = extractConfigScriptUrl(chapterHtml)
+  if (!configScriptUrl) {
+    throw new ProviderContractError(
+      "Manhuagui viewer data no longer matches the supported format."
+    )
+  }
+
+  const response = await integrationHttpClient.request({
+    integrationId: "readmanga",
+    endpointId: "readmanga-reader-config",
+    url: configScriptUrl,
+    scope: "chapter",
+    init: { credentials: MANHUAGUI_CREDENTIAL_POLICY.configuration, signal },
+    rateLimitService,
+    policyOverride: chapterPolicy,
+  })
+  if (!response.ok) {
+    cancelResponseBody(response)
+    throw Object.assign(
+      new Error(`HTTP ${response.status}: ${response.statusText}`),
+      { status: response.status }
+    )
+  }
+
+  const bytes = await readResponseBytes(response)
+  const scriptText = decodeTextBytes(
+    bytes,
+    response.headers.get("content-type")
+  )
+  return parseReaderConfigScript(scriptText)
+}
+
+/**
+ * Use the selected host when enabled, otherwise the first enabled host in
+ * the selected service. Throw when the service has no enabled image hosts.
+ */
+export function selectReaderHost(config: ReaderConfig): string {
+  const service = config.services[config.curServ]
+  if (!service) {
+    throw new ProviderContractError(
+      "Manhuagui config format changed (selected service is unavailable)"
+    )
+  }
+
+  const currentHost = service.hosts[config.curHost]
+  if (currentHost && currentHost.weight > 0) {
+    return currentHost.name
+  }
+
+  const firstAvailableHost = service.hosts.find((host) => host.weight > 0)
+  if (!firstAvailableHost) {
+    throw new ProviderContractError(
+      "Manhuagui config format changed (no enabled image hosts)"
+    )
+  }
+
+  return firstAvailableHost.name
+}

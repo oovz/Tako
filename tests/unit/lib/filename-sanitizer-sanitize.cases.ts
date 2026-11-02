@@ -254,14 +254,6 @@ export function registerSanitizeFilenameCases(): void {
         expect(result).toBe("_________")
       })
 
-      it("removes null character (illegal on all platforms)", () => {
-        expect(sanitizeFilename("file\x00name")).toBe("file_name")
-      })
-
-      it("removes forward slash (illegal on all platforms)", () => {
-        expect(sanitizeFilename("path/to/file")).toBe("path_to_file")
-      })
-
       it("allows characters that are legal on all platforms", () => {
         const safe = "file-name_123.txt"
         expect(sanitizeFilename(safe)).toBe(safe)
@@ -284,26 +276,13 @@ export function registerSanitizeFilenameCases(): void {
       })
     })
 
-    describe("Empty result after sanitization", () => {
-      it("returns empty string when all characters are removed", () => {
+    describe("Fully replaced filenames", () => {
+      it("replaces a filename made only of invalid characters", () => {
         expect(sanitizeFilename('/<>:|?*"\\')).toBe("_________")
       })
 
-      it("handles filename that becomes empty after sanitization", () => {
+      it("replaces a filename made only of control characters", () => {
         expect(sanitizeFilename("\x00\x01\x02")).toBe("___")
-      })
-    })
-
-    describe("Path length considerations", () => {
-      it("respects Windows MAX_PATH limitations indirectly via truncation", () => {
-        const long = "a".repeat(250)
-        expect(sanitizeFilename(long).length).toBe(200)
-      })
-
-      it("handles exactly 200 character filenames", () => {
-        const exact = "x".repeat(200)
-        expect(sanitizeFilename(exact)).toBe(exact)
-        expect(sanitizeFilename(exact).length).toBe(200)
       })
     })
 

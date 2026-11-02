@@ -3,7 +3,7 @@
     "message": "Tako 漫畫下載器"
   },
   "extDescription": {
-    "message": "從 MangaDex、Pixiv Comic、少年 Jump+ 等網站批次下載漫畫章節。在 Chrome 側邊欄中排隊、重試並匯出 CBZ/ZIP 檔案。"
+    "message": "在 Chrome 側邊欄選擇章節、加入下載佇列，並查看進度。繼續瀏覽，下載交給 Tako。"
   },
   "common_all": {
     "message": "全部"
@@ -117,7 +117,7 @@
     "message": "未找到章節"
   },
   "sidepanel_adultConsentRequired": {
-    "message": "請先接受 Manhuagui 的成人內容提示，然後重新載入此頁面。"
+    "message": "請先接受 看漫画 的成人內容提示，然後重新載入此頁面。"
   },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "所選章節已無法使用。"
@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "停止這個工作剩餘的處理。Chrome 已接受的下載會繼續，請在 Chrome 下載頁面管理。"
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "要忘記此工作中的所有待處理下載嗎？"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "無法再檢查瀏覽器下載。忘記它會釋放此工作中 Tako 的所有待處理輸出；檔案可能不完整。"
-  },
-  "sidepanel_forgetDownload": {
-    "message": "忘記所有下載"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ 正在下載",
     "placeholders": {
@@ -336,45 +327,6 @@
   "sidepanel_siteNotSupported": {
     "message": "此網站暫不受支援。"
   },
-  "destinationIssue_title": {
-    "message": "下載資料夾需要處理"
-  },
-  "destinationIssue_permissionRequired": {
-    "message": "請再次允許存取所選資料夾，以繼續此工作。"
-  },
-  "destinationIssue_folderMissing": {
-    "message": "請重新選擇下載資料夾，以繼續此工作。"
-  },
-  "destinationIssue_writeFailed": {
-    "message": "Tako 無法寫入所選下載資料夾。"
-  },
-  "destinationIssue_unsupported": {
-    "message": "此瀏覽器無法使用所選的自訂資料夾。"
-  },
-  "destinationIssue_diskFull": {
-    "message": "所選下載資料夾的可用空間不足。"
-  },
-  "destinationIssue_fixFolder": {
-    "message": "修復資料夾"
-  },
-  "destinationIssue_grantAccess": {
-    "message": "再次授權"
-  },
-  "destinationIssue_chooseFolder": {
-    "message": "選擇其他資料夾"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "改用瀏覽器下載"
-  },
-  "destinationIssue_cancelTask": {
-    "message": "取消工作"
-  },
-  "destinationIssue_actionFailed": {
-    "message": "無法更新受阻工作"
-  },
-  "destinationIssue_accessGranted": {
-    "message": "已恢復資料夾存取權限"
-  },
   "sidepanel_initFailed": {
     "message": "擴充功能初始化失敗"
   },
@@ -413,9 +365,6 @@
   },
   "status_waitingBrowserDownload": {
     "message": "等待 Chrome 下載完成"
-  },
-  "status_destinationActionRequired": {
-    "message": "需要處理下載資料夾"
   },
   "status_waitingProviderPolicy": {
     "message": "等待網站存取策略"
@@ -466,10 +415,7 @@
     "message": "磁碟空間不足。"
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "瀏覽器未能完成輸出檔案的儲存。"
-  },
-  "downloadError_browserDownloadUnobservable": {
-    "message": "下載歷程已刪除，無法確認瀏覽器下載結果。"
+    "message": "Chrome 未能完成檔案儲存。"
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako 無法建立壓縮檔。"
@@ -711,13 +657,16 @@
     "message": "管理下載目標和監控活躍任務。"
   },
   "options_downloadDestination": {
-    "message": "下載目標"
+    "message": "新任務的預設儲存位置"
   },
   "options_useCustomFolder": {
     "message": "使用自訂資料夾（檔案系統存取）"
   },
   "options_fsaUnsupported": {
     "message": "此瀏覽器不支援自訂資料夾。仍可使用瀏覽器下載。"
+  },
+  "options_savedFolderRepairRequired": {
+    "message": "已儲存的資料夾需要存取權限。請重新授權或選擇資料夾。"
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "未選擇下載資料夾"
@@ -767,9 +716,6 @@
         "content": "$1"
       }
     }
-  },
-  "options_clearAllHistory": {
-    "message": "清除全部歷史"
   },
   "options_activeDownloads": {
     "message": "活躍下載"
@@ -945,12 +891,6 @@
       }
     }
   },
-  "options_clearHistoryTitle": {
-    "message": "清除所有下載歷史？"
-  },
-  "options_clearHistoryDesc": {
-    "message": "這將永久刪除所有下載歷史。已下載的檔案不受影響。"
-  },
   "options_noKeepHistory": {
     "message": "否，保留歷史"
   },
@@ -979,16 +919,7 @@
     "message": "管理歷史資料"
   },
   "options_manageHistoryDesc": {
-    "message": "刪除已儲存的章節歷史記錄，不影響已儲存到磁碟的檔案。"
-  },
-  "options_clearAllHistoryLabel": {
-    "message": "清除全部歷史"
-  },
-  "options_clearAllHistorySubtext": {
-    "message": "刪除所有系列的所有下載歷史"
-  },
-  "options_clearEverything": {
-    "message": "全部清除"
+    "message": "管理所有系列或所選系列的章節歷史。"
   },
   "options_clearAllDownloadHistory": {
     "message": "清除所有下載歷史？"
@@ -1008,16 +939,16 @@
     "message": "此操作無法復原。"
   },
   "options_clearSpecificSeries": {
-    "message": "清除特定系列"
+    "message": "清除指定系列的章節歷史"
   },
   "options_clearSeriesSubtext": {
-    "message": "刪除單個系列的下載歷史"
+    "message": "刪除單一系列的章節紀錄"
   },
   "options_selectSeriesDots": {
     "message": "選擇系列..."
   },
   "options_clearSeriesHistory": {
-    "message": "清除系列歷史"
+    "message": "清除系列章節歷史"
   },
   "options_selectSeries": {
     "message": "選擇系列"
@@ -1026,7 +957,7 @@
     "message": "選擇一個系列..."
   },
   "options_noDownloadHistory": {
-    "message": "未找到下載歷史"
+    "message": "找不到章節歷史"
   },
   "options_clearSelected": {
     "message": "清除已選"
@@ -1388,7 +1319,7 @@
     "message": "權限被拒絕"
   },
   "options_toastCustomFolderSet": {
-    "message": "自訂下載資料夾已設定：$NAME$",
+    "message": "已選擇資料夾：$NAME$。儲存變更後，新任務將使用此資料夾。",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1398,17 +1329,11 @@
   "options_toastSetFolderFailed": {
     "message": "設定下載資料夾失敗"
   },
-  "options_toastAllHistoryCleared": {
-    "message": "所有下載歷史已清除"
-  },
-  "options_toastClearHistoryFailed": {
-    "message": "清除歷史失敗"
-  },
   "options_toastSeriesHistoryCleared": {
-    "message": "系列歷史已清除"
+    "message": "已清除系列章節歷史"
   },
   "options_toastClearSeriesFailed": {
-    "message": "清除系列歷史失敗"
+    "message": "清除系列章節歷史失敗"
   },
   "options_toastChangesDiscarded": {
     "message": "變更已放棄"
@@ -1442,12 +1367,6 @@
   },
   "options_openMangaToDownload": {
     "message": "開啟漫畫系列頁面開始下載。"
-  },
-  "options_keepHistory": {
-    "message": "否，保留歷史"
-  },
-  "options_clearAll": {
-    "message": "是，全部清除"
   },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "透過 Chrome 的擴充功能更新服務手動檢查更新。"
@@ -1524,7 +1443,7 @@
     }
   },
   "options_taskFailed": {
-    "message": "失敗（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "失敗（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1535,7 +1454,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "已取消（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "已取消（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1565,7 +1484,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "部分完成（已儲存 $COMPLETED$/$TOTAL$ 章）",
+    "message": "部分完成（已處理 $COMPLETED$/$TOTAL$ 章）",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1761,29 +1680,11 @@
   "settings_invalidDownloadMode": {
     "message": "下載模式無效"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "自訂資料夾已清除，已切換為瀏覽器下載。"
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "已失去自訂資料夾的存取權限，已切換為瀏覽器下載。"
-  },
   "settings_unknownError": {
     "message": "未知錯誤"
   },
   "background_settingsSyncFailed": {
     "message": "無法將設定同步到狀態"
-  },
-  "status_nativeOutputActionRequired": {
-    "message": "需要確認下載結果"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "正在忘記待處理下載…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "已忘記 $1 個待處理下載。佇列將繼續。"
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "無法忘記待處理下載。"
   },
   "startDownloadError_staleSeriesContext": {
     "message": "系列上下文已過期。請重新整理頁面後重試。"
@@ -1844,5 +1745,137 @@
   },
   "sidepanel_retrySeriesContext": {
     "message": "重試載入漫畫"
+  },
+  "options_clearTaskHistory": {
+    "message": "清除任務歷史"
+  },
+  "options_clearTaskHistoryTitle": {
+    "message": "清除任務歷史？"
+  },
+  "options_clearTaskHistoryDesc": {
+    "message": "永久刪除已完成、失敗和已取消的任務紀錄。"
+  },
+  "options_clearChapterHistory": {
+    "message": "清除章節歷史"
+  },
+  "options_clearChapterHistoryTitle": {
+    "message": "清除章節歷史？"
+  },
+  "options_clearChapterHistoryDesc": {
+    "message": "永久刪除所有系列的章節紀錄。"
+  },
+  "options_clearChapterHistorySubtext": {
+    "message": "刪除所有系列的章節紀錄"
+  },
+  "options_clearHistoryRetry": {
+    "message": "無法清除歷史，請重試。"
+  },
+  "options_toastTaskHistoryCleared": {
+    "message": "已清除任務歷史"
+  },
+  "options_toastClearTaskHistoryFailed": {
+    "message": "清除任務歷史失敗"
+  },
+  "options_toastChapterHistoryCleared": {
+    "message": "已清除章節歷史"
+  },
+  "options_toastClearChapterHistoryFailed": {
+    "message": "清除章節歷史失敗"
+  },
+  "queue_readFailed": {
+    "message": "無法載入佇列和任務歷史記錄。"
+  },
+  "queue_readStale": {
+    "message": "佇列和任務歷史記錄可能不是最新的。"
+  },
+  "common_retry": {
+    "message": "重試"
+  },
+  "status_savedToFolder": {
+    "message": "已儲存至資料夾"
+  },
+  "status_processed": {
+    "message": "先前已處理"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "正在傳送至 Chrome"
+  },
+  "progressStage_savingToFolder": {
+    "message": "正在儲存至資料夾"
+  },
+  "options_taskSavedToFolder": {
+    "message": "已儲存至資料夾（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "重試失敗章節（可能產生重複檔案）"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "重試所有章節（可能產生重複檔案）"
+  },
+  "status_saved": {
+    "message": "已儲存"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "這是先前的處理記錄，檔案儲存是否完成尚未確認。"
+  },
+  "options_taskSaved": {
+    "message": "已儲存（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "先前已處理（$TOTAL$ 章）",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      }
+    }
+  },
+  "destination_taskChrome": {
+    "message": "Chrome 下載"
+  },
+  "destination_taskFolder": {
+    "message": "所選資料夾"
+  },
+  "downloadError_browserOutputUnconfirmed": {
+    "message": "無法確認 Chrome 是否已儲存檔案。重試可能會產生重複檔案。"
+  },
+  "taskFolder_originalUnavailable": {
+    "message": "此任務的原始儲存位置無法使用。請建立新任務。"
+  },
+  "folderAccess_grant": {
+    "message": "再次授權"
+  },
+  "folderAccess_granted": {
+    "message": "已恢復資料夾存取權限"
+  },
+  "taskFolder_accessGranted": {
+    "message": "已授予資料夾存取權限。請重試儲存。"
+  },
+  "taskFolder_accessFailed": {
+    "message": "無法重新取得此任務的資料夾存取權限。"
+  },
+  "taskFolder_openActions": {
+    "message": "開啟資料夾操作"
+  },
+  "status_skipped": {
+    "message": "已略過"
+  },
+  "options_allowChromeFallback": {
+    "message": "資料夾無法使用時使用 Chrome 下載"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "適用於新工作。僅在工作首次嘗試寫入所選資料夾之前自動切換。"
+  },
+  "destination_chromeFallback": {
+    "message": "已切換至 Chrome 下載"
   }
 }

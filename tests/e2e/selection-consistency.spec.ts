@@ -27,10 +27,8 @@ async function switchSelectorToFlatChapterView(
   }
 }
 
-// Selection consistency expectation: cross-tab selection synchronization latency <= 500ms for the same series.
-
 test.describe("selection consistency across tabs", () => {
-  test("selection actions stay local to the side panel without creating session selection keys or mutating tab state", async ({
+  test("keeps chapter selection local to the panel", async ({
     context,
     extensionId,
     page,
@@ -179,7 +177,7 @@ test.describe("chapter selection flow", () => {
       sp.getByRole("button", { name: /Close Selection/i })
     ).toHaveCount(0)
   })
-  test("maintains open chapter selection when clicking outside the selection region in sidepanel", async ({
+  test("keeps the selector open when clicking elsewhere in the panel", async ({
     context,
     extensionId,
     page,
@@ -247,7 +245,7 @@ test.describe("chapter selection flow", () => {
     ).toHaveCount(0)
   })
 
-  test("does not persist chapter selections after closing and reopening the side panel", async ({
+  test("resets chapter selection when the panel reopens", async ({
     context,
     extensionId,
     page,
@@ -333,50 +331,6 @@ test.describe("chapter selection flow", () => {
       .toBe(false)
 
     await reopened.close()
-  })
-
-  test("does not show the deferred New quick-select control in the selector", async ({
-    context,
-    extensionId,
-    page,
-  }) => {
-    await page.goto(SERIES_URL, { waitUntil: "domcontentloaded" })
-
-    const baseChapters = [
-      { id: "chapter-1", url: buildExampleUrl("/new-1"), title: "Chapter 1" },
-      { id: "chapter-2", url: buildExampleUrl("/new-2"), title: "Chapter 2" },
-    ]
-
-    const tabId = await seedTabContext(
-      page,
-      context,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "no-new-quick-select",
-        seriesTitle: "No New Quick Select",
-        chapters: baseChapters,
-      },
-      SERIES_URL
-    )
-
-    await waitForTabStateById(page, context, tabId, (state) => {
-      return (
-        state.mangaId === "no-new-quick-select" &&
-        state.chapters?.length === baseChapters.length
-      )
-    })
-
-    const sp = await openSidepanelHarness(context, extensionId, page)
-    await expect(sp.locator("#root")).toBeVisible()
-    await expect(
-      sp.getByRole("button", { name: /Select Chapters/i })
-    ).toBeVisible({ timeout: 15000 })
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
-    await switchSelectorToFlatChapterView(sp)
-
-    await expect(sp.getByRole("button", { name: /^New$/i })).toHaveCount(0)
-
-    await sp.close()
   })
 
   test("locked chapters are displayed but cannot be selected", async ({

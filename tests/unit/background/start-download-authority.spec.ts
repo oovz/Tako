@@ -91,7 +91,7 @@ describe("START_DOWNLOAD background authority", () => {
   ) =>
     new QueueApplicationCommands({
       startDownloadSettings: {
-        settingsRepository: { getSettings: mocks.getSettings },
+        settingsRepository: { reload: mocks.getSettings },
         siteOverridesService: { getAll: mocks.getSiteOverrides },
         siteIntegrationSettingsService: {
           getForSite: mocks.getSiteSettings,
@@ -447,7 +447,7 @@ describe("START_DOWNLOAD background authority", () => {
     }
     const commandsWithLookup = new QueueApplicationCommands({
       startDownloadSettings: {
-        settingsRepository: { getSettings: mocks.getSettings },
+        settingsRepository: { reload: mocks.getSettings },
         siteOverridesService: { getAll: mocks.getSiteOverrides },
         siteIntegrationSettingsService: {
           getForSite: mocks.getSiteSettings,

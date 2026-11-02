@@ -30,14 +30,14 @@ function makeRuntime() {
 }
 
 function makeAvifFixture(width: number, height: number): ArrayBuffer {
-  const bytes = new Uint8Array(72)
+  const bytes = new Uint8Array(106)
   const view = new DataView(bytes.buffer)
   view.setUint32(0, 24)
   bytes.set([0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66], 4)
   bytes.set([0x61, 0x76, 0x69, 0x66], 16)
-  view.setUint32(24, 48)
+  view.setUint32(24, 82)
   bytes.set([0x6d, 0x65, 0x74, 0x61], 28)
-  view.setUint32(36, 36)
+  view.setUint32(36, 56)
   bytes.set([0x69, 0x70, 0x72, 0x70], 40)
   view.setUint32(44, 28)
   bytes.set([0x69, 0x70, 0x63, 0x6f], 48)
@@ -45,6 +45,15 @@ function makeAvifFixture(width: number, height: number): ArrayBuffer {
   bytes.set([0x69, 0x73, 0x70, 0x65], 56)
   view.setUint32(64, width)
   view.setUint32(68, height)
+  // Primary item 1 uses the first ipco property (ispe).
+  view.setUint32(72, 20)
+  bytes.set([0x69, 0x70, 0x6d, 0x61], 76)
+  view.setUint32(84, 1)
+  view.setUint16(88, 1)
+  bytes.set([1, 1], 90)
+  view.setUint32(92, 14)
+  bytes.set([0x70, 0x69, 0x74, 0x6d], 96)
+  view.setUint16(104, 1)
   return bytes.buffer
 }
 
@@ -360,7 +369,7 @@ describe("MangaMillion image resource ownership", () => {
     expect(ledger.getUsedBytes()).toBe(0)
   })
 
-  it("rejects chapter bytes without a supported signature instead of assuming WebP", async () => {
+  it("rejects unsupported chapter image signatures", async () => {
     const ledger = new OffscreenLiveResourceLedger()
     vi.spyOn(integrationHttpClient, "request").mockResolvedValue(
       makeResponse(Uint8Array.of(1, 2, 3).buffer, "application/octet-stream")

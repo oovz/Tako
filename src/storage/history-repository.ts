@@ -12,10 +12,11 @@ import {
   parseHistoryAggregate,
   serializeHistoryAggregate,
 } from "@/src/domain/history/schema"
-import type {
-  DownloadedChapterRecord,
-  HistoryAggregate,
-  SeriesDownloadHistory,
+import {
+  composeDownloadedChapterKey,
+  type DownloadedChapterRecord,
+  type HistoryAggregate,
+  type SeriesDownloadHistory,
 } from "@/src/domain/history/types"
 
 export const HISTORY_STORAGE_KEYS = {
@@ -23,6 +24,47 @@ export const HISTORY_STORAGE_KEYS = {
   seriesDownloadHistory: LOCAL_STORAGE_KEYS.seriesDownloadHistory,
   clearCutoffs: LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs,
 } as const
+
+function parseStoredHistory(stored: Record<string, unknown>): HistoryAggregate {
+  const document: Record<string, unknown> = {}
+  for (const [field, key] of Object.entries(HISTORY_STORAGE_KEYS)) {
+    if (key in stored) document[field] = stored[key]
+  }
+  return parseHistoryAggregate(document)
+}
+
+function canAcceptRecord(
+  aggregate: HistoryAggregate,
+  record: DownloadedChapterRecord,
+  sourceLastUpdated: number
+): boolean {
+  const seriesKey = `${record.siteIntegrationId}#${record.seriesId}`
+  const chapterKey = composeDownloadedChapterKey(
+    record.siteIntegrationId,
+    record.seriesId,
+    record.chapterId
+  )
+  const clearedAt = Math.max(
+    aggregate.clearCutoffs.allBefore ?? 0,
+    aggregate.clearCutoffs.bySeries[seriesKey] ?? 0,
+    aggregate.clearCutoffs.byChapter[chapterKey] ?? 0
+  )
+  if (sourceLastUpdated <= clearedAt) return false
+  const existing = aggregate.downloadedChapters.find(
+    (candidate) =>
+      composeDownloadedChapterKey(
+        candidate.siteIntegrationId,
+        candidate.seriesId,
+        candidate.chapterId
+      ) === chapterKey
+  )
+  if (!existing) return true
+  if (record.saveConfirmedAt === undefined) return false
+  return (
+    existing.saveConfirmedAt === undefined ||
+    record.downloadedAt > existing.downloadedAt
+  )
+}
 
 export class HistoryRepository {
   private cache: HistoryAggregate | null = null
@@ -49,16 +91,7 @@ export class HistoryRepository {
         continue
       }
 
-      const document: Record<string, unknown> = {}
-      if (HISTORY_STORAGE_KEYS.downloadedChapters in result)
-        document.downloadedChapters =
-          result[HISTORY_STORAGE_KEYS.downloadedChapters]
-      if (HISTORY_STORAGE_KEYS.seriesDownloadHistory in result)
-        document.seriesDownloadHistory =
-          result[HISTORY_STORAGE_KEYS.seriesDownloadHistory]
-      if (HISTORY_STORAGE_KEYS.clearCutoffs in result)
-        document.clearCutoffs = result[HISTORY_STORAGE_KEYS.clearCutoffs]
-      const aggregate = parseHistoryAggregate(document)
+      const aggregate = parseStoredHistory(result)
       if (generation !== this.cacheGeneration) {
         if (this.cache) return cloneHistoryAggregate(this.cache)
         continue
@@ -70,9 +103,12 @@ export class HistoryRepository {
   async markChapterAsDownloaded(
     record: DownloadedChapterRecord
   ): Promise<void> {
-    await this.mutations.run(async () =>
-      this.persist(addOrReplaceRecord(await this.loadAggregate(), record))
-    )
+    await this.mutations.run(async () => {
+      const aggregate = await this.loadAggregate()
+      if (canAcceptRecord(aggregate, record, record.downloadedAt)) {
+        await this.persist(addOrReplaceRecord(aggregate, record))
+      }
+    })
   }
   async restoreChapterFromCompletedTask(
     record: DownloadedChapterRecord,
@@ -80,14 +116,7 @@ export class HistoryRepository {
   ): Promise<boolean> {
     return this.mutations.run(async () => {
       const aggregate = await this.loadAggregate()
-      const seriesKey = `${record.siteIntegrationId}#${record.seriesId}`
-      const chapterKey = `${record.siteIntegrationId}\u0000${record.seriesId}\u0000${record.chapterId}`
-      const clearedAt = Math.max(
-        aggregate.clearCutoffs.allBefore ?? 0,
-        aggregate.clearCutoffs.bySeries[seriesKey] ?? 0,
-        aggregate.clearCutoffs.byChapter[chapterKey] ?? 0
-      )
-      if (sourceLastUpdated <= clearedAt) return false
+      if (!canAcceptRecord(aggregate, record, sourceLastUpdated)) return false
       await this.persist(addOrReplaceRecord(aggregate, record))
       return true
     })

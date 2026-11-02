@@ -21,6 +21,7 @@ function makeTask(
     created: 1,
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.test/chapter-1",
         title: "Chapter 1",

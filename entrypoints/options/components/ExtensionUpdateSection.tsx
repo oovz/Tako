@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   CheckCircle2,
   ExternalLink,
@@ -16,18 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  checkForChromeWebStoreUpdate,
-  getChromeWebStoreUpdateStatusCopy,
-  getCurrentExtensionVersion,
-  getDefaultExtensionUpdateRuntime,
-  reloadExtensionForUpdate,
-  type ChromeWebStoreUpdateCheckResult,
-} from "@/src/runtime/extension-update-check"
-import {
-  clearExtensionUpdateActionItem,
-  markExtensionUpdateActionItemAvailable,
-} from "@/src/runtime/options-action-items"
+import { getChromeWebStoreUpdateStatusCopy } from "@/src/runtime/extension-update-check"
+import { useExtensionUpdateState } from "./ExtensionUpdateSection-state"
 import { cn } from "@/src/shared/utils"
 import { t } from "@/src/runtime/i18n"
 
@@ -67,66 +56,16 @@ function StatusIcon({
 }
 
 export function ExtensionUpdateSection() {
-  const [currentVersion, setCurrentVersion] = useState(() =>
-    getCurrentExtensionVersion()
-  )
-  const [lastResult, setLastResult] =
-    useState<ChromeWebStoreUpdateCheckResult | null>(null)
-  const [isChecking, setIsChecking] = useState(false)
-
-  const statusCopy = useMemo(
-    () => (lastResult ? getChromeWebStoreUpdateStatusCopy(lastResult) : null),
-    [lastResult]
-  )
-
-  useEffect(() => {
-    const runtime = getDefaultExtensionUpdateRuntime()
-
-    if (!runtime?.onUpdateAvailable) return
-
-    const handleUpdateAvailable = (
-      details: chrome.runtime.UpdateAvailableDetails
-    ) => {
-      const installedVersion = getCurrentExtensionVersion(runtime)
-      setCurrentVersion(installedVersion)
-      setLastResult({
-        ok: true,
-        status: "update_available",
-        currentVersion: installedVersion,
-        availableVersion: details.version,
-        checkedAt: Date.now(),
-      })
-      void markExtensionUpdateActionItemAvailable({ version: details.version })
-    }
-
-    runtime.onUpdateAvailable.addListener(handleUpdateAvailable)
-    return () =>
-      runtime.onUpdateAvailable?.removeListener(handleUpdateAvailable)
-  }, [])
-
-  const handleCheckForUpdates = useCallback(async () => {
-    setIsChecking(true)
-    try {
-      const result = await checkForChromeWebStoreUpdate()
-      setCurrentVersion(result.currentVersion)
-      setLastResult(result)
-      if (result.ok && result.status === "update_available") {
-        await markExtensionUpdateActionItemAvailable({
-          version: result.availableVersion,
-        })
-      } else if (result.ok && result.status === "no_update") {
-        await clearExtensionUpdateActionItem()
-      }
-    } finally {
-      setIsChecking(false)
-    }
-  }, [])
-
-  const handleApplyUpdate = useCallback(() => {
-    void clearExtensionUpdateActionItem().finally(() => {
-      reloadExtensionForUpdate()
-    })
-  }, [])
+  const {
+    currentVersion,
+    lastResult,
+    isChecking,
+    handleCheckForUpdates,
+    handleApplyUpdate,
+  } = useExtensionUpdateState()
+  const statusCopy = lastResult
+    ? getChromeWebStoreUpdateStatusCopy(lastResult)
+    : null
 
   const canApplyUpdate =
     lastResult?.ok === true && lastResult.status === "update_available"

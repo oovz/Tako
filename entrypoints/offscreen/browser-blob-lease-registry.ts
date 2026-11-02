@@ -45,29 +45,8 @@ export class BrowserBlobLeaseRegistry {
   ) {}
 
   retain(input: BrowserBlobLeaseInput): BlobUrlIdentity {
-    if (this.disposed)
-      throw new Error("Browser Blob lease registry is disposed")
-    if (this.leases.has(input.outputId)) {
-      throw new Error("Blob output identity collision")
-    }
-    if (this.leases.size + 1 > this.limits.maxCount) {
-      throw new Error("Browser Blob lease count limit exceeded")
-    }
-    const nextBytes = this.retainedBytes + input.blob.size
-    if (nextBytes > this.limits.maxBytes) {
-      throw new Error("Browser Blob retained byte limit exceeded")
-    }
-
-    if (this.resourceLedger && !input.resourceLease) {
-      throw new Error("Browser Blob is missing its live resource lease")
-    }
-    if (input.resourceLease && input.resourceLease.bytes !== input.blob.size) {
-      throw new Error("Browser Blob live resource lease size mismatch")
-    }
-
-    const resourceLease = input.resourceLease?.transfer(
-      `browser Blob ${input.outputId}`
-    )
+    const nextBytes = this.assertAdmission(input)
+    const resourceLease = this.retainResourceLease(input)
     let blobUrl: string
     try {
       blobUrl = this.urls.createObjectURL(input.blob)
@@ -90,6 +69,36 @@ export class BrowserBlobLeaseRegistry {
     this.leases.set(input.outputId, lease)
     this.retainedBytes = nextBytes
     return this.toIdentity(lease)
+  }
+
+  private assertAdmission(input: BrowserBlobLeaseInput): number {
+    if (this.disposed)
+      throw new Error("Browser Blob lease registry is disposed")
+    if (this.leases.has(input.outputId)) {
+      throw new Error("Blob output identity collision")
+    }
+    if (this.leases.size + 1 > this.limits.maxCount) {
+      throw new Error("Browser Blob lease count limit exceeded")
+    }
+    const nextBytes = this.retainedBytes + input.blob.size
+    if (nextBytes > this.limits.maxBytes) {
+      throw new Error("Browser Blob retained byte limit exceeded")
+    }
+
+    return nextBytes
+  }
+
+  private retainResourceLease(
+    input: BrowserBlobLeaseInput
+  ): OffscreenLiveResourceLease | undefined {
+    if (this.resourceLedger && !input.resourceLease) {
+      throw new Error("Browser Blob is missing its live resource lease")
+    }
+    if (input.resourceLease && input.resourceLease.bytes !== input.blob.size) {
+      throw new Error("Browser Blob live resource lease size mismatch")
+    }
+
+    return input.resourceLease?.transfer(`browser Blob ${input.outputId}`)
   }
 
   revoke(input: BlobUrlIdentity): boolean {

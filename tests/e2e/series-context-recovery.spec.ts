@@ -7,8 +7,8 @@ import {
 import {
   BASIC_SERIES,
   BASIC_SERIES_PAGE_HTML,
-} from "./fixtures/mock-data/site-integrations/manhuagui"
-import { MANHUAGUI_LOCAL_PREFIX } from "./fixtures/mock-data/site-integrations/manhuagui/local-server"
+} from "./fixtures/mock-data/site-integrations/readmanga"
+import { MANHUAGUI_LOCAL_PREFIX } from "./fixtures/mock-data/site-integrations/readmanga/local-server"
 import { MANHUAGUI_BASE_URL } from "./fixtures/test-domains-constants"
 
 for (const recovery of ["automatic", "user retry"] as const) {
@@ -21,15 +21,18 @@ for (const recovery of ["automatic", "user retry"] as const) {
     const server = _extensionContextState.localMockServer
     expect(server).not.toBeNull()
     let available = false
+    let retryWasClicked: (() => Promise<boolean>) | undefined
     let requests = 0
     server!.addRoute(
       `${MANHUAGUI_LOCAL_PREFIX}/comic/${BASIC_SERIES.series.seriesId}`,
-      () => {
+      async () => {
         requests += 1
+        const providerAvailable =
+          available || (await retryWasClicked?.()) === true
         return {
-          status: available ? 200 : 503,
+          status: providerAvailable ? 200 : 503,
           headers: { "content-type": "text/html; charset=utf-8" },
-          body: available
+          body: providerAvailable
             ? BASIC_SERIES_PAGE_HTML
             : "Provider temporarily unavailable",
         }
@@ -54,8 +57,31 @@ for (const recovery of ["automatic", "user retry"] as const) {
         exact: true,
       })
       await expect(retry).toBeVisible()
-      available = true
+      // Focusing the harness for a click can start an automatic refresh.
+      // Keep that request failing until a real Retry click reaches the DOM.
+      await sidepanel.evaluate(() => {
+        document.addEventListener(
+          "click",
+          (event) => {
+            if (
+              event.isTrusted &&
+              event.target instanceof Element &&
+              event.target.closest("button")?.textContent?.trim() ===
+                "Retry series"
+            ) {
+              document.documentElement.dataset.playwrightSeriesRetry = "clicked"
+            }
+          },
+          { capture: true }
+        )
+      })
+      retryWasClicked = () =>
+        sidepanel.evaluate(
+          () =>
+            document.documentElement.dataset.playwrightSeriesRetry === "clicked"
+        )
       await retry.click()
+      expect(await retryWasClicked()).toBe(true)
     }
     await expect(
       sidepanel.getByText(BASIC_SERIES.series.seriesTitle, { exact: true })

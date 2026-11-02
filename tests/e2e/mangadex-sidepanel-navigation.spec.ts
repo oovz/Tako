@@ -49,7 +49,7 @@ async function waitForTabStateCleared(
   )
 }
 
-test.describe("MangaDex side panel navigation workflows (mocked)", () => {
+test.describe("MangaDex navigation", () => {
   test("front page -> series page initializes tab state", async ({
     context,
     extensionId,

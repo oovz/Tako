@@ -5,8 +5,12 @@ import { DEFAULT_SETTINGS } from "../../src/domain/settings/defaults"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
 import type { ChapterState } from "../../src/types/tab-state"
 
-function makeChapter(id: string, status: ChapterState["status"]): ChapterState {
+function makeChapter(
+  id: string,
+  status: ChapterState["status"]
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: `Chapter ${id}`,
@@ -53,7 +57,7 @@ function makeTask(
 test.describe("Options UI behavior", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("Downloads tab confirms active cancellation and cancels queued tasks immediately", async ({
+  test("keeps active work when cancellation is declined and offers undo for queued cancellation", async ({
     page,
     extensionId,
   }) => {
@@ -67,7 +71,7 @@ test.describe("Options UI behavior", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       {
         waitUntil: "domcontentloaded",
       }
@@ -122,39 +126,32 @@ test.describe("Options UI behavior", () => {
       .toEqual({ queuedTaskPresent: false, hasQueuedCancellationUndo: true })
   })
 
-  test("Downloads tab cancels a native-output action-required task without Undo", async ({
+  test("records active cancellation time without offering undo", async ({
     page,
     extensionId,
   }) => {
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       { waitUntil: "domcontentloaded" }
     )
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
     await seedDownloadQueueState(page, [
-      makeTask("unobservable-options", "queued", {
-        seriesTitle: "Unobservable Options",
-        activeBlock: "native_output_action_required",
-        errorCategory: "browser_download_unobservable",
+      makeTask("active-cancel-options", "downloading", {
+        seriesTitle: "Active Cancellation Options",
         chapters: [
           {
-            ...makeChapter("erased-output", "queued"),
-            errorCategory: "browser_download_unobservable",
+            ...makeChapter("active-output", "downloading"),
           },
         ],
       }),
     ])
 
-    // Canceling this blocked task also surrenders erased output observation,
-    // so it requires the same explicit warning as the task-wide Forget action.
     const taskCard = page
-      .getByRole("heading", { name: "Unobservable Options" })
+      .getByRole("heading", { name: "Active Cancellation Options" })
       .locator("xpath=ancestor::*[@aria-busy][1]")
     await taskCard.getByRole("button", { name: "Cancel" }).click()
-    await expect(
-      taskCard.getByText("Forget all pending downloads for this task?")
-    ).toBeVisible()
-    await taskCard.getByRole("button", { name: "Forget all downloads" }).click()
+    await expect(taskCard.getByText("Cancel this Tako task?")).toBeVisible()
+    await taskCard.getByRole("button", { name: "Yes" }).click()
 
     await expect(taskCard.getByText("Canceled at")).toBeVisible()
     await expect
@@ -173,21 +170,21 @@ test.describe("Options UI behavior", () => {
             taskSnapshot?: { id?: string }
           }>
           const task = downloadQueue.find(
-            (candidate) => candidate.id === "unobservable-options"
+            (candidate) => candidate.id === "active-cancel-options"
           )
           return {
             taskStatus: task?.status,
-            hasBlockedUndo: pendingUndoActions.some(
-              (action) => action.taskSnapshot?.id === "unobservable-options"
+            hasActiveCancellationUndo: pendingUndoActions.some(
+              (action) => action.taskSnapshot?.id === "active-cancel-options"
             ),
           }
         })
         return result
       })
-      .toEqual({ taskStatus: "canceled", hasBlockedUndo: false })
+      .toEqual({ taskStatus: "canceled", hasActiveCancellationUndo: false })
   })
 
-  test("Downloads tab shows retried badge and terminal timestamp labels for restarted tasks", async ({
+  test("shows retry badges and completion times for restarted tasks", async ({
     page,
     extensionId,
   }) => {
@@ -209,7 +206,7 @@ test.describe("Options UI behavior", () => {
     ]
 
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=downloads`,
+      `chrome-extension://${extensionId}/options.html?tab=activity`,
       {
         waitUntil: "domcontentloaded",
       }
@@ -251,10 +248,7 @@ test.describe("Options UI behavior", () => {
     ).toHaveCount(0)
   })
 
-  test("Site Integrations tab renders integrations and search filters the list", async ({
-    page,
-    extensionId,
-  }) => {
+  test("filters site integrations by name", async ({ page, extensionId }) => {
     await page.goto(
       `chrome-extension://${extensionId}/options.html?tab=integrations`,
       {
@@ -286,12 +280,9 @@ test.describe("Options UI behavior", () => {
     await expect(page.getByText("No integrations found")).toBeVisible()
   })
 
-  test("About / Debug tab persists log level changes", async ({
-    page,
-    extensionId,
-  }) => {
+  test("persists log level changes", async ({ page, extensionId }) => {
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=debug`,
+      `chrome-extension://${extensionId}/options.html?tab=network`,
       {
         waitUntil: "domcontentloaded",
       }

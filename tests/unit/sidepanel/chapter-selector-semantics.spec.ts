@@ -1,6 +1,7 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
+import { Window } from "happy-dom"
 
 import { ChapterSelector } from "@/entrypoints/sidepanel/components/ChapterSelector"
 
@@ -13,6 +14,39 @@ const callbacks = {
 }
 
 describe("ChapterSelector semantics", () => {
+  it("disables both controls of an empty category while retaining its label", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChapterSelector, {
+        items: [
+          {
+            groupId: "empty",
+            title: "Unavailable extras",
+            collapsed: true,
+            chapters: [],
+          },
+        ],
+        viewMode: "volumes",
+        expandedGroups: new Set<string>(["empty"]),
+        isEnqueuing: false,
+        ...callbacks,
+      })
+    )
+    const document = new Window().document
+    document.body.innerHTML = markup
+    expect(document.body.textContent).toContain("Unavailable extras")
+    const controls = Array.from(document.querySelectorAll("button"))
+    expect(controls).toHaveLength(2)
+    expect(controls.every((control) => control.disabled)).toBe(true)
+    expect(
+      document.querySelector('[role="checkbox"]')?.getAttribute("aria-checked")
+    ).toBe("false")
+    expect(
+      document
+        .querySelector("button[aria-expanded]")
+        ?.getAttribute("aria-expanded")
+    ).toBe("false")
+  })
+
   it("uses the checkbox as the only keyboard control for a chapter row", () => {
     const markup = renderToStaticMarkup(
       createElement(ChapterSelector, {
@@ -71,32 +105,43 @@ describe("ChapterSelector semantics", () => {
     expect(markup).toContain('aria-expanded="false"')
   })
 
-  it("renders an accessible marker for a previously downloaded chapter", () => {
-    const markup = renderToStaticMarkup(
-      createElement(ChapterSelector, {
-        items: [
-          {
-            id: "chapter-1",
-            title: "Chapter 1",
-            url: "https://example.com/1",
-            index: 1,
-            selected: false,
-            downloaded: true,
-            status: "queued",
-            isStandalone: true,
-          },
-        ],
-        viewMode: "chapters",
-        expandedGroups: new Set<string>(),
-        isEnqueuing: false,
-        ...callbacks,
-      })
-    )
+  it.each([
+    ["downloads-api", undefined, "status_processed"],
+    ["fsa", undefined, "status_processed"],
+    ["downloads-api", 42, "status_saved"],
+    ["fsa", 42, "status_savedToFolder"],
+    [undefined, undefined, "status_processed"],
+  ] as const)(
+    "renders an accessible history result for %s",
+    (outputDestination, saveConfirmedAt, label) => {
+      const markup = renderToStaticMarkup(
+        createElement(ChapterSelector, {
+          items: [
+            {
+              id: "chapter-1",
+              title: "Chapter 1",
+              url: "https://example.com/1",
+              index: 1,
+              selected: false,
+              downloaded: true,
+              outputDestination,
+              saveConfirmedAt,
+              status: "queued",
+              isStandalone: true,
+            },
+          ],
+          viewMode: "chapters",
+          expandedGroups: new Set<string>(),
+          isEnqueuing: false,
+          ...callbacks,
+        })
+      )
 
-    expect(markup).toContain("data-downloaded-marker")
-    expect(markup).toContain("status_completed")
-    expect(markup.match(/role="checkbox"/g)).toHaveLength(1)
-  })
+      expect(markup).toContain("data-downloaded-marker")
+      expect(markup).toContain(label)
+      expect(markup.match(/role="checkbox"/g)).toHaveLength(1)
+    }
+  )
 
   it("keeps virtualization enabled when a large volume is collapsed or expanded", () => {
     const chapters = Array.from({ length: 48 }, (_, index) => ({

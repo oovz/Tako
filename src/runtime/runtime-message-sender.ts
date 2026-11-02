@@ -1,16 +1,19 @@
 import type { RuntimeMessagePrincipal } from "@/src/runtime/runtime-message-contracts"
 
-const OFFSCREEN_PATHS: Record<string, true> = {
-  "/offscreen.html": true,
-}
-const OPTIONS_PATHS: Record<string, true> = {
-  "/options.html": true,
-}
-const SIDEPANEL_PATHS: Record<string, true> = {
-  "/sidepanel.html": true,
-}
-const BACKGROUND_PATHS: Record<string, true> = {
-  "/background.js": true,
+const DOCUMENT_PRINCIPALS = new Map<string, RuntimeMessagePrincipal>([
+  ["/sidepanel.html", "sidepanel"],
+  ["/options.html", "options"],
+])
+
+function classifyWorkerPrincipal(
+  sender: chrome.runtime.MessageSender,
+  url: URL | null
+): RuntimeMessagePrincipal {
+  if (sender.tab !== undefined) return "unknown"
+  if (url?.pathname === "/offscreen.html") return "offscreen"
+  if (sender.url === undefined || url?.pathname === "/background.js")
+    return "background"
+  return "unknown"
 }
 
 function parseOwnExtensionUrl(
@@ -36,32 +39,19 @@ export function classifyRuntimeMessagePrincipal(
   if (!extensionId || sender.id !== extensionId) return "unknown"
 
   const url = parseOwnExtensionUrl(sender.url, extensionId)
-  if (url !== null && SIDEPANEL_PATHS[url.pathname]) {
-    return "sidepanel"
-  }
-  if (url !== null && OPTIONS_PATHS[url.pathname]) {
-    return "options"
-  }
-  if (
-    url !== null &&
-    OFFSCREEN_PATHS[url.pathname] &&
-    sender.tab === undefined
-  ) {
-    return "offscreen"
-  }
-  if (
-    sender.tab === undefined &&
-    (sender.url === undefined ||
-      (url !== null && BACKGROUND_PATHS[url.pathname]))
-  ) {
-    return "background"
-  }
+  const document = url && DOCUMENT_PRINCIPALS.get(url.pathname)
+  if (document) return document
+  const worker = classifyWorkerPrincipal(sender, url)
+  if (worker !== "unknown") return worker
 
-  if (
-    typeof sender.tab?.id === "number" &&
+  return classifyContentPrincipal(sender)
+}
+
+function classifyContentPrincipal(
+  sender: chrome.runtime.MessageSender
+): RuntimeMessagePrincipal {
+  return typeof sender.tab?.id === "number" &&
     !sender.url?.startsWith("chrome-extension://")
-  ) {
-    return "content"
-  }
-  return "unknown"
+    ? "content"
+    : "unknown"
 }

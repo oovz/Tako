@@ -1,26 +1,7 @@
 /**
- * @file local-mock-server.ts
- * @description Local HTTP mock server that sits behind our DNR redirects.
- *
- * Why a local server (instead of pure Playwright `context.route`)?
- *
- * Playwright's `context.route` intercepts fetches from pages, content
- * scripts, service workers, and extension pages (options, side panel).
- * It does NOT reliably intercept fetches from offscreen documents — and
- * our chapter-plan resolution / image-download calls all run in offscreen
- * (see `entrypoints/offscreen/main.ts`).
- *
- * To plug that hole we run a local HTTP server on a random ephemeral
- * port, then install `chrome.declarativeNetRequest` session rules (see
- * `dnr-test-redirects.ts`) that rewrite specific external URLs to
- * `http://127.0.0.1:<port>/<prefix>/...`. DNR rules apply to all
- * extension-initiated requests (SW, offscreen, pages) so they close the
- * offscreen gap.
- *
- * Dispatch is path-prefix based: each integration reserves a prefix like
- * `/manhuagui`, `/hamreus`, `/mangadex-api` and registers a handler under
- * that prefix. The first matching prefix wins; the most specific prefix
- * should be registered first (longer strings before shorter).
+ * Serve DNR-redirected fixture requests, including offscreen fetches that
+ * Playwright routes do not reliably intercept. The longest matching path
+ * prefix selects the handler.
  */
 
 import http from "node:http"
@@ -41,14 +22,7 @@ export interface MockRouteResponse {
   body: Buffer | string | Uint8Array | object
 }
 
-/**
- * Shape passed to every `MockRouteHandler`.
- *
- * `pathnameAfterPrefix` is the portion of the request path AFTER the
- * matched prefix (leading `/` preserved when present). Handlers should
- * dispatch on this value rather than `url.pathname` so they remain
- * decoupled from the prefix chosen by the fixture caller.
- */
+/** Route handlers receive the path after their matched prefix. */
 export interface MockRouteRequest {
   method: string
   url: URL
@@ -120,43 +94,15 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
   const routes = new Map<string, MockRouteHandler>()
 
   /**
-   * CORS headers attached to every response.
-   *
-   * Two separate cross-origin concerns apply to the DNR-redirected
-   * fetches we answer:
-   *
-   * 1. **Plain CORS**: Extension offscreen / SW fetches go cross-origin
-   *    from the chrome-extension:// origin, and page-context fetches
-   *    from mangadex.org etc. are also cross-origin to 127.0.0.1.
-   *    Some provider-owned authenticated paths use
-   *    `credentials: 'include'`, so we can't respond with
-   *    `Access-Control-Allow-Origin: *`; instead we echo the exact Origin
-   *    header — including the literal string `null` that DNR redirects
-   *    across scheme boundaries tend to produce.
-   *
-   * 2. **Private Network Access (PNA)**: Chrome blocks public-origin
-   *    pages (mangadex.org, comic.pixiv.net, etc.) from fetching
-   *    loopback / local addresses unless the response opts in via
-   *    `Access-Control-Allow-Private-Network: true` (set on the
-   *    preflight and also on the actual response). DNR-redirected
-   *    fetches keep the original initiator origin, so without this
-   *    header the browser surfaces
-   *    `Permission was denied for this request to access the loopback
-   *    address space.` and the request fails with `ERR_FAILED`.
-   *    See: https://developer.chrome.com/blog/private-network-access-preflight
+   * Credentialed requests need the exact Origin, including a redirected `null`
+   * origin. Private Network Access preflights also need explicit loopback opt-in.
+   * See https://developer.chrome.com/blog/private-network-access-preflight.
    */
   function buildCorsHeaders(
     requestOrigin: string | undefined,
     requestedHeaders: string | undefined
   ): Record<string, string> {
-    // With `credentials: 'include'` Chrome refuses to interpret `*` in
-    // `Access-Control-Allow-Headers` as a wildcard — it must echo the
-    // exact header names the preflight requested. Without the echo, any
-    // custom request header (e.g. the Pixiv `x-client-hash` /
-    // `x-requested-with`) fails the preflight and the actual fetch
-    // surfaces as a generic `TypeError: Failed to fetch`. Echoing the
-    // requested headers ensures all preflights succeed regardless of
-    // which integration happens to set custom request headers.
+    // Credentialed preflights require explicit allowed header names.
     const allowHeaders =
       requestedHeaders && requestedHeaders.trim().length > 0
         ? requestedHeaders
@@ -259,10 +205,8 @@ export async function startLocalMockServer(): Promise<LocalMockServerHandle> {
     }
   })
 
-  // Windows can assign listen(0) a Fetch-blocked port (observed: 6667).
-  // Claim the actual HTTP socket in the dynamic/private range, above the
-  // browser's restricted ports. A probe-and-close port finder would race
-  // parallel workers between discovery and this bind.
+  // Bind the final socket above browser-restricted ports. Keeping it open
+  // avoids port-claim races between parallel workers.
   for (let attempt = 0; attempt < 20; attempt++) {
     try {
       await new Promise<void>((resolve, reject) => {

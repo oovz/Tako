@@ -1,9 +1,4 @@
-/**
- * @file series-data.ts
- * @description MangaDex series/manga metadata mock data
- *
- * Series URLs follow pattern: https://mangadex.test/title/[series-uuid]/[slug]
- */
+import captured from "@/tests/fixtures/site-integrations/mangadex/captured-api.json" with { type: "json" }
 
 import type {
   SiteIntegrationSeriesData,
@@ -15,28 +10,27 @@ import type {
 // ============================================================================
 
 /**
- * Basic series data for general testing
+ * Captured Hunter x Hunter metadata for representative tests
  */
 export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
   id: "MANGADEX_BASIC_SERIES",
-  description: "Basic mangadex series with full metadata",
+  description: "Captured Hunter x Hunter series metadata",
   series: {
     siteId: "mangadex",
     seriesId: "db692d58-4b13-4174-ae8c-30c515c0689c",
     seriesTitle: "Hunter x Hunter",
     author: "Togashi Yoshihiro",
     artist: "Togashi Yoshihiro",
-    status: "Ongoing",
-    description:
-      "Hunters are a special breed, dedicated to tracking down treasures, magical beasts, and even other men. But such pursuits require a license, and less than one in a hundred thousand can pass the grueling qualification exam. Those who do pass gain access to restricted areas, amazing stores of information, and the right to call themselves Hunters.",
+    status: captured.data.metadata.data.attributes.status,
+    description: captured.data.metadata.data.attributes.description.en,
     coverUrl:
-      "https://uploads.mangadex.org/covers/db692d58-4b13-4174-ae8c-30c515c0689c/e747cff7-41f4-4014-8d29-b8f105d71e20.jpg",
+      "https://uploads.mangadex.org/covers/db692d58-4b13-4174-ae8c-30c515c0689c/aa112927-f1e5-4fe4-a4db-7fd4a1536e3c.jpg",
   },
   chapterDatasetId: "MANGADEX_BASIC",
 }
 
 /**
- * Minimal series data (only required fields)
+ * Synthetic minimal metadata variant (only required fields)
  */
 export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
   id: "MANGADEX_MINIMAL_SERIES",

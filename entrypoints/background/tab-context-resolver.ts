@@ -85,7 +85,7 @@ class PageProbeUrlMismatchError extends Error {
   }
 }
 
-export function createTabContextResolver(deps: {
+interface TabContextResolverDependencies {
   getTabContextStateService: () => TabContextStateService
   tabContextCache: TabContextCache
   resolutionTimeoutMs?: number
@@ -93,511 +93,623 @@ export function createTabContextResolver(deps: {
   beforeStateMutation?: () => Promise<void>
   rateLimitService: RateLimitService
   siteIntegrationSettingsReader: SiteIntegrationSettingsReader
-}) {
-  const resolutionTimeoutMs =
-    deps.resolutionTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
-  const inFlightByTab = new Map<
-    number,
-    {
-      url: string | undefined
-      promise: Promise<TabContextResolutionOutcome>
-      controller: AbortController
-      retryErrors: boolean
-    }
-  >()
+}
 
-  async function commitCachedContext(
-    tabId: number,
-    cached: TabContextCacheValue,
-    requestId: number,
-    windowId: number | undefined,
-    expectedUrl: string,
-    ownerSignal: AbortSignal | undefined
+interface TabResolutionRequest {
+  tabId: number
+  tab: chrome.tabs.Tab
+  windowId: number
+  requestId: number
+  url: string
+  ownerSignal: AbortSignal
+  startedAt: number
+}
+
+type ContextCommitRequest = Parameters<
+  TabContextStateService["commitResolvedTabContext"]
+>[2]
+
+async function initializeTabContext(
+  deps: TabContextResolverDependencies,
+  payload: Parameters<TabContextStateService["commitResolvedTabContext"]>[0],
+  tabId: number,
+  request: ContextCommitRequest
+): Promise<void> {
+  await deps.beforeStateMutation?.()
+  await deps
+    .getTabContextStateService()
+    .commitResolvedTabContext(payload, tabId, request)
+}
+
+class ProviderTabResolution {
+  private readonly controller = new AbortController()
+  private acceptsPartialResults = true
+  private stage = "provider-setup"
+  private probe: { url: string; data?: unknown } | undefined
+  private providerAdapter: Awaited<
+    ReturnType<typeof getBackgroundSiteAdapterById>
+  >
+  private deadlineAt: number
+
+  constructor(
+    private readonly deps: TabContextResolverDependencies,
+    private readonly request: TabResolutionRequest,
+    private readonly integrationId: string,
+    private readonly timeoutMs: number
+  ) {
+    this.deadlineAt = Date.now() + timeoutMs
+  }
+
+  private withinDeadline<T>(operation: Promise<T>): Promise<T> {
+    return withinTimeout(
+      operation,
+      Math.max(1, this.deadlineAt - Date.now()),
+      this.controller
+    )
+  }
+
+  private commitRequest(): ContextCommitRequest {
+    const { requestId, windowId, url, ownerSignal } = this.request
+    return { requestId, windowId, expectedUrl: url, ownerSignal }
+  }
+
+  async run(): Promise<TabContextResolutionOutcome> {
+    const releaseOwner = this.observeOwnerCancellation()
+    try {
+      await this.prepareProbe()
+      // Optional enrichment receives a separate budget from provider execution.
+      this.deadlineAt = Date.now() + this.timeoutMs
+      this.stage = "provider-resolution"
+      const result = await this.withinDeadline(
+        resolveSiteIntegrationSeriesData({
+          siteIntegrationId: this.integrationId,
+          seriesUrl: this.request.url,
+          pageProbeData: this.probe?.data,
+          signal: this.controller.signal,
+          rateLimitService: this.deps.rateLimitService,
+          siteIntegrationSettingsReader:
+            this.deps.siteIntegrationSettingsReader,
+          onPartial: (partial) => this.commitPartial(partial),
+        })
+      )
+      this.acceptsPartialResults = false
+      this.stage = "normalization"
+      const normalized = normalizeFetchedSeriesData(result.chapterList)
+      const payload = buildResolvedTabContext({
+        sourceUrl: this.request.url,
+        siteIntegrationId: this.integrationId,
+        rawMangaId: result.seriesId ?? null,
+        chapters: normalized.chapters,
+        volumes: normalized.volumes,
+        seriesMetadata: result.seriesMetadata,
+        extractionError: result.metadataError ?? result.chapterListError,
+        chapterListNotice: result.chapterListNotice,
+      })
+      this.stage = "ownership-check"
+      const outcome = await this.persistProbeDataIfCurrent(result.seriesId)
+      if (outcome) return outcome
+      this.stage = "state-commit"
+      await initializeTabContext(
+        this.deps,
+        payload,
+        this.request.tabId,
+        this.commitRequest()
+      )
+      logger.debug("[tab-context] Resolved active tab from provider", {
+        tabId: this.request.tabId,
+        windowId: this.request.windowId,
+        integrationId: this.integrationId,
+        durationMs: Math.round(performance.now() - this.request.startedAt),
+      })
+      return "completed"
+    } catch (error) {
+      return await this.handleFailure(error)
+    } finally {
+      releaseOwner()
+    }
+  }
+
+  private observeOwnerCancellation(): () => void {
+    const ownerSignal = this.request.ownerSignal
+    const abortOwner = () =>
+      this.controller.abort(ownerSignal.reason ?? "superseded")
+    ownerSignal.addEventListener("abort", abortOwner, { once: true })
+    if (ownerSignal.aborted) abortOwner()
+
+    return () => ownerSignal.removeEventListener("abort", abortOwner)
+  }
+
+  private async prepareProbe(): Promise<void> {
+    const manifest = getDefinition(this.integrationId)
+    let shouldRun = manifest?.pageProbe !== "none"
+    this.providerAdapter = shouldRun
+      ? await getBackgroundSiteAdapterById(this.integrationId)
+      : undefined
+    if (
+      manifest?.pageProbe === "optional" &&
+      this.providerAdapter?.background.shouldExecutePageProbe
+    ) {
+      shouldRun = await this.shouldExecuteOptionalProbe()
+    }
+    if (shouldRun) await this.executeProbe(manifest?.pageProbe === "required")
+  }
+
+  private async shouldExecuteOptionalProbe(): Promise<boolean> {
+    const background = this.providerAdapter?.background
+    if (!background?.shouldExecutePageProbe) return false
+    try {
+      return await withinTimeout(
+        background.shouldExecutePageProbe({
+          siteIntegrationSettingsReader:
+            this.deps.siteIntegrationSettingsReader,
+        }),
+        this.timeoutMs
+      )
+    } catch (error) {
+      logger.debug("Skipping optional integration page probe", error)
+      return false
+    }
+  }
+
+  private async executeProbe(required: boolean): Promise<void> {
+    this.stage = "page-probe"
+    try {
+      const operation = executeApprovedPageProbe(
+        this.request.tabId,
+        this.integrationId
+      )
+      this.probe = required
+        ? await this.withinDeadline(operation)
+        : await withinTimeout(operation, this.timeoutMs)
+      if (this.probe.url !== this.request.url) {
+        logger.debug("Ignoring page probe from a superseded URL", {
+          tabId: this.request.tabId,
+          expectedUrl: this.request.url,
+          actualUrl: this.probe.url,
+        })
+        throw new PageProbeUrlMismatchError()
+      }
+    } catch (error) {
+      if (error instanceof PageProbeUrlMismatchError || required) throw error
+      logger.debug("Optional integration page probe failed", {
+        integrationId: this.integrationId,
+      })
+    }
+  }
+
+  private async commitPartial(partial: {
+    seriesId?: string
+    seriesMetadata?: SeriesMetadata
+  }): Promise<void> {
+    if (!this.canAcceptPartial(partial)) return
+    const { tabId, requestId, windowId, ownerSignal } = this.request
+    try {
+      await this.deps.beforeStateMutation?.()
+      if (!this.acceptsPartialResults || ownerSignal.aborted) return
+      const currentTab = await this.withinDeadline(chrome.tabs.get(tabId))
+      const currentUrl = resolveTabUrlForSupportCheck(currentTab)
+      const isCurrent = await this.deps.tabContextCache.isRequestIdCurrent(
+        windowId,
+        requestId
+      )
+      if (!this.ownsCurrentPartial(currentTab, currentUrl, isCurrent)) {
+        logger.debug("Discarding stale partial tab context result", {
+          tabId,
+          requestId,
+        })
+        return
+      }
+      await this.writePartial(partial.seriesId, partial.seriesMetadata)
+    } catch (error) {
+      logger.debug("Partial tab context commit failed", {
+        tabId,
+        requestId,
+        error,
+      })
+    }
+  }
+
+  private canAcceptPartial(partial: {
+    seriesId?: string
+    seriesMetadata?: SeriesMetadata
+  }): partial is { seriesId: string; seriesMetadata: SeriesMetadata } {
+    return (
+      this.acceptsPartialResults &&
+      !this.request.ownerSignal.aborted &&
+      !!partial.seriesId &&
+      !!partial.seriesMetadata
+    )
+  }
+  private ownsCurrentPartial(
+    tab: chrome.tabs.Tab,
+    url: string | undefined,
+    current: boolean
+  ): boolean {
+    return (
+      tab.active &&
+      tab.windowId === this.request.windowId &&
+      url === this.request.url &&
+      current
+    )
+  }
+
+  private async writePartial(
+    seriesId: string,
+    seriesMetadata: SeriesMetadata
   ): Promise<void> {
-    await deps.tabContextCache.syncActiveTabContext(tabId, cached, {
-      requestId,
-      windowId,
-      expectedUrl,
-      ownerSignal,
+    const service = this.deps.getTabContextStateService()
+    const existing = await service.getTabState(this.request.tabId)
+    const sameSeries =
+      existing?.siteIntegrationId === this.integrationId &&
+      existing.mangaId === seriesId
+    const payload = buildResolvedTabContext({
+      sourceUrl: this.request.url,
+      siteIntegrationId: this.integrationId,
+      rawMangaId: seriesId,
+      chapters: sameSeries ? existing.chapters : [],
+      volumes: sameSeries ? existing.volumes : undefined,
+      seriesMetadata,
+      chaptersLoading: true,
     })
+    await service.commitResolvedTabContext(
+      payload,
+      this.request.tabId,
+      this.commitRequest()
+    )
   }
 
-  async function initializeTabContext(
-    payload: Parameters<TabContextStateService["commitResolvedTabContext"]>[0],
-    tabId: number,
-    request: {
-      requestId: number
-      windowId?: number
-      supersedeInFlight?: boolean
-      expectedUrl?: string
-      ownerSignal?: AbortSignal
+  private async persistProbeDataIfCurrent(
+    seriesId: string | undefined
+  ): Promise<TabContextResolutionOutcome | undefined> {
+    const { tabId, windowId, requestId, url, ownerSignal } = this.request
+    const tab = await this.withinDeadline(chrome.tabs.get(tabId))
+    const currentUrl = resolveTabUrlForSupportCheck(tab)
+    const isCurrent = await this.deps.tabContextCache.isRequestIdCurrent(
+      windowId,
+      requestId
+    )
+    if (
+      ownerSignal.aborted ||
+      !tab.active ||
+      tab.windowId !== windowId ||
+      currentUrl !== url ||
+      !isCurrent
+    ) {
+      logger.debug("Discarding stale tab context result", { tabId, requestId })
+      return this.staleOutcome(tab, currentUrl, isCurrent)
     }
-  ): Promise<void> {
-    await deps.beforeStateMutation?.()
-    await deps
-      .getTabContextStateService()
-      .commitResolvedTabContext(payload, tabId, request)
+    // Accepted ownership starts provider persistence in the same continuation.
+    await this.persistProbeData(seriesId)
+    return undefined
   }
 
-  async function resolveTabContextUncoalesced(
+  private staleOutcome(
+    tab: chrome.tabs.Tab,
+    currentUrl: string | undefined,
+    isCurrent: boolean
+  ): TabContextResolutionOutcome {
+    return tab.active &&
+      tab.windowId === this.request.windowId &&
+      currentUrl !== this.request.url &&
+      isCurrent
+      ? "retry"
+      : "completed"
+  }
+
+  private async persistProbeData(seriesId: string | undefined): Promise<void> {
+    if (
+      this.probe?.data === undefined ||
+      typeof seriesId !== "string" ||
+      !this.providerAdapter?.background.persistPageProbeData
+    )
+      return
+    try {
+      await this.providerAdapter.background.persistPageProbeData({
+        seriesId,
+        pageProbeData: this.probe.data,
+      })
+    } catch (error) {
+      logger.debug("Unable to persist page-probe data", error)
+    }
+  }
+
+  private async handleFailure(
+    error: unknown
+  ): Promise<TabContextResolutionOutcome> {
+    this.acceptsPartialResults = false
+    const { tabId, windowId, requestId, url, tab, ownerSignal } = this.request
+    if (ownerSignal.aborted) return "completed"
+    logger.error("Tab context resolution failed", {
+      tabId,
+      windowId,
+      requestId,
+      integrationId: this.integrationId,
+      stage: this.stage,
+      url,
+      documentUrlAtStart: tab.url,
+      pendingUrlAtStart: tab.pendingUrl,
+      probeUrl: this.probe?.url,
+      durationMs: Math.round(performance.now() - this.request.startedAt),
+      error,
+    })
+    if (
+      !(await this.deps.tabContextCache.isRequestIdCurrent(windowId, requestId))
+    )
+      return "completed"
+    await initializeTabContext(
+      this.deps,
+      { context: "error", error: createUserFacingResolutionError() },
+      tabId,
+      { ...this.commitRequest(), supersedeInFlight: true }
+    )
+    return "completed"
+  }
+}
+
+interface InFlightResolution {
+  url: string | undefined
+  promise: Promise<TabContextResolutionOutcome>
+  controller: AbortController
+  retryErrors: boolean
+}
+
+class TabContextResolver {
+  private readonly inFlightByTab = new Map<number, InFlightResolution>()
+  private readonly timeoutMs: number
+  constructor(private readonly deps: TabContextResolverDependencies) {
+    this.timeoutMs = deps.resolutionTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
+  }
+
+  private async resolveUncoalesced(
     tabId: number,
     expectedUrl: string | undefined,
-    options: ResolveTabContextOptions = {},
-    ownerSignal?: AbortSignal
+    options: ResolveTabContextOptions,
+    ownerSignal: AbortSignal
   ): Promise<TabContextResolutionOutcome> {
-    const resolutionStartedAt = performance.now()
-    await deps.beforeResolution?.()
-    if (ownerSignal?.aborted) return "completed"
+    const startedAt = performance.now()
+    await this.deps.beforeResolution?.()
+    const start = await this.readStartingTab(
+      tabId,
+      expectedUrl,
+      options,
+      ownerSignal
+    )
+    if ("outcome" in start) return start.outcome
+    if (ownerSignal.aborted) return "completed"
+    const { tab, url } = start
+    const windowId = options.windowId ?? tab.windowId
+    const loading = await this.deps.tabContextCache.projectLoadingForTab(
+      tabId,
+      windowId,
+      options.supersedeInFlight === true
+    )
+    if (!loading || ownerSignal.aborted) return "completed"
+    return this.resolveClaimedPage(
+      {
+        tabId,
+        tab,
+        windowId,
+        requestId: loading.requestId,
+        url,
+        ownerSignal,
+        startedAt,
+      },
+      options
+    )
+  }
+
+  private async resolveClaimedPage(
+    claim: Omit<TabResolutionRequest, "url"> & { url: string | undefined },
+    options: ResolveTabContextOptions
+  ): Promise<TabContextResolutionOutcome> {
+    const { tabId, windowId, requestId, url, ownerSignal } = claim
+    const request = { requestId, windowId, expectedUrl: url, ownerSignal }
+    if (!url) {
+      await initializeTabContext(
+        this.deps,
+        { context: "unsupported" },
+        tabId,
+        request
+      )
+      return "completed"
+    }
+    if (await this.restoreCached(tabId, url, options, request, claim.startedAt))
+      return "completed"
+    const matched = matchUrl(url)
+    if (!matched) {
+      await initializeTabContext(
+        this.deps,
+        { context: "unsupported" },
+        tabId,
+        request
+      )
+      return "completed"
+    }
+    return new ProviderTabResolution(
+      this.deps,
+      { ...claim, url },
+      matched.integrationId,
+      this.timeoutMs
+    ).run()
+  }
+
+  private async readStartingTab(
+    tabId: number,
+    expectedUrl: string | undefined,
+    options: ResolveTabContextOptions,
+    ownerSignal: AbortSignal
+  ): Promise<
+    | { outcome: TabContextResolutionOutcome }
+    | { tab: chrome.tabs.Tab; url: string | undefined }
+  > {
+    if (ownerSignal.aborted) return { outcome: "completed" }
     let tab: chrome.tabs.Tab
     try {
       tab = await chrome.tabs.get(tabId)
     } catch (error) {
       logger.debug("Unable to read tab for context resolution", error)
-      return "completed"
+      return { outcome: "completed" }
     }
-    if (ownerSignal?.aborted) return "completed"
+    if (ownerSignal.aborted) return { outcome: "completed" }
     if (
       typeof options.windowId === "number" &&
       tab.windowId !== options.windowId
-    ) {
-      return "completed"
-    }
-    if (!tab.active) {
-      return ownerSignal?.aborted ? "completed" : "retry"
-    }
-
-    const currentUrl = resolveTabUrlForSupportCheck(tab)
-    if (currentUrl !== expectedUrl) {
-      // A startup or navigation event can be delivered while the tab is
-      // still about:blank. Do not let that stale invocation claim a loading
-      // request for the URL that replaces it; restart from the latest tab
-      // snapshot instead.
+    )
+      return { outcome: "completed" }
+    if (!tab.active)
+      return { outcome: ownerSignal.aborted ? "completed" : "retry" }
+    const url = resolveTabUrlForSupportCheck(tab)
+    if (url !== expectedUrl) {
       logger.debug("Restarting tab context resolution after URL changed", {
         tabId,
         expectedUrl,
-        currentUrl,
+        currentUrl: url,
       })
-      return "retry"
+      return { outcome: "retry" }
     }
-
-    const windowId = options.windowId ?? tab.windowId
-    const loading = await deps.tabContextCache.projectLoadingForTab(
-      tabId,
-      windowId,
-      options.supersedeInFlight === true
-    )
-    if (!loading) return "completed"
-    const requestId = loading.requestId
-    if (ownerSignal?.aborted) return "completed"
-
-    const url = currentUrl
-    if (!url) {
-      await initializeTabContext({ context: "unsupported" }, tabId, {
-        requestId,
-        windowId,
-        expectedUrl: url,
-        ownerSignal,
-      })
-      return "completed"
-    }
-
-    if (options.allowCached) {
-      const inMemory = deps.tabContextCache.getCachedContext(tabId)
-      const cached =
-        inMemory !== undefined
-          ? inMemory
-          : await deps.tabContextCache.readAndCache(tabId)
-      if (
-        (inMemory !== undefined || cached !== null) &&
-        (!options.retryErrors || cached === null || !("error" in cached)) &&
-        !isIncompleteCachedContext(cached) &&
-        isCachedContextForUrl(cached, url)
-      ) {
-        await commitCachedContext(
-          tabId,
-          cached,
-          requestId,
-          windowId,
-          url,
-          ownerSignal
-        )
-        logger.debug("[tab-context] Resolved active tab from cache", {
-          tabId,
-          windowId,
-          source: inMemory !== undefined ? "memory" : "session",
-          durationMs: Math.round(performance.now() - resolutionStartedAt),
-        })
-        return "completed"
-      }
-    }
-
-    const matched = matchUrl(url)
-    if (!matched) {
-      await initializeTabContext({ context: "unsupported" }, tabId, {
-        requestId,
-        windowId,
-        expectedUrl: url,
-        ownerSignal,
-      })
-      return "completed"
-    }
-
-    let acceptsPartialResults = true
-    let stage = "provider-setup"
-    let probe: { url: string; data?: unknown } | undefined
-    const resolutionController = new AbortController()
-    const abortOwner = () =>
-      resolutionController.abort(ownerSignal?.reason ?? "superseded")
-    ownerSignal?.addEventListener("abort", abortOwner, { once: true })
-    if (ownerSignal?.aborted) abortOwner()
-    try {
-      let deadlineAt = Date.now() + resolutionTimeoutMs
-      const awaitWithinResolutionDeadline = <T>(operation: Promise<T>) =>
-        withinTimeout(
-          operation,
-          Math.max(1, deadlineAt - Date.now()),
-          resolutionController
-        )
-      const awaitOptionalEnrichment = <T>(operation: Promise<T>) =>
-        withinTimeout(operation, resolutionTimeoutMs)
-      const manifest = getDefinition(matched.integrationId)
-      let shouldRunPageProbe = manifest?.pageProbe !== "none"
-      const providerAdapter = shouldRunPageProbe
-        ? await getBackgroundSiteAdapterById(matched.integrationId)
-        : undefined
-      if (
-        manifest?.pageProbe === "optional" &&
-        providerAdapter?.background.shouldExecutePageProbe
-      ) {
-        try {
-          shouldRunPageProbe = await awaitOptionalEnrichment(
-            providerAdapter.background.shouldExecutePageProbe({
-              siteIntegrationSettingsReader: deps.siteIntegrationSettingsReader,
-            })
-          )
-        } catch (error) {
-          // Optional provider policy failures cannot make a site unavailable.
-          logger.debug("Skipping optional integration page probe", error)
-          shouldRunPageProbe = false
-        }
-      }
-      if (shouldRunPageProbe) {
-        stage = "page-probe"
-        try {
-          const probeOperation = executeApprovedPageProbe(
-            tabId,
-            matched.integrationId
-          )
-          probe =
-            manifest?.pageProbe === "required"
-              ? await awaitWithinResolutionDeadline(probeOperation)
-              : await awaitOptionalEnrichment(probeOperation)
-          if (probe.url !== url) {
-            logger.debug("Ignoring page probe from a superseded URL", {
-              tabId,
-              expectedUrl: url,
-              actualUrl: probe.url,
-            })
-            throw new PageProbeUrlMismatchError()
-          }
-        } catch (error) {
-          if (error instanceof PageProbeUrlMismatchError) {
-            throw error
-          }
-          if (manifest?.pageProbe === "required") {
-            throw error
-          }
-          // Optional probes enrich provider resolution but cannot make the
-          // provider unavailable when their transient page owner disappears.
-          logger.debug("Optional integration page probe failed", {
-            integrationId: matched.integrationId,
-          })
-        }
-      }
-
-      // Optional enrichment has its own bounded wait and cannot consume the
-      // provider resolver's execution budget.
-      deadlineAt = Date.now() + resolutionTimeoutMs
-
-      const onPartial = async (partial: {
-        seriesId?: string
-        seriesMetadata?: SeriesMetadata
-      }) => {
-        if (
-          !acceptsPartialResults ||
-          ownerSignal?.aborted ||
-          !partial.seriesId ||
-          !partial.seriesMetadata
-        ) {
-          return
-        }
-
-        try {
-          await deps.beforeStateMutation?.()
-          if (!acceptsPartialResults || ownerSignal?.aborted) return
-
-          const currentTab = await awaitWithinResolutionDeadline(
-            chrome.tabs.get(tabId)
-          )
-          const currentUrl = resolveTabUrlForSupportCheck(currentTab)
-          const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
-            windowId,
-            requestId
-          )
-          if (
-            !currentTab.active ||
-            currentTab.windowId !== windowId ||
-            currentUrl !== url ||
-            !isCurrent
-          ) {
-            logger.debug("Discarding stale partial tab context result", {
-              tabId,
-              requestId,
-            })
-            return
-          }
-
-          const tabContextStateService = deps.getTabContextStateService()
-          const existingState = await tabContextStateService.getTabState(tabId)
-          const isSameSeries =
-            existingState?.siteIntegrationId === matched.integrationId &&
-            existingState.mangaId === partial.seriesId
-          const existingChapters = isSameSeries ? existingState.chapters : []
-          const partialPayload = buildResolvedTabContext({
-            sourceUrl: url,
-            siteIntegrationId: matched.integrationId,
-            rawMangaId: partial.seriesId,
-            chapters: existingChapters,
-            volumes: isSameSeries ? existingState.volumes : undefined,
-            seriesMetadata: partial.seriesMetadata,
-            chaptersLoading: true,
-          })
-
-          await tabContextStateService.commitResolvedTabContext(
-            partialPayload,
-            tabId,
-            {
-              requestId,
-              windowId,
-              expectedUrl: url,
-              ownerSignal,
-            }
-          )
-        } catch (error) {
-          logger.debug("Partial tab context commit failed", {
-            tabId,
-            requestId,
-            error,
-          })
-        }
-      }
-
-      stage = "provider-resolution"
-      const result = await awaitWithinResolutionDeadline(
-        resolveSiteIntegrationSeriesData({
-          siteIntegrationId: matched.integrationId,
-          seriesUrl: url,
-          pageProbeData: probe?.data,
-          signal: resolutionController.signal,
-          rateLimitService: deps.rateLimitService,
-          siteIntegrationSettingsReader: deps.siteIntegrationSettingsReader,
-          onPartial,
-        })
-      )
-      acceptsPartialResults = false
-      stage = "normalization"
-      const normalized = normalizeFetchedSeriesData(result.chapterList)
-      const extractionError = result.metadataError ?? result.chapterListError
-      const payload = buildResolvedTabContext({
-        sourceUrl: url,
-        siteIntegrationId: matched.integrationId,
-        rawMangaId: result.seriesId ?? null,
-        chapters: normalized.chapters,
-        volumes: normalized.volumes,
-        seriesMetadata: result.seriesMetadata,
-        extractionError,
-        chapterListNotice: result.chapterListNotice,
-      })
-
-      stage = "ownership-check"
-      const currentTab = await awaitWithinResolutionDeadline(
-        chrome.tabs.get(tabId)
-      )
-      const currentUrl = resolveTabUrlForSupportCheck(currentTab)
-      const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
-        windowId,
-        requestId
-      )
-      if (
-        ownerSignal?.aborted ||
-        !currentTab.active ||
-        currentTab.windowId !== windowId ||
-        currentUrl !== url ||
-        !isCurrent
-      ) {
-        logger.debug("Discarding stale tab context result", {
-          tabId,
-          requestId,
-        })
-        return currentTab.active &&
-          currentTab.windowId === windowId &&
-          currentUrl !== url &&
-          isCurrent
-          ? "retry"
-          : "completed"
-      }
-
-      if (
-        probe?.data !== undefined &&
-        typeof result.seriesId === "string" &&
-        providerAdapter?.background.persistPageProbeData
-      ) {
-        try {
-          await providerAdapter.background.persistPageProbeData({
-            seriesId: result.seriesId,
-            pageProbeData: probe.data,
-          })
-        } catch (error) {
-          // Resolution still succeeds if this recoverable session snapshot
-          // cannot be written; a later dispatch uses extension defaults.
-          logger.debug("Unable to persist page-probe data", error)
-        }
-      }
-
-      stage = "state-commit"
-      await initializeTabContext(payload, tabId, {
-        requestId,
-        windowId,
-        expectedUrl: url,
-        ownerSignal,
-      })
-      logger.debug("[tab-context] Resolved active tab from provider", {
-        tabId,
-        windowId,
-        integrationId: matched.integrationId,
-        durationMs: Math.round(performance.now() - resolutionStartedAt),
-      })
-      return "completed"
-    } catch (error) {
-      acceptsPartialResults = false
-      if (ownerSignal?.aborted) {
-        return "completed"
-      }
-      logger.error("Tab context resolution failed", {
-        tabId,
-        windowId,
-        requestId,
-        integrationId: matched.integrationId,
-        stage,
-        url,
-        documentUrlAtStart: tab.url,
-        pendingUrlAtStart: tab.pendingUrl,
-        probeUrl: probe?.url,
-        durationMs: Math.round(performance.now() - resolutionStartedAt),
-        error,
-      })
-      const isCurrent = await deps.tabContextCache.isRequestIdCurrent(
-        windowId,
-        requestId
-      )
-      if (!isCurrent) {
-        return "completed"
-      }
-      await initializeTabContext(
-        { context: "error", error: createUserFacingResolutionError() },
-        tabId,
-        {
-          requestId,
-          windowId,
-          supersedeInFlight: true,
-          expectedUrl: url,
-          ownerSignal,
-        }
-      )
-      return "completed"
-    } finally {
-      ownerSignal?.removeEventListener("abort", abortOwner)
-    }
+    return { tab, url }
   }
 
-  async function resolveTabContext(
+  private async restoreCached(
+    tabId: number,
+    url: string,
+    options: ResolveTabContextOptions,
+    request: ContextCommitRequest,
+    startedAt: number
+  ): Promise<boolean> {
+    if (!options.allowCached) return false
+    const memory = this.deps.tabContextCache.getCachedContext(tabId)
+    const cached =
+      memory !== undefined
+        ? memory
+        : await this.deps.tabContextCache.readAndCache(tabId)
+    if (
+      !this.canRestoreCache(
+        cached,
+        memory !== undefined,
+        options.retryErrors === true,
+        url
+      )
+    )
+      return false
+    await this.deps.tabContextCache.syncActiveTabContext(tabId, cached, request)
+    logger.debug("[tab-context] Resolved active tab from cache", {
+      tabId,
+      windowId: request?.windowId,
+      source: memory !== undefined ? "memory" : "session",
+      durationMs: Math.round(performance.now() - startedAt),
+    })
+    return true
+  }
+
+  private canRestoreCache(
+    cached: TabContextCacheValue,
+    inMemory: boolean,
+    retryErrors: boolean,
+    url: string
+  ): boolean {
+    return (
+      (inMemory || cached !== null) &&
+      (!retryErrors || cached === null || !("error" in cached)) &&
+      !isIncompleteCachedContext(cached) &&
+      isCachedContextForUrl(cached, url)
+    )
+  }
+
+  async resolveTabContext(
     tabId: number,
     options: ResolveTabContextOptions = {},
     retryCount = 0
   ): Promise<void> {
-    let requestedUrl: string | undefined
+    let url: string | undefined
     try {
-      requestedUrl = resolveTabUrlForSupportCheck(await chrome.tabs.get(tabId))
+      url = resolveTabUrlForSupportCheck(await chrome.tabs.get(tabId))
     } catch {
       return
     }
-
-    const existing = inFlightByTab.get(tabId)
-    if (existing?.url === requestedUrl && !options.supersedeInFlight) {
+    const existing = this.inFlightByTab.get(tabId)
+    if (existing?.url === url && !options.supersedeInFlight) {
       await existing.promise
-      const cached = deps.tabContextCache.getCachedContext(tabId)
-      if (
-        options.retryErrors &&
-        !existing.retryErrors &&
-        cached &&
-        "error" in cached
-      ) {
-        // An ordinary activation can finish by restoring an error from cache.
-        // A recovery caller still needs its one fresh provider attempt.
-        return await resolveTabContext(tabId, options, retryCount)
-      }
+      if (this.requiresFreshErrorRetry(tabId, existing, options))
+        return this.resolveTabContext(tabId, options, retryCount)
       return
     }
+    const outcome = await this.startResolution(tabId, url, options, existing)
+    if (outcome === "retry")
+      await this.retryStaleResolution(tabId, options, retryCount)
+  }
 
+  private requiresFreshErrorRetry(
+    tabId: number,
+    existing: InFlightResolution,
+    options: ResolveTabContextOptions
+  ): boolean {
+    const cached = this.deps.tabContextCache.getCachedContext(tabId)
+    return !!(
+      options.retryErrors &&
+      !existing.retryErrors &&
+      cached &&
+      "error" in cached
+    )
+  }
+
+  private async startResolution(
+    tabId: number,
+    url: string | undefined,
+    options: ResolveTabContextOptions,
+    existing?: InFlightResolution
+  ): Promise<TabContextResolutionOutcome> {
     existing?.controller.abort("superseded by a newer tab URL")
     const controller = new AbortController()
-    const operation = resolveTabContextUncoalesced(
+    const operation = this.resolveUncoalesced(
       tabId,
-      requestedUrl,
+      url,
       options,
       controller.signal
     )
-    inFlightByTab.set(tabId, {
-      url: requestedUrl,
+    this.inFlightByTab.set(tabId, {
+      url,
       promise: operation,
       controller,
       retryErrors: options.retryErrors === true,
     })
-    let outcome: TabContextResolutionOutcome
     try {
-      outcome = await operation
+      return await operation
     } finally {
-      if (inFlightByTab.get(tabId)?.promise === operation) {
-        inFlightByTab.delete(tabId)
-      }
-    }
-
-    if (outcome === "retry") {
-      if (retryCount < MAX_STALE_RESOLUTION_RETRIES) {
-        return await resolveTabContext(
-          tabId,
-          { ...options, supersedeInFlight: false },
-          retryCount + 1
-        )
-      }
-      logger.debug(
-        "Giving up stale tab context retry; a newer request owns it",
-        {
-          tabId,
-        }
-      )
+      if (this.inFlightByTab.get(tabId)?.promise === operation)
+        this.inFlightByTab.delete(tabId)
     }
   }
 
-  function cancelTabContextResolution(tabId: number, reason?: unknown): void {
-    const existing = inFlightByTab.get(tabId)
+  private async retryStaleResolution(
+    tabId: number,
+    options: ResolveTabContextOptions,
+    retryCount: number
+  ): Promise<void> {
+    if (retryCount < MAX_STALE_RESOLUTION_RETRIES)
+      return this.resolveTabContext(
+        tabId,
+        { ...options, supersedeInFlight: false },
+        retryCount + 1
+      )
+    logger.debug("Giving up stale tab context retry; a newer request owns it", {
+      tabId,
+    })
+  }
+
+  cancelTabContextResolution(tabId: number, reason?: unknown): void {
+    const existing = this.inFlightByTab.get(tabId)
     if (!existing) return
-    inFlightByTab.delete(tabId)
+    this.inFlightByTab.delete(tabId)
     existing.controller.abort(reason ?? "superseded by external context")
   }
+}
 
+export function createTabContextResolver(deps: TabContextResolverDependencies) {
+  const resolver = new TabContextResolver(deps)
   return {
-    resolveTabContext,
-    cancelTabContextResolution,
+    resolveTabContext: resolver.resolveTabContext.bind(resolver),
+    cancelTabContextResolution:
+      resolver.cancelTabContextResolution.bind(resolver),
   }
 }

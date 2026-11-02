@@ -16,73 +16,76 @@ Arguments:
 Options:
   --id <id>                   Unique lowercase identifier (alternative to positional argument)
   --name <name>               Human-readable site name (e.g. "Example Manga")
+  --english-name <name>       English site name (defaults to the title-cased identifier)
   --contributor <name>        Contributor name (defaults to git user.name or current user)
-  --out-dir <dir>             Target output directory (defaults to src/site-integrations/<id>)
+  --out-dir <dir>             Source output directory (defaults to src/site-integrations/<id>)
+  --fixtures-dir <dir>        Test fixture directory (defaults to tests/fixtures/site-integrations/<id>)
   --help, -h                  Show this help message
 `)
 }
 
-function parseArgs(args) {
-  let id = null
-  let name = null
-  let contributor = null
-  let outDir = null
+const argumentOptions = new Map([
+  ["--id", { key: "id" }],
+  ["--name", { key: "name" }],
+  ["--english-name", { key: "englishName" }],
+  ["--contributor", { key: "contributor", name: "--contributor" }],
+  ["--contributors", { key: "contributor", name: "--contributor" }],
+  ["--out-dir", { key: "outDir" }],
+  ["--fixtures-dir", { key: "fixturesDir" }],
+])
 
+function argumentError(message, showUsage = false) {
+  console.error(`Error: ${message}`)
+  if (showUsage) printUsage()
+  process.exit(1)
+}
+
+function readOptionValue(args, index, option) {
+  const arg = args[index]
+  const equals = arg.indexOf("=")
+  if (equals !== -1) {
+    return {
+      value:
+        option.key === "contributor"
+          ? arg.split("=")[1]
+          : arg.slice(equals + 1),
+      consumed: 0,
+    }
+  }
+  if (index + 1 >= args.length || args[index + 1].startsWith("-")) {
+    argumentError(`Missing value for ${option.name ?? arg} option.`)
+  }
+  return { value: args[index + 1], consumed: 1 }
+}
+
+function parseArgs(args) {
+  const values = {
+    id: null,
+    name: null,
+    englishName: null,
+    contributor: null,
+    outDir: null,
+    fixturesDir: null,
+  }
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
     if (arg === "--help" || arg === "-h") {
       printUsage()
       process.exit(0)
-    } else if (arg === "--id") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --id option.")
-        process.exit(1)
-      }
-      id = args[++i]
-    } else if (arg.startsWith("--id=")) {
-      id = arg.slice(5)
-    } else if (arg === "--name") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --name option.")
-        process.exit(1)
-      }
-      name = args[++i]
-    } else if (arg.startsWith("--name=")) {
-      name = arg.slice(7)
-    } else if (arg === "--contributor" || arg === "--contributors") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --contributor option.")
-        process.exit(1)
-      }
-      contributor = args[++i]
-    } else if (
-      arg.startsWith("--contributor=") ||
-      arg.startsWith("--contributors=")
-    ) {
-      contributor = arg.split("=")[1]
-    } else if (arg === "--out-dir") {
-      if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
-        console.error("Error: Missing value for --out-dir option.")
-        process.exit(1)
-      }
-      outDir = args[++i]
-    } else if (arg.startsWith("--out-dir=")) {
-      outDir = arg.slice(10)
+    }
+    const option = argumentOptions.get(arg.split("=")[0])
+    if (option) {
+      const { value, consumed } = readOptionValue(args, i, option)
+      values[option.key] = value
+      i += consumed
     } else if (arg.startsWith("-")) {
-      console.error(`Error: Unknown option "${arg}".`)
-      printUsage()
-      process.exit(1)
+      argumentError(`Unknown option "${arg}".`, true)
     } else {
-      if (id) {
-        console.error(`Error: Unexpected argument "${arg}".`)
-        printUsage()
-        process.exit(1)
-      }
-      id = arg
+      if (values.id) argumentError(`Unexpected argument "${arg}".`, true)
+      values.id = arg
     }
   }
-
-  return { id, name, contributor, outDir }
+  return values
 }
 
 function getGitUser() {
@@ -98,66 +101,141 @@ function getGitUser() {
   return process.env.USER || process.env.USERNAME || "Contributor"
 }
 
-function toPascalCase(str) {
+function capitalizeIdentifier(str, separator) {
   return str
     .split(/[-_]/)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join("")
+    .join(separator)
 }
 
-function toTitleCase(str) {
-  return str
-    .split(/[-_]/)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ")
+function resolveNewDirectory(directory) {
+  let ancestor = directory
+  const missingSegments = []
+  while (true) {
+    try {
+      fs.lstatSync(ancestor)
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error
+      const parent = path.dirname(ancestor)
+      if (parent === ancestor) throw error
+      missingSegments.push(path.basename(ancestor))
+      ancestor = parent
+      continue
+    }
+    if (missingSegments.length === 0) {
+      throw new Error(
+        `Target directory already exists: ${path.relative(root, directory)}`
+      )
+    }
+    const resolvedAncestor = fs.realpathSync(ancestor)
+    if (!fs.statSync(resolvedAncestor).isDirectory()) {
+      throw new Error(
+        `Output ancestor is not a directory: ${path.relative(root, ancestor)}`
+      )
+    }
+    return path.join(resolvedAncestor, ...missingSegments.reverse())
+  }
 }
 
-function main() {
-  const rawArgs = process.argv.slice(2)
+function claimOutputDirectory(directory, createdDirectories) {
+  const missingParents = []
+  let parent = path.dirname(directory)
+  while (!fs.existsSync(parent)) {
+    missingParents.push(parent)
+    parent = path.dirname(parent)
+  }
+  for (const missingParent of missingParents.reverse()) {
+    try {
+      fs.mkdirSync(missingParent)
+      createdDirectories.push(missingParent)
+    } catch (error) {
+      if (error.code !== "EEXIST" || !fs.statSync(missingParent).isDirectory())
+        throw error
+    }
+  }
+  fs.mkdirSync(directory)
+  createdDirectories.push(directory)
+  return fs.realpathSync(directory)
+}
+
+function directoryContains(parent, child) {
+  const owner = fs.statSync(parent, { bigint: true })
+  let current = child
+  while (true) {
+    const candidate = fs.statSync(current, { bigint: true })
+    if (owner.dev === candidate.dev && owner.ino === candidate.ino) return true
+    const next = path.dirname(current)
+    if (next === current) return false
+    current = next
+  }
+}
+
+function readScaffoldOptions(rawArgs) {
   if (rawArgs.length === 0) {
     printUsage()
     process.exit(1)
   }
-
-  const {
-    id,
-    name: customName,
-    contributor: customContributor,
-    outDir,
-  } = parseArgs(rawArgs)
-
-  if (!id) {
-    console.error("Error: Missing required site integration <id>.")
-    printUsage()
-    process.exit(1)
+  const options = parseArgs(rawArgs)
+  if (!options.id) {
+    argumentError("Missing required site integration <id>.", true)
   }
-
-  const idPattern = /^[a-z0-9][a-z0-9-]*$/
-  if (!idPattern.test(id)) {
-    console.error(
-      `Error: Invalid site integration id "${id}". Must match pattern ^[a-z0-9][a-z0-9-]*$`
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(options.id)) {
+    argumentError(
+      `Invalid site integration id "${options.id}". Must match pattern ^[a-z0-9][a-z0-9-]*$`
     )
-    process.exit(1)
   }
+  return options
+}
 
-  const targetDir = outDir
-    ? path.resolve(root, outDir)
-    : path.join(integrationsDir, id)
-  if (fs.existsSync(targetDir)) {
-    console.error(
-      `Error: Target directory already exists: ${path.relative(root, targetDir)}`
-    )
-    process.exit(1)
+function pathContains(parent, child) {
+  const relative = path.relative(parent, child)
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`))
+  )
+}
+
+function assertSeparateOutputs(directories, contains) {
+  if (
+    contains(directories.targetDir, directories.targetFixturesDir) ||
+    contains(directories.targetFixturesDir, directories.targetDir)
+  ) {
+    throw new Error("Source and fixture output directories must be separate.")
   }
+}
 
-  const siteName = customName || toTitleCase(id)
-  const contributorName = customContributor || getGitUser()
-  const pascalId = toPascalCase(id)
+function planOutputDirectories({ id, outDir, fixturesDir }) {
+  const directories = {
+    targetDir: resolveNewDirectory(
+      outDir ? path.resolve(root, outDir) : path.join(integrationsDir, id)
+    ),
+    targetFixturesDir: resolveNewDirectory(
+      fixturesDir
+        ? path.resolve(root, fixturesDir)
+        : path.join(root, "tests/fixtures/site-integrations", id)
+    ),
+  }
+  assertSeparateOutputs(directories, pathContains)
+  return directories
+}
 
+function scaffoldContents({
+  id,
+  name,
+  englishName: customEnglishName,
+  contributor,
+}) {
+  const siteName = name || capitalizeIdentifier(id, " ")
+  const englishName = customEnglishName || capitalizeIdentifier(id, " ")
+  const contributorName = contributor || getGitUser()
+  const pascalId = capitalizeIdentifier(id, "")
   const definitionJson = {
     schemaVersion: 1,
     id,
     name: siteName,
+    englishName,
     contributors: [contributorName],
     version: "0.1.0",
     shipped: false,
@@ -198,10 +276,6 @@ function main() {
     ],
     sessionRefererRules: [],
     customSettings: [],
-    fixtures: {
-      paths: [`src/site-integrations/${id}/fixtures/contract.json`],
-      liveFreshnessDays: 30,
-    },
   }
 
   const backgroundRuntimeTs = `import type {
@@ -274,39 +348,59 @@ export type ${pascalId}Contract = Record<string, unknown>
     data: {},
   }
 
-  const readmeMd = `# ${siteName}
+  return {
+    definitionJson,
+    backgroundRuntimeTs,
+    offscreenRuntimeTs,
+    contractsTs,
+    fixtureJson,
+  }
+}
 
-## Approach
+function cleanupOutputDirectories(createdDirectories) {
+  for (const directory of createdDirectories.reverse()) {
+    try {
+      fs.rmdirSync(directory)
+    } catch (error) {
+      if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) {
+        console.error(
+          `Unable to remove empty output directory ${directory}: ${error.message}`
+        )
+      }
+    }
+  }
+}
 
-<!-- Describe how this site is handled: API vs HTML parsing, viewer format, auth requirements, etc. -->
+function claimScaffoldDirectories(directories) {
+  const createdDirectories = []
+  try {
+    const claimed = {
+      targetDir: claimOutputDirectory(
+        directories.targetDir,
+        createdDirectories
+      ),
+      targetFixturesDir: claimOutputDirectory(
+        directories.targetFixturesDir,
+        createdDirectories
+      ),
+    }
+    assertSeparateOutputs(claimed, directoryContains)
+    return claimed
+  } catch (error) {
+    cleanupOutputDirectories(createdDirectories)
+    throw error
+  }
+}
 
-- Background: <!-- e.g. HTML series resolution / API series resolution -->
-- Offscreen: <!-- e.g. chapter image planning and download / tile descrambling -->
-- Page probe: none <!-- or describe if required -->
-- Dispatch context: none <!-- or schema version -->
-- DNR: none <!-- or referer rules -->
-
-## Endpoints
-
-<!-- List declared endpoint IDs and their purpose -->
-- \`${id}-series-page\`: Series metadata and chapter catalog
-
-## States covered
-
-<!-- Document how different content states are handled -->
-- Free / readable chapters: <!-- supported -->
-- Locked / paywalled chapters: <!-- skipped or handled -->
-- Unavailable / deleted series: <!-- error handling -->
-
-## Live smoke
-
-<!-- Notes on live verification, test URLs, and freshness cadence -->
-- Freshness cadence: 30 days
-`
-
-  // Create directories
+function writeScaffold({ targetDir, targetFixturesDir }, contents) {
+  const {
+    definitionJson,
+    backgroundRuntimeTs,
+    offscreenRuntimeTs,
+    contractsTs,
+    fixtureJson,
+  } = contents
   fs.mkdirSync(path.join(targetDir, "contracts"), { recursive: true })
-  fs.mkdirSync(path.join(targetDir, "fixtures"), { recursive: true })
 
   // Write files
   fs.writeFileSync(
@@ -323,12 +417,16 @@ export type ${pascalId}Contract = Record<string, unknown>
   )
   fs.writeFileSync(path.join(targetDir, "contracts/index.ts"), contractsTs)
   fs.writeFileSync(
-    path.join(targetDir, "fixtures/contract.json"),
+    path.join(targetFixturesDir, "contract.json"),
     JSON.stringify(fixtureJson, null, 2) + "\n"
   )
-  fs.writeFileSync(path.join(targetDir, "README.md"), readmeMd)
+}
 
+function reportScaffold({ targetDir, targetFixturesDir }) {
   const displayTarget = path.relative(root, targetDir).replaceAll(path.sep, "/")
+  const displayFixtures = path
+    .relative(root, targetFixturesDir)
+    .replaceAll(path.sep, "/")
   console.log(
     `Successfully created site integration scaffold at ${displayTarget}/`
   )
@@ -338,18 +436,35 @@ Created files:
   - ${displayTarget}/background-runtime.ts
   - ${displayTarget}/offscreen-runtime.ts
   - ${displayTarget}/contracts/index.ts
-  - ${displayTarget}/fixtures/contract.json
-  - ${displayTarget}/README.md
+  - ${displayFixtures}/contract.json
 
 Next steps:
   1. Configure patterns, origins, and endpoint policies in ${displayTarget}/definition.json
   2. Implement series resolution in ${displayTarget}/background-runtime.ts
   3. Implement chapter planning and image downloading in ${displayTarget}/offscreen-runtime.ts
-  4. Record deterministic test fixtures in ${displayTarget}/fixtures/contract.json
-  5. Fill in the README.md sections (Approach, Endpoints, States covered, Live smoke)
+  4. Record deterministic test fixtures in ${displayFixtures}/contract.json
+  5. Add contributor notes in ${displayTarget}/README.md when site-specific behavior needs explanation
   6. When implementation and fixtures are complete, set "shipped": true in ${displayTarget}/definition.json
   7. Re-run "pnpm generate:site-integrations && pnpm test:unit" to compile the new integration into runtime registries and verify all tests pass
 `)
+}
+
+function main() {
+  const options = readScaffoldOptions(process.argv.slice(2))
+  let directories
+  try {
+    directories = planOutputDirectories(options)
+  } catch (error) {
+    argumentError(error.message)
+  }
+  const contents = scaffoldContents(options)
+  try {
+    directories = claimScaffoldDirectories(directories)
+  } catch (error) {
+    argumentError(error.message)
+  }
+  writeScaffold(directories, contents)
+  reportScaffold(directories)
 }
 
 main()

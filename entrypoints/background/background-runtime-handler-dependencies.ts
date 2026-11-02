@@ -1,3 +1,4 @@
+import type { CoverPreviewHandlers } from "./background-cover-preview-message-handlers"
 import type { QueueApplicationCommands } from "@/entrypoints/background/queue-application-commands"
 import type { ResolveTabContextOptions } from "@/entrypoints/background/tab-context-resolver"
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
@@ -10,6 +11,7 @@ import type { HistoryRepository } from "@/src/storage/history-repository"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 
 export interface BackgroundRuntimeHandlerDependencies {
+  coverPreviewHandlers: CoverPreviewHandlers
   settingsRepository: SettingsRepository
   historyRepository: HistoryRepository
   siteIntegrationEnablementService: SiteIntegrationEnablementService

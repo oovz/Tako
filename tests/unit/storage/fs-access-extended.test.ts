@@ -43,6 +43,159 @@ function createDirectoryHandle(
 }
 
 describe("writeBlobToPath collision policy", () => {
+  it("aborts a failed new write and removes its empty entry", async () => {
+    const failure = new Error("disk full")
+    const files = new Set<string>()
+    const abort = vi.fn(async () => undefined)
+    const dir = createDirectoryHandle(
+      async (name, options?: { create?: boolean }) => {
+        if (!files.has(name) && !options?.create) {
+          throw createNamedError("NotFoundError")
+        }
+        files.add(name)
+        return {
+          createWritable: async () => ({
+            write: async () => {
+              throw failure
+            },
+            close: async () => undefined,
+            abort,
+          }),
+        }
+      },
+      {
+        removeEntry: async (name) => {
+          files.delete(name)
+        },
+      }
+    )
+
+    await expect(
+      writeBlobToPath(dir, "chapter.cbz", new Blob(["chapter"]), "overwrite")
+    ).rejects.toBe(failure)
+    expect(abort).toHaveBeenCalledOnce()
+    expect(files.size).toBe(0)
+  })
+
+  it.each(["open", "write", "close", "cancel"] as const)(
+    "preserves a complete target after %s failure",
+    async (stage) => {
+      const original = new Error(`${stage} failed`)
+      const controller = new AbortController()
+      let content = "previous complete chapter"
+      const abort = vi.fn(async () => undefined)
+      const removeEntry = vi.fn(async () => undefined)
+      const dir = createDirectoryHandle(
+        async () => ({
+          createWritable: async () => {
+            if (stage === "open") throw original
+            return {
+              write: async () => {
+                if (stage === "write") throw original
+              },
+              close: async () => {
+                if (stage === "close") throw original
+                content = "replacement"
+              },
+              abort,
+            }
+          },
+        }),
+        { removeEntry }
+      )
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "chapter.cbz",
+          new Blob(["replacement"]),
+          "overwrite",
+          {
+            signal: controller.signal,
+            onBytesWritten:
+              stage === "cancel" ? () => controller.abort(original) : undefined,
+          }
+        )
+      ).rejects.toBe(original)
+      expect(content).toBe("previous complete chapter")
+      expect(removeEntry).not.toHaveBeenCalled()
+      if (stage !== "open") expect(abort).toHaveBeenCalledOnce()
+    }
+  )
+
+  it.each(["open", "close", "cancel"] as const)(
+    "removes a new entry after %s failure even when abort rejects",
+    async (stage) => {
+      const original = new Error(`${stage} failed`)
+      const controller = new AbortController()
+      const entries = new Set<string>()
+      const dir = createDirectoryHandle(
+        async (name, options?: { create?: boolean }) => {
+          if (!entries.has(name) && !options?.create)
+            throw createNamedError("NotFoundError")
+          entries.add(name)
+          return {
+            createWritable: async () => {
+              if (stage === "open") throw original
+              return {
+                write: async () => undefined,
+                close: async () => {
+                  if (stage === "close") throw original
+                },
+                abort: async () => {
+                  throw new Error("abort unavailable")
+                },
+              }
+            },
+          }
+        },
+        {
+          removeEntry: async (name) => {
+            entries.delete(name)
+          },
+        }
+      )
+
+      await expect(
+        writeBlobToPath(
+          dir,
+          "chapter.cbz",
+          new Blob(["replacement"]),
+          "overwrite",
+          {
+            signal: controller.signal,
+            onBytesWritten:
+              stage === "cancel" ? () => controller.abort(original) : undefined,
+          }
+        )
+      ).rejects.toBe(original)
+      expect(entries.size).toBe(0)
+    }
+  )
+
+  it("preserves the save error when removing a failed new entry also fails", async () => {
+    const original = new Error("disk full")
+    const dir = createDirectoryHandle(
+      async (_name, options?: { create?: boolean }) => {
+        if (!options?.create) throw createNamedError("NotFoundError")
+        return {
+          createWritable: async () => {
+            throw original
+          },
+        }
+      },
+      {
+        removeEntry: async () => {
+          throw new Error("folder unavailable")
+        },
+      }
+    )
+
+    await expect(
+      writeBlobToPath(dir, "chapter.cbz", new Blob(["chapter"]), "overwrite")
+    ).rejects.toBe(original)
+  })
+
   it("uniquifies an existing filename while preserving its extension", async () => {
     const write = vi.fn(async () => undefined)
     const close = vi.fn(async () => undefined)
@@ -98,7 +251,7 @@ describe("writeBlobToPath collision policy", () => {
     expect(close).toHaveBeenCalledOnce()
   })
 
-  it("overwrites the original filename without a preflight existence lookup", async () => {
+  it("replaces an existing file at the original filename", async () => {
     const write = vi.fn(async () => undefined)
     const close = vi.fn(async () => undefined)
     const createWritable = vi.fn(async () => ({ write, close }))
@@ -110,7 +263,7 @@ describe("writeBlobToPath collision policy", () => {
       writeBlobToPath(dir, "Chapter 001.cbz", blob, "overwrite")
     ).resolves.toEqual({ status: "written" })
 
-    expect(getFileHandle).toHaveBeenCalledOnce()
+    expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz")
     expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz", {
       create: true,
     })

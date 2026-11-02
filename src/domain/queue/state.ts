@@ -13,27 +13,8 @@ export const QUEUE_AGGREGATE_KEYS = [
 
 export type QueueAggregateKey = (typeof QUEUE_AGGREGATE_KEYS)[number]
 
-export type DestinationIssueKind =
-  | "fsa_permission_required"
-  | "fsa_folder_missing"
-  | "fsa_write_failed"
-  | "fsa_unsupported"
-  | "disk_full"
-
-export interface DestinationIssue {
-  id: string
-  taskId: string
-  chapterId?: string
-  kind: DestinationIssueKind
-  occurredAt: number
-  acknowledgedAt?: number
-}
-
 export type ActiveTaskBlock =
-  | "destination_action_required"
-  | "provider_network_policy_pending"
-  | "provider_network_policy_action_required"
-  | "native_output_action_required"
+  "provider_network_policy_pending" | "provider_network_policy_action_required"
 
 export type OffscreenJobStage =
   | "dispatching"
@@ -58,6 +39,7 @@ export interface ActiveDispatchLease {
   fingerprint: string
   documentInstanceId?: string
   saveMode: "fsa" | "downloads-api"
+  destinationHandleId?: string
   lastEventSignature?: string
   stage: OffscreenJobStage
   startedAt: number
@@ -86,13 +68,15 @@ export interface NativeOutputSettlement {
   requested: number
   completed: number
   interrupted: number
-  /** Outputs whose Chrome download history entry was erased and the user surrendered observation of. */
-  surrendered: number
+  outputUncertain?: true
+  errorMessage?: string
+  errorCategory?: DownloadErrorCategory
   lastSuccessfulDownloadId?: number
   appliedAt: number
 }
 
 export interface TaskChapter {
+  requestedPath: string | null
   id: string
   url: string
   title: string
@@ -110,12 +94,16 @@ export interface TaskChapter {
   totalImages?: number
   imagesFailed?: number
   outputs?: OutputAccounting
+  outputDestination?: "downloads-api" | "fsa"
+  saveConfirmedAt?: number
   nativeOutputSettlement?: NativeOutputSettlement
   dispatchAttempt?: number
   lastUpdated: number
 }
 
 export interface DownloadTaskState {
+  fsaFallbackEligible?: true
+  useChromeFallback?: true
   id: string
   siteIntegrationId: string
   mangaId: string
@@ -126,8 +114,6 @@ export interface DownloadTaskState {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   activeBlock?: ActiveTaskBlock
-  destinationIssue?: DestinationIssue
-  destinationOverride?: "downloads-api"
   created: number
   started?: number
   completed?: number
@@ -135,11 +121,6 @@ export interface DownloadTaskState {
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number
   nextChapterDispatchAt?: number
-  destinationBlockRevision?: number
-  destinationResume?: {
-    commandId: string
-    blockRevision: number
-  }
   activeCancel?: {
     commandId: string
   }
@@ -173,12 +154,19 @@ export interface QueueAggregateState {
 }
 
 export interface QueueTaskSummary {
+  useChromeFallback?: true
   id: string
   seriesKey: string
   seriesTitle: string
   siteIntegration: string
   coverUrl?: string
   status: DownloadTaskStatus
+  outputDestination?: "downloads-api" | "fsa"
+  saveConfirmedAt?: number
+  destination: TaskSettingsSnapshot["destination"]
+  requestedPath?: string | null
+  targetUnavailable?: true
+  outputMode?: "downloads-api" | "fsa"
   activeBlock?: ActiveTaskBlock
   chapters: {
     total: number
@@ -189,9 +177,9 @@ export interface QueueTaskSummary {
     created: number
     completed?: number
   }
+  outputUncertain?: boolean
   failureCategory?: DownloadErrorCategory
-  /** True when any chapter has a native output whose result is unobservable. */
-  hasUnobservableOutput?: boolean
+  folderAccessRequired?: true
   isRetried?: boolean
   isRetryTask?: boolean
   lastSuccessfulDownloadId?: number

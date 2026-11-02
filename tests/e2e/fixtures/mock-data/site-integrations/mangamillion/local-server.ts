@@ -60,10 +60,20 @@ const mangaMillionSiteHandler: MockRouteHandler = (req) => {
     }
   }
 
+  // Controlled language and unavailable-chapter scenario; the public baseline
+  // uses the captured One Piece title and chapter entries.
+  if (/^\/en\/title\/10\/?$/.test(pathname)) {
+    return {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+      body: BASIC_SERIES_PAGE_HTML,
+    }
+  }
+
   return {
-    status: 200,
+    status: 404,
     headers: { "content-type": "text/html; charset=utf-8" },
-    body: BASIC_SERIES_PAGE_HTML,
+    body: "",
   }
 }
 
@@ -90,6 +100,8 @@ const mangaMillionApiHandler: MockRouteHandler = (req) => {
         })
       )
     }
+
+    if (titleId !== "1") return { status: 404, body: "" }
 
     return protoResponse(
       buildMangaMillionTitleDetailResponse({
@@ -149,6 +161,8 @@ const mangaMillionApiHandler: MockRouteHandler = (req) => {
         ])
       )
     }
+
+    if (titleId !== "1") return { status: 404, body: "" }
 
     return protoResponse(buildMangaMillionChapterListResponse())
   }

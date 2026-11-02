@@ -66,7 +66,7 @@ describe("queue scheduler policy", () => {
     expect(
       planQueueScheduling({
         queue: [
-          task("blocked", "queued", "destination_action_required"),
+          task("blocked", "queued", "provider_network_policy_action_required"),
           task("native", "downloading"),
           task("next", "queued"),
         ],

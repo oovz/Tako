@@ -1,13 +1,3 @@
-/**
- * @file state-helpers.ts
- * @description Helpers for managing and inspecting chrome.storage.session state during E2E tests
- *
- * ARCHITECTURE: Site-Specific Mock Data
- * - Uses site-integration-specific mock data from ./mock-data/site-integrations (mangadex)
- * - Each site integration has realistic URLs and HTML structures matching actual sites
- * - Shared data (download tasks, settings) in ./mock-data/shared
- */
-
 import { expect, type Page, type BrowserContext } from "@playwright/test"
 import {
   LOCAL_STORAGE_KEYS,
@@ -825,12 +815,7 @@ export async function getGlobalState(
   )
 }
 
-/**
- * Get tab ID from Playwright Page object
- *
- * Uses Chrome DevTools Protocol to reliably get the tab ID from Playwright's page object.
- * This works for all page types (web pages, extension pages) in E2E tests.
- */
+/** Resolve the Chrome tab ID for a Playwright page. */
 export async function getTabId(
   page: Page,
   context: BrowserContext
@@ -956,8 +941,7 @@ export async function getTabId(
 
         return !!chromeTabId
       },
-      // A recorded eight-worker Chrome query took 2.075s. Use the same
-      // bounded 15s admission window as the surrounding context helpers.
+      // Allow the same bounded admission window as the surrounding context helpers.
       {
         timeout: 15_000,
         intervals: [100],
@@ -973,9 +957,7 @@ export async function getTabId(
   return chromeTabId
 }
 
-/**
- * Focus the given tab and its window so popup detects it as active.
- */
+/** Focus the source tab and its window. */
 export async function focusTab(
   context: BrowserContext,
   tabId: number
@@ -1269,8 +1251,7 @@ export async function waitForGlobalState(
       .toBe(true)
   } catch {
     // expect.poll's `message` option is evaluated at call time (before any
-    // polling), so we rethrow here with the actual final lastState/lastError
-    // to preserve the diagnostic quality of the original while-loop error.
+    // polling), so rethrow here with the final lastState/lastError.
     throw new Error(
       redactDiagnosticText({
         message: "Timeout waiting for global state condition",

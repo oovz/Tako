@@ -27,56 +27,40 @@ function resolutionError(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
 }
 
+function resolveMangadexSeriesId(input: SeriesDataResolutionInput): string {
+  if (input.seriesId) return input.seriesId
+  try {
+    const seriesId = parseUuidFromPath(
+      new URL(input.seriesUrl).pathname,
+      "title"
+    )
+    if (seriesId) return seriesId
+  } catch {
+    // The caller receives the same series-resolution failure for an invalid URL.
+  }
+  throw new Error("Could not determine MangaDex series ID from the title URL")
+}
+
 async function resolveMangadexSeriesData(
   input: SeriesDataResolutionInput
 ): Promise<SeriesDataResolutionResult> {
-  let seriesId: string | null | undefined = input.seriesId
-  if (!seriesId) {
-    try {
-      seriesId = parseUuidFromPath(new URL(input.seriesUrl).pathname, "title")
-    } catch {
-      seriesId = undefined
-    }
-  }
-  if (!seriesId) {
-    throw new Error("Could not determine MangaDex series ID from the title URL")
-  }
-
-  const metadataPromise = input.signal
-    ? fetchMangadexSeriesMetadata(
-        seriesId,
-        input.rateLimitService,
-        "interactive",
-        input.signal
-      )
-    : fetchMangadexSeriesMetadata(
-        seriesId,
-        input.rateLimitService,
-        "interactive",
-        undefined
-      )
+  const seriesId = resolveMangadexSeriesId(input)
+  const metadataPromise = fetchMangadexSeriesMetadata(
+    seriesId,
+    input.rateLimitService,
+    "interactive",
+    input.signal
+  )
   const pageProbePreferences = parseMangadexPagePreferences(input.pageProbeData)
   let chapterListSettled = false
-  const chapterListPromise = (
-    input.signal
-      ? fetchMangadexChapterList(
-          seriesId,
-          input.rateLimitService,
-          input.language,
-          pageProbePreferences,
-          "interactive",
-          input.signal,
-          input.siteIntegrationSettingsReader
-        )
-      : fetchMangadexChapterList(
-          seriesId,
-          input.rateLimitService,
-          input.language,
-          pageProbePreferences,
-          "interactive",
-          undefined,
-          input.siteIntegrationSettingsReader
-        )
+  const chapterListPromise = fetchMangadexChapterList(
+    seriesId,
+    input.rateLimitService,
+    input.language,
+    pageProbePreferences,
+    "interactive",
+    input.signal,
+    input.siteIntegrationSettingsReader
   ).finally(() => {
     chapterListSettled = true
   })

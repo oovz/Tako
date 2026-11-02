@@ -1,9 +1,9 @@
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { describe, expect, it } from "vitest"
 
 import {
   beginChapterDispatch,
-  blockTaskForDestination,
-  blockTaskForNativeOutputAction,
   blockTaskForProviderPolicy,
   cancelDownloadTask,
   clearDispatchLease,
@@ -16,14 +16,12 @@ import {
   reconcileExpiredPendingUndoActions,
   recordTaskDispatchError,
   recoverQueueAfterStartup,
-  releaseDestinationBlock,
   releaseProviderPolicyBlock,
   releaseProviderPolicyBlocks,
   removeTerminalDownloadTask,
   renewDispatchLease,
   restartDownloadTask,
   restorePendingUndoAction,
-  resumeDestinationTask,
   retryFailedChapters,
   setNextChapterDispatchAt,
   settleTaskChapter,
@@ -50,6 +48,7 @@ function createChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id,
     url: `https://example.com/${id}`,
     title: id,
@@ -73,7 +72,7 @@ function createTask(
     chapters: [createChapter()],
     status,
     created: 100,
-    settingsSnapshot: {} as DownloadTaskState["settingsSnapshot"],
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
     ...overrides,
   }
 }
@@ -96,20 +95,6 @@ function createLease(
     leaseExpiresAt: 45_200,
     sequence: 4,
     ...overrides,
-  }
-}
-
-function destinationIssue(
-  taskId = "task-1",
-  chapterId = "chapter-1",
-  kind: "fsa_folder_missing" | "fsa_write_failed" = "fsa_folder_missing"
-): NonNullable<DownloadTaskState["destinationIssue"]> {
-  return {
-    id: `${taskId}:${chapterId}:${kind}`,
-    taskId,
-    chapterId,
-    kind,
-    occurredAt: 400,
   }
 }
 
@@ -366,11 +351,11 @@ describe("queue aggregate kernel", () => {
 
     it("normalizes persisted execution state and completion timestamps in the kernel", () => {
       const blocked = createTask("blocked", "downloading", {
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       })
       const missingCompletion = createTask("missing-completion", "completed", {
         completed: undefined,
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       })
       const existingCompletion = createTask("existing-completion", "failed", {
         completed: 321,
@@ -392,7 +377,7 @@ describe("queue aggregate kernel", () => {
         {
           id: "blocked",
           status: "queued",
-          activeBlock: "destination_action_required",
+          activeBlock: "provider_network_policy_action_required",
         },
         {
           id: "missing-completion",
@@ -512,7 +497,7 @@ describe("queue aggregate kernel", () => {
       expectNoChange(missing, state, "rejected")
       const blockedState = createState([
         createTask("blocked", "queued", {
-          activeBlock: "destination_action_required",
+          activeBlock: "provider_network_policy_action_required",
         }),
       ])
       expectNoChange(
@@ -605,6 +590,13 @@ describe("queue aggregate kernel", () => {
           taskId: "task-1",
           chapterId: "missing",
           lease: createLease(),
+          expectedPreviousLease: state.lease,
+          now: 500,
+        }),
+        beginChapterDispatch(state, {
+          taskId: "task-1",
+          chapterId: active.chapters[0].url,
+          lease: createLease({ chapterId: active.chapters[0].url }),
           expectedPreviousLease: state.lease,
           now: 500,
         }),
@@ -1004,279 +996,6 @@ describe("queue aggregate kernel chapter, lease, and scheduling operations", () 
 })
 
 describe("queue aggregate kernel output accounting and block operations", () => {
-  it("blocks a task for a destination issue with an optional chapter reset", () => {
-    const task = createTask("task-1", "downloading", {
-      chapters: [createChapter("chapter-1", "downloading")],
-    })
-    const lease = createLease()
-    const state = createState([task], lease)
-    const before = structuredClone(state)
-    const blocked = blockTaskForDestination(state, {
-      taskId: "task-1",
-      now: 500,
-      destinationIssue: destinationIssue(),
-      errorMessage: "Folder missing",
-      errorCategory: "folder_unavailable",
-      chapter: {
-        chapterId: "chapter-1",
-        lease,
-        imagesFailed: 2,
-        outputs: { requested: 3, committed: 1, failed: 2 },
-      },
-    })
-
-    expectApplied(blocked, state, before, ["queue"])
-    expect(blocked.next.queue[0]).toMatchObject({
-      status: "queued",
-      activeBlock: "destination_action_required",
-      destinationIssue: destinationIssue(),
-      errorMessage: "Folder missing",
-      chapters: [
-        expect.objectContaining({
-          status: "queued",
-          imagesFailed: 2,
-          outputs: { requested: 3, committed: 1, failed: 2 },
-          lastUpdated: 500,
-        }),
-      ],
-    })
-
-    expectRejectedReason(
-      blockTaskForDestination(state, {
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: destinationIssue(),
-        chapter: {
-          chapterId: "chapter-1",
-          lease: createLease({ jobId: "stale" }),
-        },
-      }),
-      state,
-      "lease-conflict"
-    )
-
-    const alreadyBlocked = createState([
-      createTask("task-1", "queued", {
-        activeBlock: "destination_action_required",
-        destinationIssue: destinationIssue(),
-      }),
-    ])
-    expectNoChange(
-      blockTaskForDestination(alreadyBlocked, {
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: destinationIssue(),
-      }),
-      alreadyBlocked,
-      "unchanged"
-    )
-
-    const terminalChapter = createState(
-      [
-        createTask("task-1", "downloading", {
-          chapters: [createChapter("chapter-1", "completed")],
-        }),
-      ],
-      lease
-    )
-    expectNoChange(
-      blockTaskForDestination(terminalChapter, {
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: destinationIssue(),
-        chapter: { chapterId: "chapter-1", lease },
-      }),
-      terminalChapter,
-      "rejected"
-    )
-    const terminalTask = createState([createTask("task-1", "failed")])
-    expectNoChange(
-      blockTaskForDestination(terminalTask, {
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: destinationIssue(),
-      }),
-      terminalTask,
-      "rejected"
-    )
-  })
-
-  it("releases and resumes destination blocks with distinct semantics", () => {
-    const blockedTask = createTask("task-1", "queued", {
-      activeBlock: "destination_action_required",
-      destinationIssue: destinationIssue(),
-      errorMessage: "permission",
-      errorCategory: "folder_permission_required",
-      chapters: [
-        createChapter("chapter-1", "downloading", {
-          errorMessage: "permission",
-        }),
-        createChapter("chapter-2", "completed"),
-      ],
-    })
-    const state = createState([blockedTask])
-    const released = releaseDestinationBlock(state, { taskId: "task-1" })
-    expect(released.changedKeys).toEqual(["queue"])
-    expect(released.next.queue[0]).toMatchObject({
-      activeBlock: undefined,
-      destinationIssue: undefined,
-      errorMessage: "permission",
-    })
-    expect(released.next.queue[0]?.chapters[0]?.status).toBe("downloading")
-
-    const latePreflight = blockTaskForDestination(
-      createState([
-        createTask("task-late", "downloading", {
-          chapters: [createChapter("chapter-late", "downloading")],
-        }),
-      ]),
-      {
-        taskId: "task-late",
-        now: 600,
-        destinationIssue: destinationIssue("task-late", "chapter-late"),
-      }
-    )
-    expect(latePreflight.next.queue[0]).toMatchObject({
-      status: "queued",
-      activeBlock: "destination_action_required",
-      destinationIssue: expect.objectContaining({ taskId: "task-late" }),
-      chapters: [expect.objectContaining({ status: "queued" })],
-    })
-
-    const resumed = resumeDestinationTask(state, {
-      taskId: "task-1",
-      commandId: "command-destination",
-      destinationOverride: "downloads-api",
-      now: 500,
-    })
-    expect(resumed.changedKeys).toEqual(["queue"])
-    expect(resumed.next.queue[0]).toMatchObject({
-      status: "queued",
-      activeBlock: undefined,
-      destinationIssue: undefined,
-      destinationOverride: "downloads-api",
-      errorMessage: undefined,
-      errorCategory: undefined,
-    })
-    expect(resumed.next.queue[0]?.chapters).toEqual([
-      expect.objectContaining({
-        id: "chapter-1",
-        status: "queued",
-        errorMessage: undefined,
-        lastUpdated: 500,
-      }),
-      expect.objectContaining({ id: "chapter-2", status: "completed" }),
-    ])
-
-    const destinationReplay = resumeDestinationTask(resumed.next, {
-      taskId: "task-1",
-      commandId: "command-destination",
-      destinationOverride: "downloads-api",
-      now: 900,
-    })
-    expectNoChange(destinationReplay, resumed.next, "unchanged")
-    expect(destinationReplay.result).toMatchObject({
-      reason: "already-resumed",
-      task: resumed.next.queue[0],
-    })
-
-    const reblocked = blockTaskForDestination(resumed.next, {
-      taskId: "task-1",
-      errorMessage: "new permission issue",
-      now: 950,
-      destinationIssue: destinationIssue(
-        "task-1",
-        "chapter-1",
-        "fsa_write_failed"
-      ),
-    })
-    expect(reblocked.next.queue[0]).toMatchObject({
-      activeBlock: "destination_action_required",
-      destinationBlockRevision: 1,
-    })
-    const delayedReplay = resumeDestinationTask(reblocked.next, {
-      taskId: "task-1",
-      commandId: "command-destination",
-      destinationOverride: "downloads-api",
-      now: 1_000,
-    })
-    expectNoChange(delayedReplay, reblocked.next, "unchanged")
-    expect(delayedReplay.result).toMatchObject({
-      reason: "superseded",
-      task: reblocked.next.queue[0],
-    })
-    expect(delayedReplay.next.queue[0]?.activeBlock).toBe(
-      "destination_action_required"
-    )
-
-    const terminalReplay = resumeDestinationTask(
-      {
-        ...resumed.next,
-        queue: [
-          {
-            ...resumed.next.queue[0]!,
-            status: "completed",
-          },
-        ],
-      },
-      {
-        taskId: "task-1",
-        commandId: "command-destination",
-        destinationOverride: "downloads-api",
-        now: 1_000,
-      }
-    )
-    expectNoChange(terminalReplay, terminalReplay.next, "unchanged")
-
-    const differentCommand = resumeDestinationTask(
-      {
-        ...resumed.next,
-        queue: [
-          {
-            ...resumed.next.queue[0]!,
-            status: "queued",
-          },
-        ],
-      },
-      {
-        taskId: "task-1",
-        commandId: "other-command",
-        destinationOverride: "downloads-api",
-        now: 1_000,
-      }
-    )
-    expectNoChange(differentCommand, differentCommand.next, "unchanged")
-    expect(differentCommand.result).toMatchObject({ reason: "not-blocked" })
-
-    const unblocked = createState([createTask()])
-    expectNoChange(
-      releaseDestinationBlock(unblocked, { taskId: "task-1" }),
-      unblocked,
-      "unchanged"
-    )
-    expectNoChange(
-      resumeDestinationTask(unblocked, {
-        taskId: "task-1",
-        commandId: "command-destination",
-        destinationOverride: undefined,
-        now: 500,
-      }),
-      unblocked,
-      "unchanged"
-    )
-    const missing = createState()
-    expectNoChange(
-      resumeDestinationTask(missing, {
-        taskId: "missing",
-        commandId: "command-destination",
-        destinationOverride: undefined,
-        now: 500,
-      }),
-      missing,
-      "rejected"
-    )
-  })
-
   it("blocks and releases provider policy waits without touching other blocks", () => {
     const state = createState([createTask("task-1", "downloading")])
     const before = structuredClone(state)
@@ -1309,11 +1028,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     expect(releasedOne.changedKeys).toEqual(["queue"])
     expect(releasedOne.next.queue[0]?.activeBlock).toBeUndefined()
 
-    const notProviderBlocked = createState([
-      createTask("task-1", "queued", {
-        activeBlock: "destination_action_required",
-      }),
-    ])
+    const notProviderBlocked = createState([createTask("task-1", "queued")])
     expectNoChange(
       releaseProviderPolicyBlock(notProviderBlocked, { taskId: "task-1" }),
       notProviderBlocked,
@@ -1338,7 +1053,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     const mixed = createState([
       blocked.next.queue[0]!,
       createTask("task-2", "queued", {
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       }),
       createTask("task-3", "queued", {
         activeBlock: "provider_network_policy_action_required",
@@ -1352,7 +1067,7 @@ describe("queue aggregate kernel output accounting and block operations", () => 
     })
     expect(released.next.queue.map((task) => task.activeBlock)).toEqual([
       undefined,
-      "destination_action_required",
+      "provider_network_policy_action_required",
       "provider_network_policy_action_required",
     ])
 
@@ -1433,11 +1148,12 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
   it("finalizes from materialized chapter outcomes and preserves lease fencing", () => {
     const lease = createLease()
     const task = createTask("task-1", "downloading", {
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
       nextChapterDispatchAt: 450,
       chapters: [
         createChapter("chapter-1", "completed"),
         createChapter("chapter-2", "failed", {
+          errorMessage: "Chapter fetch failed",
           errorCategory: "network_unavailable",
         }),
       ],
@@ -1451,6 +1167,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
         {
           chapterId: "chapter-2",
           status: "failed",
+          errorMessage: "Chapter fetch failed",
           errorCategory: "network_unavailable",
         },
       ],
@@ -1465,7 +1182,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
       completed: 500,
       activeBlock: undefined,
       nextChapterDispatchAt: undefined,
-      errorMessage: "Some chapters failed (1/2)",
+      errorMessage: "Chapter fetch failed",
       errorCategory: "network_unavailable",
     })
     expect(finalized.result).toMatchObject({
@@ -1593,7 +1310,7 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
     const original = createTask("task-1", "canceled", {
       errorMessage: "canceled",
       errorCategory: "unknown",
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
       started: 150,
       completed: 200,
       lastSuccessfulDownloadId: 40,
@@ -1605,6 +1322,11 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
           imagesFailed: 1,
           outputs: { requested: 2, committed: 1, failed: 1 },
           dispatchAttempt: 3,
+        }),
+        createChapter("saved-chapter", "completed", {
+          outputDestination: "fsa",
+          saveConfirmedAt: 200,
+          outputs: { requested: 1, committed: 1, failed: 0 },
         }),
       ],
     })
@@ -1634,6 +1356,12 @@ describe("queue aggregate kernel interruption, finalization, and history", () =>
           totalImages: undefined,
           imagesFailed: undefined,
           dispatchAttempt: undefined,
+          outputs: { requested: 0, committed: 0, failed: 0 },
+        }),
+        expect.objectContaining({
+          status: "queued",
+          outputDestination: undefined,
+          saveConfirmedAt: undefined,
           outputs: { requested: 0, committed: 0, failed: 0 },
         }),
       ],
@@ -1844,52 +1572,6 @@ describe("queue aggregate kernel cancellation and Undo", () => {
       canceled.next,
       "task-not-active"
     )
-  })
-
-  it("cancels a native-output action-required queued task without Undo so surrender runs", () => {
-    const task = createTask("task-1", "queued", {
-      activeBlock: "native_output_action_required",
-      errorCategory: "browser_download_unobservable",
-    })
-    const state = createState([task])
-    const before = structuredClone(state)
-    const canceled = cancelDownloadTask(state, {
-      taskId: "task-1",
-      commandId: "cancel-native",
-      now: 500,
-    })
-
-    expectApplied(canceled, state, before, ["queue"])
-    expect(canceled.next.pendingUndoActions).toEqual([])
-    expect(canceled.next.queue[0]).toMatchObject({
-      status: "canceled",
-      completed: 500,
-    })
-    expect(canceled.result).toMatchObject({
-      outcome: "applied",
-      canceledLease: null,
-      undo: null,
-    })
-
-    const blockedWithLease = blockTaskForNativeOutputAction(
-      createState([createTask("task-1", "downloading")]),
-      { taskId: "task-1", errorMessage: "erased" }
-    )
-    const lease = createLease()
-    const canceledWithLease = cancelDownloadTask(
-      { ...blockedWithLease.next, lease },
-      {
-        taskId: "task-1",
-        commandId: "cancel-native",
-        now: 600,
-      }
-    )
-    expect(canceledWithLease.result).toMatchObject({
-      outcome: "applied",
-      canceledLease: lease,
-      undo: null,
-      task: { activeCancel: { commandId: "cancel-native" } },
-    })
   })
 
   it("converges cancellation replays while rejecting mismatched and inactive tasks", () => {
@@ -2290,59 +1972,6 @@ describe("queue aggregate kernel rejection matrices", () => {
         nextChapterDispatchAt: 500,
       }),
       inactive,
-      "task-not-active"
-    )
-  })
-
-  it("rejects every destination/provider lookup and chapter guard", () => {
-    const missing = createState()
-    expectRejectedReason(
-      blockTaskForDestination(missing, {
-        taskId: "missing",
-        now: 500,
-        destinationIssue: destinationIssue("missing"),
-      }),
-      missing,
-      "task-not-found"
-    )
-    expectRejectedReason(
-      releaseDestinationBlock(missing, { taskId: "missing" }),
-      missing,
-      "task-not-found"
-    )
-    expectRejectedReason(
-      blockTaskForProviderPolicy(missing, {
-        taskId: "missing",
-        block: "provider_network_policy_pending",
-      }),
-      missing,
-      "task-not-found"
-    )
-    expectRejectedReason(
-      releaseProviderPolicyBlock(missing, { taskId: "missing" }),
-      missing,
-      "task-not-found"
-    )
-
-    const active = createState([createTask("task-1", "downloading")])
-    expectRejectedReason(
-      blockTaskForDestination(active, {
-        taskId: "task-1",
-        now: 500,
-        destinationIssue: destinationIssue(),
-        chapter: { chapterId: "missing", lease: createLease() },
-      }),
-      active,
-      "chapter-not-found"
-    )
-    const terminal = createState([
-      createTask("task-1", "completed", {
-        activeBlock: "destination_action_required",
-      }),
-    ])
-    expectRejectedReason(
-      releaseDestinationBlock(terminal, { taskId: "task-1" }),
-      terminal,
       "task-not-active"
     )
   })

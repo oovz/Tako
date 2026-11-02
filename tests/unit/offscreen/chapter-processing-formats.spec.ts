@@ -73,6 +73,7 @@ function createRuntime(): ChapterProcessingRuntime {
     liveResourceLedger: new OffscreenLiveResourceLedger(),
     rateLimitService,
     withImageRetries: async (fn) => fn(),
+    beginFsaWrite: async () => {},
     resolveWritableDownloadRoot: vi.fn(),
     requestBrowserBlobDownload: vi.fn(
       async () =>
@@ -125,10 +126,10 @@ function createBaseOptions<TFormat extends "cbz" | "zip" | "none">(
     onProgress: vi.fn(async () => undefined),
     onArchiveProgress: vi.fn(async () => undefined),
     abortSignal: new AbortController().signal,
-    normalizeImageFilenames: true,
-    imagePaddingDigits: 3 as const,
     settingsSnapshot: {
       ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+      normalizeImageFilenames: true,
+      imagePaddingDigits: 3,
       archiveFormat: format,
       rateLimitSettings: {
         image: { concurrency: 2, delayMs: 0 },
@@ -194,6 +195,7 @@ describe("chapter processing format contracts", () => {
     vi.mocked(writeBlobToPath).mockClear()
     const opts = {
       ...createBaseOptions("cbz"),
+      directoryHandleId: "selected-id",
       downloadMode: "custom" as const,
       settingsSnapshot: {
         ...createBaseOptions("cbz").settingsSnapshot,
@@ -358,6 +360,7 @@ describe("chapter processing format contracts", () => {
       processNoneFormatChapter(runtime, {
         opts: {
           ...createBaseOptions("none"),
+          directoryHandleId: "selected-id",
           downloadMode: "custom",
         },
         urls: ["https://example.com/1.jpg"],
@@ -383,6 +386,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -429,6 +433,7 @@ describe("chapter processing format contracts", () => {
       processNoneFormatChapter(runtime, {
         opts: {
           ...createBaseOptions("none"),
+          directoryHandleId: "selected-id",
           downloadMode: "custom",
           abortSignal: controller.signal,
         },
@@ -460,6 +465,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -484,7 +490,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "partial_success",
-      errorMessage: "Access to the selected folder is required.",
+      errorMessage: "write rejected",
       errorCategory: "folder_permission_required",
       imagesFailed: 2,
       outputsRequested: 3,
@@ -495,7 +501,7 @@ describe("chapter processing format contracts", () => {
     expect(writeBlobToPath).toHaveBeenCalledTimes(2)
   })
 
-  it("returns a structured generic FSA write failure instead of losing output counts", async () => {
+  it("preserves output counts after a folder write failure", async () => {
     const runtime = createRuntime()
     vi.mocked(runtime.resolveWritableDownloadRoot).mockResolvedValue(
       {} as FileSystemDirectoryHandle
@@ -507,6 +513,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         settingsSnapshot: {
           ...createBaseOptions("none").settingsSnapshot,
@@ -527,7 +534,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "failed",
-      errorMessage: "Tako could not write to the selected folder.",
+      errorMessage: "opaque operating system error",
       errorCategory: "folder_write_failed",
       imagesFailed: 2,
       outputsRequested: 2,
@@ -553,6 +560,7 @@ describe("chapter processing format contracts", () => {
     const outcome = await processNoneFormatChapter(runtime, {
       opts: {
         ...createBaseOptions("none"),
+        directoryHandleId: "selected-id",
         downloadMode: "custom",
         includeComicInfo: true,
         settingsSnapshot: {
@@ -574,7 +582,7 @@ describe("chapter processing format contracts", () => {
 
     expect(outcome).toEqual({
       status: "partial_success",
-      errorMessage: "There is not enough disk space in the selected folder.",
+      errorMessage: "write rejected",
       errorCategory: "disk_full",
       imagesFailed: undefined,
       outputsRequested: 3,

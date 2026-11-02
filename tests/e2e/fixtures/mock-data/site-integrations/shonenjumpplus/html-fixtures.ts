@@ -1,19 +1,4 @@
-/**
- * @file html-fixtures.ts
- * @description HTML fixtures for Shonen Jump+ routes.
- *
- * The content script extracts series metadata from:
- * - `<script id="episode-json" data-value="...">` (JSON-escaped payload with
- *   `readableProduct.series.title` and `.thumbnailUri`)
- * - `.series-header-title` / `.series-header-author` / `.series-header-description`
- * - `.js-readable-products-pagination[data-aggregate-id]` (for chapter list
- *   pagination calls)
- *
- * This metadata fixture omits the scrambled-image payload (`pageStructure.pages`)
- * since metadata-focused E2E tests do not download images. Download-workflow tests extend the
- * episode-json builder with real page entries and scramble seeds.
- */
-
+import capturedEpisode from "@/tests/fixtures/site-integrations/shonenjumpplus/captured-episode.json" with { type: "json" }
 import {
   BASIC_SERIES,
   MINIMAL_SERIES,
@@ -24,79 +9,43 @@ interface BuildEpisodePageHtmlOptions {
   episodeId: string
   seriesTitle: string
   aggregateId: string
+  thumbnailUri?: string
   author?: string
   description?: string
-  thumbnailUri?: string
   openGraphImage?: string
 }
 
-function encodeDataValueAttribute(json: string): string {
-  return json
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
+function encodeDataValueAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("'", "&#39;")
 }
 
-/**
- * Construct a Shonen Jump+ episode page HTML that mirrors the structural
- * elements the content script reads. Extra DOM surface beyond these
- * selectors is intentional (matches the real page noise) but nothing else
- * is required for extraction.
- */
 export function buildShonenJumpPlusEpisodePageHtml(
   options: BuildEpisodePageHtmlOptions
 ): string {
-  const episodeJson = JSON.stringify({
-    readableProduct: {
-      series: {
-        id: options.aggregateId,
-        title: options.seriesTitle,
-        thumbnailUri: options.thumbnailUri ?? "",
-      },
-      pageStructure: {
-        // Metadata mocks intentionally leave pages empty — download pipeline
-        // is exercised only in download-workflow specs with pre-scrambled fixtures.
-        pages: [],
-      },
-    },
-  })
-
-  const encodedEpisodeJson = encodeDataValueAttribute(episodeJson)
-
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <title>${options.seriesTitle} - 第1話 | 少年ジャンプ+</title>
-  <meta property="og:title" content="${options.seriesTitle}">
-  ${options.openGraphImage || options.thumbnailUri ? `<meta property="og:image" content="${options.openGraphImage ?? options.thumbnailUri}">` : ""}
-  ${options.description ? `<meta property="og:description" content="${options.description}">` : ""}
-</head>
-<body>
-  <header class="series-header">
-    <h1 class="series-header-title">${options.seriesTitle}</h1>
-    ${options.author ? `<p class="series-header-author">${options.author}</p>` : ""}
-    ${options.description ? `<p class="series-header-description">${options.description}</p>` : ""}
-  </header>
-  <div
-    class="js-readable-products-pagination"
-    data-aggregate-id="${options.aggregateId}"
-  ></div>
-  <script id="episode-json" type="application/json" data-value="${encodedEpisodeJson}"></script>
-</body>
-</html>`
+  const episode = structuredClone(capturedEpisode)
+  episode.readableProduct.id = options.episodeId
+  episode.readableProduct.series = {
+    id: options.aggregateId,
+    title: options.seriesTitle,
+    thumbnailUri: options.thumbnailUri ?? "",
+  }
+  const encoded = encodeDataValueAttribute(JSON.stringify(episode))
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>${encodeDataValueAttribute(options.seriesTitle)} | 少年ジャンプ＋</title></head><body>
+<div class="js-readable-products-pagination" data-aggregate-id="${options.aggregateId}" data-type="episode"></div>
+<script id="episode-json" data-value="${encoded}"></script>
+</body></html>`
 }
 
 export const BASIC_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
   episodeId: BASIC_SERIES.series.seriesId,
   seriesTitle: BASIC_SERIES.series.seriesTitle,
   aggregateId: SERIES_AGGREGATE_IDS[BASIC_SERIES.series.seriesId]!,
-  author: BASIC_SERIES.series.author,
-  description: BASIC_SERIES.series.description,
   thumbnailUri: BASIC_SERIES.series.coverUrl,
-  openGraphImage: BASIC_SERIES.series.coverUrl,
 })
 
 export const MINIMAL_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
@@ -105,13 +54,6 @@ export const MINIMAL_EPISODE_PAGE_HTML = buildShonenJumpPlusEpisodePageHtml({
   aggregateId: SERIES_AGGREGATE_IDS[MINIMAL_SERIES.series.seriesId]!,
 })
 
-export const HOME_PAGE_HTML = `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <title>少年ジャンプ+</title>
-</head>
-<body>
-  <main>Shonen Jump+ Home</main>
-</body>
-</html>`
+// Unsupported landing context used only to exercise navigation reset.
+export const HOME_PAGE_HTML =
+  '<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>少年ジャンプ＋</title></head><body></body></html>'

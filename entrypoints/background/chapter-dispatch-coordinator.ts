@@ -1,32 +1,48 @@
+import { getEffectiveTaskDestination } from "@/src/domain/queue/task-destination"
 import logger from "@/src/runtime/logger"
+import { runDestinationAccessExclusive } from "./destination-access"
 import type {
   DispatchLeaseAuthority,
   DownloadTaskState,
 } from "@/src/domain/queue/state"
 import type { ChapterDispatchOutcome } from "@/src/domain/queue/task-lifecycle"
+import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
 import type { QueueRepository } from "@/src/storage/queue-repository"
-import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { resolveDownloadPlan } from "./queue-helpers"
-import {
-  DestinationPreflightError,
-  type DestinationService,
-} from "./destination"
-import { composeSeriesKey } from "@/src/runtime/queue-task-summary"
+import { DestinationPreflightError } from "./destination"
 import type { SiteIntegrationEnablementService } from "@/src/storage/site-integration-enablement-service"
 import type { SiteIntegrationSettingsService } from "@/src/storage/site-integration-settings-service"
 import { isEnabled } from "@/src/site-integrations/catalog"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { runTaskSideEffectExclusive } from "./download-task-side-effect-gate"
 import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
-import { createOffscreenDispatchFingerprint } from "@/src/runtime/offscreen-job-fingerprint"
-import { resolveSiteIntegrationDispatchContext } from "@/src/runtime/site-integration-dispatch-context"
 import {
   ProviderNetworkPolicyActionRequiredError,
   ProviderNetworkPolicyPendingError,
 } from "@/src/site-integrations/session-rule-manager"
 import type { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import type { DownloadTaskCancellationCoordinator } from "./download-task-cancellation-coordinator"
+import {
+  reusableChapterLease,
+  canAdmitChapterDispatch,
+  canSendChapterDispatch,
+  createChapterDispatchMessage,
+  assertChapterDispatchAcknowledged,
+  sameDispatchJob,
+  type ChapterDispatchCandidate,
+  type ChapterDispatchContext,
+  type ChapterDispatchMessage,
+  type ChapterDispatchIdentity,
+} from "./chapter-dispatch-coordinator-context"
+
+interface DispatchAttemptState {
+  shouldStopDispatch: boolean
+  lastDownloadMode: "custom" | "browser"
+  currentLeaseForTask?: DispatchLeaseAuthority
+  dispatchLeaseAuthority?: DispatchLeaseAuthority
+  dispatchedJob?: ChapterDispatchIdentity
+}
 
 export interface ChapterDispatchSession {
   task: DownloadTaskState
@@ -46,7 +62,6 @@ export class ChapterDispatchCoordinator {
     ) => Promise<T>,
     private readonly cancellationCoordinator: DownloadTaskCancellationCoordinator,
     private readonly sessionRuleManager: SiteIntegrationSessionRuleManager,
-    private readonly destinationService: DestinationService,
     private readonly siteIntegrationEnablementService: Pick<
       SiteIntegrationEnablementService,
       "getAll"
@@ -61,381 +76,331 @@ export class ChapterDispatchCoordinator {
     session: ChapterDispatchSession,
     chapterIndex: number
   ): Promise<DispatchLeaseAuthority | undefined> {
-    const { task, taskId, settingsSnapshot, chapterOutcomesByIndex } = session
-    const stateManager = this.stateManager
-    const configuredOffscreenAdmission =
-      this.runOffscreenDocumentAdmissionExclusive
-    const cancellationCoordinator = this.cancellationCoordinator
-    let { shouldStopDispatch, lastDownloadMode, currentLeaseForTask } = session
+    return runDestinationAccessExclusive(() =>
+      this.dispatchChapter(session, chapterIndex)
+    )
+  }
+
+  private async dispatchChapter(
+    session: ChapterDispatchSession,
+    chapterIndex: number
+  ): Promise<DispatchLeaseAuthority | undefined> {
+    const { settingsSnapshot } = session
+    const attempt: DispatchAttemptState = {
+      shouldStopDispatch: session.shouldStopDispatch,
+      lastDownloadMode: session.lastDownloadMode,
+      currentLeaseForTask: session.currentLeaseForTask,
+    }
     try {
-      const taskChapter = task.chapters[chapterIndex]
-      if (!taskChapter) {
+      const taskChapter = session.task.chapters[chapterIndex]
+      if (!taskChapter)
         throw new Error(
           `Task chapter is missing at dispatch index ${chapterIndex}`
         )
-      }
-      let dispatchLeaseAuthority: DispatchLeaseAuthority | undefined
-      let dispatchedJob:
-        | {
-            jobId: string
-            attempt: number
-            taskId: string
-            chapterId: string
-            reusedLease: boolean
-          }
-        | undefined
       try {
-        const dispatchPlan = await resolveDownloadPlan(task)
-        const chapter = dispatchPlan.chapters[chapterIndex]
-        if (!chapter) {
-          chapterOutcomesByIndex[chapterIndex] = {
-            chapterId: taskChapter.id,
-            status: "failed",
-            errorMessage: "Chapter missing from resolved dispatch plan",
-            errorCategory: "unknown",
-          }
-          return undefined
-        }
-
-        const latestTask = await stateManager.getTask(taskId)
-        if (!latestTask || latestTask.status !== "downloading") {
-          shouldStopDispatch = true
-          logger.info("[Queue]", {
-            event: "CHAPTER_DISPATCH_ABORTED",
-            taskId,
-            reason: "TASK_NOT_DOWNLOADING",
-          })
-          return undefined
-        }
-
-        const destination =
-          await this.destinationService.getEffectiveDestination({
-            taskId,
-            chapterId: chapter.id,
-            destination: latestTask.settingsSnapshot.destination,
-            destinationOverride: latestTask.destinationOverride,
-          })
-        const saveMode: RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER">["payload"]["saveMode"] =
-          destination.kind === "custom" ? "fsa" : "downloads-api"
-        lastDownloadMode = destination.kind === "custom" ? "custom" : "browser"
-
-        const currentEnablement =
-          await this.siteIntegrationEnablementService.getAll()
-        if (!isEnabled(task.siteIntegrationId, currentEnablement)) {
-          throw new ProviderNetworkPolicyActionRequiredError(
-            task.siteIntegrationId,
-            "integration_disabled"
-          )
-        }
-
-        const currentChapter = latestTask.chapters.find(
-          (taskChapter) => taskChapter.id === chapter.id
+        const context = await this.prepareDispatch(
+          session,
+          chapterIndex,
+          attempt
         )
-        const existingLease = await stateManager.getActiveDispatchLease()
-        const reusableLease =
-          currentChapter?.status === "downloading" &&
-          existingLease?.taskId === taskId &&
-          existingLease.chapterId === chapter.id
-        if (!reusableLease) {
-          await this.sessionRuleManager.ensureNetworkReady(
-            task.siteIntegrationId
-          )
-        }
-        const attempt = reusableLease
-          ? existingLease.attempt
-          : (currentChapter?.dispatchAttempt ?? 0) + 1
-        const jobId = reusableLease ? existingLease.jobId : crypto.randomUUID()
-        dispatchedJob = {
-          jobId,
-          attempt,
-          taskId,
-          chapterId: chapter.id,
-          reusedLease: reusableLease,
-        }
-
-        const seriesKey = composeSeriesKey(
-          dispatchPlan.book.siteId,
-          dispatchPlan.book.seriesId
-        )
-        const integrationContext = await resolveSiteIntegrationDispatchContext({
-          siteIntegrationId: dispatchPlan.book.siteId,
-          taskId,
-          seriesKey,
-          chapter,
+        if (!context) return undefined
+        await this.requireIntegrationEnabled(session.task.siteIntegrationId)
+        const candidate = await this.prepareCandidate(context, session)
+        attempt.dispatchedJob = candidate.identity
+        const message = await createChapterDispatchMessage(
+          context,
+          candidate,
           settingsSnapshot,
-          siteIntegrationSettingsReader: this.siteIntegrationSettingsReader,
-        })
-
-        const unsignedPayload = {
-          jobId,
-          attempt,
-          taskId,
-          seriesKey,
-          book: {
-            siteIntegrationId: dispatchPlan.book.siteId,
-            seriesTitle: dispatchPlan.book.seriesTitle,
-            coverUrl: latestTask.seriesCoverUrl ?? dispatchPlan.book.coverUrl,
-            metadata: latestTask.settingsSnapshot.comicInfo,
-          },
-          chapter: {
-            id: chapter.id,
-            title: chapter.title,
-            url: chapter.url,
-            index: taskChapter.index,
-            chapterLabel: chapter.chapterLabel,
-            chapterNumber: chapter.chapterNumber,
-            volumeId: chapter.volumeId,
-            volumeNumber: chapter.volumeNumber,
-            volumeLabel: chapter.volumeLabel,
-            language:
-              latestTask.chapters.find(
-                (taskChapter) => taskChapter.id === chapter.id
-              )?.language ?? chapter.comicInfo?.LanguageISO,
-            resolvedPath: chapter.resolvedPath || chapter.title,
-          },
-          settingsSnapshot: { ...settingsSnapshot },
-          saveMode,
-          notBefore: latestTask.nextChapterDispatchAt,
-          integrationContext,
-        }
-        const fingerprint =
-          await createOffscreenDispatchFingerprint(unsignedPayload)
-        const dispatchMessage: RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_CHAPTER"> =
-          {
-            target: "offscreen",
-            type: "OFFSCREEN_DOWNLOAD_CHAPTER",
-            payload: {
-              ...unsignedPayload,
-              fingerprint,
-            },
-          }
-
-        if (reusableLease && existingLease.fingerprint !== fingerprint) {
-          throw new Error(
-            "Recovered dispatch fingerprint does not match durable lease"
-          )
-        }
-        return await runTaskSideEffectExclusive(taskId, async () => {
-          const [taskAtAdmission, leaseAtAdmission] = await Promise.all([
-            stateManager.getTask(taskId),
-            stateManager.getActiveDispatchLease(),
-          ])
-          const chapterAtAdmission = taskAtAdmission?.chapters.find(
-            (taskChapter) => taskChapter.id === chapter.id
-          )
-          const reusableAuthorityIsCurrent =
-            reusableLease &&
-            chapterAtAdmission?.status === "downloading" &&
-            leaseAtAdmission?.jobId === existingLease.jobId &&
-            leaseAtAdmission.attempt === existingLease.attempt &&
-            leaseAtAdmission.taskId === existingLease.taskId &&
-            leaseAtAdmission.chapterId === existingLease.chapterId &&
-            leaseAtAdmission.fingerprint === existingLease.fingerprint
-          const newAuthorityCanStart =
-            !reusableLease &&
-            chapterAtAdmission?.status === "queued" &&
-            leaseAtAdmission === null
-          if (
-            !taskAtAdmission ||
-            taskAtAdmission.status !== "downloading" ||
-            (!reusableAuthorityIsCurrent && !newAuthorityCanStart)
-          ) {
-            shouldStopDispatch = true
-            return undefined
-          }
-
-          const chapterStart = reusableLease
-            ? await stateManager.updateChapterProgress({
-                taskId,
-                chapterId: chapter.id,
-                lease: existingLease,
-                now: Date.now(),
-              })
-            : await stateManager.beginChapterDispatch({
-                taskId,
-                chapterId: chapter.id,
-                expectedPreviousLease: null,
-                lease: createDispatchLease({
-                  jobId,
-                  taskId,
-                  chapterId: chapter.id,
-                  attempt,
-                  fingerprint,
-                  saveMode,
-                }),
-                now: Date.now(),
-              })
-          if (chapterStart.outcome === "rejected") {
-            shouldStopDispatch = true
-            return undefined
-          }
-          dispatchLeaseAuthority = reusableLease
-            ? existingLease
-            : "lease" in chapterStart
-              ? chapterStart.lease
-              : undefined
-          if (!dispatchLeaseAuthority) {
-            throw new Error(
-              "Chapter dispatch lease admission produced no authority"
-            )
-          }
-          currentLeaseForTask = dispatchLeaseAuthority
-
-          const response = await configuredOffscreenAdmission(async () => {
-            const [taskBeforeSend, leaseBeforeSend] = await Promise.all([
-              stateManager.getTask(taskId),
-              stateManager.getActiveDispatchLease(),
-            ])
-            const chapterBeforeSend = taskBeforeSend?.chapters.find(
-              (taskChapter) => taskChapter.id === chapter.id
-            )
-            if (
-              taskBeforeSend?.status !== "downloading" ||
-              chapterBeforeSend?.status !== "downloading" ||
-              leaseBeforeSend?.jobId !== jobId ||
-              leaseBeforeSend.attempt !== attempt ||
-              leaseBeforeSend.taskId !== taskId ||
-              leaseBeforeSend.chapterId !== chapter.id ||
-              leaseBeforeSend.fingerprint !== fingerprint
-            ) {
-              throw new Error(
-                "Chapter dispatch authority changed before offscreen admission"
-              )
-            }
-            return await sendRuntimeMessage(dispatchMessage)
-          })
-          if (!response.success) throw new Error(response.error)
-          if (
-            response.accepted !== true ||
-            response.jobId !== jobId ||
-            response.attempt !== attempt ||
-            response.taskId !== taskId ||
-            response.chapterId !== chapter.id ||
-            response.fingerprint !== fingerprint
-          ) {
-            throw new Error("Offscreen dispatch acknowledgement mismatch")
-          }
-          const binding = await stateManager.bindDispatchLeaseIncarnation({
-            jobId,
-            attempt,
-            taskId,
-            chapterId: chapter.id,
-            fingerprint,
-            documentInstanceId: response.documentInstanceId,
-          })
-          if (binding.outcome === "rejected") {
-            throw new Error("Offscreen dispatch incarnation binding rejected")
-          }
-          dispatchLeaseAuthority = binding.lease
-          currentLeaseForTask = binding.lease
-          logger.info("[Queue]", {
-            event: "CHAPTER_DISPATCH_ACCEPTED",
-            taskId,
-            chapterId: chapter.id,
-            jobId,
-            attempt,
-          })
-          return binding.lease
-        })
-      } catch (error) {
-        if (
-          error instanceof ProviderNetworkPolicyPendingError ||
-          error instanceof ProviderNetworkPolicyActionRequiredError
-        ) {
-          if (dispatchedJob) {
-            const currentLease = await stateManager.getActiveDispatchLease()
-            const cleared =
-              currentLease !== null &&
-              currentLease.jobId === dispatchedJob.jobId &&
-              currentLease.attempt === dispatchedJob.attempt &&
-              currentLease.taskId === dispatchedJob.taskId &&
-              currentLease.chapterId === dispatchedJob.chapterId &&
-              (await cancellationCoordinator.cancelProducerAndClearLease(
-                currentLease
-              )) !== undefined
-            if (cleared) currentLeaseForTask = undefined
-          }
-          throw error
-        }
-        if (error instanceof DestinationPreflightError) {
-          throw error
-        }
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
-        chapterOutcomesByIndex[chapterIndex] = {
-          chapterId: taskChapter.id,
-          status: "failed",
-          errorMessage,
-          errorCategory: "unknown",
-        }
-
-        // Liveness recovery may have already marked the chapter/task terminal
-        // with a more accurate "Download process unresponsive" error when the
-        // offscreen was closed mid-flight. Don't overwrite that with the
-        // sendMessage rejection error ("message channel closed"), which is a
-        // downstream symptom of the offscreen being closed, not the root cause.
-        const currentTask = await stateManager.getTask(taskId)
-        const currentChapter = currentTask?.chapters.find(
-          (c) => c.id === taskChapter.id
+          this.siteIntegrationSettingsReader
         )
-        const chapterAlreadyTerminal =
-          currentChapter &&
-          (currentChapter.status === "completed" ||
-            currentChapter.status === "failed" ||
-            currentChapter.status === "partial_success")
-        const taskAlreadyTerminal =
-          currentTask &&
-          (currentTask.status === "completed" ||
-            currentTask.status === "failed" ||
-            currentTask.status === "partial_success" ||
-            currentTask.status === "canceled")
-
-        let chapterFailureAccepted = true
-        if (!chapterAlreadyTerminal) {
-          const chapterFailure = await stateManager.settleTaskChapter({
-            taskId,
-            chapterId: taskChapter.id,
-            status: "failed",
-            lease: dispatchLeaseAuthority,
-            now: Date.now(),
-            updates: {
-              errorMessage,
-              errorCategory: "unknown",
-            },
-          })
-          if (chapterFailure.outcome === "rejected") {
-            shouldStopDispatch = true
-            chapterFailureAccepted = false
-          }
-        }
-
-        if (!taskAlreadyTerminal && chapterFailureAccepted) {
-          await stateManager.recordTaskDispatchError({
-            taskId,
-            errorMessage,
-            errorCategory: "unknown",
-          })
-        }
-
-        if (taskAlreadyTerminal) {
-          shouldStopDispatch = true
-        }
-
-        logger.error("[Queue]", {
-          event: "CHAPTER_DISPATCH_FAILED",
-          taskId,
-          chapterIndex: chapterIndex + 1,
+        return await runTaskSideEffectExclusive(session.taskId, () =>
+          this.admitAndSend(context, candidate, message, attempt)
+        )
+      } catch (error) {
+        return await this.handleDispatchError(
           error,
-        })
-        if (dispatchedJob) {
-          await progressTimingEstimator.finish(dispatchedJob.jobId)
-        }
-        return dispatchLeaseAuthority
+          session,
+          chapterIndex,
+          taskChapter.id,
+          attempt
+        )
       }
     } finally {
-      session.shouldStopDispatch = shouldStopDispatch
-      session.lastDownloadMode = lastDownloadMode
-      session.currentLeaseForTask = currentLeaseForTask
+      session.shouldStopDispatch = attempt.shouldStopDispatch
+      session.lastDownloadMode = attempt.lastDownloadMode
+      session.currentLeaseForTask = attempt.currentLeaseForTask
     }
   }
+
+  private async prepareDispatch(
+    session: ChapterDispatchSession,
+    chapterIndex: number,
+    attempt: DispatchAttemptState
+  ): Promise<ChapterDispatchContext | undefined> {
+    const plan = await resolveDownloadPlan(session.task)
+    const chapter = plan.chapters[chapterIndex]
+    const taskChapter = session.task.chapters[chapterIndex]
+    if (!chapter) {
+      session.chapterOutcomesByIndex[chapterIndex] = {
+        chapterId: taskChapter.id,
+        status: "failed",
+        errorMessage: "Chapter missing from resolved dispatch plan",
+        errorCategory: "unknown",
+      }
+      return undefined
+    }
+    const latestTask = await this.stateManager.getTask(session.taskId)
+    if (!latestTask || latestTask.status !== "downloading") {
+      attempt.shouldStopDispatch = true
+      logger.info("[Queue]", {
+        event: "CHAPTER_DISPATCH_ABORTED",
+        taskId: session.taskId,
+        reason: "TASK_NOT_DOWNLOADING",
+      })
+      return undefined
+    }
+    const destination = getEffectiveTaskDestination(latestTask)
+    const saveMode =
+      destination.kind === "file-system-access" ? "fsa" : "downloads-api"
+    attempt.lastDownloadMode =
+      destination.kind === "file-system-access" ? "custom" : "browser"
+    return { plan, chapter, taskChapter, latestTask, destination, saveMode }
+  }
+
+  private async requireIntegrationEnabled(siteIntegrationId: string) {
+    const enablement = await this.siteIntegrationEnablementService.getAll()
+    if (!isEnabled(siteIntegrationId, enablement))
+      throw new ProviderNetworkPolicyActionRequiredError(
+        siteIntegrationId,
+        "integration_disabled"
+      )
+  }
+
+  private async prepareCandidate(
+    context: ChapterDispatchContext,
+    session: ChapterDispatchSession
+  ): Promise<ChapterDispatchCandidate> {
+    const { latestTask, chapter } = context
+    const currentChapter = latestTask.chapters.find(
+      (taskChapter) => taskChapter.id === chapter.id
+    )
+    const existingLease = await this.stateManager.getActiveDispatchLease()
+    const reusableLease = reusableChapterLease(
+      latestTask,
+      session.taskId,
+      chapter.id,
+      existingLease
+    )
+    if (!reusableLease)
+      await this.sessionRuleManager.ensureNetworkReady(
+        session.task.siteIntegrationId
+      )
+    return {
+      identity: {
+        jobId: reusableLease ? reusableLease.jobId : crypto.randomUUID(),
+        attempt: reusableLease
+          ? reusableLease.attempt
+          : (currentChapter?.dispatchAttempt ?? 0) + 1,
+        taskId: session.taskId,
+        chapterId: chapter.id,
+      },
+      reusableLease,
+    }
+  }
+
+  private async admitAndSend(
+    context: ChapterDispatchContext,
+    candidate: ChapterDispatchCandidate,
+    message: ChapterDispatchMessage,
+    attempt: DispatchAttemptState
+  ): Promise<DispatchLeaseAuthority | undefined> {
+    const { taskId } = candidate.identity
+    const [task, lease] = await Promise.all([
+      this.stateManager.getTask(taskId),
+      this.stateManager.getActiveDispatchLease(),
+    ])
+    if (!canAdmitChapterDispatch(task, lease, candidate)) {
+      attempt.shouldStopDispatch = true
+      return undefined
+    }
+    const admission = await this.beginOrResumeDispatch(
+      context,
+      candidate,
+      message
+    )
+    if (admission.outcome === "rejected") {
+      attempt.shouldStopDispatch = true
+      return undefined
+    }
+    attempt.dispatchLeaseAuthority =
+      candidate.reusableLease ??
+      ("lease" in admission ? admission.lease : undefined)
+    if (!attempt.dispatchLeaseAuthority)
+      throw new Error("Chapter dispatch lease admission produced no authority")
+    attempt.currentLeaseForTask = attempt.dispatchLeaseAuthority
+    const boundLease = await this.sendAndBind(candidate, message)
+    attempt.dispatchLeaseAuthority = boundLease
+    attempt.currentLeaseForTask = boundLease
+    logger.info("[Queue]", {
+      event: "CHAPTER_DISPATCH_ACCEPTED",
+      taskId: candidate.identity.taskId,
+      chapterId: candidate.identity.chapterId,
+      jobId: candidate.identity.jobId,
+      attempt: candidate.identity.attempt,
+    })
+    return boundLease
+  }
+
+  private async beginOrResumeDispatch(
+    context: ChapterDispatchContext,
+    candidate: ChapterDispatchCandidate,
+    message: ChapterDispatchMessage
+  ) {
+    const { identity, reusableLease } = candidate
+    if (reusableLease)
+      return await this.stateManager.updateChapterProgress({
+        taskId: identity.taskId,
+        chapterId: identity.chapterId,
+        lease: reusableLease,
+        now: Date.now(),
+      })
+    return await this.stateManager.beginChapterDispatch({
+      taskId: identity.taskId,
+      chapterId: identity.chapterId,
+      expectedPreviousLease: null,
+      lease: createDispatchLease({
+        ...identity,
+        fingerprint: message.payload.fingerprint,
+        saveMode: context.saveMode,
+        destinationHandleId:
+          context.destination.kind === "file-system-access"
+            ? context.destination.handleId!
+            : undefined,
+      }),
+      now: Date.now(),
+    })
+  }
+
+  private async sendAndBind(
+    candidate: ChapterDispatchCandidate,
+    message: ChapterDispatchMessage
+  ): Promise<DispatchLeaseAuthority> {
+    const { identity } = candidate
+    const response = await this.runOffscreenDocumentAdmissionExclusive(
+      async () => {
+        const [task, lease] = await Promise.all([
+          this.stateManager.getTask(identity.taskId),
+          this.stateManager.getActiveDispatchLease(),
+        ])
+        if (!canSendChapterDispatch(task, lease, message))
+          throw new Error(
+            "Chapter dispatch authority changed before offscreen admission"
+          )
+        return await sendRuntimeMessage(message)
+      }
+    )
+    const accepted = assertChapterDispatchAcknowledged(response, message)
+    const binding = await this.stateManager.bindDispatchLeaseIncarnation({
+      ...identity,
+      fingerprint: message.payload.fingerprint,
+      documentInstanceId: accepted.documentInstanceId,
+    })
+    if (binding.outcome === "rejected")
+      throw new Error("Offscreen dispatch incarnation binding rejected")
+    return binding.lease
+  }
+
+  private async clearPolicyBlockedProducer(attempt: DispatchAttemptState) {
+    if (!attempt.dispatchedJob) return
+    const lease = await this.stateManager.getActiveDispatchLease()
+    if (
+      sameDispatchJob(lease, attempt.dispatchedJob) &&
+      (await this.cancellationCoordinator.cancelProducerAndClearLease(
+        lease
+      )) !== undefined
+    )
+      attempt.currentLeaseForTask = undefined
+  }
+
+  private async handleDispatchError(
+    error: unknown,
+    session: ChapterDispatchSession,
+    chapterIndex: number,
+    chapterId: string,
+    attempt: DispatchAttemptState
+  ): Promise<DispatchLeaseAuthority | undefined> {
+    if (
+      error instanceof ProviderNetworkPolicyPendingError ||
+      error instanceof ProviderNetworkPolicyActionRequiredError
+    ) {
+      await this.clearPolicyBlockedProducer(attempt)
+      throw error
+    }
+    if (error instanceof DestinationPreflightError) throw error
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    session.chapterOutcomesByIndex[chapterIndex] = {
+      chapterId,
+      status: "failed",
+      errorMessage,
+      errorCategory: "unknown",
+    }
+    await this.persistDispatchFailure(
+      session.taskId,
+      chapterId,
+      errorMessage,
+      attempt
+    )
+    logger.error("[Queue]", {
+      event: "CHAPTER_DISPATCH_FAILED",
+      taskId: session.taskId,
+      chapterIndex: chapterIndex + 1,
+      error,
+    })
+    if (attempt.dispatchedJob)
+      await progressTimingEstimator.finish(attempt.dispatchedJob.jobId)
+    return attempt.dispatchLeaseAuthority
+  }
+
+  private async persistDispatchFailure(
+    taskId: string,
+    chapterId: string,
+    errorMessage: string,
+    attempt: DispatchAttemptState
+  ) {
+    // Recovery can settle the producer before transport rejection arrives. Preserve its cause.
+    const task = await this.stateManager.getTask(taskId)
+    const chapter = task?.chapters.find((chapter) => chapter.id === chapterId)
+    const chapterTerminal = chapter && hasSettledProducerStatus(chapter.status)
+    const taskTerminal = task && isTerminalDownloadTask(task)
+    let failureAccepted = true
+    if (!chapterTerminal) {
+      const failure = await this.stateManager.settleTaskChapter({
+        taskId,
+        chapterId,
+        status: "failed",
+        lease: attempt.dispatchLeaseAuthority,
+        now: Date.now(),
+        updates: { errorMessage, errorCategory: "unknown" },
+      })
+      if (failure.outcome === "rejected") {
+        attempt.shouldStopDispatch = true
+        failureAccepted = false
+      }
+    }
+    if (!taskTerminal && failureAccepted)
+      await this.stateManager.recordTaskDispatchError({
+        taskId,
+        errorMessage,
+        errorCategory: "unknown",
+      })
+    if (taskTerminal) attempt.shouldStopDispatch = true
+  }
+}
+
+function hasSettledProducerStatus(status: string) {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "partial_success"
+  )
 }

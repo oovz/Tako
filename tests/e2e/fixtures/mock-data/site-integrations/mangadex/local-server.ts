@@ -1,28 +1,7 @@
 /**
- * @file local-server.ts
- * @description Local-mock-server handlers + DNR redirect rules for the
- * MangaDex integration.
- *
- * MangaDex's download pipeline runs entirely in extension contexts
- * (background service worker + offscreen document), and Playwright's
- * `context.route` does not intercept offscreen fetches. To keep the
- * E2E mocks deterministic for offscreen-initiated fetches we DNR-redirect
- * the three external hosts the production code calls into the local
- * Node HTTP mock server:
- *
- *   1. `api.mangadex.org/*` — JSON endpoints:
- *      - `GET /manga/{id}` (series metadata)
- *      - `GET /manga/{id}/feed` (chapter feed)
- *      - `GET /statistics/manga/{id}` (optional rating data)
- *      - `GET /at-home/server/{id}` (image pipeline bootstrap)
- *   2. `api.mangadex.network/report` — telemetry, returns 204.
- *   3. `uploads.mangadex.org/*` — images + covers. Every response is
- *      the shared 1x1 PNG regardless of the exact path shape.
- *
- * Main-frame navigations to `mangadex.org/title/{id}` and
- * `mangadex.org/chapter/{id}` are intentionally **not** redirected
- * (see `dnr-test-redirects.ts` for why main_frame is excluded) and are
- * still handled by the Playwright route registrar in `routes.ts`.
+ * Redirect MangaDex API, telemetry, and image requests from extension contexts
+ * to the local server. Page navigations keep their original host and use
+ * Playwright routes.
  */
 
 import type { DnrRedirectRule } from "../../../dnr-test-redirects"
@@ -33,11 +12,14 @@ import type {
 } from "../../../local-mock-server"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
 import {
-  buildMangadexFeedResponse,
+  buildMangadexSeriesFeedResponse,
+  buildMangadexStatisticsResponse,
   buildMangadexSeriesResponse,
-  resolveMangadexChapterDataset,
 } from "./api-fixtures"
-import { buildAtHomeServerResponse } from "./image-fixtures"
+import {
+  buildAtHomeServerResponse,
+  MANGADEX_CAPTURED_IMAGE_DOMAIN,
+} from "./image-fixtures"
 
 /**
  * Pathname prefixes the local server mounts MangaDex handlers under.
@@ -55,6 +37,7 @@ export const MANGADEX_LOCAL_UPLOADS_PREFIX = "/__md/uploads"
 const MANGADEX_API_RULE_ID = 9200
 const MANGADEX_NETWORK_RULE_ID = 9201
 const MANGADEX_UPLOADS_RULE_ID = 9202
+const MANGADEX_CAPTURED_NODE_RULE_ID = 9203
 
 function json(body: object): MockRouteResponse {
   return {
@@ -64,16 +47,7 @@ function json(body: object): MockRouteResponse {
   }
 }
 
-/**
- * api.mangadex.org handler — dispatches by pathname:
- * - `/at-home/server/{id}` → at-home response keyed on chapter id
- * - `/manga/{id}/feed` → paged chapter feed
- * - `/manga/{id}` → series metadata
- * - `/statistics/manga/{id}` → community rating (optional, returns empty
- *   statistics so `mapCommunityRatingToFiveScale` yields `undefined`)
- * Everything else returns `{ result: 'error', message: 'not mocked' }`
- * with status 200 to mimic MangaDex's JSON-first error shape.
- */
+/** Serve fixture API responses and provider-shaped errors for unmocked paths. */
 const mangadexApiHandler: MockRouteHandler = (req) => {
   const pathname = req.pathnameAfterPrefix
   const parts = pathname.split("/").filter(Boolean)
@@ -91,16 +65,14 @@ const mangadexApiHandler: MockRouteHandler = (req) => {
     parts[1] === "manga" &&
     typeof parts[2] === "string"
   ) {
-    return json({ result: "ok", statistics: {} })
+    return json(buildMangadexStatisticsResponse(parts[2]))
   }
 
   if (parts[0] === "manga" && typeof parts[1] === "string") {
     const mangaId = parts[1]
     const isFeed = parts.length >= 3 && parts[2] === "feed"
     if (isFeed) {
-      return json(
-        buildMangadexFeedResponse(resolveMangadexChapterDataset(mangaId))
-      )
+      return json(buildMangadexSeriesFeedResponse(mangaId))
     }
     return json(buildMangadexSeriesResponse(mangaId))
   }
@@ -143,6 +115,11 @@ export function registerMangadexLocalServerHandlers(
 
   const base = server.url
   return [
+    {
+      id: MANGADEX_CAPTURED_NODE_RULE_ID,
+      regexFilter: `^https://${MANGADEX_CAPTURED_IMAGE_DOMAIN.replaceAll(".", "\\.")}/(.*)$`,
+      regexSubstitution: `${base}${MANGADEX_LOCAL_UPLOADS_PREFIX}/\\1`,
+    },
     {
       id: MANGADEX_API_RULE_ID,
       regexFilter: "^https?://api\\.mangadex\\.org/(.*)$",

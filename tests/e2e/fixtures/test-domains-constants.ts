@@ -1,12 +1,6 @@
 /**
- * @file test-domains-constants.ts
- * @description Pure URL/domain constants used by e2e mock fixtures and specs.
- *
- * This file MUST NOT import from `mock-data/` (or any module that imports
- * from it). Every integration's `routes.ts` / `api-fixtures.ts` reads from
- * here so the fixture graph stays acyclic. Import these values directly from
- * this module; route registration belongs to `routes.ts` and integration
- * mock-data modules own their integration-specific exports.
+ * Shared URL constants. Keep this module independent of `mock-data/` so route
+ * registrars and fixture builders can import it without creating cycles.
  */
 
 import {
@@ -14,7 +8,7 @@ import {
   MANHUAGUI_CONFIG_HOST,
   MANHUAGUI_IMAGE_HOST_NAMES,
   MANHUAGUI_PAGE_HOST_NAMES,
-} from "../../../src/site-integrations/manhuagui/policy"
+} from "../../../src/site-integrations/readmanga/policy"
 
 export const EXAMPLE_TEST_DOMAIN = "example.com"
 export const EXAMPLE_BASE_URL = `https://${EXAMPLE_TEST_DOMAIN}`
@@ -78,6 +72,30 @@ export const LIVE_MANGAMILLION_REFERENCE_URL =
   "https://mangamillion.shueisha.co.jp/en/title/1"
 export const LIVE_MANGAMILLION_CHAPTER_URL =
   "https://mangamillion.shueisha.co.jp/en/title/1/chapter/6736"
+
+export const LIVE_BOYLOVE_REFERENCE_URL =
+  "https://boylove.cc/home/book/index/id/34260"
+export const LIVE_MANGAGO_REFERENCE_URL =
+  "https://www.mangago.me/read-manga/kenshi_o_mezashite_ny_gaku_shitanoni_mah_tekisei_9999_nandesukedo/"
+export const LIVE_MANGANATO_REFERENCE_URL =
+  "https://www.manganato.gg/manga/hunter-x-hunter"
+export const LIVE_MANGAKAKALOT_REFERENCE_URL =
+  "https://www.mangakakalove.com/manga/hunter-x-hunter"
+export const LIVE_DM5_REFERENCE_URL =
+  "https://www.dm5.com/manhua-shanhainizhan1/"
+export const LIVE_MANGABZ_REFERENCE_URL = "https://www.mangabz.com/139bz/"
+export const LIVE_MYCOMIC_REFERENCE_URL = "https://mycomic.com/cn/comics/35937"
+export const LIVE_MANGAHERE_REFERENCE_URL =
+  "https://newm.mangahere.cc/manga/hunter_x_hunter/"
+export const LIVE_AIMANHUA_REFERENCE_URL =
+  "https://www.aimanhua.org/comic/416895"
+export const LIVE_ZAIMANHUA_REFERENCE_URL =
+  "https://www.zaimanhua.com/info/doufo.html"
+export const LIVE_COPY_REFERENCE_URL =
+  "https://www.copy3000.com/comic/dianjuren"
+export const LIVE_COOLMIC_REFERENCE_URL = "https://coolmic.me/titles/5101"
+export const LIVE_MANGAPLUS_REFERENCE_URL =
+  "https://mangaplus.shueisha.co.jp/titles/100467"
 
 export function buildMangadexUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`

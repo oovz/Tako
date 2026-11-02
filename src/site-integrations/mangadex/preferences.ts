@@ -101,6 +101,28 @@ const resolveMangadexContentRatings = (
   return ratings
 }
 
+async function readMangadexFeedSettings(
+  settingsReader?: SiteIntegrationSettingsReader
+): Promise<Record<string, unknown>> {
+  try {
+    if (!settingsReader)
+      throw new Error("MangaDex chapter options require settings reader")
+    const allSettings = await settingsReader.getAll()
+    return allSettings.mangadex || {}
+  } catch {
+    return {}
+  }
+}
+
+function resolveMangadexFeedLanguages(
+  language: string | undefined,
+  configuredLanguages: string[] | undefined,
+  preferences: MangadexUserPreferences | undefined
+): string[] | undefined {
+  if (language) return [language]
+  return configuredLanguages ?? preferences?.filteredLanguages
+}
+
 export async function resolveMangadexChapterFeedOptions(
   language?: string,
   requestPreferences?: MangadexUserPreferences,
@@ -109,34 +131,18 @@ export async function resolveMangadexChapterFeedOptions(
   languages?: string[]
   contentRatings?: string[]
 }> {
-  let storedSettings: Record<string, unknown> = {}
-
-  try {
-    if (!settingsReader) {
-      throw new Error("MangaDex chapter options require settings reader")
-    }
-    const allSettings = await settingsReader.getAll()
-    const rawSettings = allSettings.mangadex
-    if (rawSettings) {
-      storedSettings = rawSettings
-    }
-  } catch {
-    storedSettings = {}
-  }
-
+  const storedSettings = await readMangadexFeedSettings(settingsReader)
   const autoReadEnabled = storedSettings.autoReadMangaDexSettings !== false
   const configuredLanguages = parseConfiguredMangadexLanguageFilter(
     storedSettings.chapterLanguageFilter
   )
   const cachedPreferences = autoReadEnabled ? requestPreferences : undefined
 
-  const languages = language
-    ? [language]
-    : configuredLanguages !== undefined
-      ? configuredLanguages
-      : autoReadEnabled
-        ? cachedPreferences?.filteredLanguages
-        : undefined
+  const languages = resolveMangadexFeedLanguages(
+    language,
+    configuredLanguages,
+    cachedPreferences
+  )
 
   const contentRatings = autoReadEnabled
     ? resolveMangadexContentRatings(cachedPreferences)

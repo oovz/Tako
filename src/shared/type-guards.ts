@@ -1,12 +1,4 @@
-/**
- * Centralized Type Guards and Utility Types
- *
- * This file provides shared type guard functions and utility types used across
- * the codebase for safe runtime type checking of storage values and JSON data.
- *
- * Ref: TypeScript-ESLint best practices - use `unknown` for type guard parameters
- * https://typescript-eslint.io/rules/no-unsafe-argument/
- */
+/** Type guards for stored values and parsed data. */
 
 /**
  * Recursive JSON-safe value type for chrome.storage and JSON operations.
@@ -37,26 +29,15 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
  */
 export const isJsonRecord = (
   value: unknown
-): value is Record<string, JsonValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+): value is Record<string, JsonValue> => isRecord(value)
 
 /**
  * Type guard variant that narrows to StorageValue record.
  * Use when working with chrome.storage API results.
  */
-export const isStorageRecord = (
-  value: unknown
-): value is Record<string, StorageValue> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+export const isStorageRecord = isJsonRecord
 
-/**
- * Safely convert an unknown error to an Error instance.
- * Useful for catch blocks and Promise rejections where the error type is unknown.
- *
- * @param error - The caught error (unknown type)
- * @param fallbackMessage - Message to use if error is not an Error instance
- * @returns An Error instance
- */
+/** Convert an unknown failure to an Error, preserving its message when available. */
 export const toError = (
   error: unknown,
   fallbackMessage = "Unknown error"

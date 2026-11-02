@@ -1,21 +1,3 @@
-/**
- * @file pixiv-comic-download-workflow.spec.ts
- * @description Download-workflow coverage for the Pixiv Comic
- * integration.
- *
- * Exercises the full pipeline end-to-end without live network:
- *
- *   work page -> tab state -> buildId from homepage -> salt JSON
- *       -> read_v4 image URL list -> img-comic.pximg.net bytes
- *       -> offscreen archive -> OPFS cbz
- *
- * Regression targets:
- * - Next.js build-id parsing (`parseBuildId`) and salt fetch.
- * - `/api/app/episodes/{id}/read_v4` payload handling with flat
- *   `pages` array (no descramble key).
- * - Image download + archive assembly when no descramble key is set.
- */
-
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
@@ -39,7 +21,7 @@ import {
   testExtensionSessionRuleMatch,
 } from "./fixtures/session-rule-helpers"
 
-test.describe("Pixiv Comic download workflow (mocked)", () => {
+test.describe("Pixiv Comic downloads", () => {
   test.describe.configure({ timeout: 120_000 })
 
   test("matches the pximg referer rule only for enabled extension-originated requests", async ({
@@ -86,7 +68,7 @@ test.describe("Pixiv Comic download workflow (mocked)", () => {
       .not.toContain(41001)
   })
 
-  test("completes a single-chapter download through the read_v4 + pximg pipeline", async ({
+  test("saves a complete chapter from the reader API", async ({
     context,
     extensionId,
     page,
@@ -106,7 +88,7 @@ test.describe("Pixiv Comic download workflow (mocked)", () => {
     )
 
     const firstChapter = tabState.chapters.find(
-      (chapter) => chapter.locked !== true
+      (chapter) => chapter.id === PixivComic.PIXIV_COMIC_CAPTURED_STORY_ID
     )
     if (!firstChapter) {
       throw new Error(

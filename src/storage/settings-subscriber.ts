@@ -18,22 +18,24 @@ export class SettingsSubscriber {
       )
     onChanged.addListener((changes, areaName) => {
       if (areaName !== "local" || !(SETTINGS_STORAGE_KEY in changes)) return
-      try {
-        this.repository.acceptExternalDocument(
-          changes[SETTINGS_STORAGE_KEY]?.newValue
-        )
-      } catch (error) {
-        this.repository.invalidateCache()
-        logger.error("Stored settings change is invalid", error)
-        return
-      }
-      const settings = this.repository.getCachedSettings()
-      if (!settings) return
-      void applySettingsSideEffects(settings).catch((error) =>
-        logger.warn("Failed to apply external settings side effects", error)
-      )
+      this.applyExternalDocument(changes[SETTINGS_STORAGE_KEY]?.newValue)
     })
     this.registered = true
+  }
+
+  private applyExternalDocument(value: unknown): void {
+    try {
+      this.repository.acceptExternalDocument(value)
+    } catch (error) {
+      this.repository.invalidateCache()
+      logger.error("Stored settings change is invalid", error)
+      return
+    }
+    const settings = this.repository.getCachedSettings()
+    if (!settings) return
+    void applySettingsSideEffects(settings).catch((error) =>
+      logger.warn("Failed to apply external settings side effects", error)
+    )
   }
 }
 

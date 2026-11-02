@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "providerId": "manganato",
+  "data": {
+    "seriesHtml": "<meta charset=\"utf-8\"><meta property=\"og:image\" content=\"https://img-r1.2xstorage.com/thumb/s-class-hunter-heals-with-monsters.webp\"><ul class=\"manga-info-text\">\n                            <li>\n                                <h1>S-Class Hunter Heals with Monsters</h1>\n                                                                    <h2 class=\"story-alternative\">Alternative : 몬스터와 힐링하는 S급 헌터</h2>\n                                                            </li>\n\n                                                        <li>Author(s) : 팀 더 지크\n                                \n                            </li>\n                            <li>Status : Ongoing</li>\n                            <li>Last updated : Oct-24-2026 09:34:37 PM</li>\n                            <li style=\"display: none;\">TransGroup : </li>\n                            <li>View : 1,027,921</li>\n\n                                                        <li class=\"genres\">Genres :\n                                                                    <a href=\"https://www.manganato.gg/genre/comedy\">\n                                        Comedy\n                                    </a>, \n                                                                    <a href=\"https://www.manganato.gg/genre/fantasy\">\n                                        Fantasy\n                                    </a>, \n                                                                    <a href=\"https://www.manganato.gg/genre/action\">\n                                        Action\n                                    </a>, \n                                                                    <a href=\"https://www.manganato.gg/genre/adventure\">\n                                        Adventure\n                                    </a>, \n                                                                    <a href=\"https://www.manganato.gg/genre/romance\">\n                                        Romance\n                                    </a>, \n                                                                    <a href=\"https://www.manganato.gg/genre/manhwa\">\n                                        Manhwa\n                                    </a>\n                                                            </li>\n                            <li style=\"height: 27px;\"><span>Rating : </span>\n                                <div class=\"rating\" data-default=\"4.60\"></div>\n                            </li>\n                            <li style=\"line-height: 20px; font-size: 11px; font-style: italic; padding: 0px 0px 0px 44px;\">\n                                <span style=\"line-height: 100%!important;\">&nbsp;</span>\n                                <em id=\"rate_row_cmd\" style=\"color: black;\">\n                                    manganato.gg rate : 4.60 / 5 - 15 votes\n                                </em>\n                                <script type=\"application/ld+json\"> {\n                                \"@context\": \"https://schema.org\",\n                                \"@type\": \"AggregateRating\",\n                                \"ratingValue\": \"4.60\",\n                                \"ratingCount\": \"15\",\n                                \"itemReviewed\": {\n                                    \"@type\": \"Book\",\n                                    \"name\": \"S-Class Hunter Heals with Monsters\",\n                                    \"image\": \"https://img-r1.2xstorage.com/thumb/s-class-hunter-heals-with-monsters.webp\"\n                                }\n                            } </script>\n                            </li>\n                            <li class=\"li_bookmark\"></li>\n                            \n                        </ul><div id=\"chapter-list-container\" data-comic-slug=\"s-class-hunter-heals-with-monsters\"></div>",
+    "chapterPages": [
+      {
+        "success": true,
+        "data": {
+          "chapters": [
+            {
+              "chapter_name": "Chapter 57",
+              "chapter_slug": "chapter-57",
+              "chapter_num": 57
+            },
+            {
+              "chapter_name": "Chapter 56",
+              "chapter_slug": "chapter-56",
+              "chapter_num": 56
+            },
+            {
+              "chapter_name": "Chapter 55",
+              "chapter_slug": "chapter-55",
+              "chapter_num": 55
+            },
+            {
+              "chapter_name": "Chapter 54",
+              "chapter_slug": "chapter-54",
+              "chapter_num": 54
+            },
+            {
+              "chapter_name": "Chapter 53",
+              "chapter_slug": "chapter-53",
+              "chapter_num": 53
+            },
+            {
+              "chapter_name": "Chapter 52",
+              "chapter_slug": "chapter-52",
+              "chapter_num": 52
+            },
+            {
+              "chapter_name": "Chapter 51",
+              "chapter_slug": "chapter-51",
+              "chapter_num": 51
+            },
+            {
+              "chapter_name": "Chapter 50",
+              "chapter_slug": "chapter-50",
+              "chapter_num": 50
+            },
+            {
+              "chapter_name": "Chapter 49",
+              "chapter_slug": "chapter-49",
+              "chapter_num": 49
+            },
+            {
+              "chapter_name": "Chapter 48",
+              "chapter_slug": "chapter-48",
+              "chapter_num": 48
+            },
+            {
+              "chapter_name": "Chapter 47",
+              "chapter_slug": "chapter-47",
+              "chapter_num": 47
+            },
+            {
+              "chapter_name": "Chapter 46",
+              "chapter_slug": "chapter-46",
+              "chapter_num": 46
+            },
+            {
+              "chapter_name": "Chapter 45",
+              "chapter_slug": "chapter-45",
+              "chapter_num": 45
+            },
+            {
+              "chapter_name": "Chapter 44",
+              "chapter_slug": "chapter-44",
+              "chapter_num": 44
+            },
+            {
+              "chapter_name": "Chapter 43",
+              "chapter_slug": "chapter-43",
+              "chapter_num": 43
+            },
+            {
+              "chapter_name": "Chapter 42",
+              "chapter_slug": "chapter-42",
+              "chapter_num": 42
+            },
+            {
+              "chapter_name": "Chapter 41",
+              "chapter_slug": "chapter-41",
+              "chapter_num": 41
+            },
+            {
+              "chapter_name": "Chapter 40",
+              "chapter_slug": "chapter-40",
+              "chapter_num": 40
+            },
+            {
+              "chapter_name": "Chapter 39.1",
+              "chapter_slug": "chapter-39-1",
+              "chapter_num": 39.1
+            },
+            {
+              "chapter_name": "Chapter 39",
+              "chapter_slug": "chapter-39",
+              "chapter_num": 39
+            },
+            {
+              "chapter_name": "Chapter 38",
+              "chapter_slug": "chapter-38",
+              "chapter_num": 38
+            },
+            {
+              "chapter_name": "Chapter 37",
+              "chapter_slug": "chapter-37",
+              "chapter_num": 37
+            },
+            {
+              "chapter_name": "Chapter 36",
+              "chapter_slug": "chapter-36",
+              "chapter_num": 36
+            },
+            {
+              "chapter_name": "Chapter 35",
+              "chapter_slug": "chapter-35",
+              "chapter_num": 35
+            },
+            {
+              "chapter_name": "Chapter 34",
+              "chapter_slug": "chapter-34",
+              "chapter_num": 34
+            },
+            {
+              "chapter_name": "Chapter 33",
+              "chapter_slug": "chapter-33",
+              "chapter_num": 33
+            },
+            {
+              "chapter_name": "Chapter 32",
+              "chapter_slug": "chapter-32",
+              "chapter_num": 32
+            },
+            {
+              "chapter_name": "Chapter 31.1",
+              "chapter_slug": "chapter-31-1",
+              "chapter_num": 31.1
+            },
+            {
+              "chapter_name": "Chapter 31",
+              "chapter_slug": "chapter-31",
+              "chapter_num": 31
+            },
+            {
+              "chapter_name": "Chapter 30",
+              "chapter_slug": "chapter-30",
+              "chapter_num": 30
+            },
+            {
+              "chapter_name": "Chapter 29",
+              "chapter_slug": "chapter-29",
+              "chapter_num": 29
+            },
+            {
+              "chapter_name": "Chapter 28",
+              "chapter_slug": "chapter-28",
+              "chapter_num": 28
+            },
+            {
+              "chapter_name": "Chapter 27",
+              "chapter_slug": "chapter-27",
+              "chapter_num": 27
+            },
+            {
+              "chapter_name": "Chapter 26",
+              "chapter_slug": "chapter-26",
+              "chapter_num": 26
+            },
+            {
+              "chapter_name": "Chapter 25",
+              "chapter_slug": "chapter-25",
+              "chapter_num": 25
+            },
+            {
+              "chapter_name": "Chapter 24.1",
+              "chapter_slug": "chapter-24-1",
+              "chapter_num": 24.1
+            },
+            {
+              "chapter_name": "Chapter 24",
+              "chapter_slug": "chapter-24",
+              "chapter_num": 24
+            },
+            {
+              "chapter_name": "Chapter 23",
+              "chapter_slug": "chapter-23",
+              "chapter_num": 23
+            },
+            {
+              "chapter_name": "Chapter 22",
+              "chapter_slug": "chapter-22",
+              "chapter_num": 22
+            },
+            {
+              "chapter_name": "Chapter 21",
+              "chapter_slug": "chapter-21",
+              "chapter_num": 21
+            },
+            {
+              "chapter_name": "Chapter 20",
+              "chapter_slug": "chapter-20",
+              "chapter_num": 20
+            },
+            {
+              "chapter_name": "Chapter 19",
+              "chapter_slug": "chapter-19",
+              "chapter_num": 19
+            },
+            {
+              "chapter_name": "Chapter 18.1",
+              "chapter_slug": "chapter-18-1",
+              "chapter_num": 18.1
+            },
+            {
+              "chapter_name": "Chapter 18",
+              "chapter_slug": "chapter-18",
+              "chapter_num": 18
+            },
+            {
+              "chapter_name": "Chapter 17",
+              "chapter_slug": "chapter-17",
+              "chapter_num": 17
+            },
+            {
+              "chapter_name": "Chapter 16",
+              "chapter_slug": "chapter-16",
+              "chapter_num": 16
+            },
+            {
+              "chapter_name": "Chapter 15",
+              "chapter_slug": "chapter-15",
+              "chapter_num": 15
+            },
+            {
+              "chapter_name": "Chapter 14",
+              "chapter_slug": "chapter-14",
+              "chapter_num": 14
+            },
+            {
+              "chapter_name": "Chapter 13.1",
+              "chapter_slug": "chapter-13-1",
+              "chapter_num": 13.1
+            },
+            {
+              "chapter_name": "Chapter 13",
+              "chapter_slug": "chapter-13",
+              "chapter_num": 13
+            }
+          ],
+          "pagination": {
+            "total": 72,
+            "limit": 50,
+            "offset": 0,
+            "has_more": true
+          }
+        }
+      },
+      {
+        "success": true,
+        "data": {
+          "chapters": [
+            {
+              "chapter_name": "Chapter 12",
+              "chapter_slug": "chapter-12",
+              "chapter_num": 12
+            },
+            {
+              "chapter_name": "Chapter 11",
+              "chapter_slug": "chapter-11",
+              "chapter_num": 11
+            },
+            {
+              "chapter_name": "Chapter 10",
+              "chapter_slug": "chapter-10",
+              "chapter_num": 10
+            },
+            {
+              "chapter_name": "Chapter 9.1",
+              "chapter_slug": "chapter-9-1",
+              "chapter_num": 9.1
+            },
+            {
+              "chapter_name": "Chapter 9",
+              "chapter_slug": "chapter-9",
+              "chapter_num": 9
+            },
+            {
+              "chapter_name": "Chapter 8",
+              "chapter_slug": "chapter-8",
+              "chapter_num": 8
+            },
+            {
+              "chapter_name": "Chapter 7.1",
+              "chapter_slug": "chapter-7-1",
+              "chapter_num": 7.1
+            },
+            {
+              "chapter_name": "Chapter 7",
+              "chapter_slug": "chapter-7",
+              "chapter_num": 7
+            },
+            {
+              "chapter_name": "Chapter 6.1",
+              "chapter_slug": "chapter-6-1",
+              "chapter_num": 6.1
+            },
+            {
+              "chapter_name": "Chapter 6",
+              "chapter_slug": "chapter-6",
+              "chapter_num": 6
+            },
+            {
+              "chapter_name": "Chapter 5",
+              "chapter_slug": "chapter-5",
+              "chapter_num": 5
+            },
+            {
+              "chapter_name": "Chapter 4",
+              "chapter_slug": "chapter-4",
+              "chapter_num": 4
+            },
+            {
+              "chapter_name": "Chapter 3",
+              "chapter_slug": "chapter-3",
+              "chapter_num": 3
+            },
+            {
+              "chapter_name": "Chapter 2",
+              "chapter_slug": "chapter-2",
+              "chapter_num": 2
+            },
+            {
+              "chapter_name": "Chapter 1.6",
+              "chapter_slug": "chapter-1-6",
+              "chapter_num": 1.6
+            },
+            {
+              "chapter_name": "Chapter 1.5",
+              "chapter_slug": "chapter-1-5",
+              "chapter_num": 1.5
+            },
+            {
+              "chapter_name": "Chapter 1.4",
+              "chapter_slug": "chapter-1-4",
+              "chapter_num": 1.4
+            },
+            {
+              "chapter_name": "Chapter 1.3",
+              "chapter_slug": "chapter-1-3",
+              "chapter_num": 1.3
+            },
+            {
+              "chapter_name": "Chapter 1.2",
+              "chapter_slug": "chapter-1-2",
+              "chapter_num": 1.2
+            },
+            {
+              "chapter_name": "Chapter 1.1",
+              "chapter_slug": "chapter-1-1",
+              "chapter_num": 1.1
+            },
+            {
+              "chapter_name": "Chapter 1",
+              "chapter_slug": "chapter-1",
+              "chapter_num": 1
+            },
+            {
+              "chapter_name": "Chapter 0",
+              "chapter_slug": "chapter-0",
+              "chapter_num": 0
+            }
+          ],
+          "pagination": {
+            "total": 72,
+            "limit": 50,
+            "offset": 50,
+            "has_more": false
+          }
+        }
+      }
+    ],
+    "readerHtml": "<meta charset=\"utf-8\"><script>var cdns = [\"https:\\/\\/img-r1.2xstorage.com\\/\"];var chapterImages = [\"s-class-hunter-heals-with-monsters\\/57\\/0.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/1.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/2.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/3.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/4.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/5.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/6.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/7.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/8.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/9.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/10.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/11.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/12.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/13.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/14.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/15.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/16.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/17.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/18.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/19.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/20.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/21.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/22.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/23.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/24.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/25.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/26.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/27.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/28.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/29.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/30.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/31.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/32.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/33.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/34.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/35.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/36.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/37.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/38.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/39.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/40.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/41.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/42.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/43.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/44.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/45.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/46.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/47.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/48.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/49.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/50.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/51.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/52.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/53.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/54.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/55.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/56.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/57.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/58.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/59.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/60.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/61.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/62.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/63.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/64.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/65.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/66.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/67.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/68.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/69.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/70.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/71.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/72.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/73.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/74.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/75.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/76.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/77.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/78.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/79.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/80.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/81.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/82.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/83.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/84.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/85.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/86.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/87.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/88.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/89.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/90.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/91.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/92.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/93.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/94.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/95.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/96.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/97.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/98.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/99.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/100.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/101.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/102.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/103.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/104.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/105.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/106.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/107.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/108.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/109.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/110.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/111.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/112.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/113.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/114.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/115.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/116.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/117.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/118.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/119.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/120.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/121.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/122.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/123.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/124.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/125.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/126.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/127.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/128.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/129.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/130.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/131.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/132.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/133.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/134.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/135.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/136.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/137.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/138.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/139.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/140.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/141.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/142.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/143.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/144.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/145.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/146.webp\",\"s-class-hunter-heals-with-monsters\\/57\\/147.webp\"];</script>",
+    "seriesTitle": "S-Class Hunter Heals with Monsters",
+    "seriesSlug": "s-class-hunter-heals-with-monsters",
+    "readerChapter": "chapter-57",
+    "readerPageCount": 148
+  }
+}

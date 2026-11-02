@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import logger from "@/src/runtime/logger"
 import {
   buildMangadexUploadsRecoveryImageUrl,
@@ -6,6 +7,7 @@ import {
   normalizeMangadexBaseUrl,
   parseMangadexImageDeliveryTarget,
   resolveMangadexImageUrlForQuality,
+  type MangadexImageDeliveryTarget,
 } from "./image-delivery"
 import {
   fetchAtHomeServer,
@@ -33,6 +35,8 @@ import type {
 import type { ChapterRuntimeData } from "@/src/types/site-integrations"
 import type { MangadexDispatchContext } from "./contracts/dispatch-context"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { waitForMangadexDelay } from "./api-delay"
+import { createImageDownloadAdapter } from "../image-download-adapter"
 
 type MangadexAtHomeReport = {
   url: string
@@ -58,37 +62,6 @@ const isMangadexImageRecoveryRetryableError = (error: unknown): boolean => {
     (typeof status === "number" && isMangadexTransientHttpStatus(status))
   )
 }
-
-const waitForMangadexImageRecoveryWindow = async (
-  signal?: AbortSignal
-): Promise<void> => {
-  if (MANGADEX_IMAGE_RECOVERY_BACKOFF_MS <= 0) {
-    return
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort)
-      resolve()
-    }, MANGADEX_IMAGE_RECOVERY_BACKOFF_MS)
-
-    const onAbort = () => {
-      clearTimeout(timeout)
-      signal?.removeEventListener("abort", onAbort)
-      reject(new Error("aborted"))
-    }
-
-    if (signal?.aborted) {
-      onAbort()
-      return
-    }
-
-    signal?.addEventListener("abort", onAbort, { once: true })
-  })
-}
-
-const getContextChapterId = (runtime: ChapterRuntimeData): string | undefined =>
-  runtime.chapterId
 
 async function reportToMangadexNetwork(
   report: MangadexAtHomeReport,
@@ -126,6 +99,7 @@ async function reportToMangadexNetwork(
       },
       rateLimitService,
     })
+    cancelResponseBody(response)
     if (!response.ok) {
       logger.debug(
         `[mangadex] Network report rejected with HTTP ${response.status}`
@@ -236,25 +210,138 @@ export async function resolveMangadexChapterImageUrls(
   return urls
 }
 
+type MangadexChapterImageOptions = {
+  signal?: AbortSignal
+  dispatchContext?: MangadexDispatchContext
+  runtime: ChapterRuntimeData
+  onBytesReceived?: (bytesReceived: number) => void | Promise<void>
+  liveResourceLedger: OffscreenLiveResourceLedger
+}
+
+type MangadexRecoverySource = {
+  chapterId: string
+  deliveryTarget: MangadexImageDeliveryTarget
+}
+
+function requireMangadexRecoverySource(
+  imageUrl: string,
+  opts: MangadexChapterImageOptions,
+  error: unknown
+): MangadexRecoverySource {
+  const chapterId = opts.runtime.chapterId
+  const deliveryTarget = parseMangadexImageDeliveryTarget(imageUrl)
+  if (
+    !chapterId ||
+    !deliveryTarget ||
+    opts.signal?.aborted ||
+    !isMangadexImageRecoveryRetryableError(error)
+  ) {
+    throw error
+  }
+  return { chapterId, deliveryTarget }
+}
+
+async function refreshMangadexRecoveryCandidate(
+  source: MangadexRecoverySource,
+  failedOfficialBaseUrl: string,
+  imageUrl: string,
+  cycle: number,
+  opts: MangadexChapterImageOptions
+): Promise<{ recoveryUrl: string; failedOfficialBaseUrl: string }> {
+  const refreshedAtHome = await fetchAtHomeServer(
+    source.chapterId,
+    opts.runtime.rateLimitService,
+    opts.signal
+  )
+  const refreshedBaseUrl = normalizeMangadexBaseUrl(refreshedAtHome.baseUrl)
+  const useUploadsFallback = isSameMangadexBaseUrl(
+    refreshedBaseUrl,
+    failedOfficialBaseUrl
+  )
+  const recoveryUrl = useUploadsFallback
+    ? buildMangadexUploadsRecoveryImageUrl(
+        MANGADEX_UPLOADS_BASE,
+        refreshedAtHome,
+        source.deliveryTarget
+      )
+    : resolveMangadexImageUrlForQuality(refreshedAtHome, source.deliveryTarget)
+  logger.warn(
+    "[mangadex] Retrying image download with refreshed at-home candidate",
+    {
+      chapterId: source.chapterId,
+      imageUrl: summarizeUrlForDiagnostics(imageUrl),
+      cycle,
+      refreshedBaseUrl,
+      failedOfficialBaseUrl: normalizeMangadexBaseUrl(failedOfficialBaseUrl),
+      useUploadsFallback,
+      recoveryUrl: summarizeUrlForDiagnostics(recoveryUrl),
+    }
+  )
+  return {
+    recoveryUrl,
+    failedOfficialBaseUrl: useUploadsFallback
+      ? failedOfficialBaseUrl
+      : refreshedAtHome.baseUrl,
+  }
+}
+
+async function recoverMangadexChapterImage(
+  imageUrl: string,
+  opts: MangadexChapterImageOptions,
+  originalError: unknown,
+  source: MangadexRecoverySource
+): ReturnType<typeof fetchMangadexImageAsset> {
+  let lastRecoveryError = originalError
+  let failedOfficialBaseUrl = source.deliveryTarget.baseUrl
+  for (let cycle = 1; cycle <= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES; cycle++) {
+    if (opts.signal?.aborted)
+      throw new Error("aborted", { cause: originalError })
+    const candidate = await refreshMangadexRecoveryCandidate(
+      source,
+      failedOfficialBaseUrl,
+      imageUrl,
+      cycle,
+      opts
+    )
+    try {
+      return await fetchMangadexImageAsset(
+        candidate.recoveryUrl,
+        opts.runtime.rateLimitService,
+        opts.signal,
+        opts.onBytesReceived,
+        opts.liveResourceLedger
+      )
+    } catch (error) {
+      lastRecoveryError = error
+    }
+    failedOfficialBaseUrl = candidate.failedOfficialBaseUrl
+    if (
+      !isMangadexImageRecoveryRetryableError(lastRecoveryError) ||
+      cycle >= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES
+    )
+      break
+    await waitForMangadexDelay(MANGADEX_IMAGE_RECOVERY_BACKOFF_MS, opts.signal)
+  }
+  const message =
+    lastRecoveryError instanceof Error
+      ? lastRecoveryError.message
+      : String(lastRecoveryError)
+  throw new Error(
+    `${message} (recovery cycles: ${MANGADEX_IMAGE_RECOVERY_MAX_CYCLES})`,
+    { cause: originalError }
+  )
+}
+
 export async function downloadMangadexChapterImage(
   imageUrl: string,
-  opts: {
-    signal?: AbortSignal
-    dispatchContext?: MangadexDispatchContext
-    runtime: ChapterRuntimeData
-    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger: OffscreenLiveResourceLedger
-  }
+  opts: MangadexChapterImageOptions
 ): Promise<{
   data: ArrayBuffer
   filename: string
   mimeType: string
   liveResourceLease: OffscreenLiveResourceLease
 }> {
-  if (opts.signal?.aborted) {
-    throw new Error("aborted")
-  }
-
+  if (opts.signal?.aborted) throw new Error("aborted")
   logger.debug("[mangadex] Downloading chapter image", {
     imageUrl: summarizeUrlForDiagnostics(imageUrl),
   })
@@ -267,133 +354,15 @@ export async function downloadMangadexChapterImage(
       opts.liveResourceLedger
     )
   } catch (error) {
-    const chapterId = getContextChapterId(opts.runtime)
-    const deliveryTarget = parseMangadexImageDeliveryTarget(imageUrl)
-    if (
-      !chapterId ||
-      !deliveryTarget ||
-      opts.signal?.aborted ||
-      !isMangadexImageRecoveryRetryableError(error)
-    ) {
-      throw error
-    }
-
-    let lastRecoveryError: unknown = error
-    let lastRecoveryUrl: string | undefined
-    let failedOfficialBaseUrl = deliveryTarget.baseUrl
-
-    for (let cycle = 1; cycle <= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES; cycle++) {
-      if (opts.signal?.aborted) {
-        throw new Error("aborted", { cause: error })
-      }
-
-      const refreshedAtHome = await fetchAtHomeServer(
-        chapterId,
-        opts.runtime.rateLimitService,
-        opts.signal
-      )
-      const refreshedBaseUrl = normalizeMangadexBaseUrl(refreshedAtHome.baseUrl)
-      const useUploadsFallback = isSameMangadexBaseUrl(
-        refreshedBaseUrl,
-        failedOfficialBaseUrl
-      )
-      const recoveryUrl = useUploadsFallback
-        ? buildMangadexUploadsRecoveryImageUrl(
-            MANGADEX_UPLOADS_BASE,
-            refreshedAtHome,
-            deliveryTarget
-          )
-        : resolveMangadexImageUrlForQuality(refreshedAtHome, deliveryTarget)
-
-      logger.warn(
-        "[mangadex] Retrying image download with refreshed at-home candidate",
-        {
-          chapterId,
-          imageUrl: summarizeUrlForDiagnostics(imageUrl),
-          cycle,
-          refreshedBaseUrl,
-          failedOfficialBaseUrl: normalizeMangadexBaseUrl(
-            failedOfficialBaseUrl
-          ),
-          useUploadsFallback,
-          recoveryUrl: summarizeUrlForDiagnostics(recoveryUrl),
-        }
-      )
-
-      lastRecoveryUrl = recoveryUrl
-      try {
-        return await fetchMangadexImageAsset(
-          recoveryUrl,
-          opts.runtime.rateLimitService,
-          opts.signal,
-          opts.onBytesReceived,
-          opts.liveResourceLedger
-        )
-      } catch (recoveryError) {
-        lastRecoveryError = recoveryError
-      }
-
-      if (!useUploadsFallback) {
-        failedOfficialBaseUrl = refreshedAtHome.baseUrl
-      }
-
-      if (
-        !isMangadexImageRecoveryRetryableError(lastRecoveryError) ||
-        cycle >= MANGADEX_IMAGE_RECOVERY_MAX_CYCLES
-      ) {
-        break
-      }
-
-      await waitForMangadexImageRecoveryWindow(opts.signal)
-    }
-
-    const lastRecoveryMessage =
-      lastRecoveryError instanceof Error
-        ? lastRecoveryError.message
-        : String(lastRecoveryError)
-    if (lastRecoveryUrl) {
-      throw new Error(
-        `${lastRecoveryMessage} (recovery cycles: ${MANGADEX_IMAGE_RECOVERY_MAX_CYCLES})`,
-        { cause: error }
-      )
-    }
-
-    throw error
+    const source = requireMangadexRecoverySource(imageUrl, opts, error)
+    return recoverMangadexChapterImage(imageUrl, opts, error, source)
   }
 }
 
-export async function downloadMangadexCoverImage(
-  imageUrl: string,
-  opts: {
-    signal?: AbortSignal
-    dispatchContext?: MangadexDispatchContext
-    runtime: ChapterRuntimeData
-    skipRateLimit?: boolean
-    onBytesReceived?: (bytesReceived: number) => void | Promise<void>
-    liveResourceLedger: OffscreenLiveResourceLedger
-  }
-): Promise<{
-  data: ArrayBuffer
-  filename: string
-  mimeType: string
-  liveResourceLease: OffscreenLiveResourceLease
-}> {
-  const { data, mimeType, liveResourceLease } =
-    await fetchImageWithStallDetection(imageUrl, {
-      signal: opts.signal,
-      init: { credentials: "omit" },
-      integrationId: "mangadex",
-      endpointId: "mangadex-at-home-image",
-      rateLimitService: opts.runtime.rateLimitService,
-      onBytesReceived: opts.onBytesReceived,
-      liveResourceLedger: opts.liveResourceLedger,
-    })
-  return {
-    data,
-    mimeType,
-    liveResourceLease,
-    filename:
-      new URL(imageUrl).pathname.split("/").filter(Boolean).pop() ||
-      "cover.jpg",
-  }
-}
+export const downloadMangadexCoverImage =
+  createImageDownloadAdapter<MangadexDispatchContext>({
+    integrationId: "mangadex",
+    endpointId: "mangadex-at-home-image",
+    init: { credentials: "omit" },
+    filename: "cover",
+  })

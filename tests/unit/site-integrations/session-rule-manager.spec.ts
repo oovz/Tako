@@ -2,8 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { assertValidSessionRefererRuleDeclaration } from "@/src/site-integrations/definition-validation"
 import { siteIntegrationCatalog } from "@/src/runtime/generated/site-integration-catalog"
-import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/manhuagui/shared"
+import { isAllowedManhuaguiImageUrl } from "@/src/site-integrations/readmanga/shared"
 import { normalizePixivImageUrl } from "@/src/site-integrations/pixiv-comic/shared"
+import { assertIntegrationEndpointRequestUrl } from "@/src/site-integrations/request-policy"
+
+const otherIntegrationsDisabled = Object.fromEntries(
+  siteIntegrationCatalog
+    .filter(({ id }) => id !== "pixiv-comic" && id !== "readmanga")
+    .map(({ id }) => [id, false])
+)
+const managedRuleIds = siteIntegrationCatalog
+  .flatMap(({ sessionRefererRules }) => sessionRefererRules.map(({ id }) => id))
+  .sort((a, b) => a - b)
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -48,7 +58,10 @@ function installChromeMock(input?: {
     storage: {
       local: {
         get: vi.fn(async () => ({
-          siteIntegrationEnablement: input?.storedEnablement ?? {},
+          siteIntegrationEnablement: {
+            ...otherIntegrationsDisabled,
+            ...input?.storedEnablement,
+          },
         })),
       },
       session: {
@@ -153,7 +166,10 @@ async function loadManager() {
     reconcileSiteIntegrationSessionRules: (
       enablement?: Record<string, boolean>,
       _service?: typeof testEnablementService
-    ) => get().reconcile(enablement),
+    ) =>
+      get().reconcile(
+        enablement ? { ...otherIntegrationsDisabled, ...enablement } : undefined
+      ),
     ensureSiteIntegrationNetworkReady: (
       siteIntegrationId: string,
       _service?: typeof testEnablementService
@@ -244,14 +260,25 @@ describe("site integration session-rule manager", () => {
       for (const rule of definition.sessionRefererRules ?? []) {
         for (const domain of rule.requestDomains) {
           const imageUrl = `https://${domain}/contract-test-image.jpg`
-          if (definition.id === "manhuagui") {
+          if (definition.id === "readmanga") {
             expect(isAllowedManhuaguiImageUrl(imageUrl)).toBe(true)
           } else if (definition.id === "pixiv-comic") {
             expect(() => normalizePixivImageUrl(imageUrl)).not.toThrow()
           } else {
-            throw new Error(
-              `Add a runtime network-policy assertion for ${definition.id}`
-            )
+            expect(
+              definition.endpointPolicies.some(({ id }) => {
+                try {
+                  assertIntegrationEndpointRequestUrl(
+                    definition.id,
+                    id,
+                    imageUrl
+                  )
+                  return true
+                } catch {
+                  return false
+                }
+              })
+            ).toBe(true)
           }
         }
       }
@@ -265,13 +292,13 @@ describe("site integration session-rule manager", () => {
     await reconcileSiteIntegrationSessionRules(
       {
         "pixiv-comic": false,
-        manhuagui: true,
+        readmanga: true,
       },
       testEnablementService
     )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [
         expect.objectContaining({
           id: 41002,
@@ -293,13 +320,13 @@ describe("site integration session-rule manager", () => {
     await reconcileSiteIntegrationSessionRules(
       {
         "pixiv-comic": true,
-        manhuagui: true,
+        readmanga: true,
       },
       testEnablementService
     )
 
     expect(updateSessionRules).toHaveBeenCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
   })
@@ -319,7 +346,7 @@ describe("site integration session-rule manager", () => {
       reconcileSiteIntegrationSessionRules(
         {
           "pixiv-comic": true,
-          manhuagui: true,
+          readmanga: true,
         },
         testEnablementService
       )
@@ -343,7 +370,7 @@ describe("site integration session-rule manager", () => {
       reconcileSiteIntegrationSessionRules(
         {
           "pixiv-comic": true,
-          manhuagui: true,
+          readmanga: true,
         },
         testEnablementService
       )
@@ -540,6 +567,64 @@ describe("site integration session-rule manager", () => {
     expect(updateSessionRules).toHaveBeenCalledTimes(2)
   })
 
+  it("retries migration from its alarm before reading enablement or writing rules", async () => {
+    const { alarmListeners, createAlarm, updateSessionRules } =
+      installChromeMock()
+    const { SiteIntegrationSessionRuleManager } = await loadManager()
+    const migration = vi
+      .fn(async () => undefined)
+      .mockRejectedValueOnce(new Error("migration storage unavailable"))
+    const getAll = vi.fn(testEnablementService.getAll)
+    const manager = new SiteIntegrationSessionRuleManager({
+      service: { getAll },
+      awaitSchemaMigration: migration,
+      onReconciliationSucceeded: async () => undefined,
+    })
+    manager.registerListeners()
+
+    await expect(manager.start()).rejects.toThrow(
+      "migration storage unavailable"
+    )
+    expect(getAll).not.toHaveBeenCalled()
+    expect(updateSessionRules).not.toHaveBeenCalled()
+    expect(createAlarm).toHaveBeenCalledWith(
+      "site-integration-session-rule-retry",
+      expect.objectContaining({ delayInMinutes: 0.5 })
+    )
+
+    for (const listener of alarmListeners) {
+      listener({
+        name: "site-integration-session-rule-retry",
+        scheduledTime: Date.now(),
+        persistAcrossSessions: true,
+      })
+    }
+    await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledOnce())
+    expect(migration).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps invalid migration state behind the gate without scheduling reconciliation retries", async () => {
+    const { createAlarm, updateSessionRules } = installChromeMock()
+    const { SiteIntegrationSessionRuleManager } = await loadManager()
+    // Use the same error constructor as the manager after module isolation.
+    const { InvalidDurableStateError } =
+      await import("@/src/runtime/runtime-phase-errors")
+    const cause = new InvalidDurableStateError("unsupported schema epoch")
+    const getAll = vi.fn(testEnablementService.getAll)
+    const manager = new SiteIntegrationSessionRuleManager({
+      service: { getAll },
+      awaitSchemaMigration: async () => {
+        throw cause
+      },
+      onReconciliationSucceeded: async () => undefined,
+    })
+
+    await expect(manager.start()).rejects.toBe(cause)
+    expect(getAll).not.toHaveBeenCalled()
+    expect(updateSessionRules).not.toHaveBeenCalled()
+    expect(createAlarm).not.toHaveBeenCalled()
+  })
+
   it("caps retry backoff and does not replace an already scheduled retry", async () => {
     const { alarmListeners, createAlarm } = installChromeMock({
       updateSessionRules: async () => {
@@ -613,14 +698,18 @@ describe("site integration session-rule manager", () => {
     storageChangeListeners[0](
       {
         siteIntegrationEnablement: {
-          newValue: { "pixiv-comic": false, manhuagui: true },
+          newValue: {
+            ...otherIntegrationsDisabled,
+            "pixiv-comic": false,
+            readmanga: true,
+          },
         },
       },
       "local"
     )
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(2))
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41002 })],
     })
 
@@ -638,7 +727,7 @@ describe("site integration session-rule manager", () => {
     })
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(4))
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
   })
@@ -668,7 +757,7 @@ describe("site integration session-rule manager", () => {
     })
     await vi.waitFor(() => expect(updateSessionRules).toHaveBeenCalledTimes(1))
     storageChangeListeners[0](
-      { siteIntegrationEnablement: { newValue: { manhuagui: true } } },
+      { siteIntegrationEnablement: { newValue: { readmanga: true } } },
       "local"
     )
     permissionAddedListeners[0]({ origins: ["https://comic.pixiv.net/*"] })
@@ -694,7 +783,7 @@ describe("site integration session-rule manager", () => {
     })
     let manhuaguiReady = false
     const dependentReadiness = ensureSiteIntegrationNetworkReady(
-      "manhuagui",
+      "readmanga",
       testEnablementService
     ).then(() => {
       manhuaguiReady = true
@@ -713,7 +802,7 @@ describe("site integration session-rule manager", () => {
   })
 
   it("re-reads enablement when a provider is enabled immediately before dispatch", async () => {
-    const storedEnablement = { manhuagui: false }
+    const storedEnablement = { readmanga: false }
     const { updateSessionRules } = installChromeMock({ storedEnablement })
     const {
       ensureSiteIntegrationNetworkReady,
@@ -724,15 +813,15 @@ describe("site integration session-rule manager", () => {
       service: testEnablementService,
     })
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [expect.objectContaining({ id: 41001 })],
     })
 
-    storedEnablement.manhuagui = true
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+    storedEnablement.readmanga = true
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenLastCalledWith({
-      removeRuleIds: [41001, 41002],
+      removeRuleIds: managedRuleIds,
       addRules: [
         expect.objectContaining({ id: 41001 }),
         expect.objectContaining({ id: 41002 }),
@@ -742,7 +831,7 @@ describe("site integration session-rule manager", () => {
 
   it("does not rewrite an already-current managed rule set for each dependent task", async () => {
     const { updateSessionRules } = installChromeMock({
-      storedEnablement: { manhuagui: true },
+      storedEnablement: { readmanga: true },
     })
     const {
       ensureSiteIntegrationNetworkReady,
@@ -752,8 +841,8 @@ describe("site integration session-rule manager", () => {
     await initializeSiteIntegrationSessionRuleManager({
       service: testEnablementService,
     })
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
-    await ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
+    await ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
 
     expect(updateSessionRules).toHaveBeenCalledTimes(1)
   })
@@ -761,7 +850,7 @@ describe("site integration session-rule manager", () => {
   it("classifies transient reconciliation failure separately from host-access denial", async () => {
     let shouldThrow = true
     const { updateSessionRules } = installChromeMock({
-      storedEnablement: { manhuagui: true },
+      storedEnablement: { readmanga: true },
       updateSessionRules: async () => {
         if (shouldThrow) throw new Error("temporary DNR failure")
       },
@@ -779,7 +868,7 @@ describe("site integration session-rule manager", () => {
       })
     ).rejects.toThrow("temporary DNR failure")
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+      ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyPendingError)
 
     shouldThrow = false
@@ -789,7 +878,7 @@ describe("site integration session-rule manager", () => {
       ) => Promise<boolean>
     ).mockResolvedValue(false)
     await expect(
-      ensureSiteIntegrationNetworkReady("manhuagui", testEnablementService)
+      ensureSiteIntegrationNetworkReady("readmanga", testEnablementService)
     ).rejects.toBeInstanceOf(ProviderNetworkPolicyActionRequiredError)
     expect(updateSessionRules).toHaveBeenCalled()
   })

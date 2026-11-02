@@ -43,6 +43,8 @@ function createWorker(initialize: () => Promise<void>): OffscreenWorkerRuntime {
     initialize: vi.fn(initialize),
     processDownloadChapter: vi.fn(),
     parseSeriesHtml: vi.fn(),
+    fetchCoverPreview: vi.fn(),
+    cancelCoverPreview: vi.fn(() => true),
     cancelSeriesHtml: vi.fn(() => true),
     cancelJob: vi.fn((identity) => ({
       canceled: true,
@@ -53,7 +55,7 @@ function createWorker(initialize: () => Promise<void>): OffscreenWorkerRuntime {
     revokeBlobUrl: vi.fn(() => true),
     getJobState: vi.fn(() => null),
     getActiveJobCount: vi.fn(() => 0),
-    getActiveSeriesResolutionCount: vi.fn(() => 0),
+    getActiveTransientWorkCount: vi.fn(() => 0),
     getActiveTaskIds: vi.fn(() => []),
   }
 }
@@ -133,7 +135,7 @@ describe("offscreen runtime bridge", () => {
         initializationState: "initializing",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       })
     )
@@ -210,7 +212,7 @@ describe("offscreen runtime bridge", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       })
     )
@@ -312,7 +314,7 @@ describe("offscreen runtime bridge", () => {
         initializationState: "initializing",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       })
     )
@@ -484,7 +486,7 @@ describe("offscreen runtime bridge", () => {
         initializationState: "failed",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       })
     )

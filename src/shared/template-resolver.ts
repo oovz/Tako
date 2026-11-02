@@ -1,31 +1,19 @@
-/**
- * Download path template resolution utilities (directory-only semantics)
- * Single exported resolver that always returns a DIRECTORY path.
- * Final archive filename (chapter title + format extension) is appended elsewhere.
- * If the user supplies what looks like a filename (e.g. "<CHAPTER>.cbz"), it is treated as a directory name verbatim.
- */
+/** Resolve directory and filename templates using chapter metadata. */
 
-import {
-  validateTemplateMacros,
-  generateSampleMacroData,
-} from "./template-macros"
+import { validateTemplateMacros } from "./template-macros"
 import { validateResolvedPath } from "./download-path-validator"
 import { sanitizeFilename } from "./filename-sanitizer"
+import { buildTemplateValues } from "./template-values"
 
-/**
- * Template context for download path resolution (template-resolver).
- *
- * NOTE: This is intentionally a separate type from the `TemplateContext` in
- * `template-expander.ts`. See the comment there for why they are not consolidated.
- */
+/** Values required to resolve one chapter's output path. */
 export interface TemplateContext {
   date: Date
   publisher?: string
   integrationName?: string
   seriesTitle?: string
-  chapterTitle: string // REQUIRED for new semantics when resolving per chapter
+  chapterTitle: string
   volumeTitle?: string
-  format: string // REQUIRED (used externally when composing final file name)
+  format: string // Used when composing the final filename.
   chapterNumber?: number
   volumeNumber?: number
 }
@@ -42,38 +30,20 @@ export interface FilenameResolutionResult {
   error?: string
 }
 
-// Canonical token builder (per chapter) – chapters required for new rule-set.
-// Uses local date methods so date macros reflect user's local timezone (for file organization)
+// Date macros use the user's local timezone.
 function buildTokens(ctx: TemplateContext): Record<string, string | undefined> {
-  const pad2 = (n: number) => String(n).padStart(2, "0")
-  const pad3 = (n: number) => String(n).padStart(3, "0")
-  return {
-    YYYY: String(ctx.date.getFullYear()),
-    MM: pad2(ctx.date.getMonth() + 1),
-    DD: pad2(ctx.date.getDate()),
-    PUBLISHER: ctx.publisher,
-    INTEGRATION_NAME: ctx.integrationName,
-    SERIES_TITLE: ctx.seriesTitle,
-    CHAPTER_TITLE: ctx.chapterTitle,
-    VOLUME_TITLE: ctx.volumeTitle,
-    CHAPTER_NUMBER:
-      ctx.chapterNumber !== undefined ? String(ctx.chapterNumber) : undefined,
-    CHAPTER_NUMBER_PAD2:
-      ctx.chapterNumber !== undefined ? pad2(ctx.chapterNumber) : undefined,
-    CHAPTER_NUMBER_PAD3:
-      ctx.chapterNumber !== undefined ? pad3(ctx.chapterNumber) : undefined,
-    VOLUME_NUMBER:
-      ctx.volumeNumber !== undefined ? String(ctx.volumeNumber) : undefined,
-    VOLUME_NUMBER_PAD2:
-      ctx.volumeNumber !== undefined ? pad2(ctx.volumeNumber) : undefined,
-  }
+  return buildTemplateValues({
+    ...ctx,
+    currentYear: ctx.date.getFullYear(),
+    currentMonth: ctx.date.getMonth() + 1,
+    currentDay: ctx.date.getDate(),
+  })
 }
 
 // Expand (directory only). Each segment sanitized. Empty segments discarded.
 function expandDirectory(template: string, ctx: TemplateContext): string {
   const tokens = buildTokens(ctx)
-  const tpl = template || ""
-  const rawSegments = tpl.split("/")
+  const rawSegments = template.split("/")
   const out: string[] = []
   for (let seg of rawSegments) {
     seg = seg.replace(
@@ -87,11 +57,9 @@ function expandDirectory(template: string, ctx: TemplateContext): string {
 }
 
 /**
- * Resolve a directory template for ONE chapter.
- * - Always per chapter (allows <CHAPTER> macro usage).
- * - Returns error if chapterTitle or format missing (no fallback names).
- * - An empty final directory after expansion is an ERROR (no fallback to series/Chapter).
- * - Treats any extension-looking suffix as part of the directory (not a filename).
+ * Resolve a chapter directory, including any <CHAPTER_TITLE> macro.
+ * Requires a chapter title and format, and rejects an empty result.
+ * A suffix such as .cbz remains part of the directory name.
  */
 export function resolveDownloadDirectory(
   template: string,
@@ -111,12 +79,13 @@ export function resolveDownloadDirectory(
       }
     }
 
-    const macroValidation = validateTemplateMacros(template || "")
+    const normalizedTemplate = template || ""
+    const macroValidation = validateTemplateMacros(normalizedTemplate)
     if (!macroValidation.isValid) {
       return { success: false, error: macroValidation.error }
     }
 
-    const expanded = expandDirectory(template || "", ctx)
+    const expanded = expandDirectory(normalizedTemplate, ctx)
     if (!expanded) {
       return { success: false, error: "Resolved directory is empty" }
     }
@@ -166,27 +135,4 @@ export function resolveFileName(
   }
 
   return { success: true, resolvedName }
-}
-
-/**
- * Build a sample TemplateContext from macro examples (Single Source of Truth).
- * Derives preview data from TEMPLATE_MACROS to eliminate duplication.
- */
-export function buildSampleContext(): TemplateContext {
-  const macroData = generateSampleMacroData()
-  return {
-    date: new Date(
-      parseInt(macroData["YYYY"], 10),
-      parseInt(macroData["MM"], 10) - 1,
-      parseInt(macroData["DD"], 10)
-    ),
-    publisher: macroData["PUBLISHER"],
-    integrationName: macroData["INTEGRATION_NAME"],
-    seriesTitle: macroData["SERIES_TITLE"],
-    chapterTitle: macroData["CHAPTER_TITLE"],
-    volumeTitle: macroData["VOLUME_TITLE"],
-    format: "cbz",
-    chapterNumber: parseInt(macroData["CHAPTER_NUMBER_PAD3"], 10) || undefined,
-    volumeNumber: parseInt(macroData["VOLUME_NUMBER_PAD2"], 10) || undefined,
-  }
 }

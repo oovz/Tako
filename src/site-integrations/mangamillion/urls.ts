@@ -4,7 +4,6 @@ export const MANGAMILLION_IMG_HOST = "img.mangamillion.shueisha.co.jp"
 
 export const MANGAMILLION_ORIGIN = `https://${MANGAMILLION_HOST}`
 export const MANGAMILLION_API_ORIGIN = `https://${MANGAMILLION_API_HOST}`
-export const MANGAMILLION_IMG_ORIGIN = `https://${MANGAMILLION_IMG_HOST}`
 
 export interface ParsedMangaMillionUrl {
   titleId: number
@@ -15,24 +14,32 @@ export interface ParsedMangaMillionUrl {
 const TITLE_URL_REGEX =
   /^(?:\/([a-zA-Z0-9_-]+))?\/title\/(\d+)(?:\/chapter\/(\d+))?\/?$/
 
-export function parseMangaMillionSeriesUrl(
-  input: string
-): ParsedMangaMillionUrl | null {
-  let parsed: URL
+function parseTrustedMangaMillionUrl(
+  input: string,
+  hostname: string
+): URL | null {
   try {
-    parsed = new URL(input)
+    const parsed = new URL(input)
+    return parsed.protocol === "https:" &&
+      parsed.hostname === hostname &&
+      !parsed.username &&
+      !parsed.password
+      ? parsed
+      : null
   } catch {
     return null
   }
+}
 
-  if (
-    parsed.protocol !== "https:" ||
-    parsed.hostname !== MANGAMILLION_HOST ||
-    parsed.username ||
-    parsed.password
-  ) {
-    return null
-  }
+function positiveInteger(value: number): number | undefined {
+  return Number.isSafeInteger(value) && value > 0 ? value : undefined
+}
+
+export function parseMangaMillionSeriesUrl(
+  input: string
+): ParsedMangaMillionUrl | null {
+  const parsed = parseTrustedMangaMillionUrl(input, MANGAMILLION_HOST)
+  if (!parsed) return null
 
   const match = TITLE_URL_REGEX.exec(parsed.pathname)
   if (!match) {
@@ -42,20 +49,16 @@ export function parseMangaMillionSeriesUrl(
   const queryLang = parsed.searchParams.get("lang")?.trim()
   const language = queryLang || match[1] || "en"
   const titleId = Number.parseInt(match[2], 10)
-  const chapterId = match[3] ? Number.parseInt(match[3], 10) : undefined
+  const chapterId = positiveInteger(Number.parseInt(match[3], 10))
 
-  if (!Number.isSafeInteger(titleId) || titleId <= 0) {
+  if (!positiveInteger(titleId)) {
     return null
   }
 
   return {
     titleId,
     language,
-    ...(chapterId !== undefined &&
-    Number.isSafeInteger(chapterId) &&
-    chapterId > 0
-      ? { chapterId }
-      : {}),
+    ...(chapterId !== undefined ? { chapterId } : {}),
   }
 }
 
@@ -92,29 +95,9 @@ export function buildMangaMillionChapterUrl(
 }
 
 export function isTrustedMangaMillionAssetUrl(input: string): boolean {
-  try {
-    const parsed = new URL(input)
-    return (
-      parsed.protocol === "https:" &&
-      parsed.hostname === MANGAMILLION_IMG_HOST &&
-      !parsed.username &&
-      !parsed.password
-    )
-  } catch {
-    return false
-  }
+  return parseTrustedMangaMillionUrl(input, MANGAMILLION_IMG_HOST) !== null
 }
 
 export function isTrustedMangaMillionApiUrl(input: string): boolean {
-  try {
-    const parsed = new URL(input)
-    return (
-      parsed.protocol === "https:" &&
-      parsed.hostname === MANGAMILLION_API_HOST &&
-      !parsed.username &&
-      !parsed.password
-    )
-  } catch {
-    return false
-  }
+  return parseTrustedMangaMillionUrl(input, MANGAMILLION_API_HOST) !== null
 }

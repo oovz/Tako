@@ -24,6 +24,7 @@ function createChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: `chapter-${status}`,
     url: `https://example.com/${status}`,
     title: status,
@@ -91,7 +92,9 @@ describe("queue task lifecycle formulas", () => {
     },
     {
       name: "blocked queued",
-      task: createTask({ activeBlock: "destination_action_required" }),
+      task: createTask({
+        activeBlock: "provider_network_policy_action_required",
+      }),
       blocked: true,
       runnable: false,
       executing: false,
@@ -120,7 +123,7 @@ describe("queue task lifecycle formulas", () => {
       name: "terminal with stale block",
       task: createTask({
         status: "failed",
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       }),
       blocked: false,
       runnable: false,
@@ -144,7 +147,7 @@ describe("queue task lifecycle formulas", () => {
     })
     const terminal = createTask({
       status: "failed",
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
     })
     const untouched = createTask()
 
@@ -158,7 +161,7 @@ describe("queue task lifecycle formulas", () => {
     })
     expect(normalizeDownloadTaskExecutionState(untouched)).toBe(untouched)
     expect(blocked.status).toBe("downloading")
-    expect(terminal.activeBlock).toBe("destination_action_required")
+    expect(terminal.activeBlock).toBe("provider_network_policy_action_required")
   })
 
   it.each([
@@ -280,7 +283,7 @@ describe("queue task lifecycle formulas", () => {
       const task = createTask({
         status: "downloading",
         chapters: [...chapters],
-        activeBlock: "destination_action_required",
+        activeBlock: "provider_network_policy_action_required",
       })
       const before = structuredClone(task)
 
@@ -296,6 +299,34 @@ describe("queue task lifecycle formulas", () => {
       expect(task).toEqual(before)
     }
   )
+
+  it("retains the first unsuccessful chapter cause when later work is interrupted", () => {
+    const normalized = normalizeInterruptedTask(
+      createTask({
+        status: "downloading",
+        errorCategory: "network_unavailable",
+        chapters: [
+          createChapter("partial_success", {
+            errorMessage: "Closing the first file failed",
+            errorCategory: "folder_write_failed",
+            outputs: { requested: 2, committed: 1, failed: 1 },
+          }),
+          createChapter("downloading"),
+        ],
+      }),
+      "Worker stopped",
+      500
+    )
+    expect(normalized).toMatchObject({
+      status: "partial_success",
+      errorMessage: "Closing the first file failed",
+      errorCategory: "folder_write_failed",
+      chapters: [
+        { status: "partial_success", errorCategory: "folder_write_failed" },
+        { status: "failed", errorMessage: "Worker stopped" },
+      ],
+    })
+  })
 
   it("preserves an existing task completion timestamp during interruption normalization", () => {
     const normalized = normalizeInterruptedTask(
@@ -321,7 +352,7 @@ describe("queue task lifecycle formulas", () => {
     const task = createTask({
       status: "downloading",
       chapters,
-      activeBlock: "destination_action_required",
+      activeBlock: "provider_network_policy_action_required",
     })
     const before = structuredClone(task)
 

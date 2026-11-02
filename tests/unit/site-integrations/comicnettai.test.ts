@@ -5,24 +5,24 @@ import {
   extractComicNettaiBookContentId,
   parseComicNettaiSeriesIdFromPath,
   parseComicNettaiViewerCid,
-} from "@/src/site-integrations/comicnettai/shared"
+} from "@/src/site-integrations/comictropics/shared"
 import {
   buildPublusImageUrlsFromConfig,
   downloadComicNettaiChapterImage as downloadComicNettaiChapterImageImpl,
   resolveComicNettaiChapterImageUrls as resolveComicNettaiChapterImageUrlsImpl,
-} from "@/src/site-integrations/comicnettai/chapter-api"
+} from "@/src/site-integrations/comictropics/chapter-api"
 import { ChapterImagePlanSchema } from "@/src/site-integrations/chapter-plan"
 import {
   buildPublusPageTileRects,
   descramblePublusImage,
   parsePublusImageTransportUrl,
-} from "@/src/site-integrations/comicnettai/publus-image"
+} from "@/src/site-integrations/comictropics/publus-image"
 import {
   extractComicNettaiSeriesMetadataFromDocument,
   extractComicNettaiChapterListFromDocument,
   extractComicNettaiChapterListWithPagination as extractComicNettaiChapterListWithPaginationImpl,
   loadComicNettaiPaginationDocument as loadComicNettaiPaginationDocumentImpl,
-} from "@/src/site-integrations/comicnettai/series-dom"
+} from "@/src/site-integrations/comictropics/series-dom"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 import { integrationHttpClient } from "@/src/site-integrations/http-client"
 import { MAX_IMAGE_BYTES } from "@/src/constants/timeouts"
@@ -814,6 +814,7 @@ describe("Comic Nettai site integration", () => {
         if (selector === 'a[href*="page="]') {
           return (opts.paginationHrefs ?? []).map((href) => ({
             getAttribute: (name: string) => (name === "href" ? href : null),
+            closest: () => null,
           }))
         }
         return []
@@ -1160,8 +1161,8 @@ describe("Comic Nettai site integration", () => {
 
       expect(fetchForIntegration).toHaveBeenCalledWith(
         expect.objectContaining({
-          integrationId: "comicnettai",
-          endpointId: "comicnettai-viewer-page",
+          integrationId: "comictropics",
+          endpointId: "comictropics-viewer-page",
           url: "https://www.comicnettai.com/book/9?page=2",
           scope: "chapter",
           init: expect.objectContaining({

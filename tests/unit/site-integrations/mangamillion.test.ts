@@ -492,6 +492,7 @@ describe("MangaMillion site integration", () => {
       const result =
         await backgroundSiteAdapter.background.series!.resolveSeriesData({
           seriesUrl: "https://mangamillion.shueisha.co.jp/en/title/1",
+          language: "ja",
           rateLimitService: mockRateLimitService,
           siteIntegrationSettingsReader: {
             getAll: async () => ({}),

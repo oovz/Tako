@@ -1,5 +1,4 @@
 // Lightweight structured logger for browser contexts
-// Simplified: uses only logLevel (no separate debugMode flag)
 import type { AdvancedSettings } from "@/src/domain/settings/types"
 import {
   redactDiagnostic,
@@ -116,7 +115,6 @@ export function setLoggerForceDebug(value: boolean): void {
 }
 
 export function computeLoggerConfig(advanced?: AdvancedSettings): LoggerConfig {
-  // Simplified: just use logLevel directly
   if (forceDebug) {
     return { minLevel: "debug" }
   }

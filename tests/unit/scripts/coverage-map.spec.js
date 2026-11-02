@@ -67,8 +67,8 @@ describe("coverage path canonicalization", () => {
     expect(canonicalizeCoveragePath(input, root)).toBe("src/example.ts")
   })
 
-  it("canonicalizes both the map key and embedded file path", () => {
-    const map = canonicalizeCoverageMap(
+  it("canonicalizes both the map key and embedded file path", async () => {
+    const map = await canonicalizeCoverageMap(
       {
         "C:\\repo\\src\\example.ts": fileCoverage(
           "file:///C:/repo/src/example.ts",
@@ -82,29 +82,6 @@ describe("coverage path canonicalization", () => {
     expect(map["src/example.ts"].path).toBe("src/example.ts")
   })
 
-  it("removes already-applied input source maps before NYC reporting", () => {
-    const coverage = fileCoverage("/C:/repo/src/example.ts", {
-      statementId: "0",
-      line: 1,
-      hits: 1,
-    })
-    coverage.inputSourceMap = {
-      version: 3,
-      sources: ["C:/repo/src/example.ts"],
-      names: [],
-      mappings: "AAAA",
-      sourcesContent: ["export const value = 1;"],
-    }
-
-    const map = canonicalizeCoverageMap(
-      { "/C:/repo/src/example.ts": coverage },
-      "C:\\repo"
-    )
-
-    const serialized = JSON.parse(JSON.stringify(map))
-    expect(serialized["src/example.ts"]).not.toHaveProperty("inputSourceMap")
-  })
-
   it("rejects absolute and relative paths outside the repository", () => {
     expect(() =>
       canonicalizeCoveragePath("C:\\other\\example.ts", "C:\\repo")
@@ -116,8 +93,47 @@ describe("coverage path canonicalization", () => {
 })
 
 describe("coverage map merging", () => {
-  it("merges matching locations and preserves incompatible numeric IDs", () => {
-    const merged = mergeCoverageMaps(
+  it("consumes asynchronous coverage inputs with the same location merge", async () => {
+    async function* sources() {
+      yield {
+        "/repo/src/example.ts": fileCoverage("/repo/src/example.ts", {
+          statementId: "0",
+          line: 1,
+          hits: 2,
+        }),
+      }
+      yield {
+        "src/example.ts": fileCoverage("src/example.ts", {
+          statementId: "8",
+          line: 1,
+          hits: 3,
+        }),
+      }
+    }
+
+    const merged = await mergeCoverageMaps(sources(), "/repo")
+
+    expect(merged["src/example.ts"].s).toEqual({ 0: 5 })
+  })
+
+  it("preserves an asynchronous source failure after consuming earlier input", async () => {
+    const failure = new Error("coverage input read failed")
+    async function* sources() {
+      yield {
+        "/repo/src/example.ts": fileCoverage("/repo/src/example.ts", {
+          statementId: "0",
+          line: 1,
+          hits: 2,
+        }),
+      }
+      throw failure
+    }
+
+    await expect(mergeCoverageMaps(sources(), "/repo")).rejects.toBe(failure)
+  })
+
+  it("merges matching locations and preserves incompatible numeric IDs", async () => {
+    const merged = await mergeCoverageMaps(
       [
         {
           "C:\\repo\\src\\example.ts": fileCoverage(
@@ -160,7 +176,7 @@ describe("coverage map merging", () => {
     expect(hitsByLine).toEqual({ 1: 7, 2: 3 })
   })
 
-  it("reindexes functions and branches by location instead of numeric ID", () => {
+  it("reindexes functions and branches by location instead of numeric ID", async () => {
     const first = richCoverage("C:\\repo\\src\\example.ts", "0", 1, 2)
     const second = richCoverage("C:/repo/src/example.ts", "0", 2, 3)
     const matching = richCoverage("C:/repo/src/example.ts", "8", 1, 5)
@@ -169,12 +185,14 @@ describe("coverage map merging", () => {
     second.f[8] = matching.f[8]
     second.b[8] = matching.b[8]
 
-    const merged = mergeCoverageMaps(
-      [
-        { "C:\\repo\\src\\example.ts": first },
-        { "C:/repo/src/example.ts": second },
-      ],
-      "C:\\repo"
+    const merged = (
+      await mergeCoverageMaps(
+        [
+          { "C:\\repo\\src\\example.ts": first },
+          { "C:/repo/src/example.ts": second },
+        ],
+        "C:\\repo"
+      )
     )["src/example.ts"]
 
     const functionHitsByLine = Object.fromEntries(

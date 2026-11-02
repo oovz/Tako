@@ -3,7 +3,7 @@ import type {
   DownloadTaskStatus,
 } from "@/src/shared/download-contract"
 import type { ChapterStatus } from "@/src/types/chapter"
-import type { DownloadTaskState, TaskChapter } from "./state"
+import type { DownloadTaskState, OutputAccounting, TaskChapter } from "./state"
 
 const TERMINAL_TASK_STATUSES: ReadonlySet<DownloadTaskStatus> = new Set([
   "completed",
@@ -26,6 +26,15 @@ export interface ChapterDispatchOutcome {
   errorMessage?: string
   errorCategory?: DownloadErrorCategory
   imagesFailed?: number
+}
+
+export function firstUnsuccessfulChapter<T extends Pick<TaskChapter, "status">>(
+  chapters: readonly T[]
+): T | undefined {
+  return chapters.find(
+    (chapter) =>
+      chapter.status === "failed" || chapter.status === "partial_success"
+  )
 }
 
 export function isTerminalDownloadTask(
@@ -71,11 +80,10 @@ export function normalizeDownloadTaskExecutionState(
   task: DownloadTaskState
 ): DownloadTaskState {
   if (isTerminalDownloadTask(task)) {
-    if (!task.activeBlock && !task.destinationIssue) return task
+    if (!task.activeBlock) return task
     return {
       ...task,
       activeBlock: undefined,
-      destinationIssue: undefined,
     }
   }
 
@@ -98,20 +106,12 @@ export function normalizeInterruptedChapter(
     return chapter
   }
 
-  const requested = Math.max(0, chapter.outputs?.requested ?? 0)
-  const committed = Math.max(0, chapter.outputs?.committed ?? 0)
-  const recordedFailed = Math.max(0, chapter.outputs?.failed ?? 0)
-  if (chapter.status === "downloading" && committed > 0) {
-    const failed = Math.max(recordedFailed, requested - committed)
-    const complete = requested > 0 && committed === requested && failed === 0
-    return {
-      ...chapter,
-      status: complete ? "completed" : "partial_success",
-      errorMessage: complete ? undefined : errorMessage,
-      errorCategory: complete ? undefined : "unknown",
-      outputs: { requested, committed, failed },
-      lastUpdated: now,
-    }
+  if (
+    chapter.status === "downloading" &&
+    chapter.outputs &&
+    chapter.outputs.committed > 0
+  ) {
+    return recoverCommittedChapter(chapter, chapter.outputs, errorMessage, now)
   }
 
   return {
@@ -123,6 +123,42 @@ export function normalizeInterruptedChapter(
   }
 }
 
+function recoverCommittedChapter(
+  chapter: TaskChapter,
+  outputs: OutputAccounting,
+  errorMessage: string,
+  now: number
+): TaskChapter {
+  const requested = Math.max(0, outputs.requested)
+  const committed = Math.max(0, outputs.committed)
+  const failed = Math.max(0, outputs.failed, requested - committed)
+  const complete = requested > 0 && committed === requested && failed === 0
+  return {
+    ...chapter,
+    status: complete ? "completed" : "partial_success",
+    errorMessage: complete ? undefined : errorMessage,
+    errorCategory: complete ? undefined : "unknown",
+    outputs: { requested, committed, failed },
+    lastUpdated: now,
+  }
+}
+
+export function resolveTerminalChapterTaskStatus(
+  chapters: readonly Pick<TaskChapter, "status">[]
+): "completed" | "partial_success" | "failed" {
+  if (
+    chapters.length > 0 &&
+    chapters.every((chapter) => chapter.status === "completed")
+  )
+    return "completed"
+  return chapters.some(
+    (chapter) =>
+      chapter.status === "completed" || chapter.status === "partial_success"
+  )
+    ? "partial_success"
+    : "failed"
+}
+
 export function normalizeInterruptedTask(
   task: DownloadTaskState,
   errorMessage: string,
@@ -131,25 +167,21 @@ export function normalizeInterruptedTask(
   const normalizedChapters = task.chapters.map((chapter) =>
     normalizeInterruptedChapter(chapter, errorMessage, now)
   )
-  const successfulCount = normalizedChapters.filter(
-    (chapter) =>
-      chapter.status === "completed" || chapter.status === "partial_success"
-  ).length
-  const allChaptersCompleted =
-    normalizedChapters.length > 0 &&
-    normalizedChapters.every((chapter) => chapter.status === "completed")
+  const status = resolveTerminalChapterTaskStatus(normalizedChapters)
+  const allChaptersCompleted = status === "completed"
+
+  const failureChapter = firstUnsuccessfulChapter(normalizedChapters)
 
   return {
     ...task,
-    status: allChaptersCompleted
-      ? "completed"
-      : successfulCount > 0
-        ? "partial_success"
-        : "failed",
+    status,
     activeBlock: undefined,
-    destinationIssue: undefined,
-    errorMessage: allChaptersCompleted ? undefined : errorMessage,
-    errorCategory: allChaptersCompleted ? undefined : "unknown",
+    errorMessage: allChaptersCompleted
+      ? undefined
+      : (failureChapter?.errorMessage ?? errorMessage),
+    errorCategory: allChaptersCompleted
+      ? undefined
+      : (failureChapter?.errorCategory ?? "unknown"),
     completed: task.completed ?? now,
     chapters: normalizedChapters,
   }
@@ -188,7 +220,6 @@ export function cancelDownloadingTask(
     ...task,
     status: "canceled",
     activeBlock: undefined,
-    destinationIssue: undefined,
     completed: now,
     chapters: materializeCanceledChapters(task.chapters, now),
   }

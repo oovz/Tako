@@ -151,12 +151,10 @@ export async function sendRuntimeMessage<TRequest extends RuntimeMessage>(
 }
 
 /**
- * Send a command retrying only transport-level failures with the SAME
- * envelope. Command identity is the idempotency key (commandId doubles as the
- * task ID for start/retry/restart, and mutating handlers converge on replay),
- * so re-delivering an identical envelope after an uncertain transport result
- * cannot create a duplicate semantic command. Logical failure responses are
- * returned, never retried.
+ * Retry transport failures with the same command envelope and identity.
+ * Command identity is the idempotency key, so replay after an uncertain
+ * response converges on the same command instead of creating a duplicate.
+ * Return application failures without retrying.
  */
 export async function sendRuntimeMessageWithRetry<
   TRequest extends RuntimeMessage,

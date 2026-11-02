@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest"
+// @vitest-environment happy-dom
+
+import { act, createElement } from "react"
+import { createRoot } from "react-dom/client"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   normalizeHistoryView,
   normalizeQueueProjection,
   normalizeQueueView,
+  useQueueView,
 } from "@/entrypoints/sidepanel/hooks/useQueueView"
 
 function makeQueueTask(
@@ -13,6 +18,7 @@ function makeQueueTask(
   created = 1000
 ) {
   return {
+    destination: { kind: "downloads-api" },
     id,
     seriesKey: `mangadex#${id}`,
     seriesTitle,
@@ -30,31 +36,63 @@ function makeQueueTask(
 }
 
 describe("useQueueView normalizeQueueView", () => {
-  it("returns empty array for non-array input", () => {
+  it("accepts an absent projection and rejects malformed collections", () => {
     expect(normalizeQueueView(undefined)).toEqual([])
-    expect(normalizeQueueView({})).toEqual([])
+    expect(() => normalizeQueueView({})).toThrow()
+    expect(() => normalizeQueueView(null)).toThrow()
   })
 
-  it("keeps only valid queue task summaries", () => {
-    const normalized = normalizeQueueView([
-      makeQueueTask("task-1", "queued", "Series A"),
-      {
-        id: "task-2",
-        status: "downloading",
-      },
-      "invalid-item",
-    ])
+  it("preserves optional output evidence and rejects malformed destinations", () => {
+    expect(
+      normalizeQueueView([
+        {
+          ...makeQueueTask("native", "completed", "Series A"),
+          outputDestination: "downloads-api",
+          outputMode: "fsa",
+          saveConfirmedAt: 42,
+          outputUncertain: true,
+        },
+      ])[0]
+    ).toMatchObject({
+      outputDestination: "downloads-api",
+      outputMode: "fsa",
+      saveConfirmedAt: 42,
+      outputUncertain: true,
+    })
+    expect(
+      normalizeQueueView([makeQueueTask("old", "completed", "Series A")])[0]
+        .outputDestination
+    ).toBeUndefined()
+    expect(() =>
+      normalizeQueueView([
+        {
+          ...makeQueueTask("invalid", "completed", "Series A"),
+          outputDestination: "unknown",
+        },
+      ])
+    ).toThrow()
+  })
 
-    expect(normalized).toEqual([makeQueueTask("task-1", "queued", "Series A")])
+  it("rejects a projection containing malformed task summaries", () => {
+    expect(() =>
+      normalizeQueueView([
+        makeQueueTask("task-1", "queued", "Series A"),
+        {
+          id: "task-2",
+          status: "downloading",
+        },
+        "invalid-item",
+      ])
+    ).toThrow()
   })
 
   it("rejects queue items with unsupported status values", () => {
-    const normalized = normalizeQueueView([
-      makeQueueTask("task-1", "waiting", "Series A"),
-      makeQueueTask("task-2", "failed", "Series B"),
-    ])
-
-    expect(normalized).toEqual([makeQueueTask("task-2", "failed", "Series B")])
+    expect(() =>
+      normalizeQueueView([
+        makeQueueTask("task-1", "waiting", "Series A"),
+        makeQueueTask("task-2", "failed", "Series B"),
+      ])
+    ).toThrow()
   })
 
   it("strips malformed optional summary fields while preserving valid ones", () => {
@@ -64,7 +102,6 @@ describe("useQueueView normalizeQueueView", () => {
         coverUrl: 123,
         failureReason: ["legacy raw error"],
         failureCategory: "bogus",
-        hasUnobservableOutput: "yes",
         isRetried: "yes",
         isRetryTask: true,
         lastSuccessfulDownloadId: "nope",
@@ -74,7 +111,6 @@ describe("useQueueView normalizeQueueView", () => {
         coverUrl: "https://example.com/cover.jpg",
         failureReason: "https://signed.example/image?token=secret",
         failureCategory: "network_unavailable",
-        hasUnobservableOutput: true,
         isRetried: false,
         isRetryTask: true,
         lastSuccessfulDownloadId: 42,
@@ -86,7 +122,6 @@ describe("useQueueView normalizeQueueView", () => {
         ...makeQueueTask("task-1", "completed", "Series A"),
         coverUrl: undefined,
         failureCategory: undefined,
-        hasUnobservableOutput: undefined,
         isRetried: undefined,
         isRetryTask: true,
         lastSuccessfulDownloadId: undefined,
@@ -95,7 +130,6 @@ describe("useQueueView normalizeQueueView", () => {
         ...makeQueueTask("task-2", "partial_success", "Series B"),
         coverUrl: "https://example.com/cover.jpg",
         failureCategory: "network_unavailable",
-        hasUnobservableOutput: true,
         isRetried: false,
         isRetryTask: true,
         lastSuccessfulDownloadId: 42,
@@ -129,12 +163,12 @@ describe("useQueueView normalizeQueueView", () => {
   })
 
   it("rejects a raw array instead of guessing its projection contract", () => {
-    const projection = normalizeQueueProjection([
-      makeQueueTask("task-1", "completed", "Series A"),
-      makeQueueTask("task-2", "queued", "Series B"),
-    ])
-
-    expect(projection).toEqual({ queueView: [], historyView: [] })
+    expect(() =>
+      normalizeQueueProjection([
+        makeQueueTask("task-1", "completed", "Series A"),
+        makeQueueTask("task-2", "queued", "Series B"),
+      ])
+    ).toThrow()
   })
 
   it("does not synthesize history when the history projection is absent", () => {
@@ -148,4 +182,73 @@ describe("useQueueView normalizeQueueView", () => {
     expect(projection.queueView.map((task) => task.id)).toEqual(["task-2"])
     expect(projection.historyView).toEqual([])
   })
+})
+
+it("publishes active and queued task collections after the shared projection hydrates", async () => {
+  const pending = Promise.withResolvers<Record<string, unknown>>()
+  const listeners = new Set<
+    Parameters<typeof chrome.storage.onChanged.addListener>[0]
+  >()
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
+  vi.stubGlobal("chrome", {
+    storage: {
+      session: { get: () => pending.promise },
+      onChanged: {
+        addListener: (
+          listener: Parameters<typeof chrome.storage.onChanged.addListener>[0]
+        ) => listeners.add(listener),
+        removeListener: (
+          listener: Parameters<typeof chrome.storage.onChanged.addListener>[0]
+        ) => listeners.delete(listener),
+      },
+    },
+  })
+  const container = document.createElement("div")
+  const root = createRoot(container)
+  let state!: ReturnType<typeof useQueueView>
+  function View() {
+    state = useQueueView()
+    return createElement("output", null, state.status)
+  }
+  try {
+    await act(async () => root.render(createElement(View)))
+    expect(state.isLoading).toBe(true)
+    expect(state.queueView).toEqual([])
+    await act(async () =>
+      pending.resolve({
+        queueView: [
+          {
+            ...makeQueueTask("active", "downloading", "Active"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+          {
+            ...makeQueueTask("next", "queued", "Next"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+          {
+            ...makeQueueTask("later", "queued", "Later"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+        ],
+        historyView: [
+          {
+            ...makeQueueTask("finished", "completed", "Finished"),
+            chapters: { total: 3, completed: 3, unsuccessful: 0 },
+            timestamps: { created: 1, completed: 2 },
+          },
+        ],
+      })
+    )
+    expect(state.isLoading).toBe(false)
+    expect(state.status).toBe("ready")
+    expect(state.activeTasks.map((task) => task.id)).toEqual(["active"])
+    expect(state.queuedTasks.map((task) => task.id)).toEqual(["next", "later"])
+    expect(state.activeCount).toBe(1)
+    expect(state.queuedCount).toBe(2)
+    expect(state.historyTasks.map((task) => task.id)).toEqual(["finished"])
+  } finally {
+    act(() => root.unmount())
+    vi.unstubAllGlobals()
+  }
+  expect(listeners.size).toBe(0)
 })

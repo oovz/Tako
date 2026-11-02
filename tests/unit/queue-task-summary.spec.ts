@@ -19,6 +19,7 @@ function makeChapter(
   overrides: Partial<TaskChapter> = {}
 ): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? url,
     url,
     title: overrides.title ?? url,
@@ -60,7 +61,7 @@ function makeTask(
 }
 
 describe("toQueueTaskSummary", () => {
-  it("projects basic fields and preserves canonical queued status", () => {
+  it("projects the queued task summary", () => {
     const task = makeTask({
       id: "abc",
       siteIntegrationId: "integration-x",
@@ -89,7 +90,7 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("originTabId")
   })
 
-  it("maps canonical task statuses", () => {
+  it("preserves each task status", () => {
     const queued = toQueueTaskSummary(makeTask({ status: "queued" }))
     const downloading = toQueueTaskSummary(makeTask({ status: "downloading" }))
     const completed = toQueueTaskSummary(makeTask({ status: "completed" }))
@@ -142,7 +143,7 @@ describe("toQueueTaskSummary", () => {
     })
   })
 
-  it("carries completed timestamp and structured failure category only", () => {
+  it("projects the completion time and error category", () => {
     const task = makeTask({
       status: "failed",
       started: 100,
@@ -163,24 +164,93 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("completedAt")
   })
 
-  it("projects an explicit unobservable-output signal from every chapter", () => {
+  it("projects uncertain handoff independently of the producer failure category", () => {
+    const chapter = makeChapter("chapter-1", "failed", {
+      errorCategory: "archive_creation_failed",
+      nativeOutputSettlement: {
+        jobId: "job-1",
+        attempt: 1,
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        requested: 1,
+        completed: 0,
+        interrupted: 1,
+        outputUncertain: true,
+        appliedAt: 10,
+      },
+    })
+    expect(
+      toQueueTaskSummary(makeTask({ status: "failed", chapters: [chapter] }))
+    ).toMatchObject({
+      failureCategory: "archive_creation_failed",
+      outputUncertain: true,
+    })
+    expect(toQueueTaskSummary(makeTask({ chapters: [] })).outputUncertain).toBe(
+      false
+    )
+  })
+
+  it("uses the first unsuccessful chapter before stale task or successful-chapter errors", () => {
     const task = makeTask({
-      status: "downloading",
+      status: "partial_success",
       errorCategory: "network_unavailable",
       chapters: [
-        makeChapter("c1", "downloading", {
-          errorCategory: "network_unavailable",
+        makeChapter("c1", "completed", { errorCategory: "provider_changed" }),
+        makeChapter("c2", "partial_success", {
+          errorCategory: "folder_write_failed",
         }),
-        makeChapter("c2", "downloading", {
-          errorCategory: "browser_download_unobservable",
+        makeChapter("c3", "failed", {
+          errorCategory: "folder_permission_required",
         }),
       ],
     })
-
     expect(toQueueTaskSummary(task)).toMatchObject({
-      failureCategory: "network_unavailable",
-      hasUnobservableOutput: true,
+      failureCategory: "folder_write_failed",
+      folderAccessRequired: true,
     })
+    task.chapters[1].errorCategory = undefined
+    expect(toQueueTaskSummary(task).failureCategory).toBe("unknown")
+    task.status = "completed"
+    task.chapters = [makeChapter("c1", "completed")]
+    expect(toQueueTaskSummary(task).failureCategory).toBeUndefined()
+  })
+
+  it("projects only shared completed destination evidence", () => {
+    const chromeChapter = makeChapter("c1", "completed", {
+      outputDestination: "downloads-api",
+    })
+    const folderChapter = makeChapter("c2", "completed", {
+      outputDestination: "fsa",
+    })
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [chromeChapter] }))
+        .outputDestination
+    ).toBe("downloads-api")
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [folderChapter] }))
+        .outputDestination
+    ).toBe("fsa")
+    expect(
+      toQueueTaskSummary(makeTask({ chapters: [chromeChapter, folderChapter] }))
+        .outputDestination
+    ).toBeUndefined()
+    expect(
+      toQueueTaskSummary(
+        makeTask({ chapters: [chromeChapter, makeChapter("c2", "completed")] })
+      ).outputDestination
+    ).toBeUndefined()
+  })
+
+  it("projects the effective active output mode independently of completed output", () => {
+    const task = makeTask()
+    task.settingsSnapshot.destination = {
+      kind: "file-system-access",
+      handleId: "folder",
+    }
+    expect(toQueueTaskSummary(task).outputMode).toBe("fsa")
+    task.settingsSnapshot.destination = { kind: "downloads-api" }
+    expect(toQueueTaskSummary(task).outputMode).toBe("downloads-api")
+    expect(toQueueTaskSummary(task).outputDestination).toBeUndefined()
   })
 
   it("never infers a presentation category by parsing technical strings", () => {
@@ -218,7 +288,7 @@ describe("toQueueTaskSummary", () => {
     expect(record).not.toHaveProperty("totalImagesInChapter")
   })
 
-  it("projects lastSuccessfulDownloadId instead of downloadId", () => {
+  it("projects the last successful download ID", () => {
     const task = {
       ...makeTask({
         status: "completed",

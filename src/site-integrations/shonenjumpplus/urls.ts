@@ -2,6 +2,7 @@ const SITE_HOST = "shonenjumpplus.com"
 const ASSET_HOSTS = new Set([
   "cdn-ak-img.shonenjumpplus.com",
   "cdn-ak.shonenjumpplus.com",
+  "cdn-scissors.gigaviewer.com",
 ])
 
 export interface TrustedEpisodeUrl {

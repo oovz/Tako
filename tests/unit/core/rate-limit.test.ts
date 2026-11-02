@@ -1,5 +1,3 @@
-/** Explicit per-runtime rate-limit service tests. */
-
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   RateLimitService,

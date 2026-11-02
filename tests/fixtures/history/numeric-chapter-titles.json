@@ -1,0 +1,58 @@
+{
+  "downloadedChapters": [
+    {
+      "siteIntegrationId": "mangadex",
+      "seriesId": "series-1",
+      "seriesTitle": "Series",
+      "chapterId": "opaque-ten",
+      "title": "Chapter 10",
+      "url": "https://example.test/opaque-ten",
+      "downloadedAt": 200,
+      "format": "cbz"
+    },
+    {
+      "siteIntegrationId": "mangadex",
+      "seriesId": "series-1",
+      "seriesTitle": "Series",
+      "chapterId": "opaque-two",
+      "title": "Chapter 2",
+      "url": "https://example.test/opaque-two",
+      "downloadedAt": 100,
+      "format": "cbz"
+    }
+  ],
+  "seriesDownloadHistory": {
+    "mangadex#series-1": {
+      "siteIntegrationId": "mangadex",
+      "seriesId": "series-1",
+      "seriesTitle": "Series",
+      "lastUpdated": 200,
+      "downloadedChapters": [
+        {
+          "siteIntegrationId": "mangadex",
+          "seriesId": "series-1",
+          "seriesTitle": "Series",
+          "chapterId": "opaque-two",
+          "title": "Chapter 2",
+          "url": "https://example.test/opaque-two",
+          "downloadedAt": 100,
+          "format": "cbz"
+        },
+        {
+          "siteIntegrationId": "mangadex",
+          "seriesId": "series-1",
+          "seriesTitle": "Series",
+          "chapterId": "opaque-ten",
+          "title": "Chapter 10",
+          "url": "https://example.test/opaque-ten",
+          "downloadedAt": 200,
+          "format": "cbz"
+        }
+      ]
+    }
+  },
+  "downloadHistoryClearCutoffs": {
+    "bySeries": {},
+    "byChapter": {}
+  }
+}

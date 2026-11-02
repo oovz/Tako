@@ -1,12 +1,7 @@
 import fs from "node:fs/promises"
-import type { BrowserContext, Page } from "@playwright/test"
-import { expect } from "@playwright/test"
-import {
-  focusTab,
-  getSessionState,
-  getTabId,
-  openSidepanelHarness,
-} from "../../e2e/fixtures/state-helpers"
+import type { BrowserContext, Page, TestInfo } from "@playwright/test"
+import { expect, test } from "@playwright/test"
+import { getSessionState, getTabId } from "../../e2e/fixtures/state-helpers"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { MangaPageState } from "@/src/types/tab-state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
@@ -16,6 +11,17 @@ import {
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
 import type { LiveChapter } from "./metadata-extraction-helpers"
+import {
+  inspectChapterArchive,
+  inspectChapterImages,
+  inspectComicInfo,
+  readChapterArchiveWithComicInfo,
+} from "../../e2e/fixtures/chapter-artifact"
+import { assertLiveSeriesMetadata } from "./series-metadata-helpers"
+import { startSingleChapterDownload as dispatchSingleChapterDownload } from "../../e2e/fixtures/download-workflow-helpers"
+import packageJson from "../../../package.json" with { type: "json" }
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
 
 export type { LiveChapter }
 
@@ -24,14 +30,6 @@ export type LiveDownloadState = Pick<
   "siteIntegrationId" | "mangaId" | "seriesTitle" | "metadata"
 > & {
   chapters: LiveChapter[]
-}
-
-export type BrowserWorkflowCase = {
-  name: string
-  integrationId: string
-  url: string
-  expectedMangaId?: string
-  expectedSeriesTitle?: string
 }
 
 export function createDiagnosticEventRecorder(maxEvents = 20): {
@@ -92,7 +90,7 @@ export function isLiveDownloadState(
 }
 
 /**
- * Resolve candidate tab IDs for content-script reinjection.
+ * Find tabs matching the live series page.
  */
 export async function resolveCandidateTabIds(
   optionsPage: Page,
@@ -229,6 +227,7 @@ export async function loadLiveDownloadState(
         (!options.expectedSeriesTitle ||
           state.seriesTitle === options.expectedSeriesTitle)
       ) {
+        await assertLiveSeriesMetadata(page, state, test.info())
         return { optionsPage, tabId, state }
       }
     }
@@ -281,50 +280,61 @@ export async function persistDownloadSettings(
     async ({
       patch,
       sitePatch,
+      command,
     }: {
       patch: Partial<ExtensionSettings["downloads"]>
       sitePatch?: StoredSiteIntegrationSettings
+      command: ReturnType<typeof createCommandEnvelope>
     }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error("Missing persisted settings payload")
-      }
+      const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "GET_OPTIONS_CONFIGURATION",
+        })
+      if (!current.success) throw new Error(current.error)
+      const configuration = current.data.configuration
+      const baseSettings = configuration.settings
 
       const mergedSettings: ExtensionSettings = {
         ...baseSettings,
         downloads: {
           ...baseSettings.downloads,
           ...patch,
+          includeCoverImage: false,
+          includeComicInfo: true,
+          normalizeImageFilenames: true,
+          imagePaddingDigits: 3,
         },
       }
 
       const mergedSiteSettings: StoredSiteIntegrationSettings = {
-        ...(current.siteIntegrationSettings ?? {}),
+        ...configuration.integrationSettings,
         ...(sitePatch ?? {}),
       }
-
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      })
-
-      return {
-        globalSettings: mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      }
+      const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "SAVE_OPTIONS_CONFIGURATION",
+          ...command,
+          payload: {
+            configuration: {
+              ...configuration,
+              settings: mergedSettings,
+              integrationSettings: mergedSiteSettings,
+            },
+          },
+        })
+      if (!saved.success) throw new Error(saved.error)
+      return saved.data.settings
     },
-    { patch: downloadPatch, sitePatch: siteSettingsPatch }
+    {
+      patch: downloadPatch,
+      sitePatch: siteSettingsPatch,
+      command: createCommandEnvelope(),
+    }
   )
 
-  expect(nextSettings.globalSettings.downloads.defaultFormat).toBe("cbz")
+  expect(nextSettings.downloads.defaultFormat).toBe("cbz")
 }
 
 export async function startSingleChapterDownload(
@@ -340,7 +350,7 @@ export async function startSingleChapterDownload(
   )
   const chapter =
     state.siteIntegrationId === "mangadex" ||
-    state.siteIntegrationId === "manhuagui"
+    state.siteIntegrationId === "readmanga"
       ? downloadableChapters.at(-1)
       : downloadableChapters[0]
   if (!chapter) {
@@ -348,112 +358,14 @@ export async function startSingleChapterDownload(
       `No downloadable chapter found for ${state.siteIntegrationId}:${state.mangaId}`
     )
   }
-  const extensionId = optionsPage.url().split("/")[2]
-  const sidepanelPage = await openSidepanelHarness(
-    optionsPage.context(),
-    extensionId,
-    optionsPage
-  )
-  try {
-    await focusTab(optionsPage.context(), tabId)
-
-    let snapshotIdentity:
-      | {
-          sourceWindowId: number
-          sourceTabId: number
-          sourceUrl: string
-          siteIntegrationId: string
-          seriesId: string
-          seriesRevision: number
-        }
-      | undefined
-    await expect
-      .poll(
-        async () => {
-          const snapshot = await optionsPage.evaluate(async (sourceTabId) => {
-            const tab = await chrome.tabs.get(sourceTabId)
-            const stored = await chrome.storage.session.get(
-              "activeTabContextByWindow"
-            )
-            const projection = (
-              stored.activeTabContextByWindow as
-                | Record<
-                    string,
-                    {
-                      activeTabId?: number
-                      revision?: number
-                      context?: {
-                        sourceUrl?: string
-                        siteIntegrationId?: string
-                        mangaId?: string
-                        chaptersLoading?: boolean
-                      }
-                    }
-                  >
-                | undefined
-            )?.[String(tab.windowId)]
-            if (
-              tab.active !== true ||
-              projection?.activeTabId !== sourceTabId ||
-              typeof projection.revision !== "number" ||
-              typeof projection.context?.sourceUrl !== "string" ||
-              typeof projection.context.siteIntegrationId !== "string" ||
-              typeof projection.context.mangaId !== "string" ||
-              projection.context.chaptersLoading === true
-            ) {
-              return null
-            }
-            return {
-              sourceWindowId: tab.windowId,
-              sourceTabId,
-              sourceUrl: projection.context.sourceUrl,
-              siteIntegrationId: projection.context.siteIntegrationId,
-              seriesId: projection.context.mangaId,
-              seriesRevision: projection.revision,
-            }
-          }, tabId)
-          if (snapshot) {
-            snapshotIdentity = snapshot
-            return true
-          }
-          return false
-        },
-        { timeout: 15_000, intervals: [100] }
-      )
-      .toBe(true)
-    if (!snapshotIdentity) {
-      throw new Error(`No current series context snapshot for tab ${tabId}`)
-    }
-    const response = await sidepanelPage.evaluate(
-      async (payload) => {
-        const issuedAt = Date.now()
-        return (await chrome.runtime.sendMessage({
-          target: "background",
-          type: "START_DOWNLOAD",
-          commandId: crypto.randomUUID(),
-          issuedAt,
-          payload: {
-            ...payload.snapshotIdentity,
-            selectedChapterIds: [payload.selectedChapter.id],
-          },
-        })) as { success?: boolean; taskId?: string; error?: string }
-      },
-      { selectedChapter: chapter, snapshotIdentity }
-    )
-
-    expect(
-      response?.success,
-      redactDiagnosticText(response?.error ?? response)
-    ).toBe(true)
-    expect(typeof response?.taskId).toBe("string")
-
-    return {
-      taskId: response.taskId as string,
-      chapter,
-    }
-  } finally {
-    await sidepanelPage.close()
-  }
+  const taskId = await dispatchSingleChapterDownload(optionsPage, {
+    sourceTabId: tabId,
+    siteIntegrationId: state.siteIntegrationId,
+    mangaId: state.mangaId,
+    seriesTitle: state.seriesTitle,
+    chapter,
+  })
+  return { taskId, chapter }
 }
 
 export async function readGlobalStateFromExtensionPage(
@@ -486,13 +398,14 @@ export async function readActiveTaskProgressFromExtensionPage(
 
 export async function waitForTerminalTask(
   optionsPage: Page,
-  taskId: string
+  taskId: string,
+  timeoutMs = LIVE_TASK_TERMINAL_TIMEOUT_MS
 ): Promise<DownloadTaskState> {
   const startedAt = Date.now()
   let globalState: { downloadQueue: DownloadTaskState[] } | undefined
   let terminalTask: DownloadTaskState | undefined
 
-  while (Date.now() - startedAt < LIVE_TASK_TERMINAL_TIMEOUT_MS) {
+  while (Date.now() - startedAt < timeoutMs) {
     globalState = await readGlobalStateFromExtensionPage(optionsPage)
     terminalTask = globalState?.downloadQueue.find(
       (task) =>
@@ -529,7 +442,7 @@ export async function waitForTerminalTask(
       redactDiagnosticText({
         event: "task-timeout",
         taskId,
-        timeoutMs: LIVE_TASK_TERMINAL_TIMEOUT_MS,
+        timeoutMs,
         status: task.status,
         lastSuccessfulDownloadId: task.lastSuccessfulDownloadId,
         activeTaskProgress,
@@ -636,20 +549,135 @@ export async function waitForBrowserDownload(
   )
 }
 
-export async function expectZipArchiveFile(
-  filePath: string | undefined
+async function retainArtifact(
+  testInfo: TestInfo,
+  name: string,
+  content: string | Uint8Array,
+  contentType: string
 ): Promise<void> {
-  expect(typeof filePath).toBe("string")
-  const handle = await fs.open(filePath as string, "r")
+  const path = testInfo.outputPath(name)
+  await fs.writeFile(path, content)
+  await testInfo.attach(name, { path, contentType })
+}
 
-  try {
-    const signature = Buffer.alloc(4)
-    const { bytesRead } = await handle.read(signature, 0, signature.length, 0)
-    expect(bytesRead).toBe(4)
-    expect(signature.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))).toBe(true)
-  } finally {
-    await handle.close()
+export async function expectSavedChapterArchive(
+  optionsPage: Page,
+  bytes: Uint8Array,
+  task: DownloadTaskState,
+  workUrl: string,
+  testInfo: TestInfo
+): Promise<void> {
+  await retainArtifact(
+    testInfo,
+    "saved-chapter.cbz",
+    bytes,
+    "application/vnd.comicbook+zip"
+  )
+  expect(task.chapters).toHaveLength(1)
+  const chapter = task.chapters[0]
+  expect(chapter.totalImages).toBeGreaterThan(0)
+  let comicInfo: Record<string, string> | undefined
+  let images
+  if (task.settingsSnapshot.includeComicInfo) {
+    const archive = readChapterArchiveWithComicInfo(bytes, chapter.totalImages!)
+    comicInfo = await inspectComicInfo(optionsPage, archive.comicInfoXml)
+    const metadata = task.settingsSnapshot.comicInfo
+    const expected = {
+      Series: task.seriesTitle,
+      Title: chapter.title,
+      Number: chapter.chapterLabel ?? chapter.chapterNumber?.toString(),
+      Volume: chapter.volumeNumber,
+      Writer: metadata?.author,
+      Penciller: metadata?.artist,
+      Summary: metadata?.description,
+      Genre: metadata?.genres?.length ? metadata.genres.join(", ") : undefined,
+      Year: metadata?.year,
+      LanguageISO: chapter.language ?? metadata?.language,
+      Publisher: metadata?.publisher,
+      Web: chapter.url,
+      PageCount: chapter.totalImages,
+    }
+    for (const [field, value] of Object.entries(expected)) {
+      if (value !== undefined)
+        expect(comicInfo[field], field).toBe(String(value).trim())
+    }
+    if (expected.Volume === undefined) expect(comicInfo.Volume).toBeUndefined()
+    if (expected.Number === undefined) expect(comicInfo.Number).toBeUndefined()
+    await retainArtifact(
+      testInfo,
+      "ComicInfo.xml",
+      archive.comicInfoXml,
+      "application/xml"
+    )
+    images = await inspectChapterImages(optionsPage, archive.images)
+  } else {
+    images = await inspectChapterArchive(
+      optionsPage,
+      bytes,
+      chapter.totalImages!
+    )
   }
+  await retainArtifact(
+    testInfo,
+    "chapter-artifact-inspection.json",
+    JSON.stringify(
+      {
+        inspectedAt: new Date().toISOString(),
+        takoVersion: packageJson.version,
+        browser: await optionsPage.evaluate(() => navigator.userAgent),
+        integrationId: task.siteIntegrationId,
+        workUrl,
+        seriesTitle: task.seriesTitle,
+        chapter: { id: chapter.id, url: chapter.url, title: chapter.title },
+        resolvedPageCount: chapter.totalImages,
+        comicInfo,
+        images: images.map(({ name, width, height }) => ({
+          name,
+          width,
+          height,
+        })),
+        visualReview:
+          "Compare saved pages with the site's reader before recording visual correctness.",
+      },
+      null,
+      2
+    ),
+    "application/json"
+  )
+  for (const image of images) {
+    expect(image.width).toBeGreaterThan(1)
+    expect(image.height).toBeGreaterThan(1)
+    if (image.preview) {
+      await retainArtifact(
+        testInfo,
+        `saved-page-${image.name}.png`,
+        Buffer.from(image.preview.split(",")[1], "base64"),
+        "image/png"
+      )
+    }
+  }
+}
+
+export async function expectBrowserChapterArchive(
+  optionsPage: Page,
+  task: DownloadTaskState,
+  workUrl: string,
+  testInfo: TestInfo
+): Promise<void> {
+  expect(typeof task.lastSuccessfulDownloadId).toBe("number")
+  const item = await waitForBrowserDownload(
+    optionsPage,
+    task.lastSuccessfulDownloadId!
+  )
+  expect(item.state).toBe("complete")
+  expect(item.exists).toBe(true)
+  await expectSavedChapterArchive(
+    optionsPage,
+    await fs.readFile(item.filename!),
+    task,
+    workUrl,
+    testInfo
+  )
 }
 
 export async function seedCustomDirectoryHandle(
@@ -663,7 +691,7 @@ export async function seedCustomDirectoryHandle(
     })
 
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("tako-fs", 1)
+      const request = indexedDB.open("tako-fs")
       request.onupgradeneeded = () => {
         const db = request.result
         if (!db.objectStoreNames.contains("handles")) {

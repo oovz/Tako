@@ -1,10 +1,13 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
 import logger from "@/src/runtime/logger"
 import type {
   DispatchLeaseAuthority,
+  DownloadTaskState,
   PendingUndoReceipt,
 } from "@/src/domain/queue/state"
 import type { NativeOutputJobIdentity } from "@/src/domain/native-output/state"
 import type { QueueRepository } from "@/src/storage/queue-repository"
+import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import { isTerminalDownloadTask } from "@/src/domain/queue/task-lifecycle"
@@ -43,29 +46,11 @@ export class DownloadTaskCancellationCoordinator {
         commandId,
         now: Date.now(),
       })
-      if (transition.outcome === "unchanged" && transition.undo) {
-        await schedulePendingUndoAction(this.queueRepository, transition.undo)
-        return {
-          result: { kind: "queued", undo: transition.undo },
-          queueCanContinue: false,
-        }
-      }
       if (transition.outcome === "rejected") {
-        // Replay of an already-applied cancel: the task is gone or already
-        // terminal, which IS the durable result of this command.
-        const task = await this.queueRepository.getTask(taskId)
-        if (task?.activeCancel && task.activeCancel.commandId !== commandId) {
-          throw new Error(
-            "Download task was already canceled by another command."
-          )
-        }
-        if (!task || isTerminalDownloadTask(task)) {
-          return { result: { kind: "active" }, queueCanContinue: true }
-        }
-        throw new Error(
-          transition.reason === "task-not-found"
-            ? "Download task not found."
-            : "Only queued or downloading tasks can be canceled."
+        return await this.resolveRejectedCancellation(
+          taskId,
+          commandId,
+          transition.reason
         )
       }
 
@@ -77,27 +62,81 @@ export class DownloadTaskCancellationCoordinator {
         }
       }
 
-      await clearActiveTaskProgress()
-      if (transition.canceledLease) {
-        await progressTimingEstimator.finish(transition.canceledLease.jobId)
-      }
+      return await this.finishActiveCancellation(
+        taskId,
+        transition.canceledLease
+      )
+    })
+  }
 
-      const canceledJob = transition.canceledLease
-        ? await this.cancelProducerAndClearLease(transition.canceledLease)
-        : undefined
-      if (transition.canceledLease && !canceledJob) {
-        return { result: { kind: "active" }, queueCanContinue: false }
-      }
-
-      try {
-        await this.nativeOutputCoordinator.cancelTask(taskId, canceledJob)
-      } catch (error) {
-        logger.warn("Native output cleanup failed after durable cancellation", {
-          taskId,
-          error,
-        })
-      }
+  private async resolveRejectedCancellation(
+    taskId: string,
+    commandId: string,
+    reason: string
+  ): Promise<{ result: CancelTaskResult; queueCanContinue: boolean }> {
+    // A missing or terminal task already satisfies this cancellation.
+    const task = await this.queueRepository.getTask(taskId)
+    if (task?.activeCancel && task.activeCancel.commandId !== commandId) {
+      throw new Error("Download task was already canceled by another command.")
+    }
+    if (!task || isTerminalDownloadTask(task)) {
       return { result: { kind: "active" }, queueCanContinue: true }
+    }
+    throw new Error(
+      reason === "task-not-found"
+        ? "Download task not found."
+        : "Only queued or downloading tasks can be canceled."
+    )
+  }
+
+  private async finishActiveCancellation(
+    taskId: string,
+    lease: DispatchLeaseAuthority | null | undefined
+  ): Promise<{ result: CancelTaskResult; queueCanContinue: boolean }> {
+    await clearActiveTaskProgress()
+    if (lease) {
+      await progressTimingEstimator.finish(lease.jobId)
+    }
+
+    const canceledJob = lease
+      ? await this.cancelProducerAndClearLease(lease)
+      : undefined
+    if (lease && !canceledJob) {
+      return { result: { kind: "active" }, queueCanContinue: false }
+    }
+
+    try {
+      await this.nativeOutputCoordinator.cancelTask(taskId, canceledJob)
+    } catch (error) {
+      logger.warn("Native output cleanup failed after durable cancellation", {
+        taskId,
+        error,
+      })
+    }
+    return { result: { kind: "active" }, queueCanContinue: true }
+  }
+
+  async failTaskForSave(input: {
+    taskId: string
+    chapterId?: string
+    errorMessage: string
+    errorCategory: DownloadErrorCategory
+  }): Promise<TaskInterruptionOutcome> {
+    return runTaskSideEffectExclusive(input.taskId, async () => {
+      const activeLease = await this.queueRepository.getActiveDispatchLease()
+      const ownedLease = getOwnedLease(activeLease, input.taskId)
+      const failure = await this.queueRepository.failTaskForSave({
+        ...input,
+        now: Date.now(),
+      })
+      if (failure.outcome !== "applied") return "not-applied"
+      if (ownedLease && !(await this.cancelProducerAndClearLease(ownedLease))) {
+        await this.nativeOutputCoordinator.armLiveness()
+        return "quarantined"
+      }
+      await clearProgressAfterSaveFailure()
+      await this.notifyTerminalTask(failure.task)
+      return "settled"
     })
   }
 
@@ -119,49 +158,57 @@ export class DownloadTaskCancellationCoordinator {
         this.queueRepository.getTask(input.taskId),
         this.queueRepository.getActiveDispatchLease(),
       ])
+      const ownedLease = getOwnedLease(activeLease, input.taskId)
       if (
         !task ||
         (task.status !== "queued" && task.status !== "downloading")
       ) {
-        if (activeLease?.taskId === input.taskId) {
-          await this.nativeOutputCoordinator.armLiveness()
-          return "quarantined"
-        }
-        return "not-applied"
+        return await this.preserveTerminalLease(ownedLease)
       }
 
-      const ownedLease =
-        activeLease?.taskId === input.taskId ? activeLease : undefined
       const interruption = await this.queueRepository.interruptDownloadTask({
         taskId: input.taskId,
         errorMessage: input.errorMessage,
         now: Date.now(),
       })
       if (interruption.outcome !== "applied") {
-        if (ownedLease) await this.nativeOutputCoordinator.armLiveness()
-        return ownedLease ? "quarantined" : "not-applied"
+        return await this.preserveTerminalLease(ownedLease)
       }
+      return await this.finishInterruption(interruption.task, ownedLease)
+    })
+  }
 
-      if (ownedLease) {
-        const canceledJob = await this.cancelProducerAndClearLease(ownedLease)
-        if (!canceledJob) {
-          await this.nativeOutputCoordinator.armLiveness()
-          return "quarantined"
-        }
-        await this.nativeOutputCoordinator.cancelTask(input.taskId, canceledJob)
-      }
+  private async preserveTerminalLease(
+    lease: DispatchLeaseAuthority | undefined
+  ): Promise<TaskInterruptionOutcome> {
+    if (!lease) return "not-applied"
+    await this.nativeOutputCoordinator.armLiveness()
+    return "quarantined"
+  }
 
-      await clearActiveTaskProgress()
-      await notifyTerminalDownloadTask({
-        task: interruption.task,
-        finalStatus: interruption.task.status,
-        completedCount: interruption.task.chapters.filter(
-          (chapter) => chapter.status === "completed"
-        ).length,
-        totalChapters: interruption.task.chapters.length,
-        settingsRepository: this.finalizationDependencies.settingsRepository,
-      })
-      return "settled"
+  private async finishInterruption(
+    task: DownloadTaskState,
+    lease: DispatchLeaseAuthority | undefined
+  ): Promise<TaskInterruptionOutcome> {
+    if (lease) {
+      const canceledJob = await this.cancelProducerAndClearLease(lease)
+      if (!canceledJob) return await this.preserveTerminalLease(lease)
+      await this.nativeOutputCoordinator.cancelTask(task.id, canceledJob)
+    }
+    await clearActiveTaskProgress()
+    await this.notifyTerminalTask(task)
+    return "settled"
+  }
+
+  private async notifyTerminalTask(task: DownloadTaskState): Promise<void> {
+    await notifyTerminalDownloadTask({
+      task,
+      finalStatus: task.status,
+      completedCount: task.chapters.filter(
+        (chapter) => chapter.status === "completed"
+      ).length,
+      totalChapters: task.chapters.length,
+      settingsRepository: this.finalizationDependencies.settingsRepository,
     })
   }
 
@@ -191,20 +238,7 @@ export class DownloadTaskCancellationCoordinator {
         type: "OFFSCREEN_CANCEL_JOB",
         payload: identity,
       })
-      const exactIdentity =
-        response.success &&
-        response.jobId === identity.jobId &&
-        response.attempt === identity.attempt &&
-        response.taskId === identity.taskId &&
-        response.chapterId === identity.chapterId &&
-        response.fingerprint === identity.fingerprint &&
-        response.documentInstanceId === identity.documentInstanceId
-      const converged =
-        exactIdentity &&
-        ((response.canceled && response.status === "canceled") ||
-          (!response.canceled &&
-            (response.status === "absent" || response.status === "terminal")))
-      if (!converged) {
+      if (!isCancellationConverged(response, identity)) {
         logger.warn("Offscreen cancellation acknowledgement did not match", {
           taskId: lease.taskId,
           response,
@@ -221,5 +255,50 @@ export class DownloadTaskCancellationCoordinator {
       })
       return undefined
     }
+  }
+}
+
+function getOwnedLease(
+  lease: DispatchLeaseAuthority | null,
+  taskId: string
+): DispatchLeaseAuthority | undefined {
+  return lease?.taskId === taskId ? lease : undefined
+}
+
+function matchesCancellationIdentity(
+  response: Extract<
+    RuntimeMessageResponse<"OFFSCREEN_CANCEL_JOB">,
+    { success: true }
+  >,
+  identity: NativeOutputJobIdentity
+): boolean {
+  return (
+    response.jobId === identity.jobId &&
+    response.attempt === identity.attempt &&
+    response.taskId === identity.taskId &&
+    response.chapterId === identity.chapterId &&
+    response.fingerprint === identity.fingerprint &&
+    response.documentInstanceId === identity.documentInstanceId
+  )
+}
+
+function isCancellationConverged(
+  response: RuntimeMessageResponse<"OFFSCREEN_CANCEL_JOB">,
+  identity: NativeOutputJobIdentity
+): boolean {
+  if (!response.success || !matchesCancellationIdentity(response, identity))
+    return false
+  return (
+    (response.canceled && response.status === "canceled") ||
+    (!response.canceled &&
+      (response.status === "absent" || response.status === "terminal"))
+  )
+}
+
+async function clearProgressAfterSaveFailure(): Promise<void> {
+  try {
+    await clearActiveTaskProgress()
+  } catch (error) {
+    logger.warn("Could not clear progress after terminal save failure", error)
   }
 }

@@ -6,6 +6,7 @@ export function createDefaultSettings(
 ): ExtensionSettings {
   return {
     downloads: {
+      allowChromeFallback: false,
       destination: "downloads-api",
       customDirectoryHandleId: null,
       pathTemplate: "TMD/<SERIES_TITLE>",
@@ -34,7 +35,3 @@ export function createDefaultSettings(
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = createDefaultSettings()
-
-export function cloneDefaultSettings(): ExtensionSettings {
-  return structuredClone(DEFAULT_SETTINGS)
-}

@@ -67,7 +67,7 @@ test.describe("Queue rendering", () => {
     await expect(sp.getByText("Covered Series")).toBeVisible({
       timeout: 15000,
     })
-    await expect(sp.locator("img")).toHaveAttribute("src", coverUrl)
+    await expect(sp.locator("img")).toHaveAttribute("src", /^blob:/)
     await expect(sp.locator("img")).toHaveJSProperty("naturalWidth", 1)
   })
 
@@ -117,7 +117,13 @@ test.describe("Queue rendering", () => {
         completed: now - 8500,
         errorCategory: "network_unavailable",
         errorMessage: "Network error",
-        chapters: [makeChapter(buildExampleUrl("/c5"), "failed")],
+        chapters: [
+          {
+            ...makeChapter(buildExampleUrl("/c5"), "failed"),
+            errorCategory: "network_unavailable",
+            errorMessage: "Network error",
+          },
+        ],
       }),
     ]
 

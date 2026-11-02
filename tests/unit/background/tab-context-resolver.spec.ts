@@ -162,27 +162,81 @@ describe("tab context resolver", () => {
   })
 
   it("does not treat a cached metadata-only partial as terminal", async () => {
-    const cache = createCache()
-    cache.getCachedContext.mockReturnValue({
-      siteIntegrationId: "pixiv-comic",
-      mangaId: "123",
-      seriesTitle: "Cached metadata",
-      chapters: [],
-      volumes: [],
-      chaptersLoading: true,
-      lastUpdated: 1,
+    const { createTabContextCache } = await vi.importActual<
+      typeof import("@/entrypoints/background/tab-cache")
+    >("@/entrypoints/background/tab-cache")
+    const { TabContextStateService } = await vi.importActual<
+      typeof import("@/entrypoints/background/tab-context-state-service")
+    >("@/entrypoints/background/tab-context-state-service")
+    const readBefore = getSession.getMockImplementation()
+    const writeBefore = setSession.getMockImplementation()
+    const session: Record<string, unknown> = {}
+    const tab = {
+      id: 9,
+      active: true,
+      windowId: 3,
+      url: "https://comic.pixiv.net/works/123",
+    }
+    getTab.mockResolvedValue(tab)
+    getSession.mockImplementation(async (keys: string | string[]) =>
+      Object.fromEntries([keys].flat().map((key) => [key, session[key]]))
+    )
+    setSession.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(session, structuredClone(values))
     })
-    const resolver = createTabContextResolver({
-      getTabContextStateService: () => createStateService() as never,
-      tabContextCache: cache as never,
-      rateLimitService,
-      siteIntegrationSettingsReader,
+    Object.assign(chrome.storage.session, {
+      remove: async (keys: string | string[]) => {
+        for (const key of [keys].flat()) delete session[key]
+      },
     })
+    try {
+      const cache = createTabContextCache({
+        queryActiveTabs: async () => [tab],
+      })
+      const service = new TabContextStateService(cache)
+      await service.commitResolvedTabContext(
+        {
+          context: "ready",
+          sourceUrl: tab.url,
+          siteIntegrationId: "pixiv-comic",
+          mangaId: "123",
+          seriesTitle: "Cached metadata",
+          chapters: [],
+          chaptersLoading: true,
+        },
+        tab.id,
+        { windowId: tab.windowId, expectedUrl: tab.url }
+      )
+      expect(cache.getCachedContext(tab.id)).toMatchObject({
+        sourceUrl: tab.url,
+        chaptersLoading: true,
+      })
+      const sync = vi.spyOn(cache, "syncActiveTabContext")
+      const resolver = createTabContextResolver({
+        getTabContextStateService: () => service,
+        tabContextCache: cache,
+        rateLimitService,
+        siteIntegrationSettingsReader,
+      })
 
-    await resolver.resolveTabContext(9, { allowCached: true })
+      await resolver.resolveTabContext(9, { allowCached: true })
 
-    expect(cache.syncActiveTabContext).not.toHaveBeenCalled()
-    expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+      expect(sync).not.toHaveBeenCalled()
+      expect(mocks.resolveSeriesData).toHaveBeenCalledOnce()
+      expect(await service.getTabState(tab.id)).toMatchObject({
+        sourceUrl: tab.url,
+        chaptersLoading: false,
+        chapters: [{ id: "chapter-1", title: "Chapter 1" }],
+      })
+      await expect(
+        cache.getCurrentSeriesContext(tab.id, tab.windowId)
+      ).resolves.toMatchObject({
+        context: { chaptersLoading: false, chapters: [{ id: "chapter-1" }] },
+      })
+    } finally {
+      getSession.mockImplementation(readBefore ?? (() => undefined))
+      setSession.mockImplementation(writeBefore ?? (() => undefined))
+    }
   })
 
   it("waits for integration metadata before projecting loading", async () => {
@@ -325,6 +379,7 @@ describe("tab context resolver", () => {
         seriesTitle: "Previous",
         chapters: [
           {
+            requestedPath: "Tako/Chapter.cbz",
             id: "previous-chapter",
             title: "Previous chapter",
             url: "https://example.com/previous",
@@ -919,7 +974,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -959,7 +1014,7 @@ describe("tab context resolver", () => {
         tabId: 9,
         windowId: 3,
         requestId: 4,
-        integrationId: "manhuagui",
+        integrationId: "readmanga",
         stage: "page-probe",
         url: "https://www.manhuagui.com/comic/21243/",
         documentUrlAtStart: "https://www.manhuagui.com/comic/21243/",
@@ -1015,7 +1070,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -1100,7 +1155,7 @@ describe("tab context resolver", () => {
       url: "https://www.manhuagui.com/comic/21243/",
     })
     mocks.matchUrl.mockReturnValue({
-      integrationId: "manhuagui",
+      integrationId: "readmanga",
       role: "series",
     })
     mocks.getBackgroundSiteAdapterById.mockResolvedValueOnce({
@@ -1127,7 +1182,7 @@ describe("tab context resolver", () => {
     await resolver.resolveTabContext(9)
 
     expect(mocks.resolveSeriesData).toHaveBeenCalledWith({
-      siteIntegrationId: "manhuagui",
+      siteIntegrationId: "readmanga",
       seriesUrl: "https://www.manhuagui.com/comic/21243/",
       pageProbeData: {
         adultGatePresent: false,

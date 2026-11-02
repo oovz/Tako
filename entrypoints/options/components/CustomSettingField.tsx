@@ -1,10 +1,4 @@
-/**
- * CustomSettingField - Renders a single custom setting field within a site integration card.
- *
- * Handles all field types defined in {@link SettingsFieldSchema}: boolean, string, number,
- * select, and multiselect. The field also exposes an enable/disable override toggle so users
- * can opt-in to a non-default value on a per-integration basis.
- */
+/** Render a typed site setting with an optional per-site override. */
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -57,18 +51,6 @@ export function CustomSettingField({
   const descriptionId = `${controlId}-description`
   const labelId = `${controlId}-label`
 
-  const textValue = typeof effectiveValue === "string" ? effectiveValue : ""
-  const numberValue = typeof effectiveValue === "number" ? effectiveValue : 0
-  const selectValue =
-    typeof effectiveValue === "string"
-      ? effectiveValue
-      : typeof schema.defaultValue === "string"
-        ? schema.defaultValue
-        : ""
-  const multiselectValues = Array.isArray(effectiveValue)
-    ? effectiveValue.filter((v): v is string => typeof v === "string")
-    : []
-
   return (
     <div
       key={`${integrationId}-${schema.id}`}
@@ -109,8 +91,30 @@ export function CustomSettingField({
         </div>
       </div>
 
-      {/* Field control – type-specific */}
-      {schema.type === "boolean" && (
+      <CustomSettingControl
+        controlId={controlId}
+        labelId={labelId}
+        descriptionId={descriptionId}
+        schema={schema}
+        enabled={enabled}
+        effectiveValue={effectiveValue}
+        onChange={onChange}
+      />
+    </div>
+  )
+}
+
+type SettingControlProps = Omit<CustomSettingFieldProps, "integrationId"> & {
+  controlId: string
+  labelId: string
+  descriptionId: string
+}
+
+function CustomSettingControl(props: SettingControlProps) {
+  const { schema, controlId, enabled, effectiveValue, onChange } = props
+  switch (schema.type) {
+    case "boolean":
+      return (
         <Switch
           id={controlId}
           checked={Boolean(effectiveValue)}
@@ -118,89 +122,138 @@ export function CustomSettingField({
           className="data-[state=unchecked]:bg-muted-foreground/25"
           onCheckedChange={(checked) => onChange(schema, enabled, checked)}
         />
-      )}
+      )
+    case "string":
+    case "number":
+      return <ScalarSettingControl {...props} schema={schema} />
+    case "select":
+      return <SelectSettingControl {...props} schema={schema} />
+    case "multiselect":
+      return <MultiselectSettingControl {...props} schema={schema} />
+  }
+}
 
-      {schema.type === "string" && (
-        <Input
-          id={controlId}
-          value={textValue}
-          disabled={!enabled}
-          className="font-medium"
-          onChange={(e) => onChange(schema, enabled, e.target.value)}
-        />
-      )}
+function ScalarSettingControl({
+  schema,
+  controlId,
+  enabled,
+  effectiveValue,
+  onChange,
+}: SettingControlProps & {
+  schema: Extract<SettingsFieldSchema, { type: "string" | "number" }>
+}) {
+  const isNumber = schema.type === "number"
+  const value = isNumber
+    ? typeof effectiveValue === "number"
+      ? effectiveValue
+      : 0
+    : typeof effectiveValue === "string"
+      ? effectiveValue
+      : ""
+  return (
+    <Input
+      id={controlId}
+      type={isNumber ? "number" : "text"}
+      value={value}
+      disabled={!enabled}
+      className="font-medium"
+      onChange={(event) =>
+        onChange(
+          schema,
+          enabled,
+          isNumber ? Number(event.target.value) : event.target.value
+        )
+      }
+    />
+  )
+}
 
-      {schema.type === "number" && (
-        <Input
-          id={controlId}
-          type="number"
-          value={numberValue}
-          disabled={!enabled}
-          className="font-medium"
-          onChange={(e) => onChange(schema, enabled, Number(e.target.value))}
-        />
-      )}
+function SelectSettingControl({
+  schema,
+  controlId,
+  enabled,
+  effectiveValue,
+  onChange,
+}: SettingControlProps & {
+  schema: Extract<SettingsFieldSchema, { type: "select" }>
+}) {
+  const selectValue =
+    typeof effectiveValue === "string" ? effectiveValue : schema.defaultValue
+  return (
+    <Select
+      value={selectValue}
+      disabled={!enabled}
+      onValueChange={(nextValue) => onChange(schema, enabled, nextValue)}
+    >
+      <SelectTrigger id={controlId} className="font-medium">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          {schema.options.map((option) => (
+            <SelectItem
+              key={`${schema.id}-${option.value}`}
+              value={option.value}
+            >
+              {t(option.labelKey)}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
+}
 
-      {schema.type === "select" && (
-        <Select
-          value={selectValue}
-          disabled={!enabled}
-          onValueChange={(nextValue) => onChange(schema, enabled, nextValue)}
-        >
-          <SelectTrigger id={controlId} className="font-medium">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {schema.options.map((option) => (
-                <SelectItem
-                  key={`${schema.id}-${option.value}`}
-                  value={option.value}
-                >
-                  {t(option.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      )}
-
-      {schema.type === "multiselect" && (
-        <fieldset
-          id={controlId}
-          aria-labelledby={labelId}
-          aria-describedby={schema.descriptionKey ? descriptionId : undefined}
-          className="grid gap-2 sm:grid-cols-2"
-        >
-          <legend className="sr-only">{t(schema.labelKey)}</legend>
-          {schema.options.map((option) => {
-            const isChecked = multiselectValues.includes(option.value)
-            return (
-              <label
-                key={`${schema.id}-ms-${option.value}`}
-                className={cn(
-                  "flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm",
-                  enabled
-                    ? "cursor-pointer hover:bg-muted/40"
-                    : "cursor-not-allowed bg-muted/20 text-muted-foreground/70"
-                )}
-              >
-                <Checkbox
-                  checked={isChecked}
-                  disabled={!enabled}
-                  onCheckedChange={() => {
-                    const nextValues = isChecked
-                      ? multiselectValues.filter((v) => v !== option.value)
-                      : [...multiselectValues, option.value]
-                    onChange(schema, enabled, nextValues)
-                  }}
-                />
-                <span className="truncate">{t(option.labelKey)}</span>
-              </label>
-            )
-          })}
-        </fieldset>
-      )}
-    </div>
+function MultiselectSettingControl({
+  schema,
+  controlId,
+  labelId,
+  descriptionId,
+  enabled,
+  effectiveValue,
+  onChange,
+}: SettingControlProps & {
+  schema: Extract<SettingsFieldSchema, { type: "multiselect" }>
+}) {
+  const multiselectValues = Array.isArray(effectiveValue)
+    ? effectiveValue.filter(
+        (value): value is string => typeof value === "string"
+      )
+    : []
+  return (
+    <fieldset
+      id={controlId}
+      aria-labelledby={labelId}
+      aria-describedby={schema.descriptionKey ? descriptionId : undefined}
+      className="grid gap-2 sm:grid-cols-2"
+    >
+      <legend className="sr-only">{t(schema.labelKey)}</legend>
+      {schema.options.map((option) => {
+        const isChecked = multiselectValues.includes(option.value)
+        return (
+          <label
+            key={`${schema.id}-ms-${option.value}`}
+            className={cn(
+              "flex items-center gap-3 rounded-md border border-border/70 px-3 py-2 text-sm",
+              enabled
+                ? "cursor-pointer hover:bg-muted/40"
+                : "cursor-not-allowed bg-muted/20 text-muted-foreground/70"
+            )}
+          >
+            <Checkbox
+              checked={isChecked}
+              disabled={!enabled}
+              onCheckedChange={() => {
+                const nextValues = isChecked
+                  ? multiselectValues.filter((v) => v !== option.value)
+                  : [...multiselectValues, option.value]
+                onChange(schema, enabled, nextValues)
+              }}
+            />
+            <span className="truncate">{t(option.labelKey)}</span>
+          </label>
+        )
+      })}
+    </fieldset>
   )
 }

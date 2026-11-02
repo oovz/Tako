@@ -46,56 +46,62 @@ export function hexToBytes(hex: string): Uint8Array {
   return result
 }
 
-export function detectImageMimeTypeAndExt(data: Uint8Array): {
-  mimeType: string
-  extension: string
-} {
-  if (data.length >= 12) {
-    if (
-      data[0] === 0x52 &&
-      data[1] === 0x49 &&
-      data[2] === 0x46 &&
-      data[3] === 0x46 &&
-      data[8] === 0x57 &&
-      data[9] === 0x45 &&
-      data[10] === 0x42 &&
-      data[11] === 0x50
-    ) {
-      return { mimeType: "image/webp", extension: ".webp" }
-    }
+type ImageFormat = { mimeType: string; extension: string }
+const IMAGE_SIGNATURES = [
+  {
+    bytes: [0x52, 0x49, 0x46, 0x46],
+    offset: 0,
+    tail: [0x57, 0x45, 0x42, 0x50],
+    tailOffset: 8,
+    mimeType: "image/webp",
+    extension: ".webp",
+  },
+  {
+    bytes: [0xff, 0xd8, 0xff],
+    offset: 0,
+    mimeType: "image/jpeg",
+    extension: ".jpg",
+  },
+  {
+    bytes: [0x89, 0x50, 0x4e, 0x47],
+    offset: 0,
+    mimeType: "image/png",
+    extension: ".png",
+  },
+  {
+    bytes: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61],
+    offset: 0,
+    mimeType: "image/gif",
+    extension: ".gif",
+  },
+  {
+    bytes: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61],
+    offset: 0,
+    mimeType: "image/gif",
+    extension: ".gif",
+  },
+]
 
-    if (hasAvifFileTypeBrand(data)) {
-      return { mimeType: "image/avif", extension: ".avif" }
-    }
-  }
+function matchesImageSignature(
+  data: Uint8Array,
+  bytes: number[],
+  offset: number
+): boolean {
+  return bytes.every((byte, index) => data[offset + index] === byte)
+}
 
-  if (
-    data.length >= 3 &&
-    data[0] === 0xff &&
-    data[1] === 0xd8 &&
-    data[2] === 0xff
-  ) {
-    return { mimeType: "image/jpeg", extension: ".jpg" }
-  }
-
-  if (
-    data.length >= 4 &&
-    data[0] === 0x89 &&
-    data[1] === 0x50 &&
-    data[2] === 0x4e &&
-    data[3] === 0x47
-  ) {
-    return { mimeType: "image/png", extension: ".png" }
-  }
-
-  if (
-    data.length >= 6 &&
-    (String.fromCharCode(...data.subarray(0, 6)) === "GIF87a" ||
-      String.fromCharCode(...data.subarray(0, 6)) === "GIF89a")
-  ) {
-    return { mimeType: "image/gif", extension: ".gif" }
-  }
-
+export function detectImageMimeTypeAndExt(data: Uint8Array): ImageFormat {
+  const format = IMAGE_SIGNATURES.find(
+    (signature) =>
+      matchesImageSignature(data, signature.bytes, signature.offset) &&
+      (!signature.tail ||
+        matchesImageSignature(data, signature.tail, signature.tailOffset))
+  )
+  if (format?.mimeType === "image/webp")
+    return { mimeType: format.mimeType, extension: format.extension }
+  if (hasAvifFileTypeBrand(data))
+    return { mimeType: "image/avif", extension: ".avif" }
+  if (format) return { mimeType: format.mimeType, extension: format.extension }
   throw new ProviderContractError(
     "MangaMillion image bytes do not have a supported image signature"
   )

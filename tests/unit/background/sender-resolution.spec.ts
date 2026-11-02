@@ -13,7 +13,7 @@ describe("classifyRuntimeMessagePrincipal", () => {
   it.each([
     ["sidepanel", "/sidepanel.html", undefined, "sidepanel-document"],
     ["sidepanel", "/sidepanel.html", undefined, undefined],
-    ["options", "/options.html?tab=downloads", undefined, "options-document"],
+    ["options", "/options.html?tab=activity", undefined, "options-document"],
     ["options", "/options.html", undefined, undefined],
     ["offscreen", "/offscreen.html", undefined, "offscreen-document"],
     ["background", "/background.js", undefined, undefined],

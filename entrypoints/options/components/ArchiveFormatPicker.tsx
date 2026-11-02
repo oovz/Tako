@@ -39,143 +39,13 @@ export function ArchiveFormatPicker({
         }
         className="grid grid-cols-1 md:grid-cols-3 gap-3"
       >
-        {/* CBZ Option */}
-        <div>
-          <RadioGroupItem
-            value="cbz"
-            id="format-cbz"
-            className="peer sr-only"
+        {ARCHIVE_OPTIONS.map((option) => (
+          <ArchiveFormatOption
+            key={option.format}
+            {...option}
+            selected={value === option.format}
           />
-          <Label
-            htmlFor="format-cbz"
-            className={cn(
-              "flex h-full cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all hover:bg-muted/40",
-              "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary",
-              value === "cbz"
-                ? "border-primary bg-primary/5 shadow-2xs text-foreground"
-                : "border-border bg-card text-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div
-                className={cn(
-                  "p-2 rounded-lg",
-                  value === "cbz"
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted text-muted-foreground"
-                )}
-              >
-                <FileType className="size-5" />
-              </div>
-              {value === "cbz" && (
-                <CheckCircle2
-                  aria-hidden="true"
-                  className="size-4 text-primary"
-                />
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <div className="font-semibold text-sm leading-none">
-                {t("options_cbzArchive")}
-              </div>
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                {t("options_cbzArchiveDesc")}
-              </div>
-            </div>
-          </Label>
-        </div>
-
-        {/* ZIP Option */}
-        <div>
-          <RadioGroupItem
-            value="zip"
-            id="format-zip"
-            className="peer sr-only"
-          />
-          <Label
-            htmlFor="format-zip"
-            className={cn(
-              "flex h-full cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all hover:bg-muted/40",
-              "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary",
-              value === "zip"
-                ? "border-primary bg-primary/5 shadow-2xs text-foreground"
-                : "border-border bg-card text-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div
-                className={cn(
-                  "p-2 rounded-lg",
-                  value === "zip"
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted text-muted-foreground"
-                )}
-              >
-                <FileArchive className="size-5" />
-              </div>
-              {value === "zip" && (
-                <CheckCircle2
-                  aria-hidden="true"
-                  className="size-4 text-primary"
-                />
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <div className="font-semibold text-sm leading-none">
-                {t("options_zipArchive")}
-              </div>
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                {t("options_zipArchiveDesc")}
-              </div>
-            </div>
-          </Label>
-        </div>
-
-        {/* None Option */}
-        <div>
-          <RadioGroupItem
-            value="none"
-            id="format-none"
-            className="peer sr-only"
-          />
-          <Label
-            htmlFor="format-none"
-            className={cn(
-              "flex h-full cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all hover:bg-muted/40",
-              "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary",
-              value === "none"
-                ? "border-primary bg-primary/5 shadow-2xs text-foreground"
-                : "border-border bg-card text-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div
-                className={cn(
-                  "p-2 rounded-lg",
-                  value === "none"
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted text-muted-foreground"
-                )}
-              >
-                <Files className="size-5" />
-              </div>
-              {value === "none" && (
-                <CheckCircle2
-                  aria-hidden="true"
-                  className="size-4 text-primary"
-                />
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <div className="font-semibold text-sm leading-none">
-                {t("options_noArchive")}
-              </div>
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                {t("options_noArchiveDesc")}
-              </div>
-            </div>
-          </Label>
-        </div>
+        ))}
       </RadioGroup>
 
       {showNoArchiveWarning && (
@@ -191,6 +61,77 @@ export function ArchiveFormatPicker({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+const ARCHIVE_OPTIONS = [
+  {
+    format: "cbz",
+    Icon: FileType,
+    label: "options_cbzArchive",
+    description: "options_cbzArchiveDesc",
+  },
+  {
+    format: "zip",
+    Icon: FileArchive,
+    label: "options_zipArchive",
+    description: "options_zipArchiveDesc",
+  },
+  {
+    format: "none",
+    Icon: Files,
+    label: "options_noArchive",
+    description: "options_noArchiveDesc",
+  },
+] as const
+
+function ArchiveFormatOption({
+  format,
+  Icon,
+  label,
+  description,
+  selected,
+}: (typeof ARCHIVE_OPTIONS)[number] & { selected: boolean }) {
+  return (
+    <div>
+      <RadioGroupItem
+        value={format}
+        id={`format-${format}`}
+        className="peer sr-only"
+      />
+      <Label
+        htmlFor={`format-${format}`}
+        className={cn(
+          "flex h-full cursor-pointer flex-col justify-between rounded-xl border p-4 transition-all hover:bg-muted/40",
+          "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary",
+          selected
+            ? "border-primary bg-primary/5 shadow-2xs text-foreground"
+            : "border-border bg-card text-foreground"
+        )}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div
+            className={cn(
+              "p-2 rounded-lg",
+              selected
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
+            <Icon className="size-5" />
+          </div>
+          {selected && (
+            <CheckCircle2 aria-hidden="true" className="size-4 text-primary" />
+          )}
+        </div>
+        <div className="flex flex-col gap-1">
+          <div className="font-semibold text-sm leading-none">{t(label)}</div>
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            {t(description)}
+          </div>
+        </div>
+      </Label>
     </div>
   )
 }

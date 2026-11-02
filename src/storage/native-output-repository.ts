@@ -1,48 +1,43 @@
 import { z } from "zod"
 
+import { DownloadErrorCategorySchema } from "@/src/shared/download-contract"
+
 import {
+  acknowledgeNativeOutputSettlement,
   attachNativeDownload,
   ensureNativeOutputManifest,
   interruptNativeOutputBeforeAcceptance,
+  markNativeOutputOutcomeUnknown,
   markNativeDownloadTerminal,
   markNativeOutputAcceptanceUnknown,
   markNativeOutputAccountingDisposition,
   markNativeOutputBlobReleased,
   markNativeOutputDependencyReleased,
   markNativeOutputJobDependencyReleased,
-  markNativeOutputSurrendered,
   observeNativeDownloadErased,
+  observeNativeDownloadPending,
   prepareNativeOutput,
   sealNativeOutputManifest,
   type NativeOutputKernelDecision,
 } from "@/src/domain/native-output/kernel"
 import {
   createEmptyNativeOutputState,
-  isNativeOutputLive,
+  canReleaseNativeOutputBlob,
+  canAccountNativeOutput,
+  isNativeOutputTerminal,
+  nativeOutputJobIdentityMatches,
   type NativeOutputManifest,
   type NativeOutputRecord,
   type NativeOutputState,
 } from "@/src/domain/native-output/state"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { StorageMutationQueue } from "./storage-mutation-queue"
+import { parseDurableState } from "./durable-state-codecs"
 
 /**
- * Native-output persistence layout.
- *
- * Live work is stored as one manifest key per job and one output key per
- * output, plus a small index mapping live IDs and download IDs. Fully
- * released records and manifests are pruned from storage, so startup
- * hydration and every transition touch only the currently active job instead
- * of an ever-growing whole-history document.
- *
- *   pendingOutputs:index            -> { jobIds, outputIds, downloadIdToOutputId }
- *   pendingOutputs:manifest:<jobId> -> NativeOutputManifest
- *   pendingOutputs:output:<outputId>-> NativeOutputRecord
- *
- * A fully released output has `dependencyReleasedAt` set; once every tracked
- * output of a job is released (or pruned), the manifest is pruned as well.
- * Absence of a record therefore means it was fully released, never that it
- * was lost: the queue task keeps the terminal accounting.
+ * Prune output records after their resource dependencies are released.
+ * Retain each job manifest until settlement is acknowledged and all tracked
+ * outputs are released. The queue task retains terminal accounting.
  */
 
 const nonemptyString = z.string().min(1)
@@ -85,388 +80,596 @@ const manifestSlotSchema = z.discriminatedUnion("disposition", [
   }),
 ])
 
-const manifestSchema: z.ZodType<NativeOutputManifest> = z
-  .strictObject({
-    jobId: nonemptyString,
-    attempt: nonnegativeInteger,
-    taskId: nonemptyString,
-    chapterId: nonemptyString,
-    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    documentInstanceId: nonemptyString,
-    phase: z.enum(["open", "sealed"]),
-    outputsRequested: nonnegativeInteger,
-    outputsFailedBeforeHandoff: nonnegativeInteger,
-    slots: z.array(manifestSlotSchema.nullable()),
-    createdAt: nonnegativeFiniteNumber,
-    sealedAt: nonnegativeFiniteNumber.optional(),
-    dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
+const manifestInputSchema = z.strictObject({
+  jobId: nonemptyString,
+  attempt: nonnegativeInteger,
+  taskId: nonemptyString,
+  chapterId: nonemptyString,
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  documentInstanceId: nonemptyString,
+  phase: z.enum(["open", "sealed"]),
+  outputsRequested: nonnegativeInteger,
+  outputsFailedBeforeHandoff: nonnegativeInteger,
+  slots: z.array(manifestSlotSchema.nullable()),
+  createdAt: nonnegativeFiniteNumber,
+  errorMessage: z.string().optional(),
+  errorCategory: DownloadErrorCategorySchema.optional(),
+  sealedAt: nonnegativeFiniteNumber.optional(),
+  settlementAcknowledgedAt: nonnegativeFiniteNumber.optional(),
+  dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
+})
+
+type ParsedManifest = z.infer<typeof manifestInputSchema>
+const manifestSchema: z.ZodType<NativeOutputManifest> =
+  manifestInputSchema.superRefine(validateManifest)
+
+function reportInvalidNativeOutput(
+  context: z.RefinementCtx,
+  path: (string | number)[],
+  message: string
+): void {
+  context.addIssue({ code: "custom", path, message })
+}
+
+function validateManifest(
+  manifest: ParsedManifest,
+  context: z.RefinementCtx
+): void {
+  validateManifestCounts(manifest, context)
+  const untrackedCount = manifest.slots.filter(
+    (slot) => slot?.disposition === "untracked_failed"
+  ).length
+  if (manifest.phase === "open")
+    validateOpenManifest(manifest, untrackedCount, context)
+  else validateSealedManifest(manifest, untrackedCount, context)
+  validateManifestLifecycle(manifest, context)
+}
+
+function validateManifestCounts(
+  manifest: ParsedManifest,
+  context: z.RefinementCtx
+): void {
+  if (manifest.slots.length !== manifest.outputsRequested) {
+    reportInvalidNativeOutput(
+      context,
+      ["slots"],
+      "manifest slots must equal outputsRequested"
+    )
+  }
+  if (manifest.outputsFailedBeforeHandoff > manifest.outputsRequested) {
+    reportInvalidNativeOutput(
+      context,
+      ["outputsFailedBeforeHandoff"],
+      "failed-before-handoff cannot exceed requested outputs"
+    )
+  }
+}
+
+function validateOpenManifest(
+  manifest: ParsedManifest,
+  untrackedCount: number,
+  context: z.RefinementCtx
+): void {
+  if (
+    manifest.errorMessage !== undefined ||
+    manifest.errorCategory !== undefined ||
+    manifest.sealedAt !== undefined ||
+    manifest.settlementAcknowledgedAt !== undefined ||
+    manifest.dependencyReleasedAt !== undefined ||
+    manifest.outputsFailedBeforeHandoff !== 0 ||
+    untrackedCount !== 0
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["phase"],
+      "open manifest contains sealed state"
+    )
+  }
+}
+
+function validateSealedManifest(
+  manifest: ParsedManifest,
+  untrackedCount: number,
+  context: z.RefinementCtx
+): void {
+  if (
+    manifest.sealedAt === undefined ||
+    manifest.sealedAt < manifest.createdAt ||
+    manifest.slots.some((slot) => slot === null) ||
+    untrackedCount !== manifest.outputsFailedBeforeHandoff
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["phase"],
+      "sealed manifest is incomplete"
+    )
+  }
+}
+
+function validateManifestLifecycle(
+  manifest: ParsedManifest,
+  context: z.RefinementCtx
+): void {
+  if (
+    hasInvalidLifecycleTimestamp(
+      manifest.settlementAcknowledgedAt,
+      manifest.sealedAt
+    )
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["settlementAcknowledgedAt"],
+      "settlement acknowledgement requires a monotonic sealed manifest"
+    )
+  }
+  if (
+    hasInvalidLifecycleTimestamp(
+      manifest.dependencyReleasedAt,
+      manifest.settlementAcknowledgedAt
+    )
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["dependencyReleasedAt"],
+      "job dependency requires settlement acknowledgement"
+    )
+  }
+}
+
+function hasInvalidLifecycleTimestamp(
+  timestamp: number | undefined,
+  predecessor: number | undefined
+): boolean {
+  return (
+    timestamp !== undefined &&
+    (predecessor === undefined || timestamp < predecessor)
+  )
+}
+
+const outputRecordInputSchema = z.strictObject({
+  outputId: nonemptyString,
+  jobId: nonemptyString,
+  attempt: nonnegativeInteger,
+  taskId: nonemptyString,
+  chapterId: nonemptyString,
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  documentInstanceId: nonemptyString,
+  outputIndex: nonnegativeInteger,
+  outputCount: z.number().int().positive(),
+  blobUrl: z.string().startsWith("blob:"),
+  filename: nonemptyString,
+  outputKind: z.enum(["archive", "image"]),
+  phase: z.enum([
+    "prepared",
+    "acceptance_unknown",
+    "outcome_unknown",
+    "waiting",
+    "complete",
+    "interrupted",
+  ]),
+  createdAt: nonnegativeFiniteNumber,
+  acceptanceStartedAt: nonnegativeFiniteNumber.optional(),
+  downloadId: nonnegativeInteger.optional(),
+  terminalAt: nonnegativeFiniteNumber.optional(),
+  error: z.string().optional(),
+  erasedAt: nonnegativeFiniteNumber.optional(),
+  erasedByBrowserAt: nonnegativeFiniteNumber.optional(),
+  accountingDisposition: z.enum(["pending", "accounted", "not_owner"]),
+  accountingDispositionAt: nonnegativeFiniteNumber.optional(),
+  blobReleasedAt: nonnegativeFiniteNumber.optional(),
+  dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
+})
+
+type ParsedOutputRecord = z.infer<typeof outputRecordInputSchema>
+const outputRecordSchema: z.ZodType<NativeOutputRecord> =
+  outputRecordInputSchema.superRefine(validateOutputRecord)
+
+function validateOutputRecord(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (record.outputIndex >= record.outputCount) {
+    reportInvalidNativeOutput(
+      context,
+      ["outputIndex"],
+      "output index must be in range"
+    )
+  }
+  validateOutputAcceptance(record, context)
+  validateOutputHandoff(record, context)
+  validateOutputTerminalTime(record, context)
+  validateOutputErasure(record, context)
+  validateOutputAccounting(record, context)
+  const hasConsumptionEvidence = hasRecordedBlobConsumption(record)
+  validateOutputBlobRelease(record, hasConsumptionEvidence, context)
+  validateOutputDependencyRelease(record, hasConsumptionEvidence, context)
+}
+
+function requiresNativeAcceptance(record: ParsedOutputRecord): boolean {
+  return (
+    record.phase === "acceptance_unknown" ||
+    record.phase === "outcome_unknown" ||
+    record.phase === "waiting" ||
+    record.phase === "complete" ||
+    (record.phase === "interrupted" && record.acceptanceStartedAt !== undefined)
+  )
+}
+
+function validateOutputAcceptance(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (
+    requiresNativeAcceptance(record) &&
+    (record.acceptanceStartedAt === undefined ||
+      record.acceptanceStartedAt < record.createdAt)
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["acceptanceStartedAt"],
+      "accepted phases require a monotonic acceptance timestamp"
+    )
+  }
+  if (
+    (record.phase === "prepared" || record.phase === "acceptance_unknown") &&
+    (record.downloadId !== undefined || record.terminalAt !== undefined)
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["phase"],
+      "pre-acceptance phases cannot contain native result state"
+    )
+  }
+}
+
+function validateOutputHandoff(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (
+    (record.phase === "waiting" || record.phase === "complete") &&
+    record.downloadId === undefined
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["downloadId"],
+      "accepted output phase requires downloadId"
+    )
+  }
+  if (
+    (record.phase === "waiting" || record.phase === "outcome_unknown") &&
+    record.terminalAt !== undefined
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["terminalAt"],
+      "waiting output cannot be terminal"
+    )
+  }
+}
+
+function validateOutputTerminalTime(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (
+    (isNativeOutputTerminal(record) || record.terminalAt !== undefined) &&
+    (record.terminalAt === undefined ||
+      record.terminalAt < record.createdAt ||
+      (record.acceptanceStartedAt !== undefined &&
+        record.terminalAt < record.acceptanceStartedAt))
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["terminalAt"],
+      "terminal output requires a monotonic terminal timestamp"
+    )
+  }
+}
+
+function validateOutputErasure(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (record.erasedAt !== undefined && record.downloadId === undefined) {
+    reportInvalidNativeOutput(
+      context,
+      ["erasedAt"],
+      "erased observation requires downloadId"
+    )
+  }
+  if (hasInvalidLifecycleTimestamp(record.erasedByBrowserAt, record.erasedAt)) {
+    reportInvalidNativeOutput(
+      context,
+      ["erasedByBrowserAt"],
+      "browser erasure requires a monotonic erased observation"
+    )
+  }
+}
+
+function validateOutputAccounting(
+  record: ParsedOutputRecord,
+  context: z.RefinementCtx
+): void {
+  if (
+    record.accountingDisposition === "pending" &&
+    record.accountingDispositionAt !== undefined
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["accountingDispositionAt"],
+      "pending accounting cannot have a disposition timestamp"
+    )
+  }
+  if (
+    record.accountingDisposition !== "pending" &&
+    (!canAccountNativeOutput(record) ||
+      record.accountingDispositionAt === undefined)
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["accountingDisposition"],
+      "accounting disposition requires a resolved output outcome"
+    )
+  }
+}
+
+function hasRecordedBlobConsumption(record: ParsedOutputRecord): boolean {
+  return (
+    canReleaseNativeOutputBlob(record) ||
+    ((record.phase === "waiting" || record.phase === "outcome_unknown") &&
+      record.erasedAt !== undefined)
+  )
+}
+
+function validateOutputBlobRelease(
+  record: ParsedOutputRecord,
+  hasConsumptionEvidence: boolean,
+  context: z.RefinementCtx
+): void {
+  if (
+    record.blobReleasedAt !== undefined &&
+    (record.blobReleasedAt < record.createdAt || !hasConsumptionEvidence)
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["blobReleasedAt"],
+      "Blob release requires browser consumption evidence after preparation"
+    )
+  }
+}
+
+function validateOutputDependencyRelease(
+  record: ParsedOutputRecord,
+  hasConsumptionEvidence: boolean,
+  context: z.RefinementCtx
+): void {
+  if (
+    record.dependencyReleasedAt !== undefined &&
+    (!hasConsumptionEvidence ||
+      record.accountingDisposition === "pending" ||
+      record.blobReleasedAt === undefined ||
+      record.dependencyReleasedAt < record.blobReleasedAt)
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["dependencyReleasedAt"],
+      "dependency release requires resolved accounting and Blob release"
+    )
+  }
+}
+
+const nativeOutputStateInputSchema = z.strictObject({
+  manifestsByJobId: z.record(z.string(), manifestSchema),
+  outputsByOutputId: z.record(z.string(), outputRecordSchema),
+})
+
+type ParsedNativeOutputState = z.infer<typeof nativeOutputStateInputSchema>
+const nativeOutputStateSchema: z.ZodType<NativeOutputState> =
+  nativeOutputStateInputSchema.superRefine(validateNativeOutputState)
+
+function validateNativeOutputState(
+  state: ParsedNativeOutputState,
+  context: z.RefinementCtx
+): void {
+  const blobUrls = new Map<string, string>()
+  const downloadIds = new Map<number, string>()
+  const trackedOutputIds = new Set<string>()
+  for (const [jobKey, manifest] of Object.entries(state.manifestsByJobId)) {
+    validateManifestStateEntry(
+      state,
+      jobKey,
+      manifest,
+      trackedOutputIds,
+      context
+    )
+  }
+  for (const [outputKey, record] of Object.entries(state.outputsByOutputId)) {
+    validateOutputStateEntry(
+      outputKey,
+      record,
+      trackedOutputIds,
+      blobUrls,
+      downloadIds,
+      context
+    )
+  }
+}
+
+function validateManifestStateEntry(
+  state: ParsedNativeOutputState,
+  jobKey: string,
+  manifest: ParsedManifest,
+  trackedOutputIds: Set<string>,
+  context: z.RefinementCtx
+): void {
+  if (jobKey !== manifest.jobId) {
+    reportInvalidNativeOutput(
+      context,
+      ["manifestsByJobId", jobKey, "jobId"],
+      "manifest key must match jobId"
+    )
+  }
+  manifest.slots.forEach((slot, outputIndex) => {
+    validateTrackedSlot(
+      state,
+      jobKey,
+      manifest,
+      slot,
+      outputIndex,
+      trackedOutputIds,
+      context
+    )
   })
-  .superRefine((manifest, context) => {
-    if (manifest.slots.length !== manifest.outputsRequested) {
-      context.addIssue({
-        code: "custom",
-        path: ["slots"],
-        message: "manifest slots must equal outputsRequested",
-      })
-    }
-    if (manifest.outputsFailedBeforeHandoff > manifest.outputsRequested) {
-      context.addIssue({
-        code: "custom",
-        path: ["outputsFailedBeforeHandoff"],
-        message: "failed-before-handoff cannot exceed requested outputs",
-      })
-    }
-    const untrackedCount = manifest.slots.filter(
-      (slot) => slot?.disposition === "untracked_failed"
-    ).length
+  validateManifestSettlement(state, jobKey, manifest, context)
+  validateManifestDependencyRelease(state, jobKey, manifest, context)
+}
+
+function validateTrackedSlot(
+  state: ParsedNativeOutputState,
+  jobKey: string,
+  manifest: ParsedManifest,
+  slot: ParsedManifest["slots"][number],
+  outputIndex: number,
+  trackedOutputIds: Set<string>,
+  context: z.RefinementCtx
+): void {
+  if (slot?.disposition !== "tracked") return
+  const path = ["manifestsByJobId", jobKey, "slots", outputIndex]
+  if (trackedOutputIds.has(slot.outputId)) {
+    reportInvalidNativeOutput(
+      context,
+      path,
+      "outputId may occupy only one manifest slot"
+    )
+  }
+  trackedOutputIds.add(slot.outputId)
+  const record = state.outputsByOutputId[slot.outputId]
+  if (record === undefined) {
+    // A pruned sealed output is already fully released; open slots need records.
     if (manifest.phase === "open") {
-      if (
-        manifest.sealedAt !== undefined ||
-        manifest.dependencyReleasedAt !== undefined ||
-        manifest.outputsFailedBeforeHandoff !== 0 ||
-        untrackedCount !== 0
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["phase"],
-          message: "open manifest contains sealed state",
-        })
-      }
-    } else {
-      if (
-        manifest.sealedAt === undefined ||
-        manifest.sealedAt < manifest.createdAt ||
-        manifest.slots.some((slot) => slot === null) ||
-        untrackedCount !== manifest.outputsFailedBeforeHandoff
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["phase"],
-          message: "sealed manifest is incomplete",
-        })
-      }
+      reportInvalidNativeOutput(
+        context,
+        path,
+        "open manifest slots require their exact output record"
+      )
     }
-    if (
-      manifest.dependencyReleasedAt !== undefined &&
-      (manifest.sealedAt === undefined ||
-        manifest.dependencyReleasedAt < manifest.sealedAt)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["dependencyReleasedAt"],
-        message: "job dependency cannot precede manifest sealing",
-      })
-    }
-  })
+    return
+  }
+  if (
+    !nativeOutputJobIdentityMatches(record, manifest) ||
+    record.outputCount !== manifest.outputsRequested ||
+    record.outputIndex !== outputIndex
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      path,
+      "tracked slot must reference its exact output identity"
+    )
+  }
+}
 
-const outputRecordSchema: z.ZodType<NativeOutputRecord> = z
-  .strictObject({
-    outputId: nonemptyString,
-    jobId: nonemptyString,
-    attempt: nonnegativeInteger,
-    taskId: nonemptyString,
-    chapterId: nonemptyString,
-    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    documentInstanceId: nonemptyString,
-    outputIndex: nonnegativeInteger,
-    outputCount: z.number().int().positive(),
-    blobUrl: z.string().startsWith("blob:"),
-    filename: nonemptyString,
-    outputKind: z.enum(["archive", "image"]),
-    phase: z.enum([
-      "prepared",
-      "acceptance_unknown",
-      "waiting",
-      "complete",
-      "interrupted",
-      "surrendered",
-    ]),
-    createdAt: nonnegativeFiniteNumber,
-    acceptanceStartedAt: nonnegativeFiniteNumber.optional(),
-    downloadId: nonnegativeInteger.optional(),
-    terminalAt: nonnegativeFiniteNumber.optional(),
-    error: z.string().optional(),
-    erasedAt: nonnegativeFiniteNumber.optional(),
-    surrenderedAt: nonnegativeFiniteNumber.optional(),
-    accountingDisposition: z.enum(["pending", "accounted", "not_owner"]),
-    accountingDispositionAt: nonnegativeFiniteNumber.optional(),
-    blobReleasedAt: nonnegativeFiniteNumber.optional(),
-    dependencyReleasedAt: nonnegativeFiniteNumber.optional(),
-  })
-  .superRefine((record, context) => {
-    const isTerminal =
-      record.phase === "complete" || record.phase === "interrupted"
-    const isSettled = isTerminal || record.phase === "surrendered"
-    const requiresAcceptance =
-      record.phase === "acceptance_unknown" ||
-      record.phase === "waiting" ||
-      record.phase === "complete" ||
-      record.phase === "surrendered" ||
-      (record.phase === "interrupted" &&
-        record.acceptanceStartedAt !== undefined)
-    if (record.outputIndex >= record.outputCount) {
-      context.addIssue({
-        code: "custom",
-        path: ["outputIndex"],
-        message: "output index must be in range",
-      })
-    }
-    if (
-      requiresAcceptance &&
-      (record.acceptanceStartedAt === undefined ||
-        record.acceptanceStartedAt < record.createdAt)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["acceptanceStartedAt"],
-        message: "accepted phases require a monotonic acceptance timestamp",
-      })
-    }
-    if (
-      (record.phase === "prepared" || record.phase === "acceptance_unknown") &&
-      (record.downloadId !== undefined || record.terminalAt !== undefined)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["phase"],
-        message: "pre-acceptance phases cannot contain native result state",
-      })
-    }
-    if (
-      (record.phase === "waiting" || record.phase === "complete") &&
-      record.downloadId === undefined
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["downloadId"],
-        message: "accepted output phase requires downloadId",
-      })
-    }
-    if (record.phase === "waiting" && record.terminalAt !== undefined) {
-      context.addIssue({
-        code: "custom",
-        path: ["terminalAt"],
-        message: "waiting output cannot be terminal",
-      })
-    }
-    if (
-      isTerminal &&
-      (record.terminalAt === undefined ||
-        record.terminalAt < record.createdAt ||
-        (record.acceptanceStartedAt !== undefined &&
-          record.terminalAt < record.acceptanceStartedAt))
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["terminalAt"],
-        message: "terminal output requires a monotonic terminal timestamp",
-      })
-    }
-    if (record.erasedAt !== undefined && record.downloadId === undefined) {
-      context.addIssue({
-        code: "custom",
-        path: ["erasedAt"],
-        message: "erased observation requires downloadId",
-      })
-    }
-    if (
-      record.surrenderedAt !== undefined &&
-      (record.erasedAt === undefined || record.phase !== "surrendered")
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["surrenderedAt"],
-        message: "surrender requires an erased observation",
-      })
-    }
-    if (
-      record.accountingDisposition === "pending" &&
-      record.accountingDispositionAt !== undefined
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["accountingDispositionAt"],
-        message: "pending accounting cannot have a disposition timestamp",
-      })
-    }
-    if (
-      record.accountingDisposition !== "pending" &&
-      (!isSettled || record.accountingDispositionAt === undefined)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["accountingDisposition"],
-        message: "accounting disposition requires a terminal output",
-      })
-    }
-    if (
-      record.blobReleasedAt !== undefined &&
-      record.blobReleasedAt < record.createdAt
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["blobReleasedAt"],
-        message: "Blob release cannot precede preparation",
-      })
-    }
-    if (
-      record.dependencyReleasedAt !== undefined &&
-      (!isSettled ||
-        record.accountingDisposition === "pending" ||
-        record.blobReleasedAt === undefined ||
-        record.dependencyReleasedAt < record.blobReleasedAt)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["dependencyReleasedAt"],
-        message:
-          "dependency release requires terminal accounting and Blob release",
-      })
-    }
-  })
+function validateManifestSettlement(
+  state: ParsedNativeOutputState,
+  jobKey: string,
+  manifest: ParsedManifest,
+  context: z.RefinementCtx
+): void {
+  if (
+    manifest.settlementAcknowledgedAt !== undefined &&
+    manifest.slots.some(
+      (slot) =>
+        slot?.disposition === "tracked" &&
+        state.outputsByOutputId[slot.outputId]?.accountingDisposition ===
+          "pending"
+    )
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["manifestsByJobId", jobKey, "settlementAcknowledgedAt"],
+      "settlement acknowledgement requires resolved output accounting"
+    )
+  }
+}
 
-const nativeOutputStateSchema: z.ZodType<NativeOutputState> = z
-  .strictObject({
-    manifestsByJobId: z.record(z.string(), manifestSchema),
-    outputsByOutputId: z.record(z.string(), outputRecordSchema),
-  })
-  .superRefine((state, context) => {
-    const blobUrls = new Map<string, string>()
-    const downloadIds = new Map<number, string>()
-    const trackedOutputIds = new Set<string>()
+function validateManifestDependencyRelease(
+  state: ParsedNativeOutputState,
+  jobKey: string,
+  manifest: ParsedManifest,
+  context: z.RefinementCtx
+): void {
+  if (manifest.dependencyReleasedAt === undefined) return
+  const tracked = manifest.slots.flatMap((slot) =>
+    slot?.disposition === "tracked" ? [slot.outputId] : []
+  )
+  if (
+    tracked.some((outputId) => {
+      const record = state.outputsByOutputId[outputId]
+      return record !== undefined && record.dependencyReleasedAt === undefined
+    })
+  ) {
+    reportInvalidNativeOutput(
+      context,
+      ["manifestsByJobId", jobKey, "dependencyReleasedAt"],
+      "job dependency requires every tracked dependency release"
+    )
+  }
+}
 
-    for (const [jobKey, manifest] of Object.entries(state.manifestsByJobId)) {
-      if (jobKey !== manifest.jobId) {
-        context.addIssue({
-          code: "custom",
-          path: ["manifestsByJobId", jobKey, "jobId"],
-          message: "manifest key must match jobId",
-        })
-      }
-      manifest.slots.forEach((slot, outputIndex) => {
-        if (slot?.disposition !== "tracked") return
-        if (trackedOutputIds.has(slot.outputId)) {
-          context.addIssue({
-            code: "custom",
-            path: ["manifestsByJobId", jobKey, "slots", outputIndex],
-            message: "outputId may occupy only one manifest slot",
-          })
-        }
-        trackedOutputIds.add(slot.outputId)
-        const record = state.outputsByOutputId[slot.outputId]
-        if (record === undefined) {
-          // Sealed manifests may reference fully released outputs that were
-          // pruned from durable storage; absence is itself release proof.
-          if (manifest.phase === "open") {
-            context.addIssue({
-              code: "custom",
-              path: ["manifestsByJobId", jobKey, "slots", outputIndex],
-              message: "open manifest slots require their exact output record",
-            })
-          }
-          return
-        }
-        if (
-          record.jobId !== manifest.jobId ||
-          record.attempt !== manifest.attempt ||
-          record.taskId !== manifest.taskId ||
-          record.chapterId !== manifest.chapterId ||
-          record.outputCount !== manifest.outputsRequested ||
-          record.outputIndex !== outputIndex
-        ) {
-          context.addIssue({
-            code: "custom",
-            path: ["manifestsByJobId", jobKey, "slots", outputIndex],
-            message: "tracked slot must reference its exact output identity",
-          })
-        }
-      })
-      if (manifest.dependencyReleasedAt !== undefined) {
-        const tracked = manifest.slots.flatMap((slot) =>
-          slot?.disposition === "tracked" ? [slot.outputId] : []
-        )
-        if (
-          tracked.some((outputId) => {
-            const record = state.outputsByOutputId[outputId]
-            return (
-              record !== undefined && record.dependencyReleasedAt === undefined
-            )
-          })
-        ) {
-          context.addIssue({
-            code: "custom",
-            path: ["manifestsByJobId", jobKey, "dependencyReleasedAt"],
-            message: "job dependency requires every tracked dependency release",
-          })
-        }
-      }
+function validateOutputStateEntry(
+  outputKey: string,
+  record: ParsedOutputRecord,
+  trackedOutputIds: ReadonlySet<string>,
+  blobUrls: Map<string, string>,
+  downloadIds: Map<number, string>,
+  context: z.RefinementCtx
+): void {
+  if (outputKey !== record.outputId || !trackedOutputIds.has(outputKey)) {
+    reportInvalidNativeOutput(
+      context,
+      ["outputsByOutputId", outputKey],
+      "output key and manifest slot must match outputId"
+    )
+  }
+  const blobOwner = blobUrls.get(record.blobUrl)
+  if (blobOwner !== undefined) {
+    reportInvalidNativeOutput(
+      context,
+      ["outputsByOutputId", outputKey, "blobUrl"],
+      `blobUrl is already assigned to ${blobOwner}`
+    )
+  }
+  blobUrls.set(record.blobUrl, record.outputId)
+  if (record.downloadId !== undefined) {
+    const downloadOwner = downloadIds.get(record.downloadId)
+    if (downloadOwner !== undefined) {
+      reportInvalidNativeOutput(
+        context,
+        ["outputsByOutputId", outputKey, "downloadId"],
+        `downloadId is already assigned to ${downloadOwner}`
+      )
     }
-
-    for (const [outputKey, record] of Object.entries(state.outputsByOutputId)) {
-      if (outputKey !== record.outputId || !trackedOutputIds.has(outputKey)) {
-        context.addIssue({
-          code: "custom",
-          path: ["outputsByOutputId", outputKey],
-          message: "output key and manifest slot must match outputId",
-        })
-      }
-      const blobOwner = blobUrls.get(record.blobUrl)
-      if (blobOwner !== undefined) {
-        context.addIssue({
-          code: "custom",
-          path: ["outputsByOutputId", outputKey, "blobUrl"],
-          message: `blobUrl is already assigned to ${blobOwner}`,
-        })
-      }
-      blobUrls.set(record.blobUrl, record.outputId)
-      if (record.downloadId !== undefined) {
-        const downloadOwner = downloadIds.get(record.downloadId)
-        if (downloadOwner !== undefined) {
-          context.addIssue({
-            code: "custom",
-            path: ["outputsByOutputId", outputKey, "downloadId"],
-            message: `downloadId is already assigned to ${downloadOwner}`,
-          })
-        }
-        downloadIds.set(record.downloadId, record.outputId)
-      }
-    }
-  })
+    downloadIds.set(record.downloadId, record.outputId)
+  }
+}
 
 export function parseCurrentNativeOutputState(
   value: unknown
 ): NativeOutputState {
   if (value === undefined) return createEmptyNativeOutputState()
-  const parsed = nativeOutputStateSchema.safeParse(value)
-  if (!parsed.success) {
-    throw new InvalidDurableStateError("Invalid durable native output state", {
-      cause: parsed.error,
-    })
-  }
-  return parsed.data
+  return parseDurableState(
+    nativeOutputStateSchema,
+    value,
+    "native output state"
+  )
 }
 
 function parseManifest(value: unknown): NativeOutputManifest {
-  const parsed = manifestSchema.safeParse(value)
-  if (!parsed.success) {
-    throw new InvalidDurableStateError(
-      "Invalid durable native output manifest",
-      {
-        cause: parsed.error,
-      }
-    )
-  }
-  return parsed.data
+  return parseDurableState(manifestSchema, value, "native output manifest")
 }
 
 function parseOutputRecord(value: unknown): NativeOutputRecord {
-  const parsed = outputRecordSchema.safeParse(value)
-  if (!parsed.success) {
-    throw new InvalidDurableStateError("Invalid durable native output record", {
-      cause: parsed.error,
-    })
-  }
-  return parsed.data
+  return parseDurableState(outputRecordSchema, value, "native output record")
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {
@@ -724,11 +927,6 @@ export class NativeOutputRepository {
     })
   }
 
-  async listLiveOutputs(): Promise<NativeOutputRecord[]> {
-    const state = await this.snapshot()
-    return Object.values(state.outputsByOutputId).filter(isNativeOutputLive)
-  }
-
   async hasLiveDependencies(): Promise<boolean> {
     const state = await this.snapshot()
     return (
@@ -789,6 +987,24 @@ export class NativeOutputRepository {
     )
   }
 
+  async observePending(
+    input: Parameters<typeof observeNativeDownloadPending>[1]
+  ): Promise<ReturnType<typeof observeNativeDownloadPending>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      observeNativeDownloadPending(state, detached)
+    )
+  }
+
+  async markOutcomeUnknown(
+    input: Parameters<typeof markNativeOutputOutcomeUnknown>[1]
+  ): Promise<ReturnType<typeof markNativeOutputOutcomeUnknown>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      markNativeOutputOutcomeUnknown(state, detached)
+    )
+  }
+
   async markTerminal(
     input: Parameters<typeof markNativeDownloadTerminal>[1]
   ): Promise<ReturnType<typeof markNativeDownloadTerminal>["result"]> {
@@ -804,15 +1020,6 @@ export class NativeOutputRepository {
     const detached = structuredClone(input)
     return await this.execute((state) =>
       observeNativeDownloadErased(state, detached)
-    )
-  }
-
-  async markSurrendered(
-    input: Parameters<typeof markNativeOutputSurrendered>[1]
-  ): Promise<ReturnType<typeof markNativeOutputSurrendered>["result"]> {
-    const detached = structuredClone(input)
-    return await this.execute((state) =>
-      markNativeOutputSurrendered(state, detached)
     )
   }
 
@@ -853,6 +1060,15 @@ export class NativeOutputRepository {
     const detached = structuredClone(input)
     return await this.execute((state) =>
       markNativeOutputJobDependencyReleased(state, detached)
+    )
+  }
+
+  async acknowledgeSettlement(
+    input: Parameters<typeof acknowledgeNativeOutputSettlement>[1]
+  ): Promise<ReturnType<typeof acknowledgeNativeOutputSettlement>["result"]> {
+    const detached = structuredClone(input)
+    return await this.execute((state) =>
+      acknowledgeNativeOutputSettlement(state, detached)
     )
   }
 }

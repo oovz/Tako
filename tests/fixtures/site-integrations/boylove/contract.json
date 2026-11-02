@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "providerId": "boylove",
+  "data": {
+    "source": {
+      "observedAt": "2026-10-25",
+      "seriesUrl": "https://boylove.cc/home/book/index/id/32391",
+      "chapterUrl": "https://boylove.cc/home/book/capter/id/2671926",
+      "observedChapterCount": 68,
+      "observedPageCount": 35,
+      "note": "The supplied public series and reader fields are projected in series.html and reader.html. The synthetic two-page unit vectors below are derived from the earlier 34260/2699104 observation, retained in series-shagua-tiandi.html and reader-shagua-tiandi.html (nine chapters, 88 pages)."
+    },
+    "seriesHtml": "<meta charset=\"utf-8\"><div class=\"stui-content__detail\"><h1>傻瓜天地</h1><p class=\"data\"><i>作者：</i><a>하리보</a></p></div>\n<div class=\"stui-content__thumb\"><a class=\"play\" data-original=\"https://img.boylove.cc/bookimages/img/cover.webp\"></a></div>\n<script>function getChapterList(asc) { let data = JSON.parse(\"{\\\"list\\\":[{\\\"id\\\":2699104,\\\"title\\\":\\\"第1话\\\",\\\"isvip\\\":\\\"0\\\"},{\\\"id\\\":2699597,\\\"title\\\":\\\"第2话\\\",\\\"isvip\\\":\\\"0\\\"}],\\\"history\\\":[]}\"); $('#playlist__item_title_1_url').append(template(\"comic_chpater_list\", data)); }</script>",
+    "readerHtml": "<meta charset=\"utf-8\"><img src=\"https://ads.example/banner.jpg\"><section class=\"reader-cartoon-chapter\">\n<div class=\"reader-cartoon-image\" data-page=\"1\"><img src=\"https://img.boylove.cc/static/images/load.png\" data-original=\"https://img.boylove.cc/bookimages/page1.webp?w=650_1300\"></div>\n<div class=\"advertisement\"><img data-original=\"https://ads.example/middle.jpg\"></div>\n<div class=\"reader-cartoon-image\" data-page=\"2\"><img data-original=\"https://img.boylove.cc/bookimages/credits.webp?w=650_700\"></div></section>\n<script>var imageData = [{\"id\":0,\"src\":\"https://img.boylove.cc/bookimages/page1.webp?w=650_1300\",\"width\":650,\"height\":\"1300\"},{\"id\":1,\"src\":\"https://img.boylove.cc/bookimages/credits.webp?w=650_700\",\"width\":650,\"height\":\"700\"}]; var randomClass = 13;</script>",
+    "kind": "synthetic-derived"
+  }
+}

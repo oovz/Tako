@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from "vitest"
 import { OptionsConfigurationClient } from "@/entrypoints/options/controllers/options-configuration-client"
 import { OptionsExternalChangeController } from "@/entrypoints/options/controllers/options-external-change-controller"
 import { OptionsFsaController } from "@/entrypoints/options/controllers/options-fsa-controller"
-import { OptionsHistoryController } from "@/entrypoints/options/controllers/options-history-controller"
+import {
+  OptionsHistoryController,
+  type OptionsHistoryScope,
+} from "@/entrypoints/options/controllers/options-history-controller"
 import { OptionsHostPermissionController } from "@/entrypoints/options/controllers/options-host-permission-controller"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { OptionsConfigurationData } from "@/src/runtime/runtime-message-contracts"
 
 vi.mock("@/src/storage/fs-access", () => ({
-  clearDownloadRootHandle: vi.fn(),
   loadDownloadRootHandle: vi.fn(),
   saveDownloadRootHandle: vi.fn(),
   verifyPermission: vi.fn(),
@@ -77,6 +79,45 @@ describe("Options configuration and history controllers", () => {
       load.mock.invocationCallOrder[0]
     )
   })
+
+  it.each<OptionsHistoryScope>([
+    { scope: "all" },
+    { scope: "series", siteIntegrationId: "mangadex", seriesId: "series-1" },
+  ])(
+    "propagates a failed chapter clear and permits retry for $scope",
+    async (scope) => {
+      const sender = vi
+        .fn()
+        .mockResolvedValueOnce({
+          success: false,
+          error: "History storage unavailable",
+        })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: true, data: configurationData() })
+      const client = new OptionsConfigurationClient(sender as never)
+      const controller = new OptionsHistoryController(client, (selection) =>
+        OptionsConfigurationClient.clearHistory(selection, sender as never)
+      )
+
+      await expect(controller.clear(scope)).rejects.toThrow(
+        "History storage unavailable"
+      )
+      expect(sender).toHaveBeenCalledTimes(1)
+      await expect(controller.clear(scope)).resolves.toEqual(
+        configurationData()
+      )
+      expect(
+        sender.mock.calls.map(([request]) => ({
+          type: request.type,
+          payload: request.payload,
+        }))
+      ).toEqual([
+        { type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY", payload: scope },
+        { type: "CLEAR_PERSISTED_DOWNLOAD_HISTORY", payload: scope },
+        { type: "GET_OPTIONS_CONFIGURATION", payload: undefined },
+      ])
+    }
+  )
 })
 
 describe("Options external-change controller", () => {
@@ -499,44 +540,25 @@ describe("Options host-permission and FSA controllers", () => {
       status: "granted",
       handle,
     })
-    await controller.save(handle as never)
-    expect(saveDownloadRootHandle).toHaveBeenCalledWith(handle)
+    await controller.stage(handle, "staged-folder")
+    expect(saveDownloadRootHandle).toHaveBeenCalledWith(handle, "staged-folder")
   })
 
-  it("serializes mutations and skips a stale rollback after a newer repair", async () => {
-    const { saveDownloadRootHandle, clearDownloadRootHandle } =
-      await import("@/src/storage/fs-access")
-    const oldHandle = { name: "old" } as unknown as FileSystemDirectoryHandle
-    const repairedHandle = {
-      name: "repaired",
-    } as unknown as FileSystemDirectoryHandle
+  it("stages independent capabilities without overwriting the saved folder", async () => {
+    const { saveDownloadRootHandle } = await import("@/src/storage/fs-access")
     vi.mocked(saveDownloadRootHandle).mockClear()
-    vi.mocked(clearDownloadRootHandle).mockClear()
-    let releaseOlderSave!: () => void
-    const olderSaveGate = new Promise<void>((resolve) => {
-      releaseOlderSave = resolve
-    })
-    vi.mocked(saveDownloadRootHandle)
-      .mockImplementationOnce(async () => {
-        await olderSaveGate
-      })
-      .mockResolvedValue(undefined)
-    vi.mocked(clearDownloadRootHandle).mockResolvedValue(undefined)
-
+    const first = { name: "first" } as FileSystemDirectoryHandle
+    const second = { name: "second" } as FileSystemDirectoryHandle
     const controller = new OptionsFsaController()
-    const olderSave = controller.save(oldHandle as never)
-    await Promise.resolve()
-    const oldRevision = controller.revision
-    const newerRepair = controller.save(repairedHandle as never)
 
-    await expect(
-      controller.restore(oldHandle as never, oldRevision)
-    ).resolves.toBe(false)
-    releaseOlderSave()
-    await olderSave
-    await newerRepair
-    expect(saveDownloadRootHandle).toHaveBeenCalledTimes(2)
-    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(2, repairedHandle)
-    expect(clearDownloadRootHandle).not.toHaveBeenCalled()
+    await controller.stage(first, "first-id")
+    await controller.stage(second, "second-id")
+
+    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(1, first, "first-id")
+    expect(saveDownloadRootHandle).toHaveBeenNthCalledWith(
+      2,
+      second,
+      "second-id"
+    )
   })
 })

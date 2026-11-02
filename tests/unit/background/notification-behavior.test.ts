@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -8,6 +9,8 @@ import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import { persistentErrorsRepository } from "@/src/storage/persistent-errors-repository"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
+
+const chromeI18n = chrome.i18n
 
 vi.mock("@/src/runtime/logger", () => ({
   default: {
@@ -61,6 +64,7 @@ describe("notification behavior", () => {
     })
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       runtime: {
         getURL: runtimeGetUrl,
       },
@@ -90,6 +94,7 @@ describe("notification behavior", () => {
     const task = makeTask({
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -113,7 +118,7 @@ describe("notification behavior", () => {
       expect.objectContaining({
         type: "basic",
         iconUrl: "chrome-extension://test/icon/128.png",
-        title: "Download complete",
+        title: "Previously processed",
       })
     )
   })
@@ -133,6 +138,7 @@ describe("notification behavior", () => {
       lastSuccessfulDownloadId: 321,
       chapters: [
         {
+          requestedPath: "Tako/Chapter.cbz",
           id: "ch-1",
           url: "https://example.com/ch-1",
           title: "Chapter 1",
@@ -158,7 +164,7 @@ describe("notification behavior", () => {
     // Test the handler directly.
     await service.handleNotificationClick(
       `task_complete_${task.id}`,
-      new QueueRepository(new QueueProjectionService())
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
     )
 
     await Promise.resolve()
@@ -190,6 +196,7 @@ describe("notification behavior", () => {
           ),
           chapters: [
             {
+              requestedPath: "Tako/Chapter.cbz",
               id: "ch-1",
               url: "https://example.com/ch-1",
               title: "Chapter 1",
@@ -208,7 +215,7 @@ describe("notification behavior", () => {
     // Test the handler directly.
     await service.handleNotificationClick(
       "task_complete_task-click-stale",
-      new QueueRepository(new QueueProjectionService())
+      new QueueRepository(new QueueProjectionService(), new HistoryRepository())
     )
 
     await Promise.resolve()
@@ -236,6 +243,7 @@ describe("settings and persistent error behavior", () => {
     storageLocalSet.mockResolvedValue(undefined)
 
     vi.stubGlobal("chrome", {
+      i18n: chromeI18n,
       storage: {
         local: {
           get: storageLocalGet,

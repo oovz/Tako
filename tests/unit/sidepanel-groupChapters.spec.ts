@@ -5,8 +5,9 @@ import type { ChapterState, VolumeState } from "@/src/types/tab-state"
 
 function makeChapter(
   partial: Partial<ChapterState> & { url: string; title: string }
-): ChapterState {
+): ChapterState & { requestedPath: string } {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: partial.id ?? partial.url,
     url: partial.url,
     title: partial.title,
@@ -23,6 +24,72 @@ function makeChapter(
 }
 
 describe("groupChapters (Side Panel)", () => {
+  it("retains empty categories without reordering standalone chapters or repeated groups", () => {
+    const volumes: VolumeState[] = [
+      { id: "before", title: "Empty before" },
+      { id: "a", title: "A" },
+      { id: "between", title: "Empty between" },
+      { id: "b", title: "B" },
+      { id: "after", title: "Empty after" },
+    ]
+    const chapters = [
+      makeChapter({ url: "a-1", title: "A1", volumeId: "a" }),
+      makeChapter({ url: "standalone", title: "Standalone" }),
+      makeChapter({ url: "b-1", title: "B1", volumeId: "b" }),
+      makeChapter({ url: "a-2", title: "A2", volumeId: "a" }),
+    ]
+    const result = groupChapters(chapters, volumes)
+    expect(result.map((item) => item.title)).toEqual([
+      "Empty before",
+      "A",
+      "Standalone",
+      "Empty between",
+      "B",
+      "A",
+      "Empty after",
+    ])
+    expect(
+      result.flatMap((item) =>
+        "chapters" in item
+          ? item.chapters.map((chapter) => chapter.id)
+          : [item.id]
+      )
+    ).toEqual(["a-1", "standalone", "b-1", "a-2"])
+    expect(
+      result.filter((item) => "chapters" in item).map((item) => item.groupId)
+    ).toEqual(["before", "a", "between", "b", "a:a-2", "after"])
+  })
+
+  it("retains a catalog with only empty explicit categories", () => {
+    const result = groupChapters(
+      [],
+      [
+        { id: "chapters", title: "Chapters" },
+        { id: "volumes", title: "Volumes" },
+        { id: "extras", title: "Extras" },
+      ]
+    )
+    expect(result.map((item) => item.title)).toEqual([
+      "Chapters",
+      "Volumes",
+      "Extras",
+    ])
+    expect(
+      result.every((item) => "chapters" in item && item.chapters.length === 0)
+    ).toBe(true)
+  })
+
+  it("retains unavailable categories alongside standalone chapters", () => {
+    const result = groupChapters(
+      [makeChapter({ url: "standalone", title: "Standalone" })],
+      [{ id: "unavailable", title: "Unavailable extras" }]
+    )
+    expect(result.map((item) => item.title)).toEqual([
+      "Standalone",
+      "Unavailable extras",
+    ])
+  })
+
   it("preserves mixed standalone/volume order while grouping chapters into volumes", () => {
     const chapters: ChapterState[] = [
       makeChapter({

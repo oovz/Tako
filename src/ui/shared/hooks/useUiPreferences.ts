@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import type { UiPreferences } from "@/src/runtime/runtime-message-contracts"
 import {
   DEFAULT_UI_PREFERENCES,
@@ -7,49 +7,68 @@ import {
 
 const SETTINGS_CHANGE_SIGNAL_KEY = "settings:global"
 
-export function useUiPreferences() {
-  const [value, setValue] = useState<UiPreferences>(DEFAULT_UI_PREFERENCES)
-  const [hydrated, setHydrated] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
-  const requestGeneration = useRef(0)
+type PreferenceReadResult =
+  { value: UiPreferences; error: null } | { error: Error }
 
-  useEffect(() => {
-    let active = true
+interface PreferenceState {
+  value: UiPreferences
+  hydrated: boolean
+  error: Error | null
+}
 
-    const refresh = async (): Promise<void> => {
-      const generation = ++requestGeneration.current
-      try {
-        const next = await loadUiPreferences()
-        if (!active || generation !== requestGeneration.current) return
-        setValue(next)
-        setError(null)
-      } catch (cause) {
-        if (!active || generation !== requestGeneration.current) return
-        setError(cause instanceof Error ? cause : new Error(String(cause)))
-      } finally {
-        if (active && generation === requestGeneration.current) {
-          setHydrated(true)
-        }
-      }
+async function readPreferences(): Promise<PreferenceReadResult> {
+  try {
+    return { value: await loadUiPreferences(), error: null }
+  } catch (cause) {
+    return { error: cause instanceof Error ? cause : new Error(String(cause)) }
+  }
+}
+
+function subscribeToPreferences(
+  onRead: (result: PreferenceReadResult) => void
+) {
+  let active = true
+  let requestGeneration = 0
+
+  const refresh = async (): Promise<void> => {
+    const generation = ++requestGeneration
+    const result = await readPreferences()
+    if (!active || generation !== requestGeneration) return
+    onRead(result)
+  }
+
+  const onChanged = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string
+  ): void => {
+    if (areaName !== "local" || !(SETTINGS_CHANGE_SIGNAL_KEY in changes)) {
+      return
     }
-
-    const onChanged = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string
-    ): void => {
-      if (areaName !== "local" || !(SETTINGS_CHANGE_SIGNAL_KEY in changes)) {
-        return
-      }
-      void refresh()
-    }
-
-    chrome.storage.onChanged.addListener(onChanged)
     void refresh()
-    return () => {
-      active = false
-      chrome.storage.onChanged.removeListener(onChanged)
-    }
-  }, [])
+  }
 
-  return { value, hydrated, error }
+  chrome.storage.onChanged.addListener(onChanged)
+  void refresh()
+  return () => {
+    active = false
+    chrome.storage.onChanged.removeListener(onChanged)
+  }
+}
+
+export function useUiPreferences() {
+  const [state, setState] = useState<PreferenceState>({
+    value: DEFAULT_UI_PREFERENCES,
+    hydrated: false,
+    error: null,
+  })
+
+  useEffect(
+    () =>
+      subscribeToPreferences((result) => {
+        setState((current) => ({ ...current, ...result, hydrated: true }))
+      }),
+    []
+  )
+
+  return state
 }

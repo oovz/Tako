@@ -24,7 +24,7 @@ function limiterKey(
 
 function createLimiter(policy: EffectivePolicy): Bottleneck {
   return new Bottleneck({
-    // minTime is the inter-task delay; we’ll schedule delay explicitly too for precision
+    // Bottleneck spaces job starts and bounds work until each job settles.
     minTime: Math.max(0, policy.delayMs || 0),
     maxConcurrent: Math.max(1, policy.concurrency || 1),
   })
@@ -96,6 +96,7 @@ export class StorageRateLimitPolicySource implements RateLimitPolicySource {
 /** Per-runtime scheduler. Policy storage and invalidation are composition-root concerns. */
 export class RateLimitService {
   private readonly limiters = new Map<string, Bottleneck>()
+  private readonly initializations = new Map<string, Promise<Bottleneck>>()
 
   constructor(private readonly policySource: RateLimitPolicySource) {}
 
@@ -117,14 +118,31 @@ export class RateLimitService {
       ? normalizePolicy(policyOverride)
       : undefined
     const key = limiterKey(integrationId, scope, normalizedOverride)
-    let limiter = this.limiters.get(key)
+    const limiter = this.limiters.get(key)
     if (limiter) return limiter
-    const policy =
-      normalizedOverride ??
-      (await this.resolveEffectivePolicy(integrationId, scope))
-    limiter = createLimiter(policy)
-    this.limiters.set(key, limiter)
-    return limiter
+    if (normalizedOverride) {
+      const explicitLimiter = createLimiter(normalizedOverride)
+      this.limiters.set(key, explicitLimiter)
+      return explicitLimiter
+    }
+    const pending = this.initializations.get(key)
+    if (pending) return pending
+    const initialization = this.resolveEffectivePolicy(integrationId, scope)
+      .then((policy) => {
+        const initializedLimiter = createLimiter(policy)
+        // An invalidated lookup still serves its callers with their resolved policy.
+        if (this.initializations.get(key) === initialization) {
+          this.limiters.set(key, initializedLimiter)
+        }
+        return initializedLimiter
+      })
+      .finally(() => {
+        if (this.initializations.get(key) === initialization) {
+          this.initializations.delete(key)
+        }
+      })
+    this.initializations.set(key, initialization)
+    return initialization
   }
 
   async scheduleForIntegrationScope<T>(
@@ -144,6 +162,7 @@ export class RateLimitService {
   cleanupRateLimiters(): void {
     const limiters = [...this.limiters.values()]
     this.limiters.clear()
+    this.initializations.clear()
     void Promise.allSettled(limiters.map((limiter) => limiter.disconnect()))
   }
 }

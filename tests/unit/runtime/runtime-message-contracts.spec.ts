@@ -21,6 +21,11 @@ const EXACT_JOB_IDENTITY = {
 }
 
 const EXPECTED_RUNTIME_MESSAGES = {
+  GET_COVER_PREVIEW: "background|query|sidepanel|control-ready",
+  CANCEL_COVER_PREVIEW: "background|command|sidepanel|control-ready",
+  OFFSCREEN_FETCH_COVER_PREVIEW: "offscreen|query|background|runtime-ready",
+  OFFSCREEN_CANCEL_COVER_PREVIEW: "offscreen|command|background|runtime-ready",
+  OFFSCREEN_BEGIN_FSA_WRITE: "background|command|offscreen|queue-hydrated",
   REQUEST_TAB_CONTEXT_REFRESH:
     "background|command|sidepanel|integrations-ready",
   GET_SITE_INTEGRATION_ENABLEMENT: "background|query|offscreen|control-ready",
@@ -34,13 +39,9 @@ const EXPECTED_RUNTIME_MESSAGES = {
   CLEAR_ALL_HISTORY: "background|command|options|runtime-ready",
   REMOVE_TASK: "background|command|sidepanel,options|runtime-ready",
   CANCEL_TASK: "background|command|sidepanel,options|runtime-ready",
-  FORGET_UNOBSERVABLE_OUTPUTS:
-    "background|command|sidepanel,options|runtime-ready",
-  RETRY_DESTINATION: "background|command|options|runtime-ready",
   SAVE_OPTIONS_CONFIGURATION: "background|command|options|runtime-ready",
   GET_UI_PREFERENCES: "background|query|sidepanel,options|runtime-ready",
   GET_PERSISTENT_ERRORS: "background|query|sidepanel|control-ready",
-  CONTINUE_DOWNLOAD: "background|command|sidepanel,options|runtime-ready",
   UNDO_QUEUE_ACTION: "background|command|sidepanel,options|runtime-ready",
   CLEAR_PERSISTED_DOWNLOAD_HISTORY: "background|command|options|runtime-ready",
   ACKNOWLEDGE_ERROR: "background|command|sidepanel|control-ready",
@@ -75,7 +76,7 @@ describe("runtime message registry", () => {
     )
 
     expect(actual).toEqual(EXPECTED_RUNTIME_MESSAGES)
-    expect(Object.keys(actual)).toHaveLength(35)
+    expect(Object.keys(actual)).toHaveLength(37)
   })
 
   it("keeps offscreen initialization failure payloads and acknowledgements strict", () => {
@@ -193,13 +194,13 @@ describe("runtime message registry", () => {
     expect(
       runtimeMessageRegistry.GET_OPTIONS_DOWNLOAD_STATE.response.safeParse({
         success: true,
-        data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+        data: { tasks: [], queueStorageBytes: 0 },
       }).success
     ).toBe(true)
     expect(
       runtimeMessageRegistry.GET_OPTIONS_DOWNLOAD_STATE.response.safeParse({
         success: true,
-        data: { tasks: [], destinationIssue: null, queueStorageBytes: 0 },
+        data: { tasks: [], queueStorageBytes: 0 },
         legacy: true,
       }).success
     ).toBe(false)
@@ -330,7 +331,7 @@ describe("runtime message registry", () => {
           initializationState,
           documentInstanceId: DOCUMENT_INSTANCE_ID,
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }).success
       ).toBe(true)
@@ -341,7 +342,7 @@ describe("runtime message registry", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
         isInitialized: true,
       }).success
@@ -352,7 +353,7 @@ describe("runtime message registry", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
         ready: true,
       }).success
@@ -362,7 +363,7 @@ describe("runtime message registry", () => {
         success: true,
         initializationState: "ready",
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }).success
     ).toBe(false)
@@ -617,6 +618,21 @@ describe("runtime message registry", () => {
         },
       }).success
     ).toBe(false)
+  })
+
+  it("accepts an optional nonempty identity from offscreen series resolution", () => {
+    const schema = runtimeMessageRegistry.OFFSCREEN_PARSE_SERIES_HTML.response
+    expect(schema.safeParse({ success: true }).success).toBe(true)
+    expect(schema.parse({ success: true, seriesId: "series-1" })).toEqual({
+      success: true,
+      seriesId: "series-1",
+    })
+    expect(schema.safeParse({ success: true, seriesId: "" }).success).toBe(
+      false
+    )
+    expect(schema.safeParse({ success: true, seriesId: 123 }).success).toBe(
+      false
+    )
   })
 
   it("validates parsed series metadata and chapter-list output recursively", () => {

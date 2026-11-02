@@ -1,0 +1,2758 @@
+[
+  {
+    "success": true,
+    "data": {
+      "chapters": [
+        {
+          "chapter_name": "Chapter 420: Encounter",
+          "chapter_num": 420,
+          "chapter_slug": "chapter-420"
+        },
+        {
+          "chapter_name": "Chapter 419",
+          "chapter_num": 419,
+          "chapter_slug": "chapter-419"
+        },
+        {
+          "chapter_name": "Chapter 418",
+          "chapter_num": 418,
+          "chapter_slug": "chapter-418"
+        },
+        {
+          "chapter_name": "Chapter 417",
+          "chapter_num": 417,
+          "chapter_slug": "chapter-417"
+        },
+        {
+          "chapter_name": "Chapter 416: Proclamation",
+          "chapter_num": 416,
+          "chapter_slug": "chapter-416"
+        },
+        {
+          "chapter_name": "Chapter 415: Authenticity",
+          "chapter_num": 415,
+          "chapter_slug": "chapter-415"
+        },
+        {
+          "chapter_name": "Chapter 414",
+          "chapter_num": 414,
+          "chapter_slug": "chapter-414"
+        },
+        {
+          "chapter_name": "Chapter 413",
+          "chapter_num": 413,
+          "chapter_slug": "chapter-413"
+        },
+        {
+          "chapter_name": "Chapter 412",
+          "chapter_num": 412,
+          "chapter_slug": "chapter-412"
+        },
+        {
+          "chapter_name": "Chapter 411",
+          "chapter_num": 411,
+          "chapter_slug": "chapter-411"
+        },
+        {
+          "chapter_name": "Chapter 410",
+          "chapter_num": 410,
+          "chapter_slug": "chapter-410"
+        },
+        {
+          "chapter_name": "Chapter 409",
+          "chapter_num": 409,
+          "chapter_slug": "chapter-409"
+        },
+        {
+          "chapter_name": "Chapter 408",
+          "chapter_num": 408,
+          "chapter_slug": "chapter-408"
+        },
+        {
+          "chapter_name": "Chapter 407",
+          "chapter_num": 407,
+          "chapter_slug": "chapter-407"
+        },
+        {
+          "chapter_name": "Chapter 406",
+          "chapter_num": 406,
+          "chapter_slug": "chapter-406"
+        },
+        {
+          "chapter_name": "Chapter 405",
+          "chapter_num": 405,
+          "chapter_slug": "chapter-405"
+        },
+        {
+          "chapter_name": "Chapter 404",
+          "chapter_num": 404,
+          "chapter_slug": "chapter-404"
+        },
+        {
+          "chapter_name": "Chapter 403",
+          "chapter_num": 403,
+          "chapter_slug": "chapter-403"
+        },
+        {
+          "chapter_name": "Chapter 402",
+          "chapter_num": 402,
+          "chapter_slug": "chapter-402"
+        },
+        {
+          "chapter_name": "Chapter 401",
+          "chapter_num": 401,
+          "chapter_slug": "chapter-401"
+        },
+        {
+          "chapter_name": "Chapter 400",
+          "chapter_num": 400,
+          "chapter_slug": "chapter-400"
+        },
+        {
+          "chapter_name": "Chapter 399",
+          "chapter_num": 399,
+          "chapter_slug": "chapter-399"
+        },
+        {
+          "chapter_name": "Chapter 398",
+          "chapter_num": 398,
+          "chapter_slug": "chapter-398"
+        },
+        {
+          "chapter_name": "Chapter 397",
+          "chapter_num": 397,
+          "chapter_slug": "chapter-397"
+        },
+        {
+          "chapter_name": "Chapter 396",
+          "chapter_num": 396,
+          "chapter_slug": "chapter-396"
+        },
+        {
+          "chapter_name": "Chapter 395",
+          "chapter_num": 395,
+          "chapter_slug": "chapter-395"
+        },
+        {
+          "chapter_name": "Chapter 394",
+          "chapter_num": 394,
+          "chapter_slug": "chapter-394"
+        },
+        {
+          "chapter_name": "Chapter 393",
+          "chapter_num": 393,
+          "chapter_slug": "chapter-393"
+        },
+        {
+          "chapter_name": "Chapter 392",
+          "chapter_num": 392,
+          "chapter_slug": "chapter-392"
+        },
+        {
+          "chapter_name": "Chapter 391",
+          "chapter_num": 391,
+          "chapter_slug": "chapter-391"
+        },
+        {
+          "chapter_name": "Chapter 390",
+          "chapter_num": 390,
+          "chapter_slug": "chapter-390"
+        },
+        {
+          "chapter_name": "Chapter 389",
+          "chapter_num": 389,
+          "chapter_slug": "chapter-389"
+        },
+        {
+          "chapter_name": "Chapter 388",
+          "chapter_num": 388,
+          "chapter_slug": "chapter-388"
+        },
+        {
+          "chapter_name": "Chapter 387",
+          "chapter_num": 387,
+          "chapter_slug": "chapter-387"
+        },
+        {
+          "chapter_name": "Chapter 386",
+          "chapter_num": 386,
+          "chapter_slug": "chapter-386"
+        },
+        {
+          "chapter_name": "Chapter 385",
+          "chapter_num": 385,
+          "chapter_slug": "chapter-385"
+        },
+        {
+          "chapter_name": "Chapter 384",
+          "chapter_num": 384,
+          "chapter_slug": "chapter-384"
+        },
+        {
+          "chapter_name": "Chapter 383",
+          "chapter_num": 383,
+          "chapter_slug": "chapter-383"
+        },
+        {
+          "chapter_name": "Chapter 382",
+          "chapter_num": 382,
+          "chapter_slug": "chapter-382"
+        },
+        {
+          "chapter_name": "Chapter 381",
+          "chapter_num": 381,
+          "chapter_slug": "chapter-381"
+        },
+        {
+          "chapter_name": "Chapter 380",
+          "chapter_num": 380,
+          "chapter_slug": "chapter-380"
+        },
+        {
+          "chapter_name": "Chapter 379",
+          "chapter_num": 379,
+          "chapter_slug": "chapter-379"
+        },
+        {
+          "chapter_name": "Chapter 378",
+          "chapter_num": 378,
+          "chapter_slug": "chapter-378"
+        },
+        {
+          "chapter_name": "Chapter 377",
+          "chapter_num": 377,
+          "chapter_slug": "chapter-377"
+        },
+        {
+          "chapter_name": "Chapter 376",
+          "chapter_num": 376,
+          "chapter_slug": "chapter-376"
+        },
+        {
+          "chapter_name": "Chapter 375",
+          "chapter_num": 375,
+          "chapter_slug": "chapter-375"
+        },
+        {
+          "chapter_name": "Chapter 374",
+          "chapter_num": 374,
+          "chapter_slug": "chapter-374"
+        },
+        {
+          "chapter_name": "Chapter 373",
+          "chapter_num": 373,
+          "chapter_slug": "chapter-373"
+        },
+        {
+          "chapter_name": "Chapter 372",
+          "chapter_num": 372,
+          "chapter_slug": "chapter-372"
+        },
+        {
+          "chapter_name": "Chapter 371",
+          "chapter_num": 371,
+          "chapter_slug": "chapter-371"
+        },
+        {
+          "chapter_name": "Chapter 370",
+          "chapter_num": 370,
+          "chapter_slug": "chapter-370"
+        },
+        {
+          "chapter_name": "Chapter 369",
+          "chapter_num": 369,
+          "chapter_slug": "chapter-369"
+        },
+        {
+          "chapter_name": "Chapter 368",
+          "chapter_num": 368,
+          "chapter_slug": "chapter-368"
+        },
+        {
+          "chapter_name": "Chapter 367",
+          "chapter_num": 367,
+          "chapter_slug": "chapter-367"
+        },
+        {
+          "chapter_name": "Chapter 366",
+          "chapter_num": 366,
+          "chapter_slug": "chapter-366"
+        },
+        {
+          "chapter_name": "Chapter 365",
+          "chapter_num": 365,
+          "chapter_slug": "chapter-365"
+        },
+        {
+          "chapter_name": "Chapter 364",
+          "chapter_num": 364,
+          "chapter_slug": "chapter-364"
+        },
+        {
+          "chapter_name": "Chapter 363",
+          "chapter_num": 363,
+          "chapter_slug": "chapter-363"
+        },
+        {
+          "chapter_name": "Chapter 362",
+          "chapter_num": 362,
+          "chapter_slug": "chapter-362"
+        },
+        {
+          "chapter_name": "Chapter 361",
+          "chapter_num": 361,
+          "chapter_slug": "chapter-361"
+        },
+        {
+          "chapter_name": "Chapter 360",
+          "chapter_num": 360,
+          "chapter_slug": "chapter-360"
+        },
+        {
+          "chapter_name": "Chapter 359",
+          "chapter_num": 359,
+          "chapter_slug": "chapter-359"
+        },
+        {
+          "chapter_name": "Chapter 358",
+          "chapter_num": 358,
+          "chapter_slug": "chapter-358"
+        },
+        {
+          "chapter_name": "Chapter 357",
+          "chapter_num": 357,
+          "chapter_slug": "chapter-357"
+        },
+        {
+          "chapter_name": "Chapter 356.5",
+          "chapter_num": 356.5,
+          "chapter_slug": "chapter-356-5"
+        },
+        {
+          "chapter_name": "Chapter 356",
+          "chapter_num": 356,
+          "chapter_slug": "chapter-356"
+        },
+        {
+          "chapter_name": "Chapter 355",
+          "chapter_num": 355,
+          "chapter_slug": "chapter-355"
+        },
+        {
+          "chapter_name": "Chapter 354",
+          "chapter_num": 354,
+          "chapter_slug": "chapter-354"
+        },
+        {
+          "chapter_name": "Chapter 353",
+          "chapter_num": 353,
+          "chapter_slug": "chapter-353"
+        },
+        {
+          "chapter_name": "Chapter 352",
+          "chapter_num": 352,
+          "chapter_slug": "chapter-352"
+        },
+        {
+          "chapter_name": "Chapter 351",
+          "chapter_num": 351,
+          "chapter_slug": "chapter-351"
+        },
+        {
+          "chapter_name": "Chapter 350",
+          "chapter_num": 350,
+          "chapter_slug": "chapter-350"
+        },
+        {
+          "chapter_name": "Chapter 349",
+          "chapter_num": 349,
+          "chapter_slug": "chapter-349"
+        },
+        {
+          "chapter_name": "Chapter 348",
+          "chapter_num": 348,
+          "chapter_slug": "chapter-348"
+        },
+        {
+          "chapter_name": "Chapter 347",
+          "chapter_num": 347,
+          "chapter_slug": "chapter-347"
+        },
+        {
+          "chapter_name": "Chapter 346",
+          "chapter_num": 346,
+          "chapter_slug": "chapter-346"
+        },
+        {
+          "chapter_name": "Chapter 345",
+          "chapter_num": 345,
+          "chapter_slug": "chapter-345"
+        },
+        {
+          "chapter_name": "Chapter 344",
+          "chapter_num": 344,
+          "chapter_slug": "chapter-344"
+        },
+        {
+          "chapter_name": "Chapter 343",
+          "chapter_num": 343,
+          "chapter_slug": "chapter-343"
+        },
+        {
+          "chapter_name": "Chapter 342",
+          "chapter_num": 342,
+          "chapter_slug": "chapter-342"
+        },
+        {
+          "chapter_name": "Chapter 341",
+          "chapter_num": 341,
+          "chapter_slug": "chapter-341"
+        },
+        {
+          "chapter_name": "Chapter 340.6",
+          "chapter_num": 340.6,
+          "chapter_slug": "chapter-340-6"
+        },
+        {
+          "chapter_name": "Chapter 340.5",
+          "chapter_num": 340.5,
+          "chapter_slug": "chapter-340-5"
+        },
+        {
+          "chapter_name": "Chapter 340.1",
+          "chapter_num": 340.1,
+          "chapter_slug": "chapter-340-1"
+        },
+        {
+          "chapter_name": "Chapter 340",
+          "chapter_num": 340,
+          "chapter_slug": "chapter-340"
+        },
+        {
+          "chapter_name": "Chapter 339",
+          "chapter_num": 339,
+          "chapter_slug": "chapter-339"
+        },
+        {
+          "chapter_name": "Chapter 338",
+          "chapter_num": 338,
+          "chapter_slug": "chapter-338"
+        },
+        {
+          "chapter_name": "Chapter 337",
+          "chapter_num": 337,
+          "chapter_slug": "chapter-337"
+        },
+        {
+          "chapter_name": "Chapter 336",
+          "chapter_num": 336,
+          "chapter_slug": "chapter-336"
+        },
+        {
+          "chapter_name": "Chapter 335",
+          "chapter_num": 335,
+          "chapter_slug": "chapter-335"
+        },
+        {
+          "chapter_name": "Chapter 334",
+          "chapter_num": 334,
+          "chapter_slug": "chapter-334"
+        },
+        {
+          "chapter_name": "Chapter 333",
+          "chapter_num": 333,
+          "chapter_slug": "chapter-333"
+        },
+        {
+          "chapter_name": "Chapter 332",
+          "chapter_num": 332,
+          "chapter_slug": "chapter-332"
+        },
+        {
+          "chapter_name": "Chapter 331",
+          "chapter_num": 331,
+          "chapter_slug": "chapter-331"
+        },
+        {
+          "chapter_name": "Chapter 330",
+          "chapter_num": 330,
+          "chapter_slug": "chapter-330"
+        },
+        {
+          "chapter_name": "Chapter 329",
+          "chapter_num": 329,
+          "chapter_slug": "chapter-329"
+        },
+        {
+          "chapter_name": "Chapter 328",
+          "chapter_num": 328,
+          "chapter_slug": "chapter-328"
+        },
+        {
+          "chapter_name": "Chapter 327",
+          "chapter_num": 327,
+          "chapter_slug": "chapter-327"
+        },
+        {
+          "chapter_name": "Chapter 326",
+          "chapter_num": 326,
+          "chapter_slug": "chapter-326"
+        },
+        {
+          "chapter_name": "Chapter 325",
+          "chapter_num": 325,
+          "chapter_slug": "chapter-325"
+        },
+        {
+          "chapter_name": "Chapter 324",
+          "chapter_num": 324,
+          "chapter_slug": "chapter-324"
+        },
+        {
+          "chapter_name": "Chapter 323",
+          "chapter_num": 323,
+          "chapter_slug": "chapter-323"
+        },
+        {
+          "chapter_name": "Chapter 322",
+          "chapter_num": 322,
+          "chapter_slug": "chapter-322"
+        },
+        {
+          "chapter_name": "Chapter 321",
+          "chapter_num": 321,
+          "chapter_slug": "chapter-321"
+        },
+        {
+          "chapter_name": "Chapter 320",
+          "chapter_num": 320,
+          "chapter_slug": "chapter-320"
+        },
+        {
+          "chapter_name": "Chapter 319",
+          "chapter_num": 319,
+          "chapter_slug": "chapter-319"
+        },
+        {
+          "chapter_name": "Chapter 318",
+          "chapter_num": 318,
+          "chapter_slug": "chapter-318"
+        },
+        {
+          "chapter_name": "Chapter 317",
+          "chapter_num": 317,
+          "chapter_slug": "chapter-317"
+        },
+        {
+          "chapter_name": "Chapter 316",
+          "chapter_num": 316,
+          "chapter_slug": "chapter-316"
+        },
+        {
+          "chapter_name": "Chapter 315",
+          "chapter_num": 315,
+          "chapter_slug": "chapter-315"
+        },
+        {
+          "chapter_name": "Chapter 314",
+          "chapter_num": 314,
+          "chapter_slug": "chapter-314"
+        },
+        {
+          "chapter_name": "Chapter 313",
+          "chapter_num": 313,
+          "chapter_slug": "chapter-313"
+        },
+        {
+          "chapter_name": "Chapter 312",
+          "chapter_num": 312,
+          "chapter_slug": "chapter-312"
+        },
+        {
+          "chapter_name": "Chapter 311",
+          "chapter_num": 311,
+          "chapter_slug": "chapter-311"
+        },
+        {
+          "chapter_name": "Chapter 310",
+          "chapter_num": 310,
+          "chapter_slug": "chapter-310"
+        },
+        {
+          "chapter_name": "Chapter 309",
+          "chapter_num": 309,
+          "chapter_slug": "chapter-309"
+        },
+        {
+          "chapter_name": "Chapter 308",
+          "chapter_num": 308,
+          "chapter_slug": "chapter-308"
+        },
+        {
+          "chapter_name": "Chapter 307",
+          "chapter_num": 307,
+          "chapter_slug": "chapter-307"
+        },
+        {
+          "chapter_name": "Chapter 306",
+          "chapter_num": 306,
+          "chapter_slug": "chapter-306"
+        },
+        {
+          "chapter_name": "Chapter 305",
+          "chapter_num": 305,
+          "chapter_slug": "chapter-305"
+        },
+        {
+          "chapter_name": "Chapter 304",
+          "chapter_num": 304,
+          "chapter_slug": "chapter-304"
+        },
+        {
+          "chapter_name": "Chapter 303",
+          "chapter_num": 303,
+          "chapter_slug": "chapter-303"
+        },
+        {
+          "chapter_name": "Chapter 302",
+          "chapter_num": 302,
+          "chapter_slug": "chapter-302"
+        },
+        {
+          "chapter_name": "Chapter 301",
+          "chapter_num": 301,
+          "chapter_slug": "chapter-301"
+        },
+        {
+          "chapter_name": "Chapter 300",
+          "chapter_num": 300,
+          "chapter_slug": "chapter-300"
+        },
+        {
+          "chapter_name": "Chapter 299",
+          "chapter_num": 299,
+          "chapter_slug": "chapter-299"
+        },
+        {
+          "chapter_name": "Chapter 298",
+          "chapter_num": 298,
+          "chapter_slug": "chapter-298"
+        },
+        {
+          "chapter_name": "Chapter 297",
+          "chapter_num": 297,
+          "chapter_slug": "chapter-297"
+        },
+        {
+          "chapter_name": "Chapter 296",
+          "chapter_num": 296,
+          "chapter_slug": "chapter-296"
+        },
+        {
+          "chapter_name": "Chapter 295",
+          "chapter_num": 295,
+          "chapter_slug": "chapter-295"
+        },
+        {
+          "chapter_name": "Chapter 294",
+          "chapter_num": 294,
+          "chapter_slug": "chapter-294"
+        },
+        {
+          "chapter_name": "Chapter 293",
+          "chapter_num": 293,
+          "chapter_slug": "chapter-293"
+        },
+        {
+          "chapter_name": "Chapter 292",
+          "chapter_num": 292,
+          "chapter_slug": "chapter-292"
+        },
+        {
+          "chapter_name": "Chapter 291.1",
+          "chapter_num": 291.1,
+          "chapter_slug": "chapter-291-1"
+        },
+        {
+          "chapter_name": "Chapter 291",
+          "chapter_num": 291,
+          "chapter_slug": "chapter-291"
+        },
+        {
+          "chapter_name": "Chapter 290",
+          "chapter_num": 290,
+          "chapter_slug": "chapter-290"
+        },
+        {
+          "chapter_name": "Chapter 289",
+          "chapter_num": 289,
+          "chapter_slug": "chapter-289"
+        },
+        {
+          "chapter_name": "Chapter 288",
+          "chapter_num": 288,
+          "chapter_slug": "chapter-288"
+        },
+        {
+          "chapter_name": "Chapter 287",
+          "chapter_num": 287,
+          "chapter_slug": "chapter-287"
+        },
+        {
+          "chapter_name": "Chapter 286",
+          "chapter_num": 286,
+          "chapter_slug": "chapter-286"
+        },
+        {
+          "chapter_name": "Chapter 285",
+          "chapter_num": 285,
+          "chapter_slug": "chapter-285"
+        },
+        {
+          "chapter_name": "Chapter 284",
+          "chapter_num": 284,
+          "chapter_slug": "chapter-284"
+        },
+        {
+          "chapter_name": "Chapter 283",
+          "chapter_num": 283,
+          "chapter_slug": "chapter-283"
+        },
+        {
+          "chapter_name": "Chapter 282",
+          "chapter_num": 282,
+          "chapter_slug": "chapter-282"
+        },
+        {
+          "chapter_name": "Chapter 281",
+          "chapter_num": 281,
+          "chapter_slug": "chapter-281"
+        },
+        {
+          "chapter_name": "Chapter 280",
+          "chapter_num": 280,
+          "chapter_slug": "chapter-280"
+        },
+        {
+          "chapter_name": "Chapter 279",
+          "chapter_num": 279,
+          "chapter_slug": "chapter-279"
+        },
+        {
+          "chapter_name": "Chapter 278.1",
+          "chapter_num": 278.1,
+          "chapter_slug": "chapter-278-1"
+        },
+        {
+          "chapter_name": "Chapter 278",
+          "chapter_num": 278,
+          "chapter_slug": "chapter-278"
+        },
+        {
+          "chapter_name": "Chapter 277",
+          "chapter_num": 277,
+          "chapter_slug": "chapter-277"
+        },
+        {
+          "chapter_name": "Chapter 276",
+          "chapter_num": 276,
+          "chapter_slug": "chapter-276"
+        },
+        {
+          "chapter_name": "Chapter 275",
+          "chapter_num": 275,
+          "chapter_slug": "chapter-275"
+        },
+        {
+          "chapter_name": "Chapter 274",
+          "chapter_num": 274,
+          "chapter_slug": "chapter-274"
+        },
+        {
+          "chapter_name": "Chapter 273",
+          "chapter_num": 273,
+          "chapter_slug": "chapter-273"
+        },
+        {
+          "chapter_name": "Chapter 272",
+          "chapter_num": 272,
+          "chapter_slug": "chapter-272"
+        },
+        {
+          "chapter_name": "Chapter 271",
+          "chapter_num": 271,
+          "chapter_slug": "chapter-271"
+        },
+        {
+          "chapter_name": "Chapter 270",
+          "chapter_num": 270,
+          "chapter_slug": "chapter-270"
+        },
+        {
+          "chapter_name": "Chapter 269",
+          "chapter_num": 269,
+          "chapter_slug": "chapter-269"
+        },
+        {
+          "chapter_name": "Chapter 268",
+          "chapter_num": 268,
+          "chapter_slug": "chapter-268"
+        },
+        {
+          "chapter_name": "Chapter 267",
+          "chapter_num": 267,
+          "chapter_slug": "chapter-267"
+        },
+        {
+          "chapter_name": "Chapter 266",
+          "chapter_num": 266,
+          "chapter_slug": "chapter-266"
+        },
+        {
+          "chapter_name": "Chapter 265",
+          "chapter_num": 265,
+          "chapter_slug": "chapter-265"
+        },
+        {
+          "chapter_name": "Chapter 264",
+          "chapter_num": 264,
+          "chapter_slug": "chapter-264"
+        },
+        {
+          "chapter_name": "Chapter 263",
+          "chapter_num": 263,
+          "chapter_slug": "chapter-263"
+        },
+        {
+          "chapter_name": "Chapter 262",
+          "chapter_num": 262,
+          "chapter_slug": "chapter-262"
+        },
+        {
+          "chapter_name": "Chapter 261",
+          "chapter_num": 261,
+          "chapter_slug": "chapter-261"
+        },
+        {
+          "chapter_name": "Chapter 260",
+          "chapter_num": 260,
+          "chapter_slug": "chapter-260"
+        },
+        {
+          "chapter_name": "Chapter 259",
+          "chapter_num": 259,
+          "chapter_slug": "chapter-259"
+        },
+        {
+          "chapter_name": "Chapter 258",
+          "chapter_num": 258,
+          "chapter_slug": "chapter-258"
+        },
+        {
+          "chapter_name": "Chapter 257",
+          "chapter_num": 257,
+          "chapter_slug": "chapter-257"
+        },
+        {
+          "chapter_name": "Chapter 256",
+          "chapter_num": 256,
+          "chapter_slug": "chapter-256"
+        },
+        {
+          "chapter_name": "Chapter 255",
+          "chapter_num": 255,
+          "chapter_slug": "chapter-255"
+        },
+        {
+          "chapter_name": "Chapter 254",
+          "chapter_num": 254,
+          "chapter_slug": "chapter-254"
+        },
+        {
+          "chapter_name": "Chapter 253",
+          "chapter_num": 253,
+          "chapter_slug": "chapter-253"
+        },
+        {
+          "chapter_name": "Chapter 252",
+          "chapter_num": 252,
+          "chapter_slug": "chapter-252"
+        },
+        {
+          "chapter_name": "Chapter 251",
+          "chapter_num": 251,
+          "chapter_slug": "chapter-251"
+        },
+        {
+          "chapter_name": "Chapter 250",
+          "chapter_num": 250,
+          "chapter_slug": "chapter-250"
+        },
+        {
+          "chapter_name": "Chapter 249",
+          "chapter_num": 249,
+          "chapter_slug": "chapter-249"
+        },
+        {
+          "chapter_name": "Chapter 248",
+          "chapter_num": 248,
+          "chapter_slug": "chapter-248"
+        },
+        {
+          "chapter_name": "Chapter 247",
+          "chapter_num": 247,
+          "chapter_slug": "chapter-247"
+        },
+        {
+          "chapter_name": "Chapter 246",
+          "chapter_num": 246,
+          "chapter_slug": "chapter-246"
+        },
+        {
+          "chapter_name": "Chapter 245",
+          "chapter_num": 245,
+          "chapter_slug": "chapter-245"
+        },
+        {
+          "chapter_name": "Chapter 244",
+          "chapter_num": 244,
+          "chapter_slug": "chapter-244"
+        },
+        {
+          "chapter_name": "Chapter 243",
+          "chapter_num": 243,
+          "chapter_slug": "chapter-243"
+        },
+        {
+          "chapter_name": "Chapter 242",
+          "chapter_num": 242,
+          "chapter_slug": "chapter-242"
+        },
+        {
+          "chapter_name": "Chapter 241",
+          "chapter_num": 241,
+          "chapter_slug": "chapter-241"
+        },
+        {
+          "chapter_name": "Chapter 240",
+          "chapter_num": 240,
+          "chapter_slug": "chapter-240"
+        },
+        {
+          "chapter_name": "Chapter 239",
+          "chapter_num": 239,
+          "chapter_slug": "chapter-239"
+        },
+        {
+          "chapter_name": "Chapter 238",
+          "chapter_num": 238,
+          "chapter_slug": "chapter-238"
+        },
+        {
+          "chapter_name": "Chapter 237",
+          "chapter_num": 237,
+          "chapter_slug": "chapter-237"
+        },
+        {
+          "chapter_name": "Chapter 236",
+          "chapter_num": 236,
+          "chapter_slug": "chapter-236"
+        },
+        {
+          "chapter_name": "Chapter 235",
+          "chapter_num": 235,
+          "chapter_slug": "chapter-235"
+        },
+        {
+          "chapter_name": "Chapter 234",
+          "chapter_num": 234,
+          "chapter_slug": "chapter-234"
+        },
+        {
+          "chapter_name": "Chapter 233",
+          "chapter_num": 233,
+          "chapter_slug": "chapter-233"
+        },
+        {
+          "chapter_name": "Chapter 232",
+          "chapter_num": 232,
+          "chapter_slug": "chapter-232"
+        },
+        {
+          "chapter_name": "Chapter 231",
+          "chapter_num": 231,
+          "chapter_slug": "chapter-231"
+        },
+        {
+          "chapter_name": "Chapter 230",
+          "chapter_num": 230,
+          "chapter_slug": "chapter-230"
+        },
+        {
+          "chapter_name": "Chapter 229",
+          "chapter_num": 229,
+          "chapter_slug": "chapter-229"
+        },
+        {
+          "chapter_name": "Chapter 228",
+          "chapter_num": 228,
+          "chapter_slug": "chapter-228"
+        },
+        {
+          "chapter_name": "Chapter 227",
+          "chapter_num": 227,
+          "chapter_slug": "chapter-227"
+        },
+        {
+          "chapter_name": "Chapter 226",
+          "chapter_num": 226,
+          "chapter_slug": "chapter-226"
+        },
+        {
+          "chapter_name": "Chapter 225",
+          "chapter_num": 225,
+          "chapter_slug": "chapter-225"
+        },
+        {
+          "chapter_name": "Chapter 224",
+          "chapter_num": 224,
+          "chapter_slug": "chapter-224"
+        },
+        {
+          "chapter_name": "Chapter 223",
+          "chapter_num": 223,
+          "chapter_slug": "chapter-223"
+        },
+        {
+          "chapter_name": "Chapter 222",
+          "chapter_num": 222,
+          "chapter_slug": "chapter-222"
+        },
+        {
+          "chapter_name": "Chapter 221",
+          "chapter_num": 221,
+          "chapter_slug": "chapter-221"
+        },
+        {
+          "chapter_name": "Chapter 220",
+          "chapter_num": 220,
+          "chapter_slug": "chapter-220"
+        },
+        {
+          "chapter_name": "Chapter 219",
+          "chapter_num": 219,
+          "chapter_slug": "chapter-219"
+        },
+        {
+          "chapter_name": "Chapter 218",
+          "chapter_num": 218,
+          "chapter_slug": "chapter-218"
+        },
+        {
+          "chapter_name": "Chapter 217",
+          "chapter_num": 217,
+          "chapter_slug": "chapter-217"
+        },
+        {
+          "chapter_name": "Chapter 216",
+          "chapter_num": 216,
+          "chapter_slug": "chapter-216"
+        },
+        {
+          "chapter_name": "Chapter 215",
+          "chapter_num": 215,
+          "chapter_slug": "chapter-215"
+        },
+        {
+          "chapter_name": "Chapter 214",
+          "chapter_num": 214,
+          "chapter_slug": "chapter-214"
+        },
+        {
+          "chapter_name": "Chapter 213",
+          "chapter_num": 213,
+          "chapter_slug": "chapter-213"
+        },
+        {
+          "chapter_name": "Chapter 212",
+          "chapter_num": 212,
+          "chapter_slug": "chapter-212"
+        },
+        {
+          "chapter_name": "Chapter 211",
+          "chapter_num": 211,
+          "chapter_slug": "chapter-211"
+        },
+        {
+          "chapter_name": "Chapter 210",
+          "chapter_num": 210,
+          "chapter_slug": "chapter-210"
+        },
+        {
+          "chapter_name": "Chapter 209",
+          "chapter_num": 209,
+          "chapter_slug": "chapter-209"
+        },
+        {
+          "chapter_name": "Chapter 208",
+          "chapter_num": 208,
+          "chapter_slug": "chapter-208"
+        },
+        {
+          "chapter_name": "Chapter 207",
+          "chapter_num": 207,
+          "chapter_slug": "chapter-207"
+        },
+        {
+          "chapter_name": "Chapter 206",
+          "chapter_num": 206,
+          "chapter_slug": "chapter-206"
+        },
+        {
+          "chapter_name": "Chapter 205",
+          "chapter_num": 205,
+          "chapter_slug": "chapter-205"
+        },
+        {
+          "chapter_name": "Chapter 204",
+          "chapter_num": 204,
+          "chapter_slug": "chapter-204"
+        },
+        {
+          "chapter_name": "Chapter 203",
+          "chapter_num": 203,
+          "chapter_slug": "chapter-203"
+        },
+        {
+          "chapter_name": "Chapter 202",
+          "chapter_num": 202,
+          "chapter_slug": "chapter-202"
+        },
+        {
+          "chapter_name": "Chapter 201",
+          "chapter_num": 201,
+          "chapter_slug": "chapter-201"
+        },
+        {
+          "chapter_name": "Chapter 200",
+          "chapter_num": 200,
+          "chapter_slug": "chapter-200"
+        },
+        {
+          "chapter_name": "Chapter 199",
+          "chapter_num": 199,
+          "chapter_slug": "chapter-199"
+        },
+        {
+          "chapter_name": "Chapter 198",
+          "chapter_num": 198,
+          "chapter_slug": "chapter-198"
+        },
+        {
+          "chapter_name": "Chapter 197",
+          "chapter_num": 197,
+          "chapter_slug": "chapter-197"
+        },
+        {
+          "chapter_name": "Chapter 196",
+          "chapter_num": 196,
+          "chapter_slug": "chapter-196"
+        },
+        {
+          "chapter_name": "Chapter 195",
+          "chapter_num": 195,
+          "chapter_slug": "chapter-195"
+        },
+        {
+          "chapter_name": "Chapter 194",
+          "chapter_num": 194,
+          "chapter_slug": "chapter-194"
+        },
+        {
+          "chapter_name": "Chapter 193",
+          "chapter_num": 193,
+          "chapter_slug": "chapter-193"
+        },
+        {
+          "chapter_name": "Chapter 192",
+          "chapter_num": 192,
+          "chapter_slug": "chapter-192"
+        },
+        {
+          "chapter_name": "Chapter 191.3",
+          "chapter_num": 191.3,
+          "chapter_slug": "chapter-191-3"
+        },
+        {
+          "chapter_name": "Chapter 191.2",
+          "chapter_num": 191.2,
+          "chapter_slug": "chapter-191-2"
+        },
+        {
+          "chapter_name": "Chapter 191.1",
+          "chapter_num": 191.1,
+          "chapter_slug": "chapter-191-1"
+        },
+        {
+          "chapter_name": "Chapter 191",
+          "chapter_num": 191,
+          "chapter_slug": "chapter-191"
+        },
+        {
+          "chapter_name": "Chapter 190",
+          "chapter_num": 190,
+          "chapter_slug": "chapter-190"
+        },
+        {
+          "chapter_name": "Chapter 189",
+          "chapter_num": 189,
+          "chapter_slug": "chapter-189"
+        },
+        {
+          "chapter_name": "Chapter 188",
+          "chapter_num": 188,
+          "chapter_slug": "chapter-188"
+        },
+        {
+          "chapter_name": "Chapter 187",
+          "chapter_num": 187,
+          "chapter_slug": "chapter-187"
+        },
+        {
+          "chapter_name": "Chapter 186",
+          "chapter_num": 186,
+          "chapter_slug": "chapter-186"
+        },
+        {
+          "chapter_name": "Chapter 185",
+          "chapter_num": 185,
+          "chapter_slug": "chapter-185"
+        },
+        {
+          "chapter_name": "Chapter 184",
+          "chapter_num": 184,
+          "chapter_slug": "chapter-184"
+        },
+        {
+          "chapter_name": "Chapter 183",
+          "chapter_num": 183,
+          "chapter_slug": "chapter-183"
+        },
+        {
+          "chapter_name": "Chapter 182",
+          "chapter_num": 182,
+          "chapter_slug": "chapter-182"
+        },
+        {
+          "chapter_name": "Chapter 181",
+          "chapter_num": 181,
+          "chapter_slug": "chapter-181"
+        },
+        {
+          "chapter_name": "Chapter 180",
+          "chapter_num": 180,
+          "chapter_slug": "chapter-180"
+        },
+        {
+          "chapter_name": "Chapter 179",
+          "chapter_num": 179,
+          "chapter_slug": "chapter-179"
+        },
+        {
+          "chapter_name": "Chapter 178",
+          "chapter_num": 178,
+          "chapter_slug": "chapter-178"
+        },
+        {
+          "chapter_name": "Chapter 177",
+          "chapter_num": 177,
+          "chapter_slug": "chapter-177"
+        },
+        {
+          "chapter_name": "Chapter 176",
+          "chapter_num": 176,
+          "chapter_slug": "chapter-176"
+        },
+        {
+          "chapter_name": "Chapter 175",
+          "chapter_num": 175,
+          "chapter_slug": "chapter-175"
+        },
+        {
+          "chapter_name": "Chapter 174",
+          "chapter_num": 174,
+          "chapter_slug": "chapter-174"
+        },
+        {
+          "chapter_name": "Chapter 173",
+          "chapter_num": 173,
+          "chapter_slug": "chapter-173"
+        },
+        {
+          "chapter_name": "Chapter 172",
+          "chapter_num": 172,
+          "chapter_slug": "chapter-172"
+        },
+        {
+          "chapter_name": "Chapter 171",
+          "chapter_num": 171,
+          "chapter_slug": "chapter-171"
+        },
+        {
+          "chapter_name": "Chapter 170",
+          "chapter_num": 170,
+          "chapter_slug": "chapter-170"
+        },
+        {
+          "chapter_name": "Chapter 169",
+          "chapter_num": 169,
+          "chapter_slug": "chapter-169"
+        },
+        {
+          "chapter_name": "Chapter 168",
+          "chapter_num": 168,
+          "chapter_slug": "chapter-168"
+        },
+        {
+          "chapter_name": "Chapter 167",
+          "chapter_num": 167,
+          "chapter_slug": "chapter-167"
+        },
+        {
+          "chapter_name": "Chapter 166",
+          "chapter_num": 166,
+          "chapter_slug": "chapter-166"
+        },
+        {
+          "chapter_name": "Chapter 165",
+          "chapter_num": 165,
+          "chapter_slug": "chapter-165"
+        },
+        {
+          "chapter_name": "Chapter 164",
+          "chapter_num": 164,
+          "chapter_slug": "chapter-164"
+        },
+        {
+          "chapter_name": "Chapter 163",
+          "chapter_num": 163,
+          "chapter_slug": "chapter-163"
+        },
+        {
+          "chapter_name": "Chapter 162",
+          "chapter_num": 162,
+          "chapter_slug": "chapter-162"
+        },
+        {
+          "chapter_name": "Chapter 161",
+          "chapter_num": 161,
+          "chapter_slug": "chapter-161"
+        },
+        {
+          "chapter_name": "Chapter 160",
+          "chapter_num": 160,
+          "chapter_slug": "chapter-160"
+        },
+        {
+          "chapter_name": "Chapter 159",
+          "chapter_num": 159,
+          "chapter_slug": "chapter-159"
+        },
+        {
+          "chapter_name": "Chapter 158",
+          "chapter_num": 158,
+          "chapter_slug": "chapter-158"
+        },
+        {
+          "chapter_name": "Chapter 157",
+          "chapter_num": 157,
+          "chapter_slug": "chapter-157"
+        },
+        {
+          "chapter_name": "Chapter 156",
+          "chapter_num": 156,
+          "chapter_slug": "chapter-156"
+        },
+        {
+          "chapter_name": "Chapter 155",
+          "chapter_num": 155,
+          "chapter_slug": "chapter-155"
+        },
+        {
+          "chapter_name": "Chapter 154",
+          "chapter_num": 154,
+          "chapter_slug": "chapter-154"
+        },
+        {
+          "chapter_name": "Chapter 153",
+          "chapter_num": 153,
+          "chapter_slug": "chapter-153"
+        },
+        {
+          "chapter_name": "Chapter 152",
+          "chapter_num": 152,
+          "chapter_slug": "chapter-152"
+        },
+        {
+          "chapter_name": "Chapter 151",
+          "chapter_num": 151,
+          "chapter_slug": "chapter-151"
+        },
+        {
+          "chapter_name": "Chapter 150",
+          "chapter_num": 150,
+          "chapter_slug": "chapter-150"
+        },
+        {
+          "chapter_name": "Chapter 149",
+          "chapter_num": 149,
+          "chapter_slug": "chapter-149"
+        },
+        {
+          "chapter_name": "Chapter 148",
+          "chapter_num": 148,
+          "chapter_slug": "chapter-148"
+        },
+        {
+          "chapter_name": "Chapter 147",
+          "chapter_num": 147,
+          "chapter_slug": "chapter-147"
+        },
+        {
+          "chapter_name": "Chapter 146",
+          "chapter_num": 146,
+          "chapter_slug": "chapter-146"
+        },
+        {
+          "chapter_name": "Chapter 145",
+          "chapter_num": 145,
+          "chapter_slug": "chapter-145"
+        },
+        {
+          "chapter_name": "Chapter 144",
+          "chapter_num": 144,
+          "chapter_slug": "chapter-144"
+        },
+        {
+          "chapter_name": "Chapter 143",
+          "chapter_num": 143,
+          "chapter_slug": "chapter-143"
+        },
+        {
+          "chapter_name": "Chapter 142",
+          "chapter_num": 142,
+          "chapter_slug": "chapter-142"
+        },
+        {
+          "chapter_name": "Chapter 141",
+          "chapter_num": 141,
+          "chapter_slug": "chapter-141"
+        },
+        {
+          "chapter_name": "Chapter 140",
+          "chapter_num": 140,
+          "chapter_slug": "chapter-140"
+        },
+        {
+          "chapter_name": "Chapter 139",
+          "chapter_num": 139,
+          "chapter_slug": "chapter-139"
+        },
+        {
+          "chapter_name": "Chapter 138",
+          "chapter_num": 138,
+          "chapter_slug": "chapter-138"
+        },
+        {
+          "chapter_name": "Chapter 137",
+          "chapter_num": 137,
+          "chapter_slug": "chapter-137"
+        },
+        {
+          "chapter_name": "Chapter 136",
+          "chapter_num": 136,
+          "chapter_slug": "chapter-136"
+        },
+        {
+          "chapter_name": "Chapter 135",
+          "chapter_num": 135,
+          "chapter_slug": "chapter-135"
+        },
+        {
+          "chapter_name": "Chapter 134",
+          "chapter_num": 134,
+          "chapter_slug": "chapter-134"
+        },
+        {
+          "chapter_name": "Chapter 133",
+          "chapter_num": 133,
+          "chapter_slug": "chapter-133"
+        },
+        {
+          "chapter_name": "Chapter 132",
+          "chapter_num": 132,
+          "chapter_slug": "chapter-132"
+        },
+        {
+          "chapter_name": "Chapter 131",
+          "chapter_num": 131,
+          "chapter_slug": "chapter-131"
+        },
+        {
+          "chapter_name": "Chapter 130",
+          "chapter_num": 130,
+          "chapter_slug": "chapter-130"
+        },
+        {
+          "chapter_name": "Chapter 129",
+          "chapter_num": 129,
+          "chapter_slug": "chapter-129"
+        },
+        {
+          "chapter_name": "Chapter 128",
+          "chapter_num": 128,
+          "chapter_slug": "chapter-128"
+        },
+        {
+          "chapter_name": "Chapter 127",
+          "chapter_num": 127,
+          "chapter_slug": "chapter-127"
+        },
+        {
+          "chapter_name": "Chapter 126",
+          "chapter_num": 126,
+          "chapter_slug": "chapter-126"
+        },
+        {
+          "chapter_name": "Chapter 125",
+          "chapter_num": 125,
+          "chapter_slug": "chapter-125"
+        },
+        {
+          "chapter_name": "Chapter 124",
+          "chapter_num": 124,
+          "chapter_slug": "chapter-124"
+        },
+        {
+          "chapter_name": "Chapter 123",
+          "chapter_num": 123,
+          "chapter_slug": "chapter-123"
+        },
+        {
+          "chapter_name": "Chapter 122",
+          "chapter_num": 122,
+          "chapter_slug": "chapter-122"
+        },
+        {
+          "chapter_name": "Chapter 121",
+          "chapter_num": 121,
+          "chapter_slug": "chapter-121"
+        },
+        {
+          "chapter_name": "Chapter 120",
+          "chapter_num": 120,
+          "chapter_slug": "chapter-120"
+        },
+        {
+          "chapter_name": "Chapter 119",
+          "chapter_num": 119,
+          "chapter_slug": "chapter-119"
+        },
+        {
+          "chapter_name": "Chapter 118",
+          "chapter_num": 118,
+          "chapter_slug": "chapter-118"
+        },
+        {
+          "chapter_name": "Chapter 117",
+          "chapter_num": 117,
+          "chapter_slug": "chapter-117"
+        },
+        {
+          "chapter_name": "Chapter 116",
+          "chapter_num": 116,
+          "chapter_slug": "chapter-116"
+        },
+        {
+          "chapter_name": "Chapter 115",
+          "chapter_num": 115,
+          "chapter_slug": "chapter-115"
+        },
+        {
+          "chapter_name": "Chapter 114",
+          "chapter_num": 114,
+          "chapter_slug": "chapter-114"
+        },
+        {
+          "chapter_name": "Chapter 113",
+          "chapter_num": 113,
+          "chapter_slug": "chapter-113"
+        },
+        {
+          "chapter_name": "Chapter 112",
+          "chapter_num": 112,
+          "chapter_slug": "chapter-112"
+        },
+        {
+          "chapter_name": "Chapter 111",
+          "chapter_num": 111,
+          "chapter_slug": "chapter-111"
+        },
+        {
+          "chapter_name": "Chapter 110",
+          "chapter_num": 110,
+          "chapter_slug": "chapter-110"
+        },
+        {
+          "chapter_name": "Chapter 109",
+          "chapter_num": 109,
+          "chapter_slug": "chapter-109"
+        },
+        {
+          "chapter_name": "Chapter 108",
+          "chapter_num": 108,
+          "chapter_slug": "chapter-108"
+        },
+        {
+          "chapter_name": "Chapter 107",
+          "chapter_num": 107,
+          "chapter_slug": "chapter-107"
+        },
+        {
+          "chapter_name": "Chapter 106",
+          "chapter_num": 106,
+          "chapter_slug": "chapter-106"
+        },
+        {
+          "chapter_name": "Chapter 105",
+          "chapter_num": 105,
+          "chapter_slug": "chapter-105"
+        },
+        {
+          "chapter_name": "Chapter 104",
+          "chapter_num": 104,
+          "chapter_slug": "chapter-104"
+        },
+        {
+          "chapter_name": "Chapter 103",
+          "chapter_num": 103,
+          "chapter_slug": "chapter-103"
+        },
+        {
+          "chapter_name": "Chapter 102",
+          "chapter_num": 102,
+          "chapter_slug": "chapter-102"
+        },
+        {
+          "chapter_name": "Chapter 101",
+          "chapter_num": 101,
+          "chapter_slug": "chapter-101"
+        },
+        {
+          "chapter_name": "Chapter 100",
+          "chapter_num": 100,
+          "chapter_slug": "chapter-100"
+        },
+        {
+          "chapter_name": "Chapter 99",
+          "chapter_num": 99,
+          "chapter_slug": "chapter-99"
+        },
+        {
+          "chapter_name": "Chapter 98",
+          "chapter_num": 98,
+          "chapter_slug": "chapter-98"
+        },
+        {
+          "chapter_name": "Chapter 97",
+          "chapter_num": 97,
+          "chapter_slug": "chapter-97"
+        },
+        {
+          "chapter_name": "Chapter 96",
+          "chapter_num": 96,
+          "chapter_slug": "chapter-96"
+        },
+        {
+          "chapter_name": "Chapter 95",
+          "chapter_num": 95,
+          "chapter_slug": "chapter-95"
+        },
+        {
+          "chapter_name": "Chapter 94",
+          "chapter_num": 94,
+          "chapter_slug": "chapter-94"
+        },
+        {
+          "chapter_name": "Chapter 93",
+          "chapter_num": 93,
+          "chapter_slug": "chapter-93"
+        },
+        {
+          "chapter_name": "Chapter 92",
+          "chapter_num": 92,
+          "chapter_slug": "chapter-92"
+        },
+        {
+          "chapter_name": "Chapter 91",
+          "chapter_num": 91,
+          "chapter_slug": "chapter-91"
+        },
+        {
+          "chapter_name": "Chapter 90",
+          "chapter_num": 90,
+          "chapter_slug": "chapter-90"
+        },
+        {
+          "chapter_name": "Chapter 89",
+          "chapter_num": 89,
+          "chapter_slug": "chapter-89"
+        },
+        {
+          "chapter_name": "Chapter 88",
+          "chapter_num": 88,
+          "chapter_slug": "chapter-88"
+        },
+        {
+          "chapter_name": "Chapter 87",
+          "chapter_num": 87,
+          "chapter_slug": "chapter-87"
+        },
+        {
+          "chapter_name": "Chapter 86",
+          "chapter_num": 86,
+          "chapter_slug": "chapter-86"
+        },
+        {
+          "chapter_name": "Chapter 85",
+          "chapter_num": 85,
+          "chapter_slug": "chapter-85"
+        },
+        {
+          "chapter_name": "Chapter 84",
+          "chapter_num": 84,
+          "chapter_slug": "chapter-84"
+        },
+        {
+          "chapter_name": "Chapter 83",
+          "chapter_num": 83,
+          "chapter_slug": "chapter-83"
+        },
+        {
+          "chapter_name": "Chapter 82",
+          "chapter_num": 82,
+          "chapter_slug": "chapter-82"
+        },
+        {
+          "chapter_name": "Chapter 81",
+          "chapter_num": 81,
+          "chapter_slug": "chapter-81"
+        },
+        {
+          "chapter_name": "Chapter 80",
+          "chapter_num": 80,
+          "chapter_slug": "chapter-80"
+        },
+        {
+          "chapter_name": "Chapter 79",
+          "chapter_num": 79,
+          "chapter_slug": "chapter-79"
+        },
+        {
+          "chapter_name": "Chapter 78",
+          "chapter_num": 78,
+          "chapter_slug": "chapter-78"
+        },
+        {
+          "chapter_name": "Chapter 77",
+          "chapter_num": 77,
+          "chapter_slug": "chapter-77"
+        },
+        {
+          "chapter_name": "Chapter 76",
+          "chapter_num": 76,
+          "chapter_slug": "chapter-76"
+        },
+        {
+          "chapter_name": "Chapter 75",
+          "chapter_num": 75,
+          "chapter_slug": "chapter-75"
+        },
+        {
+          "chapter_name": "Chapter 74",
+          "chapter_num": 74,
+          "chapter_slug": "chapter-74"
+        },
+        {
+          "chapter_name": "Chapter 73",
+          "chapter_num": 73,
+          "chapter_slug": "chapter-73"
+        },
+        {
+          "chapter_name": "Chapter 72",
+          "chapter_num": 72,
+          "chapter_slug": "chapter-72"
+        },
+        {
+          "chapter_name": "Chapter 71",
+          "chapter_num": 71,
+          "chapter_slug": "chapter-71"
+        },
+        {
+          "chapter_name": "Chapter 70",
+          "chapter_num": 70,
+          "chapter_slug": "chapter-70"
+        },
+        {
+          "chapter_name": "Chapter 69",
+          "chapter_num": 69,
+          "chapter_slug": "chapter-69"
+        },
+        {
+          "chapter_name": "Chapter 68",
+          "chapter_num": 68,
+          "chapter_slug": "chapter-68"
+        },
+        {
+          "chapter_name": "Chapter 67",
+          "chapter_num": 67,
+          "chapter_slug": "chapter-67"
+        },
+        {
+          "chapter_name": "Chapter 66",
+          "chapter_num": 66,
+          "chapter_slug": "chapter-66"
+        },
+        {
+          "chapter_name": "Chapter 65",
+          "chapter_num": 65,
+          "chapter_slug": "chapter-65"
+        },
+        {
+          "chapter_name": "Chapter 64",
+          "chapter_num": 64,
+          "chapter_slug": "chapter-64"
+        },
+        {
+          "chapter_name": "Chapter 63",
+          "chapter_num": 63,
+          "chapter_slug": "chapter-63"
+        },
+        {
+          "chapter_name": "Chapter 62",
+          "chapter_num": 62,
+          "chapter_slug": "chapter-62"
+        },
+        {
+          "chapter_name": "Chapter 61",
+          "chapter_num": 61,
+          "chapter_slug": "chapter-61"
+        },
+        {
+          "chapter_name": "Chapter 60",
+          "chapter_num": 60,
+          "chapter_slug": "chapter-60"
+        },
+        {
+          "chapter_name": "Chapter 59",
+          "chapter_num": 59,
+          "chapter_slug": "chapter-59"
+        },
+        {
+          "chapter_name": "Chapter 58",
+          "chapter_num": 58,
+          "chapter_slug": "chapter-58"
+        },
+        {
+          "chapter_name": "Chapter 57",
+          "chapter_num": 57,
+          "chapter_slug": "chapter-57"
+        },
+        {
+          "chapter_name": "Chapter 56",
+          "chapter_num": 56,
+          "chapter_slug": "chapter-56"
+        },
+        {
+          "chapter_name": "Chapter 55",
+          "chapter_num": 55,
+          "chapter_slug": "chapter-55"
+        },
+        {
+          "chapter_name": "Chapter 54.5: Bonus (LuCaZ)",
+          "chapter_num": 54.5,
+          "chapter_slug": "chapter-54-5"
+        },
+        {
+          "chapter_name": "Chapter 54.1",
+          "chapter_num": 54.1,
+          "chapter_slug": "chapter-54-1"
+        },
+        {
+          "chapter_name": "Chapter 54",
+          "chapter_num": 54,
+          "chapter_slug": "chapter-54"
+        },
+        {
+          "chapter_name": "Chapter 53",
+          "chapter_num": 53,
+          "chapter_slug": "chapter-53"
+        },
+        {
+          "chapter_name": "Chapter 52",
+          "chapter_num": 52,
+          "chapter_slug": "chapter-52"
+        },
+        {
+          "chapter_name": "Chapter 51",
+          "chapter_num": 51,
+          "chapter_slug": "chapter-51"
+        },
+        {
+          "chapter_name": "Chapter 50",
+          "chapter_num": 50,
+          "chapter_slug": "chapter-50"
+        },
+        {
+          "chapter_name": "Chapter 49",
+          "chapter_num": 49,
+          "chapter_slug": "chapter-49"
+        },
+        {
+          "chapter_name": "Chapter 48",
+          "chapter_num": 48,
+          "chapter_slug": "chapter-48"
+        },
+        {
+          "chapter_name": "Chapter 47",
+          "chapter_num": 47,
+          "chapter_slug": "chapter-47"
+        },
+        {
+          "chapter_name": "Chapter 46",
+          "chapter_num": 46,
+          "chapter_slug": "chapter-46"
+        },
+        {
+          "chapter_name": "Chapter 45",
+          "chapter_num": 45,
+          "chapter_slug": "chapter-45"
+        },
+        {
+          "chapter_name": "Chapter 44",
+          "chapter_num": 44,
+          "chapter_slug": "chapter-44"
+        },
+        {
+          "chapter_name": "Chapter 43",
+          "chapter_num": 43,
+          "chapter_slug": "chapter-43"
+        },
+        {
+          "chapter_name": "Chapter 42",
+          "chapter_num": 42,
+          "chapter_slug": "chapter-42"
+        },
+        {
+          "chapter_name": "Chapter 41",
+          "chapter_num": 41,
+          "chapter_slug": "chapter-41"
+        },
+        {
+          "chapter_name": "Chapter 40",
+          "chapter_num": 40,
+          "chapter_slug": "chapter-40"
+        },
+        {
+          "chapter_name": "Chapter 39",
+          "chapter_num": 39,
+          "chapter_slug": "chapter-39"
+        },
+        {
+          "chapter_name": "Chapter 38",
+          "chapter_num": 38,
+          "chapter_slug": "chapter-38"
+        },
+        {
+          "chapter_name": "Chapter 37",
+          "chapter_num": 37,
+          "chapter_slug": "chapter-37"
+        },
+        {
+          "chapter_name": "Chapter 36",
+          "chapter_num": 36,
+          "chapter_slug": "chapter-36"
+        },
+        {
+          "chapter_name": "Chapter 35",
+          "chapter_num": 35,
+          "chapter_slug": "chapter-35"
+        },
+        {
+          "chapter_name": "Chapter 34",
+          "chapter_num": 34,
+          "chapter_slug": "chapter-34"
+        },
+        {
+          "chapter_name": "Chapter 33",
+          "chapter_num": 33,
+          "chapter_slug": "chapter-33"
+        },
+        {
+          "chapter_name": "Chapter 32",
+          "chapter_num": 32,
+          "chapter_slug": "chapter-32"
+        },
+        {
+          "chapter_name": "Chapter 31",
+          "chapter_num": 31,
+          "chapter_slug": "chapter-31"
+        },
+        {
+          "chapter_name": "Chapter 30",
+          "chapter_num": 30,
+          "chapter_slug": "chapter-30"
+        },
+        {
+          "chapter_name": "Chapter 29",
+          "chapter_num": 29,
+          "chapter_slug": "chapter-29"
+        },
+        {
+          "chapter_name": "Chapter 28",
+          "chapter_num": 28,
+          "chapter_slug": "chapter-28"
+        },
+        {
+          "chapter_name": "Chapter 27",
+          "chapter_num": 27,
+          "chapter_slug": "chapter-27"
+        },
+        {
+          "chapter_name": "Chapter 26",
+          "chapter_num": 26,
+          "chapter_slug": "chapter-26"
+        },
+        {
+          "chapter_name": "Chapter 25",
+          "chapter_num": 25,
+          "chapter_slug": "chapter-25"
+        },
+        {
+          "chapter_name": "Chapter 24",
+          "chapter_num": 24,
+          "chapter_slug": "chapter-24"
+        },
+        {
+          "chapter_name": "Chapter 23",
+          "chapter_num": 23,
+          "chapter_slug": "chapter-23"
+        },
+        {
+          "chapter_name": "Chapter 22",
+          "chapter_num": 22,
+          "chapter_slug": "chapter-22"
+        },
+        {
+          "chapter_name": "Chapter 21",
+          "chapter_num": 21,
+          "chapter_slug": "chapter-21"
+        },
+        {
+          "chapter_name": "Chapter 20",
+          "chapter_num": 20,
+          "chapter_slug": "chapter-20"
+        },
+        {
+          "chapter_name": "Chapter 19",
+          "chapter_num": 19,
+          "chapter_slug": "chapter-19"
+        },
+        {
+          "chapter_name": "Chapter 18",
+          "chapter_num": 18,
+          "chapter_slug": "chapter-18"
+        },
+        {
+          "chapter_name": "Chapter 17",
+          "chapter_num": 17,
+          "chapter_slug": "chapter-17"
+        },
+        {
+          "chapter_name": "Chapter 16",
+          "chapter_num": 16,
+          "chapter_slug": "chapter-16"
+        },
+        {
+          "chapter_name": "Chapter 15",
+          "chapter_num": 15,
+          "chapter_slug": "chapter-15"
+        },
+        {
+          "chapter_name": "Chapter 14.1",
+          "chapter_num": 14.1,
+          "chapter_slug": "chapter-14-1"
+        },
+        {
+          "chapter_name": "Chapter 14",
+          "chapter_num": 14,
+          "chapter_slug": "chapter-14"
+        },
+        {
+          "chapter_name": "Chapter 13.4",
+          "chapter_num": 13.4,
+          "chapter_slug": "chapter-13-4"
+        },
+        {
+          "chapter_name": "Chapter 13.3",
+          "chapter_num": 13.3,
+          "chapter_slug": "chapter-13-3"
+        },
+        {
+          "chapter_name": "Chapter 13.2",
+          "chapter_num": 13.2,
+          "chapter_slug": "chapter-13-2"
+        },
+        {
+          "chapter_name": "Chapter 13.1",
+          "chapter_num": 13.1,
+          "chapter_slug": "chapter-13-1"
+        },
+        {
+          "chapter_name": "Chapter 13",
+          "chapter_num": 13,
+          "chapter_slug": "chapter-13"
+        },
+        {
+          "chapter_name": "Chapter 12.9",
+          "chapter_num": 12.9,
+          "chapter_slug": "chapter-12-9"
+        },
+        {
+          "chapter_name": "Chapter 12.8",
+          "chapter_num": 12.8,
+          "chapter_slug": "chapter-12-8"
+        },
+        {
+          "chapter_name": "Chapter 12.7",
+          "chapter_num": 12.7,
+          "chapter_slug": "chapter-12-7"
+        },
+        {
+          "chapter_name": "Chapter 12.6",
+          "chapter_num": 12.6,
+          "chapter_slug": "chapter-12-6"
+        },
+        {
+          "chapter_name": "Chapter 12.5",
+          "chapter_num": 12.5,
+          "chapter_slug": "chapter-12-5"
+        },
+        {
+          "chapter_name": "Chapter 12.4",
+          "chapter_num": 12.4,
+          "chapter_slug": "chapter-12-4"
+        },
+        {
+          "chapter_name": "Chapter 12.3",
+          "chapter_num": 12.3,
+          "chapter_slug": "chapter-12-3"
+        },
+        {
+          "chapter_name": "Chapter 12.2",
+          "chapter_num": 12.2,
+          "chapter_slug": "chapter-12-2"
+        },
+        {
+          "chapter_name": "Chapter 12.1",
+          "chapter_num": 12.1,
+          "chapter_slug": "chapter-12-1"
+        },
+        {
+          "chapter_name": "Chapter 12",
+          "chapter_num": 12,
+          "chapter_slug": "chapter-12"
+        },
+        {
+          "chapter_name": "Chapter 11.9",
+          "chapter_num": 11.9,
+          "chapter_slug": "chapter-11-9"
+        },
+        {
+          "chapter_name": "Chapter 11.8",
+          "chapter_num": 11.8,
+          "chapter_slug": "chapter-11-8"
+        },
+        {
+          "chapter_name": "Chapter 11.7",
+          "chapter_num": 11.7,
+          "chapter_slug": "chapter-11-7"
+        },
+        {
+          "chapter_name": "Chapter 11.6",
+          "chapter_num": 11.6,
+          "chapter_slug": "chapter-11-6"
+        },
+        {
+          "chapter_name": "Chapter 11.5",
+          "chapter_num": 11.5,
+          "chapter_slug": "chapter-11-5"
+        },
+        {
+          "chapter_name": "Chapter 11.4",
+          "chapter_num": 11.4,
+          "chapter_slug": "chapter-11-4"
+        },
+        {
+          "chapter_name": "Chapter 11.3",
+          "chapter_num": 11.3,
+          "chapter_slug": "chapter-11-3"
+        },
+        {
+          "chapter_name": "Chapter 11.2",
+          "chapter_num": 11.2,
+          "chapter_slug": "chapter-11-2"
+        },
+        {
+          "chapter_name": "Chapter 11.1",
+          "chapter_num": 11.1,
+          "chapter_slug": "chapter-11-1"
+        },
+        {
+          "chapter_name": "Chapter 11",
+          "chapter_num": 11,
+          "chapter_slug": "chapter-11"
+        },
+        {
+          "chapter_name": "Chapter 10.9",
+          "chapter_num": 10.9,
+          "chapter_slug": "chapter-10-9"
+        },
+        {
+          "chapter_name": "Chapter 10.8",
+          "chapter_num": 10.8,
+          "chapter_slug": "chapter-10-8"
+        },
+        {
+          "chapter_name": "Chapter 10.7",
+          "chapter_num": 10.7,
+          "chapter_slug": "chapter-10-7"
+        },
+        {
+          "chapter_name": "Chapter 10.6",
+          "chapter_num": 10.6,
+          "chapter_slug": "chapter-10-6"
+        },
+        {
+          "chapter_name": "Chapter 10.5",
+          "chapter_num": 10.5,
+          "chapter_slug": "chapter-10-5"
+        },
+        {
+          "chapter_name": "Chapter 10.4",
+          "chapter_num": 10.4,
+          "chapter_slug": "chapter-10-4"
+        },
+        {
+          "chapter_name": "Chapter 10.3",
+          "chapter_num": 10.3,
+          "chapter_slug": "chapter-10-3"
+        },
+        {
+          "chapter_name": "Chapter 10.2",
+          "chapter_num": 10.2,
+          "chapter_slug": "chapter-10-2"
+        },
+        {
+          "chapter_name": "Chapter 10.1",
+          "chapter_num": 10.1,
+          "chapter_slug": "chapter-10-1"
+        },
+        {
+          "chapter_name": "Chapter 10",
+          "chapter_num": 10,
+          "chapter_slug": "chapter-10"
+        },
+        {
+          "chapter_name": "Chapter 9.9",
+          "chapter_num": 9.9,
+          "chapter_slug": "chapter-9-9"
+        },
+        {
+          "chapter_name": "Chapter 9.8",
+          "chapter_num": 9.8,
+          "chapter_slug": "chapter-9-8"
+        },
+        {
+          "chapter_name": "Chapter 9.7",
+          "chapter_num": 9.7,
+          "chapter_slug": "chapter-9-7"
+        },
+        {
+          "chapter_name": "Chapter 9.6",
+          "chapter_num": 9.6,
+          "chapter_slug": "chapter-9-6"
+        },
+        {
+          "chapter_name": "Chapter 9.5",
+          "chapter_num": 9.5,
+          "chapter_slug": "chapter-9-5"
+        },
+        {
+          "chapter_name": "Chapter 9.4",
+          "chapter_num": 9.4,
+          "chapter_slug": "chapter-9-4"
+        },
+        {
+          "chapter_name": "Chapter 9.3",
+          "chapter_num": 9.3,
+          "chapter_slug": "chapter-9-3"
+        },
+        {
+          "chapter_name": "Chapter 9.2",
+          "chapter_num": 9.2,
+          "chapter_slug": "chapter-9-2"
+        },
+        {
+          "chapter_name": "Chapter 9.1",
+          "chapter_num": 9.1,
+          "chapter_slug": "chapter-9-1"
+        },
+        {
+          "chapter_name": "Chapter 9",
+          "chapter_num": 9,
+          "chapter_slug": "chapter-9"
+        },
+        {
+          "chapter_name": "Chapter 8.9",
+          "chapter_num": 8.9,
+          "chapter_slug": "chapter-8-9"
+        },
+        {
+          "chapter_name": "Chapter 8.8",
+          "chapter_num": 8.8,
+          "chapter_slug": "chapter-8-8"
+        },
+        {
+          "chapter_name": "Chapter 8.7",
+          "chapter_num": 8.7,
+          "chapter_slug": "chapter-8-7"
+        },
+        {
+          "chapter_name": "Chapter 8.6",
+          "chapter_num": 8.6,
+          "chapter_slug": "chapter-8-6"
+        },
+        {
+          "chapter_name": "Chapter 8.5",
+          "chapter_num": 8.5,
+          "chapter_slug": "chapter-8-5"
+        },
+        {
+          "chapter_name": "Chapter 8.4",
+          "chapter_num": 8.4,
+          "chapter_slug": "chapter-8-4"
+        },
+        {
+          "chapter_name": "Chapter 8.3",
+          "chapter_num": 8.3,
+          "chapter_slug": "chapter-8-3"
+        },
+        {
+          "chapter_name": "Chapter 8.2",
+          "chapter_num": 8.2,
+          "chapter_slug": "chapter-8-2"
+        },
+        {
+          "chapter_name": "Chapter 8.1",
+          "chapter_num": 8.1,
+          "chapter_slug": "chapter-8-1"
+        },
+        {
+          "chapter_name": "Chapter 8",
+          "chapter_num": 8,
+          "chapter_slug": "chapter-8"
+        },
+        {
+          "chapter_name": "Chapter 7.9",
+          "chapter_num": 7.9,
+          "chapter_slug": "chapter-7-9"
+        },
+        {
+          "chapter_name": "Chapter 7.8",
+          "chapter_num": 7.8,
+          "chapter_slug": "chapter-7-8"
+        },
+        {
+          "chapter_name": "Chapter 7.7",
+          "chapter_num": 7.7,
+          "chapter_slug": "chapter-7-7"
+        },
+        {
+          "chapter_name": "Chapter 7.6",
+          "chapter_num": 7.6,
+          "chapter_slug": "chapter-7-6"
+        },
+        {
+          "chapter_name": "Chapter 7.5",
+          "chapter_num": 7.5,
+          "chapter_slug": "chapter-7-5"
+        },
+        {
+          "chapter_name": "Chapter 7.4",
+          "chapter_num": 7.4,
+          "chapter_slug": "chapter-7-4"
+        },
+        {
+          "chapter_name": "Chapter 7.3",
+          "chapter_num": 7.3,
+          "chapter_slug": "chapter-7-3"
+        },
+        {
+          "chapter_name": "Chapter 7.2",
+          "chapter_num": 7.2,
+          "chapter_slug": "chapter-7-2"
+        },
+        {
+          "chapter_name": "Chapter 7.1",
+          "chapter_num": 7.1,
+          "chapter_slug": "chapter-7-1"
+        },
+        {
+          "chapter_name": "Chapter 7",
+          "chapter_num": 7,
+          "chapter_slug": "chapter-7"
+        },
+        {
+          "chapter_name": "Chapter 6.9",
+          "chapter_num": 6.9,
+          "chapter_slug": "chapter-6-9"
+        },
+        {
+          "chapter_name": "Chapter 6.8",
+          "chapter_num": 6.8,
+          "chapter_slug": "chapter-6-8"
+        },
+        {
+          "chapter_name": "Chapter 6.7",
+          "chapter_num": 6.7,
+          "chapter_slug": "chapter-6-7"
+        },
+        {
+          "chapter_name": "Chapter 6.6",
+          "chapter_num": 6.6,
+          "chapter_slug": "chapter-6-6"
+        },
+        {
+          "chapter_name": "Chapter 6.5",
+          "chapter_num": 6.5,
+          "chapter_slug": "chapter-6-5"
+        },
+        {
+          "chapter_name": "Chapter 6.4",
+          "chapter_num": 6.4,
+          "chapter_slug": "chapter-6-4"
+        },
+        {
+          "chapter_name": "Chapter 6.3",
+          "chapter_num": 6.3,
+          "chapter_slug": "chapter-6-3"
+        },
+        {
+          "chapter_name": "Chapter 6.2",
+          "chapter_num": 6.2,
+          "chapter_slug": "chapter-6-2"
+        },
+        {
+          "chapter_name": "Chapter 6.1",
+          "chapter_num": 6.1,
+          "chapter_slug": "chapter-6-1"
+        },
+        {
+          "chapter_name": "Chapter 6",
+          "chapter_num": 6,
+          "chapter_slug": "chapter-6"
+        },
+        {
+          "chapter_name": "Chapter 5.9",
+          "chapter_num": 5.9,
+          "chapter_slug": "chapter-5-9"
+        },
+        {
+          "chapter_name": "Chapter 5.8",
+          "chapter_num": 5.8,
+          "chapter_slug": "chapter-5-8"
+        },
+        {
+          "chapter_name": "Chapter 5.7",
+          "chapter_num": 5.7,
+          "chapter_slug": "chapter-5-7"
+        },
+        {
+          "chapter_name": "Chapter 5.6",
+          "chapter_num": 5.6,
+          "chapter_slug": "chapter-5-6"
+        },
+        {
+          "chapter_name": "Chapter 5.5",
+          "chapter_num": 5.5,
+          "chapter_slug": "chapter-5-5"
+        },
+        {
+          "chapter_name": "Chapter 5.4",
+          "chapter_num": 5.4,
+          "chapter_slug": "chapter-5-4"
+        }
+      ],
+      "pagination": {
+        "has_more": true,
+        "limit": 500,
+        "offset": 0,
+        "total": 546
+      }
+    }
+  },
+  {
+    "success": true,
+    "data": {
+      "chapters": [
+        {
+          "chapter_name": "Chapter 5.3",
+          "chapter_num": 5.3,
+          "chapter_slug": "chapter-5-3"
+        },
+        {
+          "chapter_name": "Chapter 5.2",
+          "chapter_num": 5.2,
+          "chapter_slug": "chapter-5-2"
+        },
+        {
+          "chapter_name": "Chapter 5.1",
+          "chapter_num": 5.1,
+          "chapter_slug": "chapter-5-1"
+        },
+        {
+          "chapter_name": "Chapter 5",
+          "chapter_num": 5,
+          "chapter_slug": "chapter-5"
+        },
+        {
+          "chapter_name": "Chapter 4.9",
+          "chapter_num": 4.9,
+          "chapter_slug": "chapter-4-9"
+        },
+        {
+          "chapter_name": "Chapter 4.8",
+          "chapter_num": 4.8,
+          "chapter_slug": "chapter-4-8"
+        },
+        {
+          "chapter_name": "Chapter 4.7",
+          "chapter_num": 4.7,
+          "chapter_slug": "chapter-4-7"
+        },
+        {
+          "chapter_name": "Chapter 4.6",
+          "chapter_num": 4.6,
+          "chapter_slug": "chapter-4-6"
+        },
+        {
+          "chapter_name": "Chapter 4.5",
+          "chapter_num": 4.5,
+          "chapter_slug": "chapter-4-5"
+        },
+        {
+          "chapter_name": "Chapter 4.4",
+          "chapter_num": 4.4,
+          "chapter_slug": "chapter-4-4"
+        },
+        {
+          "chapter_name": "Chapter 4.3",
+          "chapter_num": 4.3,
+          "chapter_slug": "chapter-4-3"
+        },
+        {
+          "chapter_name": "Chapter 4.2",
+          "chapter_num": 4.2,
+          "chapter_slug": "chapter-4-2"
+        },
+        {
+          "chapter_name": "Chapter 4.1",
+          "chapter_num": 4.1,
+          "chapter_slug": "chapter-4-1"
+        },
+        {
+          "chapter_name": "Chapter 4",
+          "chapter_num": 4,
+          "chapter_slug": "chapter-4"
+        },
+        {
+          "chapter_name": "Chapter 3.9",
+          "chapter_num": 3.9,
+          "chapter_slug": "chapter-3-9"
+        },
+        {
+          "chapter_name": "Chapter 3.8",
+          "chapter_num": 3.8,
+          "chapter_slug": "chapter-3-8"
+        },
+        {
+          "chapter_name": "Chapter 3.7",
+          "chapter_num": 3.7,
+          "chapter_slug": "chapter-3-7"
+        },
+        {
+          "chapter_name": "Chapter 3.6",
+          "chapter_num": 3.6,
+          "chapter_slug": "chapter-3-6"
+        },
+        {
+          "chapter_name": "Chapter 3.5",
+          "chapter_num": 3.5,
+          "chapter_slug": "chapter-3-5"
+        },
+        {
+          "chapter_name": "Chapter 3.4",
+          "chapter_num": 3.4,
+          "chapter_slug": "chapter-3-4"
+        },
+        {
+          "chapter_name": "Chapter 3.3",
+          "chapter_num": 3.3,
+          "chapter_slug": "chapter-3-3"
+        },
+        {
+          "chapter_name": "Chapter 3.2",
+          "chapter_num": 3.2,
+          "chapter_slug": "chapter-3-2"
+        },
+        {
+          "chapter_name": "Chapter 3.1",
+          "chapter_num": 3.1,
+          "chapter_slug": "chapter-3-1"
+        },
+        {
+          "chapter_name": "Chapter 3",
+          "chapter_num": 3,
+          "chapter_slug": "chapter-3"
+        },
+        {
+          "chapter_name": "Chapter 2.9",
+          "chapter_num": 2.9,
+          "chapter_slug": "chapter-2-9"
+        },
+        {
+          "chapter_name": "Chapter 2.8",
+          "chapter_num": 2.8,
+          "chapter_slug": "chapter-2-8"
+        },
+        {
+          "chapter_name": "Chapter 2.7",
+          "chapter_num": 2.7,
+          "chapter_slug": "chapter-2-7"
+        },
+        {
+          "chapter_name": "Chapter 2.6",
+          "chapter_num": 2.6,
+          "chapter_slug": "chapter-2-6"
+        },
+        {
+          "chapter_name": "Chapter 2.5",
+          "chapter_num": 2.5,
+          "chapter_slug": "chapter-2-5"
+        },
+        {
+          "chapter_name": "Chapter 2.4",
+          "chapter_num": 2.4,
+          "chapter_slug": "chapter-2-4"
+        },
+        {
+          "chapter_name": "Chapter 2.3",
+          "chapter_num": 2.3,
+          "chapter_slug": "chapter-2-3"
+        },
+        {
+          "chapter_name": "Chapter 2.2",
+          "chapter_num": 2.2,
+          "chapter_slug": "chapter-2-2"
+        },
+        {
+          "chapter_name": "Chapter 2.1",
+          "chapter_num": 2.1,
+          "chapter_slug": "chapter-2-1"
+        },
+        {
+          "chapter_name": "Chapter 2",
+          "chapter_num": 2,
+          "chapter_slug": "chapter-2"
+        },
+        {
+          "chapter_name": "Chapter 1.9",
+          "chapter_num": 1.9,
+          "chapter_slug": "chapter-1-9"
+        },
+        {
+          "chapter_name": "Chapter 1.8",
+          "chapter_num": 1.8,
+          "chapter_slug": "chapter-1-8"
+        },
+        {
+          "chapter_name": "Chapter 1.7",
+          "chapter_num": 1.7,
+          "chapter_slug": "chapter-1-7"
+        },
+        {
+          "chapter_name": "Chapter 1.6",
+          "chapter_num": 1.6,
+          "chapter_slug": "chapter-1-6"
+        },
+        {
+          "chapter_name": "Chapter 1.5",
+          "chapter_num": 1.5,
+          "chapter_slug": "chapter-1-5"
+        },
+        {
+          "chapter_name": "Chapter 1.4",
+          "chapter_num": 1.4,
+          "chapter_slug": "chapter-1-4"
+        },
+        {
+          "chapter_name": "Chapter 1.3",
+          "chapter_num": 1.3,
+          "chapter_slug": "chapter-1-3"
+        },
+        {
+          "chapter_name": "Chapter 1.2",
+          "chapter_num": 1.2,
+          "chapter_slug": "chapter-1-2"
+        },
+        {
+          "chapter_name": "Chapter 1.1",
+          "chapter_num": 1.1,
+          "chapter_slug": "chapter-1-1"
+        },
+        {
+          "chapter_name": "Chapter 1",
+          "chapter_num": 1,
+          "chapter_slug": "chapter-1"
+        },
+        {
+          "chapter_name": "Chapter 0.1",
+          "chapter_num": 0.1,
+          "chapter_slug": "chapter-0-1"
+        },
+        {
+          "chapter_name": "Chapter 0",
+          "chapter_num": 0,
+          "chapter_slug": "chapter-0"
+        }
+      ],
+      "pagination": {
+        "has_more": false,
+        "limit": 500,
+        "offset": 500,
+        "total": 546
+      }
+    }
+  }
+]

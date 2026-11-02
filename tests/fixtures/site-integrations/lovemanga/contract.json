@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "providerId": "lovemanga",
+  "data": {
+    "seriesUrl": "https://www.aimanhua.org/comic/416895",
+    "chapterId": "133632",
+    "pageCount": 73,
+    "seriesHtmlFile": "series.html",
+    "chapterCount": 190,
+    "readers": [
+      {
+        "htmlFile": "reader.html",
+        "chapterId": "133632",
+        "pageCount": 73
+      },
+      {
+        "htmlFile": "reader-upload3.html",
+        "chapterId": "221966",
+        "pageCount": 179
+      }
+    ]
+  }
+}

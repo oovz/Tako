@@ -7,7 +7,10 @@ import {
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { PublicHttpsUrlSchema } from "@/src/runtime/series-data-schemas"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
-import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import {
+  useChromeStorageValue,
+  type StorageReadStatus,
+} from "@/src/ui/shared/hooks/useChromeStorageValue"
 import { isRecord } from "@/src/shared/type-guards"
 import { z } from "zod"
 
@@ -18,12 +21,23 @@ const QueueTaskSummaryStorageSchema = z.object({
   siteIntegration: z.string(),
   coverUrl: z.unknown().optional(),
   status: DownloadTaskStatusSchema,
+  outputDestination: z.enum(["downloads-api", "fsa"]).optional(),
+  saveConfirmedAt: z.number().finite().nonnegative().optional(),
+  destination: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("downloads-api") }),
+    z.strictObject({
+      kind: z.literal("file-system-access"),
+      handleId: z.string().min(1).nullable(),
+    }),
+  ]),
+  requestedPath: z.string().nullable().optional(),
+  useChromeFallback: z.literal(true).optional(),
+  targetUnavailable: z.literal(true).optional(),
+  outputMode: z.enum(["downloads-api", "fsa"]).optional(),
   activeBlock: z
     .enum([
-      "destination_action_required",
       "provider_network_policy_pending",
       "provider_network_policy_action_required",
-      "native_output_action_required",
     ])
     .optional(),
   chapters: z.object({
@@ -35,20 +49,16 @@ const QueueTaskSummaryStorageSchema = z.object({
     created: z.number(),
     completed: z.number().optional(),
   }),
+  outputUncertain: z.boolean().optional(),
   failureCategory: z.unknown().optional(),
-  hasUnobservableOutput: z.unknown().optional(),
+  folderAccessRequired: z.literal(true).optional(),
   isRetried: z.unknown().optional(),
   isRetryTask: z.unknown().optional(),
   lastSuccessfulDownloadId: z.unknown().optional(),
 })
 
-function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
-  const parsed = QueueTaskSummaryStorageSchema.safeParse(value)
-  if (!parsed.success) {
-    return null
-  }
-
-  const data = parsed.data
+function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
+  const data = QueueTaskSummaryStorageSchema.parse(value)
 
   return {
     id: data.id,
@@ -60,6 +70,13 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
       : undefined,
     status: data.status,
     activeBlock: data.activeBlock,
+    outputDestination: data.outputDestination,
+    saveConfirmedAt: data.saveConfirmedAt,
+    outputMode: data.outputMode,
+    useChromeFallback: data.useChromeFallback,
+    targetUnavailable: data.targetUnavailable,
+    destination: data.destination,
+    requestedPath: data.requestedPath,
     chapters: {
       total: data.chapters.total,
       completed: data.chapters.completed,
@@ -69,11 +86,9 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
       created: data.timestamps.created,
       completed: data.timestamps.completed,
     },
+    outputUncertain: data.outputUncertain,
     failureCategory: normalizeDownloadErrorCategory(data.failureCategory),
-    hasUnobservableOutput:
-      typeof data.hasUnobservableOutput === "boolean"
-        ? data.hasUnobservableOutput
-        : undefined,
+    folderAccessRequired: data.folderAccessRequired,
     isRetried: typeof data.isRetried === "boolean" ? data.isRetried : undefined,
     isRetryTask:
       typeof data.isRetryTask === "boolean" ? data.isRetryTask : undefined,
@@ -85,13 +100,8 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary | null {
 }
 
 export function normalizeQueueView(value: unknown): QueueTaskSummary[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .map(normalizeQueueTaskSummary)
-    .filter((task): task is QueueTaskSummary => task !== null)
+  if (value === undefined) return []
+  return z.array(z.unknown()).parse(value).map(normalizeQueueTaskSummary)
 }
 
 function isTerminalTask(task: QueueTaskSummary): boolean {
@@ -122,7 +132,7 @@ export function normalizeQueueProjection(
   value: unknown
 ): QueueProjectionStorageValue {
   if (!isRecord(value)) {
-    return { queueView: [], historyView: [] }
+    throw new Error("Invalid queue projection")
   }
 
   const queue = normalizeQueueView(value[SESSION_STORAGE_KEYS.queueView])
@@ -141,16 +151,22 @@ export interface UseQueueViewResult {
   queuedCount: number
   isLoading: boolean
   hydrated: boolean
+  status: StorageReadStatus
+  refresh: () => Promise<void>
 }
 
 export function useQueueView(): UseQueueViewResult {
-  const { value: projection, hydrated } =
-    useChromeStorageValue<QueueProjectionStorageValue>({
-      areaName: "session",
-      key: [SESSION_STORAGE_KEYS.queueView, SESSION_STORAGE_KEYS.historyView],
-      initialValue: { queueView: [], historyView: [] },
-      parse: normalizeQueueProjection,
-    })
+  const {
+    value: projection,
+    hydrated,
+    status,
+    refresh,
+  } = useChromeStorageValue<QueueProjectionStorageValue>({
+    areaName: "session",
+    key: [SESSION_STORAGE_KEYS.queueView, SESSION_STORAGE_KEYS.historyView],
+    initialValue: { queueView: [], historyView: [] },
+    parse: normalizeQueueProjection,
+  })
   const { queueView, historyView } = projection
 
   const activeTasks = useMemo(
@@ -173,6 +189,8 @@ export function useQueueView(): UseQueueViewResult {
     activeCount: activeTasks.length,
     queuedCount: queuedTasks.length,
     hydrated,
-    isLoading: !hydrated,
+    isLoading: status === "loading",
+    status,
+    refresh,
   }
 }

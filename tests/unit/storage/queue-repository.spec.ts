@@ -1,8 +1,8 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
-import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -16,7 +16,7 @@ import type {
 
 class QueueRepository extends BaseQueueRepository {
   constructor() {
-    super(new QueueProjectionService())
+    super(new QueueProjectionService(), new HistoryRepository())
   }
 }
 
@@ -61,6 +61,7 @@ function createTask(
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -74,6 +75,16 @@ function createTask(
     settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
     ...overrides,
   }
+}
+
+function createFolderTask(): DownloadTaskState {
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  settings.downloads.destination = "file-system-access"
+  settings.downloads.customDirectoryHandleId = "folder"
+  settings.downloads.allowChromeFallback = false
+  return createTask({
+    settingsSnapshot: createTaskSettingsSnapshot(settings, "mangadex"),
+  })
 }
 
 type TaskSettingsMutation = (task: DownloadTaskState) => void
@@ -198,51 +209,189 @@ describe("QueueRepository", () => {
     } as unknown as typeof chrome)
   })
 
-  it.each([
-    "provider_network_policy_pending",
-    "provider_network_policy_action_required",
-  ] as const)(
-    "replaces destination repair state with %s durably",
-    async (block) => {
-      const repository = new QueueRepository()
-      await repository.enqueueDownloadTask(createTask())
-      const destination = await repository.blockTaskForDestination({
+  it("allows a restarted task to be restarted after another interruption", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.interruptDownloadTask({
         taskId: "task-1",
-        now: 500,
-        destinationIssue: {
-          id: "issue-1",
+        errorMessage: "Worker stopped",
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.restartDownloadTask({
+        taskId: "task-1",
+        restartTaskId: "first-restart",
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    const cold = new QueueRepository()
+    await expect(
+      cold.startDownloadTask({ taskId: "first-restart", now: 500 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      cold.interruptDownloadTask({
+        taskId: "first-restart",
+        errorMessage: "Worker stopped again",
+        now: 600,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      cold.restartDownloadTask({
+        taskId: "first-restart",
+        restartTaskId: "second-restart",
+        now: 700,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      new QueueRepository().getTask("second-restart")
+    ).resolves.toMatchObject({ id: "second-restart", status: "queued" })
+  })
+
+  it("resumes a cold task started before its first chapter dispatch", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    const cold = new QueueRepository()
+    await expect(
+      cold.recoverQueueAfterStartup({
+        normalizationTime: 300,
+        interruptedAt: 300,
+        observedLease: null,
+        offscreenJob: null,
+        nativeOutputTaskIds: [],
+      })
+    ).resolves.toMatchObject({
+      outcome: "unchanged",
+      resumeTaskId: "task-1",
+      interruptedTaskIds: [],
+      leaseCleared: false,
+    })
+    await expect(cold.getTask("task-1")).resolves.toMatchObject({
+      status: "downloading",
+      chapters: [{ id: "chapter-1", status: "queued" }],
+    })
+    await expect(
+      cold.beginChapterDispatch({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        lease: createBoundDispatchLease({
+          jobId: "first-job",
           taskId: "task-1",
-          kind: "fsa_folder_missing",
-          occurredAt: 500,
+          chapterId: "chapter-1",
+          attempt: 1,
+          now: 400,
+        }),
+        expectedPreviousLease: null,
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+  })
+
+  it("returns the completed chapter count after successful folder settlements", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createFolderTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    const lease: ActiveDispatchLease = {
+      ...createBoundDispatchLease({
+        jobId: "saved-job",
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        attempt: 1,
+        now: 300,
+      }),
+      saveMode: "fsa",
+      destinationHandleId: "folder",
+    }
+    await expect(
+      repository.beginChapterDispatch({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        lease,
+        expectedPreviousLease: null,
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.settleTaskChapter({
+        taskId: "task-1",
+        chapterId: "chapter-1",
+        status: "completed",
+        lease: fullLeaseIdentity(lease),
+        now: 400,
+        updates: {
+          outputs: { requested: 1, committed: 1, failed: 0 },
+          outputDestination: "fsa",
+          saveConfirmedAt: 400,
         },
       })
-      expect(destination.outcome).toBe("applied")
-      expect(
-        DownloadTaskStateSchema.safeParse((await repository.getQueue())[0])
-          .success
-      ).toBe(true)
-
-      const replaced = await repository.blockTaskForProviderPolicy({
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.clearDispatchLease(fullLeaseIdentity(lease))
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.finalizeDownloadTask({
         taskId: "task-1",
-        block,
+        chapterOutcomesByIndex: [
+          { chapterId: "chapter-1", status: "completed" },
+        ],
+        completedAt: 500,
       })
-      expect(replaced.outcome).toBe("applied")
-      const reloaded = await new QueueRepository().getQueue()
-      expect(reloaded[0]).toMatchObject({
-        status: "queued",
-        activeBlock: block,
-      })
-      expect(reloaded[0]?.destinationIssue).toBeUndefined()
-      expect(DownloadTaskStateSchema.safeParse(reloaded[0]).success).toBe(true)
+    ).resolves.toMatchObject({
+      outcome: "applied",
+      completedCount: 1,
+      finalStatus: "completed",
+    })
+  })
 
-      expect(
-        (await repository.releaseProviderPolicyBlock("task-1")).outcome
-      ).toBe("applied")
-      const released = await new QueueRepository().getQueue()
-      expect(released[0]?.activeBlock).toBeUndefined()
-      expect(DownloadTaskStateSchema.safeParse(released[0]).success).toBe(true)
-    }
-  )
+  it("hydrates a restarted folder task with automatic Chrome fallback disabled", async () => {
+    const repository = new QueueRepository()
+    await expect(
+      repository.enqueueDownloadTask(createFolderTask())
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.startDownloadTask({ taskId: "task-1", now: 200 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.interruptDownloadTask({
+        taskId: "task-1",
+        errorMessage: "Worker stopped",
+        now: 300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      repository.restartDownloadTask({
+        taskId: "task-1",
+        restartTaskId: "folder-restart",
+        now: 400,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+
+    await expect(
+      new QueueRepository().getTask("folder-restart")
+    ).resolves.toMatchObject({
+      status: "queued",
+      settingsSnapshot: {
+        destination: { kind: "file-system-access", handleId: "folder" },
+      },
+    })
+  })
 
   it.each(["retry", "restart"] as const)(
     "accounts a new native job after %s without inheriting old settlement",
@@ -260,7 +409,6 @@ describe("QueueRepository", () => {
           requested: 2,
           completed: 1,
           interrupted: 1,
-          surrendered: 0,
           appliedAt: 200,
         },
       }
@@ -314,7 +462,6 @@ describe("QueueRepository", () => {
             requested: 1,
             completed: 1,
             interrupted: 0,
-            surrendered: 0,
             now: 500,
           })
         ).outcome
@@ -848,11 +995,6 @@ describe("QueueRepository", () => {
 
   it("round-trips operation-specific convergence markers through current storage", async () => {
     const markedTask = createTask({
-      destinationBlockRevision: 3,
-      destinationResume: {
-        commandId: "destination-command",
-        blockRevision: 3,
-      },
       activeCancel: { commandId: "cancel-command" },
       restoredUndo: { token: "undo-token", type: "cancel_queued" },
     })
@@ -860,11 +1002,6 @@ describe("QueueRepository", () => {
 
     const repository = new QueueRepository()
     await expect(repository.getTask("task-1")).resolves.toMatchObject({
-      destinationBlockRevision: 3,
-      destinationResume: {
-        commandId: "destination-command",
-        blockRevision: 3,
-      },
       activeCancel: { commandId: "cancel-command" },
       restoredUndo: { token: "undo-token", type: "cancel_queued" },
     })

@@ -1,5 +1,6 @@
 import { MAX_METADATA_RESPONSE_BYTES } from "@/src/constants/timeouts"
 import { NonRetryableDownloadError } from "./download-contract"
+import { cancelResponseBody } from "./response-body"
 
 const DEFAULT_META_SCAN_BYTES = 1024
 
@@ -39,25 +40,16 @@ function getCharsetFromContentType(
   return normalizeEncodingLabel(match?.[1])
 }
 
+const BYTE_ORDER_MARKS: ReadonlyArray<readonly [readonly number[], string]> = [
+  [[0xef, 0xbb, 0xbf], "utf-8"],
+  [[0xff, 0xfe], "utf-16le"],
+  [[0xfe, 0xff], "utf-16be"],
+]
+
 function getBomEncoding(bytes: Uint8Array): string | undefined {
-  if (
-    bytes.length >= 3 &&
-    bytes[0] === 0xef &&
-    bytes[1] === 0xbb &&
-    bytes[2] === 0xbf
-  ) {
-    return "utf-8"
-  }
-
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return "utf-16le"
-  }
-
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    return "utf-16be"
-  }
-
-  return undefined
+  return BYTE_ORDER_MARKS.find(([signature]) =>
+    signature.every((byte, index) => bytes[index] === byte)
+  )?.[1]
 }
 
 function getAsciiPrefix(bytes: Uint8Array, scanByteLimit: number): string {
@@ -115,27 +107,7 @@ export function decodeHtmlBytes(
   bytes: Uint8Array,
   options: DecodeHtmlOptions = {}
 ): DecodedHtmlDocument {
-  const bomEncoding = getBomEncoding(bytes)
-  const headerEncoding = getCharsetFromContentType(options.contentType)
-  const metaEncoding = getCharsetFromHtmlMeta(
-    bytes,
-    options.scanByteLimit ?? DEFAULT_META_SCAN_BYTES
-  )
-
-  const encoding = bomEncoding ?? headerEncoding ?? metaEncoding
-  const source: EncodingSource | undefined = bomEncoding
-    ? "bom"
-    : headerEncoding
-      ? "header"
-      : metaEncoding
-        ? "meta"
-        : undefined
-
-  if (!encoding || !source) {
-    throw new NonRetryableDownloadError(
-      "Unable to decode HTML response: no supported charset declaration found in BOM, Content-Type, or <meta charset>"
-    )
-  }
+  const { encoding, source } = resolveHtmlEncoding(bytes, options)
 
   try {
     return {
@@ -153,6 +125,24 @@ export function decodeHtmlBytes(
   }
 }
 
+function resolveHtmlEncoding(
+  bytes: Uint8Array,
+  options: DecodeHtmlOptions
+): { encoding: string; source: EncodingSource } {
+  const bom = getBomEncoding(bytes)
+  const header = getCharsetFromContentType(options.contentType)
+  const meta = getCharsetFromHtmlMeta(
+    bytes,
+    options.scanByteLimit ?? DEFAULT_META_SCAN_BYTES
+  )
+  if (bom) return { encoding: bom, source: "bom" }
+  if (header) return { encoding: header, source: "header" }
+  if (meta) return { encoding: meta, source: "meta" }
+  throw new NonRetryableDownloadError(
+    "Unable to decode HTML response: no supported charset declaration found in BOM, Content-Type, or <meta charset>"
+  )
+}
+
 export class ResponseBodyLimitError extends NonRetryableDownloadError {
   constructor(maxBytes: number, actualBytes?: number) {
     super(
@@ -164,11 +154,61 @@ export class ResponseBodyLimitError extends NonRetryableDownloadError {
   }
 }
 
-function responseBodyLimitError(
-  maxBytes: number,
-  actualBytes?: number
-): ResponseBodyLimitError {
-  return new ResponseBodyLimitError(maxBytes, actualBytes)
+function boundedResponseBytes(bytes: Uint8Array, limit: number): Uint8Array {
+  if (bytes.byteLength > limit)
+    throw new ResponseBodyLimitError(limit, bytes.byteLength)
+  return bytes
+}
+
+async function readUnstreamedResponseBytes(
+  response: Response
+): Promise<Uint8Array> {
+  const contentType = response.headers?.get?.("content-type") ?? ""
+  if (
+    contentType.toLowerCase().includes("javascript") &&
+    typeof response.arrayBuffer === "function"
+  ) {
+    return new Uint8Array(await response.arrayBuffer())
+  }
+  if (typeof response.text === "function") {
+    return new TextEncoder().encode(await response.text())
+  }
+  if (typeof response.json === "function") {
+    return new TextEncoder().encode(JSON.stringify(await response.json()))
+  }
+  return new Uint8Array(await response.arrayBuffer())
+}
+
+async function readResponseStream(
+  body: ReadableStream<Uint8Array>,
+  limit: number
+): Promise<Uint8Array> {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      if (!result.value || result.value.byteLength === 0) continue
+      totalBytes += result.value.byteLength
+      if (totalBytes > limit) {
+        const error = new ResponseBodyLimitError(limit, totalBytes)
+        void reader.cancel(error).catch(() => undefined)
+        throw error
+      }
+      chunks.push(result.value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const bytes = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
 }
 
 export async function readResponseBytes(
@@ -180,79 +220,17 @@ export async function readResponseBytes(
     response.headers?.get?.("content-length") ?? Number.NaN
   )
   if (Number.isFinite(contentLength) && contentLength > limit) {
-    const error = responseBodyLimitError(limit, contentLength)
-    void response.body?.cancel(error).catch(() => undefined)
+    const error = new ResponseBodyLimitError(limit, contentLength)
+    cancelResponseBody(response, error)
     throw error
   }
-
   if (!response.body) {
-    const contentType = response.headers?.get?.("content-type") ?? ""
-    if (
-      contentType.toLowerCase().includes("javascript") &&
-      typeof response.arrayBuffer === "function"
-    ) {
-      const buffer = await response.arrayBuffer()
-      if (buffer.byteLength > limit) {
-        throw responseBodyLimitError(limit, buffer.byteLength)
-      }
-      return new Uint8Array(buffer)
-    }
-    const responseLike = response as Response & {
-      text?: () => Promise<string>
-    }
-    if (typeof responseLike.text === "function") {
-      const bytes = new TextEncoder().encode(await responseLike.text())
-      if (bytes.byteLength > limit) {
-        throw responseBodyLimitError(limit, bytes.byteLength)
-      }
-      return bytes
-    }
-    const responseJson = response as Response & {
-      json?: () => Promise<unknown>
-    }
-    if (typeof responseJson.json === "function") {
-      const bytes = new TextEncoder().encode(
-        JSON.stringify(await responseJson.json())
-      )
-      if (bytes.byteLength > limit) {
-        throw responseBodyLimitError(limit, bytes.byteLength)
-      }
-      return bytes
-    }
-    const buffer = await response.arrayBuffer()
-    if (buffer.byteLength > limit) {
-      throw responseBodyLimitError(limit, buffer.byteLength)
-    }
-    return new Uint8Array(buffer)
+    return boundedResponseBytes(
+      await readUnstreamedResponseBytes(response),
+      limit
+    )
   }
-
-  const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let totalBytes = 0
-  try {
-    while (true) {
-      const result = await reader.read()
-      if (result.done) break
-      if (!result.value || result.value.byteLength === 0) continue
-      totalBytes += result.value.byteLength
-      if (totalBytes > limit) {
-        const error = responseBodyLimitError(limit, totalBytes)
-        void reader.cancel(error).catch(() => undefined)
-        throw error
-      }
-      chunks.push(result.value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-
-  const bytes = new Uint8Array(totalBytes)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
+  return readResponseStream(response.body, limit)
 }
 
 export async function readResponseText(

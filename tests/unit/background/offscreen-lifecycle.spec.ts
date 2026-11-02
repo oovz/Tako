@@ -79,7 +79,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "ready",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
@@ -100,7 +100,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "initializing",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
@@ -117,7 +117,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "failed",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
@@ -150,7 +150,7 @@ describe("ensureOffscreenDocumentReady", () => {
         initializationState: "failed",
         documentInstanceId: "document-1",
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       })
 
@@ -171,7 +171,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "failed",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
     closeDocument.mockResolvedValue(undefined)
@@ -191,7 +191,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "failed",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
     closeDocument.mockImplementation(async () => {
@@ -241,7 +241,7 @@ describe("ensureOffscreenDocumentReady", () => {
           initializationState: "failed",
           documentInstanceId: "document-old",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       })
@@ -250,7 +250,7 @@ describe("ensureOffscreenDocumentReady", () => {
         initializationState: "ready",
         documentInstanceId: currentDocumentInstanceId,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }))
     const closedDocumentInstanceIds: string[] = []
@@ -278,7 +278,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "failed",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
@@ -286,7 +286,7 @@ describe("ensureOffscreenDocumentReady", () => {
       initializationState: "failed",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
   })
@@ -351,7 +351,6 @@ describe("ensureOffscreenDocumentReady", () => {
       {
         getLiveTaskIds: vi.fn(async () => []),
         hasLiveDependencies: vi.fn(async () => false),
-        hasReconcilableLiveDependencies: vi.fn(async () => false),
       } as never
     )
 
@@ -370,7 +369,6 @@ describe("ensureOffscreenDocumentReady", () => {
       {
         getLiveTaskIds: vi.fn(async () => []),
         hasLiveDependencies: vi.fn(async () => true),
-        hasReconcilableLiveDependencies: vi.fn(async () => true),
       } as never
     )
 
@@ -437,13 +435,12 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       initializationState: "ready",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => true),
-      hasReconcilableLiveDependencies: vi.fn(async () => true),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -461,13 +458,12 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       initializationState: "ready",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => false),
-      hasReconcilableLiveDependencies: vi.fn(async () => false),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -484,7 +480,7 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       let currentDocumentInstanceId: string | null = "document-old"
       let currentBrowserDocumentId: string | null = "browser-document-old"
       let activeJobCount = 0
-      let activeSeriesResolutionCount = 0
+      let activeTransientWorkCount = 0
       let releaseNativeDependencyCheck!: (hasDependencies: boolean) => void
       const nativeDependencyCheck = new Promise<boolean>((resolve) => {
         releaseNativeDependencyCheck = resolve
@@ -503,7 +499,7 @@ describe("scheduleOffscreenCloseIfIdle", () => {
         initializationState: "ready",
         documentInstanceId: currentDocumentInstanceId,
         activeJobCount,
-        activeSeriesResolutionCount,
+        activeTransientWorkCount,
         activeTaskIds: activeJobCount === 0 ? [] : ["admitted-download-task"],
       }))
       const closedDocumentInstanceIds: string[] = []
@@ -520,9 +516,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       })
       const nativeOutputCoordinator = {
         hasLiveDependencies: vi.fn(async () => await nativeDependencyCheck),
-        hasReconcilableLiveDependencies: vi.fn(
-          async () => await nativeDependencyCheck
-        ),
       }
 
       const idleClose = scheduleOffscreenCloseIfIdle(
@@ -537,7 +530,7 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       const admission = runOffscreenDocumentAdmissionExclusive(async () => {
         admittedDocumentInstanceId = currentDocumentInstanceId
         activeJobCount = 1
-        activeSeriesResolutionCount = 1
+        activeTransientWorkCount = 1
       })
       await Promise.resolve()
       expect(admittedDocumentInstanceId).toBeNull()
@@ -558,37 +551,12 @@ describe("scheduleOffscreenCloseIfIdle", () => {
       initializationState: "ready",
       documentInstanceId: "document-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 1,
+      activeTransientWorkCount: 1,
       activeTaskIds: [],
     })
 
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => false),
-      hasReconcilableLiveDependencies: vi.fn(async () => false),
-    }
-
-    await scheduleOffscreenCloseIfIdle(
-      queueRepository as never,
-      nativeOutputCoordinator as never
-    )
-
-    expect(closeDocument).not.toHaveBeenCalled()
-  })
-
-  it("retains an idle offscreen owner while native cleanup is unresolved", async () => {
-    hasDocument.mockResolvedValue(true)
-    sendMessage.mockResolvedValue({
-      success: true,
-      initializationState: "ready",
-      documentInstanceId: "document-1",
-      activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
-      activeTaskIds: [],
-    })
-
-    const nativeOutputCoordinator = {
-      hasLiveDependencies: vi.fn(async () => true),
-      hasReconcilableLiveDependencies: vi.fn(async () => true),
     }
 
     await scheduleOffscreenCloseIfIdle(
@@ -628,7 +596,7 @@ describe("scheduleOffscreenCloseIfIdle", () => {
               : "ready",
         documentInstanceId: currentDocumentInstanceId,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }
     })
@@ -646,9 +614,6 @@ describe("scheduleOffscreenCloseIfIdle", () => {
     })
     const nativeOutputCoordinator = {
       hasLiveDependencies: vi.fn(async () => await nativeDependencyCheck),
-      hasReconcilableLiveDependencies: vi.fn(
-        async () => await nativeDependencyCheck
-      ),
     }
 
     const idleClose = scheduleOffscreenCloseIfIdle(

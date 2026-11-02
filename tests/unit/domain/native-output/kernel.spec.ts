@@ -8,7 +8,6 @@ import {
   markNativeOutputAccountingDisposition,
   markNativeOutputBlobReleased,
   markNativeOutputDependencyReleased,
-  markNativeOutputSurrendered,
   observeNativeDownloadErased,
   prepareNativeOutput,
   sealNativeOutputManifest,
@@ -181,12 +180,13 @@ describe("native output kernel", () => {
     }).next
 
     const erased = observeNativeDownloadErased(state, {
+      confirmedByBrowser: true,
       downloadId: 42,
       now: 12,
     })
     expect(erased.result).toMatchObject({
       outcome: "applied",
-      record: { phase: "waiting", erasedAt: 12 },
+      record: { phase: "outcome_unknown", erasedAt: 12 },
     })
   })
 
@@ -216,104 +216,5 @@ describe("native output kernel", () => {
       throw new Error("expected terminal interruption")
     }
     expect(rejected.result.record.downloadId).toBeUndefined()
-  })
-
-  it("only surrenders waiting outputs whose download was erased", () => {
-    let state = prepareNativeOutput(createEmptyNativeOutputState(), {
-      ...identity,
-      outputCount: 1,
-      now: 10,
-    }).next
-    state = markNativeOutputAcceptanceUnknown(state, {
-      outputId: identity.outputId,
-      now: 11,
-    }).next
-    state = attachNativeDownload(state, {
-      outputId: identity.outputId,
-      downloadId: 42,
-    }).next
-
-    // Without an erased observation the output is still observable.
-    expect(
-      markNativeOutputSurrendered(state, {
-        outputId: identity.outputId,
-        now: 12,
-      }).result
-    ).toEqual({ outcome: "rejected", reason: "invalid-transition" })
-
-    state = observeNativeDownloadErased(state, {
-      downloadId: 42,
-      now: 13,
-    }).next
-    const surrendered = markNativeOutputSurrendered(state, {
-      outputId: identity.outputId,
-      now: 14,
-    })
-    expect(surrendered.result).toMatchObject({
-      outcome: "applied",
-      record: {
-        phase: "surrendered",
-        erasedAt: 13,
-        surrenderedAt: 14,
-        downloadId: 42,
-      },
-    })
-    // Replay is idempotent.
-    expect(
-      markNativeOutputSurrendered(surrendered.next, {
-        outputId: identity.outputId,
-        now: 99,
-      }).result.outcome
-    ).toBe("unchanged")
-  })
-
-  it("releases Blob and dependency ownership for surrendered outputs", () => {
-    let state = prepareNativeOutput(createEmptyNativeOutputState(), {
-      ...identity,
-      outputCount: 1,
-      now: 10,
-    }).next
-    state = markNativeOutputAcceptanceUnknown(state, {
-      outputId: identity.outputId,
-      now: 11,
-    }).next
-    state = attachNativeDownload(state, {
-      outputId: identity.outputId,
-      downloadId: 42,
-    }).next
-    state = observeNativeDownloadErased(state, {
-      downloadId: 42,
-      now: 12,
-    }).next
-    state = markNativeOutputSurrendered(state, {
-      outputId: identity.outputId,
-      now: 13,
-    }).next
-
-    const blobReleased = markNativeOutputBlobReleased(state, {
-      outputId: identity.outputId,
-      now: 14,
-    })
-    expect(blobReleased.result.outcome).toBe("applied")
-    if (blobReleased.result.outcome !== "applied") {
-      throw new Error("expected Blob release")
-    }
-
-    // Accounting disposition records terminal queue settlement.
-    const accounted = markNativeOutputAccountingDisposition(blobReleased.next, {
-      outputId: identity.outputId,
-      disposition: "accounted",
-      now: 15,
-    })
-    expect(accounted.result.outcome).toBe("applied")
-
-    const dependencyReleased = markNativeOutputDependencyReleased(
-      accounted.next,
-      { outputId: identity.outputId, now: 16 }
-    )
-    expect(dependencyReleased.result).toMatchObject({
-      outcome: "applied",
-      record: { dependencyReleasedAt: 16 },
-    })
   })
 })

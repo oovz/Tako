@@ -1,14 +1,3 @@
-/**
- * E2E Tests: Settings Persistence and Usage
- *
- * Tests that settings changes in the Options page are properly persisted and
- * used during download execution. Specifically tests the defaultFormat setting
- * to prevent regression of the cbz/zip bug.
- *
- * Bug Context: Prior to fix, changing defaultFormat in Options did not affect
- * actual downloads after the durable settings document changes.
- */
-
 import type { Page } from "@playwright/test"
 import { test, expect } from "./fixtures/extension"
 import { OptionsPageObject } from "./pages/options"
@@ -20,12 +9,14 @@ let options: OptionsPageObject
 
 const SETTINGS_STORAGE_KEY = "settings:global"
 const DOWNLOAD_ROOT_DB_NAME = "tako-fs"
+const DOWNLOAD_ROOT_DB_VERSION = 2
+const MANAGED_DOWNLOAD_ROOT_STORE_NAME = "managed-handles"
 const DOWNLOAD_ROOT_STORE_NAME = "handles"
 const DOWNLOAD_ROOT_HANDLE_ID = "download-root"
 
 async function seedCustomDirectoryHandle(page: Page): Promise<string> {
   return await page.evaluate(
-    async ({ dbName, storeName, handleId }) => {
+    async ({ dbName, dbVersion, storeName, managedStoreName, handleId }) => {
       const directoryName = `settings-persistence-${Date.now()}`
       const opfsRoot = await navigator.storage.getDirectory()
       const seededDirectory = await opfsRoot.getDirectoryHandle(directoryName, {
@@ -33,11 +24,14 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
       })
 
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(dbName, 1)
+        const request = indexedDB.open(dbName, dbVersion)
         request.onupgradeneeded = () => {
           const db = request.result
           if (!db.objectStoreNames.contains(storeName)) {
             db.createObjectStore(storeName)
+          }
+          if (!db.objectStoreNames.contains(managedStoreName)) {
+            db.createObjectStore(managedStoreName)
           }
         }
         request.onsuccess = () => resolve(request.result)
@@ -47,22 +41,28 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
           )
       })
 
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction(storeName, "readwrite")
-        const store = transaction.objectStore(storeName)
-        store.put(seededDirectory, handleId)
-        transaction.oncomplete = () => resolve()
-        transaction.onerror = () =>
-          reject(
-            transaction.error ??
-              new Error("Failed to seed persisted folder handle")
-          )
-      })
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const transaction = database.transaction(storeName, "readwrite")
+          const store = transaction.objectStore(storeName)
+          store.put(seededDirectory, handleId)
+          transaction.oncomplete = () => resolve()
+          transaction.onabort = transaction.onerror = () =>
+            reject(
+              transaction.error ??
+                new Error("Failed to seed persisted folder handle")
+            )
+        })
+      } finally {
+        database.close()
+      }
 
       return directoryName
     },
     {
       dbName: DOWNLOAD_ROOT_DB_NAME,
+      dbVersion: DOWNLOAD_ROOT_DB_VERSION,
+      managedStoreName: MANAGED_DOWNLOAD_ROOT_STORE_NAME,
       storeName: DOWNLOAD_ROOT_STORE_NAME,
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
     }
@@ -71,13 +71,23 @@ async function seedCustomDirectoryHandle(page: Page): Promise<string> {
 
 async function readPersistedDirectoryName(page: Page): Promise<string | null> {
   return await page.evaluate(
-    async ({ dbName, storeName, handleId }) => {
+    async ({ dbName, dbVersion, storeName, managedStoreName }) => {
+      const stored = await chrome.storage.local.get("settings:global")
+      const handleId = (
+        stored["settings:global"] as {
+          downloads: { customDirectoryHandleId: string | null }
+        }
+      ).downloads.customDirectoryHandleId
+      if (handleId === null) return null
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open(dbName, 1)
+        const request = indexedDB.open(dbName, dbVersion)
         request.onupgradeneeded = () => {
           const db = request.result
           if (!db.objectStoreNames.contains(storeName)) {
             db.createObjectStore(storeName)
+          }
+          if (!db.objectStoreNames.contains(managedStoreName)) {
+            db.createObjectStore(managedStoreName)
           }
         }
         request.onsuccess = () => resolve(request.result)
@@ -87,48 +97,51 @@ async function readPersistedDirectoryName(page: Page): Promise<string | null> {
           )
       })
 
-      const handle = await new Promise<FileSystemDirectoryHandle | undefined>(
-        (resolve, reject) => {
-          const transaction = database.transaction(storeName, "readonly")
-          const request = transaction.objectStore(storeName).get(handleId)
-          request.onsuccess = () =>
-            resolve(request.result as FileSystemDirectoryHandle | undefined)
-          request.onerror = () =>
-            reject(
-              request.error ??
-                new Error("Failed to read persisted folder handle")
-            )
-        }
-      )
-
-      return handle?.name ?? null
+      try {
+        const handle = await new Promise<FileSystemDirectoryHandle | undefined>(
+          (resolve, reject) => {
+            const transaction = database.transaction(storeName, "readonly")
+            const request = transaction.objectStore(storeName).get(handleId)
+            request.onsuccess = () =>
+              resolve(request.result as FileSystemDirectoryHandle | undefined)
+            request.onerror = () =>
+              reject(
+                request.error ??
+                  new Error("Failed to read persisted folder handle")
+              )
+          }
+        )
+        return handle?.name ?? null
+      } finally {
+        database.close()
+      }
     },
     {
       dbName: DOWNLOAD_ROOT_DB_NAME,
+      dbVersion: DOWNLOAD_ROOT_DB_VERSION,
+      managedStoreName: MANAGED_DOWNLOAD_ROOT_STORE_NAME,
       storeName: DOWNLOAD_ROOT_STORE_NAME,
       handleId: DOWNLOAD_ROOT_HANDLE_ID,
     }
   )
 }
 
-test.describe("Settings Persistence and Usage", () => {
+test.describe("Settings persistence", () => {
   test.beforeEach(async ({ page, extensionId }) => {
     optionsPage = page
     options = new OptionsPageObject(page, extensionId)
   })
 
-  test.describe("Archive Format Settings", () => {
-    test("should default to cbz format", async () => {
+  test.describe("Archive format", () => {
+    test("defaults to CBZ", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const format = await options.getArchiveFormat()
       expect(format).toBe("cbz")
     })
 
-    test("should persist zip format selection", async () => {
+    test("persists changes from CBZ to ZIP and back", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       // Change to zip
       await options.setArchiveFormat("zip")
@@ -136,31 +149,18 @@ test.describe("Settings Persistence and Usage", () => {
 
       // Reload page and verify persistence
       await options.navigate()
-      await options.ensureInitialized()
 
       const format = await options.getArchiveFormat()
       expect(format).toBe("zip")
-    })
 
-    test("should persist cbz format selection", async () => {
-      await options.navigate()
-      await options.ensureInitialized()
-
-      // Change to cbz
       await options.setArchiveFormat("cbz")
       await options.saveSettings()
-
-      // Reload and verify
       await options.navigate()
-      await options.ensureInitialized()
-
-      const format = await options.getArchiveFormat()
-      expect(format).toBe("cbz")
+      expect(await options.getArchiveFormat()).toBe("cbz")
     })
 
-    test("should persist none (folder) format selection", async () => {
+    test("persists loose-image format", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       // Change to none
       await options.setArchiveFormat("none")
@@ -168,21 +168,15 @@ test.describe("Settings Persistence and Usage", () => {
 
       // Reload and verify
       await options.navigate()
-      await options.ensureInitialized()
 
       const format = await options.getArchiveFormat()
       expect(format).toBe("none")
-
-      // Reset to cbz for other tests
-      await options.setArchiveFormat("cbz")
-      await options.saveSettings()
     })
   })
 
-  test.describe("ComicInfo Settings", () => {
-    test("should persist ComicInfo enabled state", async () => {
+  test.describe("ComicInfo", () => {
+    test("persists the ComicInfo setting", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       // Get initial state
       const initialState = await options.isComicInfoEnabled()
@@ -193,21 +187,15 @@ test.describe("Settings Persistence and Usage", () => {
 
       // Reload and verify
       await options.navigate()
-      await options.ensureInitialized()
 
       const newState = await options.isComicInfoEnabled()
       expect(newState).toBe(!initialState)
-
-      // Reset
-      await options.toggleComicInfo()
-      await options.saveSettings()
     })
   })
 
-  test.describe("Image Normalization Settings", () => {
-    test("should persist image normalization state", async () => {
+  test.describe("Image normalization", () => {
+    test("persists image filename normalization", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const initialState = await options.isImageNormalizationEnabled()
 
@@ -215,40 +203,28 @@ test.describe("Settings Persistence and Usage", () => {
       await options.saveSettings()
 
       await options.navigate()
-      await options.ensureInitialized()
 
       const newState = await options.isImageNormalizationEnabled()
       expect(newState).toBe(!initialState)
-
-      // Reset
-      await options.toggleImageNormalization()
-      await options.saveSettings()
     })
   })
 
-  test.describe("Download Path Settings", () => {
-    test("should persist custom download path template", async () => {
+  test.describe("Download destination", () => {
+    test("persists the download path template", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const customPath = "CustomFolder/<SERIES_TITLE>/<CHAPTER_TITLE>"
       await options.setDirectoryTemplate(customPath)
       await options.saveSettings()
 
       await options.navigate()
-      await options.ensureInitialized()
 
       const savedPath = await options.getDirectoryTemplate()
       expect(savedPath).toBe(customPath)
-
-      // Reset to default
-      await options.setDirectoryTemplate("TMD/<SERIES_TITLE>")
-      await options.saveSettings()
     })
 
-    test("discarding an unsaved switch back to browser downloads preserves the stored custom folder handle", async () => {
+    test("keeps the saved folder when a destination change is discarded", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const directoryName = await seedCustomDirectoryHandle(optionsPage)
       await optionsPage.evaluate(
@@ -259,6 +235,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -269,8 +246,7 @@ test.describe("Settings Persistence and Usage", () => {
       )
 
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -283,8 +259,7 @@ test.describe("Settings Persistence and Usage", () => {
       await optionsPage.getByRole("button", { name: "Discard Changes" }).click()
 
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -294,9 +269,8 @@ test.describe("Settings Persistence and Usage", () => {
         .toBe(directoryName)
     })
 
-    test("saving browser mode clears the persisted custom folder handle", async () => {
+    test("clears the saved folder when browser downloads are selected", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const directoryName = await seedCustomDirectoryHandle(optionsPage)
       await optionsPage.evaluate(
@@ -307,6 +281,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -317,8 +292,7 @@ test.describe("Settings Persistence and Usage", () => {
       )
 
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -331,8 +305,7 @@ test.describe("Settings Persistence and Usage", () => {
       await options.waitForSaveSuccess()
 
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       await expect(
         optionsPage.getByText(`Current folder: ${directoryName}`)
@@ -341,10 +314,9 @@ test.describe("Settings Persistence and Usage", () => {
         .poll(() => readPersistedDirectoryName(optionsPage))
         .toBeNull()
     })
-    test("toggling custom folder on without choosing a folder displays note and blocks saving with clear error message", async () => {
+    test("requires a folder before saving a custom destination", async () => {
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       const switchLocator = optionsPage.locator("#custom-folder-switch")
       await expect(switchLocator).toHaveAttribute("aria-checked", "false")
@@ -398,9 +370,8 @@ test.describe("Settings Persistence and Usage", () => {
       expect(storedSettings).not.toBe("file-system-access")
     })
 
-    test("custom folder mode with valid stored handle displays folder name without warning note", async () => {
+    test("shows the saved folder name when it remains available", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const directoryName = await seedCustomDirectoryHandle(optionsPage)
       await optionsPage.evaluate(
@@ -411,6 +382,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -421,8 +393,7 @@ test.describe("Settings Persistence and Usage", () => {
       )
 
       await options.navigate()
-      await options.ensureInitialized()
-      await options.switchToSection("Downloads")
+      await options.switchToSection("storage")
 
       const switchLocator = optionsPage.locator("#custom-folder-switch")
       await expect(switchLocator).toHaveAttribute("aria-checked", "true")
@@ -432,11 +403,18 @@ test.describe("Settings Persistence and Usage", () => {
       await expect(
         optionsPage.getByText("No download folder selected")
       ).toHaveCount(0)
+      await switchLocator.click()
+      await switchLocator.click()
+      await options.saveSettings()
+      await options.waitForSaveSuccess()
+      await expect(
+        optionsPage.getByText(`Current folder: ${directoryName}`)
+      ).toBeVisible()
+      expect(await readPersistedDirectoryName(optionsPage)).toBe(directoryName)
     })
 
-    test("saving custom folder destination when the underlying folder was deleted fails with folder deleted error", async () => {
+    test("explains a save failure when the chosen folder was deleted", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const directoryName = await seedCustomDirectoryHandle(optionsPage)
       await optionsPage.evaluate(
@@ -447,6 +425,7 @@ test.describe("Settings Persistence and Usage", () => {
           storageKey: SETTINGS_STORAGE_KEY,
           settings: {
             ...DEFAULT_SETTINGS,
+            uiLanguage: "en",
             downloads: {
               ...DEFAULT_SETTINGS.downloads,
               destination: "file-system-access",
@@ -463,7 +442,6 @@ test.describe("Settings Persistence and Usage", () => {
       }, directoryName)
 
       await options.navigate()
-      await options.ensureInitialized()
 
       // Modify another setting to trigger unsaved changes and attempt to save
       await options.setFileNameTemplate("DeletedFolderTestTemplate")
@@ -485,31 +463,24 @@ test.describe("Settings Persistence and Usage", () => {
     })
   })
 
-  test.describe("Filename Template Settings", () => {
-    test("should persist custom filename template", async () => {
+  test.describe("Filename template", () => {
+    test("persists the filename template", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const customTemplate = "<SERIES_TITLE> - Chapter <CHAPTER_NUMBER>"
       await options.setFileNameTemplate(customTemplate)
       await options.saveSettings()
 
       await options.navigate()
-      await options.ensureInitialized()
 
       const savedTemplate = await options.getFileNameTemplate()
       expect(savedTemplate).toBe(customTemplate)
-
-      // Reset to default
-      await options.setFileNameTemplate("<CHAPTER_TITLE>")
-      await options.saveSettings()
     })
   })
 
-  test.describe("Notification Settings", () => {
-    test("should persist notification toggle state", async () => {
+  test.describe("Notifications", () => {
+    test("persists the notification setting", async () => {
       await options.navigate()
-      await options.ensureInitialized()
 
       const initialState = await options.areNotificationsEnabled()
 
@@ -517,23 +488,17 @@ test.describe("Settings Persistence and Usage", () => {
       await options.saveSettings()
 
       await options.navigate()
-      await options.ensureInitialized()
 
       const newState = await options.areNotificationsEnabled()
       expect(newState).toBe(!initialState)
-
-      // Reset
-      await options.toggleNotifications()
-      await options.saveSettings()
     })
   })
 
-  test.describe("Settings Sync to Centralized State", () => {
-    test("should sync format setting to background state", async ({
+  test.describe("Background settings", () => {
+    test("synchronizes the saved format to background state", async ({
       context,
     }) => {
       await options.navigate()
-      await options.ensureInitialized()
 
       // Set zip format
       await options.setArchiveFormat("zip")
@@ -545,16 +510,12 @@ test.describe("Settings Persistence and Usage", () => {
           return state?.settings.downloads.defaultFormat
         })
         .toBe("zip")
-
-      // Reset
-      await options.setArchiveFormat("cbz")
-      await options.saveSettings()
     })
   })
 })
 
-test.describe("Settings Cross-Page Consistency", () => {
-  test("settings should be consistent across options page reloads", async ({
+test.describe("Settings across pages", () => {
+  test("shares the saved format with another Options page", async ({
     context,
     extensionId,
   }) => {
@@ -562,12 +523,6 @@ test.describe("Settings Cross-Page Consistency", () => {
     const page1 = await context.newPage()
     const opts1 = new OptionsPageObject(page1, extensionId)
     await opts1.navigate()
-    await opts1.ensureInitialized()
-
-    // Force deterministic baseline first so this test does not depend on prior suite state.
-    await opts1.setArchiveFormat("cbz")
-    await opts1.saveSettings()
-    await opts1.waitForSaveSuccess()
 
     await opts1.setArchiveFormat("zip")
     await opts1.saveSettings()
@@ -576,16 +531,105 @@ test.describe("Settings Cross-Page Consistency", () => {
     const page2 = await context.newPage()
     const opts2 = new OptionsPageObject(page2, extensionId)
     await opts2.navigate()
-    await opts2.ensureInitialized()
 
     const format = await opts2.getArchiveFormat()
     expect(format).toBe("zip")
 
-    // Reset
-    await opts2.setArchiveFormat("cbz")
-    await opts2.saveSettings()
-
     await page1.close()
     await page2.close()
   })
+})
+
+test.describe("Destination saves across Options closure", () => {
+  for (const boundary of ["before-commit", "after-commit"] as const) {
+    test(`recovers the matching saved folder ${boundary}`, async ({
+      page,
+      context,
+      extensionId,
+    }) => {
+      const initialOptions = new OptionsPageObject(page, extensionId)
+      await initialOptions.navigate()
+      const oldName = await seedCustomDirectoryHandle(page)
+      await page.evaluate(
+        async (settings) => {
+          await chrome.storage.local.set({ "settings:global": settings })
+        },
+        {
+          ...DEFAULT_SETTINGS,
+          uiLanguage: "en",
+          downloads: {
+            ...DEFAULT_SETTINGS.downloads,
+            destination: "file-system-access",
+            customDirectoryHandleId: DOWNLOAD_ROOT_HANDLE_ID,
+          },
+        }
+      )
+      await initialOptions.navigate()
+      await initialOptions.switchToSection("storage")
+      await expect(page.getByText(`Current folder: ${oldName}`)).toBeVisible()
+      const newName = await page.evaluate(async (boundary) => {
+        const name = `new-folder-${crypto.randomUUID()}`
+        const root = await navigator.storage.getDirectory()
+        const handle = await root.getDirectoryHandle(name, { create: true })
+        Object.defineProperty(window, "showDirectoryPicker", {
+          configurable: true,
+          value: async () => handle,
+        })
+        const send = chrome.runtime.sendMessage.bind(chrome.runtime)
+        chrome.runtime.sendMessage = ((message: {
+          type?: string
+          payload?: { configuration?: unknown }
+        }) => {
+          if (message.type !== "SAVE_OPTIONS_CONFIGURATION")
+            return send(message)
+          Object.assign(window, {
+            submittedConfiguration: message.payload?.configuration,
+          })
+          if (boundary === "before-commit") return new Promise(() => {})
+          return send(message).then(() => new Promise(() => {}))
+        }) as typeof chrome.runtime.sendMessage
+        return name
+      }, boundary)
+      await page.getByRole("button", { name: "Change folder" }).click()
+      await expect(page.getByText(`Current folder: ${newName}`)).toBeVisible()
+      await page.getByRole("button", { name: "Save Changes" }).click()
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Boolean(
+              (window as unknown as { submittedConfiguration?: unknown })
+                .submittedConfiguration
+            )
+          )
+        )
+        .toBe(true)
+
+      const observer = await context.newPage()
+      const reopened = new OptionsPageObject(observer, extensionId)
+      await reopened.navigate()
+      const expectedName = boundary === "before-commit" ? oldName : newName
+      await expect
+        .poll(() => readPersistedDirectoryName(observer))
+        .toBe(expectedName)
+      await page.close()
+
+      const session = await context.newCDPSession(observer)
+      const { targetInfos } = await session.send("Target.getTargets")
+      const worker = targetInfos.find(
+        (target) =>
+          target.type === "service_worker" &&
+          target.url === `chrome-extension://${extensionId}/background.js`
+      )
+      expect(worker).toBeDefined()
+      await session.send("Target.closeTarget", { targetId: worker!.targetId })
+      await session.detach()
+
+      await reopened.navigate()
+      await reopened.switchToSection("storage")
+      await expect(
+        observer.getByText(`Current folder: ${expectedName}`)
+      ).toBeVisible()
+      expect(await readPersistedDirectoryName(observer)).toBe(expectedName)
+    })
+  }
 })

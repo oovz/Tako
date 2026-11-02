@@ -173,7 +173,7 @@ test.describe("Queue cancel and restart behavior", () => {
       )
     })
 
-    // Regression guard: retry-created task must not remain permanently queued
+    // The scheduler must admit the retried task.
     await waitForGlobalState(context, (state) => {
       const original = state.downloadQueue.find(
         (t) => t.id === "failed-with-mix"

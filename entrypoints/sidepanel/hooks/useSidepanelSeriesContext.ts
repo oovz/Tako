@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import type { VolumeOrChapter } from "../types"
 import { useSidepanelTrackedTabId } from "@/entrypoints/sidepanel/hooks/useSidepanelTrackedTabId"
@@ -8,16 +8,15 @@ import {
   normalizeStoredSeriesContext,
   type ActiveTabContextValue,
 } from "@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers"
-import {
-  LOCAL_STORAGE_KEYS,
-  SESSION_STORAGE_KEYS,
-} from "@/src/runtime/storage-keys"
+import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { MangaPageState } from "@/src/types/tab-state"
 import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
 import type { DownloadedChapterRecord } from "@/src/domain/history/types"
+import { useSidepanelDownloadedChapters } from "./useSidepanelSeriesContextHistory"
 import logger from "@/src/runtime/logger"
 import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
-import type { RuntimeMessageResponse } from "@/src/runtime/runtime-message-contracts"
+import { createSeriesContextRecoveryCoordinator } from "./useSidepanelSeriesContextRecovery"
+export { createSeriesContextRecoveryCoordinator } from "./useSidepanelSeriesContextRecovery"
 
 export interface SidepanelSeriesContextData {
   windowId: number | undefined
@@ -79,125 +78,9 @@ function useCurrentWindowId(): number | undefined {
   return windowId
 }
 
-interface SeriesContextRecoveryObservation {
-  activeTabContext: ActiveTabContextValue
-  hydrated: boolean
-  tabId: number | undefined
-  windowId: number | undefined
-  sourceUrl?: string
-}
-
-function describeRecoverableSeriesContext(
-  activeTabContext: ActiveTabContextValue
-): string {
-  switch (activeTabContext.kind) {
-    case "ready":
-      return [
-        "ready",
-        activeTabContext.mangaState.siteIntegrationId,
-        activeTabContext.mangaState.mangaId,
-        activeTabContext.mangaState.lastUpdated,
-      ].join(":")
-    case "error":
-      return `error:${activeTabContext.error}`
-    default:
-      return activeTabContext.kind
-  }
-}
-
-export function createSeriesContextRecoveryCoordinator(input: {
-  requestRefresh: (target: {
-    tabId: number
-    windowId: number
-    reason?: "sidepanel-retry"
-  }) => Promise<RuntimeMessageResponse<"REQUEST_TAB_CONTEXT_REFRESH">>
-}) {
-  let activeAttempt:
-    | {
-        key: string
-        targetKey: string
-        pending: boolean
-        errorRecovery: boolean
-      }
-    | undefined
-
-  async function recover(
-    observation: SeriesContextRecoveryObservation,
-    explicitRetry = false
-  ): Promise<void> {
-    if (
-      !observation.hydrated ||
-      typeof observation.tabId !== "number" ||
-      typeof observation.windowId !== "number"
-    ) {
-      return
-    }
-
-    if (
-      observation.activeTabContext.kind === "ready" &&
-      typeof observation.activeTabContext.revision === "number" &&
-      observation.activeTabContext.mangaState.chaptersLoading !== true
-    ) {
-      activeAttempt = undefined
-      return
-    }
-    const targetKey = [
-      observation.windowId,
-      observation.tabId,
-      observation.sourceUrl,
-    ].join(":")
-    if (activeAttempt?.targetKey === targetKey) {
-      if (activeAttempt.pending) return
-      if (
-        !explicitRetry &&
-        activeAttempt.errorRecovery &&
-        (observation.activeTabContext.kind === "error" ||
-          observation.activeTabContext.kind === "loading")
-      )
-        return
-    }
-    const key = [
-      targetKey,
-      describeRecoverableSeriesContext(observation.activeTabContext),
-    ].join(":")
-    if (!explicitRetry && activeAttempt?.key === key) return
-
-    const attempt = {
-      key,
-      targetKey,
-      pending: true,
-      errorRecovery: observation.activeTabContext.kind === "error",
-    }
-    activeAttempt = attempt
-    try {
-      const response = await input.requestRefresh({
-        tabId: observation.tabId,
-        windowId: observation.windowId,
-        ...(explicitRetry ? { reason: "sidepanel-retry" as const } : {}),
-      })
-      if (!response.success && activeAttempt === attempt) {
-        activeAttempt = undefined
-      }
-    } catch (error) {
-      if (activeAttempt === attempt) {
-        activeAttempt = undefined
-      }
-      throw error
-    } finally {
-      attempt.pending = false
-    }
-  }
-  return {
-    recoverIfNeeded: (observation: SeriesContextRecoveryObservation) =>
-      recover(observation),
-    retry: (observation: SeriesContextRecoveryObservation) =>
-      recover(observation, true),
-  }
-}
-
 export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
-  const { tabId, activeUrl } = useSidepanelTrackedTabId()
   const windowId = useCurrentWindowId()
+  const { tabId, activeUrl } = useSidepanelTrackedTabId(windowId)
   const recoveryCoordinator = useMemo(
     () =>
       createSeriesContextRecoveryCoordinator({
@@ -234,65 +117,9 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       initialValue: { kind: "unsupported" },
       parse: parseStoredContext,
     })
-  const [downloadedChapters, setDownloadedChapters] = useState<
-    DownloadedChapterRecord[]
-  >([])
-  const latestDownloadStateRequestId = useRef(0)
-
-  const refreshDownloadedChapters = useCallback(async (): Promise<void> => {
-    const requestId = ++latestDownloadStateRequestId.current
-    try {
-      const response = await sendRuntimeMessage({
-        target: "background",
-        type: "GET_SIDEPANEL_DOWNLOAD_STATE",
-      })
-      if (!response.success) throw new Error(response.error)
-      if (requestId === latestDownloadStateRequestId.current) {
-        setDownloadedChapters(response.data.downloadedChapters)
-      }
-    } catch (error) {
-      if (requestId === latestDownloadStateRequestId.current) {
-        logger.debug("[sidepanel] Downloaded chapter query failed", error)
-      }
-    }
-  }, [])
+  const downloadedChapters = useSidepanelDownloadedChapters()
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void refreshDownloadedChapters()
-    })
-    const handleStorageChange = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: chrome.storage.AreaName
-    ): void => {
-      if (
-        areaName !== "local" ||
-        !(
-          LOCAL_STORAGE_KEYS.downloadedChapters in changes ||
-          LOCAL_STORAGE_KEYS.seriesDownloadHistory in changes ||
-          LOCAL_STORAGE_KEYS.downloadHistoryClearCutoffs in changes
-        )
-      ) {
-        return
-      }
-      void refreshDownloadedChapters()
-    }
-    chrome.storage.onChanged.addListener(handleStorageChange)
-    return () => {
-      latestDownloadStateRequestId.current += 1
-      chrome.storage.onChanged.removeListener(handleStorageChange)
-    }
-  }, [refreshDownloadedChapters])
-
-  useEffect(() => {
-    if (
-      !hydrated ||
-      typeof tabId !== "number" ||
-      typeof windowId !== "number"
-    ) {
-      return
-    }
-
     // A Side Panel can open after an MV3 worker restart or a dropped page
     // projection. Ask the background to own a fresh resolution instead of
     // leaving a persisted loading snapshot on screen indefinitely.
@@ -337,25 +164,10 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     windowId,
   ])
 
-  const data = useMemo(() => {
-    const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)
-    if (!derived.seriesId || derived.items.length === 0) return derived
-
-    const downloadedChapterIds = new Set(
-      downloadedChapters
-        .filter(
-          (chapter) =>
-            chapter.siteIntegrationId === derived.siteId &&
-            chapter.seriesId === derived.seriesId
-        )
-        .map((chapter) => chapter.chapterId)
-    )
-
-    return {
-      ...derived,
-      items: applyDownloadedChapterMarkers(derived.items, downloadedChapterIds),
-    }
-  }, [activeTabContext, downloadedChapters])
+  const data = useMemo(
+    () => deriveDownloadedSeriesContext(activeTabContext, downloadedChapters),
+    [activeTabContext, downloadedChapters]
+  )
 
   return {
     windowId,
@@ -368,10 +180,53 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     // Until the session snapshot has hydrated, an initial "unsupported"
     // placeholder is not a resolved result. Keep the loading projection so a
     // panel opening on a supported page does not flash the wrong state.
-    isLoading:
-      !hydrated ||
-      typeof windowId !== "number" ||
-      typeof tabId !== "number" ||
-      data.isLoading,
+    isLoading: isSeriesContextLoading(
+      hydrated,
+      windowId,
+      tabId,
+      data.isLoading
+    ),
+  }
+}
+
+function isSeriesContextLoading(
+  hydrated: boolean,
+  windowId: number | undefined,
+  tabId: number | undefined,
+  loading: boolean
+) {
+  return !hydrated || windowId === undefined || tabId === undefined || loading
+}
+
+function deriveDownloadedSeriesContext(
+  activeTabContext: ActiveTabContextValue,
+  downloadedChapters: DownloadedChapterRecord[]
+) {
+  const derived = deriveSeriesContextFromActiveTabContext(activeTabContext)
+  if (!derived.seriesId || derived.items.length === 0) return derived
+  const downloadedChapterResults = new Map(
+    downloadedChapters
+      .filter(
+        (chapter) =>
+          chapter.siteIntegrationId === derived.siteId &&
+          chapter.seriesId === derived.seriesId
+      )
+      .map(
+        (chapter) =>
+          [
+            chapter.chapterId,
+            {
+              outputDestination: chapter.outputDestination,
+              saveConfirmedAt: chapter.saveConfirmedAt,
+            },
+          ] as const
+      )
+  )
+  return {
+    ...derived,
+    items: applyDownloadedChapterMarkers(
+      derived.items,
+      downloadedChapterResults
+    ),
   }
 }

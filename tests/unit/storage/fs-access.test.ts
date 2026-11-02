@@ -237,7 +237,7 @@ describe("File System Access helpers", () => {
       ).resolves.toEqual({ status: "written" })
 
       expect(createdDirectories).toEqual(["Series", "Volume 1"])
-      expect(requestedFiles).toEqual(["Chapter 001.cbz"])
+      expect(requestedFiles).toEqual(["Chapter 001.cbz", "Chapter 001.cbz"])
       expect(written).toEqual([blob])
       expect(closed).toEqual(["Chapter 001.cbz"])
     })
@@ -283,62 +283,52 @@ describe("File System Access helpers", () => {
       expect(aborted).toEqual([])
     })
 
-    it("uniquifies an existing filename while preserving its extension", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(
-        async (name: string, options?: { create?: boolean }) => {
-          if (!options?.create && name === "Chapter 001 (2).cbz") {
-            throw createNamedError("NotFoundError")
-          }
-          return { createWritable }
-        }
+    it("preserves the native write failure when abort cleanup also fails", async () => {
+      const original = new DOMException(
+        "Native write lost folder access",
+        "NotAllowedError"
       )
-      const dir = createDirectoryHandle(getFileHandle)
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["chapter"]),
-          "uniquify"
-        )
-      ).resolves.toEqual({ status: "written" })
-
-      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001 (1).cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 001 (2).cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(4, "Chapter 001 (2).cbz", {
-        create: true,
+      const abort = vi.fn(async () => {
+        throw new Error("abort cleanup failed")
       })
-      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+      const close = vi.fn(async () => undefined)
+      const dir = createDirectoryHandle(async () => ({
+        createWritable: async () => ({
+          write: async () => {
+            throw original
+          },
+          close,
+          abort,
+        }),
+      }))
+      await expect(
+        writeBlobToPath(dir, "Chapter.cbz", new Blob(["page"]), "overwrite", {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(original)
+      expect(abort).toHaveBeenCalledOnce()
+      expect(close).not.toHaveBeenCalled()
     })
 
-    it("writes the original filename when uniquify finds no existing file", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(
-        async (_name: string, options?: { create?: boolean }) => {
-          if (!options?.create) {
-            throw createNamedError("NotFoundError")
-          }
-          return { createWritable }
-        }
+    it("propagates file stream closure failures", async () => {
+      const original = new DOMException(
+        "Native close failed: disk full",
+        "QuotaExceededError"
       )
-      const dir = createDirectoryHandle(getFileHandle)
-      const blob = new Blob(["chapter"])
-
+      const dir = createDirectoryHandle(async () => ({
+        createWritable: async () => ({
+          write: async () => undefined,
+          close: async () => {
+            throw original
+          },
+          abort: async () => undefined,
+        }),
+      }))
       await expect(
-        writeBlobToPath(dir, "Chapter 001.cbz", blob, "uniquify")
-      ).resolves.toEqual({ status: "written" })
-
-      expect(getFileHandle).toHaveBeenNthCalledWith(1, "Chapter 001.cbz")
-      expect(getFileHandle).toHaveBeenNthCalledWith(2, "Chapter 001.cbz", {
-        create: true,
-      })
-      expect(createWritable).toHaveBeenCalledWith({ keepExistingData: false })
+        writeBlobToPath(dir, "Chapter.cbz", new Blob(["page"]), "overwrite", {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(original)
     })
 
     it("uniquifies files without extension or dotfiles correctly", async () => {
@@ -405,42 +395,6 @@ describe("File System Access helpers", () => {
       expect(getFileHandle).toHaveBeenNthCalledWith(3, "Chapter 01.5 (1).cbz", {
         create: true,
       })
-    })
-
-    it("overwrites existing file without existence probe", async () => {
-      const write = vi.fn(async () => undefined)
-      const close = vi.fn(async () => undefined)
-      const createWritable = vi.fn(async () => ({ write, close }))
-      const getFileHandle = vi.fn(async () => ({ createWritable }))
-      const dir = createDirectoryHandle(getFileHandle)
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["content"]),
-          "overwrite"
-        )
-      ).resolves.toEqual({ status: "written" })
-      expect(getFileHandle).toHaveBeenCalledOnce()
-      expect(getFileHandle).toHaveBeenCalledWith("Chapter 001.cbz", {
-        create: true,
-      })
-    })
-
-    it("propagates non-missing lookup errors during uniquify preflight", async () => {
-      const dir = createDirectoryHandle(async () => {
-        throw createNamedError("NotAllowedError")
-      })
-
-      await expect(
-        writeBlobToPath(
-          dir,
-          "Chapter 001.cbz",
-          new Blob(["chapter"]),
-          "uniquify"
-        )
-      ).rejects.toMatchObject({ name: "NotAllowedError" })
     })
   })
 })

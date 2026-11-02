@@ -1,23 +1,29 @@
 import { useCallback, useMemo, useRef } from "react"
 import { Download } from "lucide-react"
-
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "@/src/shared/utils"
 import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
-import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
+import {
+  CommandCenterQueue,
+  type CommandCenterQueueProps,
+} from "@/entrypoints/sidepanel/components/CommandCenterQueue"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
+import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
+import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import type { CommandCenterTaskActionHandler } from "./command-center-queue-helpers"
 
 interface SidePanelQueueRegionProps {
   queueTasks: QueueTaskSummary[]
   historyTasks: QueueTaskSummary[]
   isLoading: boolean
+  readStatus: StorageReadStatus
+  onRefresh: () => Promise<void>
   isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
-  forgettingTaskIds: Set<string>
   retryingTaskIds: Set<string>
   restartingTaskIds: Set<string>
   removingTaskIds: Set<string>
@@ -25,92 +31,211 @@ interface SidePanelQueueRegionProps {
   activeTaskProgress: ActiveTaskProgressState | null
   showActiveProgress: boolean
   onCancelTask: (taskId: string) => CancelTaskResult | Promise<CancelTaskResult>
-  onForgetUnobservable: (taskId: string) => void | Promise<void>
-  onRetryFailed: (taskId: string) => void | Promise<void>
-  onRestartTask: (taskId: string) => void | Promise<void>
-  onMoveTaskToTop: (taskId: string) => void | Promise<void>
-  onRemoveTask: (taskId: string) => void | Promise<void>
+  onRetryFailed: CommandCenterTaskActionHandler
+  onRestartTask: CommandCenterTaskActionHandler
+  onMoveTaskToTop: CommandCenterTaskActionHandler
+  onRemoveTask: CommandCenterTaskActionHandler
   onViewFullHistory: () => void | Promise<void>
 }
 
-export function SidePanelQueueRegion({
+type QueueCommands = Omit<CommandCenterQueueProps, "tasks" | "emptyState">
+
+function QueueRegionTask({
+  task,
+  commands,
+}: {
+  task: QueueTaskSummary
+  commands: QueueCommands
+}) {
+  return (
+    <CommandCenterQueue
+      {...commands}
+      tasks={[task]}
+      activeTaskProgress={
+        task.status === "downloading" ? commands.activeTaskProgress : null
+      }
+      showActiveProgress={
+        task.status === "downloading" && commands.showActiveProgress
+      }
+    />
+  )
+}
+
+function QueueTaskList({
+  tasks,
+  commands,
+  isLoading,
+}: {
+  tasks: QueueTaskSummary[]
+  commands: QueueCommands
+  isLoading: boolean
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  // TanStack Virtual's imperative functions cannot be compiler-memoized.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: tasks.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 78,
+    overscan: 6,
+    // Preserve measured task identities across queue reordering.
+    getItemKey: (index) => tasks[index]?.id ?? index,
+  })
+  const measureRow = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element) virtualizer.measureElement(element)
+    },
+    [virtualizer]
+  )
+
+  if (isLoading || tasks.length === 0) return null
+  return (
+    <div
+      ref={scrollRef}
+      data-queue-scroll-container
+      className="min-h-0 flex-1 overflow-y-auto border-y border-border/50"
+    >
+      {tasks.length <= 24 ? (
+        tasks.map((task, index) => (
+          <div key={task.id} data-index={index} data-queue-task-id={task.id}>
+            <QueueRegionTask task={task} commands={commands} />
+          </div>
+        ))
+      ) : (
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+          }}
+        >
+          {virtualizer.getVirtualItems().map((item) => {
+            const task = tasks[item.index]
+            if (!task) return null
+            return (
+              <div
+                key={task.id}
+                data-index={item.index}
+                data-queue-task-id={task.id}
+                ref={measureRow}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${item.start}px)`,
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "auto 78px",
+                }}
+              >
+                <QueueRegionTask task={task} commands={commands} />
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QueueLoadingState({ visible }: { visible: boolean }) {
+  if (!visible) return null
+  return (
+    <div
+      className="flex flex-col gap-2 p-3"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={t("common_loading")}
+    >
+      <div
+        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        aria-hidden="true"
+      />
+      <div
+        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        aria-hidden="true"
+      />
+      <div
+        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        aria-hidden="true"
+      />
+    </div>
+  )
+}
+
+function QueueHistory(props: SidePanelQueueRegionProps) {
+  if (props.isLoading || props.isInlineSelectionOpen) return null
+  return (
+    <HistorySection
+      tasks={props.historyTasks}
+      isInlineSelectionOpen={props.isInlineSelectionOpen}
+      onViewFullHistory={props.onViewFullHistory}
+      onRetryFailed={props.onRetryFailed}
+      onRestartTask={props.onRestartTask}
+      onRemoveTask={props.onRemoveTask}
+      retryingTaskIds={props.retryingTaskIds}
+      restartingTaskIds={props.restartingTaskIds}
+      removingTaskIds={props.removingTaskIds}
+    />
+  )
+}
+
+function QueueEmptyState({
+  readStatus,
+  isInlineSelectionOpen,
   queueTasks,
   historyTasks,
-  isLoading,
-  isInlineSelectionOpen,
-  cancelingTaskIds,
-  forgettingTaskIds,
-  retryingTaskIds,
-  restartingTaskIds,
-  removingTaskIds,
-  movingTaskIds,
-  activeTaskProgress,
-  showActiveProgress,
-  onCancelTask,
-  onForgetUnobservable,
-  onRetryFailed,
-  onRestartTask,
-  onMoveTaskToTop,
-  onRemoveTask,
-  onViewFullHistory,
-}: SidePanelQueueRegionProps) {
-  const queueScrollRef = useRef<HTMLDivElement | null>(null)
-  const visibleQueueTasks = useMemo(
+}: Pick<
+  SidePanelQueueRegionProps,
+  "readStatus" | "isInlineSelectionOpen" | "queueTasks" | "historyTasks"
+>) {
+  if (
+    readStatus !== "ready" ||
+    isInlineSelectionOpen ||
+    queueTasks.length > 0 ||
+    historyTasks.length > 0
+  )
+    return null
+  return (
+    <div className="p-6 text-center">
+      <Download
+        className="size-8 mx-auto mb-2 text-muted-foreground/50"
+        aria-hidden="true"
+      />
+      <h3 className="font-medium text-sm mb-1">
+        {t("sidepanel_noDownloadsYet")}
+      </h3>
+      <p className="text-xs text-muted-foreground">
+        {t("sidepanel_useSelectChapters")}
+      </p>
+    </div>
+  )
+}
+
+export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
+  const { queueTasks, isInlineSelectionOpen } = props
+  const visibleTasks = useMemo(
     () =>
       isInlineSelectionOpen
         ? queueTasks.filter((task) => task.status === "downloading")
         : queueTasks,
     [isInlineSelectionOpen, queueTasks]
   )
-  // React Compiler safely skips this component because TanStack Virtual returns
-  // imperative functions whose identities cannot be compiler-memoized.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const queueVirtualizer = useVirtualizer({
-    count: visibleQueueTasks.length,
-    getScrollElement: () => queueScrollRef.current,
-    estimateSize: () => 78,
-    overscan: 6,
-    // Use stable task IDs as keys so the virtualizer's measurement cache
-    // survives reordering (e.g. moveTaskToTop) without DOM reuse bugs.
-    getItemKey: (index) => visibleQueueTasks[index]?.id ?? index,
-  })
-
-  const measureQueueRow = useCallback(
-    (element: HTMLDivElement | null) => {
-      if (!element) return
-      queueVirtualizer.measureElement(element)
-    },
-    [queueVirtualizer]
-  )
-
-  const hasAnyTask = queueTasks.length > 0 || historyTasks.length > 0
-  const firstQueuedTaskId = queueTasks.find(
-    (task) => task.status === "queued"
-  )?.id
-
-  const renderTask = (task: QueueTaskSummary) => (
-    <CommandCenterQueue
-      tasks={[task]}
-      activeTaskProgress={
-        task.status === "downloading" ? activeTaskProgress : null
-      }
-      showActiveProgress={task.status === "downloading" && showActiveProgress}
-      firstQueuedTaskId={firstQueuedTaskId}
-      onCancelTask={onCancelTask}
-      onForgetUnobservable={onForgetUnobservable}
-      cancelingTaskIds={cancelingTaskIds}
-      forgettingTaskIds={forgettingTaskIds}
-      retryingTaskIds={retryingTaskIds}
-      restartingTaskIds={restartingTaskIds}
-      removingTaskIds={removingTaskIds}
-      movingTaskIds={movingTaskIds}
-      onRetryFailed={onRetryFailed}
-      onRestartTask={onRestartTask}
-      onMoveTaskToTop={onMoveTaskToTop}
-      onRemoveTask={onRemoveTask}
-    />
-  )
-
+  const commands: QueueCommands = {
+    firstQueuedTaskId: queueTasks.find((task) => task.status === "queued")?.id,
+    activeTaskProgress: props.activeTaskProgress,
+    showActiveProgress: props.showActiveProgress,
+    onCancelTask: props.onCancelTask,
+    cancelingTaskIds: props.cancelingTaskIds,
+    retryingTaskIds: props.retryingTaskIds,
+    restartingTaskIds: props.restartingTaskIds,
+    removingTaskIds: props.removingTaskIds,
+    movingTaskIds: props.movingTaskIds,
+    onRetryFailed: props.onRetryFailed,
+    onRestartTask: props.onRestartTask,
+    onMoveTaskToTop: props.onMoveTaskToTop,
+    onRemoveTask: props.onRemoveTask,
+  }
   return (
     <div
       data-sidepanel-queue-region
@@ -120,109 +245,15 @@ export function SidePanelQueueRegion({
         isInlineSelectionOpen ? "grow-0" : "grow"
       )}
     >
-      {isLoading && !isInlineSelectionOpen && (
-        <div
-          className="flex flex-col gap-2 p-3"
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          aria-label={t("common_loading")}
-        >
-          <div
-            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
-            aria-hidden="true"
-          />
-          <div
-            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
-            aria-hidden="true"
-          />
-          <div
-            className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
-            aria-hidden="true"
-          />
-        </div>
-      )}
-
-      {!isLoading && visibleQueueTasks.length > 0 && (
-        <div
-          ref={queueScrollRef}
-          data-queue-scroll-container
-          className="min-h-0 flex-1 overflow-y-auto border-y border-border/50"
-        >
-          {visibleQueueTasks.length <= 24 ? (
-            visibleQueueTasks.map((task, index) => (
-              <div
-                key={task.id}
-                data-index={index}
-                data-queue-task-id={task.id}
-              >
-                {renderTask(task)}
-              </div>
-            ))
-          ) : (
-            <div
-              style={{
-                height: `${queueVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {queueVirtualizer.getVirtualItems().map((item) => {
-                const task = visibleQueueTasks[item.index]
-                if (!task) return null
-
-                return (
-                  <div
-                    key={task.id}
-                    data-index={item.index}
-                    data-queue-task-id={task.id}
-                    ref={measureQueueRow}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${item.start}px)`,
-                      contentVisibility: "auto",
-                      containIntrinsicSize: "auto 78px",
-                    }}
-                  >
-                    {renderTask(task)}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {!isLoading && !isInlineSelectionOpen && (
-        <HistorySection
-          tasks={historyTasks}
-          isInlineSelectionOpen={isInlineSelectionOpen}
-          onViewFullHistory={onViewFullHistory}
-          onRetryFailed={onRetryFailed}
-          onRestartTask={onRestartTask}
-          onRemoveTask={onRemoveTask}
-          retryingTaskIds={retryingTaskIds}
-          restartingTaskIds={restartingTaskIds}
-          removingTaskIds={removingTaskIds}
-        />
-      )}
-
-      {!isLoading && !isInlineSelectionOpen && !hasAnyTask && (
-        <div className="p-6 text-center">
-          <Download
-            className="size-8 mx-auto mb-2 text-muted-foreground/50"
-            aria-hidden="true"
-          />
-          <h3 className="font-medium text-sm mb-1">
-            {t("sidepanel_noDownloadsYet")}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {t("sidepanel_useSelectChapters")}
-          </p>
-        </div>
-      )}
+      <QueueReadNotice status={props.readStatus} onRetry={props.onRefresh} />
+      <QueueLoadingState visible={props.isLoading && !isInlineSelectionOpen} />
+      <QueueTaskList
+        tasks={visibleTasks}
+        commands={commands}
+        isLoading={props.isLoading}
+      />
+      <QueueHistory {...props} />
+      <QueueEmptyState {...props} />
     </div>
   )
 }

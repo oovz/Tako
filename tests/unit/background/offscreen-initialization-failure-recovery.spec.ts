@@ -36,7 +36,7 @@ describe("offscreen initialization failure recovery", () => {
       initializationState: "failed",
       documentInstanceId: "document-instance-1",
       activeJobCount: 0,
-      activeSeriesResolutionCount: 0,
+      activeTransientWorkCount: 0,
       activeTaskIds: [],
     })
     vi.stubGlobal("chrome", {
@@ -96,7 +96,7 @@ describe("offscreen initialization failure recovery", () => {
           initializationState: "failed",
           documentInstanceId: "document-instance-old",
           activeJobCount: 0,
-          activeSeriesResolutionCount: 0,
+          activeTransientWorkCount: 0,
           activeTaskIds: [],
         }
       })

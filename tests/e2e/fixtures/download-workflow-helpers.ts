@@ -1,37 +1,11 @@
-/**
- * @file download-workflow-helpers.ts
- * @description Shared helpers for `{integration}-download-workflow.spec.ts`.
- *
- * Every mocked download-workflow spec follows the same template:
- *
- * 1. Navigate a page to the series URL and wait for tab state.
- * 2. Open the extension options page so privileged Chrome APIs are
- *    reachable from a real page context.
- * 3. Seed an OPFS directory + `tako-fs/handles[download-root]` IndexedDB
- *    handle so custom-folder downloads land in a test-scoped sandbox
- *    instead of the user's Downloads.
- * 4. Apply custom-mode settings (defaultFormat `cbz`)
- *    so the archive writer goes through the OPFS path.
- * 5. Dispatch `START_DOWNLOAD` for one chapter and wait for the task to
- *    reach a terminal state.
- * 6. Assert success and verify at least one non-empty file appeared in the
- *    seeded OPFS directory.
- *
- * Shaping these as shared helpers keeps each spec focused on integration
- * specifics (URL, chapter dataset, preferences) without duplicating the
- * 100-line plumbing.
- */
-
 import type { BrowserContext, Page } from "@playwright/test"
 import { expect } from "@playwright/test"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { redactDiagnosticText } from "../../../src/runtime/diagnostic-redaction"
-import {
-  focusTab,
-  type QueueTestState,
-  waitForGlobalState,
-} from "./state-helpers"
+import { type QueueTestState, waitForGlobalState } from "./state-helpers"
+import { createCommandEnvelope } from "../../../src/runtime/command-envelope"
+import type { RuntimeMessageResponse } from "../../../src/runtime/runtime-message-contracts"
 
 export type StoredSiteIntegrationSettings = Record<
   string,
@@ -63,11 +37,7 @@ export interface StartDownloadInput {
   chapter: DownloadChapterSelection
 }
 
-/**
- * Open the extension options page in a fresh tab. Returned page has access
- * to privileged `chrome.*` APIs (storage, runtime.sendMessage) identical to
- * the extension's own pages. Specs MUST close this page in a `finally`.
- */
+/** Open a privileged Options page. The caller must close it in `finally`. */
 export async function openOptionsPage(
   context: BrowserContext,
   extensionId: string
@@ -79,16 +49,7 @@ export async function openOptionsPage(
   return page
 }
 
-/**
- * Seed a throwaway OPFS directory + `tako-fs/handles[download-root]`
- * IndexedDB entry so custom-folder downloads land in a spec-scoped
- * sandbox. Returns the directory name so the spec can inspect the
- * contents afterwards.
- *
- * Lifted from the live download-workflow spec to keep both paths
- * identical; if the production OPFS bootstrap changes, both live and
- * mocked e2e coverage break together.
- */
+/** Seed an isolated OPFS destination and return its directory name for inspection. */
 export async function seedCustomDirectoryHandle(
   optionsPage: Page
 ): Promise<string> {
@@ -100,7 +61,7 @@ export async function seedCustomDirectoryHandle(
     })
 
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("tako-fs", 1)
+      const request = indexedDB.open("tako-fs")
       request.onupgradeneeded = () => {
         const db = request.result
         if (!db.objectStoreNames.contains("handles")) {
@@ -164,11 +125,7 @@ export async function listSeededDirectoryFiles(
   }, directoryName)
 }
 
-/**
- * Read a file from a seeded OPFS directory. This is intentionally limited to
- * test fixtures so download-workflow specs can validate archive contents
- * rather than treating a non-empty output file alone as a correct result.
- */
+/** Read saved bytes from the test destination for artifact validation. */
 export async function readSeededDirectoryFile(
   optionsPage: Page,
   directoryName: string,
@@ -197,69 +154,64 @@ export async function readSeededDirectoryFile(
   return Uint8Array.from(bytes)
 }
 
-/**
- * Persist the download settings required to exercise the custom-folder
- * pipeline (destination = 'file-system-access', format = 'cbz', concurrency = 1) plus
- * any site-integration preferences the test needs. The background observes
- * the durable settings write through its synchronous storage subscriber.
- */
+export async function persistDownloadSettings(
+  optionsPage: Page,
+  patch: Partial<ExtensionSettings["downloads"]>,
+  siteSettingsPatch?: StoredSiteIntegrationSettings
+): Promise<ExtensionSettings> {
+  return await optionsPage.evaluate(
+    async ({ patch, sitePatch, command }) => {
+      const current: RuntimeMessageResponse<"GET_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "GET_OPTIONS_CONFIGURATION",
+        })
+      if (!current.success) throw new Error(current.error)
+      const configuration = current.data.configuration
+      const saved: RuntimeMessageResponse<"SAVE_OPTIONS_CONFIGURATION"> =
+        await chrome.runtime.sendMessage({
+          target: "background",
+          type: "SAVE_OPTIONS_CONFIGURATION",
+          ...command,
+          payload: {
+            configuration: {
+              ...configuration,
+              settings: {
+                ...configuration.settings,
+                downloads: { ...configuration.settings.downloads, ...patch },
+              },
+              integrationSettings: {
+                ...configuration.integrationSettings,
+                ...(sitePatch ?? {}),
+              },
+            },
+          },
+        })
+      if (!saved.success) throw new Error(saved.error)
+      return saved.data.settings
+    },
+    { patch, sitePatch: siteSettingsPatch, command: createCommandEnvelope() }
+  )
+}
+
+/** Persist the chosen-folder CBZ destination through the background owner. */
 export async function persistCustomModeDownloadSettings(
   optionsPage: Page,
   siteSettingsPatch?: StoredSiteIntegrationSettings
 ): Promise<void> {
-  const nextSettings = await optionsPage.evaluate(
-    async ({ sitePatch }: { sitePatch?: StoredSiteIntegrationSettings }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error(
-          "Missing persisted settings payload — extension did not hydrate defaults"
-        )
-      }
-
-      const mergedSettings: ExtensionSettings = {
-        ...baseSettings,
-        downloads: {
-          ...baseSettings.downloads,
-          destination: "file-system-access",
-          customDirectoryHandleId: "download-root",
-          defaultFormat: "cbz",
-          conflictPolicy: "overwrite",
-        },
-      }
-
-      const mergedSiteSettings: StoredSiteIntegrationSettings = {
-        ...(current.siteIntegrationSettings ?? {}),
-        ...(sitePatch ?? {}),
-      }
-
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      })
-
-      return {
-        globalSettings: mergedSettings,
-        siteIntegrationSettings: mergedSiteSettings,
-      }
+  const nextSettings = await persistDownloadSettings(
+    optionsPage,
+    {
+      destination: "file-system-access",
+      customDirectoryHandleId: "download-root",
+      defaultFormat: "cbz",
+      conflictPolicy: "overwrite",
     },
-    { sitePatch: siteSettingsPatch }
+    siteSettingsPatch
   )
-
-  expect(nextSettings.globalSettings.downloads.defaultFormat).toBe("cbz")
-  expect(nextSettings.globalSettings.downloads.destination).toBe(
-    "file-system-access"
-  )
-  expect(nextSettings.globalSettings.downloads.customDirectoryHandleId).toBe(
-    "download-root"
-  )
+  expect(nextSettings.downloads.defaultFormat).toBe("cbz")
+  expect(nextSettings.downloads.destination).toBe("file-system-access")
+  expect(nextSettings.downloads.customDirectoryHandleId).toBe("download-root")
 }
 
 /** Persist the default browser-download CBZ path used by fresh installs. */
@@ -267,39 +219,14 @@ export async function persistBrowserModeDownloadSettings(
   optionsPage: Page,
   siteSettingsPatch?: StoredSiteIntegrationSettings
 ): Promise<void> {
-  const nextSettings = await optionsPage.evaluate(
-    async ({ sitePatch }: { sitePatch?: StoredSiteIntegrationSettings }) => {
-      const current = (await chrome.storage.local.get([
-        "settings:global",
-        "siteIntegrationSettings",
-      ])) as {
-        "settings:global"?: ExtensionSettings
-        siteIntegrationSettings?: StoredSiteIntegrationSettings
-      }
-      const baseSettings = current["settings:global"]
-      if (!baseSettings) {
-        throw new Error("Missing persisted settings payload")
-      }
-      const mergedSettings: ExtensionSettings = {
-        ...baseSettings,
-        downloads: {
-          ...baseSettings.downloads,
-          destination: "downloads-api",
-          defaultFormat: "cbz",
-        },
-      }
-      await chrome.storage.local.set({
-        "settings:global": mergedSettings,
-        siteIntegrationSettings: {
-          ...(current.siteIntegrationSettings ?? {}),
-          ...(sitePatch ?? {}),
-        },
-      })
-      return mergedSettings
+  const nextSettings = await persistDownloadSettings(
+    optionsPage,
+    {
+      destination: "downloads-api",
+      defaultFormat: "cbz",
     },
-    { sitePatch: siteSettingsPatch }
+    siteSettingsPatch
   )
-
   expect(nextSettings.downloads.destination).toBe("downloads-api")
   expect(nextSettings.downloads.defaultFormat).toBe("cbz")
 }
@@ -335,32 +262,36 @@ export async function waitForBrowserDownloadArtifact(
  */
 export async function seedMangadexSessionPreferences(
   optionsPage: Page,
-  seriesId: string
+  seriesId: string,
+  filteredLanguages: string[] = []
 ): Promise<void> {
-  await optionsPage.evaluate(async (mangaId: string) => {
-    const storageKey = "mangadexUserPreferencesBySeries"
-    const current = (await chrome.storage.session.get(storageKey)) as Record<
-      string,
-      unknown
-    >
-    const existing = current[storageKey]
-    const bySeries =
-      existing && typeof existing === "object" && !Array.isArray(existing)
-        ? { ...(existing as Record<string, unknown>) }
-        : {}
+  await optionsPage.evaluate(
+    async ({ mangaId, languages }) => {
+      const storageKey = "mangadexUserPreferencesBySeries"
+      const current = (await chrome.storage.session.get(storageKey)) as Record<
+        string,
+        unknown
+      >
+      const existing = current[storageKey]
+      const bySeries =
+        existing && typeof existing === "object" && !Array.isArray(existing)
+          ? { ...(existing as Record<string, unknown>) }
+          : {}
 
-    bySeries[`mangadex#${mangaId}`] = {
-      dataSaver: false,
-      filteredLanguages: ["en"],
-    }
+      bySeries[`mangadex#${mangaId}`] = {
+        dataSaver: false,
+        filteredLanguages: languages,
+      }
 
-    await chrome.storage.session.set({ [storageKey]: bySeries })
-  }, seriesId)
+      await chrome.storage.session.set({ [storageKey]: bySeries })
+    },
+    { mangaId: seriesId, languages: filteredLanguages }
+  )
 }
 
 /**
  * Dispatch `START_DOWNLOAD` for one chapter and return the queue task id.
- * Mirrors the live helper so spec assertions share the same oracle.
+ * Shared by deterministic and live workflows after the caller selects a chapter.
  */
 export async function startSingleChapterDownload(
   optionsPage: Page,
@@ -399,100 +330,115 @@ export async function startSingleChapterDownload(
       )
       .toBe(true)
 
-    await focusTab(optionsPage.context(), input.sourceTabId)
+    // The synthetic Side Panel is a tab. A later Playwright evaluation can
+    // activate it and invalidate the source projection. Keep source activation,
+    // resolution, snapshot capture and dispatch in this single evaluation.
+    const response = await sidepanelPage.evaluate(async (input) => {
+      const sourceTab = await chrome.tabs.get(input.sourceTabId)
+      await chrome.tabs.update(input.sourceTabId, {
+        active: true,
+      })
+      const refreshed = await chrome.runtime.sendMessage({
+        target: "background",
+        type: "REQUEST_TAB_CONTEXT_REFRESH",
+        payload: { tabId: input.sourceTabId, windowId: sourceTab.windowId },
+      })
+      if (!refreshed?.success) {
+        throw new Error("Unable to resolve source context before downloading")
+      }
 
-    // Wait for the source tab to own the window projection AND capture the
-    // dispatch snapshot in the same read. Validating and capturing in one
-    // tick removes the wait-then-reread window where a late background write
-    // (e.g. the Side Panel projection resolving after source activation)
-    // could bump the revision between the wait and the snapshot read. A
-    // write that still lands after this tick is rejected by the background's
-    // own stale_series_context validation when START_DOWNLOAD is applied.
-    let snapshotIdentity:
-      | {
-          sourceWindowId: number
-          sourceTabId: number
-          sourceUrl: string
-          siteIntegrationId: string
-          seriesId: string
-          seriesRevision: number
-        }
-      | undefined
-    await expect
-      .poll(
-        async () => {
-          const snapshot = await optionsPage.evaluate(async (sourceTabId) => {
-            const tab = await chrome.tabs.get(sourceTabId)
-            const stored = await chrome.storage.session.get(
-              "activeTabContextByWindow"
-            )
-            const projection = (
-              stored.activeTabContextByWindow as
-                | Record<
-                    string,
-                    {
-                      activeTabId?: number
-                      revision?: number
-                      context?: {
-                        sourceUrl?: string
-                        siteIntegrationId?: string
-                        mangaId?: string
-                        chaptersLoading?: boolean
-                      }
-                    }
-                  >
-                | undefined
-            )?.[String(tab.windowId)]
-            if (
-              tab.active !== true ||
-              projection?.activeTabId !== sourceTabId ||
-              typeof projection.revision !== "number" ||
-              typeof projection.context?.sourceUrl !== "string" ||
-              typeof projection.context.siteIntegrationId !== "string" ||
-              typeof projection.context.mangaId !== "string" ||
-              projection.context.chaptersLoading === true
-            ) {
-              return null
-            }
-            return {
+      const deadline = Date.now() + 15_000
+      let observed: Record<string, boolean> | undefined
+      while (Date.now() < deadline) {
+        const tab = await chrome.tabs.get(input.sourceTabId)
+        const stored = await chrome.storage.session.get(
+          "activeTabContextByWindow"
+        )
+        const projection = (
+          stored.activeTabContextByWindow as
+            | Record<
+                string,
+                {
+                  activeTabId?: number
+                  revision?: number
+                  context?: {
+                    sourceUrl?: string
+                    siteIntegrationId?: string
+                    mangaId?: string
+                    chaptersLoading?: boolean
+                    chapters?: Array<{ id: string; locked?: boolean }>
+                  }
+                }
+              >
+            | undefined
+        )?.[String(tab.windowId)]
+        const current = projection?.context
+        if (
+          tab.active === true &&
+          !tab.pendingUrl &&
+          projection?.activeTabId === input.sourceTabId &&
+          typeof projection.revision === "number" &&
+          typeof current?.sourceUrl === "string" &&
+          current.sourceUrl === tab.url &&
+          current.siteIntegrationId === input.siteIntegrationId &&
+          current.mangaId === input.mangaId &&
+          current.chaptersLoading !== true &&
+          current.chapters?.some(
+            (chapter) =>
+              chapter.id === input.chapter.id && chapter.locked !== true
+          )
+        ) {
+          const result = (await chrome.runtime.sendMessage({
+            target: "background",
+            type: "START_DOWNLOAD",
+            commandId: crypto.randomUUID(),
+            issuedAt: Date.now(),
+            payload: {
               sourceWindowId: tab.windowId,
-              sourceTabId,
-              sourceUrl: projection.context.sourceUrl,
-              siteIntegrationId: projection.context.siteIntegrationId,
-              seriesId: projection.context.mangaId,
+              sourceTabId: input.sourceTabId,
+              sourceUrl: current.sourceUrl,
+              siteIntegrationId: current.siteIntegrationId,
+              seriesId: current.mangaId,
               seriesRevision: projection.revision,
-            }
-          }, input.sourceTabId)
-          if (snapshot) {
-            snapshotIdentity = snapshot
-            return true
+              selectedChapterIds: [input.chapter.id],
+            },
+          })) as {
+            success?: boolean
+            taskId?: string
+            error?: string
+            code?: string
           }
-          return false
-        },
-        { timeout: 15_000, intervals: [100] }
-      )
-      .toBe(true)
-    if (!snapshotIdentity) {
+          if (
+            result?.success !== false ||
+            result.code !== "stale_series_context"
+          ) {
+            return result
+          }
+          // A stale rejection enqueues nothing. Read the newer projection
+          // before dispatching again within this same bounded deadline.
+        }
+        observed = {
+          active: tab.active,
+          pendingNavigation: Boolean(tab.pendingUrl),
+          ownsProjection: projection?.activeTabId === input.sourceTabId,
+          hasRevision: typeof projection?.revision === "number",
+          urlMatches: current?.sourceUrl === tab.url,
+          integrationMatches:
+            current?.siteIntegrationId === input.siteIntegrationId,
+          seriesMatches: current?.mangaId === input.mangaId,
+          chaptersComplete: current?.chaptersLoading !== true,
+          hasChapter:
+            current?.chapters?.some(
+              (chapter) =>
+                chapter.id === input.chapter.id && chapter.locked !== true
+            ) === true,
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
       throw new Error(
-        `No current series context snapshot for tab ${input.sourceTabId}`
+        `No current series context snapshot for tab ${input.sourceTabId}: ${JSON.stringify(observed)}`
       )
-    }
-    const response = await sidepanelPage.evaluate(
-      async (payload) => {
-        const issuedAt = Date.now()
-        return (await chrome.runtime.sendMessage({
-          target: "background",
-          type: "START_DOWNLOAD",
-          commandId: crypto.randomUUID(),
-          issuedAt,
-          payload: {
-            ...payload.snapshotIdentity,
-            selectedChapterIds: [payload.chapter.id],
-          },
-        })) as { success?: boolean; taskId?: string; error?: string }
-      },
-      { chapter: input.chapter, snapshotIdentity }
-    )
+    }, input)
 
     expect(
       response?.success,
@@ -541,12 +487,7 @@ export async function waitForTerminalTask(
   return task
 }
 
-/**
- * Assert the task reached a successful terminal state. Raises with a
- * diagnostic error body on failure so the spec failure message includes
- * chapter-level status, which usually points at the broken stage
- * (fetch / parse / descramble / archive).
- */
+/** Assert success with chapter-level diagnostics on failure. */
 export function assertTaskSucceeded(task: DownloadTaskState): void {
   const hasOnlyCompletedOutput = task.chapters.every((chapter) => {
     if (chapter.status !== "completed" || (chapter.imagesFailed ?? 0) > 0) {

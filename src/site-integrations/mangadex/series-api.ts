@@ -12,31 +12,33 @@ import {
   MANGADEX_UPLOADS_BASE,
   mapCommunityRatingToFiveScale,
   type MangadexRelationship,
+  type MangadexMangaResponse,
+  type MangadexChapterFeedResponse,
 } from "./api"
 import { resolveMangadexChapterFeedOptions } from "./preferences"
 import type { MangadexUserPreferences } from "./preferences-schema"
 import type { SiteIntegrationSettingsReader } from "@/src/types/site-integrations"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
 
+function extractAlternativePreferredTitle(
+  altTitles: Array<Record<string, string>> = []
+): string {
+  const englishTitle = altTitles.find((alt) => alt.en)?.en
+  const firstAlt = altTitles[0] ?? {}
+  const firstAltKey = Object.keys(firstAlt)[0]
+  return englishTitle ?? (firstAltKey ? firstAlt[firstAltKey] : "Unknown Title")
+}
+
 function extractPreferredTitle(
   titles: Record<string, string>,
   altTitles?: Array<Record<string, string>>
 ): string {
-  if (titles.en) return titles.en
-  if (titles["ja-ro"]) return titles["ja-ro"]
+  const preferred = titles.en || titles["ja-ro"]
+  if (preferred) return preferred
   const firstKey = Object.keys(titles)[0]
-  if (firstKey) return titles[firstKey]
-
-  if (altTitles && altTitles.length > 0) {
-    for (const alt of altTitles) {
-      if (alt.en) return alt.en
-    }
-    const firstAlt = altTitles[0]
-    const firstAltKey = Object.keys(firstAlt)[0]
-    if (firstAltKey) return firstAlt[firstAltKey]
-  }
-
-  return "Unknown Title"
+  return firstKey
+    ? titles[firstKey]
+    : extractAlternativePreferredTitle(altTitles)
 }
 
 function extractAlternativeTitles(
@@ -89,24 +91,12 @@ function buildCoverUrl(
   return `${MANGADEX_UPLOADS_BASE}/covers/${mangaId}/${fileName}`
 }
 
-function extractAuthor(
-  relationships: MangadexRelationship[]
+function extractRelationshipName(
+  relationships: MangadexRelationship[],
+  role: "author" | "artist"
 ): string | undefined {
-  const authorRel = relationships.find(
-    (relationship) => relationship.type === "author"
-  )
-  if (!authorRel?.attributes) return undefined
-  return authorRel.attributes.name as string | undefined
-}
-
-function extractArtist(
-  relationships: MangadexRelationship[]
-): string | undefined {
-  const artistRel = relationships.find(
-    (relationship) => relationship.type === "artist"
-  )
-  if (!artistRel?.attributes) return undefined
-  return artistRel.attributes.name as string | undefined
+  return relationships.find((relationship) => relationship.type === role)
+    ?.attributes?.name as string | undefined
 }
 
 function mapMangadexReadingDirection(
@@ -136,6 +126,30 @@ function buildMangadexVolumeId(volumeLabel: string): string {
   return `mangadex-volume-${volumeLabel.trim().toLowerCase().replace(/\s+/g, "-")}`
 }
 
+function extractMangadexTaxonomy(
+  attrs: MangadexMangaResponse["data"]["attributes"]
+): Pick<SeriesMetadata, "genres" | "tags" | "readingDirection"> {
+  const tagNames = attrs.tags
+    ?.map((tag) => tag.attributes?.name?.en)
+    .filter((name): name is string => typeof name === "string")
+  const publicationDemographic = formatPublicationDemographic(
+    attrs.publicationDemographic
+  )
+  const genres = Array.from(
+    new Set([
+      ...(publicationDemographic ? [publicationDemographic] : []),
+      ...(tagNames ?? []),
+    ])
+  )
+  const tags =
+    tagNames && tagNames.length > 0 ? Array.from(new Set(tagNames)) : undefined
+  return {
+    genres: genres.length > 0 ? genres : undefined,
+    tags,
+    readingDirection: mapMangadexReadingDirection(tags),
+  }
+}
+
 export async function fetchMangadexSeriesMetadata(
   seriesId: string,
   rateLimitService: RateLimitService,
@@ -155,137 +169,119 @@ export async function fetchMangadexSeriesMetadata(
     ),
   ])
   const attrs = data.data.attributes
-
   const title = extractPreferredTitle(attrs.title, attrs.altTitles)
-  const description =
-    attrs.description?.en || Object.values(attrs.description || {})[0]
-  const status = attrs.status
-  const tagNames = attrs.tags
-    ?.map((tag) => tag.attributes?.name?.en)
-    .filter((name): name is string => typeof name === "string")
-  const publicationDemographic = formatPublicationDemographic(
-    attrs.publicationDemographic
-  )
-  const genres = Array.from(
-    new Set([
-      ...(publicationDemographic ? [publicationDemographic] : []),
-      ...(tagNames ?? []),
-    ])
-  )
-  const alternativeTitles = extractAlternativeTitles(attrs.altTitles, title)
-  const author = extractAuthor(data.data.relationships)
-  const artist = extractArtist(data.data.relationships)
-  const coverUrl = buildCoverUrl(seriesId, data.data.relationships)
-  const communityRating = statisticsResult
-    ? mapCommunityRatingToFiveScale(statisticsResult, seriesId)
-    : undefined
-  const contentRating =
-    typeof attrs.contentRating === "string" ? attrs.contentRating : undefined
-  const language =
-    typeof attrs.originalLanguage === "string"
-      ? attrs.originalLanguage
-      : undefined
-  const year = typeof attrs.year === "number" ? attrs.year : undefined
-  const tags =
-    tagNames && tagNames.length > 0 ? Array.from(new Set(tagNames)) : undefined
-  const readingDirection = mapMangadexReadingDirection(tags)
-
   return {
     title,
-    author,
-    artist,
-    description,
-    genres: genres.length > 0 ? genres : undefined,
-    status,
-    coverUrl,
-    communityRating,
-    contentRating,
-    readingDirection,
-    year,
-    language,
-    alternativeTitles,
-    tags,
+    author: extractRelationshipName(data.data.relationships, "author"),
+    artist: extractRelationshipName(data.data.relationships, "artist"),
+    description:
+      attrs.description?.en || Object.values(attrs.description || {})[0],
+    ...extractMangadexTaxonomy(attrs),
+    status: attrs.status,
+    coverUrl: buildCoverUrl(seriesId, data.data.relationships),
+    communityRating: statisticsResult
+      ? mapCommunityRatingToFiveScale(statisticsResult, seriesId)
+      : undefined,
+    contentRating: attrs.contentRating,
+    year: attrs.year,
+    language: attrs.originalLanguage,
+    alternativeTitles: extractAlternativeTitles(attrs.altTitles, title),
   }
 }
 
-function mapFeedChapterToChapter(
-  entry: NonNullable<
-    ReturnType<typeof fetchChapterFeed> extends Promise<infer TResult>
-      ? TResult
-      : never
-  >["data"][number]
-): Chapter | null {
-  if (
-    !entry ||
-    typeof entry.id !== "string" ||
-    typeof entry.attributes !== "object" ||
-    entry.attributes === null
-  ) {
-    logger.warn("[mangadex] Skipping malformed chapter entry in feed response")
-    return null
-  }
+type MangadexFeedChapter = MangadexChapterFeedResponse["data"][number]
 
+function isDownloadableMangadexChapter(entry: MangadexFeedChapter): boolean {
   const attrs = entry.attributes
   if (!attrs.translatedLanguage) {
     logger.warn(
       `[mangadex] Skipping malformed chapter entry with missing language: ${entry.id}`
     )
-    return null
+    return false
   }
-
   const isExternal = Boolean(attrs.externalUrl)
   const pageCount = typeof attrs.pages === "number" ? attrs.pages : 0
-  const isUnavailable = pageCount === 0
-
-  if (isExternal || isUnavailable) {
+  if (isExternal || pageCount === 0) {
     logger.debug(
       `[mangadex] Skipping ${isExternal ? "external" : "unavailable"} chapter: ${entry.id}`
     )
-    return null
+    return false
   }
+  return true
+}
 
-  const chapterNum = attrs.chapter ? parseFloat(attrs.chapter) : undefined
-  const rawVolume = typeof attrs.volume === "string" ? attrs.volume.trim() : ""
-  const volumeNum = rawVolume ? parseInt(rawVolume, 10) : undefined
-  const volumeLabel = rawVolume ? `Vol. ${rawVolume}` : undefined
-  const volumeId = rawVolume ? buildMangadexVolumeId(rawVolume) : undefined
-
-  let title = attrs.title || ""
-  if (!title && attrs.chapter) {
-    title = `Chapter ${attrs.chapter}`
+function mapMangadexChapterPosition(
+  attrs: MangadexFeedChapter["attributes"]
+): Pick<Chapter, "chapterNumber" | "chapterLabel"> {
+  const chapterNumber = attrs.chapter ? parseFloat(attrs.chapter) : undefined
+  return {
+    chapterNumber: Number.isNaN(chapterNumber) ? undefined : chapterNumber,
+    chapterLabel:
+      typeof attrs.chapter === "string" && attrs.chapter.trim().length > 0
+        ? attrs.chapter.trim()
+        : undefined,
   }
-  if (!title) {
-    title = `Chapter ${entry.id.slice(0, 8)}`
-  }
+}
 
-  const chapter: Chapter = {
+function mapMangadexChapterVolume(
+  volume: MangadexFeedChapter["attributes"]["volume"]
+): Pick<Chapter, "volumeId" | "volumeNumber" | "volumeLabel"> {
+  const label = typeof volume === "string" ? volume.trim() : ""
+  if (!label)
+    return {
+      volumeId: undefined,
+      volumeNumber: undefined,
+      volumeLabel: undefined,
+    }
+  const volumeNumber = parseInt(label, 10)
+  return {
+    volumeId: buildMangadexVolumeId(label),
+    volumeNumber: Number.isNaN(volumeNumber) ? undefined : volumeNumber,
+    volumeLabel: `Vol. ${label}`,
+  }
+}
+
+function mapFeedChapterToChapter(entry: MangadexFeedChapter): Chapter | null {
+  if (!isDownloadableMangadexChapter(entry)) return null
+  const attrs = entry.attributes
+  const title =
+    attrs.title ||
+    (attrs.chapter
+      ? `Chapter ${attrs.chapter}`
+      : `Chapter ${entry.id.slice(0, 8)}`)
+  return {
     id: entry.id,
     url: `${MANGADEX_SITE_BASE}/chapter/${entry.id}`,
     title,
     locked: false,
     language: attrs.translatedLanguage,
-    chapterLabel:
-      typeof attrs.chapter === "string" && attrs.chapter.trim().length > 0
-        ? attrs.chapter.trim()
-        : undefined,
-    chapterNumber: Number.isNaN(chapterNum) ? undefined : chapterNum,
-    volumeId,
-    volumeNumber: Number.isNaN(volumeNum) ? undefined : volumeNum,
-    volumeLabel,
-    comicInfo: {
-      Title: title,
-      LanguageISO: attrs.translatedLanguage,
-    },
+    ...mapMangadexChapterPosition(attrs),
+    ...mapMangadexChapterVolume(attrs.volume),
+    comicInfo: { Title: title, LanguageISO: attrs.translatedLanguage },
   }
+}
 
-  return chapter
+type MangadexVolume = VolumeState & {
+  volumeNumber?: number
+  firstIndex: number
+}
+
+function compareMangadexVolumes(
+  left: MangadexVolume,
+  right: MangadexVolume
+): number {
+  if (
+    left.volumeNumber !== undefined &&
+    right.volumeNumber !== undefined &&
+    left.volumeNumber !== right.volumeNumber
+  ) {
+    return left.volumeNumber - right.volumeNumber
+  }
+  return left.firstIndex - right.firstIndex
 }
 
 function buildMangadexVolumes(chapters: Chapter[]): VolumeState[] {
-  const volumeById = new Map<
-    string,
-    VolumeState & { volumeNumber?: number; firstIndex: number }
-  >()
+  const volumeById = new Map<string, MangadexVolume>()
 
   chapters.forEach((chapter, index) => {
     if (!chapter.volumeId) {
@@ -307,22 +303,51 @@ function buildMangadexVolumes(chapters: Chapter[]): VolumeState[] {
   })
 
   return Array.from(volumeById.values())
-    .sort((left, right) => {
-      if (
-        left.volumeNumber !== undefined &&
-        right.volumeNumber !== undefined &&
-        left.volumeNumber !== right.volumeNumber
-      ) {
-        return left.volumeNumber - right.volumeNumber
-      }
-
-      return left.firstIndex - right.firstIndex
-    })
+    .sort(compareMangadexVolumes)
     .map((volume) => ({
       id: volume.id,
       title: volume.title,
       label: volume.label,
     }))
+}
+
+function collectMangadexFeedChapters(
+  entries: MangadexFeedChapter[],
+  chapterById: Map<string, Chapter>,
+  duplicateChapterIds: Set<string>
+): void {
+  for (const entry of entries) {
+    const chapter = mapFeedChapterToChapter(entry)
+    if (!chapter) continue
+    if (chapterById.has(chapter.id)) {
+      duplicateChapterIds.add(chapter.id)
+      continue
+    }
+    chapterById.set(chapter.id, chapter)
+  }
+}
+
+function warnMangadexPaginationLimit(offset: number, total: number): void {
+  if (offset === 0 && total > 10000) {
+    logger.warn(
+      `[mangadex] Series has ${total} chapters but only first 10000 can be retrieved due to API pagination limit`
+    )
+  }
+}
+
+function logMangadexDuplicateChapters(
+  seriesId: string,
+  duplicateChapterIds: Set<string>
+): void {
+  if (duplicateChapterIds.size > 0) {
+    logger.error(
+      "[mangadex] Duplicate chapter ids detected in fetchChapterList",
+      {
+        seriesId,
+        duplicateChapterIds: [...duplicateChapterIds],
+      }
+    )
+  }
 }
 
 export async function fetchMangadexChapterList(
@@ -364,39 +389,14 @@ export async function fetchMangadexChapterList(
     )
     total = feed.total
 
-    if (offset === 0 && total > 10000) {
-      logger.warn(
-        `[mangadex] Series has ${total} chapters but only first 10000 can be retrieved due to API pagination limit`
-      )
-    }
-
-    for (const entry of feed.data) {
-      const chapter = mapFeedChapterToChapter(entry)
-      if (!chapter) {
-        continue
-      }
-
-      if (chapterById.has(chapter.id)) {
-        duplicateChapterIds.add(chapter.id)
-        continue
-      }
-
-      chapterById.set(chapter.id, chapter)
-    }
+    warnMangadexPaginationLimit(offset, total)
+    collectMangadexFeedChapters(feed.data, chapterById, duplicateChapterIds)
 
     offset += limit
     if (feed.data.length < limit) break
   }
 
-  if (duplicateChapterIds.size > 0) {
-    logger.error(
-      "[mangadex] Duplicate chapter ids detected in fetchChapterList",
-      {
-        seriesId,
-        duplicateChapterIds: [...duplicateChapterIds],
-      }
-    )
-  }
+  logMangadexDuplicateChapters(seriesId, duplicateChapterIds)
 
   const chapters = Array.from(chapterById.values())
   return {

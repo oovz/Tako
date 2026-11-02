@@ -29,14 +29,11 @@ function parsePayload(
   if (!value) {
     return null
   }
-  for (const candidate of [value, decodeHtmlAttributeEntities(value)]) {
-    try {
-      return parseEpisodeJsonPayload(JSON.parse(candidate))
-    } catch {
-      // Try the decoded attribute representation next.
-    }
+  try {
+    return parseEpisodeJsonPayload(JSON.parse(value))
+  } catch {
+    return null
   }
-  return null
 }
 
 export function readEpisodeJsonAttributeFromHtml(html: string): string | null {
@@ -54,7 +51,22 @@ export function readEpisodeJsonAttributeFromHtml(html: string): string | null {
   if (!scriptTag) {
     return null
   }
-  return scriptTag.match(/\bdata-value\s*=\s*(["'])([\s\S]*?)\1/i)?.[2] ?? null
+  const attribute = scriptTag.match(
+    /\bdata-value\s*=\s*(["'])([\s\S]*?)\1/i
+  )?.[2]
+  return attribute ? decodeHtmlAttributeEntities(attribute) : null
+}
+
+function normalizeSeriesCoverUrl(
+  thumbnailUri: string | undefined,
+  baseUrl: string
+): string | undefined {
+  if (!thumbnailUri) return undefined
+  return assertIntegrationEndpointRequestUrl(
+    "shonenjumpplus",
+    "shonenjumpplus-image-cdn",
+    new URL(thumbnailUri, baseUrl).href
+  ).href
 }
 
 function normalizeEpisodeJsonSeriesMetadata(
@@ -62,25 +74,16 @@ function normalizeEpisodeJsonSeriesMetadata(
   baseUrl: string
 ): EpisodeJsonSeriesMetadata {
   const series = payload?.readableProduct?.series
-  const seriesId =
-    typeof series?.id === "string" && /^\d+$/.test(series.id)
-      ? series.id
-      : undefined
-  const seriesTitle =
-    typeof series?.title === "string" ? sanitizeLabel(series.title) : ""
-  const seriesThumbnailUri =
-    typeof series?.thumbnailUri === "string" ? series.thumbnailUri : ""
-  const coverUrl = seriesThumbnailUri
-    ? assertIntegrationEndpointRequestUrl(
-        "shonenjumpplus",
-        "shonenjumpplus-image-cdn",
-        new URL(seriesThumbnailUri, baseUrl).href
-      ).href
-    : undefined
+  if (!series)
+    return {
+      seriesId: undefined,
+      seriesTitle: undefined,
+      seriesThumbnailUri: undefined,
+    }
   return {
-    seriesId,
-    seriesTitle: seriesTitle || undefined,
-    seriesThumbnailUri: coverUrl,
+    seriesId: series.id && /^\d+$/.test(series.id) ? series.id : undefined,
+    seriesTitle: sanitizeLabel(series.title ?? "") || undefined,
+    seriesThumbnailUri: normalizeSeriesCoverUrl(series.thumbnailUri, baseUrl),
   }
 }
 
@@ -90,6 +93,14 @@ export function readEpisodeJsonSeriesMetadataFromHtml(
 ): EpisodeJsonSeriesMetadata {
   const attribute = readEpisodeJsonAttributeFromHtml(html)
   return normalizeEpisodeJsonSeriesMetadata(parsePayload(attribute), baseUrl)
+}
+
+function mainPageImageUrl(page: { src?: string }): string {
+  if (typeof page.src !== "string" || page.src.length === 0)
+    throw new ProviderContractError(
+      "Shonen Jump+ main page is missing its image URL."
+    )
+  return page.src
 }
 
 export function extractImageUrlsFromEpisodeJsonScript(html: string): string[] {
@@ -109,12 +120,7 @@ export function extractImageUrlsFromEpisodeJsonScript(html: string): string[] {
   const imageUrls: string[] = []
   for (const page of pages) {
     if (page.type !== "main") continue
-    if (typeof page.src !== "string" || page.src.length === 0) {
-      throw new ProviderContractError(
-        "Shonen Jump+ main page is missing its image URL."
-      )
-    }
-    imageUrls.push(page.src)
+    imageUrls.push(mainPageImageUrl(page))
   }
   return imageUrls
 }

@@ -2,6 +2,7 @@ import type {
   InlineSelectionPresentationBySeries,
   InlineSelectionPresentationState,
   VolumeOrChapter,
+  SidePanelChapter,
 } from "@/entrypoints/sidepanel/types"
 
 export interface InlineSelectionViewSummary {
@@ -13,6 +14,14 @@ export interface InlineSelectionViewSummary {
 const DEFAULT_PRESENTATION: InlineSelectionPresentationState = {
   viewMode: "volumes",
   collapsedGroupIds: [],
+}
+
+export function getInlineSelectionPresentation(
+  presentationBySeries: InlineSelectionPresentationBySeries,
+  seriesKey: string | undefined
+): InlineSelectionPresentationState {
+  if (!seriesKey) return DEFAULT_PRESENTATION
+  return presentationBySeries[seriesKey] ?? DEFAULT_PRESENTATION
 }
 
 /**
@@ -35,12 +44,8 @@ export function updateInlineSelectionPresentation(
 }
 
 /**
- * Build the display items from raw data, applying selection state from
- * `selectedChapterIds`.
- *
- * Collapse state is intentionally not projected into every item. It is passed
- * separately to ChapterSelector so toggling one volume does not clone every
- * chapter in a large series.
+ * Apply selected chapter IDs to the raw items. Collapse state remains
+ * separate so toggling a group does not rebuild the chapter list.
  */
 export function buildInlineSelectionItems(
   items: VolumeOrChapter[],
@@ -101,4 +106,34 @@ export function getInlineSelectionViewSummary(
     volumeCount,
     canToggleView: volumeCount > 0,
   }
+}
+
+export function getInlineSelectionChapters(
+  items: VolumeOrChapter[]
+): SidePanelChapter[] {
+  return items.flatMap((item) => ("chapters" in item ? item.chapters : [item]))
+}
+
+export function getInlineSelectionCounts(chapters: SidePanelChapter[]): {
+  selectedCount: number
+  selectableCount: number
+} {
+  const selectable = chapters.filter((chapter) => chapter.locked !== true)
+  return {
+    selectedCount: selectable.filter((chapter) => chapter.selected).length,
+    selectableCount: selectable.length,
+  }
+}
+
+export function updateCollapsedInlineGroups(
+  previous: InlineSelectionPresentationState,
+  updater: (previous: Set<string>) => Set<string>
+): InlineSelectionPresentationState {
+  const collapsedGroupIds = [...updater(new Set(previous.collapsedGroupIds))]
+  const isUnchanged =
+    collapsedGroupIds.length === previous.collapsedGroupIds.length &&
+    collapsedGroupIds.every(
+      (groupId, index) => groupId === previous.collapsedGroupIds[index]
+    )
+  return isUnchanged ? previous : { ...previous, collapsedGroupIds }
 }

@@ -120,9 +120,9 @@ global.window = global as unknown as Window & typeof globalThis
 global.HTMLElement = class {} as unknown as typeof HTMLElement
 global.HTMLDivElement = class {} as unknown as typeof HTMLDivElement
 
-describe("NONE format + browser downloads contract (behavior-based)", () => {
+describe("loose image saves through Chrome", () => {
   let worker: InstanceType<
-    typeof import("@/entrypoints/offscreen/main").OffscreenWorker
+    typeof import("@/entrypoints/offscreen/main-worker").OffscreenWorker
   >
   let mockDownloadImage: ReturnType<typeof vi.fn>
 
@@ -132,7 +132,7 @@ describe("NONE format + browser downloads contract (behavior-based)", () => {
     vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:mock-url")
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined)
 
-    const module = await import("@/entrypoints/offscreen/main")
+    const module = await import("@/entrypoints/offscreen/main-worker")
     worker = new module.OffscreenWorker()
 
     mockDownloadImage = vi.fn().mockImplementation(async (url: string) => ({

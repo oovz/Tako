@@ -1,11 +1,6 @@
 name: CI
 
-# Continuous integration for branch pushes and pull requests. Release
-# verification on tag pushes is handled by release.yml, which calls the same
-# reusable quality-e2e.yml workflow so verification steps stay in one place.
-# Keeping tags out of this trigger avoids a duplicate CI run when a developer
-# pushes main and a tag in the same `git push` (each ref update emits its own
-# push event; see https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#push).
+# Verify branch pushes and pull requests with the shared quality workflow.
 
 on:
   push:

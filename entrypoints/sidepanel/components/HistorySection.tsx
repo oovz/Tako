@@ -3,14 +3,15 @@ import React from "react"
 import { CommandCenterQueue } from "@/entrypoints/sidepanel/components/CommandCenterQueue"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
+import type { CommandCenterTaskActionHandler } from "./command-center-queue-helpers"
 
 export interface HistorySectionProps {
   tasks: QueueTaskSummary[]
   isInlineSelectionOpen: boolean
-  onViewFullHistory: () => void
-  onRetryFailed: (taskId: string) => void
-  onRestartTask: (taskId: string) => void
-  onRemoveTask: (taskId: string) => void
+  onViewFullHistory: () => void | Promise<void>
+  onRetryFailed: CommandCenterTaskActionHandler
+  onRestartTask: CommandCenterTaskActionHandler
+  onRemoveTask: CommandCenterTaskActionHandler
   retryingTaskIds?: Set<string>
   restartingTaskIds?: Set<string>
   removingTaskIds?: Set<string>

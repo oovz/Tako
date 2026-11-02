@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import captured from "@/tests/fixtures/site-integrations/pixiv-comic/captured-work.json"
 import {
   mockRateLimitedFetch,
   rateLimitService,
@@ -15,6 +16,44 @@ const fetchPixivChapterList = (seriesId: string) =>
 
 export function registerPixivComicSeriesApiCases(): void {
   describe("Pixiv Comic integration", () => {
+    it("resolves captured work metadata through the work API", async () => {
+      mockRateLimitedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => structuredClone(captured.data.workV5),
+      })
+
+      await expect(fetchPixivSeriesMetadata("9830")).resolves.toMatchObject({
+        title:
+          "嘆きの亡霊は引退したい ～最弱ハンターによる最強パーティ育成術～",
+        author: "蛇野らい,原作：槻影.キャラクター原案：チーコ",
+        coverUrl:
+          "https://public-img-comic.pximg.net/images/work_main/9830.jpg?20260801120003",
+        language: "ja",
+        readingDirection: "rtl",
+      })
+    })
+
+    it("keeps captured catalog order and omits an ended-publication notice without an episode", async () => {
+      mockRateLimitedFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => structuredClone(captured.data.episodesV2),
+      })
+
+      const result = await fetchPixivChapterList("9830")
+      const chapters = Array.isArray(result) ? result : result.chapters
+
+      expect(
+        chapters.map((chapter) => [chapter.id, chapter.title, chapter.locked])
+      ).toEqual([
+        ["249675", "第36話-②", false],
+        ["249671", "第36話-①", false],
+        ["158483", "第2話-②", false],
+        ["157481", "第2話-①", false],
+        ["156148", "第1話-②", false],
+        ["154853", "第1話-①", false],
+      ])
+    })
+
     it("fetches series metadata from works/v5 API including author", async () => {
       mockRateLimitedFetch.mockResolvedValueOnce({
         ok: true,

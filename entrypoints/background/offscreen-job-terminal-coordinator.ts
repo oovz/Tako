@@ -1,5 +1,11 @@
+import { reconcileCompletedChapterHistory } from "@/src/storage/completed-chapter-history"
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
-import type { DownloadTaskState } from "@/src/domain/queue/state"
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+import { ownsNativeOutputProducer } from "./native-output-coordinator-helpers"
+import type {
+  DownloadTaskState,
+  OutputAccounting,
+} from "@/src/domain/queue/state"
 import logger from "@/src/runtime/logger"
 import { progressTimingEstimatesRepository as progressTimingEstimator } from "@/src/storage/progress-timing-estimates-repository"
 import type { QueueRepository } from "@/src/storage/queue-repository"
@@ -18,10 +24,8 @@ import {
   clearActiveTaskProgress,
   settleActiveTaskProgressChapter,
 } from "./active-task-progress-bus"
-import type { DestinationService } from "./destination"
 import {
   finalizeDownloadTaskAfterDispatch,
-  reconcileCompletedChapterHistory,
   notifyDownloadTaskCompletion,
   notifyTerminalDownloadTask,
   type DownloadQueueFinalizationDependencies,
@@ -32,8 +36,9 @@ type OffscreenTerminalPayload =
 export type OffscreenTerminalSettlement =
   | "native-output-pending"
   | "chapter-settled"
-  | "destination-blocked"
+  | "task-save-failed"
   | "terminal-owner-released"
+  | "chrome-fallback-selected"
 
 function ownsNativeSettlement(
   task: DownloadTaskState | undefined,
@@ -51,12 +56,46 @@ function ownsNativeSettlement(
   )
 }
 
+function folderOutputCounts(
+  payload: OffscreenTerminalPayload
+): OutputAccounting {
+  const requested = payload.outcome.outputsRequested
+  const committed = payload.outcome.outputsCommitted
+  return {
+    requested,
+    committed,
+    failed: Math.max(
+      payload.outcome.outputsFailedBeforeHandoff,
+      requested - committed
+    ),
+  }
+}
+
+function folderOutputsComplete(outputs: OutputAccounting): boolean {
+  return (
+    outputs.requested > 0 &&
+    outputs.committed === outputs.requested &&
+    outputs.failed === 0
+  )
+}
+
+function isFolderSaveFailure(
+  category: DownloadErrorCategory | undefined
+): category is DownloadErrorCategory {
+  const categories: readonly DownloadErrorCategory[] = [
+    "folder_permission_required",
+    "folder_unavailable",
+    "disk_full",
+    "folder_write_failed",
+  ]
+  return category !== undefined && categories.includes(category)
+}
+
 export class OffscreenJobTerminalCoordinator {
   constructor(
     private readonly queueRepository: QueueRepository,
     private readonly nativeOutputCoordinator: NativeOutputCoordinator,
     private readonly queueScheduler: QueueScheduler,
-    private readonly destinationService: DestinationService,
     private readonly finalizationDependencies: DownloadQueueFinalizationDependencies
   ) {}
 
@@ -74,11 +113,39 @@ export class OffscreenJobTerminalCoordinator {
       await this.continueAfterNativeOutputSettlement(effects)
       return
     }
+    if (settlement === "task-save-failed") {
+      try {
+        const task = await this.queueRepository.getTask(taskId)
+        if (task) {
+          await reconcileCompletedChapterHistory(
+            [task],
+            this.finalizationDependencies.historyRepository
+          )
+          await notifyTerminalDownloadTask({
+            task,
+            finalStatus: task.status,
+            completedCount: task.chapters.filter(
+              (chapter) => chapter.status === "completed"
+            ).length,
+            totalChapters: task.chapters.length,
+            settingsRepository:
+              this.finalizationDependencies.settingsRepository,
+          })
+        }
+      } catch (error) {
+        logger.warn("Could not publish the committed save failure", error)
+      }
+      this.queueScheduler.requestContinuation()
+      return
+    }
     if (settlement === "chapter-settled") {
       await this.continueTask(taskId)
       return
     }
-    if (settlement === "terminal-owner-released") {
+    if (
+      settlement === "terminal-owner-released" ||
+      settlement === "chrome-fallback-selected"
+    ) {
       this.queueScheduler.requestContinuation()
     }
   }
@@ -104,17 +171,16 @@ export class OffscreenJobTerminalCoordinator {
         await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
         continue
       }
-      if (task && isTerminalDownloadTask(task)) {
-        try {
-          await reconcileCompletedChapterHistory(
-            [task],
-            this.finalizationDependencies
-          )
-        } catch (error) {
-          // Queue settlement is durable. History is a repairable projection
-          // and will be reconciled during the next startup or alarm pass.
-          logger.warn("Native output history projection will be retried", error)
-        }
+      if (task) {
+        const chapter = task.chapters.find(
+          (chapter) => chapter.id === effect.chapterId
+        )
+        await settleActiveTaskProgressChapter({
+          taskId: effect.taskId,
+          chapterId: effect.chapterId,
+          chapters: task.chapters,
+          destinationCommitted: chapter?.status === "completed",
+        })
       }
       await this.continueTask(effect.taskId, effect)
       await this.nativeOutputCoordinator.acknowledgeSettlement(effect)
@@ -125,99 +191,118 @@ export class OffscreenJobTerminalCoordinator {
     payload: OffscreenTerminalPayload
   ): Promise<OffscreenTerminalSettlement> {
     const lease = await this.queueRepository.getActiveDispatchLease()
-    if (
-      !lease ||
-      lease.jobId !== payload.jobId ||
-      lease.attempt !== payload.attempt ||
-      lease.taskId !== payload.taskId ||
-      lease.chapterId !== payload.chapterId ||
-      lease.fingerprint !== payload.fingerprint ||
-      lease.documentInstanceId !== payload.documentInstanceId
-    ) {
+    if (!lease || !ownsNativeOutputProducer(lease, payload)) {
       throw new Error("Terminal event no longer owns the dispatch lease")
     }
-
     if (lease.saveMode === "downloads-api") {
-      await this.nativeOutputCoordinator.sealManifest({
-        jobId: payload.jobId,
-        attempt: payload.attempt,
-        taskId: payload.taskId,
-        chapterId: payload.chapterId,
-        fingerprint: payload.fingerprint,
-        documentInstanceId: payload.documentInstanceId,
-        outputsRequested: payload.outcome.outputsRequested,
-        outputsFailedBeforeHandoff: payload.outcome.outputsFailedBeforeHandoff,
-      })
-      const clearing = await this.queueRepository.clearDispatchLease(payload)
-      if (clearing.outcome !== "applied") {
-        throw new Error("Native output terminal lease clear was rejected")
-      }
-      await progressTimingEstimator.finish(payload.jobId)
-      return "native-output-pending"
+      return await this.settleNativeProducer(payload)
     }
-
     const currentTask = await this.queueRepository.getTask(payload.taskId)
     if (!currentTask || isTerminalDownloadTask(currentTask)) {
-      // Cancellation is best effort across the MV3 message boundary. An FSA
-      // producer can finish after the task was durably canceled or otherwise
-      // terminalized. Exact terminal producer evidence releases its lease,
-      // but must not rewrite the task that already won the race.
-      const clearing = await this.queueRepository.clearDispatchLease(payload)
-      if (clearing.outcome !== "applied") {
-        throw new Error("Terminal owner dispatch lease clear was rejected")
-      }
-      await clearActiveTaskProgress()
-      await progressTimingEstimator.finish(payload.jobId)
+      // Exact terminal evidence releases a late FSA producer without rewriting
+      // a task that already won the cancellation or terminalization race.
+      await this.clearProducerLease(
+        payload,
+        "Terminal owner dispatch lease clear was rejected"
+      )
+      await this.finishProducerProgress(payload.jobId)
       return "terminal-owner-released"
     }
+    return await this.settleFolderOutput(payload)
+  }
 
-    const requested = payload.outcome.outputsRequested
-    const committed = payload.outcome.outputsCommitted
-    const failed = Math.max(
-      payload.outcome.outputsFailedBeforeHandoff,
-      requested - committed
+  private async clearProducerLease(
+    payload: OffscreenTerminalPayload,
+    rejectionMessage: string
+  ): Promise<void> {
+    const clearing = await this.queueRepository.clearDispatchLease(payload)
+    if (clearing.outcome !== "applied") throw new Error(rejectionMessage)
+  }
+
+  private async finishProducerProgress(jobId: string): Promise<void> {
+    await clearActiveTaskProgress()
+    await progressTimingEstimator.finish(jobId)
+  }
+
+  private async settleNativeProducer(
+    payload: OffscreenTerminalPayload
+  ): Promise<OffscreenTerminalSettlement> {
+    await this.nativeOutputCoordinator.sealManifest({
+      jobId: payload.jobId,
+      attempt: payload.attempt,
+      taskId: payload.taskId,
+      chapterId: payload.chapterId,
+      fingerprint: payload.fingerprint,
+      documentInstanceId: payload.documentInstanceId,
+      outputsRequested: payload.outcome.outputsRequested,
+      outputsFailedBeforeHandoff: payload.outcome.outputsFailedBeforeHandoff,
+      errorMessage: payload.outcome.errorMessage,
+      errorCategory: payload.outcome.errorCategory,
+    })
+    await this.clearProducerLease(
+      payload,
+      "Native output terminal lease clear was rejected"
     )
-    const destinationIssueKind =
-      payload.outcome.errorCategory === "folder_permission_required"
-        ? "fsa_permission_required"
-        : payload.outcome.errorCategory === "folder_unavailable"
-          ? "fsa_folder_missing"
-          : payload.outcome.errorCategory === "disk_full"
-            ? "disk_full"
-            : payload.outcome.errorCategory === "folder_write_failed"
-              ? "fsa_write_failed"
-              : null
-    if (destinationIssueKind) {
-      const transition = await this.destinationService.blockForRuntimeIssue({
-        context: {
-          taskId: payload.taskId,
-          chapterId: payload.chapterId,
-          destination: currentTask.settingsSnapshot.destination,
-          destinationOverride: currentTask.destinationOverride,
-        },
-        kind: destinationIssueKind,
-        now: Date.now(),
-        errorMessage: payload.outcome.errorMessage,
-        errorCategory: payload.outcome.errorCategory,
-        chapter: {
-          chapterId: payload.chapterId,
-          lease: payload,
-          imagesFailed: payload.outcome.imagesFailed,
-          outputs: { requested, committed, failed },
-        },
-      })
-      if (transition.outcome === "rejected") {
-        throw new Error("Destination-block terminal settlement was rejected")
-      }
-      const clearing = await this.queueRepository.clearDispatchLease(payload)
-      if (clearing.outcome !== "applied") {
-        throw new Error("Destination-block terminal lease clear was rejected")
-      }
-      await clearActiveTaskProgress()
-      await progressTimingEstimator.finish(payload.jobId)
-      return "destination-blocked"
-    }
+    await progressTimingEstimator.finish(payload.jobId)
+    return "native-output-pending"
+  }
 
+  private async settleFolderOutput(
+    payload: OffscreenTerminalPayload
+  ): Promise<OffscreenTerminalSettlement> {
+    if (payload.outcome.destinationUnavailable) {
+      const fallback = await this.queueRepository.selectChromeFallback({
+        taskId: payload.taskId,
+        terminalLease: payload,
+        now: payload.terminalAt,
+      })
+      if (fallback.outcome === "applied") {
+        await this.finishProducerProgress(payload.jobId)
+        return "chrome-fallback-selected"
+      }
+    }
+    const outputs = folderOutputCounts(payload)
+    if (isFolderSaveFailure(payload.outcome.errorCategory)) {
+      return await this.failFolderTask(
+        payload,
+        outputs,
+        payload.outcome.errorCategory
+      )
+    }
+    return await this.settleFolderChapter(payload, outputs)
+  }
+
+  private async failFolderTask(
+    payload: OffscreenTerminalPayload,
+    outputs: OutputAccounting,
+    errorCategory: DownloadErrorCategory
+  ): Promise<OffscreenTerminalSettlement> {
+    const failure = await this.queueRepository.failTaskForSave({
+      taskId: payload.taskId,
+      chapterId: payload.chapterId,
+      clearLease: payload,
+      now: payload.terminalAt,
+      errorMessage:
+        payload.outcome.errorMessage ??
+        "The selected folder could not save the chapter.",
+      errorCategory,
+      imagesFailed: payload.outcome.imagesFailed,
+      outputs,
+    })
+    if (failure.outcome === "rejected")
+      throw new Error("Terminal save failure settlement was rejected")
+    try {
+      await this.finishProducerProgress(payload.jobId)
+    } catch (error) {
+      logger.warn("Could not clear progress after terminal save failure", error)
+    }
+    return "task-save-failed"
+  }
+
+  private async settleFolderChapter(
+    payload: OffscreenTerminalPayload,
+    outputs: OutputAccounting
+  ): Promise<OffscreenTerminalSettlement> {
     const settlement = await this.queueRepository.settleTaskChapter({
       taskId: payload.taskId,
       chapterId: payload.chapterId,
@@ -228,24 +313,28 @@ export class OffscreenJobTerminalCoordinator {
         errorMessage: payload.outcome.errorMessage,
         errorCategory: payload.outcome.errorCategory,
         imagesFailed: payload.outcome.imagesFailed,
-        outputs: { requested, committed, failed },
+        outputs,
+        outputDestination: "fsa",
+        saveConfirmedAt:
+          payload.outcome.status === "completed" &&
+          folderOutputsComplete(outputs)
+            ? payload.terminalAt
+            : undefined,
       },
     })
-    if (settlement.outcome === "rejected") {
+    if (settlement.outcome === "rejected")
       throw new Error("Terminal chapter settlement was rejected")
-    }
-    const clearing = await this.queueRepository.clearDispatchLease(payload)
-    if (clearing.outcome !== "applied") {
-      throw new Error("Terminal dispatch lease clear was rejected")
-    }
+    await this.clearProducerLease(
+      payload,
+      "Terminal dispatch lease clear was rejected"
+    )
     const task = await this.queueRepository.getTask(payload.taskId)
     if (task) {
       await settleActiveTaskProgressChapter({
         taskId: payload.taskId,
         chapterId: payload.chapterId,
         chapters: task.chapters,
-        destinationCommitted:
-          requested > 0 && committed === requested && failed === 0,
+        destinationCommitted: folderOutputsComplete(outputs),
       })
     }
     await progressTimingEstimator.finish(payload.jobId)
@@ -262,6 +351,15 @@ export class OffscreenJobTerminalCoordinator {
       return
     }
     if (!task) return
+    try {
+      await reconcileCompletedChapterHistory(
+        [task],
+        this.finalizationDependencies.historyRepository
+      )
+    } catch (error) {
+      // The queue retains the repair source until history persistence succeeds.
+      logger.warn("Chapter history persistence will be retried", error)
+    }
     if (isTerminalDownloadTask(task)) {
       await notifyTerminalDownloadTask({
         task,
@@ -279,46 +377,55 @@ export class OffscreenJobTerminalCoordinator {
     if (
       task.chapters.every((chapter) => isTerminalChapterStatus(chapter.status))
     ) {
-      const outcomes = task.chapters.map((chapter) => ({
-        chapterId: chapter.id,
-        status: chapter.status as "completed" | "partial_success" | "failed",
-        errorMessage: chapter.errorMessage,
-        errorCategory: chapter.errorCategory,
-        imagesFailed: chapter.imagesFailed,
-      }))
-      const finalization = await finalizeDownloadTaskAfterDispatch({
-        stateManager: this.queueRepository,
-        taskId,
-        chapterOutcomesByIndex: outcomes,
-        settingsSnapshot: task.settingsSnapshot,
-        finalizationDependencies: this.finalizationDependencies,
-      })
-      if (finalization.finalized) {
-        await notifyDownloadTaskCompletion({
-          stateManager: this.queueRepository,
-          taskId,
-          finalStatus: finalization.finalStatus,
-          completedCount: finalization.completedCount,
-          totalChapters: finalization.chapterOutcomes.length,
-          settingsRepository: this.finalizationDependencies.settingsRepository,
-        })
-        this.queueScheduler.requestContinuation()
-      }
+      await this.finalizeSettledTask(task)
       return
     }
 
+    await this.resumeRemainingChapters(task)
+  }
+
+  private async resumeRemainingChapters(
+    task: DownloadTaskState
+  ): Promise<void> {
     const chapterDelayMs = Math.max(
       0,
       task.settingsSnapshot.rateLimitSettings.chapter.delayMs
     )
     const delayUpdate = await this.queueRepository.setNextChapterDispatchAt({
-      taskId,
+      taskId: task.id,
       nextChapterDispatchAt:
         chapterDelayMs > 0 ? Date.now() + chapterDelayMs : undefined,
     })
     if (delayUpdate.outcome === "rejected") {
       throw new Error("Next chapter dispatch deadline was rejected")
     }
-    await this.queueScheduler.resumeTask(taskId)
+    await this.queueScheduler.resumeTask(task.id)
+  }
+
+  private async finalizeSettledTask(task: DownloadTaskState): Promise<void> {
+    const outcomes = task.chapters.map((chapter) => ({
+      chapterId: chapter.id,
+      status: chapter.status as "completed" | "partial_success" | "failed",
+      errorMessage: chapter.errorMessage,
+      errorCategory: chapter.errorCategory,
+      imagesFailed: chapter.imagesFailed,
+    }))
+    const finalization = await finalizeDownloadTaskAfterDispatch({
+      stateManager: this.queueRepository,
+      taskId: task.id,
+      chapterOutcomesByIndex: outcomes,
+      finalizationDependencies: this.finalizationDependencies,
+    })
+    if (finalization.finalized) {
+      await notifyDownloadTaskCompletion({
+        stateManager: this.queueRepository,
+        taskId: task.id,
+        finalStatus: finalization.finalStatus,
+        completedCount: finalization.completedCount,
+        totalChapters: finalization.chapterOutcomes.length,
+        settingsRepository: this.finalizationDependencies.settingsRepository,
+      })
+      this.queueScheduler.requestContinuation()
+    }
   }
 }

@@ -8,7 +8,7 @@ export type QueueSchedulingPlan =
 
 /**
  * Choose the next serial queue action from one authoritative observation.
- * Native browser output no longer occupies the offscreen execution slot.
+ * Native browser output does not occupy the offscreen execution slot.
  */
 export function planQueueScheduling(input: {
   queue: DownloadTaskState[]

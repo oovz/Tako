@@ -1,5 +1,8 @@
+import type { DownloadErrorCategory } from "@/src/shared/download-contract"
+
 import {
-  isNativeOutputAcceptanceProvenAbsent,
+  canReleaseNativeOutputBlob,
+  canAccountNativeOutput,
   isNativeOutputTerminal,
   nativeOutputIdentityMatches,
   nativeOutputJobIdentityMatches,
@@ -145,20 +148,7 @@ export function prepareNativeOutput(
 > {
   const existing = state.outputsByOutputId[input.outputId]
   if (existing) {
-    if (!nativeOutputIdentityMatches(existing, input)) {
-      return rejected(state, "output-identity-conflict")
-    }
-    const manifest = state.manifestsByJobId[input.jobId]
-    if (
-      !manifest ||
-      !manifestMatches(manifest, {
-        ...input,
-        outputsRequested: input.outputCount,
-      })
-    ) {
-      return rejected(state, "manifest-conflict")
-    }
-    return unchanged(state, { manifest, record: existing })
+    return replayPreparedNativeOutput(state, existing, input)
   }
 
   if (input.outputIndex < 0 || input.outputIndex >= input.outputCount) {
@@ -223,11 +213,40 @@ export function prepareNativeOutput(
   return applied(next, { manifest: updatedManifest, record })
 }
 
+function replayPreparedNativeOutput(
+  state: NativeOutputState,
+  existing: NativeOutputRecord,
+  input: NativeOutputIdentity
+): NativeOutputKernelDecision<
+  | NativeOutputUnchanged<{
+      manifest: NativeOutputManifest
+      record: NativeOutputRecord
+    }>
+  | NativeOutputRejected<"output-identity-conflict" | "manifest-conflict">
+> {
+  if (!nativeOutputIdentityMatches(existing, input)) {
+    return rejected(state, "output-identity-conflict")
+  }
+  const manifest = state.manifestsByJobId[input.jobId]
+  if (
+    !manifest ||
+    !manifestMatches(manifest, {
+      ...input,
+      outputsRequested: input.outputCount,
+    })
+  ) {
+    return rejected(state, "manifest-conflict")
+  }
+  return unchanged(state, { manifest, record: existing })
+}
+
 export function sealNativeOutputManifest(
   state: NativeOutputState,
   input: NativeOutputJobIdentity & {
     outputsRequested: number
     outputsFailedBeforeHandoff: number
+    errorMessage?: string
+    errorCategory?: DownloadErrorCategory
     now: number
     error: string
   }
@@ -246,7 +265,10 @@ export function sealNativeOutputManifest(
   const manifest = ensured.result.manifest
   if (manifest.phase === "sealed") {
     if (
-      manifest.outputsFailedBeforeHandoff !== input.outputsFailedBeforeHandoff
+      manifest.outputsFailedBeforeHandoff !==
+        input.outputsFailedBeforeHandoff ||
+      manifest.errorMessage !== input.errorMessage ||
+      manifest.errorCategory !== input.errorCategory
     ) {
       return rejected(state, "manifest-conflict")
     }
@@ -268,6 +290,8 @@ export function sealNativeOutputManifest(
   const sealed: NativeOutputManifest = {
     ...manifest,
     phase: "sealed",
+    errorMessage: input.errorMessage,
+    errorCategory: input.errorCategory,
     outputsFailedBeforeHandoff: input.outputsFailedBeforeHandoff,
     slots,
     sealedAt: input.now,
@@ -317,7 +341,10 @@ export function attachNativeDownload(
       ? unchanged(state, { record: current })
       : rejected(state, "download-id-conflict")
   }
-  if (current.phase !== "acceptance_unknown") {
+  if (
+    current.phase !== "acceptance_unknown" &&
+    current.phase !== "outcome_unknown"
+  ) {
     return rejected(state, "invalid-transition")
   }
   if (
@@ -329,8 +356,63 @@ export function attachNativeDownload(
   }
   const record: NativeOutputRecord = {
     ...current,
-    phase: "waiting",
+    phase: current.phase === "outcome_unknown" ? "outcome_unknown" : "waiting",
     downloadId: input.downloadId,
+  }
+  return applied(replaceOutput(state, record), { record })
+}
+
+export function observeNativeDownloadPending(
+  state: NativeOutputState,
+  input: { downloadId: number }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ record: NativeOutputRecord }>
+  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
+  | NativeOutputRejected<"download-not-found">
+  | InvalidTransition
+> {
+  const current = Object.values(state.outputsByOutputId).find(
+    (record) => record.downloadId === input.downloadId
+  )
+  if (!current) return rejected(state, "download-not-found")
+  if (current.phase === "waiting") return unchanged(state, { record: current })
+  if (
+    current.phase !== "outcome_unknown" ||
+    current.accountingDisposition !== "pending" ||
+    current.blobReleasedAt !== undefined ||
+    current.erasedByBrowserAt !== undefined
+  )
+    return rejected(state, "invalid-transition")
+  const record: NativeOutputRecord = {
+    ...current,
+    phase: "waiting",
+    error: undefined,
+    erasedAt: undefined,
+  }
+  return applied(replaceOutput(state, record), { record })
+}
+
+export function markNativeOutputOutcomeUnknown(
+  state: NativeOutputState,
+  input: { outputId: string }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ record: NativeOutputRecord }>
+  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
+  | OutputNotFound
+  | InvalidTransition
+> {
+  const current = state.outputsByOutputId[input.outputId]
+  if (!current) return rejected(state, "output-not-found")
+  if (current.phase === "outcome_unknown") {
+    return unchanged(state, { record: current })
+  }
+  if (current.phase !== "acceptance_unknown" && current.phase !== "waiting") {
+    return rejected(state, "invalid-transition")
+  }
+  const record: NativeOutputRecord = {
+    ...current,
+    phase: "outcome_unknown",
+    error: "Chrome file-save outcome could not be established",
   }
   return applied(replaceOutput(state, record), { record })
 }
@@ -384,7 +466,7 @@ export function markNativeDownloadTerminal(
       ? unchanged(state, { record: current })
       : rejected(state, "terminal-conflict")
   }
-  if (current.phase !== "waiting") {
+  if (current.phase !== "waiting" && current.phase !== "outcome_unknown") {
     return rejected(state, "invalid-transition")
   }
   const record: NativeOutputRecord = {
@@ -398,7 +480,7 @@ export function markNativeDownloadTerminal(
 
 export function observeNativeDownloadErased(
   state: NativeOutputState,
-  input: { downloadId: number; now: number }
+  input: { downloadId: number; now: number; confirmedByBrowser: boolean }
 ): NativeOutputKernelDecision<
   | NativeOutputApplied<{ record: NativeOutputRecord }>
   | NativeOutputUnchanged<{ record: NativeOutputRecord }>
@@ -408,41 +490,22 @@ export function observeNativeDownloadErased(
     (record) => record.downloadId === input.downloadId
   )
   if (!current) return rejected(state, "download-not-found")
-  if (current.erasedAt !== undefined) {
+  if (
+    current.erasedAt !== undefined &&
+    (!input.confirmedByBrowser || current.erasedByBrowserAt !== undefined)
+  ) {
     return unchanged(state, { record: current })
   }
-  const record = { ...current, erasedAt: input.now }
-  return applied(replaceOutput(state, record), { record })
-}
-
-/**
- * Explicit user surrender of an unobservable Chrome download (FORGET).
- * Only waiting records whose download was erased from Chrome history qualify:
- * their result can never be observed again, and the user has accepted that
- * fact. Surrender does not claim complete or interrupted — the outcome stays
- * unknown — but it does release the queue block and later the Blob ownership.
- */
-export function markNativeOutputSurrendered(
-  state: NativeOutputState,
-  input: { outputId: string; now: number }
-): NativeOutputKernelDecision<
-  | NativeOutputApplied<{ record: NativeOutputRecord }>
-  | NativeOutputUnchanged<{ record: NativeOutputRecord }>
-  | OutputNotFound
-  | InvalidTransition
-> {
-  const current = state.outputsByOutputId[input.outputId]
-  if (!current) return rejected(state, "output-not-found")
-  if (current.phase === "surrendered") {
-    return unchanged(state, { record: current })
-  }
-  if (current.phase !== "waiting" || current.erasedAt === undefined) {
-    return rejected(state, "invalid-transition")
-  }
-  const record: NativeOutputRecord = {
+  const record = {
     ...current,
-    phase: "surrendered",
-    surrenderedAt: input.now,
+    erasedAt: current.erasedAt ?? input.now,
+    ...(!isNativeOutputTerminal(current)
+      ? {
+          phase: "outcome_unknown" as const,
+          error: "Chrome file-save outcome could not be established",
+        }
+      : {}),
+    ...(input.confirmedByBrowser ? { erasedByBrowserAt: input.now } : {}),
   }
   return applied(replaceOutput(state, record), { record })
 }
@@ -463,7 +526,7 @@ export function markNativeOutputAccountingDisposition(
 > {
   const current = state.outputsByOutputId[input.outputId]
   if (!current) return rejected(state, "output-not-found")
-  if (!isNativeOutputTerminal(current) && current.phase !== "surrendered") {
+  if (!canAccountNativeOutput(current)) {
     return rejected(state, "invalid-transition")
   }
   if (current.accountingDisposition !== "pending") {
@@ -493,11 +556,7 @@ export function markNativeOutputBlobReleased(
   if (current.blobReleasedAt !== undefined) {
     return unchanged(state, { record: current })
   }
-  if (
-    !isNativeOutputAcceptanceProvenAbsent(current) &&
-    (!isNativeOutputTerminal(current) ||
-      current.accountingDisposition === "pending")
-  ) {
+  if (!canReleaseNativeOutputBlob(current)) {
     return rejected(state, "invalid-transition")
   }
   const record = { ...current, blobReleasedAt: input.now }
@@ -519,7 +578,7 @@ export function markNativeOutputDependencyReleased(
     return unchanged(state, { record: current })
   }
   if (
-    (!isNativeOutputTerminal(current) && current.phase !== "surrendered") ||
+    !canReleaseNativeOutputBlob(current) ||
     current.accountingDisposition === "pending" ||
     current.blobReleasedAt === undefined
   ) {
@@ -547,6 +606,7 @@ export function markNativeOutputJobDependencyReleased(
   )
   if (
     manifest.phase !== "sealed" ||
+    manifest.settlementAcknowledgedAt === undefined ||
     trackedOutputIds.some((outputId) => {
       const record = state.outputsByOutputId[outputId]
       return record !== undefined && record.dependencyReleasedAt === undefined
@@ -556,4 +616,34 @@ export function markNativeOutputJobDependencyReleased(
   }
   const released = { ...manifest, dependencyReleasedAt: input.now }
   return applied(replaceManifest(state, released), { manifest: released })
+}
+
+export function acknowledgeNativeOutputSettlement(
+  state: NativeOutputState,
+  input: { jobId: string; now: number }
+): NativeOutputKernelDecision<
+  | NativeOutputApplied<{ manifest: NativeOutputManifest }>
+  | NativeOutputUnchanged<{ manifest: NativeOutputManifest }>
+  | NativeOutputRejected<"manifest-not-found" | "invalid-transition">
+> {
+  const manifest = state.manifestsByJobId[input.jobId]
+  if (!manifest) return rejected(state, "manifest-not-found")
+  if (manifest.settlementAcknowledgedAt !== undefined) {
+    return unchanged(state, { manifest })
+  }
+  if (
+    manifest.phase !== "sealed" ||
+    manifest.slots.some((slot) => {
+      if (slot?.disposition !== "tracked") return false
+      return (
+        state.outputsByOutputId[slot.outputId]?.accountingDisposition ===
+        "pending"
+      )
+    })
+  )
+    return rejected(state, "invalid-transition")
+  const acknowledged = { ...manifest, settlementAcknowledgedAt: input.now }
+  return applied(replaceManifest(state, acknowledged), {
+    manifest: acknowledged,
+  })
 }

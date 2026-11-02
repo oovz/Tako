@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangamillion",
+  "data": {
+    "titleDetail": {
+      "serviceTitle": {
+        "serviceTitleName": "One Piece",
+        "authorName": "Eiichiro Oda",
+        "coverUrl": "https://img.mangamillion.shueisha.co.jp/jpn/image/original_title_cover/1.avif?h=fixture&e=4102444800",
+        "description": "As a child, Monkey D. Luffy was inspired to become a pirate by listening to the tales of the buccaneer \"Red-Haired\" Shanks. But his life changed when Luffy accidentally ate the Gum-Gum Devil Fruit and gained the power to stretch like rubber...at the cost of never being able to swim again! Years later, still vowing to become the king of the pirates, Luffy sets out on his adventure...one guy alone in a rowboat, in search of the legendary \"One Piece,\" said to be the greatest treasure in the world..."
+      }
+    },
+    "chapterList": {
+      "totalChapters": 10,
+      "chapterGroups": [
+        {
+          "groupType": 0,
+          "chapters": [
+            {
+              "number": "#001",
+              "name": "Chapter 1:Romance Dawn",
+              "translatedChapterId": 6736
+            },
+            {
+              "number": "#002",
+              "name": "Chapter 2:They Call Him “Straw Hat Luffy”",
+              "translatedChapterId": 6739
+            },
+            {
+              "number": "#003",
+              "name": "Chapter 3:Enter Zolo: Pirate Hunter",
+              "translatedChapterId": 6742
+            },
+            {
+              "number": "#004",
+              "name": "Chapter 4:The Great Captain Morgan",
+              "translatedChapterId": 6745
+            },
+            {
+              "number": "#005",
+              "name": "Chapter 5:The King of the Pirates and the Master Swordsman",
+              "translatedChapterId": 6748
+            },
+            {
+              "number": "#006",
+              "name": "Chapter 6:Number One",
+              "translatedChapterId": 6751
+            },
+            {
+              "number": "#007",
+              "name": "Chapter 7:Friends",
+              "translatedChapterId": 6754
+            },
+            {
+              "number": "#008",
+              "name": "Chapter 8:Nami",
+              "translatedChapterId": 6757
+            },
+            {
+              "number": "#009",
+              "name": "Chapter 9:Femme Fatale",
+              "translatedChapterId": 6760
+            },
+            {
+              "number": "#010",
+              "name": "Chapter 10:Incident at the Tavern",
+              "translatedChapterId": 6763
+            }
+          ]
+        }
+      ]
+    },
+    "viewer": {
+      "aesKey": "8c12434255319a2a5fb903fc39994f409eb27979d1d78f1009f1a015f69db321",
+      "aesIv": "4af66d450c1244868dc4a5cff035898c",
+      "pages": [
+        {
+          "imageUrl": "https://img.mangamillion.shueisha.co.jp/en/translated_chapter_page/6736/1.avif.enc?h=fixture&e=4102444800",
+          "widthPx": 1080,
+          "heightPx": 1620,
+          "pageType": 0
+        }
+      ]
+    }
+  }
+}

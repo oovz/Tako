@@ -14,7 +14,7 @@ const serviceMocks = vi.hoisted(() => ({
 }))
 
 const settingsDependencies = {
-  settingsRepository: { getSettings: serviceMocks.getSettings },
+  settingsRepository: { reload: serviceMocks.getSettings },
   siteOverridesService: { getAll: serviceMocks.getSiteOverrides },
   siteIntegrationSettingsService: {
     getForSite: serviceMocks.getSiteSettings,
@@ -102,6 +102,7 @@ describe("START_DOWNLOAD task inputs and builder", () => {
       created: 100,
       chapters: [
         {
+          requestedPath: "TMD/Series Title/Chapter 12.cbz",
           id: "chapter-1",
           title: "Chapter 12",
           url: "https://mangadex.org/chapter/1",

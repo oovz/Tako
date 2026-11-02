@@ -1,32 +1,26 @@
-/**
- * @file routes.ts
- * @description Top-level e2e route dispatcher.
- *
- * This module is the single entry point `extension.ts` uses to install all
- * Playwright route mocks for a test context. It owns:
- *
- * 1. Route-policy validation (every context must either use deterministic
- *    mocks OR permit live network; never neither).
- * 2. A small `example.com` catch-all for chapter URLs that intentionally
- *    bounce to the synthetic EXAMPLE_BASE_URL in specs.
- * 3. Invocation of every site integration's `RouteRegistrar` — one per
- *    supported integration in the generated site integration catalog. Runtime
- *    adapter lookup is static.
- *    next to their mock data at
- *    `tests/e2e/fixtures/mock-data/site-integrations/{id}/routes.ts`.
- *
- * New site integrations MUST add their registrar here. See
- * `RouteRegistrar` in `mock-data/types.ts` for the contract.
- */
+/** Register each supported integration’s page routes and enforce network policy. */
 
 import type { BrowserContext, Route } from "@playwright/test"
 import type { RouteRegistrar, RouteRegistrarOptions } from "./mock-data/types"
 import { registerMangadexRoutes } from "./mock-data/site-integrations/mangadex"
-import { registerManhuaguiRoutes } from "./mock-data/site-integrations/manhuagui"
+import { registerManhuaguiRoutes } from "./mock-data/site-integrations/readmanga"
 import { registerPixivComicRoutes } from "./mock-data/site-integrations/pixiv-comic"
 import { registerShonenJumpPlusRoutes } from "./mock-data/site-integrations/shonenjumpplus"
-import { registerComicNettaiRoutes } from "./mock-data/site-integrations/comicnettai"
+import { registerComicNettaiRoutes } from "./mock-data/site-integrations/comictropics"
 import { registerMangaMillionRoutes } from "./mock-data/site-integrations/mangamillion"
+import { registerManganatoRoutes } from "./mock-data/site-integrations/manganato/routes"
+import { registerMangakakalotRoutes } from "./mock-data/site-integrations/mangakakalot/routes"
+import { registerBoyloveRoutes } from "./mock-data/site-integrations/boylove/routes"
+import { registerCopyRoutes } from "./mock-data/site-integrations/copymanga/routes"
+import { registerMycomicRoutes } from "./mock-data/site-integrations/mycomic/routes"
+import { registerDm5Routes } from "./mock-data/site-integrations/animemangahouse/routes"
+import { registerMangabzRoutes } from "./mock-data/site-integrations/mangabz/routes"
+import { registerZaimanhuaRoutes } from "./mock-data/site-integrations/mangaagain/routes"
+import { registerAimanhuaRoutes } from "./mock-data/site-integrations/lovemanga/routes"
+import { registerMangahereRoutes } from "./mock-data/site-integrations/mangahere/routes"
+import { registerMangagoRoutes } from "./mock-data/site-integrations/mangago/routes"
+import { registerCoolmicRoutes } from "./mock-data/site-integrations/coolmic/routes"
+import { registerMangaplusRoutes } from "./mock-data/site-integrations/mangaplus/routes"
 import { EXAMPLE_TEST_DOMAIN } from "./test-domains-constants"
 
 const DEFAULT_HTML =
@@ -39,6 +33,19 @@ const siteIntegrationRegistrars: ReadonlyArray<RouteRegistrar> = [
   registerShonenJumpPlusRoutes,
   registerComicNettaiRoutes,
   registerMangaMillionRoutes,
+  registerManganatoRoutes,
+  registerMangakakalotRoutes,
+  registerBoyloveRoutes,
+  registerCopyRoutes,
+  registerMycomicRoutes,
+  registerDm5Routes,
+  registerMangabzRoutes,
+  registerZaimanhuaRoutes,
+  registerAimanhuaRoutes,
+  registerMangahereRoutes,
+  registerMangagoRoutes,
+  registerCoolmicRoutes,
+  registerMangaplusRoutes,
 ]
 
 export function shouldBlockUnmatchedRequest(
@@ -100,12 +107,8 @@ async function registerExampleCatchAll(
 }
 
 /**
- * Install all deterministic e2e mocks for a Playwright BrowserContext.
- *
- * Route policy (enforced):
- * - `useMocks=true` + `allowNetwork=false` (default for `playwright.config.ts`)
- * - `useMocks=false` + `allowNetwork=true` (live tests in `playwright.live.config.ts`)
- * - Any other combination throws.
+ * Install provider mocks when enabled. Without mocks, network access must be
+ * explicitly allowed. Unmatched HTTP(S) requests follow the network policy.
  */
 export async function registerTestRoutes(
   context: BrowserContext,

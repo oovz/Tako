@@ -28,6 +28,7 @@ describe("site integration optional host permissions", () => {
   const contains = vi.fn()
   const request = vi.fn()
   const remove = vi.fn()
+  const getAll = vi.fn()
   const getManifest = vi.fn(() => ({
     host_permissions: [
       ...siteIntegrationWxtPermissions.requiredOrigins,
@@ -44,9 +45,10 @@ describe("site integration optional host permissions", () => {
     contains.mockResolvedValue(false)
     request.mockResolvedValue(false)
     remove.mockResolvedValue(true)
+    getAll.mockResolvedValue({ origins: [] })
     vi.stubGlobal("chrome", {
       runtime: { getManifest },
-      permissions: { contains, request, remove },
+      permissions: { contains, request, remove, getAll },
     })
   })
 
@@ -110,6 +112,7 @@ describe("site integration optional host permissions", () => {
   it("reconciles all abandoned optional access when no persisted integration needs it", async () => {
     storageMocks.getAll.mockResolvedValue({ mangadex: false })
     contains.mockResolvedValue(true)
+    getAll.mockResolvedValue({ origins: [OPTIONAL_BROAD_HTTPS_ORIGIN] })
 
     await expect(
       reconcileOptionalHostPermissionEnablement(storageMocks)
@@ -124,6 +127,7 @@ describe("site integration optional host permissions", () => {
 
   it("removes optional access only when no enabled integration needs it", async () => {
     contains.mockResolvedValue(true)
+    getAll.mockResolvedValue({ origins: [OPTIONAL_BROAD_HTTPS_ORIGIN] })
 
     await expect(
       removeUnusedHostPermissions({ mangadex: false })
@@ -137,6 +141,24 @@ describe("site integration optional host permissions", () => {
       false
     )
     expect(remove).not.toHaveBeenCalled()
+  })
+
+  it("preserves fixed-site access when broad HTTPS access was never granted", async () => {
+    const origin = "https://comic.pixiv.net/*"
+    let granted = true
+    getAll.mockImplementation(async () => ({
+      origins: granted ? [origin] : [],
+    }))
+    contains.mockImplementation(async () => granted)
+    remove.mockImplementation(async () => {
+      // Chrome's wildcard removal also covers narrower runtime grants.
+      granted = false
+      return true
+    })
+
+    await removeUnusedHostPermissions({ mangadex: false })
+
+    expect(await contains({ origins: [origin] })).toBe(true)
   })
 
   it("recognizes revocation of any generated optional provider origin", () => {

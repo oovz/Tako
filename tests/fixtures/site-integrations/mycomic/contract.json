@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mycomic",
+  "data": {
+    "seriesUrl": "https://mycomic.com/cn/comics/35937",
+    "readerUrl": "https://mycomic.com/cn/chapters/492177",
+    "chapterCount": 151,
+    "pageCount": 39,
+    "firstImage": "https://biccam.com/chapters/492177/1-918548.jpg",
+    "seriesHtmlFile": "series.html",
+    "readerHtmlFile": "reader.html"
+  }
+}

@@ -1,3 +1,4 @@
+import { cancelResponseBody } from "@/src/shared/response-body"
 import { z } from "zod"
 import type { AtHomeResponse } from "./image-delivery"
 import logger from "@/src/runtime/logger"
@@ -7,12 +8,11 @@ import { ProviderContractError } from "../provider-contract-error"
 import { readResponseBytes } from "@/src/shared/html-response-decoder"
 import { MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 import type { RateLimitService } from "@/src/runtime/rate-limit"
+import { waitForMangadexDelay } from "./api-delay"
 
 export const MANGADEX_API_BASE = "https://api.mangadex.org"
 export const MANGADEX_UPLOADS_BASE = "https://uploads.mangadex.org"
 export const MANGADEX_NETWORK_REPORT = "https://api.mangadex.network/report"
-export const MANGADEX_NETWORK_REPORT_HOST = new URL(MANGADEX_NETWORK_REPORT)
-  .hostname
 export const MANGADEX_NETWORK_REPORT_TIMEOUT_MS = 1500
 export const MANGADEX_IMAGE_RECOVERY_MAX_CYCLES = 5
 export const MANGADEX_IMAGE_RECOVERY_BACKOFF_MS = 250
@@ -223,35 +223,6 @@ const parseRetryAfterHeader = (response: Response): number | null => {
   return parseRateLimitRetryAfterHeader(response.headers, clampRetryDelay)
 }
 
-const waitForRetryDelay = async (
-  delayMs: number,
-  signal?: AbortSignal | null
-): Promise<void> => {
-  if (delayMs <= 0) {
-    return
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort)
-      resolve()
-    }, delayMs)
-
-    const onAbort = () => {
-      clearTimeout(timeout)
-      signal?.removeEventListener("abort", onAbort)
-      reject(new Error("aborted"))
-    }
-
-    if (signal?.aborted) {
-      onAbort()
-      return
-    }
-
-    signal?.addEventListener("abort", onAbort, { once: true })
-  })
-}
-
 export function createMangadexHttpError(
   response: Response,
   message?: string
@@ -263,17 +234,11 @@ export function createMangadexHttpError(
   return error
 }
 
-/**
- * Safely parse a response body as JSON, validating Content-Type first.
- *
- * Cloudflare challenges and proxy error pages can return HTML with HTTP 200,
- * causing `response.json()` to throw a raw `SyntaxError` whose message leaks
- * into the UI. This helper detects non-JSON responses and JSON parse failures,
- * throwing a descriptive {@link MangadexHttpError} instead.
- */
+/** Reject non-JSON responses and malformed JSON with a MangadexHttpError. */
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const contentType = response.headers?.get("content-type")
   if (contentType && !contentType.toLowerCase().includes("application/json")) {
+    cancelResponseBody(response)
     throw createMangadexHttpError(
       response,
       `MangaDex API returned non-JSON response (Content-Type: ${contentType}). The service may be blocking requests.`
@@ -283,16 +248,6 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   let bytes: Uint8Array
   try {
     bytes = await readResponseBytes(response)
-  } catch (error) {
-    if (!(error instanceof SyntaxError)) {
-      throw error
-    }
-    throw createMangadexHttpError(
-      response,
-      "Failed to parse MangaDex API response as JSON. The service may be unavailable or blocking requests."
-    )
-  }
-  try {
     return JSON.parse(new TextDecoder().decode(bytes)) as unknown
   } catch (error) {
     if (!(error instanceof SyntaxError)) {
@@ -305,17 +260,11 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   }
 }
 
-/**
- * Throw a concise {@link MangadexHttpError} for a Zod schema validation failure.
- *
- * Zod error messages can be extremely long (hundreds of fields), and dumping
- * the full error into the UI is unhelpful. The full error is logged to the
- * console for debugging; the user-facing error message is short.
- */
-function throwSchemaValidationError(
-  response: Response,
-  parsed: { success: false; error: z.ZodError }
-): never {
+/** Log schema details and throw a concise ProviderContractError. */
+function throwSchemaValidationError(parsed: {
+  success: false
+  error: z.ZodError
+}): never {
   logger.error(
     "[mangadex] API response schema validation failed",
     parsed.error.issues
@@ -349,18 +298,61 @@ const shouldRetryTransientResponse = (
   }
 }
 
-async function fetchWithMangadexRetryUsingPolicy(
-  url: string,
-  rateLimitService: RateLimitService,
-  options?: RequestInit,
-  retryCount = 0,
-  retryConfig: MangadexRetryConfig = MANGADEX_RETRY_CONFIG,
-  endpointId:
-    "mangadex-api" | "mangadex-at-home-image" = "mangadex-at-home-image"
+type MangadexRequestAttempt = {
+  url: string
+  rateLimitService: RateLimitService
+  options?: RequestInit
+  retryCount: number
+  retryConfig: MangadexRetryConfig
+  endpointId: "mangadex-api" | "mangadex-at-home-image"
+}
+
+function isRetryableMangadexNetworkError(
+  error: unknown,
+  signal?: AbortSignal | null
+): boolean {
+  if (
+    signal?.aborted ||
+    (error instanceof Error && error.name === "AbortError")
+  ) {
+    return false
+  }
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && error.name === "TypeError")
+  )
+}
+
+async function retryMangadexRequest(
+  attempt: MangadexRequestAttempt,
+  delay: number,
+  reason: string,
+  response?: Response
 ): Promise<Response> {
-  let response: Response
+  logger.warn(
+    `[mangadex] ${reason}, retrying in ${delay}ms (attempt ${attempt.retryCount + 1}/${attempt.retryConfig.maxRetries})`
+  )
+  if (response) cancelResponseBody(response)
+  await waitForMangadexDelay(delay, attempt.options?.signal)
+  return fetchWithMangadexRetryUsingPolicy({
+    ...attempt,
+    retryCount: attempt.retryCount + 1,
+  })
+}
+
+async function requestMangadexAttempt(
+  attempt: MangadexRequestAttempt
+): Promise<{ response: Response } | { networkRetry: true }> {
+  const {
+    endpointId,
+    url,
+    options,
+    rateLimitService,
+    retryCount,
+    retryConfig,
+  } = attempt
   try {
-    response = await integrationHttpClient.request({
+    const response = await integrationHttpClient.request({
       integrationId: "mangadex",
       endpointId,
       url,
@@ -369,59 +361,43 @@ async function fetchWithMangadexRetryUsingPolicy(
       skipRateLimit: endpointId === "mangadex-at-home-image",
       rateLimitService,
     })
+    return { response }
   } catch (error) {
-    const isAbort =
-      options?.signal?.aborted === true ||
-      (error instanceof Error && error.name === "AbortError")
-    const isTransientNetworkError =
-      error instanceof TypeError ||
-      (error instanceof Error && error.name === "TypeError")
-
     if (
-      isAbort ||
-      !isTransientNetworkError ||
-      retryCount >= retryConfig.maxRetries
+      retryCount >= retryConfig.maxRetries ||
+      !isRetryableMangadexNetworkError(error, options?.signal)
     ) {
       throw error
     }
+    return { networkRetry: true }
+  }
+}
 
-    const retryDelay = retryConfig.defaultRetryDelayMs
-    logger.warn(
-      `[mangadex] Network request failed, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${retryConfig.maxRetries})`
-    )
-    await waitForRetryDelay(retryDelay, options?.signal)
-    return fetchWithMangadexRetryUsingPolicy(
-      url,
-      rateLimitService,
-      options,
-      retryCount + 1,
-      retryConfig,
-      endpointId
+async function fetchWithMangadexRetryUsingPolicy(
+  attempt: MangadexRequestAttempt
+): Promise<Response> {
+  const outcome = await requestMangadexAttempt(attempt)
+  if ("networkRetry" in outcome) {
+    return retryMangadexRequest(
+      attempt,
+      attempt.retryConfig.defaultRetryDelayMs,
+      "Network request failed"
     )
   }
-  const shouldRetryRateLimit = response.status === 429
-  const shouldRetryTransient = shouldRetryTransientResponse(url, response)
-
-  if (
-    (shouldRetryRateLimit || shouldRetryTransient) &&
-    retryCount < retryConfig.maxRetries
-  ) {
-    const retryDelay =
-      parseRetryAfterHeader(response) ?? retryConfig.defaultRetryDelayMs
-    logger.warn(
-      `[mangadex] HTTP ${response.status}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${retryConfig.maxRetries})`
-    )
-    await waitForRetryDelay(retryDelay, options?.signal)
-    return fetchWithMangadexRetryUsingPolicy(
-      url,
-      rateLimitService,
-      options,
-      retryCount + 1,
-      retryConfig,
-      endpointId
+  const { response } = outcome
+  const shouldRetry =
+    response.status === 429 ||
+    shouldRetryTransientResponse(attempt.url, response)
+  if (shouldRetry && attempt.retryCount < attempt.retryConfig.maxRetries) {
+    const delay =
+      parseRetryAfterHeader(response) ?? attempt.retryConfig.defaultRetryDelayMs
+    return retryMangadexRequest(
+      attempt,
+      delay,
+      `HTTP ${response.status}`,
+      response
     )
   }
-
   return response
 }
 
@@ -436,38 +412,46 @@ export async function fetchWithMangadexRetry(
   options?: RequestInit,
   retryCount = 0
 ): Promise<Response> {
-  return fetchWithMangadexRetryUsingPolicy(
+  return fetchWithMangadexRetryUsingPolicy({
     url,
     rateLimitService,
     options,
     retryCount,
-    MANGADEX_RETRY_CONFIG,
-    "mangadex-at-home-image"
-  )
+    retryConfig: MANGADEX_RETRY_CONFIG,
+    endpointId: "mangadex-at-home-image",
+  })
 }
 
 /**
- * Run a MangaDex API call through the chapter-scope endpoint policy and rate
- * limiter, then apply MangaDex's provider-owned retry handling.
- *
- * Image downloads must NOT use this — they are already rate-limited at the
- * 'image' scope by `chapter-image-downloads.ts` via `scheduleForIntegrationScope`.
- * Using this for images would cause double rate-limiting.
+ * Apply chapter-scope API pacing and retries. Image requests use their
+ * own scheduler and must not pass through this one.
  */
-async function fetchMangadexApiWithRateLimit(
+async function fetchMangadexApiResponse<T>(
   url: string,
   rateLimitService: RateLimitService,
-  options?: RequestInit,
-  retryMode: MangadexRetryMode = "resilient"
-): Promise<Response> {
-  return fetchWithMangadexRetryUsingPolicy(
+  schema: z.ZodType<T>,
+  retryMode: MangadexRetryMode,
+  signal?: AbortSignal,
+  rateLimitMessage?: string
+): Promise<T> {
+  const response = await fetchWithMangadexRetryUsingPolicy({
     url,
     rateLimitService,
-    options,
-    0,
-    retryConfigForMode(retryMode),
-    "mangadex-api"
-  )
+    options: { credentials: "omit", signal },
+    retryCount: 0,
+    retryConfig: retryConfigForMode(retryMode),
+    endpointId: "mangadex-api",
+  })
+  if (!response.ok) {
+    cancelResponseBody(response)
+    throw createMangadexHttpError(
+      response,
+      response.status === 429 ? rateLimitMessage : undefined
+    )
+  }
+  const parsed = schema.safeParse(await parseJsonResponse(response))
+  if (!parsed.success) throwSchemaValidationError(parsed)
+  return parsed.data
 }
 
 export function parseUuidFromPath(
@@ -507,33 +491,14 @@ export async function fetchMangaMetadata(
   signal?: AbortSignal
 ): Promise<MangadexMangaResponse> {
   const url = `${MANGADEX_API_BASE}/manga/${mangaId}?includes[]=author&includes[]=artist&includes[]=cover_art`
-  const response = await fetchMangadexApiWithRateLimit(
+  return fetchMangadexApiResponse(
     url,
     rateLimitService,
-    {
-      credentials: "omit",
-      signal,
-    },
-    retryMode
+    MangadexMangaResponseSchema,
+    retryMode,
+    signal,
+    "MangaDex rate limit exceeded. Please wait and try again."
   )
-
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw createMangadexHttpError(
-        response,
-        "MangaDex rate limit exceeded. Please wait and try again."
-      )
-    }
-    throw createMangadexHttpError(response)
-  }
-
-  const parsed = MangadexMangaResponseSchema.safeParse(
-    await parseJsonResponse(response)
-  )
-  if (!parsed.success) {
-    throwSchemaValidationError(response, parsed)
-  }
-  return parsed.data
 }
 
 export async function fetchMangaStatistics(
@@ -543,27 +508,13 @@ export async function fetchMangaStatistics(
   signal?: AbortSignal
 ): Promise<MangadexStatisticsResponse> {
   const url = `${MANGADEX_API_BASE}/statistics/manga/${mangaId}`
-  const response = await fetchMangadexApiWithRateLimit(
+  return fetchMangadexApiResponse(
     url,
     rateLimitService,
-    {
-      credentials: "omit",
-      signal,
-    },
-    retryMode
+    MangadexStatisticsResponseSchema,
+    retryMode,
+    signal
   )
-
-  if (!response.ok) {
-    throw createMangadexHttpError(response)
-  }
-
-  const parsed = MangadexStatisticsResponseSchema.safeParse(
-    await parseJsonResponse(response)
-  )
-  if (!parsed.success) {
-    throwSchemaValidationError(response, parsed)
-  }
-  return parsed.data
 }
 
 export function mapCommunityRatingToFiveScale(
@@ -606,33 +557,14 @@ export async function fetchChapterFeed(
   }
 
   const url = `${MANGADEX_API_BASE}/manga/${mangaId}/feed?${params}`
-  const response = await fetchMangadexApiWithRateLimit(
+  return fetchMangadexApiResponse(
     url,
     rateLimitService,
-    {
-      credentials: "omit",
-      signal,
-    },
-    retryMode
+    MangadexChapterFeedResponseSchema,
+    retryMode,
+    signal,
+    "MangaDex rate limit exceeded. Please wait and try again."
   )
-
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw createMangadexHttpError(
-        response,
-        "MangaDex rate limit exceeded. Please wait and try again."
-      )
-    }
-    throw createMangadexHttpError(response)
-  }
-
-  const parsed = MangadexChapterFeedResponseSchema.safeParse(
-    await parseJsonResponse(response)
-  )
-  if (!parsed.success) {
-    throwSchemaValidationError(response, parsed)
-  }
-  return parsed.data
 }
 
 export async function fetchAtHomeServer(
@@ -641,31 +573,12 @@ export async function fetchAtHomeServer(
   signal?: AbortSignal
 ): Promise<AtHomeResponse> {
   const url = `${MANGADEX_API_BASE}/at-home/server/${chapterId}`
-  const response = await fetchMangadexApiWithRateLimit(
+  return fetchMangadexApiResponse(
     url,
     rateLimitService,
-    {
-      credentials: "omit",
-      signal,
-    },
-    "resilient"
+    AtHomeResponseSchema,
+    "resilient",
+    signal,
+    "MangaDex at-home rate limit exceeded (40/min). Please wait."
   )
-
-  if (!response.ok) {
-    if (response.status === 429) {
-      throw createMangadexHttpError(
-        response,
-        "MangaDex at-home rate limit exceeded (40/min). Please wait."
-      )
-    }
-    throw createMangadexHttpError(response)
-  }
-
-  const parsed = AtHomeResponseSchema.safeParse(
-    await parseJsonResponse(response)
-  )
-  if (!parsed.success) {
-    throwSchemaValidationError(response, parsed)
-  }
-  return parsed.data
 }

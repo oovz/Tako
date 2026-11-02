@@ -10,6 +10,7 @@ import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeTask(overrides: Partial<QueueTaskSummary>): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id: "task-1",
     seriesKey: "mangadex#manga-1",
     seriesTitle: "Series 1",
@@ -74,14 +75,6 @@ describe("CommandCenterQueue action hierarchy", () => {
     expect(shouldConfirmTaskCancellation(makeTask({ status: "queued" }))).toBe(
       false
     )
-    expect(
-      shouldConfirmTaskCancellation(
-        makeTask({
-          status: "queued",
-          activeBlock: "native_output_action_required",
-        })
-      )
-    ).toBe(true)
   })
 
   it("keeps active cancel visible as the only inline action", () => {

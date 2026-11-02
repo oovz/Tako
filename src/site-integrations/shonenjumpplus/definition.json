@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "shonenjumpplus",
-  "name": "Shonen Jump+",
+  "name": "少年ジャンプ＋",
+  "englishName": "Shonen Jump+",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
   "shipped": true,
@@ -13,19 +14,28 @@
   "requiredOrigins": [
     "https://shonenjumpplus.com/*",
     "https://cdn-ak-img.shonenjumpplus.com/*",
-    "https://cdn-ak.shonenjumpplus.com/*"
+    "https://cdn-ak.shonenjumpplus.com/*",
+    "https://cdn-scissors.gigaviewer.com/*"
   ],
   "optionalOrigins": [],
   "policyDefaults": {
-    "image": { "concurrency": 2, "delayMs": 1000 },
-    "chapter": { "concurrency": 1, "delayMs": 2000 }
+    "image": {
+      "concurrency": 2,
+      "delayMs": 1000
+    },
+    "chapter": {
+      "concurrency": 1,
+      "delayMs": 2000
+    }
   },
   "retryOwner": "platform",
   "pageProbe": "none",
   "runtimes": {
     "background": true,
     "offscreen": true,
-    "dispatchContext": { "mode": "none" }
+    "dispatchContext": {
+      "mode": "none"
+    }
   },
   "imageTransform": {
     "kind": "integrated-descramble",
@@ -57,7 +67,8 @@
       "purpose": "Shonen Jump+ image CDN",
       "origins": [
         "https://cdn-ak-img.shonenjumpplus.com/*",
-        "https://cdn-ak.shonenjumpplus.com/*"
+        "https://cdn-ak.shonenjumpplus.com/*",
+        "https://cdn-scissors.gigaviewer.com/*"
       ],
       "originKind": "provider-issued",
       "credentials": "omit",
@@ -67,9 +78,5 @@
     }
   ],
   "sessionRefererRules": [],
-  "customSettings": [],
-  "fixtures": {
-    "paths": ["src/site-integrations/shonenjumpplus/fixtures/contract.json"],
-    "liveFreshnessDays": 30
-  }
+  "customSettings": []
 }

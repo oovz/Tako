@@ -25,6 +25,7 @@ function renderHeader(hasOptionsActionItems: boolean): string {
 
 describe("SidePanelHeader options action indicator", () => {
   it("caps large queue counts without widening the 360px header", () => {
+    expect(formatSidePanelCount(null)).toBe("—")
     expect(formatSidePanelCount(99)).toBe("99")
     expect(formatSidePanelCount(100)).toBe("99+")
     expect(formatSidePanelCount(10_000)).toBe("99+")

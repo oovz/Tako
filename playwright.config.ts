@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Non-live E2E policy: default to deterministic mock routes/fixtures.
+// Deterministic tests use fixtures and block external network access.
 process.env.TMD_TEST_E2E_USE_MOCKS =
   process.env.TMD_TEST_E2E_USE_MOCKS ?? "true"
 process.env.TMD_TEST_E2E_ALLOW_NETWORK = "false"
@@ -22,11 +22,10 @@ export default defineConfig({
   globalSetup: path.resolve(__dirname, "tests/e2e/global-setup.ts"),
   use: {
     locale: "en-US",
-    // Chrome extensions are exercised in a persistent headed context. CI runs
-    // this configuration through Xvfb.
-    headless: false,
-    // Keep the initial failure evidence in local runs, where retries are off.
-    // This suite uses deterministic fixtures and blocks external requests.
+    // The Chromium channel supports extensions in new headless mode.
+    channel: "chromium",
+    headless: true,
+    // Retain failure evidence even when retries are disabled.
     trace: "retain-on-failure",
     // Prevent browser windows from grabbing focus during tests
     launchOptions: {
@@ -40,7 +39,6 @@ export default defineConfig({
     },
   },
   projects: [
-    // Deterministic E2E extension tests backed by fixture mock routes.
     {
       name: "e2e",
       use: {

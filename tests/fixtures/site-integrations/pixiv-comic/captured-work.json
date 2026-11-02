@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 1,
+  "providerId": "pixiv-comic",
+  "data": {
+    "workV5": {
+      "data": {
+        "official_work": {
+          "id": 9830,
+          "name": "嘆きの亡霊は引退したい ～最弱ハンターによる最強パーティ育成術～",
+          "author": "蛇野らい,原作：槻影.キャラクター原案：チーコ",
+          "description": "【コミックス①～⑬巻発売中!!】<br><br>富と名誉、力と栄光を求め、危険を顧みず世界各地の宝物殿を探索するトレジャーハンター達の黄金時代。<br>「トレジャーハンターになろうぜ」幼馴染みたちと最強の英雄になる誓いを立てたクライ・アンドリヒだったが、クライには何一つ才能がなかった…。<br>にもかかわらず、なぜか周りからの評価が異様に高く、期待だけが跳ね上がっていく日々。<br>人間離れした幼馴染みたちが大暴れするたび、上がっていくのは土下座スキル!?<br>大人気の勘違いコミカルファンタジーがついにコミカライズ!!<br><br>原作ノベルズ、GCノベルズより好評発売中!!",
+          "image": {
+            "main": "https://public-img-comic.pximg.net/c!/f=webp%3Ajpeg,w=200/images/work_main/9830.jpg?20260801120003",
+            "main_big": "https://public-img-comic.pximg.net/images/work_main/9830.jpg?20260801120003",
+            "thumbnail": "https://public-img-comic.pximg.net/c!/q=90,f=webp%3Ajpeg/images/work_thumbnail/9830.jpg?20260801120003"
+          }
+        }
+      }
+    },
+    "episodesV2": {
+      "data": {
+        "episodes": [
+          {
+            "state": "readable",
+            "episode": {
+              "id": 249675,
+              "numbering_title": "第36話-②",
+              "sub_title": "",
+              "read_start_at": 1792206000000,
+              "viewer_path": "/viewer/stories/249675",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          },
+          {
+            "state": "readable",
+            "episode": {
+              "id": 249671,
+              "numbering_title": "第36話-①",
+              "sub_title": "",
+              "read_start_at": 1790996400000,
+              "viewer_path": "/viewer/stories/249671",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          },
+          {
+            "state": "not_publishing",
+            "message": "第3話-①〜第35話-② 掲載期間が終了しました"
+          },
+          {
+            "state": "readable",
+            "episode": {
+              "id": 158483,
+              "numbering_title": "第2話-②",
+              "sub_title": "",
+              "read_start_at": 1701486000000,
+              "viewer_path": "/viewer/stories/158483",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          },
+          {
+            "state": "readable",
+            "episode": {
+              "id": 157481,
+              "numbering_title": "第2話-①",
+              "sub_title": "",
+              "read_start_at": 1700276400000,
+              "viewer_path": "/viewer/stories/157481",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          },
+          {
+            "state": "readable",
+            "episode": {
+              "id": 156148,
+              "numbering_title": "第1話-②",
+              "sub_title": "",
+              "read_start_at": 1699066800000,
+              "viewer_path": "/viewer/stories/156148",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          },
+          {
+            "state": "readable",
+            "episode": {
+              "id": 154853,
+              "numbering_title": "第1話-①",
+              "sub_title": "",
+              "read_start_at": 1697857200000,
+              "viewer_path": "/viewer/stories/154853",
+              "sales_type": "free",
+              "state": "readable"
+            }
+          }
+        ]
+      }
+    },
+    "storyPage": {
+      "pageProps": {
+        "salt": "synthetic-pixiv-fixture-salt",
+        "id": "154853",
+        "workId": 9830
+      }
+    },
+    "readV4": {
+      "data": {
+        "reading_episode": {
+          "id": 154853,
+          "numbering_title": "第1話-①",
+          "sub_title": "",
+          "work_id": 9830,
+          "pages": [
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/wTMaKLVEvWvgjiiyh4Io/1.jpg?20231017102742",
+              "height": 1024,
+              "width": 713,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-1"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/gDZViMBrrz4IX8Vj08BU/2.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-2"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/ScdyTrEzN6igySaakBMM/3.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-3"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/X1Z24IFFmKudGuJuGTZS/4.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-4"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/5e9xk11HyYGVC6X2BJ4s/5.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-5"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/PJjlmVxZePm3jXG18hiw/6.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-6"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/CZeG5YbhwnfeOMnL9CDq/7.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-7"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/QJbbCgwcwCBpUC0yFvUs/8.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-8"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/PYc0YWaf3X6u0ixMqnyU/9.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-9"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/NSJYXdfYWjkRIBLafc31/10.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-10"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/LdNi56GmPwYIwwjYPoiO/11.jpg?20231017102742",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-11"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/wIgnxgL7c30mFeOhVFpz/12.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-12"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/ExEBo4cKPuNNcyt3Nlcz/13.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-13"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/tUBYV7fJxxKLcS7tT5gM/14.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-14"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/3O4RnxUFNObVnbRzEZej/15.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-15"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/ky8GoRUchb9Soqew9uxo/16.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-16"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/1aakwCWXnZlg2M19PNV9/17.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-17"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/76nmNkHHUkyBWZIj9GRd/18.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-18"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/PI7KNnkAPwE09OfIlQEX/19.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-19"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/IczxK7JWj4o0cHWeOzdt/20.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-20"
+            },
+            {
+              "url": "https://img-comic.pximg.net/c/q90_gridshuffle32:32/images/page/154853/bHCHvlVteFuruXItfQHv/21.jpg?20231017102743",
+              "height": 1024,
+              "width": 720,
+              "gridsize": 32,
+              "key": "synthetic-pixiv-page-21"
+            }
+          ]
+        }
+      }
+    },
+    "buildId": "BVJmAtWWeZJ9AV-ajWqSo"
+  }
+}

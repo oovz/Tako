@@ -1,7 +1,8 @@
+import { createBackgroundCoverPreviewMessageHandlers } from "./background-cover-preview-message-handlers"
+import { DestinationHandleCollector } from "./destination-handle-collector"
 import { defineBackground } from "wxt/utils/define-background"
 
 import logger from "@/src/runtime/logger"
-import { sendRuntimeMessage } from "@/src/runtime/send-runtime-message"
 import { createRuntimeMessageListener } from "@/src/runtime/runtime-message-dispatcher"
 import { classifyRuntimeMessagePrincipal } from "@/src/runtime/runtime-message-sender"
 import { QueueRepository } from "@/src/storage/queue-repository"
@@ -29,12 +30,13 @@ import { includesManagedHostPermission } from "@/src/site-integrations/host-perm
 import { SiteIntegrationSessionRuleManager } from "@/src/site-integrations/session-rule-manager"
 import { configureSeriesDataOffscreenLifecycle } from "@/src/runtime/resolve-series-data-offscreen"
 import { migrateDurableStateForCurrentSchema } from "@/src/runtime/state-schema-migration"
-import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
-import type { NativeOutputRecord } from "@/src/domain/native-output/state"
 
 import { BackgroundRuntimeKernel } from "@/entrypoints/background/background-runtime-kernel"
 import { createBackgroundRuntimeMessageHandlers } from "@/entrypoints/background/background-runtime-message-handlers"
-import { registerBackgroundNavigationListeners } from "@/entrypoints/background/background-navigation-listeners"
+import {
+  registerBackgroundNavigationListeners,
+  reconcileIntegrationSupportAfterPermissionRemoval,
+} from "@/entrypoints/background/background-navigation-listeners"
 import { registerBackgroundRuntimeListeners } from "@/entrypoints/background/background-runtime-listeners"
 import {
   ensureOffscreenDocumentReady,
@@ -43,9 +45,11 @@ import {
   queryOffscreenJob,
   runOffscreenDocumentAdmissionExclusive,
   scheduleOffscreenCloseIfIdle,
+  refreshLivenessAlarmForDurableWork,
   setLivenessAlarmArmed,
 } from "@/entrypoints/background/offscreen-lifecycle"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
+import { requestBlobRevocation } from "@/entrypoints/background/native-output-blob-revocation"
 import { tabContextCache } from "@/entrypoints/background/tab-cache"
 import { TabContextStateService } from "@/entrypoints/background/tab-context-state-service"
 import { createTabUiCoordinator } from "@/entrypoints/background/tab-ui-coordinator"
@@ -86,7 +90,8 @@ const rateLimitService = new RateLimitService(rateLimitPolicySource)
 const siteIntegrationSessionRuleManager = new SiteIntegrationSessionRuleManager(
   {
     service: siteIntegrationEnablementService,
-    awaitSchemaMigration,
+    awaitSchemaMigration: (): Promise<void> =>
+      runtimeKernel.ensureSchemaMigrated(),
     onReconciliationSucceeded: async (enablement) => {
       try {
         await runtimeKernel.ensure("runtime-ready")
@@ -111,12 +116,11 @@ const finalizationDependencies = {
 }
 
 const queueProjectionService = new QueueProjectionService()
-const queueRepository = new QueueRepository(queueProjectionService)
-const destinationService = new DestinationService({
-  queueRepository,
-  settingsReader: settingsRepository,
-  notifier: getNotificationService(),
-})
+const queueRepository = new QueueRepository(
+  queueProjectionService,
+  historyRepository
+)
+const destinationService = new DestinationService()
 const downloadStateQueryService = new BackgroundDownloadStateQueryService(
   queueRepository,
   historyQueryService
@@ -124,49 +128,27 @@ const downloadStateQueryService = new BackgroundDownloadStateQueryService(
 const nativeOutputRepository = new NativeOutputRepository()
 const tabUiCoordinator = createTabUiCoordinator()
 const tabContextStateService = new TabContextStateService(tabContextCache)
-const optionsConfigurationService = new OptionsConfigurationService({
-  configurationRepository: new OptionsConfigurationRepository(
-    {
-      get: (keys) => chrome.storage.local.get(keys),
-      set: (values) => chrome.storage.local.set(values),
-    },
-    settingsRepository
-  ),
-  settingsRepository,
-  historyRepository,
-  applySettingsSideEffects,
-  cleanupRateLimiters: () => rateLimitService.cleanupRateLimiters(),
-})
-async function requestBlobRevocation(
-  record: Pick<
-    NativeOutputRecord,
-    | "jobId"
-    | "attempt"
-    | "taskId"
-    | "chapterId"
-    | "fingerprint"
-    | "documentInstanceId"
-    | "outputId"
-    | "blobUrl"
-  >
-): Promise<void> {
-  const response = await sendRuntimeMessage({
-    target: "offscreen",
-    type: "REVOKE_BLOB_URL",
-    payload: {
-      jobId: record.jobId,
-      attempt: record.attempt,
-      taskId: record.taskId,
-      chapterId: record.chapterId,
-      fingerprint: record.fingerprint,
-      documentInstanceId: record.documentInstanceId,
-      outputId: record.outputId,
-      blobUrl: record.blobUrl,
-    },
+const optionsConfigurationService: OptionsConfigurationService =
+  new OptionsConfigurationService({
+    configurationRepository: new OptionsConfigurationRepository(
+      {
+        get: (keys) => chrome.storage.local.get(keys),
+        set: (values) => chrome.storage.local.set(values),
+      },
+      settingsRepository
+    ),
+    settingsRepository,
+    historyRepository,
+    applySettingsSideEffects,
+    cleanupRateLimiters: () => rateLimitService.cleanupRateLimiters(),
+    collectUnusedHandles: () => destinationHandleCollector.collect(),
   })
-  if (!response.success) throw new Error(response.error)
-}
-
+const destinationHandleCollector: DestinationHandleCollector =
+  new DestinationHandleCollector({
+    queueRepository,
+    settingsRepository,
+    pendingHandleIds: () => optionsConfigurationService.getPendingHandleIds(),
+  })
 const nativeOutputCoordinator = new NativeOutputCoordinator({
   settingsRepository,
   repository: nativeOutputRepository,
@@ -194,7 +176,6 @@ const chapterDispatchCoordinator = new ChapterDispatchCoordinator(
   runOffscreenDocumentAdmissionExclusive,
   cancellationCoordinator,
   siteIntegrationSessionRuleManager,
-  destinationService,
   siteIntegrationEnablementService,
   siteIntegrationSettingsService
 )
@@ -215,8 +196,9 @@ const queueScheduler = new QueueScheduler(
   taskExecutor,
   async () => {
     await scheduleOffscreenCloseIfIdle(queueRepository, nativeOutputCoordinator)
-    await setLivenessAlarmArmed(
-      await nativeOutputCoordinator.hasReconcilableLiveDependencies()
+    await refreshLivenessAlarmForDurableWork(
+      queueRepository,
+      nativeOutputCoordinator
     )
   }
 )
@@ -224,21 +206,8 @@ const terminalCoordinator = new OffscreenJobTerminalCoordinator(
   queueRepository,
   nativeOutputCoordinator,
   queueScheduler,
-  destinationService,
   finalizationDependencies
 )
-
-/**
- * One-time durable-state migration gate. The promise is
- * created inside `main()` (the only context guaranteed to have `chrome`);
- * every readiness phase and the DNR manager await the SAME gate through
- * `awaitSchemaMigration()`. A rejected migration is sticky and fatal.
- */
-const schemaMigrationGate: { promise: Promise<void> | null } = { promise: null }
-
-function awaitSchemaMigration(): Promise<void> {
-  return schemaMigrationGate.promise ?? Promise.resolve()
-}
 
 const runtimeKernel = new BackgroundRuntimeKernel({
   settingsRepository,
@@ -251,7 +220,7 @@ const runtimeKernel = new BackgroundRuntimeKernel({
   ensureLivenessAlarm,
   setLivenessAlarmArmed,
   queueScheduler,
-  awaitSchemaMigration,
+  awaitSchemaMigration: migrateDurableStateForCurrentSchema,
 })
 
 const tabContextResolver = createTabContextResolver({
@@ -280,6 +249,17 @@ const queueApplicationCommands = new QueueApplicationCommands({
 })
 
 const backgroundRuntimeHandlers = createBackgroundRuntimeMessageHandlers({
+  coverPreviewHandlers: createBackgroundCoverPreviewMessageHandlers({
+    ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
+    getCurrentSeriesContext:
+      tabContextCache.getCurrentSeriesContext.bind(tabContextCache),
+    queueRepository,
+    siteIntegrationEnablementService,
+    rateLimitService,
+    ensureNetworkReady: (integrationId) =>
+      siteIntegrationSessionRuleManager.ensureNetworkReady(integrationId),
+    admit: runOffscreenDocumentAdmissionExclusive,
+  }),
   settingsRepository,
   historyRepository,
   siteIntegrationEnablementService,
@@ -302,47 +282,13 @@ const backgroundRuntimeMessageListener = createRuntimeMessageListener({
   reportError: (message, error) => logger.error(message, error),
 })
 
-async function reconcileIntegrationSupportAfterPermissionRemoval(): Promise<void> {
-  await runtimeKernel.refreshIntegrations()
-  await runtimeKernel.ensure("runtime-ready")
-
-  const tabs = await chrome.tabs.query({})
-  const outcomes = await Promise.allSettled(
-    tabs.flatMap((tab) => {
-      if (typeof tab.id !== "number") return []
-      const url = tab.url ?? tab.pendingUrl ?? ""
-      const refreshes: Promise<unknown>[] = [
-        tabUiCoordinator.updateActionForTab(tab.id, url),
-        tabUiCoordinator.updateSidePanelForTab(tab.id),
-      ]
-      if (tab.active) {
-        refreshes.push(
-          tabContextResolver.resolveTabContext(tab.id, {
-            windowId: tab.windowId,
-            allowCached: false,
-          })
-        )
-      }
-      return refreshes
-    })
-  )
-  for (const outcome of outcomes) {
-    if (outcome.status === "rejected") {
-      logger.debug(
-        "Failed to refresh tab support after permission removal",
-        outcome.reason
-      )
-    }
-  }
-}
-
 export default defineBackground({
   type: "module",
   main() {
     logger.info("Background script starting")
 
     // Event listeners are registered synchronously below. Versioned state
-    // migration then runs before any repository hydrates or the kernel starts.
+    // migration gates every storage-backed readiness phase and DNR read.
     try {
       chrome.sidePanel
         .setPanelBehavior({ openPanelOnActionClick: true })
@@ -366,6 +312,10 @@ export default defineBackground({
       }
     })
     registerSiteIntegrationEnablementListener(siteIntegrationEnablementService)
+
+    destinationHandleCollector.register(() =>
+      runtimeKernel.ensure("runtime-ready")
+    )
 
     registerBackgroundRuntimeListeners({
       waitForReadiness: (readiness) => runtimeKernel.ensure(readiness),
@@ -419,58 +369,30 @@ export default defineBackground({
 
     chrome.permissions.onRemoved.addListener((permissions) => {
       if (!includesManagedHostPermission(permissions)) return
-      void reconcileIntegrationSupportAfterPermissionRemoval().catch(
-        (error) => {
-          logger.error(
-            "Failed to reconcile integration enablement after permission removal",
-            error
-          )
-        }
-      )
+      void reconcileIntegrationSupportAfterPermissionRemoval({
+        refreshIntegrations: () => runtimeKernel.refreshIntegrations(),
+        ensureRuntimeReady: () => runtimeKernel.ensure("runtime-ready"),
+        tabUiCoordinator,
+        tabContextResolver,
+      }).catch((error) => {
+        logger.error(
+          "Failed to reconcile integration enablement after permission removal",
+          error
+        )
+      })
     })
 
     siteIntegrationSessionRuleManager.registerListeners()
 
-    // The migration promise is created HERE, in the service-worker runtime, so
-    // build-time module evaluation (which has no `chrome`) never executes it.
-    schemaMigrationGate.promise = migrateDurableStateForCurrentSchema()
-    void schemaMigrationGate.promise.catch(() => undefined)
+    const initialSessionRuleReconciliation =
+      siteIntegrationSessionRuleManager.start()
+    void initialSessionRuleReconciliation.catch((error) => {
+      logger.warn("Initial provider session DNR reconciliation failed", error)
+    })
 
-    void (async () => {
-      try {
-        // Migrate retained state before strict repositories hydrate it.
-        await schemaMigrationGate.promise
-      } catch (error) {
-        logger.error(
-          "Refusing to initialize: retained durable state could not be migrated",
-          error
-        )
-        try {
-          await chrome.storage.session.set({
-            [SESSION_STORAGE_KEYS.initFailed]: true,
-            [SESSION_STORAGE_KEYS.initError]:
-              "Retained state could not be migrated; restart the extension to retry.",
-          })
-        } catch (diagnosticError) {
-          logger.warn(
-            "Unable to publish the schema-migration failure diagnostic",
-            diagnosticError
-          )
-        }
-        return
-      }
+    runtimeKernel.markControlReady()
+    runtimeKernel.start()
 
-      // Initial DNR reconciliation and its enablement/continuation reads must
-      // not run against pre-migration storage.
-      const initialSessionRuleReconciliation =
-        siteIntegrationSessionRuleManager.start()
-      void initialSessionRuleReconciliation.catch((error) => {
-        logger.warn("Initial provider session DNR reconciliation failed", error)
-      })
-
-      runtimeKernel.markControlReady()
-      runtimeKernel.start()
-    })()
     logger.info("Background script initialized")
   },
 })

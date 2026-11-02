@@ -108,27 +108,17 @@ export class TabContextStateService {
       return { success: false }
     }
 
-    const chapters = typedPayload.chapters.map(
-      (chapter: ResolvedTabChapter, index: number) => ({
-        id: chapter.id,
-        url: chapter.url,
-        title: chapter.title,
-        locked: chapter.locked === true,
-        index: index + 1,
-        chapterLabel: chapter.chapterLabel,
-        language: chapter.language,
-        chapterNumber:
-          typeof chapter.chapterNumber === "number"
-            ? chapter.chapterNumber
-            : undefined,
-        volumeId: chapter.volumeId,
-        volumeNumber:
-          typeof chapter.volumeNumber === "number"
-            ? chapter.volumeNumber
-            : undefined,
-        volumeLabel: chapter.volumeLabel,
-      })
-    )
+    return this.commitReadyContext(typedPayload, tabId, options)
+  }
+
+  private async commitReadyContext(
+    typedPayload: ResolvedTabReadyContext,
+    tabId: number,
+    options?: TabContextStateProjectionOptions
+  ): Promise<{ success: boolean; tabState?: unknown }> {
+    const tabStateKey = `tab_${tabId}`
+    const errorKey = `seriesContextError_${tabId}`
+    const chapters = normalizeResolvedChapters(typedPayload)
 
     const applied = await this.projection.commitTabContextMutation(
       tabId,
@@ -141,55 +131,17 @@ export class TabContextStateService {
           existingState?.siteIntegrationId === typedPayload.siteIntegrationId &&
           existingState.mangaId === typedPayload.mangaId
         ) {
-          const existingChapters = new Map(
-            existingState.chapters.map((chapter) => [chapter.id, chapter])
+          const mergedState = mergeResolvedState(
+            existingState,
+            typedPayload,
+            chapters
           )
-          const mergedState: MangaPageState = {
-            ...existingState,
-            sourceUrl: typedPayload.sourceUrl,
-            seriesTitle: typedPayload.seriesTitle,
-            chapters: chapters.map((chapter) => {
-              const existing = existingChapters.get(chapter.id)
-              return {
-                ...chapter,
-                status: existing?.status ?? "queued",
-                errorMessage: existing?.errorMessage,
-                totalImages: existing?.totalImages,
-                imagesFailed: existing?.imagesFailed,
-                lastUpdated: existing?.lastUpdated ?? Date.now(),
-              }
-            }),
-            volumes: resolveVolumeStates(chapters, typedPayload.volumes),
-            metadata: typedPayload.metadata ?? existingState.metadata,
-            ...(typeof typedPayload.chaptersLoading === "boolean"
-              ? { chaptersLoading: typedPayload.chaptersLoading }
-              : { chaptersLoading: false }),
-            ...(typedPayload.chapterListNotice
-              ? { chapterListNotice: typedPayload.chapterListNotice }
-              : { chapterListNotice: undefined }),
-            lastUpdated: Date.now(),
-          }
           await chrome.storage.session.remove(errorKey)
           await chrome.storage.session.set({ [tabStateKey]: mergedState })
           return mergedState
         }
 
-        const initialState: MangaPageState = {
-          sourceUrl: typedPayload.sourceUrl,
-          siteIntegrationId: typedPayload.siteIntegrationId,
-          mangaId: typedPayload.mangaId,
-          seriesTitle: typedPayload.seriesTitle,
-          chapters: initializeChapterStates(chapters),
-          volumes: resolveVolumeStates(chapters, typedPayload.volumes),
-          metadata: typedPayload.metadata,
-          ...(typeof typedPayload.chaptersLoading === "boolean"
-            ? { chaptersLoading: typedPayload.chaptersLoading }
-            : {}),
-          ...(typedPayload.chapterListNotice
-            ? { chapterListNotice: typedPayload.chapterListNotice }
-            : {}),
-          lastUpdated: Date.now(),
-        }
+        const initialState = initializeResolvedState(typedPayload, chapters)
         await chrome.storage.session.remove(errorKey)
         await chrome.storage.session.set({ [tabStateKey]: initialState })
         return initialState
@@ -215,5 +167,92 @@ export class TabContextStateService {
         return null
       }
     )
+  }
+}
+
+function normalizeResolvedChapters(typedPayload: ResolvedTabReadyContext) {
+  return typedPayload.chapters.map(
+    (chapter: ResolvedTabChapter, index: number) => ({
+      id: chapter.id,
+      url: chapter.url,
+      title: chapter.title,
+      locked: chapter.locked === true,
+      index: index + 1,
+      chapterLabel: chapter.chapterLabel,
+      language: chapter.language,
+      chapterNumber:
+        typeof chapter.chapterNumber === "number"
+          ? chapter.chapterNumber
+          : undefined,
+      volumeId: chapter.volumeId,
+      volumeNumber:
+        typeof chapter.volumeNumber === "number"
+          ? chapter.volumeNumber
+          : undefined,
+      volumeLabel: chapter.volumeLabel,
+    })
+  )
+}
+
+function mergeResolvedState(
+  existingState: MangaPageState,
+  typedPayload: ResolvedTabReadyContext,
+  chapters: ReturnType<typeof normalizeResolvedChapters>
+): MangaPageState {
+  const existingChapters = new Map(
+    existingState.chapters.map((chapter) => [chapter.id, chapter])
+  )
+  return {
+    ...existingState,
+    sourceUrl: typedPayload.sourceUrl,
+    seriesTitle: typedPayload.seriesTitle,
+    chapters: chapters.map((chapter) =>
+      mergeChapterProgress(chapter, existingChapters.get(chapter.id))
+    ),
+    volumes: resolveVolumeStates(chapters, typedPayload.volumes),
+    metadata: typedPayload.metadata ?? existingState.metadata,
+    ...(typeof typedPayload.chaptersLoading === "boolean"
+      ? { chaptersLoading: typedPayload.chaptersLoading }
+      : { chaptersLoading: false }),
+    ...(typedPayload.chapterListNotice
+      ? { chapterListNotice: typedPayload.chapterListNotice }
+      : { chapterListNotice: undefined }),
+    lastUpdated: Date.now(),
+  }
+}
+
+function initializeResolvedState(
+  typedPayload: ResolvedTabReadyContext,
+  chapters: ReturnType<typeof normalizeResolvedChapters>
+): MangaPageState {
+  return {
+    sourceUrl: typedPayload.sourceUrl,
+    siteIntegrationId: typedPayload.siteIntegrationId,
+    mangaId: typedPayload.mangaId,
+    seriesTitle: typedPayload.seriesTitle,
+    chapters: initializeChapterStates(chapters),
+    volumes: resolveVolumeStates(chapters, typedPayload.volumes),
+    metadata: typedPayload.metadata,
+    ...(typeof typedPayload.chaptersLoading === "boolean"
+      ? { chaptersLoading: typedPayload.chaptersLoading }
+      : {}),
+    ...(typedPayload.chapterListNotice
+      ? { chapterListNotice: typedPayload.chapterListNotice }
+      : {}),
+    lastUpdated: Date.now(),
+  }
+}
+
+function mergeChapterProgress(
+  chapter: ReturnType<typeof normalizeResolvedChapters>[number],
+  existing: MangaPageState["chapters"][number] | undefined
+): MangaPageState["chapters"][number] {
+  return {
+    ...chapter,
+    status: existing?.status ?? "queued",
+    errorMessage: existing?.errorMessage,
+    totalImages: existing?.totalImages,
+    imagesFailed: existing?.imagesFailed,
+    lastUpdated: existing?.lastUpdated ?? Date.now(),
   }
 }

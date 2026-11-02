@@ -3,6 +3,7 @@ import { StorageMutationQueue } from "@/src/storage/storage-mutation-queue"
 import { matchUrl } from "@/src/site-integrations/url-matcher"
 import logger from "@/src/runtime/logger"
 import {
+  isLoadingTabContext,
   isMangaPageState,
   parseActiveTabContextByWindow,
 } from "@/src/runtime/tab-state-schemas"
@@ -41,10 +42,7 @@ export interface CurrentSeriesContext {
   windowId: number
 }
 
-// Maximum number of tab contexts to keep in the in-memory cache.
-// Tabs beyond this limit are evicted on the next set (LRU-style via
-// Map insertion order). In practice users rarely have more than ~50
-// tabs open, but this prevents unbounded growth in edge cases.
+// Cache writes evict the oldest entries once this limit is reached.
 const MAX_TAB_CACHE_SIZE = 100
 
 interface TabCacheDependencies {
@@ -64,129 +62,108 @@ function hasResolvedTabUrl(url: string | undefined): boolean {
   return typeof url === "string" && url.length > 0
 }
 
-function isLoadingContext(value: unknown): value is { loading: true } {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    (value as { loading?: unknown }).loading === true
-  )
-}
-
-export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
-  const dependencies: TabCacheDependencies = {
-    readSession: async (keys) => chrome.storage.session.get(keys),
-    writeSession: async (values) => chrome.storage.session.set(values),
-    queryActiveTabs: async () => chrome.tabs.query({ active: true }),
-    getTab: async (tabId) => chrome.tabs.get(tabId),
-    ...deps,
+class TabContextCache {
+  private readonly cache = new Map<number, TabContextCacheValue>()
+  private readonly projectionMutations = new StorageMutationQueue()
+  private readonly dependencies: TabCacheDependencies
+  constructor(deps?: Partial<TabCacheDependencies>) {
+    this.dependencies = {
+      readSession: async (keys) => chrome.storage.session.get(keys),
+      writeSession: async (values) => chrome.storage.session.set(values),
+      queryActiveTabs: async () => chrome.tabs.query({ active: true }),
+      getTab: async (tabId) => chrome.tabs.get(tabId),
+      ...deps,
+    }
   }
-
-  const cache = new Map<number, TabContextCacheValue>()
-  const projectionMutations = new StorageMutationQueue()
-
-  // LRU-style set: move the entry to the end of the Map (most recently used)
-  // and evict the oldest entry if the cache exceeds MAX_TAB_CACHE_SIZE.
-  const setCacheEntry = (tabId: number, value: TabContextCacheValue): void => {
+  private setCacheEntry(tabId: number, value: TabContextCacheValue): void {
     // Delete first so re-insertion moves the entry to the end (most recent).
-    cache.delete(tabId)
-    cache.set(tabId, value)
-
-    if (cache.size > MAX_TAB_CACHE_SIZE) {
+    this.cache.delete(tabId)
+    this.cache.set(tabId, value)
+    if (this.cache.size > MAX_TAB_CACHE_SIZE) {
       // Map.keys() returns entries in insertion order; the first is the oldest.
-      const oldestKey = cache.keys().next().value
+      const oldestKey = this.cache.keys().next().value
       if (oldestKey !== undefined) {
-        cache.delete(oldestKey)
+        this.cache.delete(oldestKey)
       }
     }
   }
 
-  const readContextForTab = async (
+  private async readContextForTab(
     tabId: number
-  ): Promise<TabContextCacheValue> => {
+  ): Promise<TabContextCacheValue> {
     const tabKey = `tab_${tabId}`
     const errorKey = `seriesContextError_${tabId}`
-    const sessionData = await dependencies.readSession([tabKey, errorKey])
-
+    const sessionData = await this.dependencies.readSession([tabKey, errorKey])
     const maybeTabState = sessionData[tabKey]
     if (isMangaPageState(maybeTabState)) {
       return maybeTabState
     }
-
     const maybeError = sessionData[errorKey]
     if (typeof maybeError === "string" && maybeError.length > 0) {
       return { error: maybeError }
     }
-
     return null
   }
 
-  const readActiveTabContextByWindow =
-    async (): Promise<ActiveTabContextByWindow> => {
-      const sessionData = await dependencies.readSession([
-        SESSION_STORAGE_KEYS.activeTabContextByWindow,
-      ])
+  private async readActiveTabContextByWindow(): Promise<ActiveTabContextByWindow> {
+    const sessionData = await this.dependencies.readSession([
+      SESSION_STORAGE_KEYS.activeTabContextByWindow,
+    ])
+    const raw = sessionData[SESSION_STORAGE_KEYS.activeTabContextByWindow]
+    return parseActiveTabContextByWindow(raw) ?? {}
+  }
 
-      const raw = sessionData[SESSION_STORAGE_KEYS.activeTabContextByWindow]
-      return parseActiveTabContextByWindow(raw) ?? {}
-    }
-
-  const buildWindowContext = (
+  private buildWindowContext(
     windowId: number,
     activeTabId: number,
     context: ProjectedTabContext,
     revision: number
-  ): WindowTabContext => ({
-    windowId,
-    activeTabId,
-    context,
-    revision,
-    timestamp: Date.now(),
-  })
+  ): WindowTabContext {
+    return {
+      windowId,
+      activeTabId,
+      context,
+      revision,
+      timestamp: Date.now(),
+    }
+  }
 
-  const getCurrentRevisionForWindow = async (
-    windowId: number
-  ): Promise<number> => {
-    const contexts = await readActiveTabContextByWindow()
+  private async getCurrentRevisionForWindow(windowId: number): Promise<number> {
+    const contexts = await this.readActiveTabContextByWindow()
     return contexts[windowId]?.revision ?? 0
   }
 
-  const writeWindowContext = async (
+  private async writeWindowContext(
     windowContext: WindowTabContext
-  ): Promise<void> => {
-    const existing = await readActiveTabContextByWindow()
+  ): Promise<void> {
+    const existing = await this.readActiveTabContextByWindow()
     const updated: ActiveTabContextByWindow = {
       ...existing,
       [windowContext.windowId]: windowContext,
     }
-
     logger.debug("[tab-cache] Writing activeTabContextByWindow projection", {
       windowId: windowContext.windowId,
       activeTabId: windowContext.activeTabId,
       revision: windowContext.revision,
       context: windowContext.context,
     })
-
-    await dependencies.writeSession({
+    await this.dependencies.writeSession({
       [SESSION_STORAGE_KEYS.activeTabContextByWindow]: updated,
     })
   }
 
-  const writeNextWindowContext = async (
+  private async writeNextWindowContext(
     windowId: number,
     activeTabId: number,
     context: ProjectedTabContext,
     supersedeCurrent = false
-  ): Promise<number | undefined> =>
-    projectionMutations.run(async () => {
+  ): Promise<number | undefined> {
+    return this.projectionMutations.run(async () => {
       // Re-check ownership at the serialized write boundary. Any active-tab
       // snapshot read before this queue turn may have become stale while a
       // newer activation was being processed.
-      const activeTabs = await dependencies.queryActiveTabs()
-      const ownsWindow = activeTabs.some(
-        (tab) =>
-          tab.id === activeTabId &&
-          (tab.windowId === undefined || tab.windowId === windowId)
-      )
+      const activeTabs = await this.dependencies.queryActiveTabs()
+      const ownsWindow = ownsActiveWindow(activeTabs, activeTabId, windowId)
       if (!ownsWindow) {
         logger.debug("[tab-cache] Skipping projection for inactive tab", {
           tabId: activeTabId,
@@ -194,31 +171,28 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
         })
         return undefined
       }
-
-      const contexts = await readActiveTabContextByWindow()
+      const contexts = await this.readActiveTabContextByWindow()
       const currentWindowContext = contexts[windowId]
       if (
         !supersedeCurrent &&
         currentWindowContext?.activeTabId === activeTabId &&
-        isLoadingContext(currentWindowContext.context) &&
-        isLoadingContext(context)
+        isLoadingTabContext(currentWindowContext.context) &&
+        isLoadingTabContext(context)
       ) {
         return currentWindowContext.revision
       }
-
       const currentRevision = currentWindowContext?.revision ?? 0
       const nextRevision = currentRevision + 1
-      await writeWindowContext(
-        buildWindowContext(windowId, activeTabId, context, nextRevision)
+      await this.writeWindowContext(
+        this.buildWindowContext(windowId, activeTabId, context, nextRevision)
       )
       return nextRevision
     })
+  }
 
-  const shouldProjectLoadingForTab = async (
-    tabId: number
-  ): Promise<boolean> => {
+  private async shouldProjectLoadingForTab(tabId: number): Promise<boolean> {
     try {
-      const tab = await dependencies.getTab(tabId)
+      const tab = await this.dependencies.getTab(tabId)
       const url = resolveTabUrlForSupportCheck(tab)
       return !isInternalUrl(url) && !!matchUrl(url)
     } catch {
@@ -226,32 +200,29 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     }
   }
 
-  const resolveProjectedContext = async (
+  private async resolveProjectedContext(
     tabId: number
-  ): Promise<ProjectedTabContext> => {
-    if (cache.has(tabId)) {
+  ): Promise<ProjectedTabContext> {
+    if (this.cache.has(tabId)) {
       logger.debug("[tab-cache] Using in-memory tab context cache", { tabId })
-      return cache.get(tabId) ?? null
+      return this.cache.get(tabId) ?? null
     }
-
-    const resolved = await readContextForTab(tabId)
+    const resolved = await this.readContextForTab(tabId)
     if (resolved !== null) {
       logger.debug("[tab-cache] Restored tab context from session storage", {
         tabId,
         resolved,
       })
-      setCacheEntry(tabId, resolved)
+      this.setCacheEntry(tabId, resolved)
       return resolved
     }
-
-    if (await shouldProjectLoadingForTab(tabId)) {
+    if (await this.shouldProjectLoadingForTab(tabId)) {
       logger.debug(
         "[tab-cache] Projecting loading state for supported tab with no cached context yet",
         { tabId }
       )
       return { loading: true }
     }
-
     logger.debug(
       "[tab-cache] No cached context for tab; projecting unsupported state",
       { tabId }
@@ -259,25 +230,23 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     return null
   }
 
-  const getWindowIdForTab = async (
+  private async getWindowIdForTab(
     tabId: number,
     preferredWindowId?: number
-  ): Promise<number | undefined> => {
+  ): Promise<number | undefined> {
     if (typeof preferredWindowId === "number") {
       return preferredWindowId
     }
-
     try {
-      const tab = await dependencies.getTab(tabId)
+      const tab = await this.dependencies.getTab(tabId)
       if (typeof tab?.windowId === "number") {
         return tab.windowId
       }
     } catch {
       // fall through
     }
-
     try {
-      const activeTabs = await dependencies.queryActiveTabs()
+      const activeTabs = await this.dependencies.queryActiveTabs()
       const activeTab = activeTabs.find((t) => t.id === tabId)
       if (typeof activeTab?.windowId === "number") {
         return activeTab.windowId
@@ -285,403 +254,463 @@ export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
     } catch {
       // fall through
     }
-
     return undefined
   }
 
-  const syncFromActiveTabs = async (): Promise<void> => {
-    const activeTabs = await dependencies.queryActiveTabs()
-
-    if (activeTabs.length === 0) {
-      await projectionMutations.run(async () => {
-        await dependencies.writeSession({
+  private async syncFromActiveTabs(updatedTabId?: number): Promise<void> {
+    const activeTabs = await this.dependencies.queryActiveTabs()
+    if (activeTabs.length === 0 && updatedTabId === undefined) {
+      await this.projectionMutations.run(() =>
+        this.dependencies.writeSession({
           [SESSION_STORAGE_KEYS.activeTabContextByWindow]: {},
         })
-      })
+      )
       return
     }
-
     for (const activeTab of activeTabs) {
       const tabId = activeTab.id
-      if (typeof tabId !== "number") {
+      if (
+        typeof tabId !== "number" ||
+        (updatedTabId !== undefined && tabId !== updatedTabId)
+      )
         continue
-      }
-
-      let windowId = activeTab.windowId
-      if (typeof windowId !== "number") {
-        windowId = await getWindowIdForTab(tabId)
-      }
-      if (typeof windowId !== "number") {
-        continue
-      }
-
-      try {
-        const tab = await dependencies.getTab(tabId)
-        if (tab?.url === "about:blank" && !tab.pendingUrl) {
-          const existing = await readActiveTabContextByWindow()
-          const currentWindowContext = existing[windowId]
-          if (
-            currentWindowContext &&
-            currentWindowContext.activeTabId === tabId
-          ) {
-            // Preserve existing projection for a transient about:blank page
-            // instead of clearing it while the real pendingUrl resolves.
-            continue
-          }
-        }
-
-        const url = resolveTabUrlForSupportCheck(tab)
-        if (!hasResolvedTabUrl(url)) {
-          continue
-        }
-
-        if (isExtensionPageUrl(url)) {
-          await writeNextWindowContext(windowId, tabId, null)
-          continue
-        }
-      } catch {
-        // Ignore tab lookup failures and fall through to projection resolution.
-      }
-
-      const context = await resolveProjectedContext(tabId)
-      await writeNextWindowContext(windowId, tabId, context)
+      const windowId =
+        activeTab.windowId ?? (await this.getWindowIdForTab(tabId))
+      if (typeof windowId !== "number") continue
+      await this.handleTabActivated(tabId, windowId)
     }
   }
 
-  const commitTabContextMutation = async (
+  private async applyTabContextMutation(
     tabId: number,
     options: ProjectionCommitOptions | undefined,
     mutation: () => Promise<ProjectedTabContext>
-  ): Promise<ProjectionMutationResult> =>
-    projectionMutations.run(async () => {
-      if (options?.ownerSignal?.aborted) {
+  ): Promise<ProjectionMutationResult> {
+    return this.projectionMutations.run(async () => {
+      if (options?.ownerSignal?.aborted)
         return { applied: false, projected: false }
-      }
-      const activeTabs = await dependencies.queryActiveTabs()
-      const activeTab = activeTabs.find((tab) => tab.id === tabId)
-      const windowId = options?.windowId ?? activeTab?.windowId
-
-      if (!activeTab || typeof windowId !== "number") {
-        if (typeof options?.requestId === "number") {
-          return { applied: false, projected: false }
-        }
-
+      const owner = await this.resolveCommitOwner(tabId, options)
+      if (owner.kind === "rejected") return { applied: false, projected: false }
+      if (owner.kind === "inactive") {
         const context = await mutation()
-        if (!isLoadingContext(context)) {
-          setCacheEntry(tabId, context)
-        }
+        this.cacheResolvedContext(tabId, context)
         return { applied: true, projected: false }
       }
-
-      if (
-        typeof activeTab.windowId === "number" &&
-        activeTab.windowId !== windowId
-      ) {
-        return { applied: false, projected: false }
-      }
-
-      if (options?.expectedUrl) {
-        let currentTab:
-          Awaited<ReturnType<TabCacheDependencies["getTab"]>> | undefined
-        try {
-          currentTab = await dependencies.getTab(tabId)
-        } catch {
-          return { applied: false, projected: false }
-        }
-        if (
-          currentTab?.windowId !== windowId ||
-          resolveTabUrlForSupportCheck(currentTab) !== options.expectedUrl
-        ) {
-          return { applied: false, projected: false }
-        }
-      }
-
-      const existing = await readActiveTabContextByWindow()
-      const currentWindowContext = existing[windowId]
-      const currentRevision = currentWindowContext?.revision ?? 0
-
-      if (
-        typeof options?.requestId === "number" &&
-        (options.requestId !== currentRevision ||
-          currentWindowContext?.activeTabId !== tabId)
-      ) {
-        logger.debug("[tab-cache] Rejecting stale active tab context commit", {
-          tabId,
-          windowId,
-          requestId: options.requestId,
-          currentRevision,
-          currentActiveTabId: currentWindowContext?.activeTabId,
-        })
-        return { applied: false, projected: false }
-      }
-
-      const context = await mutation()
-      if (options?.ownerSignal?.aborted) {
-        return { applied: false, projected: false }
-      }
-
-      // A direct, externally supplied tab context is authoritative for the
-      // current page. Advance the revision so a resolver that began before
-      // that context arrived cannot overwrite it when its fetch completes.
-      const requestId = options?.supersedeInFlight
-        ? currentRevision + 1
-        : (options?.requestId ?? currentRevision)
-
-      // Always keep the in-memory cache up to date so activation is fast.
-      // The cache stores resolved states only; transient loading projections
-      // live in the session-backed window context.
-      if (!isLoadingContext(context)) {
-        setCacheEntry(tabId, context)
-      }
-
-      await writeWindowContext(
-        buildWindowContext(windowId, tabId, context, requestId)
-      )
-      return { applied: true, projected: true }
+      return this.mutateActiveContext(tabId, owner, options, mutation)
     })
+  }
 
-  const commitActiveTabContext = async (
+  private async mutateActiveContext(
+    tabId: number,
+    owner: { windowId: number; revision: number },
+    options: ProjectionCommitOptions | undefined,
+    mutation: () => Promise<ProjectedTabContext>
+  ): Promise<ProjectionMutationResult> {
+    const context = await mutation()
+    if (options?.ownerSignal?.aborted)
+      return { applied: false, projected: false }
+    const requestId = options?.supersedeInFlight
+      ? owner.revision + 1
+      : (options?.requestId ?? owner.revision)
+    this.cacheResolvedContext(tabId, context)
+    await this.writeWindowContext(
+      this.buildWindowContext(owner.windowId, tabId, context, requestId)
+    )
+    return { applied: true, projected: true }
+  }
+
+  private cacheResolvedContext(
+    tabId: number,
+    context: ProjectedTabContext
+  ): void {
+    // Loading state belongs to the revisioned window projection, not the cache.
+    if (!isLoadingTabContext(context)) this.setCacheEntry(tabId, context)
+  }
+
+  private async resolveCommitOwner(
+    tabId: number,
+    options?: ProjectionCommitOptions
+  ): Promise<
+    | { kind: "rejected" }
+    | { kind: "inactive" }
+    | { kind: "active"; windowId: number; revision: number }
+  > {
+    const window = await this.resolveMutationWindow(tabId, options?.windowId)
+    if (window.kind === "inactive")
+      return {
+        kind: typeof options?.requestId === "number" ? "rejected" : "inactive",
+      }
+    if (window.kind === "rejected") return window
+    if (
+      !(await this.matchesExpectedUrl(
+        tabId,
+        window.windowId,
+        options?.expectedUrl
+      ))
+    )
+      return { kind: "rejected" }
+    return this.resolveRevisionOwner(tabId, window.windowId, options?.requestId)
+  }
+
+  private async resolveMutationWindow(
+    tabId: number,
+    preferredWindowId?: number
+  ): Promise<
+    | { kind: "rejected" }
+    | { kind: "inactive" }
+    | { kind: "active"; windowId: number }
+  > {
+    const active = (await this.dependencies.queryActiveTabs()).find(
+      (tab) => tab.id === tabId
+    )
+    const windowId = preferredWindowId ?? active?.windowId
+    if (!active || typeof windowId !== "number") return { kind: "inactive" }
+    if (typeof active.windowId === "number" && active.windowId !== windowId)
+      return { kind: "rejected" }
+    return { kind: "active", windowId }
+  }
+
+  private async resolveRevisionOwner(
+    tabId: number,
+    windowId: number,
+    requestId?: number
+  ): Promise<
+    | { kind: "rejected" }
+    | { kind: "active"; windowId: number; revision: number }
+  > {
+    const current = (await this.readActiveTabContextByWindow())[windowId]
+    const revision = current?.revision ?? 0
+    if (
+      !this.matchesCommitRevision(tabId, windowId, revision, current, requestId)
+    )
+      return { kind: "rejected" }
+    return { kind: "active", windowId, revision }
+  }
+
+  private async matchesExpectedUrl(
+    tabId: number,
+    windowId: number,
+    expectedUrl?: string
+  ): Promise<boolean> {
+    if (!expectedUrl) return true
+    try {
+      const tab = await this.dependencies.getTab(tabId)
+      return (
+        tab?.windowId === windowId &&
+        resolveTabUrlForSupportCheck(tab) === expectedUrl
+      )
+    } catch {
+      return false
+    }
+  }
+
+  private matchesCommitRevision(
+    tabId: number,
+    windowId: number,
+    revision: number,
+    current: WindowTabContext | undefined,
+    requestId?: number
+  ): boolean {
+    if (
+      typeof requestId !== "number" ||
+      (requestId === revision && current?.activeTabId === tabId)
+    )
+      return true
+    logger.debug("[tab-cache] Rejecting stale active tab context commit", {
+      tabId,
+      windowId,
+      requestId,
+      currentRevision: revision,
+      currentActiveTabId: current?.activeTabId,
+    })
+    return false
+  }
+
+  private async commitActiveTabContext(
     tabId: number,
     context: ProjectedTabContext,
     options?: ProjectionCommitOptions
-  ): Promise<boolean> =>
-    (
-      await commitTabContextMutation(tabId, options, () =>
+  ): Promise<boolean> {
+    return (
+      await this.applyTabContextMutation(tabId, options, () =>
         Promise.resolve(context)
       )
     ).projected
+  }
+  async getCurrentSeriesContext(
+    tabId: number,
+    windowId?: number
+  ): Promise<CurrentSeriesContext | undefined> {
+    return this.projectionMutations.run(async () => {
+      const resolvedWindowId = await this.getWindowIdForTab(tabId, windowId)
+      if (typeof resolvedWindowId !== "number") return undefined
+      const tab = await this.getActiveSeriesTab(tabId, resolvedWindowId)
+      if (!tab) return undefined
+      const matched = matchUrl(tab.url, { includeDisabled: true })
+      if (!matched) return undefined
+      const current = (await this.readActiveTabContextByWindow())[
+        resolvedWindowId
+      ]
+      if (
+        !this.matchesSeriesProjection(
+          current,
+          tabId,
+          tab.url,
+          matched.integrationId
+        )
+      )
+        return undefined
+      return {
+        context: structuredClone(current.context),
+        revision: current.revision,
+        windowId: resolvedWindowId,
+      }
+    })
+  }
 
-  return {
-    async getCurrentSeriesContext(
-      tabId: number,
-      windowId?: number
-    ): Promise<CurrentSeriesContext | undefined> {
-      return await projectionMutations.run(async () => {
-        const resolvedWindowId = await getWindowIdForTab(tabId, windowId)
-        if (typeof resolvedWindowId !== "number") return undefined
+  private async getActiveSeriesTab(
+    tabId: number,
+    windowId: number
+  ): Promise<{ url: string } | undefined> {
+    try {
+      const tab = await this.dependencies.getTab(tabId)
+      if (!tab?.active || tab.windowId !== windowId) return undefined
+      if (typeof tab.pendingUrl === "string" && tab.pendingUrl.length > 0)
+        return undefined
+      if (typeof tab.url !== "string" || tab.url.length === 0) return undefined
+      return { url: tab.url }
+    } catch {
+      return undefined
+    }
+  }
 
-        let tab: Awaited<ReturnType<TabCacheDependencies["getTab"]>>
-        try {
-          tab = await dependencies.getTab(tabId)
-        } catch {
-          return undefined
-        }
-        if (!tab?.active || tab.windowId !== resolvedWindowId) return undefined
-        if (typeof tab.pendingUrl === "string" && tab.pendingUrl.length > 0) {
-          return undefined
-        }
+  private matchesSeriesProjection(
+    context: WindowTabContext | undefined,
+    tabId: number,
+    url: string,
+    integrationId: string
+  ): context is WindowTabContext & { context: MangaPageState } {
+    return (
+      !!context &&
+      context.activeTabId === tabId &&
+      isMangaPageState(context.context) &&
+      context.context.sourceUrl === url &&
+      context.context.siteIntegrationId === integrationId
+    )
+  }
 
-        const currentUrl = tab.url
-        if (typeof currentUrl !== "string" || currentUrl.length === 0) {
-          return undefined
-        }
-        const matchedIntegration = matchUrl(currentUrl, {
-          includeDisabled: true,
-        })
-        if (!matchedIntegration) return undefined
+  getCachedContext(tabId: number): TabContextCacheValue | undefined {
+    return this.cache.get(tabId)
+  }
 
-        const activeContexts = await readActiveTabContextByWindow()
-        const activeContext = activeContexts[resolvedWindowId]
-        if (
-          !activeContext ||
-          activeContext.activeTabId !== tabId ||
-          !isMangaPageState(activeContext.context) ||
-          activeContext.context.sourceUrl !== currentUrl ||
-          activeContext.context.siteIntegrationId !==
-            matchedIntegration.integrationId
-        ) {
-          return undefined
-        }
+  setCachedContext(tabId: number, value: TabContextCacheValue): void {
+    this.setCacheEntry(tabId, value)
+  }
 
-        return {
-          context: structuredClone(activeContext.context),
-          revision: activeContext.revision,
-          windowId: resolvedWindowId,
-        }
+  deleteCachedContext(tabId: number): void {
+    this.cache.delete(tabId)
+  }
+
+  async commitTabContextMutation(
+    tabId: number,
+    options: ProjectionCommitOptions | undefined,
+    mutation: () => Promise<ProjectedTabContext>
+  ): Promise<boolean> {
+    return (await this.applyTabContextMutation(tabId, options, mutation))
+      .applied
+  }
+
+  async handleTabActivated(tabId: number, windowId?: number): Promise<void> {
+    const resolvedWindowId = await this.getWindowIdForTab(tabId, windowId)
+    if (await this.shouldSkipProjection(tabId, resolvedWindowId)) return
+    if (typeof resolvedWindowId !== "number") {
+      logger.debug("[tab-cache] Cannot resolve windowId for activated tab", {
+        tabId,
       })
-    },
+      return
+    }
+    const context = await this.resolveProjectedContext(tabId)
+    await this.writeNextWindowContext(resolvedWindowId, tabId, context)
+  }
 
-    getCachedContext(tabId: number): TabContextCacheValue | undefined {
-      return cache.get(tabId)
-    },
-
-    setCachedContext(tabId: number, value: TabContextCacheValue): void {
-      setCacheEntry(tabId, value)
-    },
-
-    deleteCachedContext(tabId: number): void {
-      cache.delete(tabId)
-    },
-
-    async commitTabContextMutation(
-      tabId: number,
-      options: ProjectionCommitOptions | undefined,
-      mutation: () => Promise<ProjectedTabContext>
-    ): Promise<boolean> {
-      return (await commitTabContextMutation(tabId, options, mutation)).applied
-    },
-
-    async handleTabActivated(tabId: number, windowId?: number): Promise<void> {
-      const resolvedWindowId = await getWindowIdForTab(tabId, windowId)
-
-      try {
-        const tab = await dependencies.getTab(tabId)
-        if (tab?.url === "about:blank" && !tab.pendingUrl) {
-          const existing = await readActiveTabContextByWindow()
-          if (
-            typeof resolvedWindowId === "number" &&
-            existing[resolvedWindowId]?.activeTabId === tabId
-          ) {
-            return
-          }
-        }
-
-        const url = resolveTabUrlForSupportCheck(tab)
-        if (!hasResolvedTabUrl(url)) {
-          return
-        }
-
-        if (isExtensionPageUrl(url)) {
-          if (typeof resolvedWindowId === "number") {
-            await writeNextWindowContext(resolvedWindowId, tabId, null)
-          }
-          return
-        }
-      } catch {
-        // Ignore tab lookup failures and continue with normal projection resolution.
+  private async shouldSkipProjection(
+    tabId: number,
+    windowId?: number
+  ): Promise<boolean> {
+    try {
+      const tab = await this.dependencies.getTab(tabId)
+      if (await this.hasTransientBlankProjection(tabId, windowId, tab))
+        return true
+      const url = resolveTabUrlForSupportCheck(tab)
+      if (!hasResolvedTabUrl(url)) return true
+      if (isExtensionPageUrl(url)) {
+        if (typeof windowId === "number")
+          await this.writeNextWindowContext(windowId, tabId, null)
+        return true
       }
+    } catch {
+      // A missing tab snapshot still permits restoration from the session cache.
+    }
+    return false
+  }
 
-      if (typeof resolvedWindowId !== "number") {
-        logger.debug("[tab-cache] Cannot resolve windowId for activated tab", {
-          tabId,
-        })
-        return
+  private async hasTransientBlankProjection(
+    tabId: number,
+    windowId: number | undefined,
+    tab: Awaited<ReturnType<TabCacheDependencies["getTab"]>>
+  ): Promise<boolean> {
+    if (tab?.url !== "about:blank" || tab.pendingUrl) return false
+    const existing = await this.readActiveTabContextByWindow()
+    return (
+      typeof windowId === "number" && existing[windowId]?.activeTabId === tabId
+    )
+  }
+
+  async handleTabUpdated(
+    tabId: number,
+    changeInfo: chrome.tabs.OnUpdatedInfo
+  ): Promise<void> {
+    if (changeInfo.url || changeInfo.status === "loading") {
+      logger.debug("[tab-cache] Tab URL changed; invalidating cached context", {
+        tabId,
+        url: changeInfo.url,
+      })
+      // Session tab/error state is owned and cleared by
+      // TabContextStateService. This cache operation only drops the local
+      // resolved projection; navigation callers clear durable state through
+      // the service before invoking this method.
+      this.cache.delete(tabId)
+    }
+    // A completed update must not allocate a new projection revision. A
+    // DOM-ready resolver may already own the active loading revision, and
+    // advancing it here would make that valid provider result look stale
+    // and force an unnecessary second resolution. URL changes still
+    // reproject immediately so stale/unsupported UI cannot survive a
+    // navigation.
+    if (changeInfo.url) {
+      await this.syncFromActiveTabs(tabId)
+    }
+  }
+
+  async handleTabRemoved(tabId: number): Promise<void> {
+    this.cache.delete(tabId)
+    await this.syncFromActiveTabs()
+  }
+
+  async handleTabReplaced(
+    addedTabId: number,
+    removedTabId: number
+  ): Promise<void> {
+    const previous = this.cache.get(removedTabId)
+    this.cache.delete(removedTabId)
+    if (previous !== undefined) {
+      this.setCacheEntry(addedTabId, previous)
+    }
+    await this.syncFromActiveTabs()
+  }
+
+  async readAndCache(tabId: number): Promise<TabContextCacheValue> {
+    const context = await this.readContextForTab(tabId)
+    if (context === null) {
+      this.cache.delete(tabId)
+    } else {
+      this.setCacheEntry(tabId, context)
+    }
+    return context
+  }
+
+  async syncActiveTabContext(
+    tabId?: number,
+    context?: ActiveTabContextValue,
+    options?: ProjectionCommitOptions
+  ): Promise<boolean> {
+    if (typeof tabId === "number") {
+      const committed = await this.commitActiveTabContext(
+        tabId,
+        context ?? null,
+        options
+      )
+      if (committed) {
+        return true
       }
-
-      const context = await resolveProjectedContext(tabId)
-      await writeNextWindowContext(resolvedWindowId, tabId, context)
-    },
-
-    async handleTabUpdated(
-      tabId: number,
-      changeInfo: chrome.tabs.OnUpdatedInfo
-    ): Promise<void> {
-      if (changeInfo.url || changeInfo.status === "loading") {
-        logger.debug(
-          "[tab-cache] Tab URL changed; invalidating cached context",
-          {
-            tabId,
-            url: changeInfo.url,
-          }
-        )
-        // Session tab/error state is owned and cleared by
-        // TabContextStateService. This cache operation only drops the local
-        // resolved projection; navigation callers clear durable state through
-        // the service before invoking this method.
-        cache.delete(tabId)
-      }
-
-      // A completed update must not allocate a new projection revision. A
-      // DOM-ready resolver may already own the active loading revision, and
-      // advancing it here would make that valid provider result look stale
-      // and force an unnecessary second resolution. URL changes still
-      // reproject immediately so stale/unsupported UI cannot survive a
-      // navigation.
-      if (changeInfo.url) {
-        await syncFromActiveTabs()
-      }
-    },
-
-    async handleTabRemoved(tabId: number): Promise<void> {
-      cache.delete(tabId)
-      await syncFromActiveTabs()
-    },
-
-    async handleTabReplaced(
-      addedTabId: number,
-      removedTabId: number
-    ): Promise<void> {
-      const previous = cache.get(removedTabId)
-      cache.delete(removedTabId)
-
-      if (previous !== undefined) {
-        setCacheEntry(addedTabId, previous)
-      }
-
-      await syncFromActiveTabs()
-    },
-
-    async readAndCache(tabId: number): Promise<TabContextCacheValue> {
-      const context = await readContextForTab(tabId)
-      if (context === null) {
-        cache.delete(tabId)
-      } else {
-        setCacheEntry(tabId, context)
-      }
-      return context
-    },
-
-    async syncActiveTabContext(
-      tabId?: number,
-      context?: ActiveTabContextValue,
-      options?: ProjectionCommitOptions
-    ): Promise<boolean> {
-      if (typeof tabId === "number") {
-        const committed = await commitActiveTabContext(
-          tabId,
-          context ?? null,
-          options
-        )
-        if (committed) {
-          return true
-        }
-        // A revisioned resolver result that no longer matches the current
-        // loading request is stale. Reprojecting here would allocate another
-        // revision and could invalidate the genuinely current request.
-        if (typeof options?.requestId === "number") {
-          return false
-        }
-        // The resolved tab is no longer active, but the active tab may still
-        // need its projection refreshed (e.g. unsupported/inactive init).
-        await syncFromActiveTabs()
+      // A revisioned resolver result that no longer matches the current
+      // loading request is stale. Reprojecting here would allocate another
+      // revision and could invalidate the genuinely current request.
+      if (typeof options?.requestId === "number") {
         return false
       }
+      // The resolved tab is no longer active, but the active tab may still
+      // need its projection refreshed (e.g. unsupported/inactive init).
+      await this.syncFromActiveTabs()
+      return false
+    }
+    await this.syncFromActiveTabs()
+    return true
+  }
 
-      await syncFromActiveTabs()
-      return true
-    },
+  async isRequestIdCurrent(
+    windowId: number,
+    requestId: number
+  ): Promise<boolean> {
+    return this.projectionMutations.run(async () => {
+      const currentRevision = await this.getCurrentRevisionForWindow(windowId)
+      return requestId === currentRevision
+    })
+  }
 
-    async isRequestIdCurrent(
-      windowId: number,
-      requestId: number
-    ): Promise<boolean> {
-      return projectionMutations.run(async () => {
-        const currentRevision = await getCurrentRevisionForWindow(windowId)
-        return requestId === currentRevision
-      })
-    },
-
-    async projectLoadingForTab(
-      tabId: number,
-      windowId?: number,
-      supersedeCurrent = false
-    ): Promise<{ requestId: number } | undefined> {
-      const resolvedWindowId = await getWindowIdForTab(tabId, windowId)
-      if (typeof resolvedWindowId !== "number") {
-        return undefined
+  async projectLoadingForTab(
+    tabId: number,
+    windowId?: number,
+    supersedeCurrent = false
+  ): Promise<
+    | {
+        requestId: number
       }
+    | undefined
+  > {
+    const resolvedWindowId = await this.getWindowIdForTab(tabId, windowId)
+    if (typeof resolvedWindowId !== "number") {
+      return undefined
+    }
+    const nextRevision = await this.writeNextWindowContext(
+      resolvedWindowId,
+      tabId,
+      { loading: true },
+      supersedeCurrent
+    )
+    return nextRevision === undefined ? undefined : { requestId: nextRevision }
+  }
+}
 
-      const nextRevision = await writeNextWindowContext(
-        resolvedWindowId,
-        tabId,
-        { loading: true },
-        supersedeCurrent
-      )
-      return nextRevision === undefined
-        ? undefined
-        : { requestId: nextRevision }
-    },
+export function createTabContextCache(deps?: Partial<TabCacheDependencies>) {
+  const cache = new TabContextCache(deps)
+  return {
+    getCurrentSeriesContext: cache.getCurrentSeriesContext.bind(cache),
+    getCachedContext: cache.getCachedContext.bind(cache),
+    setCachedContext: cache.setCachedContext.bind(cache),
+    deleteCachedContext: cache.deleteCachedContext.bind(cache),
+    commitTabContextMutation: cache.commitTabContextMutation.bind(cache),
+    handleTabActivated: cache.handleTabActivated.bind(cache),
+    handleTabUpdated: cache.handleTabUpdated.bind(cache),
+    handleTabRemoved: cache.handleTabRemoved.bind(cache),
+    handleTabReplaced: cache.handleTabReplaced.bind(cache),
+    readAndCache: cache.readAndCache.bind(cache),
+    syncActiveTabContext: cache.syncActiveTabContext.bind(cache),
+    isRequestIdCurrent: cache.isRequestIdCurrent.bind(cache),
+    projectLoadingForTab: cache.projectLoadingForTab.bind(cache),
   }
 }
 
 export const tabContextCache = createTabContextCache()
+
+function ownsActiveWindow(
+  tabs: Array<{ id?: number; windowId?: number }>,
+  tabId: number,
+  windowId: number
+): boolean {
+  return tabs.some(
+    (tab) =>
+      tab.id === tabId &&
+      (tab.windowId === undefined || tab.windowId === windowId)
+  )
+}

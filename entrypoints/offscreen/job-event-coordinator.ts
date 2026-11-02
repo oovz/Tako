@@ -21,6 +21,11 @@ export type OffscreenDownloadChapterPayload =
 export type OffscreenJobRecord = {
   request: OffscreenDownloadChapterPayload
   integrationContext: JsonObject | undefined
+  fsaWritePermit?: Promise<void>
+  writableRoot?: Promise<
+    | { status: "ready"; handle: FileSystemDirectoryHandle }
+    | { status: "failed"; error: unknown }
+  >
   controller: AbortController
   stage: OffscreenJobStage
   sequence: number

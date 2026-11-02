@@ -1,4 +1,3 @@
-import type { Chapter } from "@/src/types/chapter"
 import {
   writeBlobToPath,
   type WriteBlobToPathResult,
@@ -18,6 +17,7 @@ export function getConflictPolicy(
 }
 
 export async function writeFsaOutput(input: {
+  beginFsaWrite: () => Promise<void>
   dir: FileSystemDirectoryHandle
   path: string
   blob: Blob
@@ -26,6 +26,7 @@ export async function writeFsaOutput(input: {
   onBytesWritten?: (bytesWritten: number) => void | Promise<void>
 }): Promise<WriteBlobToPathResult> {
   try {
+    await input.beginFsaWrite()
     return await writeBlobToPath(
       input.dir,
       input.path,
@@ -45,18 +46,15 @@ export async function writeFsaOutput(input: {
 export async function resolveChapterWritableRoot(
   runtime: ChapterProcessingRuntime,
   input: {
-    taskId: string
-    chapter: Chapter
-    totalImages: number
+    directoryHandleId?: string
     abortSignal?: AbortSignal
   }
 ): Promise<FileSystemDirectoryHandle> {
   try {
-    return await runtime.resolveWritableDownloadRoot({
-      taskId: input.taskId,
-      chapter: input.chapter,
-      totalImages: input.totalImages,
-    })
+    if (!input.directoryHandleId) {
+      throw new Error("Custom folder is not configured")
+    }
+    return await runtime.resolveWritableDownloadRoot(input.directoryHandleId)
   } catch (error) {
     if (input.abortSignal?.aborted) {
       throw new Error("job-cancelled", { cause: error })

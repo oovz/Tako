@@ -1,3 +1,4 @@
+import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -6,13 +7,15 @@ import {
 } from "@/entrypoints/background/native-output-coordinator"
 import { initializeFromStorage } from "@/entrypoints/background/initialize-from-storage"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
-import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import type { DownloadTaskExecutor } from "@/entrypoints/background/download-task-executor"
 import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 import type { OffscreenJobState } from "@/src/runtime/offscreen-job-contracts"
 import { InvalidDurableStateError } from "@/src/runtime/runtime-phase-errors"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { LOCAL_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
 import { NativeOutputRepository } from "@/src/storage/native-output-repository"
 import { QueueProjectionService } from "@/src/storage/queue-projection-service"
 import { QueueRepository } from "@/src/storage/queue-repository"
@@ -46,6 +49,7 @@ function activeTask(): DownloadTaskState {
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: output.chapterId,
         url: "https://mangadex.org/chapter/chapter-1",
         title: "Chapter 1",
@@ -94,7 +98,7 @@ describe("native output cold-start recovery", () => {
   let search: ReturnType<typeof vi.fn>
   let revoke: ReturnType<typeof vi.fn>
   let settingsRepository: SettingsRepository
-  const destinationService = {} as never
+
   const queueScheduler = {
     requestContinuation: vi.fn(),
     resumeTask: vi.fn(async () => undefined),
@@ -125,14 +129,17 @@ describe("native output cold-start recovery", () => {
           get: vi.fn(async (keys: string | string[]) => {
             const requested = Array.isArray(keys) ? keys : [keys]
             return Object.fromEntries(
-              requested.map((key) => [key, structuredClone(local[key])])
+              requested
+                .filter((key) => key in local)
+                .map((key) => [key, structuredClone(local[key])])
             )
           }),
           set: vi.fn(async (values: Record<string, unknown>) => {
             Object.assign(local, structuredClone(values))
           }),
-          remove: vi.fn(async (key: string) => {
-            delete local[key]
+          remove: vi.fn(async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys])
+              delete local[key]
           }),
         },
         session: { set: vi.fn(async () => undefined) },
@@ -158,7 +165,10 @@ describe("native output cold-start recovery", () => {
       lastSequence: 1,
     })
   ) {
-    const queueRepository = new QueueRepository(new QueueProjectionService())
+    const queueRepository = new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
     const repository = new NativeOutputRepository()
     const coordinator = new NativeOutputCoordinator({
       settingsRepository,
@@ -178,6 +188,271 @@ describe("native output cold-start recovery", () => {
       historyRepository: {} as never,
     }
   }
+
+  it.each([0, 1, 2])(
+    "retains the producer cause across a cold settlement with %i requested outputs",
+    async (requested) => {
+      const first = createRuntime()
+      await first.queueRepository.initialize()
+      const hasUncertainOutput = requested === 2
+      await seedOpenManifest(first, requested, hasUncertainOutput ? [0] : [])
+      if (hasUncertainOutput) {
+        await first.repository.markAcceptanceUnknown({
+          outputId: "output-0",
+          now: 210,
+        })
+      }
+      const terminal = new OffscreenJobTerminalCoordinator(
+        first.queueRepository,
+        first.coordinator,
+        queueScheduler,
+        finalizationDependencies()
+      )
+      const producerError = {
+        errorMessage: hasUncertainOutput
+          ? "Image fetch failed"
+          : "Archive size exceeds byte limit",
+        errorCategory: hasUncertainOutput
+          ? ("network_unavailable" as const)
+          : ("archive_creation_failed" as const),
+      }
+      await terminal.settle({
+        ...jobIdentity,
+        sequence: 2,
+        stage: "archiving",
+        terminalAt: 300,
+        outcome: {
+          status: "failed",
+          outputsRequested: requested,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: hasUncertainOutput ? 1 : requested,
+          ...producerError,
+        },
+      })
+      expect(
+        await first.repository.getManifest(jobIdentity.jobId)
+      ).toMatchObject({ phase: "sealed", ...producerError })
+
+      const cold = createRuntime()
+      await cold.queueRepository.initialize()
+      const effects = await cold.coordinator.initialize()
+      const failed = await cold.queueRepository.getTask(jobIdentity.taskId)
+      expect(failed).toMatchObject({
+        status: "failed",
+        ...producerError,
+        chapters: [
+          {
+            status: "failed",
+            ...producerError,
+            ...(hasUncertainOutput
+              ? { nativeOutputSettlement: { outputUncertain: true } }
+              : {}),
+          },
+        ],
+      })
+      expect(download).not.toHaveBeenCalled()
+      expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+      for (const effect of effects)
+        await cold.coordinator.acknowledgeSettlement(effect)
+      await cold.coordinator.reconcile()
+      const reloaded = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
+      await reloaded.initialize()
+      expect(await reloaded.getTask(jobIdentity.taskId)).toEqual(failed)
+    }
+  )
+
+  it.each(["completed", "failed"] as const)(
+    "retains chapter failure causes when the final chapter is %s across a cold read",
+    async (finalStatus) => {
+      const initial = activeTask()
+      initial.chapters.push({
+        ...initial.chapters[0],
+        id: "chapter-2",
+        title: "Chapter 2",
+        index: 1,
+        status: "queued",
+        dispatchAttempt: undefined,
+      })
+      local[LOCAL_STORAGE_KEYS.downloadQueue] = [initial]
+      const runtime = createRuntime()
+      await runtime.queueRepository.initialize()
+      const terminal = new OffscreenJobTerminalCoordinator(
+        runtime.queueRepository,
+        runtime.coordinator,
+        queueScheduler,
+        finalizationDependencies()
+      )
+      const earlierFailure = {
+        errorMessage: "Archive size exceeds byte limit",
+        errorCategory: "archive_creation_failed" as const,
+      }
+      await terminal.settle({
+        ...jobIdentity,
+        sequence: 2,
+        stage: "archiving",
+        terminalAt: 300,
+        outcome: {
+          status: "failed",
+          outputsRequested: 0,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          ...earlierFailure,
+        },
+      })
+      const firstEffects = await runtime.coordinator.reconcile()
+      for (const effect of firstEffects)
+        await runtime.coordinator.acknowledgeSettlement(effect)
+      expect(
+        await runtime.queueRepository.getTask(jobIdentity.taskId)
+      ).toMatchObject({
+        status: "downloading",
+        chapters: [
+          { status: "failed", ...earlierFailure },
+          { status: "queued" },
+        ],
+      })
+
+      const lastIdentity = {
+        ...jobIdentity,
+        jobId: "job-2",
+        chapterId: "chapter-2",
+      }
+      const lease = {
+        ...createDispatchLease({
+          ...lastIdentity,
+          saveMode: "downloads-api",
+          now: 400,
+        }),
+        documentInstanceId: lastIdentity.documentInstanceId,
+      }
+      expect(
+        await runtime.queueRepository.beginChapterDispatch({
+          taskId: lastIdentity.taskId,
+          chapterId: lastIdentity.chapterId,
+          lease,
+          expectedPreviousLease: null,
+          now: 400,
+        })
+      ).toMatchObject({ outcome: "applied" })
+      const finalFailure = {
+        errorMessage: "The provider became unavailable",
+        errorCategory: "network_unavailable" as const,
+      }
+      if (finalStatus === "completed") {
+        await runtime.coordinator.handleOutputReady({
+          ...output,
+          ...lastIdentity,
+          outputId: "output-2",
+        })
+      }
+      await terminal.settle({
+        ...lastIdentity,
+        sequence: 2,
+        stage: "saving",
+        terminalAt: 500,
+        outcome: {
+          status: finalStatus,
+          outputsRequested: finalStatus === "completed" ? 1 : 0,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+          ...(finalStatus === "failed" ? finalFailure : {}),
+        },
+      })
+      if (finalStatus === "completed")
+        search.mockResolvedValue([completeDownloadItem()])
+      const cold = createRuntime()
+      await cold.queueRepository.initialize()
+      await cold.coordinator.initialize()
+      const reloaded = new QueueRepository(
+        new QueueProjectionService(),
+        new HistoryRepository()
+      )
+      await reloaded.initialize()
+      const settled = await reloaded.getTask(jobIdentity.taskId)
+      const expectedFailure = earlierFailure
+      expect(settled).toMatchObject({
+        status: finalStatus === "completed" ? "partial_success" : "failed",
+        ...expectedFailure,
+        chapters: [
+          { status: "failed", ...earlierFailure },
+          { status: finalStatus },
+        ],
+      })
+      expect(toQueueTaskSummary(settled!)).toMatchObject({
+        failureCategory: expectedFailure.errorCategory,
+      })
+    }
+  )
+
+  it.each([
+    { firstFailureIndex: 0, firstFailureStatus: "partial_success" },
+    { firstFailureIndex: 1, firstFailureStatus: "failed" },
+    { firstFailureIndex: 2, firstFailureStatus: "partial_success" },
+    { firstFailureIndex: -1, firstFailureStatus: "failed" },
+  ] as const)(
+    "keeps the task-order cause after general finalization and cold hydration at index $firstFailureIndex",
+    async ({ firstFailureIndex, firstFailureStatus }) => {
+      const initial = activeTask()
+      initial.errorMessage = "Stale final-chapter error"
+      initial.errorCategory = "provider_changed"
+      initial.chapters = Array.from({ length: 3 }, (_, index) => ({
+        ...initial.chapters[0]!,
+        id: `chapter-${index + 1}`,
+        title: `Chapter ${index + 1}`,
+        index,
+        status:
+          index === firstFailureIndex
+            ? firstFailureStatus
+            : firstFailureIndex >= 0 && index > firstFailureIndex
+              ? "failed"
+              : "completed",
+        ...(index === firstFailureIndex
+          ? {
+              errorMessage: "Original folder write failed",
+              errorCategory: "folder_write_failed" as const,
+            }
+          : firstFailureIndex >= 0 && index > firstFailureIndex
+            ? {
+                errorMessage: "Later provider failure",
+                errorCategory: "network_unavailable" as const,
+              }
+            : {}),
+      }))
+      local[LOCAL_STORAGE_KEYS.downloadQueue] = [initial]
+      local[LOCAL_STORAGE_KEYS.activeDispatchLease] = null
+      const runtime = createRuntime()
+      await runtime.queueRepository.initialize()
+      expect(
+        await runtime.queueRepository.finalizeDownloadTask({
+          taskId: initial.id,
+          chapterOutcomesByIndex: initial.chapters.map((chapter) => ({
+            chapterId: chapter.id,
+            status: chapter.status as
+              "completed" | "partial_success" | "failed",
+            errorMessage: chapter.errorMessage,
+            errorCategory: chapter.errorCategory,
+          })),
+          completedAt: 500,
+        })
+      ).toMatchObject({ outcome: "applied" })
+      const reloaded = createRuntime()
+      await reloaded.queueRepository.initialize()
+      const settled = await reloaded.queueRepository.getTask(initial.id)
+      expect(settled).toMatchObject({
+        status: firstFailureIndex < 0 ? "completed" : "partial_success",
+        errorMessage:
+          firstFailureIndex < 0 ? undefined : "Original folder write failed",
+        errorCategory:
+          firstFailureIndex < 0 ? undefined : "folder_write_failed",
+      })
+      expect(toQueueTaskSummary(settled!).failureCategory).toBe(
+        firstFailureIndex < 0 ? undefined : "folder_write_failed"
+      )
+    }
+  )
 
   it("seals an exact canceled manifest after the coordinator dies at a failed seal write", async () => {
     const identity = jobIdentity
@@ -217,7 +492,6 @@ describe("native output cold-start recovery", () => {
       restarted.queueRepository,
       restarted.coordinator,
       { requestContinuation } as unknown as QueueScheduler,
-      {} as never,
       finalizationDependencies()
     )
     await terminal.continueAfterNativeOutputSettlement(effects)
@@ -294,7 +568,6 @@ describe("native output cold-start recovery", () => {
       runtime.queueRepository,
       runtime.coordinator,
       queueScheduler,
-      destinationService,
       finalizationDependencies()
     )
     const result = await initializeFromStorage({
@@ -306,11 +579,112 @@ describe("native output cold-start recovery", () => {
       getOffscreenActiveTaskIds: vi.fn(async () => []),
       hasOffscreenDocument: vi.fn(async () => observation !== null),
       terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+      cancelOffscreenJob: vi.fn(async () => true),
       getOffscreenJobState: vi.fn(async () => observation),
       setLivenessAlarmArmed,
     })
     return { result, setLivenessAlarmArmed }
   }
+
+  it.each(["absent", "ambiguous", "unavailable"] as const)(
+    "interrupts a handoff with %s browser evidence after restart and releases its scheduling owner",
+    async (evidence) => {
+      const first = createRuntime()
+      await first.queueRepository.initialize()
+      await first.coordinator.initialize()
+      await seedOpenManifest(first, 1, [0])
+      await first.repository.markAcceptanceUnknown({
+        outputId: "output-0",
+        now: 210,
+      })
+      await first.coordinator.sealManifest({
+        ...jobIdentity,
+        outputsRequested: 1,
+        outputsFailedBeforeHandoff: 0,
+      })
+      await first.queueRepository.clearDispatchLease(jobIdentity)
+      await first.queueRepository.enqueueDownloadTask({
+        ...activeTask(),
+        id: "next-task",
+        status: "queued",
+        chapters: [
+          {
+            ...activeTask().chapters[0],
+            status: "queued",
+            dispatchAttempt: undefined,
+          },
+        ],
+      })
+      if (evidence === "ambiguous") {
+        search.mockResolvedValue(
+          [41, 42].map((id) => ({
+            ...completeDownloadItem(),
+            id,
+            url: "blob:output-0",
+          }))
+        )
+      } else if (evidence === "unavailable") {
+        search.mockRejectedValue(new Error("Chrome history unavailable"))
+      }
+
+      const restarted = createRuntime()
+      await restarted.queueRepository.initialize()
+      const effects = await restarted.coordinator.initialize()
+      expect(
+        await restarted.queueRepository.getTask(output.taskId)
+      ).toMatchObject({
+        status: "failed",
+        errorCategory: "browser_output_unconfirmed",
+        chapters: [
+          {
+            status: "failed",
+            outputs: { requested: 1, committed: 0, failed: 1 },
+          },
+        ],
+      })
+      const execute = vi.fn(async (taskId: string) => {
+        await restarted.queueRepository.startDownloadTask({
+          taskId,
+          now: Date.now(),
+        })
+        return "active" as const
+      })
+      const scheduler = new QueueScheduler(
+        restarted.queueRepository,
+        {
+          execute,
+          isActive: () => false,
+        } as unknown as DownloadTaskExecutor,
+        async () => undefined
+      )
+      const terminal = new OffscreenJobTerminalCoordinator(
+        restarted.queueRepository,
+        restarted.coordinator,
+        scheduler,
+        finalizationDependencies()
+      )
+      await terminal.continueAfterNativeOutputSettlement(effects)
+      await scheduler.activate()
+      expect(execute).toHaveBeenCalledExactlyOnceWith("next-task")
+      expect(
+        await restarted.queueRepository.getTask("next-task")
+      ).toMatchObject({ status: "downloading" })
+      expect(await restarted.coordinator.getLiveTaskIds()).toEqual([])
+      expect(await restarted.repository.hasLiveDependencies()).toBe(true)
+      expect(revoke).not.toHaveBeenCalled()
+      expect(download).not.toHaveBeenCalled()
+      const settled = await restarted.queueRepository.getTask(output.taskId)
+      const again = createRuntime()
+      await again.queueRepository.initialize()
+      const replayEffects = await again.coordinator.initialize()
+      expect(replayEffects).toEqual([])
+      expect(await again.queueRepository.getTask(output.taskId)).toEqual(
+        settled
+      )
+      expect(download).not.toHaveBeenCalled()
+      expect(revoke).not.toHaveBeenCalled()
+    }
+  )
 
   it("adopts a lost Chrome ID after restart without issuing a second download", async () => {
     const first = createRuntime()
@@ -375,6 +749,94 @@ describe("native output cold-start recovery", () => {
     expect(revoke).toHaveBeenCalledOnce()
   })
 
+  it("keeps an uncertain attempt interrupted when late acceptance is found after manual retry", async () => {
+    const first = createRuntime()
+    await first.queueRepository.initialize()
+    await first.coordinator.initialize()
+    vi.spyOn(first.repository, "attachDownload").mockRejectedValueOnce(
+      new Error("worker stopped before acknowledgement persistence")
+    )
+    await first.coordinator.handleOutputReady(output)
+    await first.coordinator.sealManifest({
+      ...jobIdentity,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 0,
+    })
+    await first.queueRepository.clearDispatchLease(jobIdentity)
+
+    const restarted = createRuntime()
+    await restarted.queueRepository.initialize()
+    const effects = await restarted.coordinator.initialize()
+    expect(effects).toHaveLength(1)
+    for (const effect of effects)
+      await restarted.coordinator.acknowledgeSettlement(effect)
+    const original = await restarted.queueRepository.getTask(output.taskId)
+    expect(original).toMatchObject({
+      status: "failed",
+      errorCategory: "browser_output_unconfirmed",
+    })
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(
+      await restarted.queueRepository.restartDownloadTask({
+        taskId: output.taskId,
+        restartTaskId: "manual-retry",
+        now: Date.now(),
+      })
+    ).toMatchObject({ outcome: "applied" })
+    const retry = await restarted.queueRepository.getTask("manual-retry")
+    expect(retry).toMatchObject({
+      status: "queued",
+      chapters: [{ status: "queued" }],
+    })
+    expect(retry?.chapters[0].nativeOutputSettlement).toBeUndefined()
+    expect(retry?.chapters[0].errorCategory).toBeUndefined()
+
+    search.mockResolvedValue([completeDownloadItem()])
+    expect(await restarted.coordinator.reconcile()).toEqual([])
+    expect(await restarted.queueRepository.getTask("manual-retry")).toEqual(
+      retry
+    )
+    expect(await restarted.queueRepository.getTask(output.taskId)).toEqual({
+      ...original,
+      isRetried: true,
+    })
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(await restarted.repository.hasLiveDependencies()).toBe(false)
+    expect(revoke).toHaveBeenCalledOnce()
+    expect(download).toHaveBeenCalledOnce()
+  })
+
+  it("recovers an open uncertain handoff and its retained dispatch lease when the producer is absent", async () => {
+    const first = createRuntime()
+    await first.queueRepository.initialize()
+    await first.coordinator.initialize()
+    await seedOpenManifest(first, 1, [0])
+    await first.repository.markAcceptanceUnknown({
+      outputId: "output-0",
+      now: 210,
+    })
+
+    const restarted = createRuntime(async () => null)
+    await restarted.queueRepository.initialize()
+    await restarted.coordinator.initialize()
+    await runStartup(restarted, null)
+
+    expect(await restarted.queueRepository.getActiveDispatchLease()).toBeNull()
+    expect(
+      await restarted.queueRepository.getTask(output.taskId)
+    ).toMatchObject({
+      status: "failed",
+      chapters: [
+        { errorCategory: "browser_output_unconfirmed", status: "failed" },
+      ],
+    })
+    expect(await restarted.coordinator.getLiveTaskIds()).toEqual([])
+    expect(await restarted.repository.hasLiveDependencies()).toBe(true)
+    expect(await new HistoryRepository().getDownloadedChapters()).toEqual([])
+    expect(download).not.toHaveBeenCalled()
+    expect(revoke).not.toHaveBeenCalled()
+  })
+
   it("fails strict cold-start hydration before touching Chrome for invalid current state", async () => {
     local["pendingOutputs:index"] = {
       jobIds: [],
@@ -435,7 +897,6 @@ describe("native output cold-start recovery", () => {
         runtime.queueRepository,
         runtime.coordinator,
         queueScheduler,
-        destinationService,
         finalizationDependencies()
       ),
       settingsRepository,
@@ -443,6 +904,7 @@ describe("native output cold-start recovery", () => {
       getOffscreenActiveTaskIds: async () => [],
       hasOffscreenDocument: async () => true,
       terminateOffscreenDocumentForUnboundLease: async () => undefined,
+      cancelOffscreenJob: vi.fn(async () => true),
       getOffscreenJobState: async () => exactTerminalJob,
       setLivenessAlarmArmed: async () => undefined,
     })
@@ -757,7 +1219,6 @@ describe("native output cold-start recovery", () => {
           runtime.queueRepository,
           runtime.coordinator,
           queueScheduler,
-          destinationService,
           finalizationDependencies()
         ),
         settingsRepository,
@@ -765,6 +1226,7 @@ describe("native output cold-start recovery", () => {
         getOffscreenActiveTaskIds: vi.fn(async () => []),
         hasOffscreenDocument: vi.fn(async () => true),
         terminateOffscreenDocumentForUnboundLease: vi.fn(async () => undefined),
+        cancelOffscreenJob: vi.fn(async () => true),
         getOffscreenJobState: vi.fn(async () => {
           throw new Error("offscreen query transport failed")
         }),

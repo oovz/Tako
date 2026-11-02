@@ -1,12 +1,4 @@
-/**
- * @file routes.ts
- * @description Playwright route registrar for the Pixiv Comic integration.
- *
- * Context-resolution coverage: the page host (`comic.pixiv.net`) serves HTML, work
- * metadata, and episode lists. Image hosts (`img-comic.pximg.net`) and the
- * Next.js `_next/data/*` reader endpoints are NOT mocked here — download-workflow
- * adds them alongside download-workflow specs.
- */
+/** Mock Pixiv Comic page HTML, work metadata, and episode lists. */
 
 import type { Route } from "@playwright/test"
 import type { RouteRegistrar } from "../../types"
@@ -20,10 +12,13 @@ import {
 } from "./html-fixtures"
 import {
   buildPixivEpisodesV2Response,
+  buildPixivReadV4Response,
+  buildPixivStoryPageResponse,
   buildPixivWorkV5Response,
 } from "./api-fixtures"
 import { BASIC_SERIES, MINIMAL_SERIES } from "./series-data"
 import { cloneSmallPngBytes, SMALL_PNG_MIME_TYPE } from "../../shared"
+import { clonePixivPagePngBytes } from "./image-fixture"
 
 export const registerPixivComicRoutes: RouteRegistrar = async (
   context,
@@ -77,6 +72,17 @@ export const registerPixivComicRoutes: RouteRegistrar = async (
         return html(buildPixivComicWorkPageHtml(workId, `Work ${workId}`))
       }
 
+      const storyPageMatch = url.pathname.match(
+        /^\/_next\/data\/[^/]+\/viewer\/stories\/(\d+)\.json$/
+      )
+      if (storyPageMatch)
+        return json(buildPixivStoryPageResponse(storyPageMatch[1]))
+
+      const readV4Match = url.pathname.match(
+        /^\/api\/app\/episodes\/(\d+)\/read_v4$/
+      )
+      if (readV4Match) return json(buildPixivReadV4Response(readV4Match[1]))
+
       // HTML: /viewer/stories/{id}
       if (url.pathname.startsWith("/viewer/stories/")) {
         return html(VIEWER_PAGE_HTML)
@@ -103,7 +109,16 @@ export const registerPixivComicRoutes: RouteRegistrar = async (
     route.fulfill({
       status: 200,
       contentType: SMALL_PNG_MIME_TYPE,
-      body: cloneSmallPngBytes(),
+      body: clonePixivPagePngBytes(),
     })
+  )
+  await context.route(
+    "https://public-img-comic.pximg.net/**",
+    async (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: SMALL_PNG_MIME_TYPE,
+        body: cloneSmallPngBytes(),
+      })
   )
 }

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "providerId": "animemangahouse",
+  "data": {
+    "signedResponse": "eval(function(p,a,c,k,e,d){e=function(c){return(c<a?\"\":e(parseInt(c/a)))+((c=c%a)>35?String.fromCharCode(c+29):c.toString(36))};if(!''.replace(/^/,String)){while(c--)d[e(c)]=k[c]||e(c);k=[function(e){return d[e]}];e=function(){return'\\\\w+'};c=1;};while(c--)if(k[c])p=p.replace(new RegExp('\\\\b'+e(c)+'\\\\b','g'),k[c]);return p;}('o 8(){1 4=3;1 a=\\'9\\';1 7=\"6://g.h.c/j/f/3\";1 2=[\"/b.5\",\"/e.5\"];k(1 i=0;i<2.q;i++){p(/^(6?:)?\\\\/\\\\//i.l(2[i])){m}2[i]=7+2[i]+\\'?4=3&a=9\\'}n 2}1 d;d=8();',27,27,'|var|pvalue|521974|cid|jpg|https|pix|dm5imagefun|synthetic-signature|key|2_4711|com||3_3844|33991|manhua1032zjcdn26|cdndm5||34|for|test|continue|return|function|if|length'.split('|'),0,{}))\n"
+  }
+}

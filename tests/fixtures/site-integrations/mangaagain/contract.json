@@ -1,0 +1,633 @@
+{
+  "schemaVersion": 1,
+  "providerId": "mangaagain",
+  "data": {
+    "series": {
+      "errno": 0,
+      "data": {
+        "comicInfo": {
+          "id": 83175,
+          "title": "斗佛",
+          "comicPy": "doufo",
+          "description": "西游原创故事",
+          "cover": "https://images.zaimanhua.com/img/webpic/19/5943391758891265.jpg",
+          "canRead": true,
+          "types": "格斗,神鬼",
+          "authorInfo": {
+            "authorName": "画梦人"
+          },
+          "chapterList": [
+            {
+              "title": "连载",
+              "data": [
+                {
+                  "chapter_id": 195373,
+                  "chapter_title": "重置版第13回",
+                  "chapter_order": 46,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 194999,
+                  "chapter_title": "重置版第12回",
+                  "chapter_order": 45,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 194409,
+                  "chapter_title": "重置版第11回",
+                  "chapter_order": 44,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 193938,
+                  "chapter_title": "重置版第10回",
+                  "chapter_order": 43,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 193574,
+                  "chapter_title": "重置版第9回",
+                  "chapter_order": 42,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192977,
+                  "chapter_title": "重置版第8回",
+                  "chapter_order": 41,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192662,
+                  "chapter_title": "重置版第7回",
+                  "chapter_order": 40,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192267,
+                  "chapter_title": "重置版第6回",
+                  "chapter_order": 39,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192108,
+                  "chapter_title": "重置版第5回",
+                  "chapter_order": 38,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 191937,
+                  "chapter_title": "重置版第4回",
+                  "chapter_order": 37,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 191222,
+                  "chapter_title": "重置版第3回",
+                  "chapter_order": 36,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 190903,
+                  "chapter_title": "重置版第2回",
+                  "chapter_order": 35,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 190549,
+                  "chapter_title": "重置版第1回",
+                  "chapter_order": 34,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 189965,
+                  "chapter_title": "第33话",
+                  "chapter_order": 33,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 189318,
+                  "chapter_title": "第32话",
+                  "chapter_order": 32,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 188842,
+                  "chapter_title": "第31话",
+                  "chapter_order": 31,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 186517,
+                  "chapter_title": "第30话",
+                  "chapter_order": 30,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 185274,
+                  "chapter_title": "第29话",
+                  "chapter_order": 29,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 185032,
+                  "chapter_title": "第28话",
+                  "chapter_order": 28,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 184689,
+                  "chapter_title": "第27话",
+                  "chapter_order": 27,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 184244,
+                  "chapter_title": "第26话",
+                  "chapter_order": 26,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183899,
+                  "chapter_title": "第25话",
+                  "chapter_order": 25,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183550,
+                  "chapter_title": "第24话",
+                  "chapter_order": 24,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183108,
+                  "chapter_title": "第23话",
+                  "chapter_order": 23,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 182518,
+                  "chapter_title": "第22话",
+                  "chapter_order": 22,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 182173,
+                  "chapter_title": "第21话",
+                  "chapter_order": 21,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181905,
+                  "chapter_title": "第20话",
+                  "chapter_order": 20,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181708,
+                  "chapter_title": "第19话",
+                  "chapter_order": 19,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181469,
+                  "chapter_title": "第18话",
+                  "chapter_order": 18,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181280,
+                  "chapter_title": "第17话",
+                  "chapter_order": 17,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181051,
+                  "chapter_title": "第16话",
+                  "chapter_order": 16,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 180772,
+                  "chapter_title": "第15话",
+                  "chapter_order": 15,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 180456,
+                  "chapter_title": "第14话",
+                  "chapter_order": 14,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179925,
+                  "chapter_title": "第13话",
+                  "chapter_order": 13,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179534,
+                  "chapter_title": "第12话",
+                  "chapter_order": 12,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179121,
+                  "chapter_title": "第11话",
+                  "chapter_order": 11,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 178776,
+                  "chapter_title": "第10话",
+                  "chapter_order": 10,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 178081,
+                  "chapter_title": "第9话",
+                  "chapter_order": 9,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 177538,
+                  "chapter_title": "第8话",
+                  "chapter_order": 8,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 177179,
+                  "chapter_title": "第7话",
+                  "chapter_order": 7,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176961,
+                  "chapter_title": "第6话",
+                  "chapter_order": 6,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176701,
+                  "chapter_title": "第5话",
+                  "chapter_order": 5,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176402,
+                  "chapter_title": "第4话",
+                  "chapter_order": 4,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175989,
+                  "chapter_title": "第3话",
+                  "chapter_order": 3,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175819,
+                  "chapter_title": "第2话",
+                  "chapter_order": 2,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175505,
+                  "chapter_title": "第1话",
+                  "chapter_order": 1,
+                  "is_fee": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "seriesComic2": {
+      "errno": 0,
+      "data": {
+        "comicInfo": {
+          "id": 83175,
+          "title": "斗佛",
+          "comicPy": "doufo",
+          "description": "西游原创故事",
+          "cover": "https://images.zaimanhua.com/img/webpic/19/5943391758891265.jpg",
+          "canRead": true,
+          "authorsTagList": [
+            {
+              "tagName": "画梦人"
+            }
+          ],
+          "themeTagList": [
+            {
+              "tagName": "格斗"
+            },
+            {
+              "tagName": "神鬼"
+            }
+          ],
+          "chapterList": [
+            {
+              "title": "连载",
+              "data": [
+                {
+                  "chapter_id": 195373,
+                  "chapter_title": "重置版第13回",
+                  "chapter_order": 46,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 194999,
+                  "chapter_title": "重置版第12回",
+                  "chapter_order": 45,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 194409,
+                  "chapter_title": "重置版第11回",
+                  "chapter_order": 44,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 193938,
+                  "chapter_title": "重置版第10回",
+                  "chapter_order": 43,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 193574,
+                  "chapter_title": "重置版第9回",
+                  "chapter_order": 42,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192977,
+                  "chapter_title": "重置版第8回",
+                  "chapter_order": 41,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192662,
+                  "chapter_title": "重置版第7回",
+                  "chapter_order": 40,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192267,
+                  "chapter_title": "重置版第6回",
+                  "chapter_order": 39,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 192108,
+                  "chapter_title": "重置版第5回",
+                  "chapter_order": 38,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 191937,
+                  "chapter_title": "重置版第4回",
+                  "chapter_order": 37,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 191222,
+                  "chapter_title": "重置版第3回",
+                  "chapter_order": 36,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 190903,
+                  "chapter_title": "重置版第2回",
+                  "chapter_order": 35,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 190549,
+                  "chapter_title": "重置版第1回",
+                  "chapter_order": 34,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 189965,
+                  "chapter_title": "第33话",
+                  "chapter_order": 33,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 189318,
+                  "chapter_title": "第32话",
+                  "chapter_order": 32,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 188842,
+                  "chapter_title": "第31话",
+                  "chapter_order": 31,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 186517,
+                  "chapter_title": "第30话",
+                  "chapter_order": 30,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 185274,
+                  "chapter_title": "第29话",
+                  "chapter_order": 29,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 185032,
+                  "chapter_title": "第28话",
+                  "chapter_order": 28,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 184689,
+                  "chapter_title": "第27话",
+                  "chapter_order": 27,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 184244,
+                  "chapter_title": "第26话",
+                  "chapter_order": 26,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183899,
+                  "chapter_title": "第25话",
+                  "chapter_order": 25,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183550,
+                  "chapter_title": "第24话",
+                  "chapter_order": 24,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 183108,
+                  "chapter_title": "第23话",
+                  "chapter_order": 23,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 182518,
+                  "chapter_title": "第22话",
+                  "chapter_order": 22,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 182173,
+                  "chapter_title": "第21话",
+                  "chapter_order": 21,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181905,
+                  "chapter_title": "第20话",
+                  "chapter_order": 20,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181708,
+                  "chapter_title": "第19话",
+                  "chapter_order": 19,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181469,
+                  "chapter_title": "第18话",
+                  "chapter_order": 18,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181280,
+                  "chapter_title": "第17话",
+                  "chapter_order": 17,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 181051,
+                  "chapter_title": "第16话",
+                  "chapter_order": 16,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 180772,
+                  "chapter_title": "第15话",
+                  "chapter_order": 15,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 180456,
+                  "chapter_title": "第14话",
+                  "chapter_order": 14,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179925,
+                  "chapter_title": "第13话",
+                  "chapter_order": 13,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179534,
+                  "chapter_title": "第12话",
+                  "chapter_order": 12,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 179121,
+                  "chapter_title": "第11话",
+                  "chapter_order": 11,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 178776,
+                  "chapter_title": "第10话",
+                  "chapter_order": 10,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 178081,
+                  "chapter_title": "第9话",
+                  "chapter_order": 9,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 177538,
+                  "chapter_title": "第8话",
+                  "chapter_order": 8,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 177179,
+                  "chapter_title": "第7话",
+                  "chapter_order": 7,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176961,
+                  "chapter_title": "第6话",
+                  "chapter_order": 6,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176701,
+                  "chapter_title": "第5话",
+                  "chapter_order": 5,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 176402,
+                  "chapter_title": "第4话",
+                  "chapter_order": 4,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175989,
+                  "chapter_title": "第3话",
+                  "chapter_order": 3,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175819,
+                  "chapter_title": "第2话",
+                  "chapter_order": 2,
+                  "is_fee": false
+                },
+                {
+                  "chapter_id": 175505,
+                  "chapter_title": "第1话",
+                  "chapter_order": 1,
+                  "is_fee": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "chapter": {
+      "errno": 0,
+      "data": {
+        "chapterInfo": {
+          "comic_id": 83175,
+          "chapter_id": 195373,
+          "page_url": [
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0007.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0008.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0009.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0010.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0011.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0012.jpg?sign=fixture-signature&t=1792969840",
+            "https://images.zaimanhua.com/img/chapterpic%2F43031%2F161768%2FIMG_20261017_0013.jpg?sign=fixture-signature&t=1792969840"
+          ]
+        }
+      }
+    }
+  }
+}

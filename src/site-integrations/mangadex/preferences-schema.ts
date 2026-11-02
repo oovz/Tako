@@ -36,14 +36,17 @@ export function normalizeMangadexUserPreferences(
   value: MangadexPageProbeData,
   defaults: Pick<MangadexUserPreferences, "dataSaver" | "filteredLanguages">
 ): MangadexUserPreferences {
-  return {
+  const preferences: MangadexUserPreferences = {
     dataSaver: value.dataSaver ?? defaults.dataSaver,
     filteredLanguages: value.filteredLanguages ?? defaults.filteredLanguages,
-    ...(value.showSafe !== undefined ? { showSafe: value.showSafe } : {}),
-    ...(value.showSuggestive !== undefined
-      ? { showSuggestive: value.showSuggestive }
-      : {}),
-    ...(value.showErotic !== undefined ? { showErotic: value.showErotic } : {}),
-    ...(value.showHentai !== undefined ? { showHentai: value.showHentai } : {}),
   }
+  for (const key of [
+    "showSafe",
+    "showSuggestive",
+    "showErotic",
+    "showHentai",
+  ] as const) {
+    if (value[key] !== undefined) preferences[key] = value[key]
+  }
+  return preferences
 }

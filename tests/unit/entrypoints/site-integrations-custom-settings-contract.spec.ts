@@ -12,7 +12,7 @@ vi.mock("@/components/ui/collapsible", () => ({
 }))
 
 import { SiteIntegrationCard } from "@/entrypoints/options/components/SiteIntegrationCard"
-import { SiteIntegrationManagementTab } from "@/entrypoints/options/tabs/SiteIntegrationManagementTab"
+import { SiteIntegrationsTab } from "@/entrypoints/options/tabs/SiteIntegrationsTab"
 import {
   assertValidSettingsFieldSchema,
   getDefinition,
@@ -102,7 +102,7 @@ describe("Site integration custom settings contract", () => {
 
   it("renders the Site Integrations tab from manifest data before registry initialization", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SiteIntegrationManagementTab, {
+      React.createElement(SiteIntegrationsTab, {
         overrides: {},
         siteIntegrationEnablement: {},
         globalSettings: DEFAULT_SETTINGS,
@@ -114,7 +114,7 @@ describe("Site integration custom settings contract", () => {
     )
 
     expect(html).toContain('data-testid="site-integration-card-mangadex"')
-    expect(html).toContain('data-testid="site-integration-card-manhuagui"')
+    expect(html).toContain('data-testid="site-integration-card-readmanga"')
     expect(html).not.toContain("v1.0.0")
   })
 
@@ -162,9 +162,9 @@ describe("Site integration custom settings contract", () => {
     expect(html).toContain("Contributors: Alice, Bob, Charlie")
   })
 
-  it("renders contributors from manifest when rendering SiteIntegrationManagementTab", () => {
+  it("renders contributors from manifest when rendering SiteIntegrationsTab", () => {
     const html = renderToStaticMarkup(
-      React.createElement(SiteIntegrationManagementTab, {
+      React.createElement(SiteIntegrationsTab, {
         overrides: {},
         siteIntegrationEnablement: {},
         globalSettings: DEFAULT_SETTINGS,

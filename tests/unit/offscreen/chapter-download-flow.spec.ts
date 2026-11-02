@@ -163,7 +163,7 @@ describe("OffscreenWorker Integration: NONE format failures", () => {
     vi.mocked(writeBlobToPath).mockResolvedValue({ status: "written" })
 
     // Dynamic import to ensure globals are set before module side-effects run
-    const mod = await import("@/entrypoints/offscreen/main")
+    const mod = await import("@/entrypoints/offscreen/main-worker")
     OffscreenWorkerClass = mod.OffscreenWorker
 
     worker = new OffscreenWorkerClass()

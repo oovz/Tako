@@ -153,12 +153,6 @@ describe("NativeOutputCoordinator", () => {
         ) => Promise<unknown>
         return await apply(input)
       }),
-      blockTaskForNativeOutputAction: vi.fn(async () => ({
-        outcome: "applied",
-      })),
-      releaseNativeOutputActionBlock: vi.fn(async () => ({
-        outcome: "applied",
-      })),
       getQueue: vi.fn(async () => []),
     }
     const coordinator = new NativeOutputCoordinator({
@@ -315,7 +309,6 @@ describe("NativeOutputCoordinator", () => {
       success: true,
       disposition: "tracked",
       phase: "interrupted",
-      terminalOutcome: "interrupted",
     })
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
       "interrupted"
@@ -353,16 +346,16 @@ describe("NativeOutputCoordinator", () => {
 
       await coordinator.reconcile()
 
-      const quarantined = await repository.getByOutputId(payload.outputId)
+      const interrupted = await repository.getByOutputId(payload.outputId)
       expect(download).toHaveBeenCalledOnce()
       expect(applySettlement).not.toHaveBeenCalled()
       expect(revoke).not.toHaveBeenCalled()
-      expect(quarantined).toMatchObject({
-        phase: "acceptance_unknown",
+      expect(interrupted).toMatchObject({
+        phase: "outcome_unknown",
         accountingDisposition: "pending",
       })
-      expect(quarantined?.blobReleasedAt).toBeUndefined()
-      expect(quarantined?.dependencyReleasedAt).toBeUndefined()
+      expect(interrupted?.blobReleasedAt).toBeUndefined()
+      expect(interrupted?.dependencyReleasedAt).toBeUndefined()
     }
   )
 
@@ -410,7 +403,7 @@ describe("NativeOutputCoordinator", () => {
     await coordinator.reconcile()
 
     expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "acceptance_unknown"
+      "outcome_unknown"
     )
     expect(ensureLiveness).toHaveBeenCalled()
     expect(download).toHaveBeenCalledOnce()
@@ -418,7 +411,7 @@ describe("NativeOutputCoordinator", () => {
     expect(revoke).not.toHaveBeenCalled()
   })
 
-  it("keeps a sealed acceptance-unknown record quarantined after exact producer terminality", async () => {
+  it("settles an interrupted handoff after exact producer terminality while retaining its Blob", async () => {
     download.mockRejectedValueOnce(new Error("blocked by policy"))
     const { coordinator, repository } = createCoordinator()
     vi.spyOn(repository, "interruptBeforeAcceptance").mockRejectedValueOnce(
@@ -441,6 +434,7 @@ describe("NativeOutputCoordinator", () => {
       },
       activeLease: null,
     })
+    await coordinator.reconcile()
 
     expect(await repository.getManifest(payload.jobId)).toMatchObject({
       phase: "sealed",
@@ -449,12 +443,18 @@ describe("NativeOutputCoordinator", () => {
     })
     const quarantined = await repository.getByOutputId(payload.outputId)
     expect(quarantined).toMatchObject({
-      phase: "acceptance_unknown",
-      accountingDisposition: "pending",
+      phase: "outcome_unknown",
+      accountingDisposition: "accounted",
     })
     expect(quarantined?.blobReleasedAt).toBeUndefined()
     expect(quarantined?.dependencyReleasedAt).toBeUndefined()
-    expect(applySettlement).not.toHaveBeenCalled()
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed: 0,
+        interrupted: 1,
+        outputUncertain: true,
+      })
+    )
     expect(revoke).not.toHaveBeenCalled()
     expect(ensureLiveness).toHaveBeenCalled()
   })
@@ -541,153 +541,29 @@ describe("NativeOutputCoordinator", () => {
     expect(ensureLiveness).toHaveBeenCalled()
   })
 
-  it("blocks the task when a tracked download is erased and forget surrenders it", async () => {
-    const { coordinator, repository, queueRepository } = createCoordinator()
-    await outputResponse(coordinator)
-    expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "waiting"
-    )
-
-    await coordinator.handleDownloadErased(42)
-
-    expect(
-      (await repository.getByOutputId(payload.outputId))?.erasedAt
-    ).toEqual(expect.any(Number))
-    expect(queueRepository.blockTaskForNativeOutputAction).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: "task-1" })
-    )
-    // The durable block replaces liveness re-arming for the erased record.
-    expect(ensureLiveness).not.toHaveBeenCalled()
-
-    await coordinator.forgetTaskUnobservableOutputs("task-1")
-
-    expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "surrendered"
-    )
-    expect(queueRepository.releaseNativeOutputActionBlock).toHaveBeenCalledWith(
-      "task-1"
-    )
-    expect(revoke).toHaveBeenCalledWith(
-      expect.objectContaining({ outputId: payload.outputId })
-    )
-  })
-
-  it("converges a forget replay with zero surrendered when nothing is unobservable", async () => {
-    const { coordinator, queueRepository } = createCoordinator()
-    // The browser still knows the download, so the output stays observable.
-    search.mockResolvedValue([downloadItem({ state: "in_progress" })])
-    await outputResponse(coordinator)
-
-    await expect(
-      coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toMatchObject({ surrendered: 0, effects: [] })
-    expect(queueRepository.releaseNativeOutputActionBlock).toHaveBeenCalledWith(
-      "task-1"
-    )
-  })
-
-  it("replays forget after durable surrender and release response loss", async () => {
-    const { coordinator, repository, queueRepository } = createCoordinator()
-    await outputResponse(coordinator)
-    await coordinator.handleDownloadErased(42)
-
-    const first = await coordinator.forgetTaskUnobservableOutputs("task-1")
-    expect(first.surrendered).toBe(1)
-    expect((await repository.getByOutputId(payload.outputId))?.phase).toBe(
-      "surrendered"
-    )
-
-    await expect(
-      coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toMatchObject({ surrendered: 0 })
-    expect(
-      queueRepository.releaseNativeOutputActionBlock
-    ).toHaveBeenCalledTimes(2)
-  })
-
-  it("treats a terminal or missing task block as a converged forget replay", async () => {
-    const { coordinator, queueRepository } = createCoordinator()
-    vi.mocked(
-      queueRepository.releaseNativeOutputActionBlock
-    ).mockResolvedValueOnce({
-      outcome: "rejected",
-      reason: "task-not-found",
-    } as never)
-
-    await expect(
-      coordinator.forgetTaskUnobservableOutputs("task-1")
-    ).resolves.toMatchObject({ surrendered: 0 })
-  })
-
-  it("surrenders erased outputs when a task is canceled without a job identity", async () => {
+  it("releases exactly erased output while preserving the uncertain result", async () => {
     const { coordinator, repository } = createCoordinator()
     await outputResponse(coordinator)
-    await coordinator.handleDownloadErased(42)
-    // The producer finished, so the manifest is sealed before cancellation.
     await coordinator.sealManifest({
       ...jobIdentity,
       outputsRequested: 1,
       outputsFailedBeforeHandoff: 0,
     })
-
-    await coordinator.cancelTask("task-1")
-
-    // Surrender does not claim complete or interrupted; the Blob is revoked,
-    // the queue is settled with the surrendered count, and the released
-    // record and manifest are pruned from durable storage.
+    await reconcileAndAcknowledge(coordinator)
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completed: 0,
+        interrupted: 1,
+        outputUncertain: true,
+      })
+    )
+    expect(revoke).not.toHaveBeenCalled()
+    await coordinator.handleDownloadErased(42)
+    expect(applySettlement).toHaveBeenCalledOnce()
     expect(revoke).toHaveBeenCalledWith(
       expect.objectContaining({ outputId: payload.outputId })
     )
-    expect(applySettlement).toHaveBeenCalledWith(
-      expect.objectContaining({ surrendered: 1 })
-    )
-    await expect(repository.hasLiveDependencies()).resolves.toBe(false)
-    await expect(
-      repository.getByOutputId(payload.outputId)
-    ).resolves.toBeUndefined()
-    await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
-  })
-
-  it("surrenders erased outputs after canceling their exact producer", async () => {
-    const { coordinator, repository } = createCoordinator()
-    await outputResponse(coordinator)
-    await coordinator.handleDownloadErased(42)
-
-    await coordinator.cancelTask("task-1", jobIdentity)
-
-    expect(revoke).toHaveBeenCalledWith(
-      expect.objectContaining({ outputId: payload.outputId })
-    )
-    expect(applySettlement).toHaveBeenCalledWith(
-      expect.objectContaining({ surrendered: 1 })
-    )
-    await expect(repository.hasLiveDependencies()).resolves.toBe(false)
-    await expect(
-      repository.getByOutputId(payload.outputId)
-    ).resolves.toBeUndefined()
-    await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
-  })
-
-  it("keeps user-pending erased work live for offscreen but excludes it from the alarm", async () => {
-    const { coordinator, repository, queueRepository } = createCoordinator()
-    await outputResponse(coordinator)
-    await coordinator.handleDownloadErased(42)
-
-    vi.mocked(queueRepository.getQueue).mockResolvedValue([
-      {
-        id: "task-1",
-        status: "queued",
-        activeBlock: "native_output_action_required",
-      },
-    ] as never)
-
-    // The offscreen document still owns the Blob URL: the dependency stays
-    // live until terminal state, explicit surrender, or cancellation.
-    expect(await coordinator.hasLiveDependencies()).toBe(true)
-    expect(await repository.hasLiveDependencies()).toBe(true)
-    // The crash-recovery alarm, however, must not re-arm forever for work
-    // whose only next step is the user's forget/cancel decision.
-    expect(await coordinator.hasReconcilableLiveDependencies()).toBe(false)
+    expect(await repository.hasLiveDependencies()).toBe(false)
   })
 
   it("observes a terminal event queued while the ID is being attached", async () => {
@@ -809,13 +685,14 @@ describe("NativeOutputCoordinator", () => {
     expect(conflicted).toMatchObject({ phase: "sealed", slots: [] })
     expect(conflicted).not.toHaveProperty("dependencyReleasedAt")
 
-    await coordinator.reconcile()
+    const conflictedEffects = await coordinator.reconcile()
     expect(ensureLiveness).toHaveBeenCalled()
     await reconcileAndAcknowledge(coordinator)
 
     // The second settlement attempt succeeds and the released job is pruned.
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
     await expect(repository.hasLiveDependencies()).resolves.toBe(false)
+    expect(conflictedEffects).toEqual([])
   })
 
   it("uses not-owner as a final cleanup disposition for a missing task", async () => {
@@ -930,7 +807,7 @@ describe("NativeOutputCoordinator", () => {
     )
   })
 
-  it("seals a fully populated R-01 failure-cut manifest from exact terminal producer state", async () => {
+  it("preserves a stopped producer failure while sealing a fully populated manifest", async () => {
     const { coordinator, repository } = createCoordinator()
     await repository.prepare({
       ...jobIdentity,
@@ -951,6 +828,8 @@ describe("NativeOutputCoordinator", () => {
         lastSequence: 4,
         outcome: {
           status: "failed",
+          errorMessage: "Archive worker failed",
+          errorCategory: "archive_creation_failed",
           outputsRequested: 0,
           outputsFailedBeforeHandoff: 0,
           outputsCommitted: 0,
@@ -962,6 +841,12 @@ describe("NativeOutputCoordinator", () => {
       await coordinator.acknowledgeSettlement(effect)
     }
 
+    expect(applySettlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorMessage: "Archive worker failed",
+        errorCategory: "archive_creation_failed",
+      })
+    )
     // The interrupted output was accounted and fully released (pruned).
     await expect(repository.getManifest(payload.jobId)).resolves.toBeUndefined()
     await expect(

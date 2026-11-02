@@ -1,4 +1,9 @@
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
+import {
+  getCompletedOutputDestination,
+  getCompletedSaveConfirmedAt,
+  getOutputResultLabel,
+} from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 
 export interface DownloadTaskBuckets {
@@ -38,6 +43,19 @@ function countCompletedChapters(chapters: TaskChapter[]): number {
   return chapters.filter((chapter) => chapter.status === "completed").length
 }
 
+function completedTaskSummary(chapters: TaskChapter[]): string {
+  const totalChapters = chapters.length
+  const destination = getCompletedOutputDestination(chapters)
+  return t(
+    getCompletedSaveConfirmedAt(chapters) === undefined
+      ? "options_taskPreviouslyProcessed"
+      : destination === "fsa"
+        ? "options_taskSavedToFolder"
+        : "options_taskSaved",
+    [String(totalChapters), totalChapters === 1 ? "" : "s"]
+  )
+}
+
 export function getTaskStatusSummaryLabel(
   task: Pick<DownloadTaskState, "status" | "chapters">
 ): string {
@@ -46,7 +64,7 @@ export function getTaskStatusSummaryLabel(
 
   switch (task.status) {
     case "completed":
-      return t("options_taskCompleted", [String(totalChapters)])
+      return completedTaskSummary(task.chapters)
     case "failed":
       return t("options_taskFailed", [
         String(completedChapters),
@@ -82,7 +100,11 @@ export function chapterStatusBadgeClass(status: string): string {
   return "bg-muted text-muted-foreground"
 }
 
-export function getTaskStatusBadge(status: DownloadTaskState["status"]): {
+export function getTaskStatusBadge(
+  status: DownloadTaskState["status"],
+  outputDestination?: TaskChapter["outputDestination"],
+  saveConfirmedAt?: number
+): {
   label: string
   className: string
 } {
@@ -99,7 +121,7 @@ export function getTaskStatusBadge(status: DownloadTaskState["status"]): {
       }
     case "completed":
       return {
-        label: t("status_completed"),
+        label: getOutputResultLabel(outputDestination, saveConfirmedAt),
         className: "bg-primary/10 text-primary",
       }
     case "partial_success":
@@ -158,11 +180,13 @@ export function shouldShowChapterError(status: TaskChapter["status"]): boolean {
 }
 
 export function formatChapterStatusLabel(
-  status: TaskChapter["status"]
+  status: TaskChapter["status"],
+  outputDestination?: TaskChapter["outputDestination"],
+  saveConfirmedAt?: number
 ): string {
   switch (status) {
     case "completed":
-      return t("status_completed")
+      return getOutputResultLabel(outputDestination, saveConfirmedAt)
     case "partial_success":
       return t("status_partialSuccess")
     case "failed":
@@ -171,6 +195,8 @@ export function formatChapterStatusLabel(
       return t("status_downloading")
     case "queued":
       return t("status_queued")
+    case "skipped":
+      return t("status_skipped")
     default:
       return status
   }

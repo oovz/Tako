@@ -47,7 +47,6 @@ const finalizationDependencies = {
     getSettings: vi.fn(async () => DEFAULT_SETTINGS),
   },
   historyRepository: {
-    markChapterAsDownloaded: vi.fn(async () => undefined),
     getDownloadedChapters: vi.fn(async () => []),
     restoreChapterFromCompletedTask: vi.fn(async () => true),
   },
@@ -77,6 +76,7 @@ function createTask(
     seriesTitle: "Series",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.test/chapter-1",
         title: "Chapter 1",

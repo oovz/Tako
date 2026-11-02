@@ -1,18 +1,7 @@
-/**
- * @file url-matcher.test.ts
- * @description Unit tests for URL pattern matching logic
- *
- * Tests:
- * - Basic URL pattern matching
- * - Wildcard patterns (* and **)
- * - Exclude pattern enforcement
- */
-
 import { beforeEach, describe, it, expect, afterEach } from "vitest"
 import {
   getAllPatternMetadata,
   matchUrl,
-  isSupportedDomain,
 } from "@/src/site-integrations/url-matcher"
 import { setEnablementMap as setUserSiteIntegrationEnablement } from "@/src/site-integrations/catalog"
 
@@ -72,7 +61,6 @@ describe("URL Pattern Matching", () => {
     it("rejects non-HTTPS pages and undeclared subdomains", () => {
       expect(matchUrl("http://comic.pixiv.net/works/9012")).toBeNull()
       expect(matchUrl("https://preview.comic.pixiv.net/works/9012")).toBeNull()
-      expect(isSupportedDomain("http://comic.pixiv.net/works/9012")).toBe(false)
     })
 
     it("matches shonenjumpplus episode paths", () => {
@@ -93,7 +81,7 @@ describe("URL Pattern Matching", () => {
 
     it("matches manhuagui series pages", () => {
       expectMatchedUrl("https://www.manhuagui.com/comic/28004/", {
-        integrationId: "manhuagui",
+        integrationId: "readmanga",
         role: "series",
       })
     })
@@ -218,20 +206,6 @@ describe("URL Pattern Matching", () => {
         integrationId: "pixiv-comic",
         role: "series",
       })
-    })
-  })
-
-  describe("Domain Support Check", () => {
-    it("returns true for supported domains (domain-only check)", () => {
-      expect(isSupportedDomain("https://comic.pixiv.net/works/123")).toBe(true)
-      // still true for same domain with different paths
-      expect(isSupportedDomain("https://mangadex.org/anything")).toBe(true)
-    })
-
-    it("returns false for unsupported domains", () => {
-      expect(isSupportedDomain("https://mangadex.org/title/abc")).toBe(true)
-      expect(isSupportedDomain("https://unsupported.com/manga/123")).toBe(false)
-      expect(isSupportedDomain("https://google.com")).toBe(false)
     })
   })
 

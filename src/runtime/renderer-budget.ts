@@ -8,11 +8,9 @@ export const MAX_RENDERER_SURFACE_PIXELS = MAX_RENDERER_IMAGE_PIXELS * 2
 
 type RendererBudgetWaiter = {
   pixels: number
-  signal?: AbortSignal
   operation: () => unknown
   resolve: (value: unknown) => void
   reject: (reason?: unknown) => void
-  canceled: boolean
   cleanup: () => void
 }
 
@@ -24,14 +22,14 @@ function removeWaiter(waiter: RendererBudgetWaiter): void {
   if (index >= 0) waiters.splice(index, 1)
 }
 
+function rendererAbortReason(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error ? signal.reason : new Error("aborted")
+}
+
 function drainRendererBudget(): void {
   while (waiters.length > 0) {
     const waiter = waiters[0]
     if (!waiter) return
-    if (waiter.canceled) {
-      waiters.shift()
-      continue
-    }
     if (reservedPixels + waiter.pixels > MAX_RENDERER_SURFACE_PIXELS) return
 
     waiters.shift()
@@ -65,29 +63,23 @@ export function withRendererPixelBudget<T>(
   }
 
   if (signal?.aborted) {
-    return Promise.reject(
-      signal.reason instanceof Error ? signal.reason : new Error("aborted")
-    )
+    return Promise.reject(rendererAbortReason(signal))
   }
 
   return new Promise<T>((resolve, reject) => {
     const surfacePixels = imagePixels * 2
     const waiter: RendererBudgetWaiter = {
       pixels: surfacePixels,
-      signal,
       operation,
       resolve: (value) => resolve(value as T),
       reject,
-      canceled: false,
       cleanup: () => undefined,
     }
     const onAbort = () => {
-      waiter.canceled = true
       removeWaiter(waiter)
       waiter.cleanup()
-      reject(
-        signal?.reason instanceof Error ? signal.reason : new Error("aborted")
-      )
+      reject(rendererAbortReason(signal))
+      drainRendererBudget()
     }
     waiter.cleanup = () => signal?.removeEventListener("abort", onAbort)
     signal?.addEventListener("abort", onAbort, { once: true })

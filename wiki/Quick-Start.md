@@ -1,65 +1,64 @@
 # Quick Start
 
-## Install from the Chrome Web Store
+[English](Quick-Start) · [日本語](Quick-Start.ja) · [简体中文](Quick-Start.zh-CN) · [繁體中文](Quick-Start.zh-TW) · [한국어](Quick-Start.ko)
 
-1. Open the [Tako page on the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
+## Install Tako
+
+1. Open [Tako on the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb) in Chrome 150 or newer.
 2. Click **Add to Chrome**.
-3. Pin Tako from the extensions menu for quick access.
-
-## Install from source
+3. Open Chrome's extensions menu and pin Tako so its icon is easy to find.
 
 <details>
-<summary>From GitHub Releases</summary>
+<summary>Install a GitHub release</summary>
 
-1. Go to the repository **Releases** page and download the latest `tako-manga-downloader-vX.Y.Z-chrome.zip`.
-2. Extract the zip to a folder on your machine.
-3. Open `chrome://extensions`.
-4. Enable **Developer mode**.
-5. Choose **Load unpacked** and select the extracted folder.
+1. Open [GitHub Releases](https://github.com/oovz/Tako/releases) and download the Chrome ZIP file for the release you want.
+2. Extract it to a folder on your computer.
+3. Open `chrome://extensions` and turn on **Developer mode**.
+4. Click **Load unpacked** and select the extracted folder.
 
-</details>
-
-<details>
-<summary>Build locally</summary>
-
-```powershell
-pnpm install
-pnpm build
-```
-
-Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select `.output\chrome-mv3`.
+Keep that folder in place while the extension is installed. For a local build, use the [contributor setup guide](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#quick-setup).
 
 </details>
 
 ## Download your first chapter
 
-1. Open a supported manga series or chapter page on any of the [supported sites](Supported-Sites).
-2. Click the Tako icon to open the Side Panel.
-3. Tako detects the series and lists available chapters.
-4. Select the chapters you want.
-5. Click **Download**.
-6. Watch progress in the queue. New installs save completed chapters as CBZ files through Chrome Downloads. Choose ZIP or image-folder output in Options.
+1. Open a manga on a [supported site](Supported-Sites). Most sites use the series page; Shonen Jump+ (少年ジャンプ＋) uses an episode page.
+2. Click the Tako icon to open Chrome's Side Panel.
+3. Select the chapters you want and click **Download**.
+4. Follow progress in the queue. When saving finishes, the result shows **Saved** or **Saved to folder**.
 
-## Change output format or save location
+Tako starts with CBZ files saved through Chrome Downloads. You can open a CBZ with a compatible comic reader.
 
-1. Right-click the Tako icon and choose **Options**, or use **Settings** in the Side Panel header.
-2. Under **Downloads**, pick CBZ, ZIP, or loose images.
-3. Optionally set a custom download folder using File System Access. If the folder permission later needs attention, Tako stops that task and offers repair actions. The selected folder stays unchanged until you repair or replace its permission.
-4. Adjust path and filename templates — see [Template Macros](Template-Macros) for the full reference.
+> [!TIP]
+> MangaDex is off by default. Enable it in **Options → Site Integrations**, accept Chrome's site-access request, and click **Save Changes** before returning to the series page.
 
-## Queue and retry
+## Choose a format
 
-- Tako processes one chapter at a time to maintain stability.
-- Failed images retry automatically based on your rate-limit and retry settings.
-- You can retry failed chapters or restart a task from the queue.
-- The Side Panel shows recent activity; the Options page shows full history.
+Open **Settings** from the Side Panel, or right-click the Tako icon and choose **Options**. In **Storage & Files**, choose an archive format and click **Save Changes**.
 
-### Interrupted work and series recovery
+| Format         | Use it for                                       |
+| -------------- | ------------------------------------------------ |
+| **CBZ**        | Reading chapters in a comic reader               |
+| **ZIP**        | Keeping a chapter's images in a standard archive |
+| **No Archive** | Saving individual image files                    |
 
-After a service-worker restart, Tako restores queue and history state and reconciles work that survived the restart. If closing or restarting the browser interrupts processing, use **Retry failed** for a partially successful task or **Restart task** to download it again.
+You can also include a series cover and ComicInfo.xml metadata for compatible readers. [Filename templates](Template-Macros) let you choose how folders and chapter names are organized.
 
-When series information fails to load, the Side Panel makes one recovery attempt. If the error remains, use **Retry series** to try again.
+## Choose a save folder
 
-### Cancel a task
+In **Options → Storage & Files**, keep **Use browser downloads** to use Chrome's download location, or choose **Use custom folder (File System Access)** and select a folder. Click **Save Changes** to use that choice for new downloads.
 
-Canceling a Tako task stops its remaining processing and future chapter dispatch. Downloads already accepted by Chrome continue; manage those transfers in **Chrome Downloads**. Files already saved remain on disk.
+You can change these defaults while a download is running. Tasks already in the queue keep their own folder and requested filenames, including when you retry or restart them. To save a chapter somewhere else, change the default and create a new task.
+
+The optional **Use Chrome Downloads if the folder is unavailable** setting applies to new tasks. It is off by default and can switch destinations only before that task first attempts to write to its selected folder.
+
+## Manage downloads
+
+Tako processes one chapter at a time. You can add more chapters to the queue while it works. Keep Chrome running while downloads save.
+
+- Use **Retry failed chapters** to try the unfinished parts of a task again. A partially saved chapter starts again from the beginning.
+- Use **Restart task** to download every chapter in that task again.
+- Use **Cancel download** to stop the task's remaining work. Files already saved stay on disk, and transfers already accepted by Chrome continue in Chrome Downloads.
+- Open **Activity & History** in Options to see older tasks and chapter records.
+
+For folder access errors, interrupted work, or **Previously processed** results, see [Troubleshooting](Troubleshooting).

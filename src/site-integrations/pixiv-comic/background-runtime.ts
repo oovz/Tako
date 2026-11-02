@@ -40,23 +40,24 @@ async function resolvePixivSeriesData(input: {
     ),
   ])
 
+  const metadata = resolvePixivSeriesPart(metadataResult)
+  const chapterList = resolvePixivSeriesPart(chapterListResult)
   return {
     seriesId: workId,
-    seriesMetadata:
-      metadataResult.status === "fulfilled" ? metadataResult.value : undefined,
-    chapterList:
-      chapterListResult.status === "fulfilled"
-        ? chapterListResult.value
-        : undefined,
-    metadataError:
-      metadataResult.status === "rejected"
-        ? resolvePixivSeriesDataError(metadataResult.reason)
-        : undefined,
-    chapterListError:
-      chapterListResult.status === "rejected"
-        ? resolvePixivSeriesDataError(chapterListResult.reason)
-        : undefined,
+    seriesMetadata: metadata.value,
+    chapterList: chapterList.value,
+    metadataError: metadata.error,
+    chapterListError: chapterList.error,
   }
+}
+
+function resolvePixivSeriesPart<T>(result: PromiseSettledResult<T>): {
+  value?: T
+  error?: string
+} {
+  return result.status === "fulfilled"
+    ? { value: result.value }
+    : { error: resolvePixivSeriesDataError(result.reason) }
 }
 
 const background: ServiceWorkerIntegration<PixivDispatchContext> = {

@@ -1,32 +1,28 @@
-/**
- * @file series-data.ts
- * @description Pixiv Comic series/work metadata mock data.
- *
- * Series URLs follow the pattern: https://comic.pixiv.net/works/{workId}
- */
-
 import type {
   SiteIntegrationSeriesData,
   SiteIntegrationSeriesDataset,
 } from "../../types"
+import captured from "@/tests/fixtures/site-integrations/pixiv-comic/captured-work.json" with { type: "json" }
+
+const work = captured.data.workV5.data.official_work
 
 export const BASIC_SERIES: SiteIntegrationSeriesDataset = {
   id: "PIXIV_COMIC_BASIC_SERIES",
-  description: "Basic Pixiv Comic work with full metadata",
+  description: "Captured pixivコミック work 9830",
   series: {
     siteId: "pixiv-comic",
-    seriesId: "9999001",
-    seriesTitle: "テスト作品",
-    author: "テスト作者",
-    description: "A Pixiv Comic fixture work used by e2e tests.",
-    coverUrl: "https://img-comic.pximg.net/works/9999001/cover_main_big.jpg",
+    seriesId: String(work.id),
+    seriesTitle: work.name,
+    author: work.author,
+    description: work.description,
+    coverUrl: work.image.main_big,
   },
   chapterDatasetId: "PIXIV_COMIC_BASIC",
 }
 
 export const MINIMAL_SERIES: SiteIntegrationSeriesDataset = {
   id: "PIXIV_COMIC_MINIMAL_SERIES",
-  description: "Pixiv Comic work with only required fields",
+  description: "Synthetic navigation control with only required fields",
   series: {
     siteId: "pixiv-comic",
     seriesId: "9999002",
@@ -40,8 +36,8 @@ export function createPixivComicSeries(
 ): SiteIntegrationSeriesData {
   return {
     siteId: overrides.siteId || "pixiv-comic",
-    seriesId: overrides.seriesId || "9999001",
-    seriesTitle: overrides.seriesTitle || "テスト作品",
+    seriesId: overrides.seriesId || BASIC_SERIES.series.seriesId,
+    seriesTitle: overrides.seriesTitle || BASIC_SERIES.series.seriesTitle,
     author: overrides.author,
     description: overrides.description,
     coverUrl: overrides.coverUrl,

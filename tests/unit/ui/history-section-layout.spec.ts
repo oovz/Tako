@@ -5,6 +5,7 @@ import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
 function makeHistoryTask(id: string): QueueTaskSummary {
   return {
+    destination: { kind: "downloads-api" },
     id,
     seriesKey: `mangadex#${id}`,
     seriesTitle: `Series ${id}`,

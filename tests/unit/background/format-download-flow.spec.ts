@@ -1,3 +1,4 @@
+import { captureRequestedOutputPath } from "@/src/runtime/task-output-path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { resolveDownloadPlan } from "@/entrypoints/background/queue-helpers"
@@ -41,13 +42,14 @@ function createTask(
   snapshotSettings: ExtensionSettings = makeSettings("zip")
 ): DownloadTaskState {
   const now = Date.now()
-  return {
+  const task: DownloadTaskState = {
     id: "task-1",
     siteIntegrationId: "mangadex",
     mangaId: "mangadex:series-1",
     seriesTitle: "Hunter x Hunter",
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "ch-1",
         url: "https://mangadex.org/chapter/ch-1",
         title: "Chapter 1",
@@ -62,38 +64,35 @@ function createTask(
     created: now,
     settingsSnapshot: createTaskSettingsSnapshot(snapshotSettings, "mangadex"),
   }
+  task.chapters = task.chapters.map((chapter) => ({
+    ...chapter,
+    requestedPath: captureRequestedOutputPath(task, chapter),
+  }))
+  return task
 }
 
-describe("format resolution integration (resolveDownloadPlan)", () => {
+describe("queued download format", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getAllSiteOverrides.mockResolvedValue({})
   })
 
-  it("uses global default format when no site override exists", async () => {
-    const plan = await resolveDownloadPlan(createTask())
+  it.each([
+    ["cbz", "Library/Hunter x Hunter/Chapter 1.cbz"],
+    ["zip", "Library/Hunter x Hunter/Chapter 1.zip"],
+    ["none", "Library/Hunter x Hunter/Chapter 1"],
+  ] as const)(
+    "preserves the queued %s format and path",
+    async (format, path) => {
+      getAllSiteOverrides.mockResolvedValue({
+        mangadex: { outputFormat: format === "none" ? "cbz" : "none" },
+      })
 
-    expect(plan.format).toBe("zip")
-    expect(plan.chapters[0]?.resolvedPath).toContain(".zip")
-  })
+      const plan = await resolveDownloadPlan(createTask(makeSettings(format)))
 
-  it("uses the frozen task snapshot format instead of live site overrides", async () => {
-    getAllSiteOverrides.mockResolvedValue({
-      mangadex: {
-        outputFormat: "none",
-      },
-    })
-
-    const plan = await resolveDownloadPlan(createTask(makeSettings("none")))
-
-    expect(plan.format).toBe("none")
-    expect(plan.chapters[0]?.resolvedPath?.endsWith(".none")).toBe(false)
-  })
-
-  it("resolves from the frozen task settings without consulting tab-scoped format state", async () => {
-    const plan = await resolveDownloadPlan(createTask(makeSettings("cbz")))
-
-    expect(plan.format).toBe("cbz")
-    expect(plan.chapters[0]?.resolvedPath).toContain(".cbz")
-  })
+      expect(plan.format).toBe(format)
+      expect(plan.chapters[0]?.resolvedPath).toBe(path)
+      expect(getAllSiteOverrides).not.toHaveBeenCalled()
+    }
+  )
 })

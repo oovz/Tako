@@ -1,3 +1,4 @@
+import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { recoverFromLivenessTimeout as recoverFromLivenessTimeoutCore } from "@/entrypoints/background/offscreen-lifecycle"
@@ -9,7 +10,6 @@ import type {
 import type { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import type { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
-import type { DestinationService } from "@/entrypoints/background/destination"
 import type { DownloadQueueFinalizationDependencies } from "@/entrypoints/background/download-queue-finalization"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 
@@ -80,19 +80,11 @@ function createNativeOutputCoordinator(
   } as unknown as NativeOutputCoordinator
 }
 
-const destinationService = {
-  blockForRuntimeIssue: vi.fn(async () => ({
-    outcome: "applied" as const,
-    task: {},
-  })),
-} as unknown as DestinationService
-
 const finalizationDependencies = {
   settingsRepository: {
     getSettings: vi.fn(async () => DEFAULT_SETTINGS),
   },
   historyRepository: {
-    markChapterAsDownloaded: vi.fn(async () => undefined),
     getDownloadedChapters: vi.fn(async () => []),
     restoreChapterFromCompletedTask: vi.fn(async () => true),
   },
@@ -106,13 +98,15 @@ async function recoverFromLivenessTimeout(
   const queueScheduler = {
     activate: async () => await onRecover(),
     resumeTask: async (taskId: string) => await onRecover(taskId),
+    requestContinuation: () => {
+      void onRecover()
+    },
     isTaskActive: () => false,
   } as unknown as QueueScheduler
   const terminalCoordinator = new OffscreenJobTerminalCoordinator(
     stateManager,
     nativeOutputCoordinator,
     queueScheduler,
-    destinationService,
     finalizationDependencies
   )
   await recoverFromLivenessTimeoutCore(
@@ -135,8 +129,10 @@ function createStateManager(
     id: "task-1",
     status: active ? ("downloading" as const) : ("failed" as const),
     activeBlock,
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
     chapters: [
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-1",
         url: "https://example.com/chapter-1",
         title: "Chapter 1",
@@ -146,6 +142,7 @@ function createStateManager(
         lastUpdated: 1,
       },
       {
+        requestedPath: "Tako/Chapter.cbz",
         id: "chapter-2",
         url: "https://example.com/chapter-2",
         title: "Chapter 2",
@@ -195,6 +192,9 @@ function createStateManager(
       clearDispatchLease: mocks.clearLease,
       interruptDownloadTask,
       settleTaskChapter,
+      setNextChapterDispatchAt: vi.fn(async () => ({
+        outcome: "applied" as const,
+      })),
     } as unknown as QueueRepository,
     interruptDownloadTask,
   }
@@ -222,7 +222,7 @@ describe("recoverFromLivenessTimeout", () => {
         initializationState: "ready",
         documentInstanceId: DOCUMENT_INSTANCE_ID,
         activeJobCount: 0,
-        activeSeriesResolutionCount: 0,
+        activeTransientWorkCount: 0,
         activeTaskIds: [],
       }
     }
@@ -726,6 +726,55 @@ describe("recoverFromLivenessTimeout", () => {
       })
     )
     expect(onRecover).toHaveBeenCalledWith()
+  })
+
+  it("continues queue after recovering terminal FSA failure", async () => {
+    const lease = createLease()
+    const { manager } = createStateManager()
+    manager.failTaskForSave = vi.fn(async () => {
+      mocks.getLease.mockResolvedValue(null)
+      return {
+        outcome: "applied",
+        task: { id: "task-1", status: "failed", chapters: [] },
+        clearedLease: lease,
+      }
+    }) as never
+    mocks.getLease.mockResolvedValue(lease)
+    sendMessage.mockImplementationOnce(async (message) => ({
+      success: true,
+      requestId: message.payload?.requestId,
+      job: {
+        jobId: lease.jobId,
+        attempt: lease.attempt,
+        taskId: lease.taskId,
+        chapterId: lease.chapterId,
+        fingerprint: lease.fingerprint,
+        documentInstanceId: lease.documentInstanceId,
+        status: "terminal",
+        stage: "saving",
+        lastSequence: 9,
+        outcome: {
+          status: "failed",
+          errorCategory: "folder_write_failed",
+          errorMessage: "native close failed",
+          outputsRequested: 1,
+          outputsCommitted: 0,
+          outputsFailedBeforeHandoff: 0,
+        },
+      },
+    }))
+    const onRecover = vi.fn(async () => undefined)
+
+    await recoverFromLivenessTimeout(
+      manager,
+      createNativeOutputCoordinator(),
+      onRecover
+    )
+
+    expect(manager.failTaskForSave).toHaveBeenCalledOnce()
+    expect(await mocks.getLease()).toBeNull()
+    expect(onRecover).toHaveBeenCalledOnce()
+    expect(closeDocument).not.toHaveBeenCalled()
   })
 
   it("re-enters the runner for a matching terminal job without closing offscreen", async () => {

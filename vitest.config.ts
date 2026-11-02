@@ -30,65 +30,28 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      // Include source and executable extension runtime modules in the gate.
-      // Browser UI components and React hooks are covered by Playwright E2E and
-      // excluded below.
+      // Native tests exercise shared logic, UI components and maintained tooling.
+      // The merged browser report adds the application launchers below.
       include: [
-        "src/**/*.ts",
-        "entrypoints/background/**/*.ts",
-        "entrypoints/offscreen/**/*.ts",
-        "entrypoints/options/**/*.ts",
-        "entrypoints/sidepanel/**/*.ts",
+        "src/**/*.{ts,tsx}",
+        "entrypoints/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,tsx,js,mjs,cjs,mts,cts}",
       ],
       exclude: [
-        "src/**/*.d.ts",
-        "src/types/**",
-        "src/runtime/generated/**", // Generated registries (tested via E2E)
-        // Reverse-engineered PUBLUS configuration decoding is validated by
-        // Comic Nettai browser/live workflows using real transport data. It is
-        // intentionally outside the unit gate because synthetic unit vectors
-        // would duplicate the site algorithm rather than independently test it.
-        "src/site-integrations/comicnettai/publus-config.ts",
+        "**/*.d.ts",
+        "src/runtime/generated/**",
         "**/node_modules/**",
-        // UI components (.tsx) are exercised end-to-end via Playwright; they
-        // are intentionally excluded from the unit/integration coverage gate.
-        "entrypoints/**/*.tsx",
-        "components/**/*.tsx",
-        // Entry points that only wire the extension lifecycle and are
-        // exercised by WXT/E2E rather than unit tests.
-        "entrypoints/background/index.ts",
-        // Compiled and registered only in deterministic mocked E2E builds.
+        // Isolated browser-test setup.
         "entrypoints/background/e2e-state-seed.ts",
+        // Application launchers are exercised by the instrumented browser suite.
+        "entrypoints/background/index.ts",
         "entrypoints/offscreen/main.ts",
-        "entrypoints/offscreen/zip.worker.ts",
         "entrypoints/options/main.tsx",
         "entrypoints/sidepanel/main.tsx",
-        // Pure type definition modules (no executable logic to cover).
+        // Type-only modules.
         "entrypoints/offscreen/chapter-processing-types.ts",
         "entrypoints/sidepanel/types.ts",
-        // React hooks require jsdom and are covered by Playwright E2E today.
-        "entrypoints/options/hooks/useOptionsPageState.ts",
-        "entrypoints/options/hooks/useOptionsFolderManagement.ts",
-        "entrypoints/options/hooks/useOptionsHistory.ts",
-        "entrypoints/options/hooks/useDownloadsTabState.ts",
-        "entrypoints/sidepanel/hooks/useCommandCenterActions.ts",
-        "entrypoints/sidepanel/hooks/useSidepanelTrackedTabId.ts",
-        "entrypoints/sidepanel/hooks/useErrors.ts",
-        "entrypoints/sidepanel/hooks/useSidepanelSeriesContext.ts",
-        "entrypoints/sidepanel/hooks/useInlineSelectionState.ts",
-        "entrypoints/sidepanel/hooks/useOptionsActionItems.ts",
-        "entrypoints/sidepanel/hooks/useSelection.ts",
-        "entrypoints/sidepanel/hooks/useDownload.ts",
-        "entrypoints/sidepanel/hooks/useQueueView.ts",
-        "entrypoints/sidepanel/hooks/useChapterSelections.ts",
-        "entrypoints/sidepanel/hooks/useInitFailure.ts",
-        "entrypoints/sidepanel/hooks/useActiveTaskProgress.ts",
-        "src/ui/shared/hooks/useChromeStorageValue.ts",
-        "src/ui/shared/hooks/useUiPreferences.ts",
-        // These runtime helpers are only reachable from the excluded pure
-        // offscreen bootstrap and do not yet have direct unit tests.
-        "entrypoints/offscreen/error-categories.ts",
-        "entrypoints/offscreen/status-ui.ts",
       ],
       thresholds: {
         lines: 80,

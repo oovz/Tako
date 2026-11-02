@@ -5,17 +5,9 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 import { createQueueRepositoryTestHarness } from "./queue-repository-test-harness"
 
-const CANONICAL_TASK_STATUSES: Array<DownloadTaskState["status"]> = [
-  "queued",
-  "downloading",
-  "completed",
-  "partial_success",
-  "failed",
-  "canceled",
-]
-
 function makeChapter(overrides: Partial<TaskChapter> = {}): TaskChapter {
   return {
+    requestedPath: "Tako/Chapter.cbz",
     id: overrides.id ?? "chapter-1",
     url: overrides.url ?? "https://example.com/chapter-1",
     title: overrides.title ?? "Chapter 1",
@@ -52,8 +44,8 @@ function makeTask(
   }
 }
 
-describe("status vocabulary invariants", () => {
-  it("retry/restart create new tasks using canonical queued status only", async () => {
+describe("queue task lifecycle", () => {
+  it("queues new retry and restart tasks", async () => {
     const retrySource = makeTask({
       id: "partial-task",
       status: "partial_success",
@@ -98,7 +90,6 @@ describe("status vocabulary invariants", () => {
 
     for (const task of createdTasks) {
       expect(task.status).toBe("queued")
-      expect(CANONICAL_TASK_STATUSES).toContain(task.status)
       expect(task.settingsSnapshot).toEqual(
         expect.objectContaining({
           archiveFormat: DEFAULT_SETTINGS.downloads.defaultFormat,
@@ -108,20 +99,10 @@ describe("status vocabulary invariants", () => {
       expect(
         task.chapters.every((chapter) => chapter.status === "queued")
       ).toBe(true)
-      expect(
-        task.chapters.every(
-          (chapter) => chapter.status !== ("pending" as never)
-        )
-      ).toBe(true)
-      expect(
-        task.chapters.every(
-          (chapter) => chapter.status !== ("waiting" as never)
-        )
-      ).toBe(true)
     }
   })
 
-  it("clearAllHistory keeps only canonical queued/downloading tasks", async () => {
+  it("clearing task history preserves queued and active tasks", async () => {
     const queue = [
       makeTask({ id: "queued-task", status: "queued" }),
       makeTask({ id: "downloading-task", status: "downloading" }),
@@ -154,10 +135,5 @@ describe("status vocabulary invariants", () => {
       "queued-task",
       "downloading-task",
     ])
-    expect(
-      updatedQueue.every((task) =>
-        CANONICAL_TASK_STATUSES.includes(task.status)
-      )
-    ).toBe(true)
   })
 })

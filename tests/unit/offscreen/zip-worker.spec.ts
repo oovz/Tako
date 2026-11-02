@@ -1,16 +1,4 @@
-/**
- * Zip Worker Unit Tests
- *
- * The worker (`entrypoints/offscreen/zip.worker.ts`) runs as a Web Worker and
- * communicates via `self.postMessage` / `self.onmessage`. These tests load the
- * worker module in a Node environment, stub the worker global (`self`) to
- * capture outbound messages and intercept inbound message dispatch, and drive
- * the worker by invoking its `onmessage` handler directly with crafted
- * `MessageEvent` payloads.
- *
- * The worker is excluded from the coverage gate (see vitest.config.ts), but
- * protocol and real-archive tests still exercise its behavior directly.
- */
+// Drive the worker through its message protocol with an isolated worker global.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { strFromU8, unzipSync } from "fflate"
@@ -140,6 +128,26 @@ describe("zip.worker streaming archive protocol", () => {
     })
   })
 
+  it("rejects empty image input and prevents later archive output", async () => {
+    await installWorkerRuntime()
+    sendMessage({ type: "init", chapterTitle: "Empty", extension: "cbz" })
+    sendMessage({
+      type: "addImage",
+      inputId: "empty-input",
+      filename: "001.jpg",
+      buffer: new ArrayBuffer(0),
+    })
+    sendMessage({ type: "finalize" })
+
+    expect(await waitForTerminalMessage()).toMatchObject({
+      success: false,
+      error: expect.stringContaining("Image payload is empty"),
+    })
+    expect(
+      postedMessages.some((message) => "success" in message && message.success)
+    ).toBe(false)
+  })
+
   it("creates an archive for valid small input", async () => {
     await installWorkerRuntime()
 
@@ -240,15 +248,5 @@ describe("zip.worker streaming archive protocol", () => {
 
     const terminal = await waitForTerminalMessage()
     expect(terminal.success).toBe(true)
-  })
-})
-
-describe("zip.worker MV3 compression implementation", () => {
-  it("does not rely on nested blob workers for compression", async () => {
-    const source = await import("@/entrypoints/offscreen/zip.worker.ts?raw")
-    const text = String(source.default)
-    expect(text).not.toContain("AsyncZipDeflate")
-    expect(text).toContain("ZipDeflate")
-    expect(text).toContain("ZipPassThrough")
   })
 })

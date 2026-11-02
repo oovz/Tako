@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures/extension"
+import { test, expect, resolveBackgroundWorker } from "./fixtures/extension"
 import {
   getTabId,
   seedTabContext,
@@ -16,44 +16,7 @@ async function getActionTitle(
   context: import("@playwright/test").BrowserContext,
   tabId: number
 ): Promise<string> {
-  const expectedName = "Tako Manga Downloader"
-  const isOurWorker = async (
-    sw: import("@playwright/test").Worker
-  ): Promise<boolean> => {
-    try {
-      const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
-      return name === expectedName
-    } catch {
-      return false
-    }
-  }
-
-  let worker: import("@playwright/test").Worker | undefined
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context
-      .serviceWorkers()
-      .filter((sw) => sw.url().startsWith("chrome-extension://"))
-    for (const sw of candidates) {
-      if (await isOurWorker(sw)) {
-        worker = sw
-        break
-      }
-    }
-    if (worker) break
-
-    try {
-      await context.waitForEvent("serviceworker", {
-        timeout: 1000,
-        predicate: (sw) => sw.url().startsWith("chrome-extension://"),
-      })
-    } catch {
-      void 0
-    }
-  }
-
-  if (!worker) {
-    throw new Error("Service worker not found")
-  }
+  const worker = await resolveBackgroundWorker(context)
   return await worker.evaluate(async (id: number) => {
     try {
       return await chrome.action.getTitle({ tabId: id })
@@ -67,45 +30,7 @@ async function isActionEnabled(
   context: import("@playwright/test").BrowserContext,
   tabId: number
 ): Promise<boolean> {
-  const expectedName = "Tako Manga Downloader"
-  const isOurWorker = async (
-    sw: import("@playwright/test").Worker
-  ): Promise<boolean> => {
-    try {
-      const name = await sw.evaluate(() => chrome.runtime.getManifest().name)
-      return name === expectedName
-    } catch {
-      return false
-    }
-  }
-
-  let worker: import("@playwright/test").Worker | undefined
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidates = context
-      .serviceWorkers()
-      .filter((sw) => sw.url().startsWith("chrome-extension://"))
-    for (const sw of candidates) {
-      if (await isOurWorker(sw)) {
-        worker = sw
-        break
-      }
-    }
-    if (worker) break
-
-    try {
-      await context.waitForEvent("serviceworker", {
-        timeout: 1000,
-        predicate: (sw) => sw.url().startsWith("chrome-extension://"),
-      })
-    } catch {
-      void 0
-    }
-  }
-
-  if (!worker) {
-    throw new Error("Service worker not found")
-  }
-
+  const worker = await resolveBackgroundWorker(context)
   return await worker.evaluate(async (id: number) => {
     try {
       return await chrome.action.isEnabled(id)
@@ -160,7 +85,7 @@ async function waitForSidepanelSeries(
   )
 }
 
-test.describe("Side Panel activation and enable/disable behavior", () => {
+test.describe("Side Panel activation", () => {
   test("opens side panel on supported series page and keeps the action enabled", async ({
     context,
     extensionId,
@@ -243,7 +168,7 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
     await sp.close()
   })
 
-  test("shows an indicator on the settings gear when Options has an update action item", async ({
+  test("marks the settings button when an update needs attention", async ({
     context,
     extensionId,
     page,
@@ -271,7 +196,7 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
     )
     await sp.close()
   })
-  test("clicking settings gear opens the options page tab", async ({
+  test("opens Options from the settings button", async ({
     context,
     extensionId,
     page,
@@ -302,56 +227,6 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
     await optionsPage.close()
   })
 
-  test("uses sidepanel.html as single entrypoint for supported and unsupported tabs", async ({
-    context,
-    extensionId,
-    page,
-  }) => {
-    // Unsupported tab: example.com
-    await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
-    await getTabId(page, context)
-
-    const spUnsupported = await openSidepanelHarness(context, extensionId, page)
-    await expect(spUnsupported.locator("#root")).toBeVisible()
-    await expect(spUnsupported.url()).toMatch(/\/sidepanel\.html$/)
-
-    // Supported series tab: mangadex
-    const supportedPage = await context.newPage()
-    const baseChapters = [
-      { id: "chapter-1", url: "https://example.com/ch1", title: "Chapter 1" },
-      { id: "chapter-2", url: "https://example.com/ch2", title: "Chapter 2" },
-    ]
-
-    await seedTabContext(
-      supportedPage,
-      context,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "test-series-entrypoint",
-        seriesTitle: "EntryPoint Test Series",
-        chapters: baseChapters,
-      },
-      MANGADEX_TEST_SERIES_URL
-    )
-
-    const spSupported = await openSidepanelHarness(
-      context,
-      extensionId,
-      supportedPage
-    )
-    await expect(spSupported.locator("#root")).toBeVisible()
-    await waitForSidepanelSeries(spSupported, "EntryPoint Test Series")
-    await expect(spSupported.url()).toMatch(/\/sidepanel\.html$/)
-
-    // Interactions within the Command Center (e.g., opening the chapter selector) must not navigate away from sidepanel.html
-    await spSupported.getByRole("button", { name: /Select chapters/i }).click()
-    await expect(spSupported.url()).toMatch(/\/sidepanel\.html$/)
-
-    await spUnsupported.close()
-    await spSupported.close()
-    await supportedPage.close()
-  })
-
   test("shows unsupported message on about:blank", async ({
     context,
     extensionId,
@@ -371,68 +246,6 @@ test.describe("Side Panel activation and enable/disable behavior", () => {
 
     await sp.close()
     await page.close()
-  })
-
-  test("handles page refresh on supported page", async ({
-    context,
-    extensionId,
-    page,
-  }) => {
-    // Navigate to a supported series page
-    await page.goto(MANGADEX_TEST_SERIES_URL, {
-      waitUntil: "domcontentloaded",
-    })
-
-    const baseChapters = [
-      { id: "chapter-1", url: "https://example.com/ch1", title: "Chapter 1" },
-      { id: "chapter-2", url: "https://example.com/ch2", title: "Chapter 2" },
-    ]
-
-    await seedTabContext(
-      page,
-      context,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "test-series-refresh",
-        seriesTitle: "Refresh Test Series",
-        chapters: baseChapters,
-      },
-      MANGADEX_TEST_SERIES_URL
-    )
-
-    // Open Side Panel and verify initial state
-    const sp = await openSidepanelHarness(context, extensionId, page)
-    await expect(sp.locator("#root")).toBeVisible()
-    await waitForSidepanelSeries(sp, "Refresh Test Series")
-    await expect(sp.getByText("Refresh Test Series")).toBeVisible({
-      timeout: 10000,
-    })
-    await expect(
-      sp.getByRole("button", { name: /Select chapters/i })
-    ).toBeVisible()
-
-    // Refresh the main page
-    await page.reload({ waitUntil: "domcontentloaded" })
-
-    // Re-initialize tab state after refresh
-    await seedTabContext(
-      page,
-      context,
-      {
-        siteIntegrationId: "mangadex",
-        mangaId: "test-series-refresh",
-        seriesTitle: "Refresh Test Series",
-        chapters: baseChapters,
-      },
-      MANGADEX_TEST_SERIES_URL
-    )
-
-    // Wait for side panel to update after refresh - it should still work
-    await expect(
-      sp.getByRole("button", { name: /Select chapters/i })
-    ).toBeVisible({ timeout: 5000 })
-
-    await sp.close()
   })
 
   test("updates side panel when switching between tabs", async ({

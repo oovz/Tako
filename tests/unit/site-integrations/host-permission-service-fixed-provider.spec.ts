@@ -81,7 +81,17 @@ describe("fixed-only provider host permissions", () => {
           ],
         }),
       },
-      permissions: { request, remove },
+      permissions: {
+        request,
+        remove,
+        getAll: async () => ({
+          origins: [
+            "https://fixed.example/*",
+            "https://shared.example/*",
+            "https://mandatory.example/*",
+          ],
+        }),
+      },
     })
   })
 

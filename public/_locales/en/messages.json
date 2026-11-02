@@ -3,7 +3,7 @@
     "message": "Tako Manga Downloader"
   },
   "extDescription": {
-    "message": "Batch-download manga from MangaDex, Pixiv Comic, Shonen Jump+, and more. Queue, retry, and export CBZ/ZIP from the Side Panel."
+    "message": "Select chapters, queue downloads, and track progress from Chrome’s side panel. Keep browsing while Tako handles the downloads."
   },
   "common_all": {
     "message": "All"
@@ -117,7 +117,7 @@
     "message": "No chapters found"
   },
   "sidepanel_adultConsentRequired": {
-    "message": "Accept Manhuagui’s adult-content prompt, then reload this page."
+    "message": "Accept 看漫画’s adult-content prompt, then reload this page."
   },
   "sidepanel_selectedChaptersUnavailable": {
     "message": "The selected chapters are no longer available."
@@ -262,15 +262,6 @@
   "sidepanel_cancelProgressWarning": {
     "message": "Stops this task’s remaining work. Downloads already accepted by Chrome continue; manage them in Chrome Downloads."
   },
-  "sidepanel_forgetUnobservableDownload": {
-    "message": "Forget all pending downloads for this task?"
-  },
-  "sidepanel_forgetUnobservableWarning": {
-    "message": "The browser download can no longer be inspected. Forgetting it releases all of Tako's pending outputs for this task; files may be incomplete."
-  },
-  "sidepanel_forgetDownload": {
-    "message": "Forget all downloads"
-  },
   "sidepanel_chapterDownloading": {
     "message": "$COUNT$ $UNIT$ downloading",
     "placeholders": {
@@ -336,45 +327,6 @@
   "sidepanel_siteNotSupported": {
     "message": "This site is not supported yet."
   },
-  "destinationIssue_title": {
-    "message": "Download folder needs attention"
-  },
-  "destinationIssue_permissionRequired": {
-    "message": "Grant access to the selected folder to continue this task."
-  },
-  "destinationIssue_folderMissing": {
-    "message": "Choose the download folder again to continue this task."
-  },
-  "destinationIssue_writeFailed": {
-    "message": "Tako could not write to the selected download folder."
-  },
-  "destinationIssue_unsupported": {
-    "message": "This browser cannot use the selected custom folder."
-  },
-  "destinationIssue_diskFull": {
-    "message": "The selected download folder does not have enough free space."
-  },
-  "destinationIssue_fixFolder": {
-    "message": "Fix folder"
-  },
-  "destinationIssue_grantAccess": {
-    "message": "Grant access again"
-  },
-  "destinationIssue_chooseFolder": {
-    "message": "Choose another folder"
-  },
-  "destinationIssue_continueDownloads": {
-    "message": "Continue in Downloads"
-  },
-  "destinationIssue_cancelTask": {
-    "message": "Cancel task"
-  },
-  "destinationIssue_actionFailed": {
-    "message": "Could not update the blocked task"
-  },
-  "destinationIssue_accessGranted": {
-    "message": "Folder access restored"
-  },
   "sidepanel_initFailed": {
     "message": "Extension initialization failed"
   },
@@ -413,9 +365,6 @@
   },
   "status_waitingBrowserDownload": {
     "message": "Waiting for Chrome Downloads"
-  },
-  "status_destinationActionRequired": {
-    "message": "Download folder action required"
   },
   "status_waitingProviderPolicy": {
     "message": "Waiting for provider access"
@@ -466,10 +415,7 @@
     "message": "There is not enough disk space."
   },
   "downloadError_browserDownloadInterrupted": {
-    "message": "The browser did not finish saving the output."
-  },
-  "downloadError_browserDownloadUnobservable": {
-    "message": "The browser download could not be confirmed after its history was erased."
+    "message": "Chrome could not finish saving the output."
   },
   "downloadError_archiveCreationFailed": {
     "message": "Tako could not create the archive."
@@ -711,13 +657,16 @@
     "message": "Manage download destination and monitor active tasks."
   },
   "options_downloadDestination": {
-    "message": "Download destination"
+    "message": "Download defaults for new tasks"
   },
   "options_useCustomFolder": {
     "message": "Use custom folder (File System Access)"
   },
   "options_fsaUnsupported": {
     "message": "Custom folders are unavailable in this browser. Browser Downloads remain available."
+  },
+  "options_savedFolderRepairRequired": {
+    "message": "The saved folder needs access. Grant access again or select a folder."
   },
   "options_fsaNoFolderSelectedTitle": {
     "message": "No download folder selected"
@@ -767,9 +716,6 @@
         "content": "$1"
       }
     }
-  },
-  "options_clearAllHistory": {
-    "message": "Clear All History"
   },
   "options_activeDownloads": {
     "message": "Active Downloads"
@@ -861,7 +807,7 @@
     }
   },
   "options_taskSummaryFailed": {
-    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -872,7 +818,7 @@
     }
   },
   "options_taskSummaryCanceled": {
-    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -902,7 +848,7 @@
     }
   },
   "options_taskSummaryPartial": {
-    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -945,12 +891,6 @@
       }
     }
   },
-  "options_clearHistoryTitle": {
-    "message": "Clear all download history?"
-  },
-  "options_clearHistoryDesc": {
-    "message": "This will permanently delete all download history. Downloaded files are not affected."
-  },
   "options_noKeepHistory": {
     "message": "No, Keep History"
   },
@@ -979,16 +919,7 @@
     "message": "Manage History Data"
   },
   "options_manageHistoryDesc": {
-    "message": "Remove stored chapter history records without affecting files already saved on disk."
-  },
-  "options_clearAllHistoryLabel": {
-    "message": "Clear All History"
-  },
-  "options_clearAllHistorySubtext": {
-    "message": "Remove all download history for all series"
-  },
-  "options_clearEverything": {
-    "message": "Clear Everything"
+    "message": "Manage chapter history for all series or a selected series."
   },
   "options_clearAllDownloadHistory": {
     "message": "Clear All Download History?"
@@ -1008,16 +939,16 @@
     "message": "This action cannot be undone."
   },
   "options_clearSpecificSeries": {
-    "message": "Clear Specific Series"
+    "message": "Clear chapter history for a series"
   },
   "options_clearSeriesSubtext": {
-    "message": "Remove download history for a single series"
+    "message": "Remove chapter records for one series"
   },
   "options_selectSeriesDots": {
     "message": "Select Series..."
   },
   "options_clearSeriesHistory": {
-    "message": "Clear Series History"
+    "message": "Clear series chapter history"
   },
   "options_selectSeries": {
     "message": "Select Series"
@@ -1026,7 +957,7 @@
     "message": "Choose a series..."
   },
   "options_noDownloadHistory": {
-    "message": "No download history found"
+    "message": "No chapter history found"
   },
   "options_clearSelected": {
     "message": "Clear Selected"
@@ -1388,7 +1319,7 @@
     "message": "Permission denied"
   },
   "options_toastCustomFolderSet": {
-    "message": "Custom download folder set: $NAME$",
+    "message": "Folder selected: $NAME$. Save changes to use it for new tasks.",
     "placeholders": {
       "name": {
         "content": "$1"
@@ -1398,17 +1329,11 @@
   "options_toastSetFolderFailed": {
     "message": "Failed to set download folder"
   },
-  "options_toastAllHistoryCleared": {
-    "message": "All download history cleared"
-  },
-  "options_toastClearHistoryFailed": {
-    "message": "Failed to clear history"
-  },
   "options_toastSeriesHistoryCleared": {
-    "message": "Series history cleared"
+    "message": "Series chapter history cleared"
   },
   "options_toastClearSeriesFailed": {
-    "message": "Failed to clear series history"
+    "message": "Failed to clear series chapter history"
   },
   "options_toastChangesDiscarded": {
     "message": "Changes discarded"
@@ -1442,12 +1367,6 @@
   },
   "options_openMangaToDownload": {
     "message": "Open a manga series page to start downloading."
-  },
-  "options_keepHistory": {
-    "message": "No, Keep History"
-  },
-  "options_clearAll": {
-    "message": "Yes, Clear All"
   },
   "options_chromeWebStoreUpdatesDesc": {
     "message": "Manual update check through Chrome's extension update service."
@@ -1516,15 +1435,18 @@
     "message": "Partial"
   },
   "options_taskCompleted": {
-    "message": "Completed ($TOTAL$ chapters)",
+    "message": "Completed ($TOTAL$ chapter$PLURAL$)",
     "placeholders": {
       "total": {
         "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
       }
     }
   },
   "options_taskFailed": {
-    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Failed ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1535,7 +1457,7 @@
     }
   },
   "options_taskCanceled": {
-    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Canceled ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1565,7 +1487,7 @@
     }
   },
   "options_taskPartial": {
-    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters saved)",
+    "message": "Partial ($COMPLETED$ of $TOTAL$ chapters processed)",
     "placeholders": {
       "completed": {
         "content": "$1"
@@ -1761,29 +1683,11 @@
   "settings_invalidDownloadMode": {
     "message": "Invalid download mode"
   },
-  "settings_customFolderClearedFallback": {
-    "message": "The custom folder was cleared. Switched to browser downloads."
-  },
-  "settings_customFolderPermissionLostFallback": {
-    "message": "Access to the custom folder was lost. Switched to browser downloads."
-  },
   "settings_unknownError": {
     "message": "Unknown error"
   },
   "background_settingsSyncFailed": {
     "message": "Failed to sync settings to state"
-  },
-  "status_nativeOutputActionRequired": {
-    "message": "Download result review required"
-  },
-  "sidepanel_forgettingDownload": {
-    "message": "Forgetting pending downloads…"
-  },
-  "sidepanel_forgetSucceeded": {
-    "message": "Forgot $1 pending download(s). The queue will continue."
-  },
-  "sidepanel_toastForgetFailed": {
-    "message": "Failed to forget the pending downloads."
   },
   "startDownloadError_staleSeriesContext": {
     "message": "The series context is stale. Refresh the page and try again."
@@ -1844,5 +1748,146 @@
   },
   "sidepanel_retrySeriesContext": {
     "message": "Retry series"
+  },
+  "options_clearTaskHistory": {
+    "message": "Clear task history"
+  },
+  "options_clearTaskHistoryTitle": {
+    "message": "Clear task history?"
+  },
+  "options_clearTaskHistoryDesc": {
+    "message": "Permanently remove finished, failed, and canceled task records."
+  },
+  "options_clearChapterHistory": {
+    "message": "Clear chapter history"
+  },
+  "options_clearChapterHistoryTitle": {
+    "message": "Clear chapter history?"
+  },
+  "options_clearChapterHistoryDesc": {
+    "message": "Permanently remove chapter records for all series."
+  },
+  "options_clearChapterHistorySubtext": {
+    "message": "Remove chapter records for all series"
+  },
+  "options_clearHistoryRetry": {
+    "message": "History could not be cleared. Try again."
+  },
+  "options_toastTaskHistoryCleared": {
+    "message": "Task history cleared"
+  },
+  "options_toastClearTaskHistoryFailed": {
+    "message": "Failed to clear task history"
+  },
+  "options_toastChapterHistoryCleared": {
+    "message": "Chapter history cleared"
+  },
+  "options_toastClearChapterHistoryFailed": {
+    "message": "Failed to clear chapter history"
+  },
+  "queue_readFailed": {
+    "message": "Queue and task history could not be loaded."
+  },
+  "queue_readStale": {
+    "message": "Queue and task history may be out of date."
+  },
+  "common_retry": {
+    "message": "Retry"
+  },
+  "status_savedToFolder": {
+    "message": "Saved to folder"
+  },
+  "status_processed": {
+    "message": "Previously processed"
+  },
+  "progressStage_sendingToChrome": {
+    "message": "Sending to Chrome"
+  },
+  "progressStage_savingToFolder": {
+    "message": "Saving to folder"
+  },
+  "options_taskSavedToFolder": {
+    "message": "Saved to folder ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_retryUncertainHandoff": {
+    "message": "Retry failed chapters (may create duplicates)"
+  },
+  "sidepanel_restartUncertainHandoff": {
+    "message": "Retry all chapters (may create duplicates)"
+  },
+  "status_saved": {
+    "message": "Saved"
+  },
+  "output_saveUnconfirmedDescription": {
+    "message": "This record shows earlier processing. Final saving was not confirmed."
+  },
+  "options_taskSaved": {
+    "message": "Saved ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_taskPreviouslyProcessed": {
+    "message": "Previously processed ($TOTAL$ chapter$PLURAL$)",
+    "placeholders": {
+      "total": {
+        "content": "$1"
+      },
+      "plural": {
+        "content": "$2"
+      }
+    }
+  },
+  "destination_taskChrome": {
+    "message": "Chrome Downloads"
+  },
+  "destination_taskFolder": {
+    "message": "Selected folder"
+  },
+  "downloadError_browserOutputUnconfirmed": {
+    "message": "Chrome file saving could not be confirmed. Retrying may create duplicate files."
+  },
+  "taskFolder_originalUnavailable": {
+    "message": "This task’s original destination is unavailable. Create a new task."
+  },
+  "folderAccess_grant": {
+    "message": "Grant access again"
+  },
+  "folderAccess_granted": {
+    "message": "Folder access restored"
+  },
+  "taskFolder_accessGranted": {
+    "message": "Folder access granted. Use Retry to try saving again."
+  },
+  "taskFolder_accessFailed": {
+    "message": "Could not renew access to this task’s folder."
+  },
+  "taskFolder_openActions": {
+    "message": "Open folder actions"
+  },
+  "status_skipped": {
+    "message": "Skipped"
+  },
+  "options_allowChromeFallback": {
+    "message": "Use Chrome Downloads if the folder is unavailable"
+  },
+  "options_allowChromeFallbackHelp": {
+    "message": "Applies to new tasks. Switches automatically only before the task first attempts to write to its selected folder."
+  },
+  "destination_chromeFallback": {
+    "message": "Switched to Chrome Downloads"
   }
 }
