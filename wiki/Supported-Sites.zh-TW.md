@@ -34,14 +34,14 @@
 
 - **Manga Again（再漫画）：** 同一作品與章節的歷史在 `www.zaimanhua.com` 與 `manhua.zaimanhua.com` 之間共用。
 - **CopyManga（拷貝漫畫）：** 同一作品與章節的歷史在 `www.copy3000.com` 與 `www.copy4000.com` 之間共用。
-- **MangaHere：** 請開啟 `newm.mangahere.cc`。舊版 `m.mangahere.cc` 閱讀器未受支援。
-- **MangaNato 與 MangaKakalot：** 各自在「選項 → 網站整合」中擁有開關與章節歷史。
+- **MangaHere：** 請開啟 `newm.mangahere.cc`。舊版 `m.mangahere.cc` 閱讀器不受支援。
+- **MangaNato 與 MangaKakalot：** 各自在「選項 → 網站整合」中設有獨立開關，章節歷史也各自獨立。
 - **Manhuagui（看漫画）：** 支援 `www.manhuagui.com` 與 `manhuagui.com`。請開啟漫畫詳細資料頁以選取章節。
 
 ## 啟用 MangaDex
 
 1. 開啟 Tako 的「選項 → 網站整合」。
-2. 開啟 MangaDex，並同意 Chrome 的網站存取要求。
+2. 啟用 MangaDex，並同意 Chrome 的網站存取要求。
 3. 點選「儲存變更」。
 4. 返回 MangaDex 作品頁，再開啟 Tako。
 
@@ -51,7 +51,7 @@ MangaDex 使用位址會變動的圖片伺服器，因此 Chrome 會要求存取
 
 章節是否可用，取決於網站的網頁版閱讀器、你的存取權限，以及地區或帳號限制。部分整合會沿用網站現有的瀏覽器工作階段。需要時請先在網站登入，並在下載期間保持工作階段穩定。付費或受限制的章節，也必須能透過該網站的網頁版閱讀器存取。網站與應用程式的訂閱條款可能不同。
 
-Manhuagui（看漫画）除了帳號登入外，另有成人內容同意提示。請先在網站完成該提示，再於 Tako 重新開啟漫畫詳細資料頁。
+Manhuagui（看漫画）除了帳號登入外，另有成人內容同意提示。請先在網站完成成人內容同意步驟，再於 Tako 重新開啟漫畫詳細資料頁。
 
 CopyManga（拷貝漫畫）可能暫時回傳空白章節清單，其網站的訪客閱讀器也可能出現相同情況。此時請等待網站恢復顯示章節，再於 Tako 重新載入作品頁。
 

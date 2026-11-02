@@ -30,4 +30,4 @@ Tako는 지원 사이트의 만화 챕터를 오프라인에서 읽을 수 있�
 
 ## 기여자를 위한 안내
 
-설정과 검증 방법은 [기여 가이드](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)에서 시작하세요. [아키텍처](Architecture.ko)는 확장 프로그램의 구성을 설명하고, [사이트 연동 가이드](Site-Integration-Guide.ko)는 사이트를 추가하는 방법을 다룹니다.
+개발 환경 설정과 검증 방법은 [기여 가이드](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)를 참고하세요. [아키텍처](Architecture.ko)는 확장 프로그램의 구성을 설명하고, [사이트 연동 가이드](Site-Integration-Guide.ko)는 사이트를 추가하는 방법을 다룹니다.

@@ -20,8 +20,7 @@
 
 - **用喜欢的阅读器看。** 保存为 CBZ、ZIP 或单独的图片。CBZ 还可以附上章节信息和封面，供漫画阅读器使用。
 - **书库按自己的习惯整理。** 选择保存文件夹，自定义系列和章节的命名方式。
-- **查看保存结果。** 随时查看下载结果和章节历史。
-- **按需清理历史。** 清除旧任务时可以保留章节历史，也可以分别清除这两类记录。
+- **查看下载结果和历史。** 清除旧任务时可以保留章节历史，也可以分别清除两类记录。
 
 ## 从喜欢的作品开始
 
@@ -37,7 +36,7 @@ Tako 默认通过 Chrome 下载功能保存 CBZ 文件。打开**选项 → 存�
 
 也支持以下网站：[BoyLove（香香腐宅）](https://boylove.cc) · [Mangago](https://www.mangago.me) · [MangaNato](https://manganato.gg) · [MangaKakalot](https://mangakakalove.com) · [Coolmic](https://coolmic.me) · [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) · [Anime Manga House（动漫屋）](https://www.dm5.com) · [Manga Again（再漫画）](https://www.zaimanhua.com) · [CopyManga（拷貝漫畫）](https://www.copy3000.com) · [MYCOMIC](https://mycomic.com) · [Māngabz](https://www.mangabz.com) · [MangaHere](https://newm.mangahere.cc) · [Love Manga（爱漫画）](https://www.aimanhua.org)。请查看[各网站的说明](https://github.com/oovz/Tako/wiki/Supported-Sites.zh-CN)，了解可用情况及应打开的页面。
 
-MangaDex 默认关闭。请在**选项 → 站点集成**中启用，并允许 Chrome 请求的网站访问权限。[查看各网站的使用提示](https://github.com/oovz/Tako/wiki/Supported-Sites.zh-CN)。
+MangaDex 默认关闭。请在**选项 → 站点集成**中启用，并同意 Chrome 的网站访问权限请求。[查看各网站的使用提示](https://github.com/oovz/Tako/wiki/Supported-Sites.zh-CN)。
 
 界面支持英语、日语、简体中文、繁体中文和韩语。
 
@@ -46,7 +45,7 @@ MangaDex 默认关闭。请在**选项 → 站点集成**中启用，并允许 C
 设置、队列状态和下载历史保存在浏览器中。下载时直接连接支持的网站及其图片服务；启用 MangaDex 后，也会发送其服务要求的传输报告。Tako 不使用开发者分析服务或广告追踪工具。详情请阅读[隐私政策（英文）](PRIVACY.md)。
 
 > [!NOTE]
-> 请保存你有权下载的内容。章节是否可用取决于网站的网页访问权限，包括账户或地区要求。
+> 请保存你有权下载的内容。章节是否可用取决于网站网页端的访问条件，包括账户或地区要求。
 
 ## 需要帮助时
 

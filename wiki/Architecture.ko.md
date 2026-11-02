@@ -4,7 +4,7 @@
 
 > 이 페이지는 [영어 원문](Architecture)을 기계 번역한 문서입니다.
 
-Tako는 Chrome 150 이상을 위한 WXT Manifest V3 확장 프로그램입니다. 이 페이지는 기여자가 필요한 코드를 찾도록 안내합니다. 다운로드 도움말은 [빠른 시작](Quick-Start.ko)과 [문제 해결](Troubleshooting.ko)을 참고하세요.
+Tako는 Chrome 150 이상에서 동작하는 WXT 기반 Manifest V3 확장 프로그램입니다. 이 페이지는 기여자가 필요한 코드를 찾도록 안내합니다. 다운로드 도움말은 [빠른 시작](Quick-Start.ko)과 [문제 해결](Troubleshooting.ko)을 참고하세요.
 
 ## 확장 프로그램 구성
 
@@ -28,7 +28,7 @@ Tako는 Chrome 150 이상을 위한 WXT Manifest V3 확장 프로그램입니다
 | 공통 런타임 서비스  | [`src/runtime/`](https://github.com/oovz/Tako/tree/main/src/runtime)                                                                                                           |
 | 연동 인터페이스     | [`src/types/site-integrations.ts`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)                                                                      |
 
-설정과 테스트는 [기여 가이드](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)를, 사이트 추가는 [사이트 연동 가이드](Site-Integration-Guide.ko)를 참고하세요.
+개발 환경 설정과 테스트는 [기여 가이드](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)를, 사이트 추가는 [사이트 연동 가이드](Site-Integration-Guide.ko)를 참고하세요.
 
 ## 참고 자료
 

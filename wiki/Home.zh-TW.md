@@ -8,7 +8,7 @@
 
 > 本頁由[英文原文](Home)機器翻譯而成。
 
-Tako 可從支援網站儲存漫畫章節，供離線閱讀。在閱讀分頁旁開啟 Tako，選取章節，再儲存為 CBZ、ZIP 或個別圖片。
+Tako 可儲存支援網站上的漫畫章節，供離線閱讀。在閱讀分頁旁開啟 Tako，選取章節，再儲存為 CBZ、ZIP 或個別圖片。
 
 **[下載第一個章節 →](Quick-Start.zh-TW)**
 
@@ -26,7 +26,7 @@ Tako 可從支援網站儲存漫畫章節，供離線閱讀。在閱讀分頁旁
 
 從 [Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)安裝 Tako。需要 Chrome 150 或更新版本。介面支援英文、日文、簡體中文、繁體中文與韓文。
 
-設定、佇列紀錄與下載歷史都儲存在瀏覽器中。Tako 直接連線至支援網站及其圖片服務。包括 MangaDex 傳輸回報在內的詳細資訊，請參閱[隱私權政策](https://github.com/oovz/Tako/blob/main/PRIVACY.md)。
+設定、佇列紀錄與下載歷史都儲存在瀏覽器中。Tako 直接連線至支援網站及其圖片服務。有關 MangaDex 傳輸回報等詳細資訊，請參閱[隱私權政策](https://github.com/oovz/Tako/blob/main/PRIVACY.md)。
 
 ## 給貢獻者
 

@@ -8,7 +8,7 @@
 
 このページは[英語版](Home)から機械翻訳されています。
 
-Tako は対応サイトの漫画を保存し、オフラインで読めるようにします。閲覧中のタブの横で開き、保存したい話を選んで、CBZ、ZIP、個別の画像として保存できます。
+Tako では、対応サイトの漫画をオフラインで読むために保存できます。閲覧中のタブの横にパネルを開き、読みたい話を選んで、CBZ、ZIP、個別の画像として保存します。
 
 **[初めてのダウンロード →](Quick-Start.ja)**
 
@@ -24,10 +24,10 @@ Tako は対応サイトの漫画を保存し、オフラインで読めるよう
 
 ## Tako を入手する
 
-[Chrome ウェブストア](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)からインストールできます。Chrome 150 以降が必要です。画面の表示言語は英語、日本語、簡体字中国語、繁体字中国語、韓国語に対応しています。
+[Chrome ウェブストア](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)からインストールできます。Chrome 150 以降が必要です。表示言語は英語、日本語、簡体字中国語、繁体字中国語、韓国語から選べます。
 
 設定、キューの記録、ダウンロード履歴はブラウザ内に保存されます。Tako は対応サイトとその画像配信サービスに直接接続します。MangaDex の配信レポートなどの詳細は、[プライバシーポリシー](https://github.com/oovz/Tako/blob/main/PRIVACY.md)をご覧ください。
 
 ## 開発に参加する方へ
 
-環境の準備と検証方法は[開発者向けガイド](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)から確認できます。[アーキテクチャ](Architecture.ja)では拡張機能の構成を、[サイト統合ガイド](Site-Integration-Guide.ja)ではサイトの追加方法を説明しています。
+環境の準備と検証の手順は[開発者向けガイド](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md)をご覧ください。[アーキテクチャ](Architecture.ja)では拡張機能の構成を、[サイト統合ガイド](Site-Integration-Guide.ja)ではサイトの追加方法を説明しています。
