@@ -14,7 +14,7 @@ function chapter(id: string, fields: Partial<ChapterState> = {}): ChapterState {
   }
 }
 
-it("labels explicit categories from their catalog or chapter metadata and retains unknown membership as standalone", () => {
+it("uses catalog labels and leaves unknown categories ungrouped", () => {
   const result = groupChapters(
     [
       chapter("catalog", { volumeId: "catalog", volumeLabel: "Chapter label" }),
@@ -38,4 +38,30 @@ it("labels explicit categories from their catalog or chapter metadata and retain
     "unknown",
   ])
   expect(result[4]).toMatchObject({ id: "unknown", isStandalone: true })
+})
+
+it("returns no rows for an empty chapter list", () => {
+  expect(groupChapters([])).toEqual([])
+})
+
+it("starts volume groups collapsed and preserves expanded groups", () => {
+  const chapters = [
+    chapter("first", { volumeNumber: 1 }),
+    chapter("second", { volumeNumber: 1 }),
+    chapter("third", { volumeNumber: 2 }),
+  ]
+  const initial = groupChapters(chapters)
+  expect(initial).toHaveLength(2)
+  expect(initial).toMatchObject([
+    { collapsed: true, chapters: [{ id: "first" }, { id: "second" }] },
+    { collapsed: true, chapters: [{ id: "third" }] },
+  ])
+
+  const expanded = initial.map((row) =>
+    "chapters" in row ? { ...row, collapsed: false } : row
+  )
+  expect(groupChapters(chapters, expanded)).toMatchObject([
+    { collapsed: false },
+    { collapsed: false },
+  ])
 })
