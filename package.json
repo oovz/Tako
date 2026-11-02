@@ -1,6 +1,6 @@
 {
   "name": "tako-manga-downloader",
-  "version": "2.0.9",
+  "version": "2.1.0",
   "description": "Select chapters, queue downloads, and track progress from Chrome’s side panel. Keep browsing while Tako handles the downloads.",
   "type": "module",
   "engines": {
