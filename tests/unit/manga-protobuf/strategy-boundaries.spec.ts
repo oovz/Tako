@@ -144,7 +144,7 @@ describe("MANGA Plus catalog strategy boundaries", () => {
 })
 
 describe("MangaMillion chapter strategy boundaries", () => {
-  it("uses a chapter URL as the identifier fallback, filters missing page URLs and preserves image order without complete AES credentials", async () => {
+  it("resolves fallback IDs and ordered image pages without complete AES credentials", async () => {
     const first = "https://img.mangamillion.shueisha.co.jp/1.png"
     const second = "https://img.mangamillion.shueisha.co.jp/2.png"
     const viewer = new BinaryWriter()

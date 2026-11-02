@@ -228,7 +228,7 @@ describe("queued settings isolation", () => {
     })
   })
 
-  it("keeps first task snapshot isolated from later settings mutation while new task uses updated values", async () => {
+  it("keeps existing task settings while new tasks use updated defaults", async () => {
     const settingsRef = {
       current: makeSettings({
         downloads: {

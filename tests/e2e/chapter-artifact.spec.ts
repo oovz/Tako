@@ -47,7 +47,7 @@ test("saved archive checker decodes real images and rejects corrupt page content
   }
 })
 
-test("retains the complete saved chapter and inspection receipt for visual review", async ({
+test("retains saved chapter files and image inspection results", async ({
   page,
 }, testInfo) => {
   const bytes = zipSync({
