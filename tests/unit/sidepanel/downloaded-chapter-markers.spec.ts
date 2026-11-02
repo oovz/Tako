@@ -43,7 +43,10 @@ describe("downloaded chapter markers", () => {
       items,
       new Map([
         ["standalone-1", { outputDestination: "downloads-api" as const }],
-        ["chapter-2", { outputDestination: "fsa" as const, saveConfirmedAt: 42 }],
+        [
+          "chapter-2",
+          { outputDestination: "fsa" as const, saveConfirmedAt: 42 },
+        ],
       ])
     )
 

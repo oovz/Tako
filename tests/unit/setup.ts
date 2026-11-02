@@ -28,7 +28,10 @@ function substitutePlaceholders(
   })
 }
 
-function getMessageMock(key: string, substitutions?: string | string[]): string {
+function getMessageMock(
+  key: string,
+  substitutions?: string | string[]
+): string {
   const msgs = loadMessages()
   const entry = msgs![key]
   if (!entry) return key

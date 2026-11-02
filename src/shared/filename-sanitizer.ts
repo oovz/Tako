@@ -32,7 +32,8 @@ export function sanitizeFilename(filename: string): string {
   const controlRe = /[\x00-\x1f\x80-\x9f]/g
   const reservedRe = /^\.+$/
   // Device names remain reserved when followed by an extension.
-  const windowsReservedRe = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i
+  const windowsReservedRe =
+    /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i
   // Windows doesn't allow trailing dots or spaces
   // eslint-disable-next-line no-useless-escape
   const windowsTrailingRe = /[\. ]+$/
