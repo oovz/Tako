@@ -126,7 +126,7 @@ class ChapterImageByteBudget {
   }
 }
 
-function isResourceLimit(
+export function isResourceLimit(
   error: unknown
 ): error is ChapterResourceLimitError | OffscreenLiveResourceLimitError {
   return (

@@ -3,7 +3,10 @@ import type {
   BrowserBlobDownloadResponse,
   ChapterOutcome,
 } from "./chapter-processing-types"
-import type { FsaWriteError } from "./error-categories"
+import {
+  classifyOffscreenErrorCategory,
+  type FsaWriteError,
+} from "./error-categories"
 
 export function requireNativeOutputDisposition(
   response: BrowserBlobDownloadResponse
@@ -84,6 +87,30 @@ export function createNoneFormatChapterOutcome(
     outputsRequested: totalOutputs,
     outputsFailedBeforeHandoff: 0,
     outputsCommitted: input.downloadMode === "custom" ? totalOutputs : 0,
+  }
+}
+
+export function createNoneFormatResourceFailureOutcome(input: {
+  error: Error
+  downloadMode: NoneFormatCounts["downloadMode"]
+  outputsRequested: number
+  outputsAccepted: number
+  totalImages: number
+  imagesAccepted: number
+}): ChapterOutcome {
+  const imagesFailed = Math.max(0, input.totalImages - input.imagesAccepted)
+  return {
+    status: input.outputsAccepted > 0 ? "partial_success" : "failed",
+    errorMessage: input.error.message,
+    errorCategory: classifyOffscreenErrorCategory(input.error),
+    imagesFailed: imagesFailed || undefined,
+    outputsRequested: input.outputsRequested,
+    outputsFailedBeforeHandoff:
+      input.downloadMode === "browser"
+        ? input.outputsRequested - input.outputsAccepted
+        : 0,
+    outputsCommitted:
+      input.downloadMode === "custom" ? input.outputsAccepted : 0,
   }
 }
 

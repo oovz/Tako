@@ -833,7 +833,16 @@ describe("Offscreen resource lifecycles", () => {
           },
         }
       )
-    ).rejects.toThrow("Offscreen live resource cap exceeded")
+    ).resolves.toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining(
+        "Offscreen live resource cap exceeded"
+      ),
+      imagesFailed: 1,
+      outputsRequested: 1,
+      outputsFailedBeforeHandoff: 1,
+      outputsCommitted: 0,
+    })
 
     expect(blobConstructor).not.toHaveBeenCalled()
     expect(registry.getRetainedCount()).toBe(1)
@@ -847,6 +856,151 @@ describe("Offscreen resource lifecycles", () => {
     expect(registry.revoke(browserIdentity)).toBe(true)
     vi.unstubAllGlobals()
 
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("counts an accepted cover before a resource abort on the first page", async () => {
+    const coverData = new Uint8Array(8).buffer
+    const ledger = new OffscreenLiveResourceLedger(16)
+    const coverLease = ledger.reserve(coverData.byteLength, "retained cover")
+    const requestBrowserBlobDownload = vi.fn(async () => ({
+      success: true as const,
+      disposition: "tracked" as const,
+      phase: "prepared" as const,
+    }))
+    const outcome = await processNoneFormatChapter(
+      {
+        liveResourceLedger: ledger,
+        rateLimitService,
+        withImageRetries: async (operation) => operation(),
+        beginFsaWrite: async () => {},
+        resolveWritableDownloadRoot: vi.fn(),
+        requestBrowserBlobDownload,
+        getMemoryStats: () => null,
+      },
+      {
+        opts: {
+          taskId: "task-cover",
+          jobId: "job-cover",
+          attempt: 1,
+          chapter: {
+            id: "chapter-cover",
+            title: "Cover",
+            url: "https://example.com/cover",
+            comicInfo: {},
+          },
+          seriesTitle: "Series",
+          format: "none",
+          includeComicInfo: false,
+          downloadMode: "browser",
+          comicInfoVersion: "2.0",
+          onProgress: vi.fn(async () => undefined),
+          onArchiveProgress: vi.fn(async () => undefined),
+          abortSignal: new AbortController().signal,
+          coverImage: {
+            data: coverData,
+            mimeType: "image/png",
+            liveResourceLease: coverLease,
+          },
+          settingsSnapshot: {
+            ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+            archiveFormat: "none",
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
+        },
+        urls: ["https://images.example/page.png"],
+        integrationId: "test-site",
+        downloadImage: vi.fn(async () => {
+          ledger.reserve(16, "page")
+          throw new Error("unreachable")
+        }),
+        normalizeSettings: {
+          normalizeImageFilenames: true,
+          imagePaddingDigits: "auto",
+        },
+      }
+    )
+
+    expect(outcome).toMatchObject({
+      status: "partial_success",
+      errorMessage: expect.stringContaining(
+        "Offscreen live resource cap exceeded"
+      ),
+      imagesFailed: 1,
+      outputsRequested: 2,
+      outputsFailedBeforeHandoff: 1,
+      outputsCommitted: 0,
+    })
+    expect(requestBrowserBlobDownload).toHaveBeenCalledOnce()
+    coverLease.release()
+    expect(ledger.getUsedBytes()).toBe(0)
+  })
+
+  it("reports cancellation with its resource cause when the job aborts", async () => {
+    const controller = new AbortController()
+    const ledger = new OffscreenLiveResourceLedger(8)
+    const onProgress = vi.fn(async (pct: number) => {
+      if (pct === 100) controller.abort()
+    })
+    const processing = processNoneFormatChapter(
+      {
+        liveResourceLedger: ledger,
+        rateLimitService,
+        withImageRetries: async (operation) => operation(),
+        beginFsaWrite: async () => {},
+        resolveWritableDownloadRoot: vi.fn(),
+        requestBrowserBlobDownload: vi.fn(),
+        getMemoryStats: () => null,
+      },
+      {
+        opts: {
+          taskId: "task-cancel",
+          jobId: "job-cancel",
+          attempt: 1,
+          chapter: {
+            id: "chapter-cancel",
+            title: "Cancel",
+            url: "https://example.com/cancel",
+            comicInfo: {},
+          },
+          seriesTitle: "Series",
+          format: "none",
+          includeComicInfo: false,
+          downloadMode: "browser",
+          comicInfoVersion: "2.0",
+          onProgress,
+          onArchiveProgress: vi.fn(async () => undefined),
+          abortSignal: controller.signal,
+          settingsSnapshot: {
+            ...createTaskSettingsSnapshot(DEFAULT_SETTINGS, "test-site"),
+            archiveFormat: "none",
+            rateLimitSettings: {
+              image: { concurrency: 1, delayMs: 0 },
+              chapter: { concurrency: 1, delayMs: 0 },
+            },
+          },
+        },
+        urls: ["https://images.example/page.png"],
+        integrationId: "test-site",
+        downloadImage: vi.fn(async () => {
+          ledger.reserve(16, "page")
+          throw new Error("unreachable")
+        }),
+        normalizeSettings: {
+          normalizeImageFilenames: true,
+          imagePaddingDigits: "auto",
+        },
+      }
+    )
+
+    await expect(processing).rejects.toThrow("job-cancelled")
+    const error = (await processing.catch((caught: unknown) => caught)) as Error
+    expect((error.cause as Error).message).toContain(
+      "Offscreen live resource cap exceeded"
+    )
     expect(ledger.getUsedBytes()).toBe(0)
   })
 })

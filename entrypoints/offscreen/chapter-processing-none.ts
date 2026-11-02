@@ -6,6 +6,7 @@ import type { OffscreenLiveResourceLease } from "@/src/runtime/offscreen-live-re
 import {
   ChapterResourceLimitError,
   downloadChapterImages,
+  isResourceLimit,
 } from "./chapter-image-downloads"
 import {
   buildCoverOutputFilename,
@@ -16,6 +17,7 @@ import { FsaWriteError, toFsaWriteError } from "./error-categories"
 import {
   createFsaDestinationFailureOutcome,
   createNoneFormatChapterOutcome,
+  createNoneFormatResourceFailureOutcome,
   requireNativeOutputDisposition,
 } from "./chapter-processing-outcomes"
 import {
@@ -50,8 +52,9 @@ export class NoneFormatChapterOutput {
   private readonly outputCount: number
   private readonly collisionPolicy: ReturnType<typeof getConflictPolicy>
   private writableRoot: FileSystemDirectoryHandle | null = null
-  private committedFsaOutputs = 0
-  private committedFsaImages = 0
+  // A closed folder write or a browser handoff with durable ownership.
+  private acceptedOutputs = 0
+  private acceptedPageImages = 0
   private fsaWriteFailure: FsaWriteError | null = null
   private failedPageHandoffs = 0
   private failedAdditionalHandoffs = 0
@@ -91,31 +94,50 @@ export class NoneFormatChapterOutput {
   }
 
   async run(): Promise<ChapterOutcome> {
-    if (this.opts.downloadMode === "custom") {
-      this.writableRoot = await resolveChapterWritableRoot(
-        this.runtime,
-        this.opts
+    try {
+      if (this.opts.downloadMode === "custom") {
+        this.writableRoot = await resolveChapterWritableRoot(
+          this.runtime,
+          this.opts
+        )
+      }
+      this.assertActive()
+      const coverFailure = await this.saveCover()
+      if (coverFailure) return coverFailure
+      const { failed } = await this.downloadPages()
+      this.assertActive()
+      if (this.fsaWriteFailure) return this.failureOutcome(this.fsaWriteFailure)
+      const metadataFailure = await this.saveComicInfo()
+      if (metadataFailure) return metadataFailure
+      await this.opts.onArchiveProgress(
+        100,
+        this.writableRoot ? "saved" : "download started"
       )
+      return createNoneFormatChapterOutcome({
+        downloadMode: this.outputMode,
+        totalImages: this.input.urls.length,
+        failedImages: failed + this.failedPageHandoffs,
+        totalAdditionalOutputs: this.totalAdditionalOutputs,
+        failedAdditionalOutputs: this.failedAdditionalHandoffs,
+      })
+    } catch (error) {
+      if (!isResourceLimit(error)) throw error
+      if (this.opts.abortSignal?.aborted) {
+        throw new Error("job-cancelled", { cause: error })
+      }
+      return createNoneFormatResourceFailureOutcome({
+        error,
+        downloadMode: this.outputMode,
+        outputsRequested: this.outputCount,
+        outputsAccepted: this.acceptedOutputs,
+        totalImages: this.input.urls.length,
+        imagesAccepted: this.acceptedPageImages,
+      })
     }
-    this.assertActive()
-    const coverFailure = await this.saveCover()
-    if (coverFailure) return coverFailure
-    const { failed } = await this.downloadPages()
-    this.assertActive()
-    if (this.fsaWriteFailure) return this.failureOutcome(this.fsaWriteFailure)
-    const metadataFailure = await this.saveComicInfo()
-    if (metadataFailure) return metadataFailure
-    await this.opts.onArchiveProgress(
-      100,
-      this.writableRoot ? "saved" : "download started"
-    )
-    return createNoneFormatChapterOutcome({
-      downloadMode: this.writableRoot ? "custom" : "browser",
-      totalImages: this.input.urls.length,
-      failedImages: failed + this.failedPageHandoffs,
-      totalAdditionalOutputs: this.totalAdditionalOutputs,
-      failedAdditionalOutputs: this.failedAdditionalHandoffs,
-    })
+  }
+
+  private get outputMode(): "custom" | "browser" {
+    return this.writableRoot ? "custom" : "browser"
   }
 
   private assertActive(): void {
@@ -126,16 +148,16 @@ export class NoneFormatChapterOutput {
     return createFsaDestinationFailureOutcome({
       error,
       outputsRequested: this.outputCount,
-      outputsCommitted: this.committedFsaOutputs,
+      outputsCommitted: this.acceptedOutputs,
       totalImages: this.input.urls.length,
-      committedImages: this.committedFsaImages,
+      committedImages: this.acceptedPageImages,
     })
   }
 
   private additionalOutputFailure(error: unknown): ChapterOutcome {
     if (this.opts.abortSignal?.aborted)
       throw new Error("job-cancelled", { cause: error })
-    if (!this.writableRoot) throw error
+    if (isResourceLimit(error) || !this.writableRoot) throw error
     this.fsaWriteFailure = toFsaWriteError(error)
     return this.failureOutcome(this.fsaWriteFailure)
   }
@@ -157,7 +179,7 @@ export class NoneFormatChapterOutput {
       signal,
       onBytesWritten: progress,
     })
-    this.committedFsaOutputs++
+    this.acceptedOutputs++
   }
 
   private async handoff(input: {
@@ -188,6 +210,7 @@ export class NoneFormatChapterOutput {
       logger.debug(input.logLabel, response)
       return false
     }
+    this.acceptedOutputs++
     return true
   }
 
@@ -295,7 +318,7 @@ export class NoneFormatChapterOutput {
           signal,
           () => this.opts.onProgress(10, "saving images")
         )
-        this.committedFsaImages++
+        this.acceptedPageImages++
         return
       }
       await this.opts.onProgress(10, "download handoff")
@@ -310,6 +333,7 @@ export class NoneFormatChapterOutput {
         }))
       )
         this.failedPageHandoffs++
+      else this.acceptedPageImages++
     } catch (error) {
       this.failPage(error)
     } finally {
