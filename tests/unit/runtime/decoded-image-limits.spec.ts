@@ -6,11 +6,53 @@ import {
   readEncodedImageDimensions,
 } from "@/src/runtime/decoded-image-limits"
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
+import { MAX_IMAGE_DIMENSION_PX } from "@/src/constants/timeouts"
 
 const dimensionLedger = new OffscreenLiveResourceLedger()
 
 function readDimensions(buffer: ArrayBuffer, mimeType: string) {
   return readEncodedImageDimensions(buffer, mimeType, dimensionLedger)
+}
+
+function makePngHeader(width: number, height: number): ArrayBuffer {
+  const bytes = new Uint8Array(24)
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12)
+  const view = new DataView(bytes.buffer)
+  view.setUint32(16, width)
+  view.setUint32(20, height)
+  return bytes.buffer
+}
+
+function makeWebpHeader(
+  format: "VP8L" | "VP8X",
+  width: number,
+  height: number
+): ArrayBuffer {
+  const payloadSize = format === "VP8L" ? 5 : 10
+  const bytes = new Uint8Array(20 + payloadSize + (payloadSize % 2))
+  const view = new DataView(bytes.buffer)
+  const encoder = new TextEncoder()
+  bytes.set(encoder.encode("RIFF"))
+  view.setUint32(4, bytes.length - 8, true)
+  bytes.set(encoder.encode("WEBP"), 8)
+  bytes.set(encoder.encode(format), 12)
+  view.setUint32(16, payloadSize, true)
+  if (format === "VP8L") {
+    bytes[20] = 0x2f
+    // VP8L packs width minus one and height minus one into 14 bits each.
+    view.setUint32(21, (height - 1) * 2 ** 14 + width - 1, true)
+  } else {
+    for (const [offset, dimension] of [
+      [24, width],
+      [27, height],
+    ]) {
+      const encoded = new Uint8Array(4)
+      new DataView(encoded.buffer).setUint32(0, dimension - 1, true)
+      bytes.set(encoded.subarray(0, 3), offset)
+    }
+  }
+  return bytes.buffer
 }
 
 function makeJpegFrame(
@@ -113,6 +155,106 @@ describe("decoded image resource limits", () => {
     expect(dimensions).toEqual({ width: 65_537, height: 512 })
     expect(() =>
       assertDecodedImageWithinLimits(dimensions.width, dimensions.height, "PNG")
+    ).toThrow(DecodedImageResourceLimitError)
+  })
+
+  it.each([
+    ["VP8L", 1025],
+    ["VP8X", 514],
+  ] as const)(
+    "preserves %s height bytes before resource admission",
+    (format, height) => {
+      const dimensions = readDimensions(
+        makeWebpHeader(format, 258, height),
+        "image/webp"
+      )
+
+      expect(dimensions).toEqual({ width: 258, height })
+      expect(() =>
+        assertDecodedImageWithinLimits(
+          dimensions.width,
+          dimensions.height,
+          "WebP"
+        )
+      ).not.toThrow()
+    }
+  )
+
+  it.each([
+    [0, 512],
+    [512, 0],
+  ])("rejects an encoded PNG with dimensions %d×%d", (width, height) => {
+    const dimensions = readDimensions(makePngHeader(width, height), "image/png")
+
+    expect(() =>
+      assertDecodedImageWithinLimits(dimensions.width, dimensions.height, "PNG")
+    ).toThrow(DecodedImageResourceLimitError)
+  })
+
+  it.each([
+    [MAX_IMAGE_DIMENSION_PX, 1],
+    [1, MAX_IMAGE_DIMENSION_PX],
+  ])("admits a PNG at the inclusive dimension cap %d×%d", (width, height) => {
+    const dimensions = readDimensions(makePngHeader(width, height), "image/png")
+
+    expect(dimensions).toEqual({ width, height })
+    expect(() =>
+      assertDecodedImageWithinLimits(dimensions.width, dimensions.height, "PNG")
+    ).not.toThrow()
+  })
+
+  it("reads JPEG prefix dimensions from SOF when APP data contains IHDR", () => {
+    const bytes = new Uint8Array(47)
+    const view = new DataView(bytes.buffer)
+    bytes.set([0xff, 0xd8, 0xff, 0xef, 0, 24])
+    // APP15 data is opaque; these bytes do not define PNG dimensions.
+    bytes.set(new TextEncoder().encode("IHDR"), 12)
+    view.setUint32(16, 1)
+    view.setUint32(20, 1)
+    bytes.set([0xff, 0xc0, 0, 17, 8], 28)
+    view.setUint16(33, 8192)
+    view.setUint16(35, 8192)
+    bytes[37] = 3
+    bytes.set([1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0], 38)
+
+    const dimensions = readDimensions(bytes.buffer, "image/jpeg")
+
+    expect(dimensions).toEqual({ width: 8192, height: 8192 })
+    expect(() =>
+      assertDecodedImageWithinLimits(
+        dimensions.width,
+        dimensions.height,
+        "JPEG"
+      )
+    ).toThrow(DecodedImageResourceLimitError)
+  })
+
+  it("reads GIF logical dimensions when comment data contains a WebP header", () => {
+    const bytes = new Uint8Array(79)
+    const view = new DataView(bytes.buffer)
+    bytes.set(new TextEncoder().encode("GIF89a"))
+    view.setUint16(6, 2048, true)
+    view.setUint16(8, 17_751, true)
+    // No global palette; a comment holds data resembling two WebP chunks.
+    bytes.set([0x42, 0x50, 0, 0x21, 0xfe, 40], 10)
+    view.setUint32(16, 10, true)
+    bytes.set(new TextEncoder().encode("VP8X"), 30)
+    view.setUint32(34, 10, true)
+    bytes[56] = 0
+    // The complete local-palette image is 1×1 within the larger logical screen.
+    bytes.set(
+      [
+        0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0x80, 0, 0, 0, 255, 255, 255, 2, 2, 0x44,
+        1, 0, 0x3b,
+      ],
+      57
+    )
+
+    const dimensions = readDimensions(bytes.buffer, "image/gif")
+
+    expect(dimensions).toEqual({ width: 2048, height: 17_751 })
+    expect(() =>
+      assertDecodedImageWithinLimits(dimensions.width, dimensions.height, "GIF")
     ).toThrow(DecodedImageResourceLimitError)
   })
 

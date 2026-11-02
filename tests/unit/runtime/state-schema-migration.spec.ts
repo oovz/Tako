@@ -5,6 +5,10 @@ import {
   migrateDurableStateForCurrentSchema,
 } from "@/src/runtime/state-schema-migration"
 import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import { toQueueTaskSummary } from "@/src/runtime/queue-task-summary"
+import { HistoryRepository } from "@/src/storage/history-repository"
+import { QueueProjectionService } from "@/src/storage/queue-projection-service"
+import { QueueRepository } from "@/src/storage/queue-repository"
 import { createTaskSettingsSnapshot as createCurrentSnapshot } from "@/src/runtime/settings-snapshot"
 function createTaskSettingsSnapshot(
   ...args: Parameters<typeof createCurrentSnapshot>
@@ -1064,6 +1068,385 @@ describe("migrateDurableStateForCurrentSchema", () => {
       expect(local).not.toHaveProperty("stateSchemaMigrationJournal")
     }
   )
+  function publishedLegacyTask(id: string) {
+    const reference = legacyTask(id)
+    const chapter = reference.chapters[0]
+    return {
+      id,
+      siteIntegrationId: reference.siteIntegrationId,
+      mangaId: reference.mangaId,
+      seriesTitle: reference.seriesTitle,
+      status: "queued",
+      created: 1,
+      settingsSnapshot: {
+        archiveFormat: "cbz",
+        overwriteExisting: true,
+        pathTemplate: reference.taskSettingsSnapshot.pathTemplate,
+        fileNameTemplate: "<CHAPTER_TITLE>",
+        includeComicInfo: true,
+        includeCoverImage: true,
+        normalizeImageFilenames: true,
+        imagePaddingDigits: "auto",
+        siteSettings: {},
+        rateLimitSettings: {
+          image: { concurrency: 2, delayMs: 100 },
+          chapter: { concurrency: 1, delayMs: 100 },
+        },
+        retrySettings: { image: 3, chapter: 3 },
+        siteIntegrationId: reference.siteIntegrationId,
+      },
+      chapters: [
+        {
+          id: chapter.id,
+          url: chapter.url,
+          title: chapter.title,
+          index: chapter.index,
+          status: "queued",
+          lastUpdated: 10,
+        },
+      ],
+    }
+  }
+
+  function currentQueueForFactChecks() {
+    Object.assign(chrome.storage.session, {
+      set: vi.fn(async () => undefined),
+    })
+    return new QueueRepository(
+      new QueueProjectionService(),
+      new HistoryRepository()
+    )
+  }
+
+  it.each(["legacy", "epoch-2"] as const)(
+    "retains safe %s cover URLs and author metadata for current task consumers",
+    async (version) => {
+      const task = publishedLegacyTask(`safe-covers-${version}`)
+      const seriesCoverUrl =
+        "https://uploads.mangadex.org/covers/series/series-cover.jpg"
+      const comicInfo = {
+        author: "Retained Author",
+        coverUrl:
+          "https://uploads.mangadex.org/covers/series/metadata-cover.jpg",
+      }
+      local = {
+        ...(version === "epoch-2" ? { stateSchemaEpoch: 2 } : {}),
+        downloadQueue: [
+          {
+            ...task,
+            seriesCoverUrl,
+            settingsSnapshot:
+              version === "epoch-2"
+                ? createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex", {
+                    comicInfo,
+                  })
+                : { ...task.settingsSnapshot, comicInfo },
+          },
+        ],
+      }
+
+      await expect(
+        migrateDurableStateForCurrentSchema()
+      ).resolves.toBeUndefined()
+      const tasks = await currentQueueForFactChecks().getQueue()
+      expect(tasks).toHaveLength(1)
+      expect(toQueueTaskSummary(tasks[0]).coverUrl).toBe(seriesCoverUrl)
+      expect(tasks[0].settingsSnapshot.comicInfo).toMatchObject(comicInfo)
+    }
+  )
+
+  it("keeps captured false preferences in the snapshot consumed by a current retry", async () => {
+    const task = publishedLegacyTask("captured-preferences")
+    local = {
+      downloadQueue: [
+        {
+          ...task,
+          status: "partial_success",
+          started: 2,
+          completed: 20,
+          settingsSnapshot: {
+            ...task.settingsSnapshot,
+            includeComicInfo: false,
+            includeCoverImage: false,
+            normalizeImageFilenames: false,
+          },
+          chapters: task.chapters.map((chapter) => ({
+            ...chapter,
+            status: "partial_success",
+            totalImages: 4,
+            imagesFailed: 1,
+          })),
+        },
+      ],
+    }
+
+    await expect(migrateDurableStateForCurrentSchema()).resolves.toBeUndefined()
+    await expect(
+      currentQueueForFactChecks().retryFailedChapters({
+        taskId: task.id,
+        retryTaskId: "preference-retry",
+        now: 1_000,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      currentQueueForFactChecks().getTask("preference-retry")
+    ).resolves.toMatchObject({
+      settingsSnapshot: {
+        includeComicInfo: false,
+        includeCoverImage: false,
+        normalizeImageFilenames: false,
+        conflictPolicy: "overwrite",
+      },
+    })
+  })
+
+  it("preserves the historical original and retry identities for current recovery actions", async () => {
+    const task = publishedLegacyTask("historical-original")
+    local = {
+      downloadQueue: [
+        {
+          ...task,
+          status: "partial_success",
+          started: 2,
+          completed: 20,
+          isRetried: true,
+          chapters: task.chapters.map((chapter) => ({
+            ...chapter,
+            status: "partial_success",
+            totalImages: 4,
+            imagesFailed: 1,
+          })),
+        },
+        {
+          ...task,
+          id: "historical-retry",
+          created: 20,
+          isRetried: false,
+          isRetryTask: true,
+        },
+      ],
+    }
+
+    await expect(migrateDurableStateForCurrentSchema()).resolves.toBeUndefined()
+    const queue = currentQueueForFactChecks()
+    const summaries = (await queue.getQueue()).map(toQueueTaskSummary)
+    expect(summaries).toMatchObject([
+      { id: task.id, isRetried: true, isRetryTask: false },
+      { id: "historical-retry", isRetried: false, isRetryTask: true },
+    ])
+    await expect(
+      queue.restartDownloadTask({
+        taskId: task.id,
+        restartTaskId: "duplicate-original",
+        now: 1_000,
+      })
+    ).resolves.toMatchObject({
+      outcome: "rejected",
+      reason: "already-retried",
+    })
+    await expect(
+      queue.startDownloadTask({ taskId: "historical-retry", now: 1_100 })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      queue.interruptDownloadTask({
+        taskId: "historical-retry",
+        errorMessage: "Worker stopped after the historical retry",
+        now: 1_200,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+    await expect(
+      queue.restartDownloadTask({
+        taskId: "historical-retry",
+        restartTaskId: "fresh-after-historical-retry",
+        now: 1_300,
+      })
+    ).resolves.toMatchObject({ outcome: "applied" })
+  })
+
+  it("retains pre-accounting image metrics while admitting unknown output counts as zero", async () => {
+    const task = publishedLegacyTask("pre-accounting")
+    local = {
+      downloadQueue: [
+        {
+          ...task,
+          status: "partial_success",
+          started: 2,
+          completed: 20,
+          chapters: task.chapters.map((chapter) => ({
+            ...chapter,
+            status: "partial_success",
+            totalImages: 6,
+            imagesFailed: 2,
+          })),
+        },
+      ],
+    }
+
+    await expect(migrateDurableStateForCurrentSchema()).resolves.toBeUndefined()
+    await expect(
+      currentQueueForFactChecks().getTask(task.id)
+    ).resolves.toMatchObject({
+      chapters: [
+        {
+          totalImages: 6,
+          imagesFailed: 2,
+          outputs: { requested: 0, committed: 0, failed: 0 },
+        },
+      ],
+    })
+  })
+
+  it("retains prior completed and partial results and their first cause while interrupting active legacy work", async () => {
+    const priorCause = {
+      errorMessage: "The prior image request failed",
+      errorCategory: "network_unavailable",
+    }
+    const task = publishedLegacyTask("mixed-prior-results")
+    const chapter = task.chapters[0]
+    local = {
+      downloadQueue: [
+        {
+          ...task,
+          status: "downloading",
+          started: 2,
+          settingsSnapshot: createTaskSettingsSnapshot(
+            DEFAULT_SETTINGS,
+            "mangadex"
+          ),
+          chapters: [
+            {
+              ...chapter,
+              id: "completed",
+              index: 0,
+              url: "https://mangadex.org/chapter/completed",
+              status: "completed",
+              outputs: { requested: 1, committed: 1, failed: 0 },
+              lastUpdated: 100,
+            },
+            {
+              ...chapter,
+              id: "partial",
+              index: 1,
+              url: "https://mangadex.org/chapter/partial",
+              status: "partial_success",
+              ...priorCause,
+              outputs: { requested: 2, committed: 1, failed: 1 },
+              lastUpdated: 200,
+            },
+            {
+              ...chapter,
+              id: "active",
+              index: 2,
+              url: "https://mangadex.org/chapter/active",
+              status: "downloading",
+              dispatchAttempt: 1,
+              outputs: { requested: 0, committed: 0, failed: 0 },
+              lastUpdated: 300,
+            },
+          ],
+        },
+      ],
+      activeDispatchLease: {
+        jobId: "legacy-active-job",
+        taskId: task.id,
+        chapterId: "active",
+        attempt: 1,
+        stage: "dispatching",
+        startedAt: 300,
+        lastActivityAt: 300,
+        leaseExpiresAt: 45_300,
+        sequence: 0,
+      },
+    }
+
+    await expect(migrateDurableStateForCurrentSchema()).resolves.toBeUndefined()
+    await expect(
+      currentQueueForFactChecks().getTask(task.id)
+    ).resolves.toMatchObject({
+      status: "partial_success",
+      ...priorCause,
+      chapters: [
+        {
+          id: "completed",
+          status: "completed",
+          outputs: { requested: 1, committed: 1, failed: 0 },
+          lastUpdated: 100,
+        },
+        {
+          id: "partial",
+          status: "partial_success",
+          ...priorCause,
+          outputs: { requested: 2, committed: 1, failed: 1 },
+          lastUpdated: 200,
+        },
+        { id: "active", status: "failed", errorCategory: "unknown" },
+      ],
+    })
+  })
+
+  it("keeps a canceled legacy task and unrelated queued work when its old lease is null and output remains pending", async () => {
+    const task = publishedLegacyTask("historical-canceled")
+    const snapshot = createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex")
+    const queued = {
+      ...publishedLegacyTask("unrelated-queued"),
+      settingsSnapshot: snapshot,
+    }
+    local = {
+      downloadQueue: [
+        {
+          ...task,
+          status: "canceled",
+          started: 2,
+          completed: 300,
+          settingsSnapshot: snapshot,
+          chapters: task.chapters.map((chapter) => ({
+            ...chapter,
+            status: "canceled",
+            dispatchAttempt: 1,
+            outputs: { requested: 0, committed: 0, failed: 0 },
+            lastUpdated: 300,
+          })),
+        },
+        queued,
+      ],
+      activeDispatchLease: null,
+      pendingOutputs: {
+        "pending-output": {
+          outputId: "pending-output",
+          jobId: "canceled-job",
+          attempt: 1,
+          taskId: task.id,
+          chapterId: task.chapters[0].id,
+          downloadId: 501,
+          blobUrl:
+            "blob:chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/pending-output",
+          filename: "TMD/Series/Chapter.cbz",
+          outputIndex: 0,
+          outputCount: 1,
+          outputKind: "archive",
+          state: "in_progress",
+          createdAt: 100,
+        },
+      },
+    }
+
+    await expect(migrateDurableStateForCurrentSchema()).resolves.toBeUndefined()
+    await expect(currentQueueForFactChecks().getQueue()).resolves.toMatchObject(
+      [
+        {
+          id: task.id,
+          status: "canceled",
+          chapters: [{ status: "canceled" }],
+        },
+        {
+          id: queued.id,
+          status: "queued",
+          settingsSnapshot: { destination: { kind: "downloads-api" } },
+          chapters: [{ status: "queued" }],
+        },
+      ]
+    )
+  })
 })
 
 describe("ordered stored-state migration steps", () => {
