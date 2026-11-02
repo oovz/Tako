@@ -20,7 +20,9 @@ concurrency:
 
 jobs:
   publish-wiki:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -30,18 +32,23 @@ jobs:
       - name: Publish wiki
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.WIKI_TOKEN || github.token }}
         run: |
           set -euo pipefail
+
+          if [[ ! -s wiki/Home.md ]]; then
+            echo "::error::wiki/Home.md is missing or empty."
+            exit 1
+          fi
 
           repo="${GITHUB_REPOSITORY}"
           wiki_url="https://x-access-token:${GH_TOKEN}@github.com/${repo}.wiki.git"
 
           tmp_dir="$(mktemp -d)"
-          echo "Cloning wiki into $tmp_dir"
+          trap 'rm -rf "$tmp_dir"' EXIT
 
           if ! git clone --depth 1 "$wiki_url" "$tmp_dir" 2>/dev/null; then
-            echo "::error::Wiki repo not found. Go to https://github.com/${repo}/wiki and create at least one page to initialize it, then re-run this workflow."
+            echo "::error::Cannot access the wiki. Initialize it at https://github.com/${repo}/wiki and check the publishing token's access. Set WIKI_TOKEN when the workflow token cannot write to the wiki."
             exit 1
           fi
 
@@ -51,7 +58,7 @@ jobs:
           cd -
 
           # Copy current wiki content.
-          cp -r wiki/* "$tmp_dir/"
+          cp -R wiki/. "$tmp_dir/"
 
           # Commit and push if there are changes.
           cd "$tmp_dir"
@@ -63,4 +70,4 @@ jobs:
             exit 0
           fi
           git commit -m "chore: sync wiki from ${{ github.sha }}"
-          git push origin master
+          git push origin HEAD
