@@ -38,3 +38,33 @@ describe("filename truncation", () => {
     assert.equal(sanitizeFilename(expected), expected)
   })
 })
+
+for (const character of ["漫", "あ", "한", "é", "📚"]) {
+  it(`fits a long ${character} title within a filesystem name`, () => {
+    const input = character.repeat(200)
+    const result = sanitizeFilename(input)
+    assert.ok(Buffer.byteLength(`${result}.cbz`, "utf8") <= 255)
+    assert.ok(result.length <= MAX_FILENAME_LENGTH)
+    assert.ok(input.startsWith(result))
+    assert.equal(sanitizeFilename(result), result)
+  })
+}
+
+it("keeps complete characters when the UTF-8 byte limit is reached", () => {
+  const input = `${"漫".repeat(79)}📚chapter`
+  const result = sanitizeFilename(input)
+  assert.equal(result, "漫".repeat(79))
+  assert.equal(sanitizeFilename(result), result)
+})
+
+for (const device of ["COM¹", "com²", "COM³", "LPT¹", "lpt²", "LPT³"]) {
+  it(`replaces Windows device name ${device}, including extensions`, () => {
+    assert.equal(sanitizeFilename(device), "_")
+    assert.equal(sanitizeFilename(`${device}.cbz`), "_")
+  })
+}
+
+it("preserves similar names that are not Windows devices", () => {
+  assert.equal(sanitizeFilename("COM⁴"), "COM⁴")
+  assert.equal(sanitizeFilename("LPT¹2"), "LPT¹2")
+})
