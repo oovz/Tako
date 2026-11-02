@@ -4,7 +4,7 @@ Set up Tako locally, test your changes, and open a pull request.
 
 ## Quick setup
 
-Use Node.js 22.13 or later in the 22.x line, or Node.js 24 or newer, and the pnpm version listed in `package.json`.
+Use the Node.js version selected by `.node-version` and the pnpm version listed in `package.json`. Other supported Node.js versions are listed in `package.json` under `engines`.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -47,12 +47,14 @@ To add a site, run `pnpm new:site-integration <id>` and follow the [Site Integra
 
 Use `pnpm test:coverage` for unit and integration coverage. Use `pnpm coverage:all` to collect compatible native and browser profiles and generate the combined report. Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
-Browser tests create disposable profiles and build their own test extension. Install the configured Chromium channel before running them:
+Browser tests run headlessly in bundled Chromium, create disposable profiles, and build their own test extension. Install Chromium before running them:
 
 ```sh
-pnpm exec playwright install chromium-tip-of-tree
+pnpm exec playwright install --no-shell chromium
 pnpm test:e2e
 ```
+
+Use `pnpm test:e2e:headed` to run the same tests with a visible browser.
 
 ### E2E diagnostics
 

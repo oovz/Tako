@@ -1,80 +1,49 @@
-# Contributing a Site Integration
+# Add a site integration
 
 [English](Site-Integration-Guide) · [日本語](Site-Integration-Guide.ja) · [简体中文](Site-Integration-Guide.zh-CN) · [繁體中文](Site-Integration-Guide.zh-TW) · [한국어](Site-Integration-Guide.ko)
 
-This guide is for contributors adding or maintaining a supported site. To request a site without writing code, [open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md).
+To request a site without writing code, [open a feature request](https://github.com/oovz/Tako/issues/new?template=feature_request.md). For development setup, read [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md).
 
-Read [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md) for setup and [Architecture](Architecture) for runtime ownership. Integrations are TypeScript modules packaged with the extension.
+## Create the integration
 
-## What an integration owns
-
-A site integration identifies supported pages, resolves series and chapter information, downloads images, and handles any site-specific image transformation. Its definition declares origins, request policy, and settings.
-
-## Add a site
-
-### 1. Create the scaffold
-
-```powershell
+```sh
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
-The command creates source files and a test-data seed:
+The scaffold creates source files in `src/site-integrations/<id>/` and test data in `tests/fixtures/site-integrations/<id>/`.
 
-| File                                                  | Purpose                                                               |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| `src/site-integrations/<id>/definition.json`          | Identity, URL matching, origins, capabilities, policies, and settings |
-| `src/site-integrations/<id>/background-runtime.ts`    | Series and chapter-list resolution                                    |
-| `src/site-integrations/<id>/offscreen-runtime.ts`     | Chapter plans and image downloading                                   |
-| `src/site-integrations/<id>/contracts/index.ts`       | Provider contracts                                                    |
-| `tests/fixtures/site-integrations/<id>/contract.json` | Deterministic test-data seed                                          |
+Declare the site's supported URLs and access requirements in `definition.json`. Implement series and chapter-list loading in `background-runtime.ts`, and chapter images in `offscreen-runtime.ts`. Use the [definition schema](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json), [runtime interfaces](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts), and a comparable existing integration as references.
 
-The scaffold starts with `shipped: false` and `enabledByDefault: false`. Set `shipped: true` when the implementation and tests are ready for release. For isolated scaffolding, `--out-dir` selects the source destination and `--fixtures-dir` selects the test-data destination.
-
-### 2. Declare the site's contract
-
-Edit `definition.json` using the [definition schema](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json) and a comparable existing integration as references.
-
-Set `name` to the site’s native display name and `englishName` to its English name. Use a stable identifier for `id` and the integration directory; alternative domains belong in the matching rules.
-
-Define the pages Tako should recognize, fixed and optional origins, endpoint purposes, credentials, response types and limits, request spacing, retry ownership, and required runtime capabilities. Declare only access the integration needs.
-
-### 3. Resolve the series in the background
-
-Implement `series.resolveSeriesData` in `background-runtime.ts`, following [`ServiceWorkerIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
-
-Resolve the series title, metadata, chapter IDs, chapter URLs, and availability from URL data, the provider API, or fetched HTML. Use `integrationHttpClient` for requests and validate provider data before returning it. Add dispatch-context preparation only when chapter processing needs it.
-
-### 4. Resolve and download chapter images offscreen
-
-Implement `chapter.resolveChapterPlan` and `chapter.downloadImage` in `offscreen-runtime.ts`, following [`OffscreenIntegration`](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts).
-
-Use the shared chapter-plan schemas and `fetchImageWithStallDetection`. Forward cancellation, rate settings, byte progress and resource accounting, and return the image result defined by the interface. Schedule each request once.
+Use `integrationHttpClient` for requests and `fetchImageWithStallDetection` for images. Forward cancellation, rate settings, byte progress, and resource accounting. Schedule each request once.
 
 Validate response sizes, image dimensions, page counts, and provider-issued URLs before allocation or privileged use. Transformations must reserve their required resources and release them on success, failure, or cancellation.
 
-### 5. Document and test the integration
+Request only the site access you need. Package executable code with the extension; do not execute code from site responses or log credentials.
 
-Put captured HTML, protocol vectors, and controlled image inputs in `tests/fixtures/site-integrations/<id>/`. The generator checks the canonical `contract.json` envelope: `schemaVersion: 1`, the integration's `providerId`, and an object in `data`. Keep fixture provenance beside the data so contributors can distinguish captured fields from synthetic controls.
+## Add tests
 
-Add focused unit coverage and mocked browser coverage for UI-visible behavior. Check page ordering and transformed image content, along with successful decoding.
+Keep HTML, API, and image fixtures beside the scaffold's `contract.json`. Record their sources and remove account details, cookies, and tokens.
 
-Update reader instructions in [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting). Live checks belong in `tests/live/`; shared work URLs are defined in `tests/e2e/fixtures/test-domains-constants.ts`.
+The generator checks the `contract.json` envelope: `schemaVersion: 1`, the integration's `providerId`, and an object in `data`.
 
-### 6. Generate and verify
+Cover metadata, chapter order, image transformations, and failure handling with focused tests. Use mocked browser tests for visible behavior and inspect the saved images, not just the archive's existence. Add a live check when site access is available.
 
-While developing, run focused tests and these checks:
-
-```powershell
+```sh
 pnpm generate:site-integrations
-pnpm check:site-integrations
-pnpm type-check
 pnpm lint
+pnpm type-check
 pnpm test:unit
 ```
 
-When resolvers and fixtures are ready, set `shipped: true` and regenerate the catalogs. Run the applicable integration and browser checks from [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing), then build the production extension with `pnpm build`.
+Run the applicable integration and browser checks from [Contributing](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#testing), then `pnpm build`.
 
-Run a [live chapter check](https://github.com/oovz/Tako/blob/main/CONTRIBUTING.md#live-chapter-validation) when site access is available, and compare transformed pages with the site's reader.
+## Finish the contribution
+
+The scaffold starts with `shipped: false` and `enabledByDefault: false`. Set `shipped: true` only when the integration and its tests are ready, then regenerate the catalogs.
+
+Declare typed settings in `customSettings`. Add every referenced label, description, and option label to all five locale catalogs: `en`, `ja`, `zh_CN`, `zh_TW`, and `ko`.
+
+Update [Supported Sites](Supported-Sites) and [Troubleshooting](Troubleshooting), including any access requirements that affect downloads.
 
 ## Optional capabilities
 
@@ -93,13 +62,3 @@ Declare image transformations in the definition and implement them offscreen. Te
 ### Provider-issued image servers
 
 For dynamically selected image hosts, declare `originKind: "provider-issued"` and validate URLs where the provider supplies them. Fixed endpoint origins belong in `requiredOrigins`; optional host patterns belong in `optionalOrigins`.
-
-### Localized settings
-
-Declare typed settings in `customSettings`. Their labels, descriptions, and option labels must exist in all five locale catalogs: `en`, `ja`, `zh_CN`, `zh_TW`, and `ko`. The generator checks that the required keys are present.
-
-## Shared request security
-
-Use `integrationHttpClient` and the shared image transport for requests. Declare the required origins, credentials and response limits in the definition. Package executable code with the extension and parse remote responses as data. Keep credentials and raw responses out of logs.
-
-Related: [Architecture](Architecture), [Permissions](Permissions), and [Supported Sites](Supported-Sites).

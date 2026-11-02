@@ -20,8 +20,7 @@ Choose a few chapters or queue a whole selection while you browse. Tako shows do
 
 - **Read in your favorite app.** Save CBZ or ZIP files, or keep the individual images. CBZ files can include chapter details and cover art for your comic reader.
 - **Build an organized library.** Choose a folder and customize how series and chapters are named.
-- **Know what was saved.** Check your download results and chapter history.
-- **Keep your history useful.** Clear old tasks while keeping your chapter history, or clear each separately.
+- **Track your downloads.** Check saved chapters and download results. Clear old tasks without losing chapter history, or clear each separately.
 
 ## Start with a series you enjoy
 
@@ -41,14 +40,14 @@ MangaDex is off by default. Enable it in **Options → Site Integrations** and a
 
 The interface is available in English, Japanese, Simplified Chinese, Traditional Chinese, and Korean.
 
-## Your library stays with you
+## Privacy
 
 Settings, queue state, and download history stay in your browser. Downloads connect directly to supported sites and their image services; enabling MangaDex also enables the delivery reports its service requires. Tako runs without developer analytics or advertising trackers. Read the [privacy policy](PRIVACY.md).
 
 > [!NOTE]
 > Save content you have permission to download. Chapter availability follows the site’s website access, including any account or regional requirements.
 
-## A little help when you need it
+## Help
 
 [First download](https://github.com/oovz/Tako/wiki/Quick-Start) · [Folders and filenames](https://github.com/oovz/Tako/wiki/Template-Macros) · [Download help](https://github.com/oovz/Tako/wiki/Troubleshooting) · [Permissions](https://github.com/oovz/Tako/wiki/Permissions)
 
