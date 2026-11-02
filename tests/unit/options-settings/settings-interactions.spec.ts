@@ -10,6 +10,7 @@ import { PathVisualization } from "@/entrypoints/options/components/PathVisualiz
 import { RateLimitingForm } from "@/entrypoints/options/components/RateLimitingForm"
 import { SiteIntegrationCard } from "@/entrypoints/options/components/SiteIntegrationCard"
 import type { SiteIntegrationSettingsField } from "@/src/site-integrations/definition-types"
+import { getSiteIntegrationList } from "@/entrypoints/options/tabs/SiteIntegrationsTab-model"
 
 vi.mock("@/src/runtime/i18n", () => ({
   t: (key: string, args: string[] = []) => [key, ...args].join(":"),
@@ -195,6 +196,29 @@ const customSchemas: SiteIntegrationSettingsField[] = [
 ]
 
 describe("custom setting controls", () => {
+  it("displays a stored string override before reporting an edit", async () => {
+    const schema = customSchemas[1]!
+    const onChange = vi.fn()
+    await render(
+      createElement(CustomSettingField, {
+        integrationId: "site",
+        schema,
+        enabled: true,
+        effectiveValue: "saved text",
+        onChange,
+      })
+    )
+    expect(
+      container.querySelector<HTMLInputElement>("#site-custom-text")!.value
+    ).toBe("saved text")
+    await enter("#site-custom-text", "edited text")
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(
+      schema,
+      true,
+      "edited text"
+    )
+  })
+
   it("toggles the override with its current value and disables inherited controls", async () => {
     const schema = customSchemas[1]!
     const onChange = vi.fn()
@@ -298,16 +322,144 @@ function cardProps(
 
 async function openCard(props: ComponentProps<typeof SiteIntegrationCard>) {
   await render(createElement(SiteIntegrationCard, props))
+  const selector = `[data-testid="configure-site-integration-${props.siteIntegration.id}"]`
   if (
-    container
-      .querySelector('[data-testid="configure-site-integration-site"]')!
-      .getAttribute("aria-expanded") === "false"
+    container.querySelector(selector)!.getAttribute("aria-expanded") === "false"
   ) {
-    await click('[data-testid="configure-site-integration-site"]')
+    await click(selector)
   }
 }
 
+const mangadex = getSiteIntegrationList({
+  search: "",
+  filter: "all",
+  enablement: { mangadex: true },
+  overriddenIds: new Set(),
+}).integrations.find((integration) => integration.id === "mangadex")!
+
 describe("integration overrides", () => {
+  it("labels and displays the stored MangaDex quality override before saving another allowed option", async () => {
+    const quality = mangadex.customSettings!.find(
+      (field) => field.id === "imageQuality"
+    )!
+    if (quality.type !== "select")
+      throw new Error("MangaDex image quality requires a select control")
+    const original = quality.options.find((option) => option.value === "data")!
+    const saver = quality.options.find(
+      (option) => option.value === "data-saver"
+    )!
+    const onSiteIntegrationSettingsChange = vi.fn()
+    const props = cardProps({
+      siteIntegration: mangadex,
+      siteIntegrationSettingsValues: { imageQuality: "data" },
+      onSiteIntegrationSettingsChange,
+    })
+    await openCard(props)
+    const control = container.querySelector<HTMLButtonElement>(
+      "#mangadex-custom-imageQuality"
+    )!
+    const label = container.querySelector<HTMLLabelElement>(
+      'label[for="mangadex-custom-imageQuality"]'
+    )
+    expect(label?.control).toBe(control)
+    expect(control.disabled).toBe(false)
+    expect(control.textContent).toBe(original.labelKey)
+    expect(
+      container
+        .querySelector("#mangadex-custom-imageQuality-enabled")!
+        .getAttribute("aria-checked")
+    ).toBe("true")
+    await select("#mangadex-custom-imageQuality", saver.labelKey)
+    expect(onSiteIntegrationSettingsChange).toHaveBeenCalledExactlyOnceWith(
+      "mangadex",
+      "imageQuality",
+      true,
+      "data-saver"
+    )
+    await openCard({
+      ...props,
+      siteIntegrationSettingsValues: { imageQuality: "data-saver" },
+    })
+    expect(control.textContent).toBe(saver.labelKey)
+  })
+
+  it("edits image and chapter rate overrides with the enabled default", async () => {
+    const props = cardProps({
+      siteIntegration: mangadex,
+      override: {
+        imagePolicy: { concurrency: 3 },
+        chapterPolicy: { delayMs: 200 },
+      },
+    })
+    await openCard(props)
+    expect(
+      container.querySelector<HTMLInputElement>("#image-concurrency")!.disabled
+    ).toBe(false)
+    expect(
+      container.querySelector<HTMLInputElement>("#chapter-delay")!.disabled
+    ).toBe(false)
+    await enter("#image-concurrency", "4")
+    const edited = {
+      imagePolicy: { concurrency: 4 },
+      chapterPolicy: { delayMs: 200 },
+    }
+    expect(props.onChange).toHaveBeenLastCalledWith("mangadex", edited)
+    await openCard({ ...props, override: edited })
+    await enter("#chapter-delay", "0")
+    expect(props.onChange).toHaveBeenLastCalledWith("mangadex", {
+      imagePolicy: { concurrency: 4 },
+      chapterPolicy: { delayMs: 0 },
+    })
+  })
+
+  it("displays saved zero retries and preserves the sibling when one override is cleared", async () => {
+    const props = cardProps({
+      siteIntegration: mangadex,
+      override: { outputFormat: "zip", retries: { image: 0, chapter: 0 } },
+    })
+    await openCard(props)
+    expect(
+      container.querySelector<HTMLInputElement>("#mangadex-image-retries")!
+        .value
+    ).toBe("0")
+    expect(
+      container.querySelector<HTMLInputElement>("#mangadex-chapter-retries")!
+        .value
+    ).toBe("0")
+    await enter("#mangadex-image-retries", "")
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith("mangadex", {
+      outputFormat: "zip",
+      retries: { chapter: 0 },
+    })
+  })
+
+  it("persists a zero image retry override while preserving the chapter override", async () => {
+    const props = cardProps({
+      siteIntegration: mangadex,
+      override: { retries: { image: 1, chapter: 2 } },
+    })
+    await openCard(props)
+    await enter("#mangadex-image-retries", "0")
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith("mangadex", {
+      retries: { image: 0, chapter: 2 },
+    })
+  })
+
+  it("resets a single policy override", async () => {
+    const props = cardProps({
+      siteIntegration: mangadex,
+      override: { outputFormat: "zip" },
+    })
+    await openCard(props)
+    await click('[data-testid="reset-site-integration-overrides-mangadex"]')
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith("mangadex", null)
+    expect(
+      container
+        .querySelector('[data-testid="configure-site-integration-mangadex"]')!
+        .getAttribute("aria-expanded")
+    ).toBe("false")
+  })
+
   it("clears a path override and preserves unrelated values", async () => {
     const props = cardProps({
       override: { outputFormat: "zip", pathTemplate: "Old" },

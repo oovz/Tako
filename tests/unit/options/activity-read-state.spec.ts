@@ -2,6 +2,7 @@
 
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { flushSync } from "react-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ActivityTab } from "@/entrypoints/options/tabs/ActivityTab"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -150,6 +151,39 @@ describe("Activity task reads", () => {
     sendMessage.mockResolvedValue(known)
     await change()
     expect(container.textContent).toContain("Known series")
+  })
+
+  it("keeps known tasks available throughout a pending refresh and its failure", async () => {
+    sendMessage.mockResolvedValue(known)
+    await mount()
+    const pending = Promise.withResolvers<unknown>()
+    sendMessage.mockReturnValueOnce(pending.promise)
+    await change()
+    expect(container.textContent).toContain("Known series")
+    await act(async () => pending.reject(new Error("Refresh unavailable")))
+    expect(container.textContent).toContain("Known series")
+    expect(container.querySelector('[role="alert"]')).not.toBeNull()
+  })
+
+  it("cancels queued subscription startup when the Activity view closes immediately", async () => {
+    sendMessage.mockResolvedValue(known)
+    act(() => {
+      flushSync(() =>
+        root.render(
+          createElement(ActivityTab, {
+            onClearChapterHistory: async () => true,
+          })
+        )
+      )
+      root.unmount()
+    })
+    await act(async () => {})
+    expect(addListener).not.toHaveBeenCalled()
+    expect(sendMessage).not.toHaveBeenCalled()
+    root = createRoot(container)
+    await mount()
+    expect(container.textContent).toContain("Known series")
+    expect(listeners.size).toBeGreaterThan(0)
   })
 
   it.each(["success", "failure"])(

@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -8,8 +11,11 @@ import {
   useOptionsNavigation,
   useOptionsSaveShortcut,
   useOptionsUnloadGuard,
+  useOptionsPageDocument,
 } from "@/entrypoints/options/main-options-lifecycle"
-import { t } from "@/src/runtime/i18n"
+import { applyUiLanguagePreference, t } from "@/src/runtime/i18n"
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 
 let root: Root
 let container: HTMLDivElement
@@ -56,9 +62,99 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount())
   container.remove()
+  await applyUiLanguagePreference("auto")
+  document.documentElement.removeAttribute("data-tako-motion")
   vi.restoreAllMocks()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
+})
+
+function DocumentView({
+  settings = null,
+}: {
+  settings?: ExtensionSettings | null
+}) {
+  useOptionsPageDocument(settings)
+  return null
+}
+
+function deferredPreferences() {
+  const pending = Promise.withResolvers<unknown>()
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: unknown) => {
+      const locale = String(url).includes("/ja/") ? "ja" : "en"
+      return new Response(
+        readFileSync(
+          resolve(
+            dirname(fileURLToPath(import.meta.url)),
+            "../../../public/_locales",
+            locale,
+            "messages.json"
+          ),
+          "utf8"
+        )
+      )
+    })
+  )
+  vi.stubGlobal("chrome", {
+    ...chrome,
+    runtime: { ...chrome.runtime, sendMessage: () => pending.promise },
+    storage: {
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  return pending
+}
+
+it("waits for persisted document preferences and then follows live motion drafts", async () => {
+  const pending = deferredPreferences()
+  document.documentElement.setAttribute("data-tako-motion", "reduce")
+  await act(async () => root.render(createElement(DocumentView)))
+  expect(document.documentElement.getAttribute("data-tako-motion")).toBe(
+    "reduce"
+  )
+  await act(async () =>
+    pending.resolve({
+      success: true,
+      data: { uiLanguage: "ja", motionPreference: "reduce" },
+    })
+  )
+  expect(document.documentElement.lang).toBe("ja")
+  expect(document.documentElement.getAttribute("data-tako-motion")).toBe(
+    "reduce"
+  )
+  await act(async () =>
+    root.render(
+      createElement(DocumentView, {
+        settings: { ...DEFAULT_SETTINGS, motionPreference: "system" },
+      })
+    )
+  )
+  expect(document.documentElement.hasAttribute("data-tako-motion")).toBe(false)
+})
+
+it("applies a hydrated draft's motion preference while persisted preferences are pending", async () => {
+  const pending = deferredPreferences()
+  await act(async () =>
+    root.render(
+      createElement(DocumentView, {
+        settings: { ...DEFAULT_SETTINGS, motionPreference: "reduce" },
+      })
+    )
+  )
+  expect(document.documentElement.getAttribute("data-tako-motion")).toBe(
+    "reduce"
+  )
+  await act(async () =>
+    pending.resolve({
+      success: true,
+      data: { uiLanguage: "auto", motionPreference: "system" },
+    })
+  )
+  expect(document.documentElement.getAttribute("data-tako-motion")).toBe(
+    "reduce"
+  )
 })
 
 it("tracks direct links, navigation and browser history without duplicate entries", async () => {

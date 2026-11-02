@@ -9,6 +9,12 @@ import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
 import { t } from "@/src/runtime/i18n"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
+import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
+import {
+  beginChapterDispatch,
+  startDownloadTask,
+} from "@/src/domain/queue/kernel"
+import { createDispatchLease } from "@/src/runtime/dispatch-lease"
 
 let root: Root
 let container: HTMLDivElement
@@ -71,6 +77,52 @@ function callbacks() {
     onRemove: vi.fn<DownloadTaskCardProps["onRemove"]>(async () => undefined),
   }
 }
+
+function activeTask(): DownloadTaskState {
+  const now = Date.now()
+  const queued = DownloadTaskStateSchema.parse({
+    id: "active-task",
+    siteIntegrationId: "mangadex",
+    mangaId: "series",
+    seriesTitle: "Active series",
+    status: "queued",
+    created: now,
+    settingsSnapshot: createTaskSettingsSnapshot(DEFAULT_SETTINGS, "mangadex"),
+    chapters: [
+      {
+        id: "active-chapter",
+        title: "Only chapter",
+        index: 0,
+        url: "https://mangadex.org/chapter/11111111-1111-4111-8111-111111111111",
+        requestedPath: "Recorded/active.cbz",
+        status: "queued",
+        lastUpdated: now,
+      },
+    ],
+  })
+  const started = startDownloadTask(
+    { queue: [queued], lease: null, pendingUndoActions: [] },
+    { taskId: queued.id, now }
+  )
+  expect(started.result.outcome).toBe("applied")
+  const dispatch = beginChapterDispatch(started.next, {
+    taskId: queued.id,
+    chapterId: "active-chapter",
+    expectedPreviousLease: null,
+    lease: createDispatchLease({
+      jobId: "active-job",
+      taskId: queued.id,
+      chapterId: "active-chapter",
+      attempt: 1,
+      fingerprint: "a".repeat(64),
+      saveMode: "downloads-api",
+      now,
+    }),
+    now,
+  })
+  expect(dispatch.result.outcome).toBe("applied")
+  return DownloadTaskStateSchema.parse(dispatch.next.queue[0])
+}
 async function render(props: DownloadTaskCardProps) {
   await act(async () => root.render(createElement(DownloadTaskCard, props)))
 }
@@ -83,6 +135,40 @@ function button(label: string, parent: ParentNode = container) {
 }
 
 describe("task card controls", () => {
+  it("requests active cancellation before confirmation and clears its busy state after completion", async () => {
+    const task = activeTask()
+    const actions = callbacks()
+    const pending =
+      Promise.withResolvers<Awaited<ReturnType<typeof actions.onCancel>>>()
+    actions.onCancel.mockReturnValueOnce(pending.promise)
+    await render({ task, ...actions })
+    const card = container.querySelector("[aria-busy]")!
+    expect(card).not.toBeNull()
+    expect(card.getAttribute("aria-busy")).toBe("false")
+    expect(container.querySelector('[role="group"]')).toBeNull()
+    await act(async () => button(t("common_cancel")).click())
+    let confirmation = container.querySelector('[role="group"]')!
+    expect(confirmation).not.toBeNull()
+    expect(actions.onCancel).not.toHaveBeenCalled()
+    await act(async () => button("No", confirmation).click())
+    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(actions.onCancel).not.toHaveBeenCalled()
+    await act(async () => button(t("common_cancel")).click())
+    confirmation = container.querySelector('[role="group"]')!
+    await act(async () => button("Yes", confirmation).click())
+    expect(actions.onCancel).toHaveBeenCalledExactlyOnceWith(task.id)
+    expect(card.getAttribute("aria-busy")).toBe("true")
+    expect(confirmation.getAttribute("aria-busy")).toBe("true")
+    expect(
+      [...confirmation.querySelectorAll("button")].every(
+        (item) => item.disabled
+      )
+    ).toBe(true)
+    await act(async () => pending.resolve({ success: true }))
+    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(card.getAttribute("aria-busy")).toBe("false")
+  })
+
   it.each(["rejected", "unsuccessful"])(
     "retries queued cancellation after a %s result",
     async (outcome) => {

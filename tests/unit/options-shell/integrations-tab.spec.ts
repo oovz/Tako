@@ -107,3 +107,42 @@ it("preserves integration identity when toggling enablement from a filtered list
     props.onSiteIntegrationEnablementChange
   ).toHaveBeenCalledExactlyOnceWith("mangadex", true)
 })
+
+it("filters a single override for reset and keeps all integrations reachable afterward", async () => {
+  const single = {
+    ...props,
+    overrides: { mangadex: { outputFormat: "zip" as const } },
+    siteIntegrationSettingsByIntegration: {},
+  }
+  await act(async () => root.render(createElement(SiteIntegrationsTab, single)))
+  await filter("common_overrides")
+  expect(cards()).toEqual(["mangadex"])
+  await act(async () =>
+    container
+      .querySelector<HTMLElement>(
+        '[data-testid="configure-site-integration-mangadex"]'
+      )!
+      .click()
+  )
+  await act(async () =>
+    container
+      .querySelector<HTMLElement>(
+        '[data-testid="reset-site-integration-overrides-mangadex"]'
+      )!
+      .click()
+  )
+  expect(props.onChange).toHaveBeenCalledExactlyOnceWith("mangadex", null)
+  await act(async () =>
+    root.render(
+      createElement(SiteIntegrationsTab, { ...single, overrides: {} })
+    )
+  )
+  await filter("common_all")
+  expect(cards()).toHaveLength(
+    siteIntegrationCatalog.filter((integration) => integration.shipped).length
+  )
+  await filter("common_disabled")
+  expect(cards()).toContain("mangadex")
+  await filter("common_enabled")
+  expect(cards().length).toBeGreaterThan(0)
+})

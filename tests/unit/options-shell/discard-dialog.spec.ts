@@ -50,6 +50,16 @@ it.each([true, false])(
     expect(button("common_loading").disabled).toBe(true)
     await act(async () => button("common_cancel").click())
     expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        })
+      )
+    })
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
     expect(discardChanges).toHaveBeenCalledOnce()
     await act(async () => pending.resolve(discarded))
     expect(document.querySelector('[role="alertdialog"]') !== null).toBe(
