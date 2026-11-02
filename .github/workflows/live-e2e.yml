@@ -1,12 +1,8 @@
 name: Live E2E
 
-# Run the API canary on pushes and pull requests; run full live tests on request.
+# Developers run the API canary or full live suite manually.
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
     inputs:
       suite:
@@ -22,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: live-e2e-${{ github.head_ref || github.ref }}
+  group: live-e2e-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -63,10 +59,10 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --no-shell chromium
       - name: Bounded live API canary
-        if: github.event_name != 'workflow_dispatch' || inputs.suite == 'ci'
+        if: inputs.suite == 'ci'
         run: pnpm test:live:ci
       - name: Full live browser and download suite
-        if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
+        if: inputs.suite == 'full'
         run: pnpm test:live:full
       - name: Upload live E2E artifacts
         if: failure()
