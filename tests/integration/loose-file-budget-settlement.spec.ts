@@ -3,6 +3,7 @@ import { createBackgroundOffscreenEventMessageHandlers } from "@/entrypoints/bac
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
 import { OffscreenJobTerminalCoordinator } from "@/entrypoints/background/offscreen-job-terminal-coordinator"
 import { QueueScheduler } from "@/entrypoints/background/queue-scheduler"
+import { OffscreenWorker } from "@/entrypoints/offscreen/main-worker"
 import {
   MAX_CHAPTER_IMAGE_BYTES,
   MAX_METADATA_RESPONSE_BYTES,
@@ -279,8 +280,6 @@ async function runChapter(
   ).toBe("applied")
 
   const ledger = new OffscreenLiveResourceLedger(options.liveResourceCapacity)
-  const { OffscreenWorker } =
-    await import("@/entrypoints/offscreen/main-worker")
   const worker = new OffscreenWorker(`budget-document-${pageCount}`, ledger)
   await worker.initialize()
   vi.spyOn(fsAccess, "loadDownloadRootHandle").mockResolvedValue(
