@@ -1,6 +1,5 @@
 import type { RuntimeMessageRequest } from "@/src/runtime/runtime-message-contracts"
 import type { ProcessChapterStreamingOptions } from "./chapter-processing"
-import type { ChapterOutcome } from "./chapter-processing-types"
 
 type OffscreenDownloadProgressMessage =
   RuntimeMessageRequest<"OFFSCREEN_DOWNLOAD_PROGRESS">
@@ -59,44 +58,6 @@ export function createDownloadingProgressPayload(input: {
   imagesFailed?: number
 }): UnsequencedProgressPayload {
   return createProgressPayload({ ...input, status: "downloading" })
-}
-
-export function createTerminalProgressPayload(input: {
-  taskId: string
-  chapterId: string
-  chapterTitle: string
-  outcome: ChapterOutcome
-  totalImages: number
-  imagesProcessed: number
-}): UnsequencedProgressPayload {
-  const {
-    taskId,
-    chapterId,
-    chapterTitle,
-    outcome,
-    totalImages,
-    imagesProcessed,
-  } = input
-  return {
-    taskId,
-    chapterId,
-    chapterTitle,
-    status: outcome.status,
-    stage: "saving",
-    phaseFraction:
-      outcome.outputsRequested > 0 &&
-      outcome.outputsCommitted >= outcome.outputsRequested
-        ? 1
-        : 0.99,
-    imagesProcessed,
-    imagesFailed: outcome.imagesFailed ?? 0,
-    totalImages,
-    error: outcome.errorMessage,
-    errorCategory: outcome.errorCategory,
-    outputsRequested: outcome.outputsRequested,
-    outputsFailedBeforeHandoff: outcome.outputsFailedBeforeHandoff,
-    outputsCommitted: outcome.outputsCommitted,
-  }
 }
 
 type ProgressPhase = Pick<UnsequencedProgressPayload, "stage" | "phaseFraction">
