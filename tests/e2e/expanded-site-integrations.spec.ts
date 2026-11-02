@@ -105,26 +105,22 @@ test.describe("site downloads through the chapter selector", () => {
           await panel.getByRole("button", { name: /Select Chapters/i }).click()
           if (fixture.id === "copymanga" || fixture.id === "mycomic") {
             expect(state.volumes.length).toBeGreaterThanOrEqual(3)
-            const expanded = panel.locator(
-              '[data-kind="volume"] button[aria-expanded="true"]:enabled'
-            )
-            while (await expanded.count()) {
-              const label = await expanded.first().getAttribute("aria-label")
-              const toggle = panel.getByRole("button", {
-                name: label!,
-                exact: true,
-              })
-              await toggle.click()
-              await expect(toggle).toHaveAttribute("aria-expanded", "false")
-            }
+            // Collapse mounted groups in order so later virtualized headers appear.
             for (const volume of state.volumes) {
-              if (state.chapters.some((item) => item.volumeId === volume.id))
-                continue
               const row = panel.locator('[data-kind="volume"]').filter({
                 has: panel.getByText(volume.title!, { exact: true }),
               })
-              await expect(row.getByRole("button")).toBeDisabled()
-              await expect(row.getByRole("checkbox")).toBeDisabled()
+              const toggle = row.getByRole("button")
+              await expect(toggle).toBeVisible()
+              if (state.chapters.some((item) => item.volumeId === volume.id)) {
+                if ((await toggle.getAttribute("aria-expanded")) === "true") {
+                  await toggle.click()
+                }
+                await expect(toggle).toHaveAttribute("aria-expanded", "false")
+              } else {
+                await expect(toggle).toBeDisabled()
+                await expect(row.getByRole("checkbox")).toBeDisabled()
+              }
             }
           }
           const allChapters = panel.getByRole("radio", {
