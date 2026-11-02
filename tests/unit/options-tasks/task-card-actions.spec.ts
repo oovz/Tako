@@ -266,7 +266,8 @@ describe("task card controls", () => {
 it("retains expanded chapters when a virtual task scrolls out and returns or the section becomes short", async () => {
   // Supply browser layout dimensions while keeping the real virtualizer and cards.
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(120)
-  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(600)
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(120)
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600)
   const actions = callbacks()
   const tasks = Array.from({ length: 51 }, (_, index) => ({
     ...makeTask("queued"),

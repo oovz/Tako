@@ -61,7 +61,12 @@ describe("mounted queue region", () => {
         return this.hasAttribute("data-queue-scroll-container") ? 156 : 78
       }
     )
-    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(300)
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return this.hasAttribute("data-queue-scroll-container") ? 156 : 78
+      }
+    )
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300)
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)

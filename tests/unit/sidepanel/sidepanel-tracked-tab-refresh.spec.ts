@@ -25,6 +25,7 @@ function makeTab(id: number): chrome.tabs.Tab {
     active: true,
     url: `https://example.com/${id}`,
     index: 0,
+    lastAccessed: 0,
     pinned: false,
     highlighted: true,
     windowId: 1,

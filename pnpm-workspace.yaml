@@ -4,6 +4,6 @@ allowBuilds:
   spawn-sync: true
 
 overrides:
-  "@vitejs/plugin-react": ^6.0.3
+  "@vitejs/plugin-react": ^6.2.1
 patchedDependencies:
   istanbul-lib-source-maps@5.0.6: patches/istanbul-lib-source-maps@5.0.6.patch

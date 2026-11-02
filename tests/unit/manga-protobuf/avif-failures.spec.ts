@@ -3,14 +3,14 @@ import { convertMangaMillionAvifToJpeg } from "@/src/site-integrations/mangamill
 import { OffscreenLiveResourceLedger } from "@/src/runtime/offscreen-live-resource-ledger"
 
 function avif(): ArrayBuffer {
-  const bytes = new Uint8Array(72)
+  const bytes = new Uint8Array(106)
   const view = new DataView(bytes.buffer)
   view.setUint32(0, 24)
   bytes.set(new TextEncoder().encode("ftypavif"), 4)
   bytes.set(new TextEncoder().encode("avif"), 16)
-  view.setUint32(24, 48)
+  view.setUint32(24, 82)
   bytes.set(new TextEncoder().encode("meta"), 28)
-  view.setUint32(36, 36)
+  view.setUint32(36, 56)
   bytes.set(new TextEncoder().encode("iprp"), 40)
   view.setUint32(44, 28)
   bytes.set(new TextEncoder().encode("ipco"), 48)
@@ -18,6 +18,15 @@ function avif(): ArrayBuffer {
   bytes.set(new TextEncoder().encode("ispe"), 56)
   view.setUint32(64, 32)
   view.setUint32(68, 32)
+  // Primary item 1 uses the first ipco property (ispe).
+  view.setUint32(72, 20)
+  bytes.set(new TextEncoder().encode("ipma"), 76)
+  view.setUint32(84, 1)
+  view.setUint16(88, 1)
+  bytes.set([1, 1], 90)
+  view.setUint32(92, 14)
+  bytes.set(new TextEncoder().encode("pitm"), 96)
+  view.setUint16(104, 1)
   return bytes.buffer
 }
 

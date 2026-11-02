@@ -40,6 +40,7 @@ function browserTab(
     url,
     active,
     index: 0,
+    lastAccessed: 0,
     pinned: false,
     highlighted: active,
     incognito: false,
