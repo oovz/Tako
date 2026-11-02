@@ -25,11 +25,7 @@ export default async function globalSetup(_config: FullConfig) {
   })
 
   if (!skipBuild) {
-    try {
-      rmSync(buildDir, { recursive: true, force: true })
-    } catch {
-      // Best-effort cleanup; continue if the folder doesn't exist.
-    }
+    rmSync(buildDir, { recursive: true, force: true })
 
     await new Promise<void>((resolve, reject) => {
       exec(
