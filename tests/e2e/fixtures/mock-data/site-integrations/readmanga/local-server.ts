@@ -61,14 +61,7 @@ function html(body: string): {
   }
 }
 
-/**
- * www.manhuagui.com handler — dispatches by pathname suffix:
- * - `/comic/{id}/{chapter}.html` → chapter viewer with packed payload
- * - `/comic/{id}/` or `/comic/{id}` → series page HTML (known series
- *   use the fixed fixtures; unknown ids fall back to a synthesized
- *   minimal series page so content-script extraction still runs)
- * - anything else → the home-page placeholder
- */
+/** Serve captured Manhuagui pages, with generated series pages for other IDs. */
 const manhuaguiMainHandler: MockRouteHandler = (req) => {
   const pathname = req.pathnameAfterPrefix
 

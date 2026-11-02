@@ -35,23 +35,9 @@ import { StorageMutationQueue } from "./storage-mutation-queue"
 import { parseDurableState } from "./durable-state-codecs"
 
 /**
- * Native-output persistence layout.
- *
- * Live work is stored as one manifest key per job and one output key per
- * output, plus a small index mapping live IDs and download IDs. Fully
- * released records and manifests are pruned from storage, so startup
- * hydration and transitions touch current accounting and retained resources
- * across jobs.
- *
- *   pendingOutputs:index            -> { jobIds, outputIds, downloadIdToOutputId }
- *   pendingOutputs:manifest:<jobId> -> NativeOutputManifest
- *   pendingOutputs:output:<outputId>-> NativeOutputRecord
- *
- * A fully released output has `dependencyReleasedAt` set; once every tracked
- * output of a job is released (or pruned) and settlement is acknowledged, the
- * manifest is pruned as well.
- * Absence of a record therefore means it was fully released, never that it
- * was lost: the queue task keeps the terminal accounting.
+ * Prune output records after their resource dependencies are released.
+ * Retain each job manifest until settlement is acknowledged and all tracked
+ * outputs are released. The queue task retains terminal accounting.
  */
 
 const nonemptyString = z.string().min(1)

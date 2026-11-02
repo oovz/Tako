@@ -1,14 +1,4 @@
-/**
- * Site Overrides Service
- * Stores per-site overrides in chrome.storage.local under key 'siteOverrides'.
- *
- * Flat structure of current per-provider queue policy overrides:
- *   { [siteId]: {
- *       imagePolicy?: { concurrency?: number, delayMs?: number },
- *       chapterPolicy?: { concurrency?: number, delayMs?: number },
- *       retries?: { image?: number, chapter?: number }
- *   } }
- */
+/** Persist per-site image, chapter, and retry overrides in local storage. */
 
 import { StorageMutationQueue } from "./storage-mutation-queue"
 import {

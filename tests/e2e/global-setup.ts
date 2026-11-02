@@ -8,7 +8,6 @@ import { clearE2eCoverageRunOutput } from "./coverage-run-output"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default async function globalSetup(_config: FullConfig) {
-  // Build the extension with WXT before tests
   const isLiveTest = process.env.TMD_TEST_E2E_LIVE === "true"
   const skipBuild = process.env.TMD_TEST_E2E_SKIP_BUILD === "true"
   const buildDir = path.resolve(
@@ -40,12 +39,8 @@ export default async function globalSetup(_config: FullConfig) {
           windowsHide: true,
           env: {
             ...process.env,
-            // Forward E2E_COVERAGE so wxt.config.ts activates the istanbul plugin
-            // when building for coverage collection.
             E2E_COVERAGE: process.env.E2E_COVERAGE ?? "false",
-            // Deterministic mocked E2E needs a background-owned queue seeding
-            // adapter. The live-test mode enables the same isolated adapter in
-            // wxt.config.ts; production builds leave it compiled off.
+            // Queue seeding is restricted to isolated test builds.
             TAKO_E2E_STATE_SEED:
               process.env.TMD_TEST_E2E_USE_MOCKS === "true" ? "true" : "false",
           },

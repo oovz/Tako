@@ -423,12 +423,8 @@ export async function fetchWithMangadexRetry(
 }
 
 /**
- * Run a MangaDex API call through the chapter-scope endpoint policy and rate
- * limiter, then apply MangaDex's provider-owned retry handling.
- *
- * Image downloads must NOT use this — they are already rate-limited at the
- * 'image' scope by `chapter-image-downloads.ts` via `scheduleForIntegrationScope`.
- * Using this for images would cause double rate-limiting.
+ * Apply chapter-scope API pacing and retries. Image requests use their
+ * own scheduler and must not pass through this one.
  */
 async function fetchMangadexApiResponse<T>(
   url: string,

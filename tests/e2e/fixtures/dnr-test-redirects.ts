@@ -54,11 +54,7 @@ export const DNR_TEST_RULE_ID_MIN = 9000
 export const DNR_TEST_RULE_ID_MAX = 9999
 
 /**
- * A low-priority deny rule makes deterministic E2E fail closed: a new
- * extension-origin provider request cannot silently escape the local mock
- * server just because an integration acquired another endpoint. Redirect
- * rules have a higher priority and localhost is excluded so their rewritten
- * requests can reach the fixture server.
+ * Block unmatched extension requests; higher-priority redirects use localhost.
  */
 export const DNR_TEST_NETWORK_BLOCK_RULE_ID = 9999
 const DNR_TEST_REDIRECT_PRIORITY = 100

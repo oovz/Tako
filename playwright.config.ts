@@ -22,7 +22,7 @@ export default defineConfig({
   globalSetup: path.resolve(__dirname, "tests/e2e/global-setup.ts"),
   use: {
     locale: "en-US",
-    // The persistent extension context requires a headed browser; CI uses Xvfb.
+    // Run the extension tests headed; CI supplies Xvfb.
     headless: false,
     // Retain failure evidence even when retries are disabled.
     trace: "retain-on-failure",

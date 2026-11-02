@@ -22,14 +22,7 @@ export interface MockRouteResponse {
   body: Buffer | string | Uint8Array | object
 }
 
-/**
- * Shape passed to every `MockRouteHandler`.
- *
- * `pathnameAfterPrefix` is the portion of the request path AFTER the
- * matched prefix (leading `/` preserved when present). Handlers should
- * dispatch on this value rather than `url.pathname` so they remain
- * decoupled from the prefix chosen by the fixture caller.
- */
+/** Route handlers receive the path after their matched prefix. */
 export interface MockRouteRequest {
   method: string
   url: URL

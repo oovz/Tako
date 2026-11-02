@@ -34,17 +34,7 @@ export function getDefinitions(): readonly SiteIntegrationDefinition[] {
 export function getDisplayName(siteIntegrationId: string): string {
   return getDefinition(siteIntegrationId)?.name ?? siteIntegrationId
 }
-/**
- * Sets the module-scoped in-memory site integration enablement map.
- *
- * Production call sites are restricted by architecture boundaries to the
- * background kernel initialization phase, the storage change listener and
- * initialization loader (`src/runtime/site-integration-initialization.ts`),
- * and the compile-time-gated E2E state seed.
- *
- * Callers that query {@link isEnabled} before this map is hydrated will
- * safely fall back to each definition's `enabledByDefault` configuration.
- */
+/** Replace cached enablement overrides; unset entries keep their definition defaults. */
 export function setEnablementMap(next: SiteIntegrationEnablementMap): void {
   enablement = { ...next }
 }
@@ -53,16 +43,7 @@ export function getEnablementMap(): SiteIntegrationEnablementMap {
   return { ...enablement }
 }
 
-/**
- * Determines whether a site integration is enabled.
- *
- * Evaluation order:
- * 1. Returns `false` if the integration definition is unknown or not `shipped`.
- * 2. Returns the explicit boolean override from the provided or module-scoped
- *    `enablement` map if present.
- * 3. Falls back to `definition.enabledByDefault` when the map has not yet been
- *    hydrated or contains no explicit user override for this integration.
- */
+/** Apply explicit overrides to shipped integrations, then fall back to defaults. */
 export function isEnabled(
   siteIntegrationId: string,
   overrides: SiteIntegrationEnablementMap = enablement

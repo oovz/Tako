@@ -64,19 +64,8 @@ export interface HTMLFixtures {
 }
 
 /**
- * Options passed to every site-integration route registrar.
- *
- * - `useMocks`: when `true`, the registrar MUST install deterministic routes
- *   for every host it owns and MUST NOT let requests escape to the real
- *   network. When `false`, the registrar is a no-op.
- * - `allowNetwork`: informational — indicates the top-level policy permits
- *   live network calls for unmatched hosts. Registrars should not pass
- *   requests through based on this flag; they should only mock or skip.
- *
- * Additional per-test overrides (response bodies, image bytes) belong on
- * extended option shapes defined by each integration. Keep this type narrow
- * so the top-level dispatcher can pass a single object to every registrar
- * without coupling to integration-specific fields.
+ * Mocked routes must not reach the network. allowNetwork describes the
+ * top-level policy; it does not permit a registrar to bypass its mocks.
  */
 export interface RouteRegistrarOptions {
   useMocks: boolean
@@ -84,17 +73,8 @@ export interface RouteRegistrarOptions {
 }
 
 /**
- * Every site integration MUST export a function matching this signature from
- * `tests/e2e/fixtures/mock-data/site-integrations/{id}/routes.ts`. The
- * top-level dispatcher at `tests/e2e/fixtures/routes.ts` invokes every
- * registered registrar in parallel for each test `BrowserContext`.
- *
- * Registrars must:
- * - Be idempotent: the dispatcher may be called once per test.
- * - Register routes only when `options.useMocks === true`.
- * - Scope their `context.route(pattern, handler)` calls to hosts the
- *   integration actually talks to; never match `**` or cross-host globs.
- * - Never await real network I/O.
+ * Register idempotent, host-scoped routes only when useMocks is true.
+ * Registrars must not use catch-all routes or make real network requests.
  */
 export type RouteRegistrar = (
   context: BrowserContext,

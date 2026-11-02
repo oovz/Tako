@@ -77,11 +77,7 @@ function appendUnavailableMacroDiagnostics(
   }
 }
 
-/**
- * Sanitize path component - delegates to sanitizeFilename for cross-platform
- * illegal char + Windows reserved name protection, then applies path-component
- * specific trimming (leading/trailing dots, whitespace).
- */
+/** Sanitize a preview path component and trim its boundary dots and whitespace. */
 function sanitizePathComponent(value: string): string {
   const sanitized = sanitizeFilename(value)
   return sanitized
@@ -105,12 +101,8 @@ export function getCurrentTimeValues(): Pick<
   }
 }
 
-/**
- * Create mock context for template preview
- * Derives values from TEMPLATE_MACROS examples (SSOT)
- */
+/** Build preview values from the documented macro examples. */
 export function createMockContext(): TemplateContext {
-  // Derive from TEMPLATE_MACROS examples (SSOT) - see template-macros.ts
   const macroExamples = generateSampleMacroData()
 
   return {

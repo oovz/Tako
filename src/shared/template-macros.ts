@@ -1,7 +1,4 @@
-/**
- * Single source of truth for download path template macros
- * Defines all supported macros with their descriptions and capabilities
- */
+/** Supported path-template macros and their preview values. */
 
 export interface TemplateMacro {
   name: string
@@ -11,9 +8,6 @@ export interface TemplateMacro {
   category: "date" | "manga" | "site"
 }
 
-/**
- * Definitive list of all supported template macros
- */
 export const TEMPLATE_MACROS = [
   // Date macros - can be resolved anywhere
   {

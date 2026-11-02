@@ -47,16 +47,7 @@ function json(body: object): MockRouteResponse {
   }
 }
 
-/**
- * api.mangadex.org handler — dispatches by pathname:
- * - `/at-home/server/{id}` → at-home response keyed on chapter id
- * - `/manga/{id}/feed` → paged chapter feed
- * - `/manga/{id}` → series metadata
- * - `/statistics/manga/{id}` → captured community rating for the title;
- *   synthetic variants return empty statistics.
- * Everything else returns `{ result: 'error', message: 'not mocked' }`
- * with status 200 to mimic MangaDex's JSON-first error shape.
- */
+/** Serve fixture API responses and provider-shaped errors for unmocked paths. */
 const mangadexApiHandler: MockRouteHandler = (req) => {
   const pathname = req.pathnameAfterPrefix
   const parts = pathname.split("/").filter(Boolean)

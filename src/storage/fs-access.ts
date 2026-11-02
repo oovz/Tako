@@ -2,12 +2,10 @@ import {
   DirectoryNotFoundError,
   PermissionExpiredError,
 } from "@/src/types/errors"
-/*
-  File System Access helpers for selecting a download root and writing files.
-  - Stores FileSystemDirectoryHandle in IndexedDB (structured clone via IDB allowed).
-  - Provides writeBlobToPath() to save at subpaths under the chosen root.
-  - No implicit fallbacks: callers must surface errors (permission denied, missing handle) explicitly.
-*/
+/**
+ * Store directory handles in IndexedDB and write beneath the selected root.
+ * Permission and write failures propagate without changing the destination.
+ */
 
 import { parseSettingsDocument } from "@/src/domain/settings/schema"
 import { SETTINGS_STORAGE_KEYS } from "@/src/runtime/storage-keys"
@@ -294,13 +292,7 @@ async function ensureSubdir(
   return dir
 }
 
-/**
- * Check directory permissions before write operation
- * Throws specific error types for better UX:
- * - PermissionExpiredError: Permission was granted but expired
- * - DirectoryNotFoundError: Handle exists but directory was deleted
- * - Generic Error: Permission query/request failed
- */
+/** Check write access and distinguish expired permission from a missing directory. */
 export async function checkPermissionBeforeWrite(
   dir: DirHandle
 ): Promise<void> {

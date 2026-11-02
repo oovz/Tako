@@ -1,12 +1,6 @@
 /**
- * ComicInfo.xml Generator Utility
- * Generates ComicInfo.xml metadata files for comic book archives (CBZ)
- *
- * Based on the ComicInfo.xml schema from the Anansi Project:
+ * Generate archive metadata using the Anansi Project ComicInfo schema.
  * https://github.com/anansi-project/comicinfo
- *
- * This utility creates XML metadata that is compatible with popular comic readers
- * like Komga, Kavita, and other ComicInfo.xml-supporting applications.
  */
 
 import type {
@@ -279,14 +273,7 @@ function generateVersionSpecificXML(
   return xml
 }
 
-/**
- * Generate ComicInfo.xml content from metadata
- * @param metadata - Metadata object from the site integration
- * @param pageCount - Number of pages in the chapter
- * @param version - ComicInfo schema version (always '2.0')
- * @param hasCoverImage - Whether a cover image is included
- * @returns ComicInfo.xml content or null if metadata is empty
- */
+/** Generate ComicInfo.xml, or return null if metadata processing or XML generation fails. */
 export function generateComicInfo(
   metadata: ComicInfoV2 = {},
   pageCount: number = 0,

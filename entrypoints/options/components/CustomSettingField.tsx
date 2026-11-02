@@ -1,10 +1,4 @@
-/**
- * CustomSettingField - Renders a single custom setting field within a site integration card.
- *
- * Handles all field types defined in {@link SettingsFieldSchema}: boolean, string, number,
- * select, and multiselect. The field also exposes an enable/disable override toggle so users
- * can opt-in to a non-default value on a per-integration basis.
- */
+/** Render a typed site setting with an optional per-site override. */
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
