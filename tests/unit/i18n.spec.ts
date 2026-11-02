@@ -49,6 +49,19 @@ describe("i18n infrastructure", () => {
     it("handles single string substitution", () => {
       expect(t("sidepanel_chaptersCount", "42")).toBe("42 Chapters")
     })
+
+    it.each(["$$", "$&", "$`", "$'"])(
+      "preserves literal substitution %s",
+      (value) => {
+        expect(t("sidepanel_chaptersCount", value)).toBe(`${value} Chapters`)
+      }
+    )
+
+    it("does not expand placeholders inside substitutions", () => {
+      expect(t("options_chaptersCount", ["$TOTAL$", "10"])).toBe(
+        "$TOTAL$/10 chapters"
+      )
+    })
   })
 
   describe("SUPPORTED_LOCALES", () => {
