@@ -45,6 +45,7 @@ import {
   queryOffscreenJob,
   runOffscreenDocumentAdmissionExclusive,
   scheduleOffscreenCloseIfIdle,
+  refreshLivenessAlarmForDurableWork,
   setLivenessAlarmArmed,
 } from "@/entrypoints/background/offscreen-lifecycle"
 import { NativeOutputCoordinator } from "@/entrypoints/background/native-output-coordinator"
@@ -195,8 +196,9 @@ const queueScheduler = new QueueScheduler(
   taskExecutor,
   async () => {
     await scheduleOffscreenCloseIfIdle(queueRepository, nativeOutputCoordinator)
-    await setLivenessAlarmArmed(
-      await nativeOutputCoordinator.hasLiveDependencies()
+    await refreshLivenessAlarmForDurableWork(
+      queueRepository,
+      nativeOutputCoordinator
     )
   }
 )

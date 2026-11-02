@@ -331,6 +331,7 @@ class OffscreenLivenessRecovery {
   private async recoverUnboundLease(): Promise<boolean> {
     const lease = this.lease
     if (!lease || lease.documentInstanceId) return false
+    await ensureLivenessAlarm()
     const interrupted = await runTaskSideEffectExclusive(lease.taskId, () =>
       this.interruptUnboundLease(lease)
     )
