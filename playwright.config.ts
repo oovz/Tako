@@ -22,8 +22,9 @@ export default defineConfig({
   globalSetup: path.resolve(__dirname, "tests/e2e/global-setup.ts"),
   use: {
     locale: "en-US",
-    // Run the extension tests headed; CI supplies Xvfb.
-    headless: false,
+    // The Chromium channel supports extensions in new headless mode.
+    channel: "chromium",
+    headless: true,
     // Retain failure evidence even when retries are disabled.
     trace: "retain-on-failure",
     // Prevent browser windows from grabbing focus during tests

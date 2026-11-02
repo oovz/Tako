@@ -53,9 +53,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shouldUseMockRoutes = process.env.TMD_TEST_E2E_USE_MOCKS === "true"
 const shouldAllowNetwork = process.env.TMD_TEST_E2E_ALLOW_NETWORK === "true"
 const shouldEnableLiveIntegrations = process.env.TMD_TEST_E2E_LIVE === "true"
-// Use a channel compatible with the extension’s Chrome 150 minimum.
-const e2eBrowserChannel =
-  process.env.TMD_TEST_E2E_BROWSER_CHANNEL ?? "chromium-tip-of-tree"
+// The bundled Chromium channel supports extensions in new headless mode.
+const e2eBrowserChannel = process.env.TMD_TEST_E2E_BROWSER_CHANNEL ?? "chromium"
 const pathToExtension = path.resolve(
   __dirname,
   shouldEnableLiveIntegrations
@@ -599,8 +598,8 @@ export const test = base.extend<{
 }>({
   // eslint-disable-next-line no-empty-pattern
   _extensionContextState: async ({}, use, testInfo) => {
-    // Use a headed extension context; CI supplies Xvfb.
-    const headless = testInfo.project.use.headless ?? false
+    // Respect the configured headless mode and the CLI --headed override.
+    const headless = testInfo.project.use.headless ?? true
     const state = await setupExtensionContext(headless)
     try {
       await use(state)

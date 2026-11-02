@@ -15,7 +15,7 @@ export default defineConfig({
       testMatch: ["api-contract.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
   ],

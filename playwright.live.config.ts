@@ -20,8 +20,9 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   use: {
     locale: "en-US",
-    // CI supplies Xvfb for extension contexts.
-    headless: false,
+    // The Chromium channel supports extensions in new headless mode.
+    channel: "chromium",
+    headless: true,
     // Live traces can retain unredacted request URLs and headers.
     trace: "off",
     launchOptions: {
@@ -41,7 +42,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/harness"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -49,7 +50,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/mangadex"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -57,7 +58,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/pixiv-comic"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -65,7 +66,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/shonenjumpplus"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -73,7 +74,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/readmanga"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -81,7 +82,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/comictropics"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     {
@@ -89,7 +90,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, "tests/live/mangamillion"),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     },
     ...[
@@ -111,7 +112,7 @@ export default defineConfig({
       testDir: path.resolve(__dirname, `tests/live/${name}`),
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chromium-tip-of-tree",
+        channel: "chromium",
       },
     })),
   ],
