@@ -106,7 +106,7 @@ fs.mkdirSync = (target, ...args) => {
 }
 fs.rmdirSync = (target, ...args) => {
   if (target === source) {
-    if (${JSON.stringify(cleanup)} === "removed") fs.rmSync(target, { recursive: true })
+    if (${JSON.stringify(cleanup)} === "removed") rmdir(target)
     if (${JSON.stringify(cleanup)} === "populated") fs.writeFileSync(path.join(target, "concurrent.txt"), "retained")
     if (${JSON.stringify(cleanup)} === "permission") throw Object.assign(new Error("cleanup access denied"), { code: "EPERM" })
   }
