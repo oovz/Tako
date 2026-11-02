@@ -160,22 +160,6 @@ export function matchUrl(
 }
 
 /**
- * Check if a domain is supported by any site integration
- */
-export function isSupportedDomain(url: string): boolean {
-  try {
-    const parsedUrl = new URL(url)
-    if (parsedUrl.protocol !== "https:") return false
-    const hostname = parsedUrl.hostname
-    const patterns = ensurePatternsCompiled()
-
-    return patterns.some((pattern) => isDomainMatch(hostname, pattern.domains))
-  } catch {
-    return false
-  }
-}
-
-/**
  * Get the packaged URL-pattern metadata.
  */
 export function getAllPatternMetadata() {
