@@ -66,6 +66,63 @@ describe("rendered progress boundaries", () => {
     expect(html).not.toContain("0/0 images")
   })
 
+  it.each([
+    { processed: 1, total: 1, stage: "downloading" as const, percent: 100 },
+    { processed: 2, total: 4, stage: "transforming" as const, percent: 50 },
+  ])(
+    "announces actual image completion for $processed/$total images during $stage",
+    ({ processed, total, stage, percent }) => {
+      const html = render(
+        progress({
+          imagesProcessed: processed,
+          totalImages: total,
+          stage,
+          overallFraction: 0.5,
+          activeChapters: [
+            {
+              chapterId: "chapter",
+              imagesProcessed: processed,
+              totalImages: total,
+              stage,
+              phaseFraction: 0.5,
+              updatedAt: 1,
+            },
+          ],
+        })
+      )
+      expect(html).toMatch(new RegExp(`aria-label="[^"]*: ${percent}%"`))
+      expect(html).toContain(`${processed}/${total}`)
+      expect(html).toContain('role="status"')
+      expect(html).toContain('aria-live="polite"')
+    }
+  )
+
+  it("keeps zero-total stage transitions finite and hides their image track", () => {
+    const html = render(
+      progress({
+        stage: "resolving",
+        imagesProcessed: 0,
+        totalImages: 0,
+        activeChapterCount: 1,
+        activeChapters: [
+          {
+            chapterId: "chapter",
+            imagesProcessed: 0,
+            totalImages: 0,
+            stage: "resolving",
+            phaseFraction: 0,
+            updatedAt: 1,
+          },
+        ],
+        overallFraction: 0.25,
+      })
+    )
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain('aria-label="Progress 25%"')
+    expect(html).not.toContain("NaN")
+    expect(html).not.toContain("Infinity")
+  })
+
   it("uses image progress alone when the chapter total is unavailable", () => {
     const html = render(progress(), {
       chapters: { total: 0, completed: 0, unsuccessful: 0 },

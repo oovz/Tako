@@ -664,9 +664,9 @@ test.describe("Side Panel chapter/volume order", () => {
       waitUntil: "domcontentloaded",
     })
 
-    const baseChapters = Array.from({ length: 36 }, (_, index) => {
+    const baseChapters = Array.from({ length: 72 }, (_, index) => {
       const chapterNumber = index + 1
-      const volumeNumber = chapterNumber <= 18 ? 1 : 2
+      const volumeNumber = chapterNumber <= 36 ? 1 : 2
 
       return {
         id: `stress-${chapterNumber}`,
@@ -716,6 +716,17 @@ test.describe("Side Panel chapter/volume order", () => {
 
     await sp.getByRole("button", { name: /Select Chapters/i }).click()
 
+    const firstChapter = sp.getByRole("checkbox", {
+      name: baseChapters[0].title,
+      exact: true,
+    })
+    await expect(firstChapter).toBeVisible()
+    await firstChapter.click()
+    await expect(firstChapter).toBeChecked()
+    await expect(
+      sp.getByRole("button", { name: /Download \(1\)/i })
+    ).toBeVisible()
+
     for (let iteration = 0; iteration < 10; iteration += 1) {
       const isGroupedView = iteration % 2 === 0
       await sp
@@ -724,6 +735,16 @@ test.describe("Side Panel chapter/volume order", () => {
         })
         .click()
     }
+
+    await expect(firstChapter).toBeVisible()
+    await expect(firstChapter).toBeChecked()
+    await firstChapter.click()
+    await expect(firstChapter).not.toBeChecked()
+    await firstChapter.click()
+    await expect(firstChapter).toBeChecked()
+    await expect(
+      sp.getByRole("button", { name: /Download \(1\)/i })
+    ).toBeVisible()
 
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByRole("radio", { name: /All chapters/i })).toBeVisible()

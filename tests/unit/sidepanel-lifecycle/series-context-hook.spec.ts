@@ -11,10 +11,8 @@ import {
   SESSION_STORAGE_KEYS,
 } from "@/src/runtime/storage-keys"
 
-const { send } = vi.hoisted(() => ({ send: vi.fn() }))
-vi.mock("@/src/runtime/send-runtime-message", () => ({
-  sendRuntimeMessage: send,
-}))
+const send = vi.fn()
+const readSession = vi.fn()
 
 function event<T extends unknown[]>() {
   const listeners = new Set<(...args: T) => void>()
@@ -96,6 +94,9 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   storedContext = readyContext()
   query.mockReset().mockResolvedValue([tab])
+  readSession.mockReset().mockImplementation(async () => ({
+    [SESSION_STORAGE_KEYS.activeTabContextByWindow]: storedContext,
+  }))
   send
     .mockReset()
     .mockImplementation(async (message) =>
@@ -104,6 +105,7 @@ beforeEach(() => {
         : { success: true }
     )
   vi.stubGlobal("chrome", {
+    runtime: { sendMessage: send },
     windows: { getCurrent: vi.fn(async () => ({ id: 2 })) },
     tabs: {
       getCurrent: vi.fn(async () => ({ windowId: 2 })),
@@ -113,9 +115,7 @@ beforeEach(() => {
     },
     storage: {
       session: {
-        get: vi.fn(async () => ({
-          [SESSION_STORAGE_KEYS.activeTabContextByWindow]: storedContext,
-        })),
+        get: readSession,
       },
       onChanged: changed,
     },
@@ -243,3 +243,82 @@ it("rejects a superseded window query and listens only to relevant tab updates",
   )
   expect(query).toHaveBeenCalledTimes(3)
 })
+
+it.each(["active tab", "session context"] as const)(
+  "keeps the series loading until the independently delayed %s read finishes",
+  async (delayedRead) => {
+    const pendingTab = Promise.withResolvers<(typeof tab)[]>()
+    const pendingSession = Promise.withResolvers<Record<string, unknown>>()
+    if (delayedRead === "active tab") query.mockReturnValue(pendingTab.promise)
+    else readSession.mockReturnValue(pendingSession.promise)
+    await act(async () => root.render(createElement(View)))
+    expect(state.windowId).toBe(2)
+    if (delayedRead === "active tab") {
+      expect(state.tabId).toBeUndefined()
+      expect(state.mangaTitle).toBe("Series")
+    } else {
+      expect(state.tabId).toBe(7)
+      expect(state.mangaState).toBeUndefined()
+    }
+    expect(state.isLoading).toBe(true)
+    expect(state.retrySeriesContext).toBeUndefined()
+    await act(async () => {
+      pendingTab.resolve([tab])
+      pendingSession.resolve({
+        [SESSION_STORAGE_KEYS.activeTabContextByWindow]: readyContext(),
+      })
+    })
+    expect(state).toMatchObject({
+      windowId: 2,
+      tabId: 7,
+      seriesRevision: 3,
+      seriesId: "series",
+      isLoading: false,
+    })
+  }
+)
+
+it.each([
+  {
+    identity: "another provider",
+    record: {
+      ...savedChapter,
+      siteIntegrationId: "mangaplus",
+      url: "https://mangaplus.shueisha.co.jp/viewer/1000001",
+    },
+  },
+  {
+    identity: "another series",
+    record: {
+      ...savedChapter,
+      seriesId: "other-series",
+      seriesTitle: "Other series",
+    },
+  },
+])(
+  "does not inherit a saved result from $identity sharing the chapter ID",
+  async ({ record }) => {
+    send.mockImplementation(async (message) =>
+      message.type === "GET_SIDEPANEL_DOWNLOAD_STATE"
+        ? { success: true, data: { downloadedChapters: [record] } }
+        : { success: true }
+    )
+    await act(async () => root.render(createElement(View)))
+    const first = state.items[0]
+    expect(first).toMatchObject({ id: "chapter", downloaded: false })
+    if ("chapters" in first) throw new Error("Expected standalone chapter")
+    expect(first.outputDestination).toBeUndefined()
+    expect(first.saveConfirmedAt).toBeUndefined()
+    send.mockResolvedValueOnce({
+      success: true,
+      data: { downloadedChapters: [savedChapter] },
+    })
+    await act(async () => changeHistory())
+    expect(state.items[0]).toMatchObject({
+      id: "chapter",
+      downloaded: true,
+      outputDestination: "downloads-api",
+      saveConfirmedAt: 10,
+    })
+  }
+)

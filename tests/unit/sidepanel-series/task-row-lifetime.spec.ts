@@ -157,6 +157,40 @@ describe("task row progress lifetime", () => {
     advance(1000)
   })
 
+  it("retains a single-chapter row safely when its live projection clears", () => {
+    const single = {
+      ...task,
+      chapters: { total: 1, completed: 0, unsuccessful: 0 },
+    }
+    render({
+      task: single,
+      activeTaskProgress: {
+        ...progress,
+        overallFraction: 0.5,
+        chapterTitle: "Only chapter",
+        activeChapters: [
+          {
+            chapterId: "chapter",
+            imagesProcessed: 5,
+            totalImages: 10,
+            stage: "downloading",
+            phaseFraction: 0.5,
+            updatedAt: 1,
+          },
+        ],
+      },
+    })
+    expectProgress(true)
+    advance(100)
+    expect(() =>
+      render({ task: single, activeTaskProgress: null })
+    ).not.toThrow()
+    expectProgress(true)
+    expect(container.textContent).toContain("1/1")
+    advance(500)
+    expectProgress(false)
+  })
+
   it("retains action focus when the row receives another live progress revision", () => {
     const onCancelTask = vi.fn()
     render({ onCancelTask })

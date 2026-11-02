@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest"
+// @vitest-environment happy-dom
+
+import { act, createElement } from "react"
+import { createRoot } from "react-dom/client"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   normalizeHistoryView,
   normalizeQueueProjection,
   normalizeQueueView,
+  useQueueView,
 } from "@/entrypoints/sidepanel/hooks/useQueueView"
 
 function makeQueueTask(
@@ -177,4 +182,73 @@ describe("useQueueView normalizeQueueView", () => {
     expect(projection.queueView.map((task) => task.id)).toEqual(["task-2"])
     expect(projection.historyView).toEqual([])
   })
+})
+
+it("publishes active and queued task collections after the shared projection hydrates", async () => {
+  const pending = Promise.withResolvers<Record<string, unknown>>()
+  const listeners = new Set<
+    Parameters<typeof chrome.storage.onChanged.addListener>[0]
+  >()
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
+  vi.stubGlobal("chrome", {
+    storage: {
+      session: { get: () => pending.promise },
+      onChanged: {
+        addListener: (
+          listener: Parameters<typeof chrome.storage.onChanged.addListener>[0]
+        ) => listeners.add(listener),
+        removeListener: (
+          listener: Parameters<typeof chrome.storage.onChanged.addListener>[0]
+        ) => listeners.delete(listener),
+      },
+    },
+  })
+  const container = document.createElement("div")
+  const root = createRoot(container)
+  let state!: ReturnType<typeof useQueueView>
+  function View() {
+    state = useQueueView()
+    return createElement("output", null, state.status)
+  }
+  try {
+    await act(async () => root.render(createElement(View)))
+    expect(state.isLoading).toBe(true)
+    expect(state.queueView).toEqual([])
+    await act(async () =>
+      pending.resolve({
+        queueView: [
+          {
+            ...makeQueueTask("active", "downloading", "Active"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+          {
+            ...makeQueueTask("next", "queued", "Next"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+          {
+            ...makeQueueTask("later", "queued", "Later"),
+            chapters: { total: 3, completed: 0, unsuccessful: 0 },
+          },
+        ],
+        historyView: [
+          {
+            ...makeQueueTask("finished", "completed", "Finished"),
+            chapters: { total: 3, completed: 3, unsuccessful: 0 },
+            timestamps: { created: 1, completed: 2 },
+          },
+        ],
+      })
+    )
+    expect(state.isLoading).toBe(false)
+    expect(state.status).toBe("ready")
+    expect(state.activeTasks.map((task) => task.id)).toEqual(["active"])
+    expect(state.queuedTasks.map((task) => task.id)).toEqual(["next", "later"])
+    expect(state.activeCount).toBe(1)
+    expect(state.queuedCount).toBe(2)
+    expect(state.historyTasks.map((task) => task.id)).toEqual(["finished"])
+  } finally {
+    act(() => root.unmount())
+    vi.unstubAllGlobals()
+  }
+  expect(listeners.size).toBe(0)
 })

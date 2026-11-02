@@ -55,6 +55,72 @@ describe("sidepanel window resolution", () => {
 })
 
 describe("sidepanel series-context recovery coordinator", () => {
+  it("coalesces explicit retry commands while the current request is pending", async () => {
+    const response = Promise.withResolvers<{ success: true }>()
+    const requestRefresh = vi.fn(() => response.promise)
+    const coordinator = createSeriesContextRecoveryCoordinator({
+      requestRefresh,
+    })
+    const failed = {
+      ...observation,
+      sourceUrl: "https://mangadex.org/title/series-1",
+      activeTabContext: {
+        kind: "error" as const,
+        error: "Provider unavailable",
+      },
+    }
+    const first = coordinator.retry(failed)
+    const duplicate = coordinator.retry(failed)
+    try {
+      expect(requestRefresh).toHaveBeenCalledExactlyOnceWith({
+        tabId: 7,
+        windowId: 2,
+        reason: "sidepanel-retry",
+      })
+    } finally {
+      response.resolve({ success: true })
+      await Promise.all([first, duplicate])
+    }
+    await coordinator.retry(failed)
+    expect(requestRefresh).toHaveBeenCalledTimes(2)
+  })
+
+  it("waits for another explicit retry after an error passes through loading to a different error", async () => {
+    const requestRefresh = vi.fn(async () => ({ success: true as const }))
+    const coordinator = createSeriesContextRecoveryCoordinator({
+      requestRefresh,
+    })
+    await coordinator.retry({
+      ...observation,
+      sourceUrl: "https://mangadex.org/title/series-1",
+      activeTabContext: { kind: "error", error: "Provider unavailable" },
+    })
+    await coordinator.recoverIfNeeded({
+      ...observation,
+      sourceUrl: "https://mangadex.org/title/series-1",
+      activeTabContext: { kind: "loading" },
+    })
+    const failedAgain = {
+      ...observation,
+      sourceUrl: "https://mangadex.org/title/series-1",
+      activeTabContext: {
+        kind: "error" as const,
+        error: "Upstream access failed",
+      },
+    }
+    await coordinator.recoverIfNeeded(failedAgain)
+    expect(requestRefresh).toHaveBeenCalledTimes(1)
+    await coordinator.retry(failedAgain)
+    expect(requestRefresh).toHaveBeenCalledTimes(2)
+    expect(requestRefresh).toHaveBeenLastCalledWith({
+      tabId: 7,
+      windowId: 2,
+      reason: "sidepanel-retry",
+    })
+    await coordinator.recoverIfNeeded(failedAgain)
+    expect(requestRefresh).toHaveBeenCalledTimes(2)
+  })
+
   it("recovers cached ready state that has no authoritative revision", async () => {
     const requestRefresh = vi.fn(async () => ({ success: true as const }))
     const coordinator = createSeriesContextRecoveryCoordinator({

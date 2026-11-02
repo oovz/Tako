@@ -154,3 +154,148 @@ it("does not reconnect when disconnected-port recovery settles after unmount", a
   expect(connect).toHaveBeenCalledTimes(1)
   expect(get).toHaveBeenCalledTimes(readsBeforeDisconnect + 1)
 })
+
+it("waits for progress data when generation and revision hydrate first", async () => {
+  const data = Promise.withResolvers<Record<string, unknown>>()
+  const revision = Promise.withResolvers<Record<string, unknown>>()
+  const generation = Promise.withResolvers<Record<string, unknown>>()
+  get.mockImplementation((key: string) => {
+    if (key === keys.activeTaskProgress) return data.promise
+    if (key === keys.activeTaskProgressRevision) return revision.promise
+    return generation.promise
+  })
+  await act(async () => root.render(createElement(View)))
+  await act(async () =>
+    revision.resolve({ [keys.activeTaskProgressRevision]: 5 })
+  )
+  expect(state.hydrated).toBe(false)
+  expect(connect).not.toHaveBeenCalled()
+  await act(async () =>
+    generation.resolve({ [keys.activeTaskProgressGeneration]: "worker-1" })
+  )
+  expect(state.hydrated).toBe(false)
+  expect(state.progress).toBeNull()
+  expect(connect).not.toHaveBeenCalled()
+
+  await act(async () =>
+    data.resolve({ [keys.activeTaskProgress]: progress("worker-1", 5) })
+  )
+  expect(state.hydrated).toBe(true)
+  expect(state.progress?.taskId).toBe("worker-1:5")
+  expect(connect).toHaveBeenCalledTimes(1)
+  await act(async () =>
+    first.onMessage.emit(message("worker-1", 6, progress("worker-1", 6)))
+  )
+  expect(state.progress?.taskId).toBe("worker-1:6")
+})
+
+it("recovers coherent progress and a later cleared projection after external disconnects", async () => {
+  await act(async () => root.render(createElement(View)))
+  const pending = Promise.withResolvers<Record<string, unknown>>()
+  get.mockReturnValueOnce(pending.promise)
+  await act(async () => first.onDisconnect.emit())
+  expect(state.progress?.taskId).toBe("worker-1:5")
+
+  stored = snapshot("worker-2", 1)
+  await act(async () => pending.resolve(stored))
+  expect(state.progress?.taskId).toBe("worker-2:1")
+  await act(async () => vi.advanceTimersByTimeAsync(250))
+  expect(connect).toHaveBeenCalledTimes(2)
+
+  const cleared = Promise.withResolvers<Record<string, unknown>>()
+  get.mockReturnValueOnce(cleared.promise)
+  await act(async () => second.onDisconnect.emit())
+  expect(state.progress?.taskId).toBe("worker-2:1")
+  await act(async () =>
+    cleared.resolve({
+      [keys.activeTaskProgress]: null,
+      [keys.activeTaskProgressGeneration]: "worker-2",
+      [keys.activeTaskProgressRevision]: 2,
+    })
+  )
+  expect(state.hydrated).toBe(true)
+  expect(state.progress).toBeNull()
+})
+
+it.each([
+  {
+    mismatch: "generation",
+    data: progress("worker-3", 10),
+  },
+  {
+    mismatch: "revision",
+    data: progress("worker-2", 9),
+  },
+])(
+  "retains current progress when recovery has a mismatched $mismatch",
+  async ({ data }) => {
+    await act(async () => root.render(createElement(View)))
+    const pending = Promise.withResolvers<Record<string, unknown>>()
+    get.mockReturnValueOnce(pending.promise)
+    await act(async () => first.onDisconnect.emit())
+    await act(async () =>
+      pending.resolve({
+        [keys.activeTaskProgress]: data,
+        [keys.activeTaskProgressGeneration]: "worker-2",
+        [keys.activeTaskProgressRevision]: 10,
+      })
+    )
+    expect(state.progress?.taskId).toBe("worker-1:5")
+  }
+)
+
+it.each([
+  { missing: "generation", key: keys.activeTaskProgressGeneration },
+  { missing: "revision", key: keys.activeTaskProgressRevision },
+])(
+  "retains current progress when a cleared recovery lacks its $missing",
+  async ({ key }) => {
+    await act(async () => root.render(createElement(View)))
+    const pending = Promise.withResolvers<Record<string, unknown>>()
+    get.mockReturnValueOnce(pending.promise)
+    await act(async () => first.onDisconnect.emit())
+    const incomplete: Record<string, unknown> = {
+      [keys.activeTaskProgress]: null,
+      [keys.activeTaskProgressGeneration]: "worker-2",
+      [keys.activeTaskProgressRevision]: 1,
+    }
+    delete incomplete[key]
+    await act(async () => pending.resolve(incomplete))
+    expect(state.progress?.taskId).toBe("worker-1:5")
+  }
+)
+
+it("preserves live progress while older per-key storage reads settle and recovers after disconnect", async () => {
+  await act(async () => root.render(createElement(View)))
+  const data = Promise.withResolvers<Record<string, unknown>>()
+  const revision = Promise.withResolvers<Record<string, unknown>>()
+  const generation = Promise.withResolvers<Record<string, unknown>>()
+  get.mockImplementation((key: string) => {
+    if (key === keys.activeTaskProgress) return data.promise
+    if (key === keys.activeTaskProgressRevision) return revision.promise
+    return generation.promise
+  })
+  await act(async () => {
+    changes.emit(
+      {
+        [keys.activeTaskProgress]: { newValue: progress("worker-1", 6) },
+        [keys.activeTaskProgressGeneration]: { newValue: "worker-1" },
+        [keys.activeTaskProgressRevision]: { newValue: 6 },
+      },
+      "session"
+    )
+    first.onMessage.emit(message("worker-2", 1, progress("worker-2", 1)))
+  })
+  expect(state.progress?.taskId).toBe("worker-2:1")
+  await act(async () => {
+    revision.resolve({ [keys.activeTaskProgressRevision]: 6 })
+    generation.resolve({ [keys.activeTaskProgressGeneration]: "worker-1" })
+    data.resolve({ [keys.activeTaskProgress]: progress("worker-1", 6) })
+  })
+  expect(state.progress?.taskId).toBe("worker-2:1")
+
+  stored = snapshot("worker-3", 1)
+  get.mockImplementation(async () => stored)
+  await act(async () => first.onDisconnect.emit())
+  expect(state.progress?.taskId).toBe("worker-3:1")
+})
