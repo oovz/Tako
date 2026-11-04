@@ -6,7 +6,7 @@
 
 [English](Home) · [日本語](Home.ja) · [简体中文](Home.zh-CN) · [繁體中文](Home.zh-TW) · [한국어](Home.ko)
 
-Tako saves manga chapters from supported sites for offline reading. Open it beside your reading tab, choose chapters, and save them as CBZ, ZIP, or individual images.
+Queue batches of manga chapters from different series in Chrome’s side panel and keep browsing while Tako saves them. Read offline with CBZ, ZIP, or individual images.
 
 **[Download your first chapter →](Quick-Start)**
 

@@ -8,27 +8,27 @@
 
 ## 対応サイト一覧
 
-| サイト                                                     | 開くページ                                                    | 初期状態で利用可能     |
-| ---------------------------------------------------------- | ------------------------------------------------------------- | ---------------------- |
-| [MangaDex](https://mangadex.org)                           | 漫画の作品ページ                                              | オプションで有効にする |
-| [pixivコミック](https://comic.pixiv.net)                   | 作品ページ                                                    | はい                   |
-| [少年ジャンプ＋](https://shonenjumpplus.com)               | エピソードページ                                              | はい                   |
-| [Manhuagui（看漫画）](https://www.manhuagui.com)           | 漫画の詳細ページ                                              | はい                   |
-| [COMIC熱帯](https://www.comicnettai.com)                   | 書籍ページ                                                    | はい                   |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)       | 作品ページ                                                    | はい                   |
-| [BoyLove（香香腐宅）](https://boylove.cc)                  | `/home/book/index/id/{id}` の書籍詳細                         | はい                   |
-| [Mangago](https://www.mangago.me)                          | `/read-manga/{series}/` の作品ページ                          | はい                   |
-| [MangaNato](https://manganato.gg)                          | `/manga/{series}` の作品ページ                                | はい                   |
-| [MangaKakalot](https://mangakakalove.com)                  | `/manga/{series}` の作品ページ                                | はい                   |
-| [Coolmic](https://coolmic.me)                              | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) | `/titles/{id}` のウェブ版作品ページ                           | はい                   |
-| [Anime Manga House（动漫屋）](https://www.dm5.com)         | `/manhua-{series}/` の作品ページ                              | はい                   |
-| [Manga Again（再漫画）](https://www.zaimanhua.com)         | `/info/{series}.html` の漫画詳細または `/view/...` のリーダー | はい                   |
-| [CopyManga（拷貝漫畫）](https://www.copy3000.com)          | `/comic/{series}` の作品ページ                                | はい                   |
-| [MYCOMIC](https://mycomic.com)                             | `/comics/{id}` または `/cn/comics/{id}` の作品ページ          | はい                   |
-| [Māngabz](https://www.mangabz.com)                         | `/{id}bz/` の作品ページ                                       | はい                   |
-| [MangaHere](https://newm.mangahere.cc)                     | `/manga/{series}/` の作品ページ                               | はい                   |
-| [Love Manga（爱漫画）](https://www.aimanhua.org)           | `/comic/{id}` の漫画詳細                                      | はい                   |
+| サイト                      | 開くページ             | 初期状態で利用可能     |
+| --------------------------- | ---------------------- | ---------------------- |
+| MangaDex                    | 漫画の作品ページ       | オプションで有効にする |
+| pixivコミック               | 作品ページ             | はい                   |
+| 少年ジャンプ＋              | エピソードページ       | はい                   |
+| Manhuagui（看漫画）         | 漫画の詳細ページ       | はい                   |
+| COMIC熱帯                   | 書籍ページ             | はい                   |
+| MANGA MILLION               | 作品ページ             | はい                   |
+| BoyLove（香香腐宅）         | 書籍詳細               | はい                   |
+| Mangago                     | 作品ページ             | はい                   |
+| MangaNato                   | 作品ページ             | はい                   |
+| MangaKakalot                | 作品ページ             | はい                   |
+| Coolmic                     | ウェブ版の作品ページ   | はい                   |
+| MANGA Plus by SHUEISHA      | ウェブ版の作品ページ   | はい                   |
+| Anime Manga House（动漫屋） | 作品ページ             | はい                   |
+| Manga Again（再漫画）       | 漫画詳細またはリーダー | はい                   |
+| CopyManga（拷貝漫畫）       | 作品ページ             | はい                   |
+| MYCOMIC                     | 作品ページ             | はい                   |
+| Māngabz                     | 作品ページ             | はい                   |
+| MangaHere                   | 作品ページ             | はい                   |
+| Love Manga（爱漫画）        | 漫画詳細               | はい                   |
 
 ## ドメインとエピソード履歴
 

@@ -6,27 +6,27 @@ Open the page listed for your site, then click the Tako icon to choose chapters.
 
 ## Sites
 
-| Site                                                        | Page to open                                                    | Available by default |
-| ----------------------------------------------------------- | --------------------------------------------------------------- | -------------------- |
-| [MangaDex](https://mangadex.org)                            | Manga title page                                                | Enable in Options    |
-| [pixiv Comic (pixivコミック)](https://comic.pixiv.net)      | Work page                                                       | Yes                  |
-| [Shonen Jump+ (少年ジャンプ＋)](https://shonenjumpplus.com) | Episode page                                                    | Yes                  |
-| [Manhuagui (看漫画)](https://www.manhuagui.com)             | Comic details page                                              | Yes                  |
-| [Comic Nettai (COMIC熱帯)](https://www.comicnettai.com)     | Book page                                                       | Yes                  |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)        | Title page                                                      | Yes                  |
-| [BoyLove (香香腐宅)](https://boylove.cc)                    | Book details at `/home/book/index/id/{id}`                      | Yes                  |
-| [Mangago](https://www.mangago.me)                           | Series at `/read-manga/{series}/`                               | Yes                  |
-| [MangaNato](https://manganato.gg)                           | Series at `/manga/{series}`                                     | Yes                  |
-| [MangaKakalot](https://mangakakalove.com)                   | Series at `/manga/{series}`                                     | Yes                  |
-| [Coolmic](https://coolmic.me)                               | Website title at `/titles/{id}`                                 | Yes                  |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp)  | Website title at `/titles/{id}`                                 | Yes                  |
-| [Anime Manga House (动漫屋)](https://www.dm5.com)           | Series at `/manhua-{series}/`                                   | Yes                  |
-| [Manga Again (再漫画)](https://www.zaimanhua.com)           | Comic details at `/info/{series}.html` or reader at `/view/...` | Yes                  |
-| [CopyManga (拷貝漫畫)](https://www.copy3000.com)            | Series at `/comic/{series}`                                     | Yes                  |
-| [MYCOMIC](https://mycomic.com)                              | Series at `/comics/{id}` or `/cn/comics/{id}`                   | Yes                  |
-| [Māngabz](https://www.mangabz.com)                          | Series at `/{id}bz/`                                            | Yes                  |
-| [MangaHere](https://newm.mangahere.cc)                      | Series at `/manga/{series}/`                                    | Yes                  |
-| [Love Manga (爱漫画)](https://www.aimanhua.org)             | Comic details at `/comic/{id}`                                  | Yes                  |
+| Site                          | Page to open            | Available by default |
+| ----------------------------- | ----------------------- | -------------------- |
+| MangaDex                      | Manga title page        | Enable in Options    |
+| pixiv Comic (pixivコミック)   | Work page               | Yes                  |
+| Shonen Jump+ (少年ジャンプ＋) | Episode page            | Yes                  |
+| Manhuagui (看漫画)            | Comic details page      | Yes                  |
+| Comic Nettai (COMIC熱帯)      | Book page               | Yes                  |
+| MANGA MILLION                 | Title page              | Yes                  |
+| BoyLove (香香腐宅)            | Book details            | Yes                  |
+| Mangago                       | Series page             | Yes                  |
+| MangaNato                     | Series page             | Yes                  |
+| MangaKakalot                  | Series page             | Yes                  |
+| Coolmic                       | Website title page      | Yes                  |
+| MANGA Plus by SHUEISHA        | Website title page      | Yes                  |
+| Anime Manga House (动漫屋)    | Series page             | Yes                  |
+| Manga Again (再漫画)          | Comic details or reader | Yes                  |
+| CopyManga (拷貝漫畫)          | Series page             | Yes                  |
+| MYCOMIC                       | Series page             | Yes                  |
+| Māngabz                       | Series page             | Yes                  |
+| MangaHere                     | Series page             | Yes                  |
+| Love Manga (爱漫画)           | Comic details           | Yes                  |
 
 ## Domains and chapter history
 

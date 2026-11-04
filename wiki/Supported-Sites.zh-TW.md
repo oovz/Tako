@@ -8,27 +8,27 @@
 
 ## 網站清單
 
-| 網站                                                         | 應開啟的頁面                                               | 預設可用     |
-| ------------------------------------------------------------ | ---------------------------------------------------------- | ------------ |
-| [MangaDex](https://mangadex.org)                             | 漫畫作品頁                                                 | 在選項中啟用 |
-| [pixiv Comic（pixivコミック）](https://comic.pixiv.net)      | 作品頁                                                     | 是           |
-| [Shonen Jump+（少年ジャンプ＋）](https://shonenjumpplus.com) | 單篇頁面                                                   | 是           |
-| [Manhuagui（看漫画）](https://www.manhuagui.com)             | 漫畫詳細資料頁                                             | 是           |
-| [Comic Nettai（COMIC熱帯）](https://www.comicnettai.com)     | 書籍頁                                                     | 是           |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)         | 作品頁                                                     | 是           |
-| [BoyLove（香香腐宅）](https://boylove.cc)                    | 書籍詳細資料：`/home/book/index/id/{id}`                   | 是           |
-| [Mangago](https://www.mangago.me)                            | 作品：`/read-manga/{series}/`                              | 是           |
-| [MangaNato](https://manganato.gg)                            | 作品：`/manga/{series}`                                    | 是           |
-| [MangaKakalot](https://mangakakalove.com)                    | 作品：`/manga/{series}`                                    | 是           |
-| [Coolmic](https://coolmic.me)                                | 網頁版作品：`/titles/{id}`                                 | 是           |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp)   | 網頁版作品：`/titles/{id}`                                 | 是           |
-| [Anime Manga House（动漫屋）](https://www.dm5.com)           | 作品：`/manhua-{series}/`                                  | 是           |
-| [Manga Again（再漫画）](https://www.zaimanhua.com)           | 漫畫詳細資料：`/info/{series}.html`，或閱讀器：`/view/...` | 是           |
-| [CopyManga（拷貝漫畫）](https://www.copy3000.com)            | 作品：`/comic/{series}`                                    | 是           |
-| [MYCOMIC](https://mycomic.com)                               | 作品：`/comics/{id}` 或 `/cn/comics/{id}`                  | 是           |
-| [Māngabz](https://www.mangabz.com)                           | 作品：`/{id}bz/`                                           | 是           |
-| [MangaHere](https://newm.mangahere.cc)                       | 作品：`/manga/{series}/`                                   | 是           |
-| [Love Manga（爱漫画）](https://www.aimanhua.org)             | 漫畫詳細資料：`/comic/{id}`                                | 是           |
+| 網站                           | 應開啟的頁面       | 預設可用     |
+| ------------------------------ | ------------------ | ------------ |
+| MangaDex                       | 漫畫作品頁         | 在選項中啟用 |
+| pixiv Comic（pixivコミック）   | 作品頁             | 是           |
+| Shonen Jump+（少年ジャンプ＋） | 單篇頁面           | 是           |
+| Manhuagui（看漫画）            | 漫畫詳細資料頁     | 是           |
+| Comic Nettai（COMIC熱帯）      | 書籍頁             | 是           |
+| MANGA MILLION                  | 作品頁             | 是           |
+| BoyLove（香香腐宅）            | 書籍詳情頁         | 是           |
+| Mangago                        | 作品頁             | 是           |
+| MangaNato                      | 作品頁             | 是           |
+| MangaKakalot                   | 作品頁             | 是           |
+| Coolmic                        | 網頁版作品頁       | 是           |
+| MANGA Plus by SHUEISHA         | 網頁版作品頁       | 是           |
+| Anime Manga House（动漫屋）    | 作品頁             | 是           |
+| Manga Again（再漫画）          | 漫畫詳情頁或閱讀頁 | 是           |
+| CopyManga（拷貝漫畫）          | 作品頁             | 是           |
+| MYCOMIC                        | 作品頁             | 是           |
+| Māngabz                        | 作品頁             | 是           |
+| MangaHere                      | 作品頁             | 是           |
+| Love Manga（爱漫画）           | 漫畫詳情頁         | 是           |
 
 ## 網域與章節歷史
 

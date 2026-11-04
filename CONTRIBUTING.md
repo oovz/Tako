@@ -1,23 +1,23 @@
 # Contributing to Tako
 
-Set up Tako locally, test your changes, and open a pull request.
+You can help Tako by fixing a download problem, adding support for a site, or improving a guide or translation. For a bug or site request, start with the [issue forms](https://github.com/oovz/Tako/issues/new/choose).
 
 ## Quick setup
 
-Use the Node.js version selected by `.node-version` and the pnpm version listed in `package.json`. Other supported Node.js versions are listed in `package.json` under `engines`.
+Clone the repository and run these commands from its root. Use the Node.js version in [`.node-version`](.node-version) and the pnpm version in [`package.json`](package.json). You need Chrome 150 or later to load the build.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
 ```
 
-Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select `.output/chrome-mv3`. Tako requires Chrome 150 or newer.
+In Chrome, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and select `.output/chrome-mv3`. Pin Tako and click its icon on a [supported page](https://github.com/oovz/Tako/wiki/Supported-Sites) to open the side panel.
 
 ## Development workflow
 
 Run `pnpm dev` to start the development build. Use `pnpm build` for a production build or `pnpm zip` to create a release archive.
 
-Before opening a pull request, run:
+For a code change, run these checks before opening a pull request:
 
 ```sh
 pnpm lint
@@ -28,7 +28,7 @@ pnpm test:integration
 pnpm build
 ```
 
-Lint includes generated site-integration and module-boundary checks. Run the relevant browser tests for changes to downloads, settings, site integrations, or other visible behavior.
+Lint includes generated site-integration and module-boundary checks. Run the relevant browser tests for changes to downloads, settings, site integrations, or other visible behavior. For a prose or translation change, check formatting and follow any links or steps you changed.
 
 ## Code style
 
@@ -38,12 +38,12 @@ To add a site, run `pnpm new:site-integration <id>` and follow the [Site Integra
 
 ## Testing
 
-| Suite       | Command                 | What it checks                                                            |
-| ----------- | ----------------------- | ------------------------------------------------------------------------- |
-| Unit        | `pnpm test:unit`        | Individual functions and components                                       |
-| Integration | `pnpm test:integration` | Modules working together with controlled browser and network interfaces   |
-| E2E         | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                 |
-| Live E2E    | `pnpm test:live`        | The built extension against real sites; run when site access is available |
+| Suite       | Command                 | What it checks                                                                |
+| ----------- | ----------------------- | ----------------------------------------------------------------------------- |
+| Unit        | `pnpm test:unit`        | Individual functions and components                                           |
+| Integration | `pnpm test:integration` | Modules working together with controlled browser and network interfaces       |
+| E2E         | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                     |
+| Live E2E    | `pnpm test:live`        | The built extension against real sites; run for an intentional provider check |
 
 Use `pnpm test:coverage` for unit and integration coverage. Use `pnpm coverage:all` to collect compatible native and browser profiles and generate the combined report. Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
@@ -86,4 +86,4 @@ Live checks download a chapter and verify the saved archive, metadata and images
 
 ## Documentation
 
-Reader and contributor guides live in the [wiki](https://github.com/oovz/Tako/wiki). Update the corresponding files in `wiki/` when behavior changes, keeping translated pages aligned. Keep product instructions direct and focused on what readers need to do.
+Edit reader and developer guides in [`wiki/`](wiki/), then send those changes in a pull request. The wiki publishes from `main`. Keep the five language versions aligned and use the labels readers see in the extension. When you change a screenshot or store description, update the corresponding locale in the [store assets](assets/store/).

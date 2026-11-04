@@ -6,6 +6,8 @@
 
 ## 安裝 Tako
 
+部分支援網站含有年齡限制的內容。如果 Chrome 線上應用程式商店將 Tako 標為成人內容，請登入符合年齡要求的 Google 帳戶再安裝。
+
 1. 使用 Chrome 150 或更新版本，開啟 [Chrome 線上應用程式商店的 Tako 頁面](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)。
 2. 點選「加到 Chrome」。
 3. 開啟 Chrome 擴充功能選單並固定 Tako，方便找到它的圖示。
@@ -56,7 +58,7 @@ Tako 預設透過 Chrome 下載功能儲存 CBZ 檔案。你可以使用相容�
 
 ## 管理下載
 
-Tako 每次處理一個章節。處理期間仍可將更多章節加入佇列。儲存期間請保持 Chrome 執行。
+若要再加一批，開啟另一部作品，或在目前的作品多選幾個章節，再點選「下載」。Tako 依佇列逐章處理。下載時請保持 Chrome 執行。
 
 - 使用「重試失敗章節」，再次嘗試任務中未完成的部分。僅儲存部分內容的章節會從頭開始。
 - 使用「重新開始任務」，再次下載該任務的所有章節。

@@ -6,49 +6,74 @@
 
 **Manga downloads, right in your browser.**
 
-Select chapters, queue downloads, and track progress from Chrome’s side panel. Keep browsing while Tako handles the downloads.
+Queue chapters from Chrome’s side panel and keep browsing while they download.
 
-[**Add Tako to Chrome**](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb) · [Quick start](https://github.com/oovz/Tako/wiki/Quick-Start)
+<a href="https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb"><img src="https://developer.chrome.com/static/docs/webstore/branding/image/iNEddTyWiMfLSwFD6qGq.png" alt="Add Tako to Chrome" width="206" /></a>
+
+[![GitHub release](https://img.shields.io/github/v/release/oovz/Tako?style=flat-square)](https://github.com/oovz/Tako/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/oovz/Tako/ci.yml?branch=main&style=flat-square)](https://github.com/oovz/Tako/actions/workflows/ci.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
+[Quick start](https://github.com/oovz/Tako/wiki/Quick-Start)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
+
+<img src="assets/store/en/screenshot-01-selection-1280x800.png" alt="Tako side panel with three chapters selected on a demo series" width="700" />
 
 </div>
 
 ## Keep the chapters you want to read
 
-Choose a few chapters or queue a whole selection while you browse. Tako shows download progress beside your reading tab and lets you retry chapters that fail.
+Queue batches of chapters from different series in Chrome’s side panel. Keep browsing while Tako saves them to your library for offline reading.
 
-- **Read in your favorite app.** Save CBZ or ZIP files, or keep the individual images. CBZ files can include chapter details and cover art for your comic reader.
-- **Build an organized library.** Choose a folder and customize how series and chapters are named.
-- **Track your downloads.** Check saved chapters and download results. Clear old tasks without losing chapter history, or clear each separately.
+- 📚 **Read in your favorite app.** Save CBZ or ZIP files, or keep the individual images. CBZ files can include chapter details and cover art for your comic reader.
+- 📁 **Organize your library automatically.** Set folder and filename templates so Tako sorts chapters into series folders and names the files as it saves them.
+- 🔄 **Track your downloads.** Follow the queue, retry unfinished chapters, and check your history to see what’s ready to read.
 
 ## Start with a series you enjoy
 
-1. [Install Tako from the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb). Use Chrome 150 or later.
+1. [Install Tako from the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
 2. Open a series or chapter on a supported site and click the Tako icon.
 3. Select your chapters in the side panel, then click **Download**.
 
-Tako saves CBZ files through Chrome Downloads by default. Open **Options → Storage & Files** to choose another format or a library folder.
+Tako saves chapters as CBZ files by default. For other formats and naming options, open **Options → Storage & Files**.
 
 ## Supported sites
 
-[pixiv Comic (pixivコミック)](https://comic.pixiv.net) · [Shonen Jump+ (少年ジャンプ＋)](https://shonenjumpplus.com) · [Manhuagui (看漫画)](https://www.manhuagui.com) · [Comic Nettai (COMIC熱帯)](https://www.comicnettai.com) · [MANGA MILLION](https://mangamillion.shueisha.co.jp) · [MangaDex](https://mangadex.org)
+Check the [supported sites guide](https://github.com/oovz/Tako/wiki/Supported-Sites) to see which page to open and whether you need to enable the site in Options.
 
-Also supported: [BoyLove (香香腐宅)](https://boylove.cc) · [Mangago](https://www.mangago.me) · [MangaNato](https://manganato.gg) · [MangaKakalot](https://mangakakalove.com) · [Coolmic](https://coolmic.me) · [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp) · [Anime Manga House (动漫屋)](https://www.dm5.com) · [Manga Again (再漫画)](https://www.zaimanhua.com) · [CopyManga (拷貝漫畫)](https://www.copy3000.com) · [MYCOMIC](https://mycomic.com) · [Māngabz](https://www.mangabz.com) · [MangaHere](https://newm.mangahere.cc) · [Love Manga (爱漫画)](https://www.aimanhua.org). Check the [site-specific notes](https://github.com/oovz/Tako/wiki/Supported-Sites) for availability and the page to open.
+<details>
+<summary>See all supported manga sites</summary>
 
-MangaDex is off by default. Enable it in **Options → Site Integrations** and approve Chrome's site-access request. [See site-specific tips](https://github.com/oovz/Tako/wiki/Supported-Sites).
+**Enabled by default**
+
+- pixiv Comic (pixivコミック)
+- Shonen Jump+ (少年ジャンプ＋)
+- Manhuagui (看漫画)
+- Comic Nettai (COMIC熱帯)
+- MANGA MILLION
+- BoyLove (香香腐宅)
+- Mangago
+- MangaNato
+- MangaKakalot
+- Coolmic
+- MANGA Plus by SHUEISHA
+- Anime Manga House (动漫屋)
+- Manga Again (再漫画)
+- CopyManga (拷貝漫畫)
+- MYCOMIC
+- Māngabz
+- MangaHere
+- Love Manga (爱漫画)
+
+**Optional**
+
+MangaDex is off by default. Enable it in **Options → Site Integrations** and approve Chrome’s site access request.
+
+</details>
 
 The interface is available in English, Japanese, Simplified Chinese, Traditional Chinese, and Korean.
 
-## Privacy
-
-Settings, queue state, and download history stay in your browser. Downloads connect directly to supported sites and their image services; enabling MangaDex also enables the delivery reports its service requires. Tako runs without developer analytics or advertising trackers. Read the [privacy policy](PRIVACY.md).
-
-> [!NOTE]
-> Save content you have permission to download. Chapter availability follows the site’s website access, including any account or regional requirements.
-
 ## Help
 
-[First download](https://github.com/oovz/Tako/wiki/Quick-Start) · [Folders and filenames](https://github.com/oovz/Tako/wiki/Template-Macros) · [Download help](https://github.com/oovz/Tako/wiki/Troubleshooting) · [Permissions](https://github.com/oovz/Tako/wiki/Permissions)
+[First download](https://github.com/oovz/Tako/wiki/Quick-Start) · [Folders and filenames](https://github.com/oovz/Tako/wiki/Template-Macros) · [Download help](https://github.com/oovz/Tako/wiki/Troubleshooting) · [Permissions](https://github.com/oovz/Tako/wiki/Permissions) · [privacy policy](PRIVACY.md)
 
 [Report a problem or request a site](https://github.com/oovz/Tako/issues/new/choose). For local installation and development, see the [contributor guide](CONTRIBUTING.md).

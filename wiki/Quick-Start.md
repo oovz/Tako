@@ -4,6 +4,8 @@
 
 ## Install Tako
 
+Some supported sites carry age-restricted content. If the Chrome Web Store lists Tako as mature, sign in with an eligible adult Google Account to install it.
+
 1. Open [Tako on the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb) in Chrome 150 or newer.
 2. Click **Add to Chrome**.
 3. Open Chrome's extensions menu and pin Tako so its icon is easy to find.
@@ -54,7 +56,7 @@ The optional **Use Chrome Downloads if the folder is unavailable** setting appli
 
 ## Manage downloads
 
-Tako processes one chapter at a time. You can add more chapters to the queue while it works. Keep Chrome running while downloads save.
+To queue another batch, open a different series or select more chapters, then click **Download** again. Tako works through the queue one chapter at a time. Keep Chrome running while downloads save.
 
 - Use **Retry failed chapters** to try the unfinished parts of a task again. A partially saved chapter starts again from the beginning.
 - Use **Restart task** to download every chapter in that task again.

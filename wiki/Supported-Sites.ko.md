@@ -8,27 +8,27 @@
 
 ## 사이트 목록
 
-| 사이트                                                      | 열어야 할 페이지                                                 | 기본 사용 여부 |
-| ----------------------------------------------------------- | ---------------------------------------------------------------- | -------------- |
-| [MangaDex](https://mangadex.org)                            | 만화 작품 페이지                                                 | 옵션에서 켜기  |
-| [pixiv Comic (pixivコミック)](https://comic.pixiv.net)      | 작품 페이지                                                      | 켜짐           |
-| [Shonen Jump+ (少年ジャンプ＋)](https://shonenjumpplus.com) | 에피소드 페이지                                                  | 켜짐           |
-| [Manhuagui (看漫画)](https://www.manhuagui.com)             | 만화 상세 페이지                                                 | 켜짐           |
-| [Comic Nettai (COMIC熱帯)](https://www.comicnettai.com)     | 책 페이지                                                        | 켜짐           |
-| [MANGA MILLION](https://mangamillion.shueisha.co.jp)        | 작품 페이지                                                      | 켜짐           |
-| [BoyLove (香香腐宅)](https://boylove.cc)                    | `/home/book/index/id/{id}`의 책 상세 페이지                      | 켜짐           |
-| [Mangago](https://www.mangago.me)                           | `/read-manga/{series}/`의 작품 페이지                            | 켜짐           |
-| [MangaNato](https://manganato.gg)                           | `/manga/{series}`의 작품 페이지                                  | 켜짐           |
-| [MangaKakalot](https://mangakakalove.com)                   | `/manga/{series}`의 작품 페이지                                  | 켜짐           |
-| [Coolmic](https://coolmic.me)                               | `/titles/{id}`의 웹사이트 작품 페이지                            | 켜짐           |
-| [MANGA Plus by SHUEISHA](https://mangaplus.shueisha.co.jp)  | `/titles/{id}`의 웹사이트 작품 페이지                            | 켜짐           |
-| [Anime Manga House (动漫屋)](https://www.dm5.com)           | `/manhua-{series}/`의 작품 페이지                                | 켜짐           |
-| [Manga Again (再漫画)](https://www.zaimanhua.com)           | `/info/{series}.html`의 만화 상세 페이지 또는 `/view/...`의 리더 | 켜짐           |
-| [CopyManga (拷貝漫畫)](https://www.copy3000.com)            | `/comic/{series}`의 작품 페이지                                  | 켜짐           |
-| [MYCOMIC](https://mycomic.com)                              | `/comics/{id}` 또는 `/cn/comics/{id}`의 작품 페이지              | 켜짐           |
-| [Māngabz](https://www.mangabz.com)                          | `/{id}bz/`의 작품 페이지                                         | 켜짐           |
-| [MangaHere](https://newm.mangahere.cc)                      | `/manga/{series}/`의 작품 페이지                                 | 켜짐           |
-| [Love Manga (爱漫画)](https://www.aimanhua.org)             | `/comic/{id}`의 만화 상세 페이지                                 | 켜짐           |
+| 사이트                        | 열어야 할 페이지           | 기본 사용 여부 |
+| ----------------------------- | -------------------------- | -------------- |
+| MangaDex                      | 만화 작품 페이지           | 옵션에서 켜기  |
+| pixiv Comic (pixivコミック)   | 작품 페이지                | 켜짐           |
+| Shonen Jump+ (少年ジャンプ＋) | 에피소드 페이지            | 켜짐           |
+| Manhuagui (看漫画)            | 만화 상세 페이지           | 켜짐           |
+| Comic Nettai (COMIC熱帯)      | 책 페이지                  | 켜짐           |
+| MANGA MILLION                 | 작품 페이지                | 켜짐           |
+| BoyLove (香香腐宅)            | 책 상세 페이지             | 켜짐           |
+| Mangago                       | 작품 페이지                | 켜짐           |
+| MangaNato                     | 작품 페이지                | 켜짐           |
+| MangaKakalot                  | 작품 페이지                | 켜짐           |
+| Coolmic                       | 웹사이트의 작품 페이지     | 켜짐           |
+| MANGA Plus by SHUEISHA        | 웹사이트의 작품 페이지     | 켜짐           |
+| Anime Manga House (动漫屋)    | 작품 페이지                | 켜짐           |
+| Manga Again (再漫画)          | 만화 상세 페이지 또는 뷰어 | 켜짐           |
+| CopyManga (拷貝漫畫)          | 작품 페이지                | 켜짐           |
+| MYCOMIC                       | 작품 페이지                | 켜짐           |
+| Māngabz                       | 작품 페이지                | 켜짐           |
+| MangaHere                     | 작품 페이지                | 켜짐           |
+| Love Manga (爱漫画)           | 만화 상세 페이지           | 켜짐           |
 
 ## 도메인과 챕터 기록
 
