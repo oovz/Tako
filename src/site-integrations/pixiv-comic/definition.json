@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "pixiv-comic",
   "name": "pixivコミック",
-  "englishName": "pixiv Comic",
+  "englishName": "pixiv COMIC",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
   "shipped": true,

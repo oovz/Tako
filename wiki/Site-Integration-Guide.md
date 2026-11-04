@@ -10,6 +10,8 @@ To request a site without writing code, [open a feature request](https://github.
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
+Use the site’s native name for `--name`. For an English-language site, use the same name for `--english-name`. For other sites, use the English name or Latin-script brand the provider uses on its website, in its logo, or on an official social account. If the provider uses neither, use the main domain’s label without the public suffix, such as `example` for `www.example.co.jp`.
+
 The scaffold creates source files in `src/site-integrations/<id>/` and test data in `tests/fixtures/site-integrations/<id>/`.
 
 Declare the site's supported URLs and access requirements in `definition.json`. Implement series and chapter-list loading in `background-runtime.ts`, and chapter images in `offscreen-runtime.ts`. Use the [definition schema](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json), [runtime interfaces](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts), and a comparable existing integration as references.

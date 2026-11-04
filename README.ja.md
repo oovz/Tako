@@ -45,24 +45,24 @@ Chrome のサイドパネルから、複数の作品のエピソードをまと�
 
 **初期設定で有効**
 
-- pixivコミック
-- 少年ジャンプ＋
-- Manhuagui（看漫画）
-- COMIC熱帯
+- pixivコミック（pixiv COMIC）
+- 少年ジャンプ＋（Shonen Jump+）
+- ManHuaGui（看漫画/漫画柜）
+- COMIC熱帯（COMIC nettai）
 - MANGA MILLION
-- BoyLove（香香腐宅）
+- FUHOUSE（香香腐宅）
 - Mangago
 - MangaNato
 - MangaKakalot
 - Coolmic
 - MANGA Plus by SHUEISHA
-- Anime Manga House（动漫屋）
-- Manga Again（再漫画）
-- CopyManga（拷貝漫畫）
-- MYCOMIC
-- Māngabz
+- DM5（动漫屋）
+- zaimanhua（再漫画）
+- copy3000（拷貝漫畫）
+- MYCOMIC（我的漫畫）
+- mangabz（Māngabz）
 - MangaHere
-- Love Manga（爱漫画）
+- aimanhua（我爱漫画）
 
 **オプションで有効化**
 

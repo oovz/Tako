@@ -39,12 +39,12 @@
     "name": {
       "type": "string",
       "minLength": 1,
-      "description": "Human-readable display name for the manga site (e.g. 'MangaDex')."
+      "description": "Official name used by the site in its own language."
     },
     "englishName": {
       "type": "string",
       "minLength": 1,
-      "description": "English name for the manga site, alongside its native display name."
+      "description": "Official English name or Latin-script brand. For an English-language site, use its native name. If neither name is available, use the primary domain label without the public suffix."
     },
     "contributors": {
       "type": "array",

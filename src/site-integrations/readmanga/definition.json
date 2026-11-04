@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "readmanga",
-  "name": "看漫画",
-  "englishName": "Manhuagui",
+  "name": "看漫画/漫画柜",
+  "englishName": "ManHuaGui",
   "contributors": ["TMD Team"],
   "version": "1.1.0",
   "shipped": true,

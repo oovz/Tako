@@ -4,39 +4,39 @@
 
 > 本页由[英文原文](Supported-Sites)机器翻译而来。
 
-打开下表中对应网站的页面，再点击 Tako 图标选择章节。
+下表列出了 Tako 能识别漫画的页面类型。打开支持的页面，再点击 Tako 图标选择章节。
 
 ## 网站列表
 
-| 网站                           | 应打开的页面       | 默认可用     |
-| ------------------------------ | ------------------ | ------------ |
-| MangaDex                       | 漫画作品页面       | 在选项中启用 |
-| pixiv Comic（pixivコミック）   | 作品页面           | 是           |
-| Shonen Jump+（少年ジャンプ＋） | 单话页面           | 是           |
-| Manhuagui（看漫画）            | 漫画详情页         | 是           |
-| Comic Nettai（COMIC熱帯）      | 书籍页面           | 是           |
-| MANGA MILLION                  | 作品页面           | 是           |
-| BoyLove（香香腐宅）            | 书籍详情页         | 是           |
-| Mangago                        | 作品页             | 是           |
-| MangaNato                      | 作品页             | 是           |
-| MangaKakalot                   | 作品页             | 是           |
-| Coolmic                        | 网页端作品页       | 是           |
-| MANGA Plus by SHUEISHA         | 网页端作品页       | 是           |
-| Anime Manga House（动漫屋）    | 作品页             | 是           |
-| Manga Again（再漫画）          | 漫画详情页或阅读页 | 是           |
-| CopyManga（拷貝漫畫）          | 作品页             | 是           |
-| MYCOMIC                        | 作品页             | 是           |
-| Māngabz                        | 作品页             | 是           |
-| MangaHere                      | 作品页             | 是           |
-| Love Manga（爱漫画）           | 漫画详情页         | 是           |
+| 网站                                              | 支持的页面类型     | 默认可用     |
+| ------------------------------------------------- | ------------------ | ------------ |
+| MangaDex                                          | 漫画作品页面       | 在选项中启用 |
+| pixiv COMIC（pixivコミック）                      | 作品页面           | 是           |
+| Shonen Jump+（少年ジャンプ＋）                    | 单话页面           | 是           |
+| ManHuaGui（看漫画/漫画柜）                        | 漫画详情页         | 是           |
+| COMIC nettai（COMIC熱帯）                         | 书籍页面           | 是           |
+| MANGA MILLION                                     | 作品页面           | 是           |
+| FUHOUSE（香香腐宅）                               | 书籍详情页         | 是           |
+| Mangago                                           | 作品页             | 是           |
+| MangaNato                                         | 作品页             | 是           |
+| MangaKakalot                                      | 作品页             | 是           |
+| Coolmic                                           | 网页端作品页       | 是           |
+| MANGA Plus by SHUEISHA                            | 网页端作品页       | 是           |
+| DM5（动漫屋）                                     | 作品页             | 是           |
+| [zaimanhua（再漫画）](https://www.zaimanhua.com/) | 漫画详情页或阅读页 | 是           |
+| copy3000（拷貝漫畫）                              | 作品页             | 是           |
+| MYCOMIC（我的漫畫）                               | 作品页             | 是           |
+| mangabz（Māngabz）                                | 作品页             | 是           |
+| MangaHere                                         | 作品页             | 是           |
+| aimanhua（我爱漫画）                              | 漫画详情页         | 是           |
 
 ## 域名与章节历史
 
-- **Manga Again（再漫画）：** 同一系列和章节的历史在 `www.zaimanhua.com` 与 `manhua.zaimanhua.com` 之间共用。
-- **CopyManga（拷貝漫畫）：** 同一系列和章节的历史在 `www.copy3000.com` 与 `www.copy4000.com` 之间共用。
+- **zaimanhua（再漫画）：** 同一系列和章节的历史在 `www.zaimanhua.com` 与 `manhua.zaimanhua.com` 之间共用。
+- **copy3000（拷貝漫畫）：** 同一系列和章节的历史在 `www.copy3000.com` 与 `www.copy4000.com` 之间共用。
 - **MangaHere：** 请打开 `newm.mangahere.cc`。旧版 `m.mangahere.cc` 阅读器不受支持。
 - **MangaNato 和 MangaKakalot：** 在**选项 → 站点集成**中各有独立开关，章节历史也各自独立。
-- **Manhuagui（看漫画）：** 同时识别 `www.manhuagui.com` 和 `manhuagui.com`。请打开漫画详情页选择章节。
+- **ManHuaGui（看漫画/漫画柜）：** 同时识别 `www.manhuagui.com` 和 `manhuagui.com`。请打开漫画详情页选择章节。
 
 ## 启用 MangaDex
 
@@ -51,11 +51,11 @@ MangaDex 使用地址会变化的图片服务器，因此 Chrome 会请求 HTTPS
 
 章节是否可用取决于网站的网页阅读器、你的访问权限，以及地区或账户限制。部分站点集成会沿用网站已有的浏览器会话。需要时请先登录网站，并在下载期间保持该会话稳定。付费或受限章节也需要能通过网站的网页阅读器访问。网站和应用订阅的条款可能不同。
 
-Manhuagui（看漫画）除了账户登录，还有成人内容同意提示。请先在网站上完成成人内容同意步骤，再在 Tako 中重新打开漫画详情页。
+ManHuaGui（看漫画/漫画柜）除了账户登录，还有成人内容同意提示。请先在网站上完成成人内容同意步骤，再在 Tako 中重新打开漫画详情页。
 
-CopyManga（拷貝漫畫）有时会暂时返回空章节列表，网站的访客阅读器中也可能出现同样情况。遇到这种情况，请等待网站重新显示章节，再在 Tako 中重新加载系列页面。
+copy3000（拷貝漫畫）有时会暂时返回空章节列表，网站的访客阅读器中也可能出现同样情况。遇到这种情况，请等待网站重新显示章节，再在 Tako 中重新加载系列页面。
 
-如果 Tako 找不到系列，请检查上表中的页面类型。例如，MangaDex 需要作品页面，Manhuagui（看漫画）需要漫画详情页。如果列表仍无法加载，请参阅[问题排查](Troubleshooting.zh-CN)。
+如果 Tako 找不到系列，请检查上表中的页面类型。例如，MangaDex 需要作品页面，ManHuaGui（看漫画/漫画柜）需要漫画详情页。如果列表仍无法加载，请参阅[问题排查](Troubleshooting.zh-CN)。
 
 网站的页面和图片服务可能发生变化。遇到问题时，请通过[错误报告表单](https://github.com/oovz/Tako/issues/new?template=bug_report.md)提供网站名称和公开的示例网址。
 

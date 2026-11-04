@@ -10,6 +10,8 @@
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
+`--name` 填写网站的原语言名称。英语网站的 `--english-name` 填写相同的名称。其他网站填写运营方在官网、标志或官方社交媒体账号上使用的英文名称或拉丁字母品牌名。如果两者都没有，使用主域名中紧邻公共后缀之前的部分，例如 `www.example.co.jp` 填写 `example`。
+
 脚手架会在 `src/site-integrations/<id>/` 创建源文件，在 `tests/fixtures/site-integrations/<id>/` 创建测试数据。
 
 在 `definition.json` 声明支持的 URL 和所需访问权限。在 `background-runtime.ts` 实现作品信息和章节列表的加载，在 `offscreen-runtime.ts` 实现章节图片的加载。可参考[定义结构](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json)、[运行时接口](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)以及相似的现有集成。

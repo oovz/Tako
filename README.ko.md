@@ -45,24 +45,24 @@ Tako는 기본적으로 챕터를 CBZ로 저장합니다. 형식이나 파일 �
 
 **기본으로 켜진 사이트**
 
-- pixiv Comic (pixivコミック)
+- pixiv COMIC (pixivコミック)
 - Shonen Jump+ (少年ジャンプ＋)
-- Manhuagui (看漫画)
-- Comic Nettai (COMIC熱帯)
+- ManHuaGui (看漫画/漫画柜)
+- COMIC nettai (COMIC熱帯)
 - MANGA MILLION
-- BoyLove (香香腐宅)
+- FUHOUSE (香香腐宅)
 - Mangago
 - MangaNato
 - MangaKakalot
 - Coolmic
 - MANGA Plus by SHUEISHA
-- Anime Manga House (动漫屋)
-- Manga Again (再漫画)
-- CopyManga (拷貝漫畫)
-- MYCOMIC
-- Māngabz
+- DM5 (动漫屋)
+- zaimanhua (再漫画)
+- copy3000 (拷貝漫畫)
+- MYCOMIC (我的漫畫)
+- mangabz (Māngabz)
 - MangaHere
-- Love Manga (爱漫画)
+- aimanhua (我爱漫画)
 
 **옵션에서 켤 수 있는 사이트**
 

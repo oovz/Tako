@@ -148,9 +148,9 @@ export interface SiteIntegrationDefinition {
   schemaVersion: typeof SITE_INTEGRATION_DEFINITION_SCHEMA_VERSION
   /** Unique kebab-case provider identifier (e.g. "mangadex"). */
   id: string
-  /** Human-readable display name for the manga site (e.g. "MangaDex"). */
+  /** Official name used by the site in its own language. */
   name: string
-  /** English name for readers who do not use the site's native language. */
+  /** Official English name, Latin-script brand, or primary domain label without the public suffix. */
   englishName: string
   /** List of contributor names or handles who authored or maintain this site integration. */
   contributors: string[]

@@ -45,24 +45,24 @@ Tako 默认将章节保存为 CBZ。要更改格式或文件命名规则，请�
 
 **默认启用**
 
-- pixiv Comic（pixivコミック）
+- pixiv COMIC（pixivコミック）
 - Shonen Jump+（少年ジャンプ＋）
-- Manhuagui（看漫画）
-- Comic Nettai（COMIC熱帯）
+- ManHuaGui（看漫画/漫画柜）
+- COMIC nettai（COMIC熱帯）
 - MANGA MILLION
-- BoyLove（香香腐宅）
+- FUHOUSE（香香腐宅）
 - Mangago
 - MangaNato
 - MangaKakalot
 - Coolmic
 - MANGA Plus by SHUEISHA
-- Anime Manga House（动漫屋）
-- Manga Again（再漫画）
-- CopyManga（拷貝漫畫）
-- MYCOMIC
-- Māngabz
+- DM5（动漫屋）
+- zaimanhua（再漫画）
+- copy3000（拷貝漫畫）
+- MYCOMIC（我的漫畫）
+- mangabz（Māngabz）
 - MangaHere
-- Love Manga（爱漫画）
+- aimanhua（我爱漫画）
 
 **按需启用**
 

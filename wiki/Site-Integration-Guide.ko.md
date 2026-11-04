@@ -10,6 +10,8 @@
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
+`--name`에는 사이트의 현지 언어 이름을 입력하세요. 영어 사이트는 `--english-name`에도 같은 이름을 입력하세요. 그 외 사이트는 운영자가 공식 웹사이트, 로고, 공식 소셜 미디어 계정에서 사용하는 영어 이름이나 로마자 브랜드명을 입력하세요. 둘 다 없으면 기본 도메인의 공개 접미사 바로 앞 부분을 사용하세요. 예를 들어 `www.example.co.jp`는 `example`을 사용하세요.
+
 이 명령은 `src/site-integrations/<id>/`에 소스 파일을, `tests/fixtures/site-integrations/<id>/`에 테스트 데이터를 만듭니다.
 
 `definition.json`에 지원 URL과 필요한 접근 권한을 선언하세요. 작품 정보와 챕터 목록은 `background-runtime.ts`에서, 챕터 이미지는 `offscreen-runtime.ts`에서 불러오도록 구현하세요. [정의 스키마](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json), [런타임 인터페이스](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts), 비슷한 기존 통합을 참고하세요.

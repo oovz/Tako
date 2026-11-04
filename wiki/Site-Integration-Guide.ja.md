@@ -10,6 +10,8 @@
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
+`--name` にはサイトの現地語名を指定します。英語のサイトでは `--english-name` にも同じ名前を指定します。それ以外のサイトでは、公式サイト、ロゴ、公式 SNS アカウントで運営元が使用している英語名またはラテン文字のブランド名を指定します。どちらもない場合は、メインドメインのパブリックサフィックス直前の部分を使います。たとえば `www.example.co.jp` なら `example` を指定します。
+
 ソースファイルは `src/site-integrations/<id>/`、テストデータは `tests/fixtures/site-integrations/<id>/` に作成されます。
 
 `definition.json` に対応 URL と必要なアクセス権限を定義します。作品情報とエピソード一覧の取得は `background-runtime.ts`、エピソード画像の取得は `offscreen-runtime.ts` に実装します。[定義スキーマ](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json)、[実行時インターフェース](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)、構成が近い既存の統合機能を参考にしてください。

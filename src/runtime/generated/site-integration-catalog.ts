@@ -7,7 +7,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "animemangahouse",
     "name": "动漫屋",
-    "englishName": "Anime Manga House",
+    "englishName": "DM5",
     "contributors": [
       "Otaro"
     ],
@@ -108,8 +108,8 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "boylove",
-    "name": "香香腐宅BoyLove",
-    "englishName": "BoyLove",
+    "name": "香香腐宅",
+    "englishName": "FUHOUSE",
     "contributors": [
       "Otaro"
     ],
@@ -186,7 +186,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "comictropics",
     "name": "COMIC熱帯",
-    "englishName": "Comic Nettai",
+    "englishName": "COMIC nettai",
     "contributors": [
       "TMD Team"
     ],
@@ -391,7 +391,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "copymanga",
     "name": "拷貝漫畫",
-    "englishName": "CopyManga",
+    "englishName": "copy3000",
     "contributors": [
       "Otaro"
     ],
@@ -485,8 +485,8 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "lovemanga",
-    "name": "爱漫画",
-    "englishName": "Love Manga",
+    "name": "我爱漫画",
+    "englishName": "aimanhua",
     "contributors": [
       "Otaro"
     ],
@@ -576,7 +576,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "mangaagain",
     "name": "再漫画",
-    "englishName": "Manga Again",
+    "englishName": "zaimanhua",
     "contributors": [
       "Otaro"
     ],
@@ -657,7 +657,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "mangabz",
     "name": "Māngabz",
-    "englishName": "Māngabz",
+    "englishName": "mangabz",
     "contributors": [
       "Otaro"
     ],
@@ -1478,7 +1478,7 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "mycomic",
-    "name": "MYCOMIC",
+    "name": "我的漫畫",
     "englishName": "MYCOMIC",
     "contributors": [
       "Otaro"
@@ -1569,7 +1569,7 @@ export const siteIntegrationCatalog = [
     "schemaVersion": 1,
     "id": "pixiv-comic",
     "name": "pixivコミック",
-    "englishName": "pixiv Comic",
+    "englishName": "pixiv COMIC",
     "contributors": [
       "TMD Team"
     ],
@@ -1685,8 +1685,8 @@ export const siteIntegrationCatalog = [
   {
     "schemaVersion": 1,
     "id": "readmanga",
-    "name": "看漫画",
-    "englishName": "Manhuagui",
+    "name": "看漫画/漫画柜",
+    "englishName": "ManHuaGui",
     "contributors": [
       "TMD Team"
     ],

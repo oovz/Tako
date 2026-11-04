@@ -10,6 +10,8 @@
 pnpm new:site-integration <id> --name "Native Site Name" --english-name "English Site Name"
 ```
 
+`--name` 填寫網站的原語名稱。英語網站的 `--english-name` 填寫相同的名稱。其他網站填寫營運方在官網、標誌或官方社群帳號上使用的英文名稱或拉丁字母品牌名。如果兩者都沒有，使用主網域中緊鄰公共後綴之前的部分，例如 `www.example.co.jp` 填寫 `example`。
+
 工具會在 `src/site-integrations/<id>/` 建立原始碼，在 `tests/fixtures/site-integrations/<id>/` 建立測試資料。
 
 在 `definition.json` 宣告支援的 URL 和所需存取權限。在 `background-runtime.ts` 實作作品資訊與章節清單的載入，在 `offscreen-runtime.ts` 實作章節圖片的載入。可參考[定義結構](https://github.com/oovz/Tako/blob/main/src/site-integrations/definition.schema.json)、[執行階段介面](https://github.com/oovz/Tako/blob/main/src/types/site-integrations.ts)，以及相似的現有整合。

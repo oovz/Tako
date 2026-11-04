@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "lovemanga",
-  "name": "爱漫画",
-  "englishName": "Love Manga",
+  "name": "我爱漫画",
+  "englishName": "aimanhua",
   "contributors": ["Otaro"],
   "version": "1.0.0",
   "shipped": true,
