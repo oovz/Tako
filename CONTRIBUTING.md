@@ -45,7 +45,9 @@ To add a site, run `pnpm new:site-integration <id>` and follow the [Site Integra
 | E2E         | `pnpm test:e2e`         | The built extension in Chromium using local site fixtures                     |
 | Live E2E    | `pnpm test:live`        | The built extension against real sites; run for an intentional provider check |
 
-Use `pnpm test:coverage` for unit and integration coverage. Use `pnpm coverage:all` to collect compatible native and browser profiles and generate the combined report. Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
+Run `pnpm test:coverage` to measure unit and integration coverage with Vitest V8. The command checks the coverage thresholds, prints a summary, and writes `coverage/index.html`, `coverage/lcov.info`, and `coverage/coverage-final.json`.
+
+Keep tests for distinct behavior and failures. Captured HTML, protocol samples and image inputs belong in `tests/fixtures/site-integrations/<id>/`, with their sources documented beside them.
 
 Browser tests run headlessly in bundled Chromium, create disposable profiles, and build their own test extension. Install Chromium before running them:
 

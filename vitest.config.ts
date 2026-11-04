@@ -30,8 +30,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      // Native tests exercise shared logic, UI components and maintained tooling.
-      // The merged browser report adds the application launchers below.
       include: [
         "src/**/*.{ts,tsx}",
         "entrypoints/**/*.{ts,tsx}",
@@ -44,7 +42,7 @@ export default defineConfig({
         "**/node_modules/**",
         // Isolated browser-test setup.
         "entrypoints/background/e2e-state-seed.ts",
-        // Application launchers are exercised by the instrumented browser suite.
+        // Playwright exercises these launchers in the built extension.
         "entrypoints/background/index.ts",
         "entrypoints/offscreen/main.ts",
         "entrypoints/options/main.tsx",

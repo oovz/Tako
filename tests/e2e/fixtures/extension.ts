@@ -8,7 +8,6 @@ import {
 import os from "node:os"
 import path from "node:path"
 import fs from "node:fs/promises"
-import crypto from "node:crypto"
 import { fileURLToPath } from "node:url"
 import {
   clearDnrRedirectRules,
@@ -61,108 +60,10 @@ const pathToExtension = path.resolve(
     ? "../../../.output/chrome-mv3-live-test"
     : "../../../.output/chrome-mv3-e2e-test"
 )
-const collectCoverage = process.env.E2E_COVERAGE === "true"
 const collectDiagnostics = process.env.TMD_TEST_E2E_DIAG === "true"
-const nycOutputDir = path.resolve(__dirname, "../../../.nyc_output/e2e")
 
 const BACKGROUND_WORKER_NAME = "Tako Manga Downloader"
 const E2E_SEED_DOWNLOAD_QUEUE_MESSAGE = "E2E_SEED_DOWNLOAD_QUEUE"
-
-type CoverageTargetKind = "page" | "worker"
-
-const collectedCoverageTargets = new WeakSet<object>()
-const coverageCloseHooks = new WeakSet<Page>()
-
-async function writeCoverage(
-  coverage: unknown,
-  targetKind: CoverageTargetKind
-): Promise<void> {
-  if (!coverage) return
-  await fs.mkdir(nycOutputDir, { recursive: true })
-  await fs.writeFile(
-    path.join(
-      nycOutputDir,
-      `coverage-${targetKind}-${crypto.randomUUID()}.json`
-    ),
-    JSON.stringify(coverage),
-    "utf8"
-  )
-}
-
-/**
- * Collect window.__coverage__ from a page before it closes. Closed pages are
- * otherwise absent from BrowserContext.pages() at fixture teardown.
- */
-async function collectPageCoverage(page: Page): Promise<void> {
-  if (!collectCoverage || collectedCoverageTargets.has(page)) return
-  collectedCoverageTargets.add(page)
-  try {
-    const coverage = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__coverage__
-    )
-    await writeCoverage(coverage, "page")
-  } catch {
-    // Page may have been closed or navigated away – best effort.
-  }
-}
-
-/** Collect global coverage from an instrumented MV3 service worker. */
-async function collectWorkerCoverage(worker: Worker): Promise<void> {
-  if (!collectCoverage || collectedCoverageTargets.has(worker)) return
-  collectedCoverageTargets.add(worker)
-  try {
-    const coverage = await worker.evaluate(
-      () => (globalThis as unknown as Record<string, unknown>).__coverage__
-    )
-    await writeCoverage(coverage, "worker")
-  } catch {
-    // A service worker may be terminated before teardown. The next live worker
-    // in the context is still collected below when available.
-  }
-}
-
-function installPageCoverageCloseHook(page: Page): void {
-  if (!collectCoverage || coverageCloseHooks.has(page)) return
-  coverageCloseHooks.add(page)
-
-  const close = page.close.bind(page)
-  page.close = async (...args: Parameters<Page["close"]>) => {
-    await collectPageCoverage(page)
-    return close(...args)
-  }
-}
-
-/**
- * Collect coverage from all chrome-extension:// pages in the context
- * (side panel, options, offscreen), regular test pages, and the MV3 service
- * worker. Page close hooks cover pages that specs intentionally close early.
- */
-async function collectContextCoverage(
-  context: BrowserContext,
-  backgroundWorker?: Worker
-): Promise<void> {
-  if (!collectCoverage) return
-  const pages = context.pages()
-  const workers = Array.from(
-    new Set(
-      [backgroundWorker, ...context.serviceWorkers()].filter(
-        (worker): worker is Worker => worker !== undefined
-      )
-    )
-  )
-  await Promise.allSettled([
-    ...pages.map((page) => collectPageCoverage(page)),
-    ...workers.map((worker) => collectWorkerCoverage(worker)),
-  ])
-}
-
-function installCoverageHooks(context: BrowserContext): void {
-  if (!collectCoverage) return
-  for (const page of context.pages()) {
-    installPageCoverageCloseHook(page)
-  }
-  context.on("page", installPageCoverageCloseHook)
-}
 
 function isBackgroundWorkerUrl(url: string): boolean {
   return (
@@ -364,16 +265,6 @@ export async function teardownExtensionResources(
   }
 
   if (context) {
-    // Collect coverage from background/side-panels/etc before closing context.
-    try {
-      await collectContextCoverage(context, backgroundWorker)
-    } catch (error) {
-      errors.push(error as Error)
-      console.warn(
-        "[extension.fixture] failed to collect extension coverage:",
-        redactDiagnostic(error)
-      )
-    }
     try {
       await context.close()
     } catch (error) {
@@ -496,7 +387,6 @@ async function setupExtensionContext(
     })
     contextForCleanup = context
     if (collectDiagnostics) installContextDiagnostics(context)
-    installCoverageHooks(context)
 
     if (!shouldUseMockRoutes && !shouldAllowNetwork) {
       throw new Error(

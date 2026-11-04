@@ -1,9 +1,7 @@
 import process from "node:process"
 import type { ConfigEnv, UserManifest, WxtViteConfig } from "wxt"
 import tailwindcss from "@tailwindcss/vite"
-import istanbul from "vite-plugin-istanbul"
 import { siteIntegrationWxtPermissions } from "../src/runtime/generated/site-integration-wxt-permissions"
-import { serializedPageProbeModules } from "./page-probe-instrumentation"
 
 export function createViteBuildPolicy(configEnv: ConfigEnv): WxtViteConfig {
   return {
@@ -18,29 +16,7 @@ export function createViteBuildPolicy(configEnv: ConfigEnv): WxtViteConfig {
           process.env.TAKO_E2E_STATE_SEED === "true"
       ),
     },
-    plugins: [
-      tailwindcss(),
-      // Instrument only the isolated E2E coverage build.
-      ...(configEnv.mode === "e2e-test" && process.env.E2E_COVERAGE === "true"
-        ? [
-            istanbul({
-              include: ["src/**/*", "entrypoints/**/*", "components/**/*"],
-              exclude: [
-                "node_modules",
-                ".output",
-                "tests",
-                "**/*.d.ts",
-                "src/types/**",
-                "src/runtime/generated/**",
-                ...serializedPageProbeModules,
-              ],
-              extension: [".js", ".ts", ".tsx"],
-              requireEnv: false,
-              forceBuildInstrument: true,
-            }),
-          ]
-        : []),
-    ],
+    plugins: [tailwindcss()],
     build: {
       // Vite's modulepreload helper touches document/window. Extension service
       // workers have neither, and background runtimes are lazy-loaded there.

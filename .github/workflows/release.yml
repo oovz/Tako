@@ -110,7 +110,6 @@ jobs:
       - name: Build release bundle
         run: pnpm zip
         env:
-          E2E_COVERAGE: "false"
           TMD_TEST_E2E_USE_MOCKS: "false"
       - name: Validate packaged manifest version
         shell: pwsh

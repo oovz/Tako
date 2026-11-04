@@ -40,11 +40,11 @@ afterEach(() => fs.rmSync(workspace, { recursive: true, force: true }))
 
 describe("WXT build artifacts", () => {
   it.each([
-    { mode: "production", state: false, redirects: false, covered: false },
-    { mode: "e2e-test", state: true, redirects: true, covered: true },
+    { mode: "production", state: false, redirects: false },
+    { mode: "e2e-test", state: true, redirects: true },
   ])(
     "executes the $mode artifact with its configured capabilities",
-    ({ mode, state, redirects, covered }) => {
+    ({ mode, state, redirects }) => {
       const runner = `import fs from "node:fs"
 import path from "node:path"
 import { createRequire } from "node:module"
@@ -63,16 +63,13 @@ await import(pathToFileURL(path.join(outputDirectory, output.manifest.background
 fs.writeFileSync("result.json", JSON.stringify({
   manifest: output.manifest,
   probe: globalThis.takoPolicyProbe,
-  covered: Object.keys(globalThis.__coverage__ ?? {}).some((file) => file.replaceAll("\\\\", "/").endsWith("/entrypoints/background.ts")),
 }))
 `
       const environment: typeof process.env = {
         ...process.env,
         TAKO_E2E_STATE_SEED: "true",
-        E2E_COVERAGE: "true",
       }
       delete environment.NODE_ENV
-      delete environment.VITE_COVERAGE
       const execution = spawnSync(
         process.execPath,
         ["--input-type=module", "--eval", runner],
@@ -83,7 +80,6 @@ fs.writeFileSync("result.json", JSON.stringify({
         fs.readFileSync(path.join(workspace, "result.json"), "utf8")
       )
       expect(result.probe).toEqual([state, redirects])
-      expect(result.covered).toBe(covered)
       if (mode === "production") {
         expect(result.manifest.host_permissions).toEqual([
           ...siteIntegrationWxtPermissions.requiredOrigins,
