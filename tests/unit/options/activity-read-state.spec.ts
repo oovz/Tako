@@ -102,11 +102,11 @@ describe("Activity task reads", () => {
     expect(container.textContent).toContain(
       "Queue and task history could not be loaded."
     )
-    expect(container.textContent).not.toContain("No downloads yet")
+    expect(container.textContent).not.toContain("No download tasks")
     expect(container.textContent).not.toContain("Sensitive transport details")
     sendMessage.mockResolvedValue(empty)
     await retry()
-    expect(container.textContent).toContain("No downloads yet")
+    expect(container.textContent).toContain("No download tasks")
     expect(container.querySelector('[role="alert"]')).toBeNull()
   })
 
@@ -132,7 +132,7 @@ describe("Activity task reads", () => {
       expect(container.textContent).toContain("Known series")
       sendMessage.mockResolvedValue(empty)
       await retry()
-      expect(container.textContent).toContain("No downloads yet")
+      expect(container.textContent).toContain("No download tasks")
       expect(container.querySelector('[role="alert"]')).toBeNull()
     }
   )
@@ -147,7 +147,7 @@ describe("Activity task reads", () => {
       "Queue and task history could not be loaded."
     )
     await retry()
-    expect(container.textContent).toContain("No downloads yet")
+    expect(container.textContent).toContain("No download tasks")
     sendMessage.mockResolvedValue(known)
     await change()
     expect(container.textContent).toContain("Known series")
@@ -200,7 +200,7 @@ describe("Activity task reads", () => {
         if (outcome === "success") older.resolve(known)
         else older.reject(new Error("Old failure"))
       })
-      expect(container.textContent).toContain("No downloads yet")
+      expect(container.textContent).toContain("No download tasks")
       expect(container.textContent).not.toContain("Known series")
       expect(container.querySelector('[role="alert"]')).toBeNull()
     }

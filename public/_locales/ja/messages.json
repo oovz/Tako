@@ -1306,6 +1306,12 @@
   "options_pacingPreviewDesc": {
     "message": "全体の既定値。空き枠がある場合の最短開始時刻の例です。"
   },
+  "options_noDownloadTasks": {
+    "message": "ダウンロードタスクはありません"
+  },
+  "options_historyBySite": {
+    "message": "サイト別の章の履歴"
+  },
   "options_previewOutput": {
     "message": "プレビュー出力"
   },

@@ -1306,6 +1306,12 @@
   "options_pacingPreviewDesc": {
     "message": "Global defaults. Earliest example starts when a request slot is free."
   },
+  "options_noDownloadTasks": {
+    "message": "No download tasks"
+  },
+  "options_historyBySite": {
+    "message": "Chapter history by site"
+  },
   "options_previewOutput": {
     "message": "Preview Output"
   },

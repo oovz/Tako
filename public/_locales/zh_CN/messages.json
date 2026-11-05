@@ -1306,6 +1306,12 @@
   "options_pacingPreviewDesc": {
     "message": "全局默认设置。有空闲请求名额时的最早开始时间示例。"
   },
+  "options_noDownloadTasks": {
+    "message": "没有下载任务"
+  },
+  "options_historyBySite": {
+    "message": "按站点查看章节记录"
+  },
   "options_previewOutput": {
     "message": "预览输出"
   },

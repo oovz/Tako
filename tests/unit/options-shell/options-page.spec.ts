@@ -229,7 +229,7 @@ it("routes the storage, integration and activity sections to their live controls
   await act(async () => button("options_activity").click())
   await act(async () => vi.dynamicImportSettled())
   expect(container.querySelector("h1")?.textContent).toBe(t("options_activity"))
-  expect(container.textContent).toContain(t("options_noDownloadsYet"))
+  expect(container.textContent).toContain(t("options_noDownloadTasks"))
   await act(async () => button("options_saveChanges").click())
   expect(configuration.settings.downloads.includeComicInfo).toBe(
     !DEFAULT_SETTINGS.downloads.includeComicInfo

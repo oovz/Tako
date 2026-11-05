@@ -1306,6 +1306,12 @@
   "options_pacingPreviewDesc": {
     "message": "전역 기본값입니다. 요청 슬롯이 비어 있을 때의 가장 빠른 시작 시간 예시입니다."
   },
+  "options_noDownloadTasks": {
+    "message": "다운로드 작업 없음"
+  },
+  "options_historyBySite": {
+    "message": "사이트별 챕터 기록"
+  },
   "options_previewOutput": {
     "message": "출력 미리 보기"
   },

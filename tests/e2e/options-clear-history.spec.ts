@@ -194,8 +194,29 @@ test.describe("Options Downloads history management", () => {
       makeTask("queued", "queued"),
       makeTask("done", "completed"),
     ])
-    await setDownloadedChapterHistory(page.context(), [chapterRecord()])
+    const record = chapterRecord()
+    await setDownloadedChapterHistory(page.context(), [
+      record,
+      { ...record, chapterId: "second", url: "https://example.com/second" },
+      {
+        ...record,
+        siteIntegrationId: "coolmic",
+        chapterId: "coolmic-one",
+        seriesId: "coolmic-series",
+        url: "https://example.com/coolmic",
+      },
+    ])
     await page.reload()
+
+    const bySite = page.getByRole("region", { name: "Chapter history by site" })
+    await expect(bySite).toBeVisible()
+    const counts = bySite.getByRole("listitem")
+    await expect(
+      counts.filter({ hasText: "MangaDex" }).getByText("2", { exact: true })
+    ).toBeVisible()
+    await expect(
+      counts.filter({ hasText: /coolmic/i }).getByText("1", { exact: true })
+    ).toBeVisible()
 
     await page
       .getByRole("button", { name: "Clear chapter history", exact: true })
@@ -207,6 +228,7 @@ test.describe("Options Downloads history management", () => {
       .getByRole("button", { name: "Clear chapter history", exact: true })
       .click()
     await expect(dialog).toHaveCount(0)
+    await expect(bySite).toHaveCount(0)
     await expect(
       page.getByText("Chapter history cleared", { exact: true })
     ).toBeVisible()

@@ -1,3 +1,4 @@
+import { HistoryBySite } from "../components/HistoryBySite"
 import { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
@@ -40,13 +41,13 @@ export function ActivityTab(props: ActivityTabProps) {
       <SettingsSectionHeader
         id="options-activity-heading"
         title={t("options_activity")}
-        description={t("options_downloadsDesc")}
       />
       <QueueReadNotice status={state.readStatus} onRetry={state.retryRead} />
       <ActivityTabQueue
         state={state}
         onClearHistory={() => setHistoryToClear("tasks")}
       />
+      <HistoryBySite series={props.series ?? []} />
       <ActivityTabHistory
         {...props}
         seriesHistory={seriesHistory}

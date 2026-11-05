@@ -6,7 +6,6 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { Card, CardContent } from "@/components/ui/card"
 import { DownloadTaskSection } from "@/entrypoints/options/components/DownloadTaskSection"
 import type { DownloadTaskState } from "@/src/domain/queue/state"
 import { t } from "@/src/runtime/i18n"
@@ -92,17 +91,14 @@ export function DownloadTaskGroups({
       />
 
       {tasks.length === 0 && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Download className="size-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-medium mb-2">
-              {t("sidepanel_noDownloadsYet")}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t("options_openMangaToDownload")}
-            </p>
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border px-4 py-5">
+          <h3 className="text-sm font-medium">
+            {t("options_noDownloadTasks")}
+          </h3>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            {t("options_openMangaToDownload")}
+          </p>
+        </div>
       )}
     </div>
   )

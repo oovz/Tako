@@ -1306,6 +1306,12 @@
   "options_pacingPreviewDesc": {
     "message": "全域預設設定。有空閒請求名額時的最早開始時間範例。"
   },
+  "options_noDownloadTasks": {
+    "message": "沒有下載任務"
+  },
+  "options_historyBySite": {
+    "message": "依網站查看章節記錄"
+  },
   "options_previewOutput": {
     "message": "預覽輸出"
   },
