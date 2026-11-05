@@ -55,7 +55,7 @@ export function DownloadTaskSection({
   return (
     <div className="flex flex-col gap-4">
       <h2
-        className={`flex items-center gap-2 text-sm font-medium uppercase tracking-wider text-muted-foreground ${titleClassName ?? ""}`.trim()}
+        className={`flex items-center gap-2 text-sm font-medium text-muted-foreground ${titleClassName ?? ""}`.trim()}
       >
         {icon}
         {title} ({tasks.length})

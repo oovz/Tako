@@ -1,4 +1,4 @@
-import { AlertTriangle, Folder, FolderCheck, HardDrive } from "lucide-react"
+import { AlertTriangle, Folder } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { detectFsaCapabilities } from "@/src/storage/fs-access"
@@ -161,7 +161,6 @@ export function DownloadFolderDestination(
     <>
       {/* Destination Switch Row */}
       <SettingsRow
-        icon={isFsaActive ? FolderCheck : HardDrive}
         title={t("options_useCustomFolder")}
         description={
           <DownloadFolderDetails

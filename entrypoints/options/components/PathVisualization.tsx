@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { AlertCircle, CheckCircle2 } from "lucide-react"
+import { AlertCircle, File, Folder } from "lucide-react"
 
 import { createMockContext } from "@/src/shared/template-expander"
 import { createPathPreview } from "./PathVisualization-preview"
@@ -9,12 +9,14 @@ interface PathVisualizationProps {
   template: string
   filenameTemplate: string
   format: "cbz" | "zip" | "none"
+  destinationName?: string
 }
 
 export function PathVisualization({
   template,
   filenameTemplate,
   format,
+  destinationName,
 }: PathVisualizationProps) {
   const mockContext = useMemo(() => createMockContext(), [])
 
@@ -23,39 +25,55 @@ export function PathVisualization({
     [template, filenameTemplate, format, mockContext]
   )
 
+  const lastSlash = fullPath?.lastIndexOf("/") ?? -1
+  const directory = fullPath?.slice(0, lastSlash)
+  const outputName = fullPath?.slice(lastSlash + 1)
+  const OutputIcon = format === "none" ? Folder : File
+
   return (
     <div
       id="template-validation-status"
       role={hasErrors ? "alert" : "status"}
       aria-live="polite"
-      className="rounded-lg border border-border bg-muted/40 p-3.5 flex flex-col gap-2"
+      className="min-w-0 rounded-lg border bg-background/70 p-4"
     >
-      <div className="flex items-start gap-2.5">
-        {hasErrors ? (
-          <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
-        ) : (
-          <CheckCircle2 className="size-4 text-primary mt-0.5 shrink-0" />
+      <p className="flex items-center gap-2 text-sm font-semibold">
+        {hasErrors && (
+          <AlertCircle aria-hidden="true" className="size-4 text-destructive" />
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-foreground mb-1">
-            {hasErrors
-              ? t("options_invalidTemplate")
-              : t("options_previewOutput")}
-          </p>
-          {fullPath ? (
-            <p className="text-xs font-mono text-muted-foreground break-all bg-background/80 px-2 py-1 rounded border border-border/40">
-              {fullPath}
-            </p>
-          ) : (
-            <p className="text-xs text-destructive">{errors.join("; ")}</p>
+        {hasErrors ? t("options_invalidTemplate") : t("options_exampleOutput")}
+      </p>
+      {outputName ? (
+        <div className="mt-3 flex flex-col gap-2 text-xs wrap-anywhere">
+          {destinationName && (
+            <p className="text-muted-foreground">{destinationName}</p>
           )}
-          {warnings.length > 0 && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              {warnings.join("; ")}
+          <p className="flex items-start gap-2 font-mono">
+            <Folder
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <span>{directory}/</span>
+          </p>
+          <p className="ml-2 flex items-start gap-2 border-l pl-3 font-mono">
+            <OutputIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 text-muted-foreground"
+            />
+            <span>{outputName}</span>
+          </p>
+          {format === "none" && (
+            <p className="text-muted-foreground">
+              {t("options_noArchiveDesc")}
             </p>
           )}
         </div>
-      </div>
+      ) : (
+        <p className="mt-2 text-xs text-destructive">{errors.join("; ")}</p>
+      )}
+      {warnings.length > 0 && (
+        <p className="mt-2 text-xs text-amber-700">{warnings.join("; ")}</p>
+      )}
     </div>
   )
 }

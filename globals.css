@@ -272,3 +272,17 @@ html[data-tako-motion="reduce"] *::after {
     opacity: 1;
   }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-tako-motion="reduce"]) .settings-choice {
+    transition:
+      background-color 120ms ease-out,
+      border-color 120ms ease-out,
+      scale 200ms cubic-bezier(0.2, 0.8, 0.3, 1.2);
+  }
+
+  html:not([data-tako-motion="reduce"]) .settings-choice:active {
+    scale: 0.975;
+    transition-duration: 70ms;
+  }
+}

@@ -2,7 +2,6 @@ import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { t } from "@/src/runtime/i18n"
 import type { SiteIntegrationCardProps } from "./SiteIntegrationCard-types"
@@ -32,8 +31,8 @@ export function SiteIntegrationCardHeader({
 > & { hasOverrides: boolean; isExpanded: boolean }) {
   return (
     <CardHeader className="gap-0 px-5 py-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 wrap-anywhere">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle
               role="heading"
@@ -45,7 +44,7 @@ export function SiteIntegrationCardHeader({
             {!isEnabled && (
               <Badge
                 variant="secondary"
-                className="h-5 px-2 text-[10px] font-medium text-muted-foreground"
+                className="h-5 px-2 text-xs font-medium text-muted-foreground"
               >
                 {t("options_disabled")}
               </Badge>
@@ -53,7 +52,7 @@ export function SiteIntegrationCardHeader({
             {hasOverrides && (
               <Badge
                 variant="outline"
-                className="h-5 border-primary/40 bg-primary/10 px-2 text-[10px] font-medium text-foreground"
+                className="h-5 border-primary/40 bg-primary/10 px-2 text-xs font-medium text-foreground"
               >
                 {t("options_override")}
               </Badge>
@@ -74,24 +73,14 @@ export function SiteIntegrationCardHeader({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Label
-              htmlFor={`${siteIntegration.id}-integration-enabled`}
-              className="text-xs text-muted-foreground"
-            >
-              {t("options_enabled")}
-            </Label>
-            <Switch
-              id={`${siteIntegration.id}-integration-enabled`}
-              checked={isEnabled}
-              aria-label={t("options_enableIntegration", [
-                siteIntegration.name,
-              ])}
-              onCheckedChange={(checked) =>
-                onEnabledChange?.(siteIntegration.id, checked)
-              }
-            />
-          </div>
+          <Switch
+            id={`${siteIntegration.id}-integration-enabled`}
+            checked={isEnabled}
+            aria-label={t("options_enableIntegration", [siteIntegration.name])}
+            onCheckedChange={(checked) =>
+              onEnabledChange?.(siteIntegration.id, checked)
+            }
+          />
           <CollapsibleTrigger asChild>
             <Button
               data-testid={`configure-site-integration-${siteIntegration.id}`}

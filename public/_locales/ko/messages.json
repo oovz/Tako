@@ -503,6 +503,9 @@
   "options_suppressSaveAsDesc": {
     "message": "Chrome 파일 선택 창을 열지 않고 브라우저에 설정된 다운로드 경로에 저장"
   },
+  "options_fileNaming": {
+    "message": "파일 이름 지정"
+  },
   "options_directoryPathTemplate": {
     "message": "폴더 경로 템플릿"
   },
@@ -678,7 +681,7 @@
     "message": "기존 파일 덮어쓰기"
   },
   "options_conflictUniquify": {
-    "message": "고유한 이름으로 두 파일 모두 유지"
+    "message": "두 파일 모두 유지"
   },
   "options_conflictPolicyHelp": {
     "message": "브라우저 다운로드와 사용자 지정 폴더 모두에 적용됩니다."
@@ -1293,6 +1296,15 @@
   },
   "options_invalidTemplate": {
     "message": "잘못된 템플릿"
+  },
+  "options_exampleOutput": {
+    "message": "출력 예시"
+  },
+  "options_pacingPreview": {
+    "message": "요청 패턴"
+  },
+  "options_pacingPreviewDesc": {
+    "message": "전역 기본값입니다. 요청 슬롯이 비어 있을 때의 가장 빠른 시작 시간 예시입니다."
   },
   "options_previewOutput": {
     "message": "출력 미리 보기"

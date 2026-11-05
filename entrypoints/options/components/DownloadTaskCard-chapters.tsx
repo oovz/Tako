@@ -31,7 +31,7 @@ function ChapterResultRow({ chapter }: { chapter: TaskChapter }) {
           )}
         </Badge>
       </div>
-      <span role="cell" className="font-mono text-[11px]">
+      <span role="cell" className="tabular-nums text-[11px]">
         {getChapterImageSummary(chapter)}
       </span>
       <span
@@ -77,7 +77,7 @@ export function DownloadTaskCardChapters({
         >
           <div
             role="row"
-            className="grid min-w-[38rem] grid-cols-[minmax(0,1fr)_140px_100px_minmax(0,1fr)] bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+            className="grid min-w-[38rem] grid-cols-[minmax(0,1fr)_140px_100px_minmax(0,1fr)] bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground"
           >
             <span role="columnheader">{t("options_chapter")}</span>
             <span role="columnheader">{t("options_status")}</span>

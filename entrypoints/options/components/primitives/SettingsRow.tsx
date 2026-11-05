@@ -2,7 +2,6 @@ import React from "react"
 import { cn } from "@/src/shared/utils"
 
 interface SettingsRowProps {
-  icon?: React.ComponentType<{ className?: string }>
   title: React.ReactNode
   description?: React.ReactNode
   control?: React.ReactNode
@@ -13,7 +12,6 @@ interface SettingsRowProps {
 }
 
 export function SettingsRow({
-  icon: Icon,
   title,
   description,
   control,
@@ -23,48 +21,41 @@ export function SettingsRow({
   align = "center",
 }: SettingsRowProps) {
   if (children) {
-    return (
-      <div className={cn("p-4 transition-colors hover:bg-muted/20", className)}>
-        {children}
-      </div>
-    )
+    return <div className={cn("p-4", className)}>{children}</div>
   }
 
   return (
     <div
       className={cn(
-        "flex justify-between gap-4 p-4 min-h-[3.5rem] transition-colors hover:bg-muted/20",
+        "flex min-h-14 flex-wrap justify-between gap-3 p-4",
         align === "center" ? "items-center" : "items-start",
         className
       )}
     >
-      <div className="flex items-start gap-3 min-w-0 flex-1">
-        {Icon && (
-          <div className="p-1.5 rounded-md bg-muted text-muted-foreground shrink-0 mt-0.5">
-            <Icon className="size-4" />
+      <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 wrap-anywhere">
+        {htmlFor ? (
+          <label
+            htmlFor={htmlFor}
+            className="text-sm font-medium text-foreground cursor-pointer select-none leading-snug"
+          >
+            {title}
+          </label>
+        ) : (
+          <div className="text-sm font-medium text-foreground leading-snug">
+            {title}
           </div>
         )}
-        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-          {htmlFor ? (
-            <label
-              htmlFor={htmlFor}
-              className="text-sm font-medium text-foreground cursor-pointer select-none leading-snug"
-            >
-              {title}
-            </label>
-          ) : (
-            <div className="text-sm font-medium text-foreground leading-snug">
-              {title}
-            </div>
-          )}
-          {description && (
-            <div className="text-xs text-muted-foreground leading-relaxed">
-              {description}
-            </div>
-          )}
-        </div>
+        {description && (
+          <div className="text-[13px] leading-relaxed text-muted-foreground">
+            {description}
+          </div>
+        )}
       </div>
-      {control && <div className="shrink-0 flex items-center">{control}</div>}
+      {control && (
+        <div className="flex max-w-full min-w-0 shrink-0 items-center [&>*]:max-w-full">
+          {control}
+        </div>
+      )}
     </div>
   )
 }

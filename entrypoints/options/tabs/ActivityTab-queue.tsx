@@ -33,7 +33,10 @@ export function ActivityTabQueue({
               <h2 className="text-sm font-semibold text-foreground tracking-tight">
                 {t("options_activeDownloads")}
               </h2>
-              <Badge variant="secondary" className="h-5 px-2 text-xs font-mono">
+              <Badge
+                variant="secondary"
+                className="h-5 px-2 text-xs tabular-nums"
+              >
                 {tasks.length}
               </Badge>
             </div>

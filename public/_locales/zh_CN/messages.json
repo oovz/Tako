@@ -503,6 +503,9 @@
   "options_suppressSaveAsDesc": {
     "message": "保存到已配置的浏览器下载路径，不打开 Chrome 的文件选择器"
   },
+  "options_fileNaming": {
+    "message": "文件命名"
+  },
   "options_directoryPathTemplate": {
     "message": "目录路径模板"
   },
@@ -678,7 +681,7 @@
     "message": "覆盖现有文件"
   },
   "options_conflictUniquify": {
-    "message": "使用唯一名称保留两个文件"
+    "message": "保留两个文件"
   },
   "options_conflictPolicyHelp": {
     "message": "此策略同时适用于浏览器下载和自定义文件夹。"
@@ -1293,6 +1296,15 @@
   },
   "options_invalidTemplate": {
     "message": "无效模板"
+  },
+  "options_exampleOutput": {
+    "message": "输出示例"
+  },
+  "options_pacingPreview": {
+    "message": "请求节奏"
+  },
+  "options_pacingPreviewDesc": {
+    "message": "全局默认设置。有空闲请求名额时的最早开始时间示例。"
   },
   "options_previewOutput": {
     "message": "预览输出"

@@ -1,5 +1,4 @@
 import React, { useCallback } from "react"
-import { BookOpen, FileCheck, Hash, Image as ImageIcon } from "lucide-react"
 
 import {
   Select,
@@ -82,6 +81,11 @@ export function StorageTab({
 
       <StorageTemplates
         downloads={settings.downloads}
+        destinationName={
+          settings.downloads.destination === "file-system-access"
+            ? selectedFolderName || t("destination_taskFolder")
+            : t("destination_taskChrome")
+        }
         onChange={updateDownloads}
       />
 
@@ -91,7 +95,6 @@ export function StorageTab({
         description={t("options_storageFormatsDesc")}
       >
         <SettingsRow
-          icon={BookOpen}
           title={t("options_includeComicInfo")}
           description={t("options_includeComicInfoDesc")}
           htmlFor="comicinfo"
@@ -108,7 +111,6 @@ export function StorageTab({
         />
 
         <SettingsRow
-          icon={ImageIcon}
           title={t("options_includeCover")}
           description={t("options_includeCoverDesc")}
           htmlFor="cover-image"
@@ -125,7 +127,6 @@ export function StorageTab({
         />
 
         <SettingsRow
-          icon={FileCheck}
           title={t("options_normalizeFilenames")}
           description={t("options_normalizeFilenamesDesc")}
           htmlFor="normalize"
@@ -142,7 +143,6 @@ export function StorageTab({
         />
 
         <SettingsRow
-          icon={Hash}
           title={t("options_imagePadding")}
           description={t("options_imagePaddingDesc")}
           htmlFor="image-padding"

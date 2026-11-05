@@ -503,6 +503,9 @@
   "options_suppressSaveAsDesc": {
     "message": "Save to the configured browser download path without opening Chrome's file chooser"
   },
+  "options_fileNaming": {
+    "message": "File naming"
+  },
   "options_directoryPathTemplate": {
     "message": "Directory Path Template"
   },
@@ -678,7 +681,7 @@
     "message": "Overwrite existing files"
   },
   "options_conflictUniquify": {
-    "message": "Keep both files with a unique name"
+    "message": "Keep both files"
   },
   "options_conflictPolicyHelp": {
     "message": "This policy applies to both browser Downloads and custom folders."
@@ -1293,6 +1296,15 @@
   },
   "options_invalidTemplate": {
     "message": "Invalid Template"
+  },
+  "options_exampleOutput": {
+    "message": "Example output"
+  },
+  "options_pacingPreview": {
+    "message": "Request pattern"
+  },
+  "options_pacingPreviewDesc": {
+    "message": "Global defaults. Earliest example starts when a request slot is free."
   },
   "options_previewOutput": {
     "message": "Preview Output"

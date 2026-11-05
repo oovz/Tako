@@ -8,13 +8,7 @@ import {
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { SettingsGroup } from "./primitives/SettingsGroup"
 import { getChromeWebStoreUpdateStatusCopy } from "@/src/runtime/extension-update-check"
 import { useExtensionUpdateState } from "./ExtensionUpdateSection-state"
 import { cn } from "@/src/shared/utils"
@@ -71,22 +65,11 @@ export function ExtensionUpdateSection() {
     lastResult?.ok === true && lastResult.status === "update_available"
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-2">
-          <RefreshCw
-            aria-hidden="true"
-            className="size-5 text-muted-foreground"
-          />
-          <CardTitle role="heading" aria-level={2} className="text-base">
-            {t("options_chromeWebStoreUpdates")}
-          </CardTitle>
-        </div>
-        <CardDescription>
-          {t("options_chromeWebStoreUpdatesDesc")}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+    <SettingsGroup
+      title={t("options_chromeWebStoreUpdates")}
+      description={t("options_autoUpdateNote")}
+    >
+      <div className="flex flex-col gap-4 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground" translate="no">
             {t("options_installedVersion", [currentVersion])}
@@ -121,18 +104,14 @@ export function ExtensionUpdateSection() {
           </div>
         </div>
 
-        {statusCopy ? (
+        {statusCopy && (
           <Alert className={statusClasses(statusCopy.tone)} aria-live="polite">
             <StatusIcon tone={statusCopy.tone} />
             <AlertTitle>{statusCopy.title}</AlertTitle>
             <AlertDescription>{statusCopy.description}</AlertDescription>
           </Alert>
-        ) : (
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {t("options_autoUpdateNote")}
-          </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsGroup>
   )
 }

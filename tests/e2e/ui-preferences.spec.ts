@@ -20,7 +20,9 @@ test.describe("UI preferences", () => {
 
       await page.locator("#ui-language").click()
       await page.getByRole("option", { name: displayName }).click()
-      await options.saveSettings()
+      await page
+        .getByRole("button", { name: "Save Changes", exact: true })
+        .click()
 
       await expect(page.locator("html")).toHaveAttribute("lang", locale)
       await expect(sidepanel.locator("html")).toHaveAttribute("lang", locale)
@@ -59,8 +61,7 @@ test.describe("UI preferences", () => {
       "data-tako-motion"
     )
 
-    await page.locator("#motion-preference").click()
-    await page.getByRole("option", { name: "Reduce motion" }).click()
+    await page.getByRole("radio", { name: "Reduce motion" }).click()
     await expect(page.locator("html")).toHaveAttribute(
       "data-tako-motion",
       "reduce"
@@ -69,17 +70,20 @@ test.describe("UI preferences", () => {
       "data-tako-motion"
     )
 
-    await options.saveSettings()
+    await page
+      .getByRole("button", { name: "Save Changes", exact: true })
+      .click()
 
     await expect(sidepanel.locator("html")).toHaveAttribute(
       "data-tako-motion",
       "reduce"
     )
 
-    await page.locator("#motion-preference").click()
-    await page.getByRole("option", { name: "Follow system setting" }).click()
+    await page.getByRole("radio", { name: "Follow system setting" }).click()
     await expect(page.locator("html")).not.toHaveAttribute("data-tako-motion")
-    await options.saveSettings()
+    await page
+      .getByRole("button", { name: "Save Changes", exact: true })
+      .click()
     await expect(sidepanel.locator("html")).not.toHaveAttribute(
       "data-tako-motion"
     )

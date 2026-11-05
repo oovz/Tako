@@ -43,7 +43,11 @@ test.describe("Options Page", () => {
 
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
 
+    const output = page.locator("#template-validation-status")
+    await expect(output).toContainText(".cbz")
     await page.locator('label[for="format-none"]').click()
+    await expect(output).toContainText("Individual image files")
+    await expect(output).not.toContainText(".cbz")
 
     await expect(
       page.getByText(
@@ -78,6 +82,16 @@ test.describe("Options Page", () => {
     ).toHaveCount(0)
     const input = page.locator('[data-testid="chapter-delay-input"]')
     await input.fill("1250")
+    const preview = page
+      .getByRole("heading", { name: "Request pattern" })
+      .locator("..")
+    await expect(preview).toContainText(/1[,. ]?250 ms/)
+    await page.getByTestId("request-delay-input").fill("600")
+    await expect(preview.getByRole("listitem")).toHaveText([
+      "0 ms",
+      "600 ms",
+      "1,200 ms",
+    ])
     await page.getByRole("button", { name: "Save Changes" }).click()
 
     await expect
@@ -200,4 +214,62 @@ test.describe("Options Page", () => {
       page.getByRole("button", { name: "Check for Updates" })
     ).toBeVisible()
   })
+})
+
+test("keeps the current section visible and settings readable at 320 pixels", async ({
+  page,
+  extensionId,
+}) => {
+  await page.setViewportSize({ width: 320, height: 620 })
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=activity`)
+
+  const sections = page.getByRole("navigation", { name: "Tako Settings" })
+  const activity = sections.getByRole("button", { name: "Activity & History" })
+  await expect(activity).toBeInViewport({ ratio: 1 })
+  await expect(activity).toHaveAttribute("aria-current", "page")
+  await sections.getByRole("button", { name: "General" }).press("Enter")
+  await expect(page.getByRole("heading", { name: "General" })).toBeVisible()
+  await expect(page).toHaveURL(/\?tab=general$/)
+
+  const language = page.locator("#ui-language")
+  const help = page.getByText(/Chrome continues to localize/)
+  await expect(language).toBeInViewport({ ratio: 1 })
+  await expect(help).toBeInViewport({ ratio: 1 })
+  const triggerBox = (await language.boundingBox())!
+  const helpBox = (await help.boundingBox())!
+  expect(
+    triggerBox.y >= helpBox.y + helpBox.height ||
+      triggerBox.x >= helpBox.x + helpBox.width
+  ).toBe(true)
+
+  await page.goBack()
+  await expect(activity).toHaveAttribute("aria-current", "page")
+  await expect(
+    page.getByRole("heading", { name: "Activity & History" })
+  ).toBeVisible()
+})
+
+test("keeps a settings dropdown within a short, narrow viewport", async ({
+  page,
+  extensionId,
+}) => {
+  await page.setViewportSize({ width: 320, height: 240 })
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+
+  const language = page.locator("#ui-language")
+  await language.click()
+  const list = page.getByRole("listbox")
+  await expect(list).toBeVisible()
+  await expect
+    .poll(async () => {
+      const bounds = await list.boundingBox()
+      return !!bounds && bounds.y >= 0 && bounds.y + bounds.height <= 240
+    })
+    .toBe(true)
+  await page.keyboard.press("End")
+  const lastOption = list.getByRole("option").last()
+  await expect(lastOption).toBeFocused()
+  await expect(lastOption).toBeInViewport({ ratio: 1 })
+  await page.keyboard.press("Escape")
+  await expect(language).toBeFocused()
 })

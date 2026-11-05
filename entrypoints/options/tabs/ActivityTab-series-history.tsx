@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Layers, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -98,7 +98,6 @@ export function ActivityTabSeriesHistory({
   } = state
   return (
     <SettingsRow
-      icon={Layers}
       title={t("options_clearSpecificSeries")}
       description={t("options_clearSeriesSubtext")}
       control={

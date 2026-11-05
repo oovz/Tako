@@ -51,7 +51,7 @@ export function DownloadTaskCardHeading({ task }: { task: DownloadTaskState }) {
             {task.isRetried && (
               <>
                 <span>•</span>
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
                   {t("options_retried")}
                 </Badge>
               </>

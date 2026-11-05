@@ -167,7 +167,7 @@ function PolicyHierarchy({
       <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
         {hasOverride && (
           <li>
-            ✓ <strong>{t("options_override")}</strong>:{" "}
+            <strong>{t("options_override")}</strong>:{" "}
             {t("options_activeThisForm")}
           </li>
         )}

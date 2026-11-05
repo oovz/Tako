@@ -10,10 +10,7 @@ export function DownloadDestinationSection(
   props: DownloadDestinationSectionProps
 ) {
   return (
-    <SettingsGroup
-      title={t("options_downloadDestination")}
-      description={t("options_conflictPolicyHelp")}
-    >
+    <SettingsGroup title={t("options_downloadDestination")}>
       <DownloadFolderDestination {...props} />
       <DownloadDestinationOutput
         downloads={props.downloads}

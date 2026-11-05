@@ -503,6 +503,9 @@
   "options_suppressSaveAsDesc": {
     "message": "Chrome のファイル選択ダイアログを開かず、設定済みのダウンロードパスに保存"
   },
+  "options_fileNaming": {
+    "message": "ファイル名の設定"
+  },
   "options_directoryPathTemplate": {
     "message": "ディレクトリパステンプレート"
   },
@@ -678,7 +681,7 @@
     "message": "既存ファイルを上書き"
   },
   "options_conflictUniquify": {
-    "message": "一意の名前で両方を保持"
+    "message": "両方のファイルを保持"
   },
   "options_conflictPolicyHelp": {
     "message": "この設定はブラウザーのダウンロードとカスタムフォルダーの両方に適用されます。"
@@ -1293,6 +1296,15 @@
   },
   "options_invalidTemplate": {
     "message": "無効なテンプレート"
+  },
+  "options_exampleOutput": {
+    "message": "出力例"
+  },
+  "options_pacingPreview": {
+    "message": "リクエストの間隔"
+  },
+  "options_pacingPreviewDesc": {
+    "message": "全体の既定値。空き枠がある場合の最短開始時刻の例です。"
   },
   "options_previewOutput": {
     "message": "プレビュー出力"

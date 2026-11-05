@@ -1,5 +1,5 @@
+import { SettingsChoices } from "../components/primitives/SettingsChoices"
 import React from "react"
-import { Bell, Globe, Sparkles } from "lucide-react"
 
 import {
   Select,
@@ -15,7 +15,6 @@ import {
   SUPPORTED_LOCALES,
   type UiLanguagePreference,
 } from "@/src/shared/ui-language"
-import type { MotionPreference } from "@/src/shared/motion-preference"
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
 import { SettingsRow } from "../components/primitives/SettingsRow"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
@@ -32,16 +31,11 @@ export function GeneralTab({ settings, onChange }: GeneralTabProps) {
       <SettingsSectionHeader
         id="options-general-heading"
         title={t("options_general")}
-        description={t("options_interfacePreferencesDesc")}
       />
 
       {/* Interface Settings Group */}
-      <SettingsGroup
-        title={t("options_interfacePreferences")}
-        description={t("options_interfacePreferencesDesc")}
-      >
+      <SettingsGroup title={t("options_interfacePreferences")}>
         <SettingsRow
-          icon={Globe}
           title={t("options_uiLanguage")}
           description={t("options_uiLanguageDesc")}
           htmlFor="ui-language"
@@ -70,40 +64,24 @@ export function GeneralTab({ settings, onChange }: GeneralTabProps) {
         />
 
         <SettingsRow
-          icon={Sparkles}
           title={t("options_motionPreference")}
-          description={t("options_motionPreferenceDesc")}
-          htmlFor="motion-preference"
           control={
-            <Select
+            <SettingsChoices
+              label={t("options_motionPreference")}
               value={settings.motionPreference}
-              onValueChange={(value) =>
-                onChange({ motionPreference: value as MotionPreference })
-              }
-            >
-              <SelectTrigger id="motion-preference" className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">
-                  {t("options_motionSystem")}
-                </SelectItem>
-                <SelectItem value="reduce">
-                  {t("options_motionReduce")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              onChange={(motionPreference) => onChange({ motionPreference })}
+              choices={[
+                { value: "system", label: t("options_motionSystem") },
+                { value: "reduce", label: t("options_motionReduce") },
+              ]}
+            />
           }
         />
       </SettingsGroup>
 
       {/* Notifications Settings Group */}
-      <SettingsGroup
-        title={t("options_notifications")}
-        description={t("options_notificationsDesc")}
-      >
+      <SettingsGroup title={t("options_notifications")}>
         <SettingsRow
-          icon={Bell}
           title={t("options_enableNotifications")}
           description={t("options_enableNotificationsDesc")}
           htmlFor="notifications"

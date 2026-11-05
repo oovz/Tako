@@ -290,10 +290,9 @@ test.describe("Options UI behavior", () => {
     await expect(page.locator("#root")).toBeVisible({ timeout: 10000 })
     await expect(page.getByText("Debug Settings")).toBeVisible()
 
-    await page.getByTestId("log-level-select").click()
     // E2E builds run in development mode, where Debug is the default. Select
     // a different value so this test exercises the unsaved-settings footer.
-    await page.getByRole("option", { name: "Error" }).click()
+    await page.getByRole("radio", { name: "Error" }).click()
     await page.getByRole("button", { name: "Save Changes" }).click()
 
     await expect
@@ -313,7 +312,7 @@ test.describe("Options UI behavior", () => {
     await page.reload({ waitUntil: "domcontentloaded" })
     await expect(page.getByRole("button", { name: /Network/i })).toBeVisible()
     await expect(page.getByText("Debug Settings")).toBeVisible()
-    await expect(page.getByTestId("log-level-select")).toContainText("Error")
+    await expect(page.getByRole("radio", { name: "Error" })).toBeChecked()
   })
 })
 

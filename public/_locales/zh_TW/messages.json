@@ -503,6 +503,9 @@
   "options_suppressSaveAsDesc": {
     "message": "儲存到已設定的瀏覽器下載路徑，不開啟 Chrome 的檔案選擇器"
   },
+  "options_fileNaming": {
+    "message": "檔案命名"
+  },
   "options_directoryPathTemplate": {
     "message": "目錄路徑範本"
   },
@@ -678,7 +681,7 @@
     "message": "覆寫現有檔案"
   },
   "options_conflictUniquify": {
-    "message": "使用唯一名稱保留兩個檔案"
+    "message": "保留兩個檔案"
   },
   "options_conflictPolicyHelp": {
     "message": "此原則同時適用於瀏覽器下載和自訂資料夾。"
@@ -1293,6 +1296,15 @@
   },
   "options_invalidTemplate": {
     "message": "無效範本"
+  },
+  "options_exampleOutput": {
+    "message": "輸出範例"
+  },
+  "options_pacingPreview": {
+    "message": "請求節奏"
+  },
+  "options_pacingPreviewDesc": {
+    "message": "全域預設設定。有空閒請求名額時的最早開始時間範例。"
   },
   "options_previewOutput": {
     "message": "預覽輸出"

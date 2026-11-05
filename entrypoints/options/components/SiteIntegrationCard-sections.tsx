@@ -37,7 +37,7 @@ function OverrideLabel({
     <Label htmlFor={id}>
       {t(label)}
       {overridden && (
-        <Badge variant="outline" className="ml-2 text-[10px] font-medium">
+        <Badge variant="outline" className="ml-2 text-xs font-medium">
           {t("options_override")}
         </Badge>
       )}

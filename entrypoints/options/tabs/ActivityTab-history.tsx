@@ -1,4 +1,3 @@
-import { Database, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ClearHistoryDialog } from "../components/ClearHistoryDialog"
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
@@ -25,7 +24,6 @@ function ActivityStorageSummary({
 }: StorageSummaryProps) {
   return (
     <SettingsRow
-      icon={Database}
       title={t("options_storageUsed")}
       description={
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mt-1">
@@ -87,7 +85,6 @@ export function ActivityTabHistory(
       />
       {/* Clear Chapter History Action */}
       <SettingsRow
-        icon={Trash2}
         title={t("options_clearChapterHistory")}
         description={t("options_clearChapterHistorySubtext")}
         control={

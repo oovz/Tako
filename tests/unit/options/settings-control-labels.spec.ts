@@ -25,8 +25,10 @@ describe("options control labels", () => {
       })
     )
 
-    expect(markup).toContain('id="archive-format-label"')
-    expect(markup).toContain('aria-labelledby="archive-format-label"')
+    const controls = document.createElement("div")
+    controls.innerHTML = markup
+    const group = controls.querySelector('[role="radiogroup"]')
+    expect(group?.getAttribute("aria-label")).toBe("options_archiveFormat")
   })
 
   it("uses a labeled fieldset for multiselect integration settings", () => {
@@ -104,15 +106,13 @@ describe("options control labels", () => {
 
     expect(markup).toContain('for="ui-language"')
     expect(markup).toContain('id="ui-language"')
-    expect(markup).toContain('for="motion-preference"')
-    expect(markup).toContain('id="motion-preference"')
     const controls = document.createElement("div")
     controls.innerHTML = markup
     expect(controls.querySelector("#ui-language")?.getAttribute("role")).toBe(
       "combobox"
     )
     expect(
-      controls.querySelector("#motion-preference")?.getAttribute("role")
-    ).toBe("combobox")
+      controls.querySelector('[role="radiogroup"]')?.getAttribute("aria-label")
+    ).toBe("options_motionPreference")
   })
 })

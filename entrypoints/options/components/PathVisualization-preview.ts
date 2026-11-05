@@ -1,4 +1,8 @@
 import {
+  resolveDownloadDirectory,
+  resolveFileName,
+} from "@/src/shared/template-resolver"
+import {
   expandTemplate,
   validateTemplate,
   type TemplateContext,
@@ -29,14 +33,26 @@ export function createPathPreview(
 ) {
   const path = expandPreviewTemplate(template, context)
   const filename = expandPreviewTemplate(filenameTemplate, context)
-  const hasErrors = !path.success || !filename.success
+  const runtimeContext = {
+    ...context,
+    date: new Date(),
+    chapterTitle: context.chapterTitle ?? "",
+    format,
+  }
+  const directory = resolveDownloadDirectory(template, runtimeContext)
+  const leaf = resolveFileName(filenameTemplate, runtimeContext)
+  const errors = path.errors.concat(filename.errors)
+  if (path.success && directory.error) errors.push(directory.error)
+  if (filename.success && leaf.error) errors.push(leaf.error)
+  const fullPath =
+    errors.length === 0 && directory.resolvedPath && leaf.resolvedName
+      ? `${directory.resolvedPath}/${leaf.resolvedName}`
+      : null
   const extension = format === "none" ? "" : `.${format}`
   return {
-    hasErrors,
-    fullPath: hasErrors
-      ? null
-      : `${path.expanded}/${filename.expanded}${extension}`,
-    errors: path.errors.concat(filename.errors),
+    hasErrors: fullPath === null,
+    fullPath: fullPath ? `${fullPath}${extension}` : null,
+    errors,
     warnings: path.warnings.concat(filename.warnings),
   }
 }
