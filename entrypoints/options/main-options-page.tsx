@@ -1,4 +1,4 @@
-import { lazy, Profiler, Suspense, useState } from "react"
+import { lazy, Profiler, Suspense, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 
 import { Toaster } from "@/components/ui/sonner"
@@ -50,7 +50,7 @@ function onRenderCallback(
   actualDuration: number,
   baseDuration: number
 ) {
-  logger.debug(`⚡ [Profiler] ${id} - ${phase}`, {
+  logger.debug(`[Profiler] ${id} - ${phase}`, {
     actualDuration: `${actualDuration.toFixed(2)}ms`,
     baseDuration: `${baseDuration.toFixed(2)}ms`,
     improvement:
@@ -136,48 +136,64 @@ function OptionsWorkspace({
 }) {
   const { activeSection, handleSectionChange } = navigation
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
+  const mainRef = useRef<HTMLElement>(null)
+  const discardButtonRef = useRef<HTMLButtonElement>(null)
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground font-sans antialiased md:flex-row">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground font-sans antialiased lg:flex-row">
       <Toaster />
       <OptionsSidebar
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
       />
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col p-4 pb-28 sm:p-6 sm:pb-28 md:p-8 md:pb-28">
-          {state.hasExternalChanges && (
-            <ExternalSettingsConflictBanner
-              isResolving={state.isResolvingExternalChanges}
-              onReload={async () => {
-                await state.resolveExternalChanges("reload")
-              }}
-              onKeepMine={async () => {
-                await state.resolveExternalChanges("keep-mine")
-              }}
-            />
-          )}
-          <section
-            key={activeSection}
-            aria-labelledby={`options-${activeSection}-heading`}
-            className="animate-in fade-in slide-in-from-bottom-2 duration-200"
-          >
-            <Suspense fallback={<SectionLoadingSkeleton />}>
-              <OptionsTabContent state={state} activeSection={activeSection} />
-            </Suspense>
-          </section>
-        </div>
-      </main>
-      {state.hasUnsavedChanges && (
-        <UnsavedChangesFooter
-          isSaving={state.isSaving}
-          isSaveBlocked={
-            state.hasExternalChanges || state.isResolvingExternalChanges
-          }
-          onDiscard={() => setShowDiscardDialog(true)}
-          onSave={state.saveConfiguration}
-        />
-      )}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main
+          ref={mainRef}
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto"
+        >
+          <div className="@container mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
+            {state.hasExternalChanges && (
+              <ExternalSettingsConflictBanner
+                isResolving={state.isResolvingExternalChanges}
+                onReload={async () => {
+                  await state.resolveExternalChanges("reload")
+                }}
+                onKeepMine={async () => {
+                  await state.resolveExternalChanges("keep-mine")
+                }}
+              />
+            )}
+            <section
+              key={activeSection}
+              aria-labelledby={`options-${activeSection}-heading`}
+            >
+              <Suspense fallback={<SectionLoadingSkeleton />}>
+                <OptionsTabContent
+                  state={state}
+                  activeSection={activeSection}
+                />
+              </Suspense>
+            </section>
+          </div>
+        </main>
+        {state.hasUnsavedChanges && (
+          <UnsavedChangesFooter
+            discardButtonRef={discardButtonRef}
+            isSaving={state.isSaving}
+            isSaveBlocked={
+              state.hasExternalChanges || state.isResolvingExternalChanges
+            }
+            onDiscard={() => setShowDiscardDialog(true)}
+            onSave={state.saveConfiguration}
+          />
+        )}
+      </div>
       <OptionsDiscardDialog
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          const target = discardButtonRef.current ?? mainRef.current
+          target?.focus()
+        }}
         open={showDiscardDialog}
         onOpenChange={setShowDiscardDialog}
         discardChanges={state.discardChanges}

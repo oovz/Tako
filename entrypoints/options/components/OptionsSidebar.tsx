@@ -9,93 +9,52 @@ interface OptionsSidebarProps {
   onSectionChange: (section: OptionsSection) => void
 }
 
-function NavItem({
-  icon: Icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex w-auto shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full cursor-pointer",
-        active
-          ? "bg-accent text-accent-foreground shadow-2xs font-semibold"
-          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-      )}
-    >
-      <Icon className="size-4 shrink-0" />
-      <span className="truncate">{label}</span>
-    </button>
-  )
-}
+const sections = [
+  { id: "general", label: "options_general", icon: Settings },
+  { id: "storage", label: "options_storage", icon: FolderArchive },
+  { id: "network", label: "options_network", icon: Zap },
+  { id: "integrations", label: "options_siteIntegrations", icon: Puzzle },
+  { id: "activity", label: "options_activity", icon: Activity },
+] as const
 
 export function OptionsSidebar({
   activeSection,
   onSectionChange,
 }: OptionsSidebarProps) {
   return (
-    <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-sidebar md:w-64 md:overflow-y-auto md:border-b-0 md:border-r">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border/40 px-4 md:h-14">
-        <img
-          aria-hidden="true"
-          alt=""
-          className="size-6 shrink-0"
-          src="icon/32.png"
-        />
-        <span className="text-base font-semibold tracking-tight">
+    <aside className="flex shrink-0 flex-col border-b bg-sidebar lg:w-60 lg:overflow-y-auto lg:border-r lg:border-b-0">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 px-4 lg:h-14 lg:border-b">
+        <img alt="" className="size-6 shrink-0" src="icon/32.png" />
+        <span className="text-sm font-semibold tracking-tight lg:text-base">
           {t("options_takoSettings")}
         </span>
       </div>
 
       <nav
         aria-label={t("options_takoSettings")}
-        className="flex min-w-0 flex-row gap-1 overflow-x-auto p-2 md:flex-1 md:flex-col md:overflow-x-visible md:p-3"
+        className="grid grid-cols-3 gap-1 px-3 pb-3 sm:grid-cols-5 lg:flex lg:flex-col lg:pt-3"
       >
-        <NavItem
-          icon={Settings}
-          label={t("options_general")}
-          active={activeSection === "general"}
-          onClick={() => onSectionChange("general")}
-        />
-        <NavItem
-          icon={FolderArchive}
-          label={t("options_storage")}
-          active={activeSection === "storage"}
-          onClick={() => onSectionChange("storage")}
-        />
-        <NavItem
-          icon={Zap}
-          label={t("options_network")}
-          active={activeSection === "network"}
-          onClick={() => onSectionChange("network")}
-        />
-        <NavItem
-          icon={Puzzle}
-          label={t("options_siteIntegrations")}
-          active={activeSection === "integrations"}
-          onClick={() => onSectionChange("integrations")}
-        />
-        <NavItem
-          icon={Activity}
-          label={t("options_activity")}
-          active={activeSection === "activity"}
-          onClick={() => onSectionChange("activity")}
-        />
+        {sections.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onSectionChange(id)}
+            aria-current={id === activeSection ? "page" : undefined}
+            className={cn(
+              "flex min-h-9 min-w-0 w-full cursor-pointer items-center justify-center rounded-md px-1.5 py-1.5 text-center text-xs font-medium leading-snug transition-colors duration-150 lg:justify-start lg:gap-2.5 lg:px-3 lg:py-2 lg:text-left lg:text-sm",
+              id === activeSection
+                ? "bg-accent font-semibold text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+          >
+            <Icon
+              aria-hidden="true"
+              className="hidden size-4 shrink-0 lg:block"
+            />
+            <span className="min-w-0 wrap-anywhere">{t(label)}</span>
+          </button>
+        ))}
       </nav>
-      <div className="hidden border-t border-border/40 px-4 py-3 md:block">
-        <span className="text-xs text-muted-foreground">
-          {t("options_takoVersion", [chrome.runtime.getManifest().version])}
-        </span>
-      </div>
     </aside>
   )
 }

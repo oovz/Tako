@@ -316,3 +316,24 @@ test.describe("Options UI behavior", () => {
     await expect(page.getByTestId("log-level-select")).toContainText("Error")
   })
 })
+
+test("restores keyboard focus when the discard confirmation closes", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  await page.getByTestId("notifications-switch").press("Space")
+
+  const discard = page.getByRole("button", { name: "Discard", exact: true })
+  await discard.press("Enter")
+  const dialog = page.getByRole("alertdialog")
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(discard).toBeFocused()
+
+  await discard.press("Enter")
+  await dialog.getByRole("button", { name: "Discard Changes" }).press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expect(discard).toHaveCount(0)
+  await expect(page.getByRole("main")).toBeFocused()
+})

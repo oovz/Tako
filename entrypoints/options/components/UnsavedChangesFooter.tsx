@@ -1,9 +1,11 @@
 import { Loader2 } from "lucide-react"
+import type { Ref } from "react"
 
 import { Button } from "@/components/ui/button"
 import { t } from "@/src/runtime/i18n"
 
 interface UnsavedChangesFooterProps {
+  discardButtonRef: Ref<HTMLButtonElement>
   isSaving: boolean
   isSaveBlocked?: boolean
   onDiscard: () => void
@@ -11,26 +13,31 @@ interface UnsavedChangesFooterProps {
 }
 
 export function UnsavedChangesFooter({
+  discardButtonRef,
   isSaving,
   isSaveBlocked = false,
   onDiscard,
   onSave,
 }: UnsavedChangesFooterProps) {
   return (
-    <div className="fixed bottom-0 left-0 md:left-64 right-0 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 animate-in slide-in-from-bottom-4 fade-in duration-200 shadow-lg">
-      <div className="mx-auto max-w-5xl px-4 py-3 sm:px-8 sm:py-3.5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="shrink-0 border-t bg-background">
+      <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 text-sm font-medium text-muted-foreground">
-            <div className="size-2 rounded-full bg-destructive animate-pulse" />
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-full bg-muted-foreground"
+            />
             <span>{t("options_unsavedChanges")}</span>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="ml-auto flex max-w-full flex-wrap justify-end gap-2">
             <Button
               type="button"
+              ref={discardButtonRef}
               onClick={onDiscard}
               variant="outline"
               disabled={isSaving}
-              className="transition-all duration-150 active:scale-[0.97]"
+              className="h-auto min-h-9 whitespace-normal"
             >
               {t("options_discard")}
             </Button>
@@ -38,7 +45,7 @@ export function UnsavedChangesFooter({
               type="button"
               onClick={onSave}
               disabled={isSaving || isSaveBlocked}
-              className="shadow-sm transition-all duration-150 active:scale-[0.97]"
+              className="h-auto min-h-9 whitespace-normal"
             >
               {isSaving && (
                 <Loader2

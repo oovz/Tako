@@ -18,18 +18,26 @@ export function SettingsGroup({
   className,
   containerClassName,
 }: SettingsGroupProps) {
+  const hasHeading = Boolean(title || description || action)
   return (
-    <div className={cn("flex flex-col gap-2", containerClassName)}>
-      {(title || description || action) && (
-        <div className="flex items-end justify-between px-1 gap-2">
+    <div
+      className={cn(
+        "grid gap-3",
+        hasHeading &&
+          "@min-[48rem]:grid-cols-[12rem_minmax(0,1fr)] @min-[48rem]:gap-6",
+        containerClassName
+      )}
+    >
+      {hasHeading && (
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 @min-[48rem]:pt-3">
           <div className="flex flex-col gap-0.5">
             {title && (
-              <h2 className="text-sm font-semibold text-foreground tracking-tight">
+              <h2 className="text-base font-semibold text-foreground">
                 {title}
               </h2>
             )}
             {description && (
-              <p className="text-xs text-muted-foreground leading-relaxed">
+              <p className="text-sm leading-snug text-muted-foreground">
                 {description}
               </p>
             )}
@@ -39,7 +47,7 @@ export function SettingsGroup({
       )}
       <div
         className={cn(
-          "rounded-xl border border-border bg-card divide-y divide-border/60 overflow-hidden shadow-2xs",
+          "min-w-0 divide-y divide-border/70 rounded-lg bg-muted/50",
           className
         )}
       >

@@ -16,10 +16,12 @@ export function OptionsDiscardDialog({
   open,
   onOpenChange,
   discardChanges,
+  onCloseAutoFocus,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   discardChanges: () => Promise<boolean>
+  onCloseAutoFocus?: (event: Event) => void
 }) {
   const [isDiscarding, setIsDiscarding] = useState(false)
   const discard = async () => {
@@ -40,7 +42,7 @@ export function OptionsDiscardDialog({
         onOpenChange(nextOpen)
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {t("options_discardUnsavedChanges")}
@@ -53,7 +55,11 @@ export function OptionsDiscardDialog({
           <AlertDialogCancel disabled={isDiscarding}>
             {t("common_cancel")}
           </AlertDialogCancel>
-          <Button disabled={isDiscarding} onClick={() => void discard()}>
+          <Button
+            variant="destructive"
+            disabled={isDiscarding}
+            onClick={() => void discard()}
+          >
             {isDiscarding ? t("common_loading") : t("options_discardChanges")}
           </Button>
         </AlertDialogFooter>

@@ -88,17 +88,11 @@ export function SiteIntegrationsTab({
       <SettingsSectionHeader
         id="options-integrations-heading"
         title={t("options_siteIntegrations")}
-        description={t("options_siteIntegrationsDesc")}
-        action={
-          <Badge variant="secondary" className="h-6 px-2.5 text-xs font-medium">
-            {t("options_integrationsCount", [String(integrations.length)])}
-          </Badge>
-        }
       />
 
       {/* Search & Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative min-w-0 max-w-md flex-[1_1_16rem]">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label={t("options_searchSiteIntegrations")}
@@ -127,7 +121,7 @@ export function SiteIntegrationsTab({
           <div className="flex items-center gap-2">
             <Badge
               variant="outline"
-              className="border-primary/40 bg-background text-[10px] font-semibold text-primary"
+              className="border-primary/40 bg-background text-xs font-semibold text-primary"
             >
               {t("options_overrides")}
             </Badge>
@@ -207,7 +201,7 @@ function IntegrationFilters({
     { value: "overrides", label: t("common_overrides") },
   ] as const
   return (
-    <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+    <div className="flex flex-wrap items-center gap-1.5">
       {filters
         .filter(
           (filter) => filter.value !== "overrides" || counts.overrides > 0
@@ -217,11 +211,12 @@ function IntegrationFilters({
             key={filter.value}
             type="button"
             onClick={() => onFilterChange(filter.value)}
+            aria-pressed={activeFilter === filter.value}
             className={cn(
-              "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150 active:scale-[0.96] cursor-pointer",
+              "inline-flex min-h-7 cursor-pointer items-center rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150",
               activeFilter === filter.value
-                ? "bg-primary text-primary-foreground shadow-2xs"
-                : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "border border-foreground/40 bg-accent text-accent-foreground"
+                : "border border-transparent bg-muted/70 text-foreground hover:bg-muted"
             )}
           >
             {filter.label} ({counts[filter.value]})
