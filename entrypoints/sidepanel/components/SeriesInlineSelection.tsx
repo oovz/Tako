@@ -3,7 +3,6 @@ import React, { useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { cn } from "@/src/shared/utils"
 import type {
   InlineSelectionPresentationBySeries,
   InlineSelectionPresentationState,
@@ -28,7 +27,7 @@ import {
   getInlineSelectionViewSummary,
   updateInlineSelectionPresentation,
 } from "@/entrypoints/sidepanel/components/series-inline-selection-helpers"
-import { Check, Download } from "lucide-react"
+import { Download, ListChecks, Loader2 } from "lucide-react"
 import { t } from "@/src/runtime/i18n"
 
 interface SeriesInlineSelectionProps {
@@ -60,11 +59,11 @@ function SeriesSelectionLoading() {
       aria-label={t("common_loading")}
     >
       <div className="px-3 py-2 bg-muted/50 border-b border-border">
-        <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+        <div className="h-4 w-24 bg-muted rounded" />
       </div>
       <div className="flex-1 p-3 flex flex-col gap-2">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-8 bg-muted rounded animate-pulse" />
+          <div key={i} className="h-8 bg-muted rounded" />
         ))}
       </div>
     </div>
@@ -88,24 +87,28 @@ function SeriesSelectionToolbar({
   viewMode: InlineSelectionViewMode
   updatePresentation: PresentationUpdater
 }) {
+  const allSelected = selectedCount > 0 && selectedCount === selectableCount
+  const partiallySelected = selectedCount > 0 && !allSelected
+  const selectAllLabel = t("sidepanel_selectAllChapters")
+
   return (
     <div className="sticky top-0 z-10 border-b border-border bg-background">
       <div className="flex flex-col gap-2 px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <label
-              htmlFor="select-all-ctx"
-              className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground"
-            >
-              <Checkbox
-                id="select-all-ctx"
-                checked={selectedCount > 0 && selectedCount === selectableCount}
-                onCheckedChange={onSelectAll}
-                disabled={isEnqueuing || selectableCount === 0}
-              />
-              <span>{t("sidepanel_selectChaptersLabel")}</span>
-            </label>
-          </div>
+          <Checkbox
+            id="select-all-ctx"
+            aria-label={selectAllLabel}
+            title={selectAllLabel}
+            checked={partiallySelected ? "indeterminate" : allSelected}
+            onCheckedChange={onSelectAll}
+            disabled={isEnqueuing || selectableCount === 0}
+            className="size-8 cursor-pointer rounded-md border-input data-[state=unchecked]:hover:bg-muted"
+            uncheckedIndicator={
+              selectedCount === 0 && (
+                <ListChecks aria-hidden="true" className="size-4" />
+              )
+            }
+          />
           <span className="shrink-0 text-xs text-muted-foreground">
             {selectedCount > 0
               ? t("sidepanel_selectedCount", [String(selectedCount)])
@@ -169,34 +172,22 @@ function SeriesSelectionFooter({
         </p>
       )}
 
-      <div
-        className={cn(
-          "overflow-hidden border-t border-border bg-background transition-[max-height,opacity] duration-200 ease-out",
-          selectedCount > 0 && !download.isEnqueuing
-            ? "max-h-[64px] opacity-100"
-            : "max-h-0 opacity-0"
-        )}
-      >
-        <div className="h-[64px] px-3 py-2.5">
-          <Button
-            type="button"
-            className="group h-10 w-full gap-2 text-sm font-semibold transition-all duration-150 active:scale-[0.98]"
-            onClick={onStart}
-            disabled={download.isEnqueuing}
-          >
-            {download.showSuccess ? (
-              <>
-                <Check className="size-4 animate-in zoom-in-75 duration-200 text-primary-foreground" />
-                {t("sidepanel_addedToQueue")}
-              </>
-            ) : (
-              <>
-                <Download className="size-4 transition-transform duration-150 group-hover:translate-y-0.5" />
-                {t("sidepanel_downloadCount", [String(selectedCount)])}
-              </>
-            )}
-          </Button>
-        </div>
+      <div className="shrink-0 bg-background px-3 py-2.5">
+        <Button
+          type="button"
+          className="h-10 w-full gap-2 text-sm font-semibold tabular-nums"
+          onClick={download.isEnqueuing ? undefined : onStart}
+          disabled={selectedCount === 0}
+          aria-disabled={download.isEnqueuing || undefined}
+          aria-busy={download.isEnqueuing || undefined}
+        >
+          {download.isEnqueuing ? (
+            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+          ) : (
+            <Download aria-hidden="true" className="size-4" />
+          )}
+          {t("sidepanel_downloadCount", [String(selectedCount)])}
+        </Button>
       </div>
     </>
   )

@@ -845,3 +845,157 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.close()
   })
 })
+
+test("keeps long titles and chapter statuses readable in a resizable panel", async ({
+  context,
+  extensionId,
+  page,
+}) => {
+  const seriesTitle =
+    "The Apothecary's Atlas of Forgotten Cities and the Secrets Hidden Under the Northern Sea"
+  const chapters = Array.from({ length: 65 }, (_, index) => ({
+    id: `long-title-${index + 1}`,
+    url: `https://example.com/long-title-${index + 1}`,
+    title: `Chapter ${index + 1}: A Letter from the Cartographer Who Never Returned from the Northern Sea`,
+    locked: index === 0,
+  }))
+  await page.goto(STRESS_TOGGLE_SERIES_URL)
+  await seedTabContext(
+    page,
+    context,
+    {
+      siteIntegrationId: "mangadex",
+      mangaId: MANGADEX_STRESS_TOGGLE_SERIES_ID,
+      seriesTitle,
+      metadata: { author: "Aya Mori" },
+      chapters,
+    },
+    STRESS_TOGGLE_SERIES_URL
+  )
+
+  const panel = await openSidepanelHarness(context, extensionId, page)
+  await panel.setViewportSize({ width: 360, height: 730 })
+  await panel
+    .getByRole("button", { name: "Select Chapters", exact: true })
+    .click()
+
+  const downloadedAt = Date.now()
+  await setDownloadedChapterHistory(
+    context,
+    chapters.slice(0, 3).map((chapter, index) => ({
+      siteIntegrationId: "mangadex",
+      seriesId: MANGADEX_STRESS_TOGGLE_SERIES_ID,
+      seriesTitle,
+      chapterId: chapter.id,
+      title: chapter.title,
+      url: chapter.url,
+      downloadedAt,
+      format: "cbz",
+      ...(index < 2
+        ? {
+            saveConfirmedAt: downloadedAt,
+            outputDestination: index === 0 ? "downloads-api" : "fsa",
+          }
+        : {}),
+    }))
+  )
+
+  const list = panel.locator('[data-virtualized="true"]')
+  const title = panel.getByRole("heading", { name: seriesTitle })
+  const first = list.getByText(chapters[0].title, { exact: true })
+  const firstRow = list.getByTestId("inline-item").filter({
+    hasText: chapters[0].title,
+  })
+  const secondRow = list.getByTestId("inline-item").filter({
+    hasText: chapters[1].title,
+  })
+  const locked = list.getByRole("checkbox", {
+    name: chapters[0].title,
+    exact: true,
+  })
+  const savedToFolder = list.getByRole("checkbox", {
+    name: chapters[1].title,
+    exact: true,
+  })
+  const processed = list.getByRole("checkbox", {
+    name: chapters[2].title,
+    exact: true,
+  })
+  const cover = panel.getByRole("img", { name: seriesTitle })
+  const selectAll = panel.getByRole("checkbox", { name: "Select all" })
+  await expect(first).toBeVisible()
+  await expect(locked).toBeDisabled()
+  await expect(locked).toHaveAccessibleDescription("Locked Saved")
+  await expect(savedToFolder).toHaveAccessibleDescription("Saved to folder")
+  await expect(processed).toHaveAccessibleDescription("Previously processed")
+
+  for (const [width, height] of [
+    [360, 730],
+    [320, 620],
+    [200, 640],
+  ]) {
+    await panel.setViewportSize({ width, height })
+    await expect(
+      panel.getByRole("button", { name: "Close Selection" })
+    ).toBeInViewport()
+    if (width < 280) {
+      await expect(cover).toBeHidden()
+    } else {
+      await expect(cover).toBeInViewport({ ratio: 1 })
+    }
+    await expect(selectAll).toBeInViewport({ ratio: 1 })
+    await expect(selectAll.locator("svg")).toBeVisible()
+    for (const badge of [
+      firstRow.getByTitle("Locked", { exact: true }),
+      firstRow.getByTitle("Saved", { exact: true }),
+      secondRow.getByTitle("Saved to folder", { exact: true }),
+      list.getByTitle("Previously processed", { exact: true }),
+    ]) {
+      await expect(badge).toBeInViewport({ ratio: 1 })
+    }
+    for (const label of [title, first]) {
+      const visibleLines = await label.evaluate(
+        (element) =>
+          element.clientHeight /
+          parseFloat(getComputedStyle(element).lineHeight)
+      )
+      expect(visibleLines).toBeCloseTo(2, 0)
+    }
+    await expect
+      .poll(async () => {
+        const firstBox = await firstRow.boundingBox()
+        const secondBox = await secondRow.boundingBox()
+        return (
+          !!firstBox &&
+          !!secondBox &&
+          firstBox.y + firstBox.height <= secondBox.y
+        )
+      })
+      .toBe(true)
+  }
+
+  await savedToFolder.press("Space")
+  await expect(selectAll).toHaveAttribute("aria-checked", "mixed")
+  await selectAll.press("Space")
+  await expect(selectAll).toBeChecked()
+  await expect(locked).not.toBeChecked()
+  await expect(panel.getByText("64 selected", { exact: true })).toBeVisible()
+  await selectAll.press("Space")
+  await expect(
+    panel.getByRole("button", { name: "Download (0)" })
+  ).toBeDisabled()
+
+  await expect(first).toHaveAttribute("title", chapters[0].title)
+  await expect(panel.getByText("Aya Mori", { exact: true })).toBeVisible()
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+  const last = list.getByRole("checkbox", {
+    name: chapters[64].title,
+    exact: true,
+  })
+  await last.scrollIntoViewIfNeeded()
+  await expect(last).toBeInViewport()
+  await last.press("Space")
+  await expect(last).toBeChecked()
+})

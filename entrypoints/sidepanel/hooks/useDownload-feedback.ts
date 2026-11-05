@@ -1,43 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-
-const SUCCESS_HIDE_DELAY_MS = 2000
+import { toast } from "sonner"
+import { t } from "@/src/runtime/i18n"
 
 export function useDownloadFeedback() {
-  const [showSuccess, setShowSuccess] = useState(false)
   const [isEnqueuing, setIsEnqueuing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
-
-  const clearSuccessTimeout = useCallback(() => {
-    if (timeoutRef.current !== null) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-  }, [])
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      clearSuccessTimeout()
     }
-  }, [clearSuccessTimeout])
+  }, [])
 
   const begin = useCallback(() => {
     setIsEnqueuing(true)
-    setShowSuccess(false)
     setErrorMessage(null)
-    clearSuccessTimeout()
-  }, [clearSuccessTimeout])
+  }, [])
 
   const succeed = useCallback(() => {
     if (!mountedRef.current) return
-    setShowSuccess(true)
-    timeoutRef.current = setTimeout(() => {
-      if (mountedRef.current) setShowSuccess(false)
-      timeoutRef.current = null
-    }, SUCCESS_HIDE_DELAY_MS)
+    toast.success(t("sidepanel_addedToQueue"), {
+      position: "bottom-center",
+    })
   }, [])
 
   const fail = useCallback((message: string) => {
@@ -49,7 +35,6 @@ export function useDownloadFeedback() {
   }, [])
 
   return {
-    showSuccess,
     isEnqueuing,
     errorMessage,
     begin,

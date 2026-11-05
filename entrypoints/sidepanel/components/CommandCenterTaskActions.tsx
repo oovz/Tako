@@ -148,7 +148,7 @@ function InlineTaskAction({ action }: { action: TaskActionDescriptor }) {
           variant="ghost"
           size="icon"
           className={cn(
-            "size-6 rounded transition-all duration-150 active:scale-90",
+            "size-6 rounded transition-[color,background-color,scale] duration-150 active:scale-90",
             action.destructive
               ? "text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -175,7 +175,7 @@ function OverflowTaskActions({ actions }: { actions: TaskActionDescriptor[] }) {
           aria-label={t("sidepanel_moreActions")}
           variant="ghost"
           size="icon"
-          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150 active:scale-90"
+          className="size-6 text-muted-foreground hover:bg-muted hover:text-foreground transition-[color,background-color,scale] duration-150 active:scale-90"
         >
           <MoreHorizontal
             aria-hidden="true"

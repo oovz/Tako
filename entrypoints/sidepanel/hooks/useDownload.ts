@@ -18,7 +18,6 @@ export {
 
 interface UseDownloadReturn {
   startDownload: (selectedChapterIds: string[]) => Promise<boolean>
-  showSuccess: boolean
   /** True while a download enqueue request is in-flight (prevents double-clicks) */
   isEnqueuing: boolean
   errorMessage: string | null
@@ -54,7 +53,7 @@ export function useDownload({
         succeed()
         return true
       } catch (error) {
-        logger.error("❌ Failed to start download:", error)
+        logger.error("Failed to start download:", error)
         fail(t("sidepanel_enqueueFailed"))
         return false
       } finally {
@@ -67,7 +66,6 @@ export function useDownload({
 
   return {
     startDownload,
-    showSuccess: feedback.showSuccess,
     isEnqueuing: feedback.isEnqueuing,
     errorMessage: feedback.errorMessage,
   }

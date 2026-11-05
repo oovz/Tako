@@ -1,6 +1,6 @@
-import { useMemo, useRef } from "react"
+import { useId, useMemo, useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { CheckCircle2, ChevronRight } from "lucide-react"
+import { CheckCircle2, ChevronRight, History, LockKeyhole } from "lucide-react"
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/src/shared/utils"
@@ -29,7 +29,7 @@ type SelectorRow =
       title: string
       chapterCount: number
       selectableChapterCount: number
-      allSelected: boolean
+      selectionState: boolean | "indeterminate"
       groupId: string
       isExpanded: boolean
     }
@@ -72,9 +72,9 @@ function flattenRows(
       const selectableChapters = item.chapters.filter(
         (chapter) => chapter.locked !== true
       )
-      const allSelected =
-        selectableChapters.length > 0 &&
-        selectableChapters.every((chapter) => chapter.selected)
+      const selectedCount = selectableChapters.filter(
+        (chapter) => chapter.selected
+      ).length
       const isExpanded =
         item.chapters.length > 0 && expandedGroups.has(groupKey)
 
@@ -85,7 +85,11 @@ function flattenRows(
         title: item.title,
         chapterCount: item.chapters.length,
         selectableChapterCount: selectableChapters.length,
-        allSelected,
+        selectionState:
+          selectedCount > 0 &&
+          (selectedCount === selectableChapters.length
+            ? true
+            : "indeterminate"),
         groupId: item.groupId,
         isExpanded,
       })
@@ -128,6 +132,8 @@ type SelectorActions = Pick<
 
 function ChapterDownloadMarker({ chapter }: { chapter: SidePanelChapter }) {
   if (chapter.downloaded !== true) return null
+  const saveConfirmed = chapter.saveConfirmedAt !== undefined
+  const Icon = saveConfirmed ? CheckCircle2 : History
   const label = getOutputResultLabel(
     chapter.outputDestination,
     chapter.saveConfirmedAt
@@ -136,10 +142,15 @@ function ChapterDownloadMarker({ chapter }: { chapter: SidePanelChapter }) {
   return (
     <span
       data-downloaded-marker
-      className="inline-flex shrink-0 items-center text-emerald-600 dark:text-emerald-400 animate-in zoom-in-75 duration-200"
+      className={cn(
+        "inline-flex shrink-0 items-center",
+        saveConfirmed
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-muted-foreground"
+      )}
       title={label}
     >
-      <CheckCircle2 className="size-4" aria-hidden="true" />
+      <Icon className="size-4" aria-hidden="true" />
       <span className="sr-only">{label}</span>
     </span>
   )
@@ -152,7 +163,11 @@ function ChapterRow({
 }: Pick<SelectorActions, "isEnqueuing" | "onToggleChapter"> & {
   row: Exclude<SelectorRow, { kind: "volume-header" }>
 }) {
-  const isChapterDisabled = isEnqueuing || row.chapter.locked === true
+  const statusId = useId()
+  const isLocked = row.chapter.locked === true
+  const hasStatus = isLocked || row.chapter.downloaded === true
+  const isChapterDisabled = isEnqueuing || isLocked
+  const lockedLabel = isLocked ? t("common_locked") : undefined
 
   return (
     <div
@@ -174,6 +189,7 @@ function ChapterRow({
       <Checkbox
         id={row.chapter.id}
         aria-label={row.chapter.title}
+        aria-describedby={hasStatus ? statusId : undefined}
         checked={row.chapter.selected}
         onCheckedChange={() =>
           onToggleChapter(row.chapter.id, !row.chapter.selected)
@@ -183,18 +199,32 @@ function ChapterRow({
         disabled={isChapterDisabled}
       />
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="w-7 shrink-0 font-mono text-[11px] font-medium tabular-nums text-muted-foreground">
+        <span className="w-7 shrink-0 text-right text-[11px] max-[280px]:w-5 font-medium tabular-nums text-muted-foreground">
           {row.chapter.index}
         </span>
-        <span className="flex-1 truncate text-sm leading-5 text-foreground">
+        <span
+          className="line-clamp-2 min-w-0 flex-1 wrap-anywhere text-sm leading-5 text-foreground"
+          title={row.chapter.title}
+        >
           {row.chapter.title}
         </span>
-        {row.chapter.locked === true && (
-          <span className="shrink-0 text-[11px] text-muted-foreground">
-            {t("common_locked")}
+        {hasStatus && (
+          <span id={statusId} className="flex shrink-0 items-center gap-1.5">
+            {lockedLabel && (
+              <span
+                className="text-[11px] text-muted-foreground"
+                title={lockedLabel}
+              >
+                <span className="max-[280px]:sr-only">{lockedLabel}</span>
+                <LockKeyhole
+                  aria-hidden="true"
+                  className="hidden size-4 max-[280px]:block"
+                />
+              </span>
+            )}
+            <ChapterDownloadMarker chapter={row.chapter} />
           </span>
         )}
-        <ChapterDownloadMarker chapter={row.chapter} />
       </div>
     </div>
   )
@@ -246,7 +276,7 @@ function VolumeHeaderRow({
       </button>
       <Checkbox
         className="mr-3"
-        checked={row.chapterCount > 0 && row.allSelected}
+        checked={row.selectionState}
         onCheckedChange={() => onVolumeSelectAll(row.groupId)}
         // Keep checkbox activation isolated from the adjacent volume toggle.
         // Radix emits keyboard and pointer events from the checkbox root;
@@ -343,6 +373,8 @@ export function ChapterSelector({
             return (
               <div
                 key={virtualItem.key}
+                data-index={virtualItem.index}
+                ref={virtualizer.measureElement}
                 style={{
                   position: "absolute",
                   top: 0,

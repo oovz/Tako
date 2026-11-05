@@ -185,7 +185,7 @@ describe("mounted series selection", () => {
     expect(checkbox("Chapter extra").getAttribute("aria-checked")).toBe("false")
     expect(
       container.querySelector("#select-all-ctx")?.getAttribute("aria-checked")
-    ).toBe("false")
+    ).toBe("mixed")
     expect(checkbox("Chapter locked").disabled).toBe(true)
     expect(checkbox("Chapter locked").getAttribute("aria-checked")).toBe(
       "false"
@@ -315,7 +315,7 @@ describe("mounted series selection", () => {
     )
     expect(
       container.querySelector("#select-all-ctx")?.getAttribute("aria-checked")
-    ).toBe("false")
+    ).toBe("mixed")
     await click(button("Download (2)"))
     await vi.waitFor(() => expect(onAfterStart).toHaveBeenCalledOnce())
     expect(sendMessage).toHaveBeenCalledExactlyOnceWith(

@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CollapsibleTrigger } from "@/components/ui/collapsible"
 import type { SidepanelSeriesContextData } from "@/entrypoints/sidepanel/hooks/useSidepanelSeriesContext"
-import { getDisplayName } from "@/src/site-integrations/catalog"
 import type { CoverPreviewIdentity } from "@/entrypoints/sidepanel/services/cover-preview-loader"
 import { getInlineSelectionViewSummary } from "./series-inline-selection-helpers"
 import { TAB_NOT_SUPPORTED_MSG } from "@/entrypoints/sidepanel/messages"
@@ -54,18 +53,18 @@ export function resolveSeriesCardMessage(
 
 function SeriesCardLoading() {
   return (
-    <div className="flex gap-4">
-      <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted animate-pulse" />
+    <div className="flex gap-4 max-[280px]:gap-2">
+      <div className="relative h-32 w-24 shrink-0 max-[280px]:hidden overflow-hidden rounded-lg border border-border bg-muted" />
       <div className="flex flex-1 flex-col justify-between min-w-0">
         <div className="flex flex-col gap-2">
-          <div className="h-5 w-36 bg-muted rounded animate-pulse" />
-          <div className="h-4 w-28 bg-muted rounded animate-pulse" />
-          <div className="flex gap-2">
-            <div className="h-5 w-24 bg-muted rounded animate-pulse" />
-            <div className="h-5 w-20 bg-muted rounded animate-pulse" />
+          <div className="h-5 w-36 max-w-full bg-muted rounded" />
+          <div className="h-4 w-28 max-w-full bg-muted rounded" />
+          <div className="flex flex-wrap gap-2">
+            <div className="h-5 w-24 max-w-full bg-muted rounded" />
+            <div className="h-5 w-20 max-w-full bg-muted rounded" />
           </div>
         </div>
-        <div className="h-9 w-full bg-muted rounded animate-pulse mt-3" />
+        <div className="h-9 w-full bg-muted rounded mt-3" />
       </div>
     </div>
   )
@@ -78,7 +77,7 @@ function SeriesMessageAction({ data, isExpanded }: SeriesContextCardProps) {
       size="sm"
       variant={isExpanded ? "secondary" : "default"}
       className={cn(
-        "w-full gap-2 mt-3 h-9 text-sm shadow-sm",
+        "w-full gap-2 mt-3 h-9 text-sm max-[280px]:h-auto max-[280px]:min-h-9 max-[280px]:whitespace-normal",
         isExpanded && "ring-1 ring-border"
       )}
       disabled={!data.retrySeriesContext}
@@ -112,14 +111,14 @@ function SeriesCardMessage({
   showAction: boolean
 }) {
   return (
-    <div className="flex gap-4">
-      <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted flex items-center justify-center text-muted-foreground">
+    <div className="flex gap-4 max-[280px]:gap-2">
+      <div className="relative h-32 w-24 shrink-0 max-[280px]:hidden overflow-hidden rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground">
         <BookOpen className="size-8" />
       </div>
       <div className="flex flex-1 flex-col justify-center min-w-0">
-        <h2 className="font-bold text-base leading-tight">
+        <h1 className="font-semibold text-lg leading-tight">
           {messageState.title}
-        </h2>
+        </h1>
         <p className="text-sm text-muted-foreground mt-1.5">
           {messageState.description}
         </p>
@@ -168,7 +167,7 @@ function SeriesChapterSummary({
       {isLoading ? (
         <Badge
           variant="secondary"
-          className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground"
+          className="text-xs h-5 px-2 py-0 gap-1 text-muted-foreground"
         >
           <Loader2 className="size-3 animate-spin" />
           {t("common_loading")}
@@ -176,25 +175,19 @@ function SeriesChapterSummary({
       ) : chapterCount === 0 ? (
         <Badge
           variant="secondary"
-          className="text-[10px] h-5 px-2 py-0 gap-1 text-muted-foreground"
+          className="text-xs h-5 px-2 py-0 gap-1 text-muted-foreground"
         >
           <AlertCircle className="size-3" />
           {t("sidepanel_noChaptersFound")}
         </Badge>
       ) : (
         <>
-          <Badge
-            variant="secondary"
-            className="text-[10px] h-5 px-2 py-0 gap-1 shadow-sm"
-          >
+          <Badge variant="secondary" className="text-xs h-5 px-2 py-0 gap-1">
             <BookOpen className="size-3" />
             {t("sidepanel_chaptersCount", [String(chapterCount)])}
           </Badge>
           {volumeCount > 0 && (
-            <Badge
-              variant="outline"
-              className="text-[10px] h-5 px-2 py-0 gap-1"
-            >
+            <Badge variant="outline" className="text-xs h-5 px-2 py-0 gap-1">
               <Layers className="size-3" />
               {t("sidepanel_volumesCount", [String(volumeCount)])}
             </Badge>
@@ -251,7 +244,7 @@ function SeriesSelectionTrigger({
         size="sm"
         variant={isExpanded ? "secondary" : "default"}
         className={cn(
-          "w-full gap-2 mt-3 h-9 text-sm shadow-sm transition-all duration-150 active:scale-[0.98]",
+          "w-full gap-2 mt-3 h-9 text-sm max-[280px]:h-auto max-[280px]:min-h-9 max-[280px]:whitespace-normal",
           isExpanded && "ring-1 ring-border"
         )}
         disabled={
@@ -279,37 +272,35 @@ function RecognizedSeriesCard({
   isExpanded,
   triggerRef,
 }: SeriesContextCardProps) {
-  const subtitle = [
-    data.author,
-    data.siteId ? getDisplayName(data.siteId) : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+  const author = data.author?.trim()
   const { chapterCount, volumeCount } = getInlineSelectionViewSummary(
     data.items
   )
 
   return (
-    <div className="group flex gap-4 transition-all duration-200">
-      <div className="relative h-32 w-24 shrink-0 overflow-hidden rounded-lg border border-border shadow-md bg-muted">
+    <div className="flex gap-4 max-[280px]:gap-2">
+      <div className="relative h-32 w-24 shrink-0 max-[280px]:hidden overflow-hidden rounded-lg border border-border bg-muted">
         <CoverPreview
           identity={buildSeriesCoverIdentity(data)}
           alt={data.mangaTitle}
-          className="object-contain transition-all duration-300 group-hover:scale-105"
+          className="object-contain"
         />
       </div>
       {/* Content */}
       <div className="flex flex-1 flex-col justify-between min-w-0">
         <div>
-          <h2
-            className="font-bold text-base leading-tight truncate"
+          <h1
+            className="line-clamp-2 wrap-anywhere text-lg font-semibold leading-tight max-[280px]:text-sm"
             title={data.mangaTitle}
           >
             {data.mangaTitle}
-          </h2>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5 truncate">
-              {subtitle}
+          </h1>
+          {author && (
+            <p
+              className="mt-0.5 truncate text-sm text-muted-foreground"
+              title={author}
+            >
+              {author}
             </p>
           )}
           <SeriesChapterSummary

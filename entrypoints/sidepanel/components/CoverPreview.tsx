@@ -33,7 +33,7 @@ export function CoverPreview({
         }}
         draggable={false}
       />
-      {loading && <div className="absolute inset-0 bg-muted animate-pulse" />}
+      {loading && <div className="absolute inset-0 bg-muted" />}
     </div>
   )
 }

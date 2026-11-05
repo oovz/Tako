@@ -86,7 +86,7 @@ function getTaskRowActionModel({
 
 function TaskRowCover({ task }: Pick<CommandCenterTaskRowProps, "task">) {
   return (
-    <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted shadow-sm border border-border/50 transition-transform duration-200 group-hover:scale-105">
+    <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-muted border border-border/50 max-[280px]:hidden">
       <CoverPreview
         identity={
           task.coverUrl
@@ -113,8 +113,11 @@ function TaskRowHeading({
 }) {
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <h3 className="font-semibold text-sm truncate" title={task.seriesTitle}>
+      <div className="flex items-center gap-1.5 max-[280px]:flex-col max-[280px]:items-start max-[280px]:gap-0.5">
+        <h3
+          className="max-w-full truncate text-sm font-semibold max-[280px]:line-clamp-2 max-[280px]:whitespace-normal"
+          title={task.seriesTitle}
+        >
           {task.seriesTitle}
         </h3>
         <Badge
@@ -125,7 +128,7 @@ function TaskRowHeading({
         </Badge>
       </div>
 
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           {getTaskStatusIcon(task.status)}
           <span className="capitalize">
@@ -137,8 +140,8 @@ function TaskRowHeading({
             )}
           </span>
         </span>
-        <span>·</span>
-        <span className="font-mono">
+        <span className="max-[280px]:hidden">·</span>
+        <span className="tabular-nums">
           {activeRowChapterCount}/{task.chapters.total}{" "}
           {t("common_chaptersShort")}
         </span>
@@ -244,7 +247,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
       <div
         className={cn(
           "group relative flex items-center gap-2.5 px-3 py-2 border-b border-border/50",
-          "transition-all duration-200 ease-out",
+          "transition-[opacity,translate,scale,background-color] duration-200 ease-out",
           "hover:bg-muted/30",
           isActive && "bg-muted/40 border-l-2 border-l-primary",
           (isRemoving || isCanceling) &&

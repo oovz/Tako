@@ -160,8 +160,8 @@
       }
     }
   },
-  "sidepanel_selectChaptersLabel": {
-    "message": "챕터 선택"
+  "sidepanel_selectAllChapters": {
+    "message": "모두 선택"
   },
   "sidepanel_skipToContent": {
     "message": "본문으로 건너뛰기"
@@ -204,9 +204,6 @@
   },
   "sidepanel_noDownloadsYet": {
     "message": "아직 다운로드가 없습니다"
-  },
-  "sidepanel_useSelectChapters": {
-    "message": "위의 \"챕터 선택\"으로 다운로드를 시작하세요"
   },
   "sidepanel_recentHistory": {
     "message": "최근 기록"

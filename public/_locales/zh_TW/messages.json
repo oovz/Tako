@@ -160,8 +160,8 @@
       }
     }
   },
-  "sidepanel_selectChaptersLabel": {
-    "message": "選擇章節"
+  "sidepanel_selectAllChapters": {
+    "message": "全選"
   },
   "sidepanel_skipToContent": {
     "message": "跳到主要內容"
@@ -204,9 +204,6 @@
   },
   "sidepanel_noDownloadsYet": {
     "message": "暫無下載"
-  },
-  "sidepanel_useSelectChapters": {
-    "message": "使用上方的\"選擇章節\"開始下載"
   },
   "sidepanel_recentHistory": {
     "message": "最近歷史"

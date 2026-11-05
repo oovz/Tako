@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("@/entrypoints/sidepanel/hooks/useDownload", () => ({
   useDownload: () => ({
     startDownload: vi.fn(),
-    showSuccess: false,
     isEnqueuing: false,
     errorMessage: "Unable to enqueue this download.",
   }),

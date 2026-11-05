@@ -160,8 +160,8 @@
       }
     }
   },
-  "sidepanel_selectChaptersLabel": {
-    "message": "章を選択"
+  "sidepanel_selectAllChapters": {
+    "message": "すべて選択"
   },
   "sidepanel_skipToContent": {
     "message": "メインコンテンツへスキップ"
@@ -204,9 +204,6 @@
   },
   "sidepanel_noDownloadsYet": {
     "message": "ダウンロードなし"
-  },
-  "sidepanel_useSelectChapters": {
-    "message": "上の「章を選択」を使用してダウンロードを開始"
   },
   "sidepanel_recentHistory": {
     "message": "最近の履歴"

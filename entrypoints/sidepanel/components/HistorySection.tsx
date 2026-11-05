@@ -40,7 +40,7 @@ export function HistorySection({
       <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
         <h2
           id="sidepanel-recent-history-title"
-          className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+          className="text-sm font-semibold text-muted-foreground"
         >
           {t("sidepanel_recentHistory")}
         </h2>
@@ -48,7 +48,7 @@ export function HistorySection({
           <button
             type="button"
             onClick={onViewFullHistory}
-            className="text-[10px] text-muted-foreground hover:text-foreground transition-all duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
+            className="text-xs text-muted-foreground hover:text-foreground transition-[color,background-color,scale] duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
           >
             {t("sidepanel_viewFullHistory")}
           </button>

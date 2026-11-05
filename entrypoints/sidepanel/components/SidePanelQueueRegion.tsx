@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef } from "react"
-import { Download } from "lucide-react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "@/src/shared/utils"
@@ -148,15 +147,15 @@ function QueueLoadingState({ visible }: { visible: boolean }) {
       aria-label={t("common_loading")}
     >
       <div
-        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        className="h-16 rounded-md border border-border/60 bg-muted/30"
         aria-hidden="true"
       />
       <div
-        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        className="h-16 rounded-md border border-border/60 bg-muted/30"
         aria-hidden="true"
       />
       <div
-        className="h-16 animate-pulse rounded-md border border-border/60 bg-muted/30"
+        className="h-16 rounded-md border border-border/60 bg-muted/30"
         aria-hidden="true"
       />
     </div>
@@ -197,18 +196,9 @@ function QueueEmptyState({
   )
     return null
   return (
-    <div className="p-6 text-center">
-      <Download
-        className="size-8 mx-auto mb-2 text-muted-foreground/50"
-        aria-hidden="true"
-      />
-      <h3 className="font-medium text-sm mb-1">
-        {t("sidepanel_noDownloadsYet")}
-      </h3>
-      <p className="text-xs text-muted-foreground">
-        {t("sidepanel_useSelectChapters")}
-      </p>
-    </div>
+    <h2 className="px-4 py-5 text-sm font-medium text-muted-foreground">
+      {t("sidepanel_noDownloadsYet")}
+    </h2>
   )
 }
 

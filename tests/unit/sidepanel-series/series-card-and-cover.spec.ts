@@ -58,7 +58,7 @@ describe("series card and cover presentation", () => {
   it("shows loading before stale failure or series data and gives retry its own action", async () => {
     const retry = vi.fn()
     await render(series({ isLoading: true, retrySeriesContext: retry }))
-    expect(container.querySelector("h2")).toBeNull()
+    expect(container.querySelector("h1")).toBeNull()
     expect(container.querySelector("button")).toBeNull()
     await render(series({ retrySeriesContext: retry }))
     const action = container.querySelector("button")!
@@ -71,7 +71,7 @@ describe("series card and cover presentation", () => {
     await render(series({ blockingMessage: TAB_NOT_SUPPORTED_MSG }))
     expect(container.querySelector("button")?.disabled).toBe(true)
     await render(series({ mangaTitle: "" }))
-    expect(container.querySelector("h2")).not.toBeNull()
+    expect(container.querySelector("h1")).not.toBeNull()
     expect(container.querySelector("button")).toBeNull()
   })
 
@@ -79,8 +79,9 @@ describe("series card and cover presentation", () => {
     await render(
       series({ author: "Artist", chapterListNotice: "adult-consent-required" })
     )
-    expect(container.querySelector("h2")?.textContent).toBe("Series One")
-    expect(container.textContent).toContain("Artist · MangaDex")
+    expect(container.querySelector("h1")?.textContent).toBe("Series One")
+    expect(container.textContent).toContain("Artist")
+    expect(container.textContent).not.toContain("MangaDex")
     expect(container.textContent).toContain("3 Chapters")
     expect(container.textContent).toContain("1 Volumes")
     expect(triggerRef.current).toBe(container.querySelector("button"))
@@ -89,6 +90,7 @@ describe("series card and cover presentation", () => {
     await act(async () => triggerRef.current!.click())
     expect(onOpenChange).toHaveBeenLastCalledWith(true)
     await render(series({ items: [], isChaptersLoading: true }), true)
+    expect(container.textContent).not.toMatch(/Artist|MangaDex/)
     expect(triggerRef.current!.disabled).toBe(false)
     expect(triggerRef.current!.getAttribute("aria-expanded")).toBe("true")
     await act(async () => triggerRef.current!.click())

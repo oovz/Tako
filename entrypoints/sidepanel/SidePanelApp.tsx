@@ -88,7 +88,6 @@ export function SidePanelApp() {
           {t("sidepanel_skipToContent")}
         </a>
         <ErrorBanner />
-        <div className="px-2 pt-2"></div>
         <SidePanelHeader
           activeCount={countsAvailable ? activeCount : null}
           queuedCount={countsAvailable ? queuedCount : null}
@@ -106,7 +105,7 @@ export function SidePanelApp() {
             onOpenChange={updateInlineSelectionOpen}
             className="contents"
           >
-            <div className="bg-background border-b border-border shadow-sm sticky top-0 z-20">
+            <div className="bg-background border-b border-border sticky top-0 z-20">
               <div className="p-4">
                 <SeriesContextCard
                   data={seriesData}

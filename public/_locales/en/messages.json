@@ -160,8 +160,8 @@
       }
     }
   },
-  "sidepanel_selectChaptersLabel": {
-    "message": "Select chapters"
+  "sidepanel_selectAllChapters": {
+    "message": "Select all"
   },
   "sidepanel_skipToContent": {
     "message": "Skip to content"
@@ -204,9 +204,6 @@
   },
   "sidepanel_noDownloadsYet": {
     "message": "No downloads yet"
-  },
-  "sidepanel_useSelectChapters": {
-    "message": "Use \"Select Chapters\" above to start downloading"
   },
   "sidepanel_recentHistory": {
     "message": "Recent history"

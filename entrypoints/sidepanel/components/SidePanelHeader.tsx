@@ -1,6 +1,5 @@
 import { Settings } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -32,51 +31,37 @@ export function SidePanelHeader({
     : t("sidepanel_openOptionsAdvanced")
 
   return (
-    <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background shadow-sm z-30">
-      <div className="flex items-center gap-2">
-        <Badge
-          variant={
-            activeCount !== null && activeCount > 0 ? "default" : "secondary"
-          }
-          className="h-6 px-2.5 text-xs font-semibold gap-1 transition-all duration-200 ease-out"
-        >
-          <span className="tabular-nums">
+    <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background z-30">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
+          <span className="text-base font-semibold tabular-nums text-foreground">
             {formatSidePanelCount(activeCount)}
           </span>
           <span>{t("common_active")}</span>
-        </Badge>
-        <Badge
-          variant="secondary"
-          className="h-6 px-2.5 text-xs font-semibold gap-1 transition-all duration-200 ease-out"
-        >
-          <span className="tabular-nums">
+        </span>
+        <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
+          <span className="text-base font-semibold tabular-nums text-foreground">
             {formatSidePanelCount(queuedCount)}
           </span>
           <span>{t("common_queued")}</span>
-        </Badge>
+        </span>
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="group relative size-9 transition-all duration-150 active:scale-95"
+            className="relative size-9 shrink-0"
             onClick={onOpenSettings}
             aria-label={settingsLabel}
           >
-            <Settings className="size-5 transition-transform duration-300 ease-out group-hover:rotate-45" />
+            <Settings aria-hidden="true" className="size-5" />
             {hasOptionsActionItems && (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive animate-ping opacity-75"
-                />
-                <span
-                  aria-hidden="true"
-                  data-testid="options-action-indicator"
-                  className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
-                />
-              </>
+              <span
+                aria-hidden="true"
+                data-testid="options-action-indicator"
+                className="absolute right-1.5 top-1.5 size-2 rounded-full bg-destructive ring-2 ring-background"
+              />
             )}
           </Button>
         </TooltipTrigger>

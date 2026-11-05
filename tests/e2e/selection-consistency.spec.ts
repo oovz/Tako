@@ -142,6 +142,7 @@ test.describe("chapter selection flow", () => {
     })
 
     const sp = await openSidepanelHarness(context, extensionId, page)
+    await sp.setViewportSize({ width: 200, height: 640 })
     await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
@@ -150,6 +151,10 @@ test.describe("chapter selection flow", () => {
 
     const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
     await expect(toggleButton).toBeVisible()
+    await expect(toggleButton).toBeInViewport({ ratio: 1 })
+    expect(
+      await toggleButton.evaluate((el) => el.scrollWidth <= el.clientWidth)
+    ).toBe(true)
     await toggleButton.click()
 
     await expect(
@@ -158,11 +163,22 @@ test.describe("chapter selection flow", () => {
 
     const downloadButton = sp.getByRole("button", { name: /Download/i })
     await expect(downloadButton).toBeVisible()
+    await expect(downloadButton).toBeDisabled()
 
+    const selectAll = sp.getByRole("checkbox", { name: "Select all" })
+    await sp
+      .getByRole("checkbox", { name: "Chapter 1", exact: true })
+      .press("Space")
+    await expect(selectAll).toHaveAttribute("aria-checked", "mixed")
+    await selectAll.press("Space")
+    await expect(selectAll).toBeChecked()
+    await selectAll.press("Space")
+    await expect(downloadButton).toBeDisabled()
     await sp.getByText("Chapter 1").click()
 
     await expect(downloadButton).toHaveText(/Download \(1\)/i)
     await downloadButton.click()
+    await expect(sp.getByText("Added to Queue!", { exact: true })).toBeVisible()
 
     await waitForGlobalState(
       context,

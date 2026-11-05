@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useDownload } from "@/entrypoints/sidepanel/hooks/useDownload"
 import type { MangaPageState } from "@/src/types/tab-state"
 import { t } from "@/src/runtime/i18n"
+import { toast } from "sonner"
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn() } }))
 
 const mangaState: MangaPageState = {
   sourceUrl: "https://mangadex.org/title/series",
@@ -44,7 +47,6 @@ describe("mounted enqueue lifetime", () => {
       null,
       JSON.stringify({
         pending: download.isEnqueuing,
-        success: download.showSuccess,
         error: download.errorMessage,
       })
     )
@@ -76,12 +78,11 @@ describe("mounted enqueue lifetime", () => {
     act(() => root.unmount())
     container.remove()
     Object.keys(stored).forEach((key) => delete stored[key])
-    vi.useRealTimers()
     vi.resetAllMocks()
     vi.unstubAllGlobals()
   })
 
-  it("serializes enqueue clicks, sends the current selection identity, and expires success feedback", async () => {
+  it("serializes enqueue clicks, sends the current selection identity, and reports acceptance once", async () => {
     const response = Promise.withResolvers<unknown>()
     sendMessage.mockReturnValue(response.promise)
     let pending!: Promise<boolean>
@@ -100,15 +101,15 @@ describe("mounted enqueue lifetime", () => {
       seriesRevision: 3,
       selectedChapterIds: ["two"],
     })
-    vi.useFakeTimers()
     await act(async () => {
       response.resolve({ success: true, taskId: "accepted-task" })
       expect(await pending).toBe(true)
     })
-    expect(download.showSuccess).toBe(true)
     expect(download.isEnqueuing).toBe(false)
-    act(() => vi.advanceTimersByTime(2000))
-    expect(download.showSuccess).toBe(false)
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      t("sidepanel_addedToQueue"),
+      expect.anything()
+    )
   })
 
   it("reports missing selections and logical failures, then permits another attempt", async () => {
@@ -161,7 +162,7 @@ describe("mounted enqueue lifetime", () => {
     expect(download.errorMessage).toBeNull()
   })
 
-  it("settles accepted work after unmount without keeping a feedback timer", async () => {
+  it("settles accepted work after unmount without notifying a closed panel", async () => {
     const response = Promise.withResolvers<unknown>()
     sendMessage.mockReturnValue(response.promise)
     let pending!: Promise<boolean>
@@ -170,9 +171,8 @@ describe("mounted enqueue lifetime", () => {
     })
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1))
     act(() => root.unmount())
-    vi.useFakeTimers()
     response.resolve({ success: true, taskId: "accepted-task" })
     expect(await pending).toBe(true)
-    expect(vi.getTimerCount()).toBe(0)
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })
