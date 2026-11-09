@@ -1,3 +1,4 @@
+import { TemplateMacros } from "./primitives/TemplateMacros"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -88,11 +89,18 @@ export function SiteIntegrationOutputSettings({
       <div className="flex flex-col gap-2">
         <OverrideLabel
           id={`${siteIntegration.id}-path`}
-          label="options_downloadPathTemplate"
+          label="options_directoryPathTemplate"
           overridden={override?.pathTemplate !== undefined}
         />
+        <p
+          id={`${siteIntegration.id}-path-help`}
+          className="options-template-help"
+        >
+          {t("options_directoryPathTemplateDesc")}
+        </p>
         <Input
           id={`${siteIntegration.id}-path`}
+          aria-describedby={`${siteIntegration.id}-path-help`}
           value={override?.pathTemplate ?? ""}
           onChange={(e) =>
             updateOverride({
@@ -101,9 +109,13 @@ export function SiteIntegrationOutputSettings({
           }
           placeholder={t("options_leaveEmptyGlobal")}
         />
-        <p className="text-[11px] font-medium text-muted-foreground">
-          {t("options_useMacros")}
-        </p>
+        <TemplateMacros
+          kind="path"
+          value={override?.pathTemplate ?? ""}
+          onChange={(pathTemplate) =>
+            updateOverride({ pathTemplate: pathTemplate || undefined })
+          }
+        />
       </div>
     </div>
   )

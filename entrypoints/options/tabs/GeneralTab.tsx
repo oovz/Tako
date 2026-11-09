@@ -26,6 +26,8 @@ interface GeneralTabProps {
 }
 
 export function GeneralTab({ settings, onChange }: GeneralTabProps) {
+  const updateAdvanced = (updates: Partial<ExtensionSettings["advanced"]>) =>
+    onChange({ advanced: { ...settings.advanced, ...updates } })
   return (
     <div className="flex flex-col gap-6">
       <SettingsSectionHeader
@@ -100,6 +102,26 @@ export function GeneralTab({ settings, onChange }: GeneralTabProps) {
 
       {/* Extension Updates & Version */}
       <ExtensionUpdateSection />
+      {/* Group 3: Debug & Diagnostics */}
+      <SettingsGroup title={t("options_debugSettings")}>
+        <SettingsRow
+          title={t("options_logLevel")}
+          description={t("options_logLevelDesc")}
+          control={
+            <SettingsChoices
+              label={t("options_logLevel")}
+              value={settings.advanced.logLevel}
+              onChange={(logLevel) => updateAdvanced({ logLevel })}
+              choices={[
+                { value: "error", label: t("options_logLevelError") },
+                { value: "warn", label: t("options_logLevelWarn") },
+                { value: "info", label: t("options_logLevelInfo") },
+                { value: "debug", label: t("options_logLevelDebug") },
+              ]}
+            />
+          }
+        />
+      </SettingsGroup>
     </div>
   )
 }

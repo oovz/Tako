@@ -1,3 +1,4 @@
+import { useOptionsIndicator } from "../../hooks/useOptionsMotion"
 import * as RadioGroup from "@radix-ui/react-radio-group"
 
 export function SettingsChoices<Value extends string>({
@@ -11,16 +12,22 @@ export function SettingsChoices<Value extends string>({
   choices: readonly { value: Value; label: string }[]
   onChange: (value: Value) => void
 }) {
+  const group = useOptionsIndicator<HTMLDivElement>(
+    value,
+    '[role="radio"][data-state="checked"]'
+  )
   return (
     <RadioGroup.Root
+      ref={group}
       aria-label={label}
       value={value}
       onValueChange={(next) => {
         const choice = choices.find((item) => item.value === next)
         if (choice) onChange(choice.value)
       }}
-      className="flex flex-wrap gap-1 rounded-md border bg-muted p-1"
+      className="options-choices flex flex-wrap gap-1 rounded-md border bg-muted p-1"
     >
+      <span className="options-indicator" aria-hidden="true" />
       {choices.map((choice) => (
         <RadioGroup.Item
           key={choice.value}

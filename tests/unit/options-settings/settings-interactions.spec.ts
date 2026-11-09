@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from "@/src/domain/settings/defaults"
 // @vitest-environment happy-dom
 
 import { act, createElement, type ComponentProps } from "react"
@@ -573,6 +574,7 @@ describe("download output presentation", () => {
   it("previews valid templates and announces directory or filename errors", async () => {
     await render(
       createElement(PathVisualization, {
+        fileOptions: DEFAULT_SETTINGS.downloads,
         template: "Series",
         filenameTemplate: "Chapter",
         format: "cbz",
@@ -583,6 +585,7 @@ describe("download output presentation", () => {
     )
     await render(
       createElement(PathVisualization, {
+        fileOptions: DEFAULT_SETTINGS.downloads,
         template: "<UNKNOWN>",
         filenameTemplate: "Chapter",
         format: "zip",
@@ -593,6 +596,7 @@ describe("download output presentation", () => {
     )
     await render(
       createElement(PathVisualization, {
+        fileOptions: DEFAULT_SETTINGS.downloads,
         template: "Series",
         filenameTemplate: "",
         format: "none",

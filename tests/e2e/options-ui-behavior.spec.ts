@@ -282,7 +282,7 @@ test.describe("Options UI behavior", () => {
 
   test("persists log level changes", async ({ page, extensionId }) => {
     await page.goto(
-      `chrome-extension://${extensionId}/options.html?tab=network`,
+      `chrome-extension://${extensionId}/options.html?tab=general`,
       {
         waitUntil: "domcontentloaded",
       }
@@ -310,7 +310,7 @@ test.describe("Options UI behavior", () => {
       .toBe("error")
 
     await page.reload({ waitUntil: "domcontentloaded" })
-    await expect(page.getByRole("button", { name: /Network/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /^General$/i })).toBeVisible()
     await expect(page.getByText("Debug Settings")).toBeVisible()
     await expect(page.getByRole("radio", { name: "Error" })).toBeChecked()
   })
@@ -335,4 +335,23 @@ test("restores keyboard focus when the discard confirmation closes", async ({
   await expect(dialog).toHaveCount(0)
   await expect(discard).toHaveCount(0)
   await expect(page.getByRole("main")).toBeFocused()
+})
+
+test("keeps chapter disclosure focus and semantics through interrupted transitions", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=activity`)
+  await seedDownloadQueueState(page, [
+    makeTask("chapter-motion", "downloading"),
+  ])
+  const toggle = page.locator(".options-chapter-toggle")
+  await toggle.press("Enter")
+  await expect(page.getByRole("table")).toBeVisible()
+  await toggle.press("Enter")
+  await expect(page.getByRole("table")).toHaveCount(0)
+  await toggle.press("Enter")
+  await expect(page.getByRole("table")).toBeVisible()
+  await expect(toggle).toBeFocused()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
 })

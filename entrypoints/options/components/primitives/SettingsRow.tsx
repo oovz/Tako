@@ -21,13 +21,15 @@ export function SettingsRow({
   align = "center",
 }: SettingsRowProps) {
   if (children) {
-    return <div className={cn("p-4", className)}>{children}</div>
+    return (
+      <div className={cn("settings-row-content", className)}>{children}</div>
+    )
   }
 
   return (
     <div
       className={cn(
-        "flex min-h-14 flex-wrap justify-between gap-3 p-4",
+        "settings-row flex flex-wrap justify-between gap-3",
         align === "center" ? "items-center" : "items-start",
         className
       )}

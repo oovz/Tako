@@ -474,7 +474,7 @@
     "message": "ダウンロード形式、パフォーマンス、再試行、通知を設定します。"
   },
   "options_storageFormats": {
-    "message": "ストレージと形式"
+    "message": "ファイルの設定"
   },
   "options_storageFormatsDesc": {
     "message": "アーカイブ形式とファイル整理オプションを選択。"
@@ -483,7 +483,7 @@
     "message": "ComicInfo.xml を含める"
   },
   "options_includeComicInfoDesc": {
-    "message": "コミックリーダー用のメタデータを埋め込む"
+    "message": "コミック閲覧アプリ用のメタデータです。"
   },
   "options_includeCoverImage": {
     "message": "シリーズ表紙を含める"
@@ -492,10 +492,10 @@
     "message": "表紙画像をアーカイブ内に保存"
   },
   "options_normalizeFilenames": {
-    "message": "ファイル名を正規化"
+    "message": "画像名を連番にする"
   },
   "options_normalizeFilenamesDesc": {
-    "message": "画像を 001.jpg, 002.jpg... にリネーム"
+    "message": "元の画像ファイル名を置き換えます。"
   },
   "options_suppressSaveAs": {
     "message": "名前を付けて保存ダイアログを抑制"
@@ -507,16 +507,21 @@
     "message": "ファイル名の設定"
   },
   "options_directoryPathTemplate": {
-    "message": "ディレクトリパステンプレート"
+    "message": "保存先内のフォルダーパス"
   },
   "options_directoryPathTemplateDesc": {
-    "message": "マクロを使用：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
+    "message": "ダウンロード先の中に作るフォルダーです。"
   },
   "options_filenameTemplate": {
-    "message": "ファイル名テンプレート"
+    "message": "アーカイブのファイル名"
   },
   "options_filenameTemplateDesc": {
-    "message": "アーカイブ/フォルダ名のテンプレート。同じマクロと <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3> をサポート。"
+    "message": "チャプターごとにアーカイブを作成し、.$format$ を自動で付けます。",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
   },
   "options_imageFilenamePadding": {
     "message": "画像ファイル名のゼロ埋め"
@@ -537,7 +542,7 @@
     "message": "5 桁 (00001-99999)"
   },
   "options_imagePaddingDesc": {
-    "message": "正規化された画像ファイル名のゼロ埋め（例：001.jpg, 002.jpg）。"
+    "message": "画像番号の先頭にゼロを付けます。"
   },
   "options_archiveFormat": {
     "message": "アーカイブ形式"
@@ -660,7 +665,7 @@
     "message": "新しいタスクの保存先の既定値"
   },
   "options_useCustomFolder": {
-    "message": "カスタムフォルダを使用（File System Access）"
+    "message": "フォルダーに保存"
   },
   "options_fsaUnsupported": {
     "message": "このブラウザーではカスタムフォルダーを利用できません。ブラウザーのダウンロードは引き続き利用できます。"
@@ -672,7 +677,7 @@
     "message": "ダウンロードフォルダーが選択されていません"
   },
   "options_fsaNoFolderSelectedDesc": {
-    "message": "File System Access ダウンロードモードを使用するにはフォルダーを選択してください。フォルダーを選択するまで変更を保存できません。"
+    "message": "この設定を保存する前にフォルダーを選択してください。"
   },
   "options_conflictPolicy": {
     "message": "既存ファイル"
@@ -1304,7 +1309,7 @@
     "message": "リクエストの間隔"
   },
   "options_pacingPreviewDesc": {
-    "message": "全体の既定値。空き枠がある場合の最短開始時刻の例です。"
+    "message": "表示時間は調整されています。リクエストは空きができるまで待機します。"
   },
   "options_noDownloadTasks": {
     "message": "ダウンロードタスクはありません"
@@ -1357,13 +1362,13 @@
     "message": "シリーズカバーを含める"
   },
   "options_includeCoverDesc": {
-    "message": "カバー画像をアーカイブ内に保存"
+    "message": "利用可能な場合。"
   },
   "options_pathTemplateMacros": {
     "message": "マクロを使用：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
   },
   "options_imagePadding": {
-    "message": "画像ファイル名のパディング"
+    "message": "画像番号のゼロ埋め"
   },
   "options_paddingAuto": {
     "message": "自動（画像総数に基づく）"
@@ -2165,5 +2170,88 @@
   },
   "sidepanel_chapterResults": {
     "message": "チャプターの結果"
+  },
+  "options_decreaseValue": {
+    "message": "$label$を減らす",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_increaseValue": {
+    "message": "$label$を増やす",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_macroSeries": {
+    "message": "作品名"
+  },
+  "options_macroChapterTitle": {
+    "message": "チャプター名"
+  },
+  "options_macroChapterNumber": {
+    "message": "チャプター番号"
+  },
+  "options_macroVolumeNumber": {
+    "message": "巻数"
+  },
+  "options_macroChapterTwoDigits": {
+    "message": "チャプター番号 (02)"
+  },
+  "options_macroChapterThreeDigits": {
+    "message": "チャプター番号 (002)"
+  },
+  "options_fileNamingAndContents": {
+    "message": "ファイル名と内容"
+  },
+  "options_moreExampleImages": {
+    "message": "ほか$count$枚の画像",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_replayExample": {
+    "message": "例を再生"
+  },
+  "options_currentChapter": {
+    "message": "現在のチャプター"
+  },
+  "options_oneImageAtATime": {
+    "message": "一度に1枚の画像"
+  },
+  "options_parallelImages": {
+    "message": "最大$count$枚を並行処理",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_exampleRequestStarts": {
+    "message": "リクエスト開始の例"
+  },
+  "options_afterChapter": {
+    "message": "チャプター完了後"
+  },
+  "options_nextChapter": {
+    "message": "次のチャプター"
+  },
+  "options_chapterFolderName": {
+    "message": "チャプターフォルダー名"
+  },
+  "options_chapterFolderNameDesc": {
+    "message": "チャプターごとに画像と追加のメタデータを入れるフォルダーです。"
+  },
+  "options_archiveContents": {
+    "message": "各アーカイブ内のファイル"
+  },
+  "options_chapterFolderContents": {
+    "message": "各チャプターフォルダー内のファイル"
   }
 }

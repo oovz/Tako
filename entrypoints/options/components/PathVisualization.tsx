@@ -1,15 +1,39 @@
+import { useOptionsPreview } from "../hooks/useOptionsMotion"
 import { useMemo } from "react"
-import { AlertCircle, File, Folder } from "lucide-react"
-
+import {
+  AlertCircle,
+  ChevronRight,
+  FileArchive,
+  Folder,
+  Image,
+  FileCode,
+} from "lucide-react"
+import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { createMockContext } from "@/src/shared/template-expander"
+import {
+  normalizeImageFilename,
+  sanitizeFilename,
+} from "@/src/shared/filename-sanitizer"
+import {
+  buildImageOutputFilename,
+  buildCoverOutputFilename,
+} from "@/src/shared/output-filenames"
 import { createPathPreview } from "./PathVisualization-preview"
 import { t } from "@/src/runtime/i18n"
 
+type FileOptions = Pick<
+  ExtensionSettings["downloads"],
+  | "normalizeImageFilenames"
+  | "imagePaddingDigits"
+  | "includeComicInfo"
+  | "includeCoverImage"
+>
 interface PathVisualizationProps {
   template: string
   filenameTemplate: string
   format: "cbz" | "zip" | "none"
   destinationName?: string
+  fileOptions: FileOptions
 }
 
 export function PathVisualization({
@@ -17,59 +41,145 @@ export function PathVisualization({
   filenameTemplate,
   format,
   destinationName,
+  fileOptions,
 }: PathVisualizationProps) {
-  const mockContext = useMemo(() => createMockContext(), [])
-
-  const { hasErrors, fullPath, errors, warnings } = useMemo(
-    () => createPathPreview(template, filenameTemplate, format, mockContext),
-    [template, filenameTemplate, format, mockContext]
+  const context = useMemo(() => createMockContext(), [])
+  const chapterLabel = t("options_chapter")
+  const outputs = useMemo(
+    () =>
+      [1, 2, 3].map((chapterNumber) =>
+        createPathPreview(template, filenameTemplate, format, {
+          ...context,
+          chapterNumber,
+          chapterTitle: `${chapterLabel} ${chapterNumber}`,
+        })
+      ),
+    [template, filenameTemplate, format, context, chapterLabel]
   )
-
-  const lastSlash = fullPath?.lastIndexOf("/") ?? -1
-  const directory = fullPath?.slice(0, lastSlash)
-  const outputName = fullPath?.slice(lastSlash + 1)
-  const OutputIcon = format === "none" ? Folder : File
-
+  const { hasErrors, errors, warnings } = outputs[0]
+  const groups = new Map<string, { index: number; name: string }[]>()
+  outputs.forEach((output, index) => {
+    if (!output.fullPath) return
+    const split = output.fullPath.lastIndexOf("/")
+    const directory = output.fullPath.slice(0, split)
+    const files = groups.get(directory) ?? []
+    files.push({ index, name: output.fullPath.slice(split + 1) })
+    groups.set(directory, files)
+  })
+  const images = [0, 1, 2].map((index) => {
+    const originalFilename = `scan-${index + 1}.jpg`
+    if (format === "none")
+      return buildImageOutputFilename({
+        index,
+        totalImages: 12,
+        originalFilename,
+        mimeType: "image/jpeg",
+        ...fileOptions,
+      })
+    return fileOptions.normalizeImageFilenames
+      ? normalizeImageFilename(
+          index,
+          12,
+          "image/jpeg",
+          fileOptions.imagePaddingDigits
+        )
+      : sanitizeFilename(originalFilename)
+  })
+  const preview = useOptionsPreview(
+    JSON.stringify([outputs, destinationName, fileOptions])
+  )
+  const OutputIcon = format === "none" ? Folder : FileArchive
   return (
     <div
-      id="template-validation-status"
-      role={hasErrors ? "alert" : "status"}
-      aria-live="polite"
-      className="min-w-0 rounded-lg border bg-background/70 p-4"
+      ref={preview}
+      role="group"
+      aria-label={t("options_exampleOutput")}
+      className="options-output-preview"
     >
+      <span
+        id="template-validation-status"
+        role={hasErrors ? "alert" : "status"}
+        aria-live="polite"
+        className="sr-only"
+      >
+        {hasErrors
+          ? errors.join("; ")
+          : [
+              outputs[0].fullPath,
+              format === "none" ? t("options_noArchiveDesc") : "",
+              ...warnings,
+            ]
+              .filter(Boolean)
+              .join(". ")}
+      </span>
       <p className="flex items-center gap-2 text-sm font-semibold">
         {hasErrors && (
           <AlertCircle aria-hidden="true" className="size-4 text-destructive" />
         )}
         {hasErrors ? t("options_invalidTemplate") : t("options_exampleOutput")}
       </p>
-      {outputName ? (
-        <div className="mt-3 flex flex-col gap-2 text-xs wrap-anywhere">
+      {hasErrors ? (
+        <p className="mt-2 text-xs text-destructive" aria-hidden="true">
+          {errors.join("; ")}
+        </p>
+      ) : (
+        <div className="options-output-tree">
           {destinationName && (
-            <p className="text-muted-foreground">{destinationName}</p>
+            <p className="options-output-destination">{destinationName}</p>
           )}
-          <p className="flex items-start gap-2 font-mono">
-            <Folder
-              aria-hidden="true"
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <span>{directory}/</span>
-          </p>
-          <p className="ml-2 flex items-start gap-2 border-l pl-3 font-mono">
-            <OutputIcon
-              aria-hidden="true"
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-            <span>{outputName}</span>
-          </p>
+          {[...groups].map(([directory, files]) => (
+            <div key={directory}>
+              <div className="options-output-folder">
+                <Folder aria-hidden="true" />
+                <p className="options-output-path">{directory}/</p>
+              </div>
+              <div className="options-output-examples">
+                {files.map(({ index, name }) => (
+                  <details
+                    key={index}
+                    className="options-output-chapter"
+                    open={index === 0}
+                  >
+                    <summary>
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="output-disclosure"
+                      />
+                      <OutputIcon aria-hidden="true" />
+                      <span>{name}</span>
+                    </summary>
+                    <ul className="options-output-contents">
+                      {fileOptions.includeCoverImage && (
+                        <li title={t("options_includeCoverDesc")}>
+                          <Image aria-hidden="true" />
+                          <span>{buildCoverOutputFilename("image/jpeg")}</span>
+                        </li>
+                      )}
+                      {images.map((filename) => (
+                        <li key={filename}>
+                          <Image aria-hidden="true" />
+                          <span>{filename}</span>
+                        </li>
+                      ))}
+                      <li className="options-output-more">
+                        {t("options_moreExampleImages", ["9"])}
+                      </li>
+                      {fileOptions.includeComicInfo && (
+                        <li>
+                          <FileCode aria-hidden="true" />
+                          <span>ComicInfo.xml</span>
+                        </li>
+                      )}
+                    </ul>
+                  </details>
+                ))}
+              </div>
+            </div>
+          ))}
           {format === "none" && (
-            <p className="text-muted-foreground">
-              {t("options_noArchiveDesc")}
-            </p>
+            <p className="options-output-note">{t("options_noArchiveDesc")}</p>
           )}
         </div>
-      ) : (
-        <p className="mt-2 text-xs text-destructive">{errors.join("; ")}</p>
       )}
       {warnings.length > 0 && (
         <p className="mt-2 text-xs text-amber-700">{warnings.join("; ")}</p>

@@ -1,17 +1,8 @@
 import React, { useCallback } from "react"
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import type { ExtensionSettings } from "@/src/domain/settings/types"
 import { t } from "@/src/runtime/i18n"
 import { SettingsGroup } from "../components/primitives/SettingsGroup"
-import { SettingsRow } from "../components/primitives/SettingsRow"
 import { SettingsSectionHeader } from "../components/primitives/SettingsSectionHeader"
 import { DownloadDestinationSection } from "../components/DownloadDestinationSection"
 import { ArchiveFormatPicker } from "../components/ArchiveFormatPicker"
@@ -55,10 +46,29 @@ export function StorageTab({
       <SettingsSectionHeader
         id="options-storage-heading"
         title={t("options_storage")}
-        description={t("options_storageFormatsDesc")}
       />
 
-      {/* Group 1: Download Destination (FSA vs Chrome Downloads API) */}
+      {/* Output format and naming show the result before destination details. */}
+      <div className="flex flex-col gap-2">
+        <ArchiveFormatPicker
+          showNoArchiveWarning={showNoArchiveWarning}
+          value={settings.downloads.defaultFormat}
+          onValueChange={(value) => updateDownloads({ defaultFormat: value })}
+        />
+      </div>
+
+      <SettingsGroup title={t("options_fileNamingAndContents")}>
+        <StorageTemplates
+          downloads={settings.downloads}
+          destinationName={
+            settings.downloads.destination === "file-system-access"
+              ? selectedFolderName || t("destination_taskFolder")
+              : t("destination_taskChrome")
+          }
+          onChange={updateDownloads}
+        />
+      </SettingsGroup>
+
       <DownloadDestinationSection
         downloads={settings.downloads}
         selectedFolderName={selectedFolderName}
@@ -69,113 +79,6 @@ export function StorageTab({
         onDownloadsChange={updateDownloads}
         onPickFolder={onPickFolder}
       />
-
-      {/* Group 2: Archive Format */}
-      <div className="flex flex-col gap-2">
-        <ArchiveFormatPicker
-          showNoArchiveWarning={showNoArchiveWarning}
-          value={settings.downloads.defaultFormat}
-          onValueChange={(value) => updateDownloads({ defaultFormat: value })}
-        />
-      </div>
-
-      <StorageTemplates
-        downloads={settings.downloads}
-        destinationName={
-          settings.downloads.destination === "file-system-access"
-            ? selectedFolderName || t("destination_taskFolder")
-            : t("destination_taskChrome")
-        }
-        onChange={updateDownloads}
-      />
-
-      {/* Group 4: Metadata & File Options */}
-      <SettingsGroup
-        title={t("options_storageFormats")}
-        description={t("options_storageFormatsDesc")}
-      >
-        <SettingsRow
-          title={t("options_includeComicInfo")}
-          description={t("options_includeComicInfoDesc")}
-          htmlFor="comicinfo"
-          control={
-            <Switch
-              id="comicinfo"
-              data-testid="comicinfo-switch"
-              checked={settings.downloads.includeComicInfo}
-              onCheckedChange={(checked) =>
-                updateDownloads({ includeComicInfo: checked })
-              }
-            />
-          }
-        />
-
-        <SettingsRow
-          title={t("options_includeCover")}
-          description={t("options_includeCoverDesc")}
-          htmlFor="cover-image"
-          control={
-            <Switch
-              id="cover-image"
-              data-testid="cover-image-switch"
-              checked={settings.downloads.includeCoverImage}
-              onCheckedChange={(checked) =>
-                updateDownloads({ includeCoverImage: checked })
-              }
-            />
-          }
-        />
-
-        <SettingsRow
-          title={t("options_normalizeFilenames")}
-          description={t("options_normalizeFilenamesDesc")}
-          htmlFor="normalize"
-          control={
-            <Switch
-              id="normalize"
-              data-testid="normalize-switch"
-              checked={settings.downloads.normalizeImageFilenames}
-              onCheckedChange={(checked) =>
-                updateDownloads({ normalizeImageFilenames: checked })
-              }
-            />
-          }
-        />
-
-        <SettingsRow
-          title={t("options_imagePadding")}
-          description={t("options_imagePaddingDesc")}
-          htmlFor="image-padding"
-          control={
-            <Select
-              value={String(settings.downloads.imagePaddingDigits ?? "auto")}
-              onValueChange={(value) =>
-                updateDownloads({
-                  imagePaddingDigits:
-                    value === "auto"
-                      ? "auto"
-                      : (parseInt(value) as 2 | 3 | 4 | 5),
-                })
-              }
-            >
-              <SelectTrigger
-                id="image-padding"
-                data-testid="image-padding-select"
-                className="w-48"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">{t("options_paddingAuto")}</SelectItem>
-                <SelectItem value="2">{t("options_padding2")}</SelectItem>
-                <SelectItem value="3">{t("options_padding3")}</SelectItem>
-                <SelectItem value="4">{t("options_padding4")}</SelectItem>
-                <SelectItem value="5">{t("options_padding5")}</SelectItem>
-              </SelectContent>
-            </Select>
-          }
-        />
-      </SettingsGroup>
     </div>
   )
 }

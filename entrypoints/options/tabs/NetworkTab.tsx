@@ -1,5 +1,5 @@
+import { NumberStepper } from "../components/primitives/NumberStepper"
 import { NetworkPacingPreview } from "../components/NetworkPacingPreview"
-import { SettingsChoices } from "../components/primitives/SettingsChoices"
 import React from "react"
 
 import { Input } from "@/components/ui/input"
@@ -39,10 +39,6 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
     onChange({ globalRetries: { ...settings.globalRetries, ...updates } })
   }
 
-  const updateAdvanced = (updates: Partial<ExtensionSettings["advanced"]>) => {
-    onChange({ advanced: { ...settings.advanced, ...updates } })
-  }
-
   const imagePolicy = settings.globalPolicy.image
   const chapterPolicy = settings.globalPolicy.chapter
   const retries = settings.globalRetries
@@ -57,7 +53,7 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
       {/* Group 1: Performance & Pacing */}
       <SettingsGroup title={t("options_performance")}>
         <div className="@container">
-          <div className="grid items-start gap-4 @min-[38rem]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="options-pacing-layout">
             <div className="min-w-0 divide-y divide-border/70">
               {/* Image Concurrency Slider */}
               <SettingsRow
@@ -224,70 +220,37 @@ export function NetworkTab({ settings, onChange }: NetworkTabProps) {
       </SettingsGroup>
 
       {/* Group 2: Retry Settings */}
-      <SettingsGroup
-        title={t("options_retrySettings")}
-        description={t("options_retrySettingsDesc")}
-      >
+      <SettingsGroup title={t("options_retrySettings")}>
         <SettingsRow
           title={t("options_imageRetries")}
-          description={t("options_imageRetriesDesc")}
+
           htmlFor="image-retries"
           control={
-            <Input
+            <NumberStepper
               id="image-retries"
-              data-testid="image-retries-input"
-              type="number"
+              testId="image-retries-input"
+              label={t("options_imageRetries")}
               min={0}
               max={10}
               value={retries.image}
-              onChange={(e) =>
-                updateGlobalRetries({ image: parseInt(e.target.value) || 0 })
-              }
-              className="tabular-nums w-28"
+              onChange={(value) => updateGlobalRetries({ image: value })}
             />
           }
         />
 
         <SettingsRow
           title={t("options_chapterRetries")}
-          description={t("options_chapterRetriesDesc")}
+
           htmlFor="chapter-retries"
           control={
-            <Input
+            <NumberStepper
               id="chapter-retries"
-              data-testid="chapter-retries-input"
-              type="number"
+              testId="chapter-retries-input"
+              label={t("options_chapterRetries")}
               min={0}
               max={10}
               value={retries.chapter}
-              onChange={(e) =>
-                updateGlobalRetries({ chapter: parseInt(e.target.value) || 0 })
-              }
-              className="tabular-nums w-28"
-            />
-          }
-        />
-      </SettingsGroup>
-
-      {/* Group 3: Debug & Diagnostics */}
-      <SettingsGroup
-        title={t("options_debugSettings")}
-        description={t("options_debugSettingsDesc")}
-      >
-        <SettingsRow
-          title={t("options_logLevel")}
-          description={t("options_logLevelDesc")}
-          control={
-            <SettingsChoices
-              label={t("options_logLevel")}
-              value={settings.advanced.logLevel}
-              onChange={(logLevel) => updateAdvanced({ logLevel })}
-              choices={[
-                { value: "error", label: t("options_logLevelError") },
-                { value: "warn", label: t("options_logLevelWarn") },
-                { value: "info", label: t("options_logLevelInfo") },
-                { value: "debug", label: t("options_logLevelDebug") },
-              ]}
+              onChange={(value) => updateGlobalRetries({ chapter: value })}
             />
           }
         />

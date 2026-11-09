@@ -474,7 +474,7 @@
     "message": "Configure download formats, performance, retries, and notifications."
   },
   "options_storageFormats": {
-    "message": "Storage & Formats"
+    "message": "File options"
   },
   "options_storageFormatsDesc": {
     "message": "Choose archive format and file organization options."
@@ -483,7 +483,7 @@
     "message": "Include ComicInfo.xml"
   },
   "options_includeComicInfoDesc": {
-    "message": "Embed metadata for comic readers"
+    "message": "Metadata for comic reader apps."
   },
   "options_includeCoverImage": {
     "message": "Include Series Cover"
@@ -492,10 +492,10 @@
     "message": "Save cover image inside archive"
   },
   "options_normalizeFilenames": {
-    "message": "Normalize Filenames"
+    "message": "Name images by number"
   },
   "options_normalizeFilenamesDesc": {
-    "message": "Rename images to 001.jpg, 002.jpg..."
+    "message": "Replace the original image names."
   },
   "options_suppressSaveAs": {
     "message": "Suppress Save As Dialog"
@@ -507,16 +507,21 @@
     "message": "File naming"
   },
   "options_directoryPathTemplate": {
-    "message": "Directory Path Template"
+    "message": "Save subfolder path"
   },
   "options_directoryPathTemplateDesc": {
-    "message": "Use macros: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>"
+    "message": "Folders inside your download location."
   },
   "options_filenameTemplate": {
-    "message": "Filename Template"
+    "message": "Archive filename"
   },
   "options_filenameTemplateDesc": {
-    "message": "Template for the archive/folder name. Supports same macros plus <CHAPTER_NUMBER_PAD2>, <CHAPTER_NUMBER_PAD3>."
+    "message": "One archive per chapter. .$format$ is added automatically.",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
   },
   "options_imageFilenamePadding": {
     "message": "Image Filename Padding"
@@ -537,7 +542,7 @@
     "message": "5 digits (00001-99999)"
   },
   "options_imagePaddingDesc": {
-    "message": "Zero-padding for normalized image filenames (e.g., 001.jpg, 002.jpg)."
+    "message": "Leading zeros for image numbers."
   },
   "options_archiveFormat": {
     "message": "Archive Format"
@@ -660,7 +665,7 @@
     "message": "Download defaults for new tasks"
   },
   "options_useCustomFolder": {
-    "message": "Use custom folder (File System Access)"
+    "message": "Save to a folder"
   },
   "options_fsaUnsupported": {
     "message": "Custom folders are unavailable in this browser. Browser Downloads remain available."
@@ -672,7 +677,7 @@
     "message": "No download folder selected"
   },
   "options_fsaNoFolderSelectedDesc": {
-    "message": "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
+    "message": "Choose a folder before saving these settings."
   },
   "options_conflictPolicy": {
     "message": "Existing files"
@@ -1304,7 +1309,7 @@
     "message": "Request pattern"
   },
   "options_pacingPreviewDesc": {
-    "message": "Global defaults. Earliest example starts when a request slot is free."
+    "message": "Timing is scaled. Requests wait for a free slot."
   },
   "options_noDownloadTasks": {
     "message": "No download tasks"
@@ -1357,13 +1362,13 @@
     "message": "Include Series Cover"
   },
   "options_includeCoverDesc": {
-    "message": "Save cover image inside archive"
+    "message": "When available."
   },
   "options_pathTemplateMacros": {
     "message": "Use macros: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>"
   },
   "options_imagePadding": {
-    "message": "Image Filename Padding"
+    "message": "Image number padding"
   },
   "options_paddingAuto": {
     "message": "Auto (based on total images)"
@@ -2177,5 +2182,88 @@
   },
   "sidepanel_chapterResults": {
     "message": "Chapter results"
+  },
+  "options_decreaseValue": {
+    "message": "Decrease $label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_increaseValue": {
+    "message": "Increase $label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_macroSeries": {
+    "message": "Series"
+  },
+  "options_macroChapterTitle": {
+    "message": "Chapter title"
+  },
+  "options_macroChapterNumber": {
+    "message": "Chapter no."
+  },
+  "options_macroVolumeNumber": {
+    "message": "Volume no."
+  },
+  "options_macroChapterTwoDigits": {
+    "message": "Chapter no. (02)"
+  },
+  "options_macroChapterThreeDigits": {
+    "message": "Chapter no. (002)"
+  },
+  "options_fileNamingAndContents": {
+    "message": "File naming & contents"
+  },
+  "options_moreExampleImages": {
+    "message": "$count$ more images",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_replayExample": {
+    "message": "Replay example"
+  },
+  "options_currentChapter": {
+    "message": "Current chapter"
+  },
+  "options_oneImageAtATime": {
+    "message": "One image at a time"
+  },
+  "options_parallelImages": {
+    "message": "Up to $count$ images at once",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_exampleRequestStarts": {
+    "message": "Example request starts"
+  },
+  "options_afterChapter": {
+    "message": "After the chapter finishes"
+  },
+  "options_nextChapter": {
+    "message": "Next chapter"
+  },
+  "options_chapterFolderName": {
+    "message": "Chapter folder name"
+  },
+  "options_chapterFolderNameDesc": {
+    "message": "One folder per chapter for images and optional metadata."
+  },
+  "options_archiveContents": {
+    "message": "Files inside each archive"
+  },
+  "options_chapterFolderContents": {
+    "message": "Files inside each chapter folder"
   }
 }

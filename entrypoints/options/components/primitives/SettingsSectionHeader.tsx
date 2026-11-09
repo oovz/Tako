@@ -10,7 +10,7 @@ export function SettingsSectionHeader({
   description,
 }: SettingsSectionHeaderProps) {
   return (
-    <header>
+    <header className="options-section-heading">
       <h1 id={id} className="text-2xl font-semibold tracking-tight">
         {title}
       </h1>

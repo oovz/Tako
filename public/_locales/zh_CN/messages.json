@@ -474,7 +474,7 @@
     "message": "配置下载格式、性能、重试和通知。"
   },
   "options_storageFormats": {
-    "message": "存储与格式"
+    "message": "文件选项"
   },
   "options_storageFormatsDesc": {
     "message": "选择归档格式和文件组织选项。"
@@ -483,7 +483,7 @@
     "message": "包含 ComicInfo.xml"
   },
   "options_includeComicInfoDesc": {
-    "message": "为漫画阅读器嵌入元数据"
+    "message": "供漫画阅读器使用的元数据。"
   },
   "options_includeCoverImage": {
     "message": "包含系列封面"
@@ -492,10 +492,10 @@
     "message": "将封面图片保存到归档文件中"
   },
   "options_normalizeFilenames": {
-    "message": "规范化文件名"
+    "message": "以编号命名图片"
   },
   "options_normalizeFilenamesDesc": {
-    "message": "将图片重命名为 001.jpg, 002.jpg..."
+    "message": "替换原始图片文件名。"
   },
   "options_suppressSaveAs": {
     "message": "禁止另存为对话框"
@@ -507,16 +507,21 @@
     "message": "文件命名"
   },
   "options_directoryPathTemplate": {
-    "message": "目录路径模板"
+    "message": "保存子文件夹路径"
   },
   "options_directoryPathTemplateDesc": {
-    "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
+    "message": "在下载位置内创建的文件夹。"
   },
   "options_filenameTemplate": {
-    "message": "文件名模板"
+    "message": "压缩包文件名"
   },
   "options_filenameTemplateDesc": {
-    "message": "归档/文件夹名称的模板。支持相同宏以及 <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3>。"
+    "message": "每章一个压缩包，自动添加 .$format$ 扩展名。",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
   },
   "options_imageFilenamePadding": {
     "message": "图片文件名补零"
@@ -537,7 +542,7 @@
     "message": "5 位数 (00001-99999)"
   },
   "options_imagePaddingDesc": {
-    "message": "规范化图片文件名的补零位数（例如 001.jpg, 002.jpg）。"
+    "message": "在图片编号前补零。"
   },
   "options_archiveFormat": {
     "message": "归档格式"
@@ -660,7 +665,7 @@
     "message": "新任务的默认保存位置"
   },
   "options_useCustomFolder": {
-    "message": "使用自定义文件夹（文件系统访问）"
+    "message": "保存到文件夹"
   },
   "options_fsaUnsupported": {
     "message": "此浏览器不支持自定义文件夹。仍可使用浏览器下载。"
@@ -672,7 +677,7 @@
     "message": "未选择下载文件夹"
   },
   "options_fsaNoFolderSelectedDesc": {
-    "message": "使用文件系统访问（File System Access）下载模式需要选择文件夹。在选择文件夹之前无法保存更改。"
+    "message": "保存这些设置前，请先选择文件夹。"
   },
   "options_conflictPolicy": {
     "message": "现有文件"
@@ -1304,7 +1309,7 @@
     "message": "请求节奏"
   },
   "options_pacingPreviewDesc": {
-    "message": "全局默认设置。有空闲请求名额时的最早开始时间示例。"
+    "message": "动画时间经过缩放。请求会等待空闲位置。"
   },
   "options_noDownloadTasks": {
     "message": "没有下载任务"
@@ -1357,13 +1362,13 @@
     "message": "包含系列封面"
   },
   "options_includeCoverDesc": {
-    "message": "将封面图像保存到压缩包内"
+    "message": "有封面时保存。"
   },
   "options_pathTemplateMacros": {
     "message": "使用宏：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
   },
   "options_imagePadding": {
-    "message": "图片文件名填充"
+    "message": "图片编号补零"
   },
   "options_paddingAuto": {
     "message": "自动（根据图片总数）"
@@ -2165,5 +2170,88 @@
   },
   "sidepanel_chapterResults": {
     "message": "章节结果"
+  },
+  "options_decreaseValue": {
+    "message": "减少$label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_increaseValue": {
+    "message": "增加$label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_macroSeries": {
+    "message": "系列名称"
+  },
+  "options_macroChapterTitle": {
+    "message": "章节标题"
+  },
+  "options_macroChapterNumber": {
+    "message": "章节号"
+  },
+  "options_macroVolumeNumber": {
+    "message": "卷号"
+  },
+  "options_macroChapterTwoDigits": {
+    "message": "章节号 (02)"
+  },
+  "options_macroChapterThreeDigits": {
+    "message": "章节号 (002)"
+  },
+  "options_fileNamingAndContents": {
+    "message": "文件命名与内容"
+  },
+  "options_moreExampleImages": {
+    "message": "另外 $count$ 张图片",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_replayExample": {
+    "message": "重播示例"
+  },
+  "options_currentChapter": {
+    "message": "当前章节"
+  },
+  "options_oneImageAtATime": {
+    "message": "一次一张图片"
+  },
+  "options_parallelImages": {
+    "message": "最多同时处理 $count$ 张图片",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_exampleRequestStarts": {
+    "message": "请求开始时间示例"
+  },
+  "options_afterChapter": {
+    "message": "章节完成后"
+  },
+  "options_nextChapter": {
+    "message": "下一章节"
+  },
+  "options_chapterFolderName": {
+    "message": "章节文件夹名称"
+  },
+  "options_chapterFolderNameDesc": {
+    "message": "每章一个文件夹，用于保存图片和可选元数据。"
+  },
+  "options_archiveContents": {
+    "message": "每个压缩包内的文件"
+  },
+  "options_chapterFolderContents": {
+    "message": "每个章节文件夹内的文件"
   }
 }

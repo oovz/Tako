@@ -91,7 +91,7 @@ export function SiteIntegrationsTab({
       />
 
       {/* Search & Filter Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="options-integrations-toolbar flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-0 max-w-md flex-[1_1_16rem]">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -145,7 +145,7 @@ export function SiteIntegrationsTab({
       )}
 
       {/* Site Integration List */}
-      <div className="min-w-0 flex flex-col gap-4">
+      <div className="options-integration-list min-w-0 flex flex-col">
         {visibleIntegrations.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
             <div className="text-muted-foreground">

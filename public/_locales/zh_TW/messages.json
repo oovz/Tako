@@ -474,7 +474,7 @@
     "message": "設定下載格式、效能、重試和通知。"
   },
   "options_storageFormats": {
-    "message": "儲存與格式"
+    "message": "檔案選項"
   },
   "options_storageFormatsDesc": {
     "message": "選擇封存格式和檔案組織選項。"
@@ -483,7 +483,7 @@
     "message": "包含 ComicInfo.xml"
   },
   "options_includeComicInfoDesc": {
-    "message": "為漫畫閱讀器嵌入詮釋資料"
+    "message": "供漫畫閱讀器使用的中繼資料。"
   },
   "options_includeCoverImage": {
     "message": "包含系列封面"
@@ -492,10 +492,10 @@
     "message": "將封面圖片儲存到封存檔案中"
   },
   "options_normalizeFilenames": {
-    "message": "規範化檔案名"
+    "message": "以編號命名圖片"
   },
   "options_normalizeFilenamesDesc": {
-    "message": "將圖片重新命名為 001.jpg, 002.jpg..."
+    "message": "取代原始圖片檔名。"
   },
   "options_suppressSaveAs": {
     "message": "禁止另存新檔對話框"
@@ -507,16 +507,21 @@
     "message": "檔案命名"
   },
   "options_directoryPathTemplate": {
-    "message": "目錄路徑範本"
+    "message": "儲存子資料夾路徑"
   },
   "options_directoryPathTemplateDesc": {
-    "message": "使用巨集：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
+    "message": "在下載位置內建立的資料夾。"
   },
   "options_filenameTemplate": {
-    "message": "檔案名範本"
+    "message": "壓縮檔檔名"
   },
   "options_filenameTemplateDesc": {
-    "message": "封存/資料夾名稱的範本。支援相同巨集以及 <CHAPTER_NUMBER_PAD2>、<CHAPTER_NUMBER_PAD3>。"
+    "message": "每章一個壓縮檔，副檔名 .$format$ 會自動加上。",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
   },
   "options_imageFilenamePadding": {
     "message": "圖片檔案名補零"
@@ -537,7 +542,7 @@
     "message": "5 位數 (00001-99999)"
   },
   "options_imagePaddingDesc": {
-    "message": "規範化圖片檔案名的補零位數（例如 001.jpg, 002.jpg）。"
+    "message": "在圖片編號前補零。"
   },
   "options_archiveFormat": {
     "message": "封存格式"
@@ -660,7 +665,7 @@
     "message": "新任務的預設儲存位置"
   },
   "options_useCustomFolder": {
-    "message": "使用自訂資料夾（檔案系統存取）"
+    "message": "儲存至資料夾"
   },
   "options_fsaUnsupported": {
     "message": "此瀏覽器不支援自訂資料夾。仍可使用瀏覽器下載。"
@@ -672,7 +677,7 @@
     "message": "未選擇下載資料夾"
   },
   "options_fsaNoFolderSelectedDesc": {
-    "message": "使用檔案系統存取（File System Access）下載模式需要選擇資料夾。在選擇資料夾之前無法儲存變更。"
+    "message": "儲存這些設定前，請先選擇資料夾。"
   },
   "options_conflictPolicy": {
     "message": "現有檔案"
@@ -1304,7 +1309,7 @@
     "message": "請求節奏"
   },
   "options_pacingPreviewDesc": {
-    "message": "全域預設設定。有空閒請求名額時的最早開始時間範例。"
+    "message": "動畫時間經過縮放。請求會等待空閒位置。"
   },
   "options_noDownloadTasks": {
     "message": "沒有下載任務"
@@ -1357,13 +1362,13 @@
     "message": "包含系列封面"
   },
   "options_includeCoverDesc": {
-    "message": "將封面圖像儲存到壓縮包內"
+    "message": "有封面時儲存。"
   },
   "options_pathTemplateMacros": {
     "message": "使用巨集：<SERIES_TITLE>、<CHAPTER_NUMBER>、<CHAPTER_TITLE>、<VOLUME_NUMBER>"
   },
   "options_imagePadding": {
-    "message": "圖片檔名填充"
+    "message": "圖片編號補零"
   },
   "options_paddingAuto": {
     "message": "自動（根據圖片總數）"
@@ -2165,5 +2170,88 @@
   },
   "sidepanel_chapterResults": {
     "message": "章節結果"
+  },
+  "options_decreaseValue": {
+    "message": "減少$label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_increaseValue": {
+    "message": "增加$label$",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_macroSeries": {
+    "message": "系列名稱"
+  },
+  "options_macroChapterTitle": {
+    "message": "章節標題"
+  },
+  "options_macroChapterNumber": {
+    "message": "章節號"
+  },
+  "options_macroVolumeNumber": {
+    "message": "卷號"
+  },
+  "options_macroChapterTwoDigits": {
+    "message": "章節號 (02)"
+  },
+  "options_macroChapterThreeDigits": {
+    "message": "章節號 (002)"
+  },
+  "options_fileNamingAndContents": {
+    "message": "檔案命名與內容"
+  },
+  "options_moreExampleImages": {
+    "message": "另外 $count$ 張圖片",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_replayExample": {
+    "message": "重播範例"
+  },
+  "options_currentChapter": {
+    "message": "目前章節"
+  },
+  "options_oneImageAtATime": {
+    "message": "一次一張圖片"
+  },
+  "options_parallelImages": {
+    "message": "最多同時處理 $count$ 張圖片",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_exampleRequestStarts": {
+    "message": "請求開始時間範例"
+  },
+  "options_afterChapter": {
+    "message": "章節完成後"
+  },
+  "options_nextChapter": {
+    "message": "下一章節"
+  },
+  "options_chapterFolderName": {
+    "message": "章節資料夾名稱"
+  },
+  "options_chapterFolderNameDesc": {
+    "message": "每章一個資料夾，用於儲存圖片及選用的中繼資料。"
+  },
+  "options_archiveContents": {
+    "message": "每個壓縮檔內的檔案"
+  },
+  "options_chapterFolderContents": {
+    "message": "每個章節資料夾內的檔案"
   }
 }

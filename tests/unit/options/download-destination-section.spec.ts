@@ -103,9 +103,7 @@ describe("DownloadDestinationSection", () => {
       "No custom folder selected. Uses default browser downloads."
     )
     expect(markup).toContain("No download folder selected")
-    expect(markup).toContain(
-      "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
-    )
+    expect(markup).toContain("Choose a folder before saving these settings.")
   })
 
   it("renders suppress save as dialog switch enabled for browser downloads and disabled for FSA", () => {

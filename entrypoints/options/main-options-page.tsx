@@ -1,4 +1,12 @@
-import { lazy, Profiler, Suspense, useRef, useState } from "react"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
+import {
+  lazy,
+  Profiler,
+  Suspense,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 import { Loader2 } from "lucide-react"
 
 import { Toaster } from "@/components/ui/sonner"
@@ -138,20 +146,35 @@ function OptionsWorkspace({
   const [showDiscardDialog, setShowDiscardDialog] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
   const discardButtonRef = useRef<HTMLButtonElement>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
+  const saveOwnedFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0
+  }, [activeSection])
+  useLayoutEffect(() => {
+    if (state.hasUnsavedChanges) return
+    const focused = document.activeElement
+    if (
+      footerRef.current?.contains(focused) ||
+      (saveOwnedFocus.current && focused === document.body)
+    )
+      mainRef.current?.focus({ preventScroll: true })
+    saveOwnedFocus.current = false
+  }, [state.hasUnsavedChanges])
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground font-sans antialiased lg:flex-row">
+    <div className="tako-options flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground font-sans antialiased lg:flex-row">
       <Toaster />
       <OptionsSidebar
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="options-workspace flex min-h-0 min-w-0 flex-1 flex-col">
         <main
           ref={mainRef}
           tabIndex={-1}
           className="min-h-0 flex-1 overflow-y-auto"
         >
-          <div className="@container mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
+          <div className="options-canvas @container mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
             {state.hasExternalChanges && (
               <ExternalSettingsConflictBanner
                 isResolving={state.isResolvingExternalChanges}
@@ -168,30 +191,48 @@ function OptionsWorkspace({
               aria-labelledby={`options-${activeSection}-heading`}
             >
               <Suspense fallback={<SectionLoadingSkeleton />}>
-                <OptionsTabContent
-                  state={state}
-                  activeSection={activeSection}
-                />
+                <div className="options-section-enter">
+                  <OptionsTabContent
+                    state={state}
+                    activeSection={activeSection}
+                  />
+                </div>
               </Suspense>
             </section>
           </div>
         </main>
-        {state.hasUnsavedChanges && (
-          <UnsavedChangesFooter
-            discardButtonRef={discardButtonRef}
-            isSaving={state.isSaving}
-            isSaveBlocked={
-              state.hasExternalChanges || state.isResolvingExternalChanges
-            }
-            onDiscard={() => setShowDiscardDialog(true)}
-            onSave={state.saveConfiguration}
-          />
-        )}
+        <Collapsible
+          open={state.hasUnsavedChanges}
+          ref={footerRef}
+          className="options-unsaved"
+        >
+          <CollapsibleContent
+            className="options-unsaved-reveal"
+            inert={!state.hasUnsavedChanges}
+          >
+            <UnsavedChangesFooter
+              discardButtonRef={discardButtonRef}
+              isSaving={state.isSaving}
+              isSaveBlocked={
+                state.hasExternalChanges || state.isResolvingExternalChanges
+              }
+              onDiscard={() => setShowDiscardDialog(true)}
+              onSave={() => {
+                saveOwnedFocus.current = Boolean(
+                  footerRef.current?.contains(document.activeElement)
+                )
+                return state.saveConfiguration()
+              }}
+            />
+          </CollapsibleContent>
+        </Collapsible>
       </div>
       <OptionsDiscardDialog
         onCloseAutoFocus={(event) => {
           event.preventDefault()
-          const target = discardButtonRef.current ?? mainRef.current
+          const target = state.hasUnsavedChanges
+            ? discardButtonRef.current
+            : mainRef.current
           target?.focus()
         }}
         open={showDiscardDialog}

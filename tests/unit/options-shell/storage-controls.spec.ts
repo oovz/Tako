@@ -84,7 +84,7 @@ it.each([
   async (pathTemplate, expected) => {
     const settings = await mountStorage({ pathTemplate })
     const macro = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "+ <SERIES_TITLE>"
+      (button) => button.title === "<SERIES_TITLE>"
     )!
     await act(async () => macro.click())
     expect(onChange).toHaveBeenCalledExactlyOnceWith({
@@ -101,7 +101,7 @@ it.each([
   async (fileNameTemplate, expected) => {
     const settings = await mountStorage({ fileNameTemplate })
     const macro = Array.from(container.querySelectorAll("button")).filter(
-      (button) => button.textContent === "+ <CHAPTER_TITLE>"
+      (button) => button.title === "<CHAPTER_TITLE>"
     )[1]!
     await act(async () => macro.click())
     expect(onChange).toHaveBeenCalledExactlyOnceWith({

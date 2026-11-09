@@ -1,3 +1,4 @@
+import { SlidersHorizontal, X } from "lucide-react"
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -6,7 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { t } from "@/src/runtime/i18n"
 import type { SiteIntegrationCardProps } from "./SiteIntegrationCard-types"
 
-function IntegrationContributors({
+export function IntegrationContributors({
   contributors = [],
 }: {
   contributors?: readonly string[]
@@ -30,14 +31,14 @@ export function SiteIntegrationCardHeader({
   "siteIntegration" | "isEnabled" | "onEnabledChange"
 > & { hasOverrides: boolean; isExpanded: boolean }) {
   return (
-    <CardHeader className="gap-0 px-5 py-4">
+    <CardHeader className="options-integration-header gap-0 px-5 py-4">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-[1_1_12rem] flex-col gap-1 wrap-anywhere">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle
               role="heading"
               aria-level={2}
-              className="text-base font-semibold"
+              className="options-integration-name text-base font-semibold"
             >
               {siteIntegration.name}
             </CardTitle>
@@ -58,12 +59,9 @@ export function SiteIntegrationCardHeader({
               </Badge>
             )}
           </div>
-          <CardDescription className="text-xs text-muted-foreground">
+          <CardDescription className="options-integration-domains text-xs text-muted-foreground">
             {siteIntegration.domains.join(", ")}
           </CardDescription>
-          <IntegrationContributors
-            contributors={siteIntegration.contributors}
-          />
           {siteIntegration.requiresBroadHttpsPermission && !isEnabled && (
             <p className="max-w-xl text-xs text-muted-foreground">
               {t("options_broadHostPermissionDescription", [
@@ -86,9 +84,17 @@ export function SiteIntegrationCardHeader({
               data-testid={`configure-site-integration-${siteIntegration.id}`}
               variant="ghost"
               size="sm"
-              className="h-8 gap-1.5 px-2 text-xs font-medium"
+              className="options-configure-button"
+              aria-label={
+                isExpanded ? t("options_hide") : t("options_configure")
+              }
+              title={isExpanded ? t("options_hide") : t("options_configure")}
             >
-              {isExpanded ? t("options_hide") : t("options_configure")}
+              {isExpanded ? (
+                <X aria-hidden="true" />
+              ) : (
+                <SlidersHorizontal aria-hidden="true" />
+              )}
             </Button>
           </CollapsibleTrigger>
         </div>

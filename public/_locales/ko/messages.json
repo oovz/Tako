@@ -474,7 +474,7 @@
     "message": "다운로드 형식, 성능, 재시도 및 알림을 설정합니다."
   },
   "options_storageFormats": {
-    "message": "저장 및 형식"
+    "message": "파일 옵션"
   },
   "options_storageFormatsDesc": {
     "message": "압축 형식과 파일 정리 방식을 선택합니다."
@@ -483,7 +483,7 @@
     "message": "ComicInfo.xml 포함"
   },
   "options_includeComicInfoDesc": {
-    "message": "만화 뷰어용 메타데이터 포함"
+    "message": "만화 뷰어 앱용 메타데이터입니다."
   },
   "options_includeCoverImage": {
     "message": "작품 표지 포함"
@@ -492,10 +492,10 @@
     "message": "압축 파일 안에 표지 이미지 저장"
   },
   "options_normalizeFilenames": {
-    "message": "파일 이름 통일"
+    "message": "이미지 이름을 번호로 지정"
   },
   "options_normalizeFilenamesDesc": {
-    "message": "이미지 이름을 001.jpg, 002.jpg...로 변경"
+    "message": "원래 이미지 파일 이름을 바꿉니다."
   },
   "options_suppressSaveAs": {
     "message": "다른 이름으로 저장 창 생략"
@@ -507,16 +507,21 @@
     "message": "파일 이름 지정"
   },
   "options_directoryPathTemplate": {
-    "message": "폴더 경로 템플릿"
+    "message": "저장 하위 폴더 경로"
   },
   "options_directoryPathTemplateDesc": {
-    "message": "사용 가능한 매크로: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>"
+    "message": "다운로드 위치 안에 만들 폴더입니다."
   },
   "options_filenameTemplate": {
-    "message": "파일 이름 템플릿"
+    "message": "압축 파일 이름"
   },
   "options_filenameTemplateDesc": {
-    "message": "압축 파일·폴더 이름 템플릿입니다. 위 매크로와 <CHAPTER_NUMBER_PAD2>, <CHAPTER_NUMBER_PAD3>를 사용할 수 있습니다."
+    "message": "챕터마다 압축 파일을 만들고 .$format$ 확장자를 자동으로 붙입니다.",
+    "placeholders": {
+      "format": {
+        "content": "$1"
+      }
+    }
   },
   "options_imageFilenamePadding": {
     "message": "이미지 파일 이름 자릿수"
@@ -537,7 +542,7 @@
     "message": "5자리(00001-99999)"
   },
   "options_imagePaddingDesc": {
-    "message": "통일된 이미지 파일 이름의 앞자리를 0으로 채웁니다(예: 001.jpg, 002.jpg)."
+    "message": "이미지 번호 앞에 0을 붙입니다."
   },
   "options_archiveFormat": {
     "message": "압축 형식"
@@ -660,7 +665,7 @@
     "message": "새 작업의 다운로드 기본값"
   },
   "options_useCustomFolder": {
-    "message": "사용자 지정 폴더 사용(File System Access)"
+    "message": "폴더에 저장"
   },
   "options_fsaUnsupported": {
     "message": "이 브라우저에서는 사용자 지정 폴더를 사용할 수 없습니다. 브라우저 다운로드는 사용할 수 있습니다."
@@ -672,7 +677,7 @@
     "message": "다운로드 폴더를 선택하지 않았습니다"
   },
   "options_fsaNoFolderSelectedDesc": {
-    "message": "File System Access 다운로드 모드를 사용하려면 폴더를 선택하세요. 폴더를 선택한 뒤 변경 사항을 저장할 수 있습니다."
+    "message": "이 설정을 저장하기 전에 폴더를 선택하세요."
   },
   "options_conflictPolicy": {
     "message": "기존 파일"
@@ -1304,7 +1309,7 @@
     "message": "요청 패턴"
   },
   "options_pacingPreviewDesc": {
-    "message": "전역 기본값입니다. 요청 슬롯이 비어 있을 때의 가장 빠른 시작 시간 예시입니다."
+    "message": "표시 시간은 조정됩니다. 요청은 빈 자리가 생길 때까지 기다립니다."
   },
   "options_noDownloadTasks": {
     "message": "다운로드 작업 없음"
@@ -1357,13 +1362,13 @@
     "message": "작품 표지 포함"
   },
   "options_includeCoverDesc": {
-    "message": "압축 파일 안에 표지 이미지 저장"
+    "message": "제공되는 경우에만 저장합니다."
   },
   "options_pathTemplateMacros": {
     "message": "사용 가능한 매크로: <SERIES_TITLE>, <CHAPTER_NUMBER>, <CHAPTER_TITLE>, <VOLUME_NUMBER>"
   },
   "options_imagePadding": {
-    "message": "이미지 파일 이름 자릿수"
+    "message": "이미지 번호 앞자리 채우기"
   },
   "options_paddingAuto": {
     "message": "자동(전체 이미지 수 기준)"
@@ -2177,5 +2182,88 @@
   },
   "sidepanel_chapterResults": {
     "message": "챕터 결과"
+  },
+  "options_decreaseValue": {
+    "message": "$label$ 줄이기",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_increaseValue": {
+    "message": "$label$ 늘리기",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_macroSeries": {
+    "message": "시리즈"
+  },
+  "options_macroChapterTitle": {
+    "message": "챕터 제목"
+  },
+  "options_macroChapterNumber": {
+    "message": "챕터 번호"
+  },
+  "options_macroVolumeNumber": {
+    "message": "권 번호"
+  },
+  "options_macroChapterTwoDigits": {
+    "message": "챕터 번호 (02)"
+  },
+  "options_macroChapterThreeDigits": {
+    "message": "챕터 번호 (002)"
+  },
+  "options_fileNamingAndContents": {
+    "message": "파일 이름 및 내용"
+  },
+  "options_moreExampleImages": {
+    "message": "이미지 $count$개 더",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_replayExample": {
+    "message": "예시 다시 재생"
+  },
+  "options_currentChapter": {
+    "message": "현재 챕터"
+  },
+  "options_oneImageAtATime": {
+    "message": "한 번에 이미지 1개"
+  },
+  "options_parallelImages": {
+    "message": "한 번에 최대 $count$개 이미지",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "options_exampleRequestStarts": {
+    "message": "요청 시작 예시"
+  },
+  "options_afterChapter": {
+    "message": "챕터 완료 후"
+  },
+  "options_nextChapter": {
+    "message": "다음 챕터"
+  },
+  "options_chapterFolderName": {
+    "message": "챕터 폴더 이름"
+  },
+  "options_chapterFolderNameDesc": {
+    "message": "챕터별 폴더에 이미지와 선택한 메타데이터를 저장합니다."
+  },
+  "options_archiveContents": {
+    "message": "각 압축 파일 안의 파일"
+  },
+  "options_chapterFolderContents": {
+    "message": "각 챕터 폴더 안의 파일"
   }
 }

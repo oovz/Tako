@@ -337,9 +337,7 @@ test.describe("Settings persistence", () => {
         optionsPage.getByText("No download folder selected")
       ).toBeVisible()
       await expect(
-        optionsPage.getByText(
-          "Select a folder to use File System Access download mode. Changes cannot be saved until a folder is chosen."
-        )
+        optionsPage.getByText("Choose a folder before saving these settings.")
       ).toBeVisible()
 
       // Attempt to save changes

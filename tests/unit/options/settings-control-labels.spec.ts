@@ -78,6 +78,7 @@ describe("options control labels", () => {
   it("renders the selected archive extension in the path preview", () => {
     const zipMarkup = renderToStaticMarkup(
       createElement(PathVisualization, {
+        fileOptions: DEFAULT_SETTINGS.downloads,
         template: "Series",
         filenameTemplate: "Chapter",
         format: "zip",
@@ -85,6 +86,7 @@ describe("options control labels", () => {
     )
     const folderMarkup = renderToStaticMarkup(
       createElement(PathVisualization, {
+        fileOptions: DEFAULT_SETTINGS.downloads,
         template: "Series",
         filenameTemplate: "Chapter",
         format: "none",

@@ -35,7 +35,7 @@ export function DownloadTaskCard(props: DownloadTaskCardProps) {
   }
   return (
     <Card
-      className="relative"
+      className="options-task-card relative"
       aria-busy={actions.pendingAction !== null || actions.isCanceling}
     >
       <DownloadTaskCardCancelConfirmation task={task} actions={actions} />

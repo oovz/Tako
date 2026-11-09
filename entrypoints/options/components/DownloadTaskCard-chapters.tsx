@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
+import { ChevronRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { DownloadTaskState, TaskChapter } from "@/src/domain/queue/state"
 import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
@@ -56,20 +57,19 @@ export function DownloadTaskCardChapters({
   expanded: boolean
   onToggle: () => void
 }) {
-  const Chevron = expanded ? ChevronDown : ChevronRight
   return (
-    <div className="flex flex-col gap-2">
+    <Collapsible open={expanded} className="flex flex-col gap-2">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
+        className="options-chapter-toggle flex w-full items-center gap-1.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded"
         aria-expanded={expanded}
         aria-controls={id}
       >
-        <Chevron className="size-4 shrink-0" />
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         <span>{getTaskStatusSummaryLabel(task)}</span>
       </button>
-      {expanded && (
+      <CollapsibleContent className="options-disclosure" inert={!expanded}>
         <div
           id={id}
           role="table"
@@ -96,7 +96,7 @@ export function DownloadTaskCardChapters({
             ))}
           </div>
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

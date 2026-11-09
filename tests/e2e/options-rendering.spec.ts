@@ -82,9 +82,10 @@ test.describe("Options Page", () => {
     ).toHaveCount(0)
     const input = page.locator('[data-testid="chapter-delay-input"]')
     await input.fill("1250")
-    const preview = page
-      .getByRole("heading", { name: "Request pattern" })
-      .locator("..")
+    const preview = page.getByRole("group", {
+      name: "Request pattern",
+      exact: true,
+    })
     await expect(preview).toContainText(/1[,. ]?250 ms/)
     await page.getByTestId("request-delay-input").fill("600")
     await expect(preview.getByRole("listitem")).toHaveText([
@@ -272,4 +273,387 @@ test("keeps a settings dropdown within a short, narrow viewport", async ({
   await expect(lastOption).toBeInViewport({ ratio: 1 })
   await page.keyboard.press("Escape")
   await expect(language).toBeFocused()
+})
+
+test("keeps moving selection surfaces aligned after rapid changes and responsive reflow", async ({
+  page,
+  extensionId,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1200, height: 850 })
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=general`)
+  const navigation = page.getByRole("navigation", { name: "Tako Settings" })
+  const info = page.getByRole("radio", { name: "Info", exact: true })
+  const feedback = await info.evaluate(async (button) => {
+    if (!(button instanceof HTMLButtonElement))
+      throw new Error("Expected a radio button")
+    button.click()
+    await new Promise(requestAnimationFrame)
+    await new Promise(requestAnimationFrame)
+    return {
+      checked: button.getAttribute("aria-checked"),
+      moving: button
+        .closest('[role="radiogroup"]')!
+        .querySelector(".options-indicator")!
+        .getAnimations()
+        .some((animation) => animation.playState === "running"),
+    }
+  })
+  expect(feedback).toEqual({ checked: "true", moving: true })
+  await page.getByRole("radio", { name: "Error", exact: true }).press("Space")
+  await info.press("Space")
+  await expect(info).toBeChecked()
+  await expect(info).toBeFocused()
+
+  for (const width of [1200, 320, 768]) {
+    await page.setViewportSize({ width, height: 850 })
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          return [
+            ...document.querySelectorAll<HTMLElement>(
+              ".options-navigation, .options-choices"
+            ),
+          ].every((root) => {
+            const selected = root.querySelector(
+              '[aria-current="page"], [role="radio"][aria-checked="true"]'
+            )
+            const highlight = root.querySelector(".options-indicator")
+            if (!selected || !highlight) return false
+            const a = selected.getBoundingClientRect(),
+              b = highlight.getBoundingClientRect()
+            return (
+              Math.abs(a.x - b.x) < 1 &&
+              Math.abs(a.y - b.y) < 1 &&
+              Math.abs(a.width - b.width) < 1 &&
+              Math.abs(a.height - b.height) < 1
+            )
+          })
+        })
+      )
+      .toBe(true)
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      )
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath("general-" + width + ".png"),
+    })
+  }
+  await page.getByRole("main").evaluate((main) => {
+    main.scrollTop = main.scrollHeight
+  })
+  await navigation.getByRole("button", { name: "Storage & Files" }).click()
+  await expect
+    .poll(() => page.getByRole("main").evaluate((main) => main.scrollTop))
+    .toBe(0)
+  await navigation.getByRole("button", { name: "General", exact: true }).click()
+  await expect(
+    page.getByRole("heading", { name: "General", exact: true })
+  ).toBeVisible()
+  await expect(
+    navigation.getByRole("button", { name: "General", exact: true })
+  ).toBeFocused()
+  await page.getByRole("radio", { name: "Reduce motion", exact: true }).click()
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-tako-motion",
+    "reduce"
+  )
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                (animation.playState === "running" || animation.pending) &&
+                Number(animation.effect?.getTiming().duration) > 1
+            ).length
+      )
+    )
+    .toBe(0)
+  await navigation.getByRole("button", { name: "Network & Speed" }).click()
+  await expect(
+    page.getByRole("button", { name: "Replay example", exact: true })
+  ).toHaveAttribute("aria-disabled", "true")
+  await page.getByTestId("request-delay-input").fill("700")
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                (animation.playState === "running" || animation.pending) &&
+                Number(animation.effect?.getTiming().duration) > 1
+            ).length
+      )
+    )
+    .toBe(0)
+})
+
+test("keeps keyboard focus stable while the unsaved bar enters and exits", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html`)
+  const notifications = page.getByTestId("notifications-switch")
+  await notifications.press("Space")
+  await notifications.press("Space")
+  await expect(
+    page.getByRole("button", { name: "Save Changes", exact: true })
+  ).toHaveCount(0)
+  await expect(notifications).toBeFocused()
+  for (const reducedMotion of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion })
+    await notifications.press("Space")
+    const save = page.getByRole("button", { name: "Save Changes", exact: true })
+    await save.press("Enter")
+    await expect(save).toHaveCount(0)
+    await expect(page.getByRole("main")).toBeFocused()
+  }
+})
+
+test("adjusts bounded retry counts with the stepper and saves typed values", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=network`)
+  const input = page.getByTestId("image-retries-input")
+  const increase = page.getByRole("button", {
+    name: "Increase Image Retries",
+    exact: true,
+  })
+  const decrease = page.getByRole("button", {
+    name: "Decrease Image Retries",
+    exact: true,
+  })
+  await input.fill("0")
+  await expect(decrease).toBeDisabled()
+  await increase.press("Enter")
+  await expect(input).toHaveValue("1")
+  await decrease.click()
+  await expect(input).toHaveValue("0")
+  await input.fill("10")
+  await expect(increase).toBeDisabled()
+  await decrease.press("Enter")
+  await expect(input).toHaveValue("9")
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "Save Changes", exact: true })
+  ).toHaveCount(0)
+  await page.reload()
+  await expect(input).toHaveValue("9")
+})
+
+test("previews chapter contents and retains padding while normalization is off", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=storage`)
+  const preview = page.getByRole("group", {
+    name: "Example output",
+    exact: true,
+  })
+  const outputs = preview.locator(".options-output-chapter summary")
+  await expect(outputs).toHaveText([
+    "Chapter 1.cbz",
+    "Chapter 2.cbz",
+    "Chapter 3.cbz",
+  ])
+  await page.getByTestId("image-padding-select").click()
+  await page.getByRole("option", { name: /^4/ }).click()
+  const first = preview.locator(".options-output-contents").first()
+  await expect(first.getByText("0001.jpg", { exact: true })).toBeVisible()
+  await page.getByTestId("normalize-switch").click()
+  await expect(page.getByTestId("image-padding-select")).toHaveCount(0)
+  await expect(first.getByText("scan-1.jpg", { exact: true })).toBeVisible()
+  await page.getByTestId("cover-image-switch").click()
+  await page.getByTestId("comicinfo-switch").click()
+  await expect(first.getByText("000-cover.jpg", { exact: true })).toHaveCount(0)
+  await expect(first.getByText("ComicInfo.xml", { exact: true })).toHaveCount(0)
+  await page.locator('label[for="format-none"]').click()
+  await expect(outputs).toHaveText(["Chapter 1", "Chapter 2", "Chapter 3"])
+  await expect(first.getByText("001-scan-1.jpg", { exact: true })).toBeVisible()
+  await page.getByTestId("normalize-switch").click()
+  await expect(page.getByTestId("image-padding-select")).toContainText("4")
+  await expect(first.getByText("0001.jpg", { exact: true })).toBeVisible()
+})
+
+test("uses shared macro shortcuts for a persisted site path override", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(
+    `chrome-extension://${extensionId}/options.html?tab=integrations`
+  )
+  const card = page.getByTestId("site-integration-card-mangadex")
+  await page.getByTestId("configure-site-integration-mangadex").click()
+  await expect(
+    card.getByRole("textbox", { name: "Save subfolder path", exact: true })
+  ).toHaveAccessibleDescription(/download location/)
+  await card.getByTitle("<SERIES_TITLE>", { exact: true }).click()
+  await card.getByTitle("<VOLUME_NUMBER>", { exact: true }).click()
+  await expect(card.locator("#mangadex-path")).toHaveValue(
+    "<SERIES_TITLE>/<VOLUME_NUMBER>"
+  )
+  await page.getByRole("button", { name: "Save Changes", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "Save Changes", exact: true })
+  ).toHaveCount(0)
+  await page.reload()
+  await page.getByTestId("configure-site-integration-mangadex").click()
+  await expect(card.locator("#mangadex-path")).toHaveValue(
+    "<SERIES_TITLE>/<VOLUME_NUMBER>"
+  )
+  await card.locator("#mangadex-path").fill("")
+  await expect(card.getByText("Override", { exact: true })).toHaveCount(0)
+})
+
+test("replays a finite pacing example and stops motion when the OS preference changes", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=network`)
+  await expect(
+    page.getByRole("heading", { name: "Debug Settings", exact: true })
+  ).toHaveCount(0)
+  const preview = page.getByRole("group", {
+    name: "Request pattern",
+    exact: true,
+  })
+  await page.getByTestId("request-delay-input").fill("1000")
+  await page.getByTestId("chapter-delay-input").fill("2000")
+  await page
+    .getByRole("slider", { name: "Image Concurrency", exact: true })
+    .press("End")
+  await expect(preview.locator(".options-image-slot")).toHaveCount(10)
+  await expect(preview.getByRole("listitem")).toHaveText([
+    "0 ms",
+    "1,000 ms",
+    "2,000 ms",
+  ])
+  const replay = preview.getByRole("button", {
+    name: "Replay example",
+    exact: true,
+  })
+  const running = await replay.evaluate(async (button) => {
+    if (!(button instanceof HTMLButtonElement))
+      throw new Error("Expected replay button")
+    button.click()
+    await new Promise(requestAnimationFrame)
+    return document
+      .getAnimations()
+      .some(
+        (animation) => animation.playState === "running" || animation.pending
+      )
+  })
+  expect(running).toBe(true)
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  animation.playState === "running" || animation.pending
+              ).length
+        ),
+      { timeout: 5000 }
+    )
+    .toBe(0)
+  await replay.focus()
+  await replay.press("Enter")
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await expect(replay).toHaveAttribute("aria-disabled", "true")
+  await expect(replay).toBeFocused()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter(
+              (animation) =>
+                (animation.playState === "running" || animation.pending) &&
+                Number(animation.effect?.getTiming().duration) > 1
+            ).length
+      )
+    )
+    .toBe(0)
+  await page.getByRole("button", { name: "General", exact: true }).click()
+  await expect(
+    page.getByRole("heading", { name: "Debug Settings", exact: true })
+  ).toBeVisible()
+})
+
+test("distinguishes save folders, chapter outputs, and contained files by format", async ({
+  page,
+  extensionId,
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/options.html?tab=storage`)
+  const folder = page.getByRole("textbox", {
+    name: "Save subfolder path",
+    exact: true,
+  })
+  const chapterName = page.getByRole("textbox", {
+    name: "Archive filename",
+    exact: true,
+  })
+  await expect(folder).toHaveAccessibleDescription(/download location/)
+  await expect(chapterName).toHaveAccessibleDescription(/\.cbz.*automatically/)
+  await folder.fill("Library/<SERIES_TITLE>")
+  await chapterName.fill("Episode <CHAPTER_NUMBER_PAD2>")
+  const preview = page.getByRole("group", {
+    name: "Example output",
+    exact: true,
+  })
+  await expect(preview.locator("summary").first()).toHaveText("Episode 01.cbz")
+  await expect(
+    preview.getByText("01.jpg", { exact: true }).first()
+  ).toBeVisible()
+  const archiveContents = page.getByRole("group", {
+    name: "Files inside each archive",
+    exact: true,
+  })
+  await expect(archiveContents.getByTestId("normalize-switch")).toBeVisible()
+  await expect(archiveContents.locator("#filename-template")).toHaveCount(0)
+
+  await page.locator('label[for="format-zip"]').click()
+  await expect(chapterName).toHaveValue("Episode <CHAPTER_NUMBER_PAD2>")
+  await expect(chapterName).toHaveAccessibleDescription(/\.zip.*automatically/)
+  await expect(page.locator(".options-file-extension")).toHaveText(".zip")
+  await expect(preview.locator("summary").first()).toHaveText("Episode 01.zip")
+
+  await page.locator('label[for="format-none"]').click()
+  const chapterFolder = page.getByRole("textbox", {
+    name: "Chapter folder name",
+    exact: true,
+  })
+  await expect(chapterFolder).toHaveValue("Episode <CHAPTER_NUMBER_PAD2>")
+  await expect(chapterFolder).toHaveAccessibleDescription(/folder per chapter/)
+  await expect(chapterName).toHaveCount(0)
+  await expect(page.locator(".options-file-extension")).toHaveCount(0)
+  await expect(archiveContents).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("group", {
+        name: "Files inside each chapter folder",
+        exact: true,
+      })
+      .getByTestId("normalize-switch")
+  ).toBeVisible()
+  await expect(preview.locator("summary").first()).toHaveText("Episode 01")
+  await expect(
+    preview.getByText("01.jpg", { exact: true }).first()
+  ).toBeVisible()
+  await expect(folder).toHaveValue("Library/<SERIES_TITLE>")
+
+  await page.locator('label[for="format-cbz"]').click()
+  await expect(chapterName).toHaveValue("Episode <CHAPTER_NUMBER_PAD2>")
+  await expect(archiveContents).toBeVisible()
 })

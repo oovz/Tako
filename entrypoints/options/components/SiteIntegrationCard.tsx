@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { cn } from "@/src/shared/utils"
 import { t } from "@/src/runtime/i18n"
-import { SiteIntegrationCardHeader } from "./SiteIntegrationCard-header"
+import {
+  SiteIntegrationCardHeader,
+  IntegrationContributors,
+} from "./SiteIntegrationCard-header"
 import {
   SiteIntegrationOutputSettings,
   SiteIntegrationRateSettings,
@@ -56,7 +59,7 @@ export function SiteIntegrationCard({
     <Card
       data-testid={`site-integration-card-${siteIntegration.id}`}
       className={cn(
-        "overflow-hidden border-border/70 transition-colors duration-150",
+        "options-integration-card overflow-hidden border-border/70 transition-colors duration-150",
         cardAppearance(isEnabled, hasOverrides)
       )}
     >
@@ -68,7 +71,10 @@ export function SiteIntegrationCard({
           hasOverrides={hasOverrides}
           isExpanded={isExpanded}
         />
-        <CollapsibleContent className="border-t border-border/60 data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
+        <CollapsibleContent
+          className="options-disclosure border-t border-border/60"
+          inert={!isExpanded}
+        >
           <CardContent className="flex flex-col gap-6 px-5 py-5">
             <SiteIntegrationOutputSettings {...sectionProps} />
             <SiteIntegrationRateSettings {...sectionProps} />
@@ -77,6 +83,9 @@ export function SiteIntegrationCard({
               siteIntegration={siteIntegration}
               values={siteIntegrationSettingsValues}
               onChange={onSiteIntegrationSettingsChange}
+            />
+            <IntegrationContributors
+              contributors={siteIntegration.contributors}
             />
             {hasOverrides && (
               <div className="border-t border-border/70 pt-2">

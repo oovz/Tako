@@ -1,3 +1,4 @@
+import { useOptionsIndicator } from "../hooks/useOptionsMotion"
 import { Activity, FolderArchive, Puzzle, Settings, Zap } from "lucide-react"
 
 import { cn } from "@/src/shared/utils"
@@ -21,9 +22,10 @@ export function OptionsSidebar({
   activeSection,
   onSectionChange,
 }: OptionsSidebarProps) {
+  const navigation = useOptionsIndicator(activeSection, '[aria-current="page"]')
   return (
-    <aside className="flex shrink-0 flex-col border-b bg-sidebar lg:w-60 lg:overflow-y-auto lg:border-r lg:border-b-0">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 px-4 lg:h-14 lg:border-b">
+    <aside className="options-sidebar flex shrink-0 flex-col border-b bg-sidebar lg:w-60 lg:overflow-y-auto lg:border-r lg:border-b-0">
+      <div className="options-brand flex h-12 shrink-0 items-center gap-2.5 px-4 lg:h-14 lg:border-b">
         <img alt="" className="size-6 shrink-0" src="icon/32.png" />
         <span className="text-sm font-semibold tracking-tight lg:text-base">
           {t("options_takoSettings")}
@@ -31,9 +33,11 @@ export function OptionsSidebar({
       </div>
 
       <nav
+        ref={navigation}
         aria-label={t("options_takoSettings")}
-        className="grid grid-cols-3 gap-1 px-3 pb-3 sm:grid-cols-5 lg:flex lg:flex-col lg:pt-3"
+        className="options-navigation grid grid-cols-3 gap-1 px-3 pb-3 sm:grid-cols-5 lg:flex lg:flex-col lg:pt-3"
       >
+        <span className="options-indicator" aria-hidden="true" />
         {sections.map(({ id, label, icon: Icon }) => (
           <button
             key={id}

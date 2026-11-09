@@ -20,7 +20,7 @@ export function UnsavedChangesFooter({
   onSave,
 }: UnsavedChangesFooterProps) {
   return (
-    <div className="shrink-0 border-t bg-background">
+    <div className="options-save-bar shrink-0 border-t bg-background">
       <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 text-sm font-medium text-muted-foreground">

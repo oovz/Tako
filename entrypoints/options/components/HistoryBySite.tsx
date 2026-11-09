@@ -39,8 +39,8 @@ export function HistoryBySite({
                 className="h-1 overflow-hidden rounded-full bg-border"
               >
                 <div
-                  className="h-full bg-download-progress"
-                  style={{ width: `${(chapters / largest) * 100}%` }}
+                  className="options-history-bar h-full bg-download-progress"
+                  style={{ transform: `scaleX(${chapters / largest})` }}
                 />
               </div>
             </li>

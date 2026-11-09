@@ -31,13 +31,13 @@ export function DownloadTaskCardHeading({ task }: { task: DownloadTaskState }) {
     (chapter) => chapter.status === "completed"
   ).length
   return (
-    <CardHeader className="pb-3">
+    <CardHeader className="options-task-heading pb-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <CardTitle role="heading" aria-level={3} className="text-base">
             {task.seriesTitle}
           </CardTitle>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <div className="options-task-meta mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span>
               {t("options_chaptersCount", [
                 String(completedChapters),
