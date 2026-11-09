@@ -1,13 +1,11 @@
-import { useId, useMemo, useRef } from "react"
+import { playPanelMotion, stopPanelMotion } from "../hooks/panel-motion"
+import { useId, useLayoutEffect, useMemo, useRef } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { CheckCircle2, ChevronRight, History, LockKeyhole } from "lucide-react"
-
-import { Checkbox } from "@/components/ui/checkbox"
-import { cn } from "@/src/shared/utils"
-import type {
-  SidePanelChapter,
-  VolumeOrChapter,
-} from "@/entrypoints/sidepanel/types"
+import { History } from "lucide-react"
+import { PanelIcon } from "./PanelIcon"
+import { PanelCheckbox } from "./PanelCheckbox"
+import { usePanelScrollMargin } from "../hooks/usePanelScrollMargin"
+import type { SidePanelChapter, Volume, VolumeOrChapter } from "../types"
 import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
 
@@ -19,213 +17,159 @@ interface ChapterSelectorProps {
   onToggleGroup: (groupKey: string) => void
   onToggleChapter: (chapterId: string, checked: boolean) => void
   onVolumeSelectAll: (groupId: string) => void
+  scrollElement?: HTMLDivElement | null
 }
-
-type SelectorRow =
-  | {
-      kind: "volume-header"
-      key: string
-      groupKey: string
-      title: string
-      chapterCount: number
-      selectableChapterCount: number
-      selectionState: boolean | "indeterminate"
-      groupId: string
-      isExpanded: boolean
-    }
-  | {
-      kind: "standalone-chapter"
-      key: string
-      chapter: SidePanelChapter
-    }
-  | {
-      kind: "volume-chapter" | "chapter-mode-chapter"
-      key: string
-      chapter: SidePanelChapter
-    }
-
-function flattenRows(
-  items: VolumeOrChapter[],
-  viewMode: "volumes" | "chapters",
-  expandedGroups: Set<string>
-): SelectorRow[] {
-  if (viewMode === "chapters") {
-    return items.flatMap((item) => {
-      if ("chapters" in item) {
-        return item.chapters.map((chapter) => ({
-          kind: "chapter-mode-chapter" as const,
-          key: chapter.id,
-          chapter,
-        }))
-      }
-
-      return [
-        { kind: "chapter-mode-chapter" as const, key: item.id, chapter: item },
-      ]
-    })
-  }
-
-  const rows: SelectorRow[] = []
-  items.forEach((item) => {
-    if ("chapters" in item) {
-      const groupKey = item.groupId
-      const selectableChapters = item.chapters.filter(
-        (chapter) => chapter.locked !== true
-      )
-      const selectedCount = selectableChapters.filter(
-        (chapter) => chapter.selected
-      ).length
-      const isExpanded =
-        item.chapters.length > 0 && expandedGroups.has(groupKey)
-
-      rows.push({
-        kind: "volume-header",
-        key: `${groupKey}-header`,
-        groupKey,
-        title: item.title,
-        chapterCount: item.chapters.length,
-        selectableChapterCount: selectableChapters.length,
-        selectionState:
-          selectedCount > 0 &&
-          (selectedCount === selectableChapters.length
-            ? true
-            : "indeterminate"),
-        groupId: item.groupId,
-        isExpanded,
-      })
-
-      if (isExpanded) {
-        item.chapters.forEach((chapter) => {
-          rows.push({
-            kind: "volume-chapter",
-            key: `${groupKey}-${chapter.id}`,
-            chapter,
-          })
-        })
-      }
-
-      return
-    }
-
-    rows.push({
-      kind: "standalone-chapter",
-      key: `standalone-${item.id}`,
-      chapter: item,
-    })
-  })
-
-  return rows
+type VolumeRow = {
+  kind: "volume-header"
+  key: string
+  groupKey: string
+  groupId: string
+  title: string
+  number?: number
+  range: string
+  chapterCount: number
+  selectableChapterCount: number
+  selectionState: boolean | "indeterminate"
+  isExpanded: boolean
 }
-
-function countPotentialRows(items: VolumeOrChapter[]): number {
-  return items.reduce(
-    (count, item) =>
-      count + ("chapters" in item ? 1 + item.chapters.length : 1),
-    0
-  )
+type ChapterRowData = {
+  kind: "standalone-chapter" | "volume-chapter" | "chapter-mode-chapter"
+  key: string
+  chapter: SidePanelChapter
 }
-
-type SelectorActions = Pick<
+type SelectorRow = VolumeRow | ChapterRowData
+type Actions = Pick<
   ChapterSelectorProps,
   "isEnqueuing" | "onToggleGroup" | "onToggleChapter" | "onVolumeSelectAll"
 >
 
-function ChapterDownloadMarker({ chapter }: { chapter: SidePanelChapter }) {
-  if (chapter.downloaded !== true) return null
-  const saveConfirmed = chapter.saveConfirmedAt !== undefined
-  const Icon = saveConfirmed ? CheckCircle2 : History
-  const label = getOutputResultLabel(
+function volumeRow(volume: Volume, expanded: Set<string>): VolumeRow {
+  const selectable = volume.chapters.filter((chapter) => !chapter.locked)
+  const selected = selectable.filter((chapter) => chapter.selected).length
+  const first = volume.chapters[0],
+    last = volume.chapters.at(-1)
+  const start = first?.chapterNumber ?? first?.index
+  const end = last?.chapterNumber ?? last?.index
+  return {
+    kind: "volume-header",
+    key: volume.groupId + "-header",
+    groupKey: volume.groupId,
+    groupId: volume.groupId,
+    title: volume.title,
+    number: volume.number,
+    range:
+      start === undefined
+        ? t("sidepanel_chapterCount", ["0"])
+        : t("sidepanel_chapterNumber", [
+            start === end ? String(start) : start + "–" + end,
+          ]),
+    chapterCount: volume.chapters.length,
+    selectableChapterCount: selectable.length,
+    selectionState:
+      selected > 0 && (selected === selectable.length ? true : "indeterminate"),
+    isExpanded: volume.chapters.length > 0 && expanded.has(volume.groupId),
+  }
+}
+function flattenRows(
+  items: VolumeOrChapter[],
+  mode: ChapterSelectorProps["viewMode"],
+  expanded: Set<string>
+): SelectorRow[] {
+  return items.flatMap((item): SelectorRow[] => {
+    if (!("chapters" in item))
+      return [
+        {
+          kind:
+            mode === "chapters" ? "chapter-mode-chapter" : "standalone-chapter",
+          key: item.id,
+          chapter: item,
+        },
+      ]
+    const children: ChapterRowData[] = item.chapters.map((chapter) => ({
+      kind: mode === "chapters" ? "chapter-mode-chapter" : "volume-chapter",
+      key: item.groupId + "-" + chapter.id,
+      chapter,
+    }))
+    if (mode === "chapters") return children
+    const header = volumeRow(item, expanded)
+    return [header, ...(header.isExpanded ? children : [])]
+  })
+}
+
+export function SelectionChapterRow({
+  chapter,
+  pending,
+  onToggle,
+  standalone = false,
+  review = false,
+}: {
+  chapter: SidePanelChapter
+  pending: boolean
+  onToggle: (id: string, selected: boolean) => void
+  standalone?: boolean
+  review?: boolean
+}) {
+  const statusId = useId()
+  const locked = chapter.locked === true
+  const disabled = pending || locked
+  const savedLabel = getOutputResultLabel(
     chapter.outputDestination,
     chapter.saveConfirmedAt
   )
-
-  return (
-    <span
-      data-downloaded-marker
-      className={cn(
-        "inline-flex shrink-0 items-center",
-        saveConfirmed
-          ? "text-emerald-600 dark:text-emerald-400"
-          : "text-muted-foreground"
-      )}
-      title={label}
-    >
-      <Icon className="size-4" aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-    </span>
-  )
-}
-
-function ChapterRow({
-  row,
-  isEnqueuing,
-  onToggleChapter,
-}: Pick<SelectorActions, "isEnqueuing" | "onToggleChapter"> & {
-  row: Exclude<SelectorRow, { kind: "volume-header" }>
-}) {
-  const statusId = useId()
-  const isLocked = row.chapter.locked === true
-  const hasStatus = isLocked || row.chapter.downloaded === true
-  const isChapterDisabled = isEnqueuing || isLocked
-  const lockedLabel = isLocked ? t("common_locked") : undefined
-
+  const hasStatus = locked || chapter.downloaded === true
   return (
     <div
-      className={cn(
-        "group flex items-center gap-2 border-b border-border/40 px-3 py-2 text-sm transition-colors duration-150",
-        isChapterDisabled
-          ? "cursor-default"
-          : "cursor-pointer hover:bg-muted/35"
-      )}
-      data-testid={
-        row.kind === "standalone-chapter" ? "inline-item" : undefined
-      }
-      data-kind={row.kind === "standalone-chapter" ? "standalone" : undefined}
+      className={"manga-chapter" + (review ? " review-chapter" : "")}
+      data-selected={chapter.selected}
+      data-locked={locked}
+      data-testid={standalone ? "inline-item" : undefined}
+      data-kind={standalone ? "standalone" : undefined}
       onClick={() => {
-        if (isChapterDisabled) return
-        onToggleChapter(row.chapter.id, !row.chapter.selected)
+        if (!disabled) onToggle(chapter.id, !chapter.selected)
       }}
     >
-      <Checkbox
-        id={row.chapter.id}
-        aria-label={row.chapter.title}
+      <span className="chapter-number">{chapter.index}</span>
+      <span className="chapter-title" title={chapter.title}>
+        {chapter.title}
+      </span>
+      {hasStatus && (
+        <span id={statusId} className="chapter-marks">
+          {locked && (
+            <span className="chapter-mark" title={t("common_locked")}>
+              <PanelIcon name="lock" />
+              <span className="mark-label">{t("common_locked")}</span>
+            </span>
+          )}
+          {chapter.downloaded && (
+            <span
+              data-downloaded-marker
+              className={
+                "chapter-mark" +
+                (chapter.saveConfirmedAt === undefined ? "" : " saved-mark")
+              }
+              title={savedLabel}
+            >
+              {chapter.saveConfirmedAt === undefined ? (
+                <History aria-hidden="true" />
+              ) : (
+                <PanelIcon name="archive" />
+              )}
+              <span className="mark-label">{savedLabel}</span>
+            </span>
+          )}
+        </span>
+      )}
+      <PanelCheckbox
+        id={review ? undefined : chapter.id}
+        className="chapter-checkbox"
+        checked={chapter.selected}
+        aria-label={chapter.title}
         aria-describedby={hasStatus ? statusId : undefined}
-        checked={row.chapter.selected}
-        onCheckedChange={() =>
-          onToggleChapter(row.chapter.id, !row.chapter.selected)
-        }
+        disabled={disabled}
+        onCheckedChange={(checked) => onToggle(chapter.id, checked === true)}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
-        disabled={isChapterDisabled}
       />
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="w-7 shrink-0 text-right text-[11px] max-[280px]:w-5 font-medium tabular-nums text-muted-foreground">
-          {row.chapter.index}
-        </span>
-        <span
-          className="line-clamp-2 min-w-0 flex-1 wrap-anywhere text-sm leading-5 text-foreground"
-          title={row.chapter.title}
-        >
-          {row.chapter.title}
-        </span>
-        {hasStatus && (
-          <span id={statusId} className="flex shrink-0 items-center gap-1.5">
-            {lockedLabel && (
-              <span
-                className="text-[11px] text-muted-foreground"
-                title={lockedLabel}
-              >
-                <span className="max-[280px]:sr-only">{lockedLabel}</span>
-                <LockKeyhole
-                  aria-hidden="true"
-                  className="hidden size-4 max-[280px]:block"
-                />
-              </span>
-            )}
-            <ChapterDownloadMarker chapter={row.chapter} />
-          </span>
-        )}
-      </div>
     </div>
   )
 }
@@ -235,75 +179,114 @@ function VolumeHeaderRow({
   isEnqueuing,
   onToggleGroup,
   onVolumeSelectAll,
-}: Omit<SelectorActions, "onToggleChapter"> & {
-  row: Extract<SelectorRow, { kind: "volume-header" }>
-}) {
-  const isDisclosureDisabled = isEnqueuing || row.chapterCount === 0
-
+}: Omit<Actions, "onToggleChapter"> & { row: VolumeRow }) {
+  const label =
+    row.number === undefined
+      ? row.title
+      : t("sidepanel_volumeNumber", [String(row.number)])
+  const generic = "Volume " + row.number
+  const raw = row.title.trim()
+  const genericLabels = [
+    generic,
+    label,
+    "Vol. " + row.number,
+    String(row.number),
+  ].map((value) => value.toLowerCase())
+  const subtitle =
+    row.number === undefined || genericLabels.includes(raw.toLowerCase())
+      ? ""
+      : raw.toLowerCase().startsWith(generic.toLowerCase() + ":")
+        ? raw.slice(generic.length + 1).trim()
+        : raw
   return (
     <div
-      className="flex items-center border-b border-border/30 bg-muted/20"
+      className="manga-volume-header"
+      data-expanded={row.isExpanded}
       data-testid="inline-item"
       data-kind="volume"
     >
       <button
         type="button"
+        className="manga-volume-toggle"
         aria-expanded={row.isExpanded}
-        aria-label={t("sidepanel_volumeToggleAria", [row.title])}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left transition-colors duration-150",
-          isDisclosureDisabled
-            ? "cursor-default bg-muted/20"
-            : "cursor-pointer bg-muted/20 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        )}
-        disabled={isDisclosureDisabled}
-        onClick={() => {
-          onToggleGroup(row.groupKey)
-        }}
+        aria-label={t("sidepanel_volumeToggleAria", [
+          subtitle ? label + ": " + subtitle : label,
+        ])}
+        disabled={isEnqueuing || row.chapterCount === 0}
+        onClick={() => onToggleGroup(row.groupKey)}
       >
-        <ChevronRight
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
-            row.isExpanded && "rotate-90"
-          )}
-        />
-        <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
-          <span className="truncate">{row.title}</span>
-        </div>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {row.chapterCount}
+        <PanelIcon name="next" />
+        <span className="volume-copy">
+          <strong>{label}</strong>
+          <span className="volume-range">{row.range}</span>
+          {subtitle && <span className="volume-title">{subtitle}</span>}
         </span>
       </button>
-      <Checkbox
-        className="mr-3"
+      <PanelCheckbox
+        className="volume-checkbox"
         checked={row.selectionState}
-        onCheckedChange={() => onVolumeSelectAll(row.groupId)}
-        // Keep checkbox activation isolated from the adjacent volume toggle.
-        // Radix emits keyboard and pointer events from the checkbox root;
-        // without stopping them here a bubbled activation can also toggle the
-        // volume disclosure in layouts where the row receives the event.
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-        disabled={row.selectableChapterCount === 0 || isEnqueuing}
+        disabled={isEnqueuing || row.selectableChapterCount === 0}
         aria-label={t("sidepanel_volumeSelectAllAria", [
           row.title,
           String(row.chapterCount),
         ])}
+        onCheckedChange={() => onVolumeSelectAll(row.groupId)}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
       />
     </div>
   )
 }
 
-function ChapterSelectorRow({
+function VolumeGroup({
+  item,
   row,
-  ...actions
-}: SelectorActions & {
-  row: SelectorRow
+  actions,
+}: {
+  item: Volume
+  row: VolumeRow
+  actions: Actions
 }) {
-  return row.kind === "volume-header" ? (
-    <VolumeHeaderRow row={row} {...actions} />
-  ) : (
-    <ChapterRow row={row} {...actions} />
+  const content = useRef<HTMLDivElement>(null)
+  const previous = useRef(row.isExpanded)
+  useLayoutEffect(() => {
+    const changed = previous.current !== row.isExpanded
+    previous.current = row.isExpanded
+    const chapters = [
+      ...(content.current?.querySelectorAll<HTMLElement>(".manga-chapter") ??
+        []),
+    ].slice(0, 4)
+    if (changed && row.isExpanded)
+      chapters.forEach((chapter, index) =>
+        playPanelMotion(
+          chapter,
+          [
+            { opacity: 0.65, translate: "0 -3px" },
+            { opacity: 1, translate: "0 0" },
+          ],
+          150,
+          index * 12
+        )
+      )
+    else if (!row.isExpanded) chapters.forEach(stopPanelMotion)
+  }, [row.isExpanded])
+  return (
+    <div className="manga-volume" data-expanded={row.isExpanded}>
+      <VolumeHeaderRow row={row} {...actions} />
+      <div className="volume-chapters" inert={!row.isExpanded}>
+        <div className="volume-leaves" ref={content}>
+          {item.chapters.map((chapter) => (
+            <div key={chapter.id}>
+              <SelectionChapterRow
+                chapter={chapter}
+                pending={actions.isEnqueuing}
+                onToggle={actions.onToggleChapter}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -311,84 +294,117 @@ export function ChapterSelector({
   items,
   viewMode,
   expandedGroups,
-  isEnqueuing,
-  onToggleGroup,
-  onToggleChapter,
-  onVolumeSelectAll,
+  scrollElement: parentScroll,
+  ...actions
 }: ChapterSelectorProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const ownScroll = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const scrollMargin = usePanelScrollMargin(parentScroll, list)
+  const previousMode = useRef(viewMode)
+  useLayoutEffect(() => {
+    if (previousMode.current === viewMode) return
+    previousMode.current = viewMode
+    if (parentScroll)
+      parentScroll.scrollTop = Math.min(
+        parentScroll.scrollTop,
+        parentScroll.querySelector<HTMLElement>(".manga-header")
+          ?.offsetHeight ?? 0
+      )
+    if (list.current)
+      playPanelMotion(list.current, [{ opacity: 0.78 }, { opacity: 1 }], 145)
+  }, [viewMode, parentScroll])
 
   const rows = useMemo(
     () => flattenRows(items, viewMode, expandedGroups),
     [items, viewMode, expandedGroups]
   )
-  // React Compiler safely skips this component because TanStack Virtual returns
-  // imperative functions whose identities cannot be compiler-memoized.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    getItemKey: (index) => rows[index]?.key ?? index,
-    estimateSize: () => 40,
-    overscan: 6,
-  })
-  // Expanding a volume changes the visible row count. Base the rendering mode
-  // on the list's stable maximum instead so disclosure never remounts the full
-  // selector across the virtualization boundary.
   const shouldVirtualize = useMemo(
-    () => countPotentialRows(items) > 48,
+    () =>
+      items.reduce(
+        (count, item) =>
+          count + ("chapters" in item ? item.chapters.length + 1 : 1),
+        0
+      ) > 64,
     [items]
   )
-
-  const actions = {
-    isEnqueuing,
-    onToggleGroup,
-    onToggleChapter,
-    onVolumeSelectAll,
-  }
-
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: rows.length,
+    getScrollElement: () => parentScroll ?? ownScroll.current,
+    getItemKey: (index) => rows[index].key,
+    estimateSize: () => 40,
+    overscan: 6,
+    scrollMargin,
+    measureElement: (element, entry) =>
+      Math.ceil(entry?.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight),
+  })
+  const chapter = (item: SidePanelChapter, standalone = false) => (
+    <SelectionChapterRow
+      chapter={item}
+      pending={actions.isEnqueuing}
+      onToggle={actions.onToggleChapter}
+      standalone={standalone}
+    />
+  )
+  const renderRow = (row: SelectorRow) =>
+    row.kind === "volume-header" ? (
+      <VolumeHeaderRow row={row} {...actions} />
+    ) : (
+      chapter(row.chapter, row.kind === "standalone-chapter")
+    )
   return (
     <div
-      ref={scrollRef}
+      ref={ownScroll}
+      className={
+        "manga-chapter-list" + (parentScroll ? " shared-scroll-list" : "")
+      }
       data-virtualized={shouldVirtualize}
-      className="flex-1 min-h-0 border-b border-border bg-background overflow-y-auto"
     >
-      {!shouldVirtualize ? (
-        rows.map((row) => (
-          <div key={row.key}>
-            <ChapterSelectorRow row={row} {...actions} />
-          </div>
-        ))
-      ) : (
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            position: "relative",
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const row = rows[virtualItem.index]
-            if (!row) return null
-
-            return (
+      <div ref={list}>
+        {rows.length === 0 && (
+          <p className="panel-empty" role="status">
+            {t("sidepanel_noChaptersFound")}
+          </p>
+        )}
+        {shouldVirtualize ? (
+          <div
+            style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          >
+            {virtualizer.getVirtualItems().map((item) => (
               <div
-                key={virtualItem.key}
-                data-index={virtualItem.index}
+                key={item.key}
                 ref={virtualizer.measureElement}
+                data-index={item.index}
                 style={{
                   position: "absolute",
                   top: 0,
-                  left: 0,
                   width: "100%",
-                  transform: `translateY(${virtualItem.start}px)`,
+                  transform:
+                    "translateY(" + (item.start - scrollMargin) + "px)",
                 }}
               >
-                <ChapterSelectorRow row={row} {...actions} />
+                {renderRow(rows[item.index])}
               </div>
+            ))}
+          </div>
+        ) : viewMode === "chapters" ? (
+          rows.map((row) => <div key={row.key}>{renderRow(row)}</div>)
+        ) : (
+          items.map((item) => {
+            if (!("chapters" in item))
+              return <div key={item.id}>{chapter(item, true)}</div>
+            const header = volumeRow(item, expandedGroups)
+            return (
+              <VolumeGroup
+                key={item.groupId}
+                item={item}
+                row={header}
+                actions={actions}
+              />
             )
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   )
 }

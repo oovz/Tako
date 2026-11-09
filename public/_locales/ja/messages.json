@@ -1892,5 +1892,278 @@
   },
   "destination_chromeFallback": {
     "message": "Chrome ダウンロードに切り替え済み"
+  },
+  "sidepanel_tab_queue": {
+    "message": "キュー"
+  },
+  "sidepanel_tab_manga": {
+    "message": "マンガ"
+  },
+  "sidepanel_tab_recent": {
+    "message": "最近"
+  },
+  "sidepanel_navigation": {
+    "message": "サイドパネルのナビゲーション"
+  },
+  "sidepanel_inProgress": {
+    "message": "進行中"
+  },
+  "sidepanel_upNext": {
+    "message": "待機中"
+  },
+  "sidepanel_needsAttention": {
+    "message": "対応が必要"
+  },
+  "sidepanel_noActiveDownloads": {
+    "message": "ダウンロード中のタスクはありません。"
+  },
+  "sidepanel_noRecentDownloads": {
+    "message": "保存済みの話はありません。"
+  },
+  "sidepanel_viewHistoryOptions": {
+    "message": "設定で履歴を見る"
+  },
+  "sidepanel_savedCount": {
+    "message": "$value1$/$value2$ 保存済み",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_taskPercent": {
+    "message": "タスク $value1$% 完了",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterCount": {
+    "message": "$value1$ 話",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneChapter": {
+    "message": "1 話"
+  },
+  "sidepanel_volumeCount": {
+    "message": "$value1$ 巻",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneVolume": {
+    "message": "1 巻"
+  },
+  "sidepanel_chapterNumber": {
+    "message": "第 $value1$ 話",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterProgress": {
+    "message": "現在の話の画像進捗"
+  },
+  "sidepanel_waitingForSave": {
+    "message": "保存中 · 完了確認待ち"
+  },
+  "sidepanel_imageCount": {
+    "message": "画像 $value1$/$value2$",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_cancelTask": {
+    "message": "タスクをキャンセル"
+  },
+  "sidepanel_cancelTaskQuestion": {
+    "message": "このタスクをキャンセルしますか？"
+  },
+  "sidepanel_cancelTaskNote": {
+    "message": "保存済みファイルは残ります。Chrome に渡した転送は続行します。"
+  },
+  "sidepanel_keepDownloading": {
+    "message": "ダウンロードを続ける"
+  },
+  "sidepanel_reorderTask": {
+    "message": "タスクの順序を変更"
+  },
+  "sidepanel_queuePosition": {
+    "message": "キュー内の位置"
+  },
+  "sidepanel_moveTask": {
+    "message": "移動"
+  },
+  "sidepanel_queueChanged": {
+    "message": "キューが変わりました。もう一度移動してください。"
+  },
+  "sidepanel_undoExpired": {
+    "message": "元に戻せる時間が過ぎました。"
+  },
+  "sidepanel_moreDetails": {
+    "message": "詳細を表示"
+  },
+  "sidepanel_lessDetail": {
+    "message": "詳細を閉じる"
+  },
+  "sidepanel_reviewSelection": {
+    "message": "選択内容を確認"
+  },
+  "sidepanel_clearSelection": {
+    "message": "すべて解除"
+  },
+  "sidepanel_downloadAction": {
+    "message": "ダウンロード"
+  },
+  "sidepanel_saveFormat": {
+    "message": "保存形式"
+  },
+  "sidepanel_saveTo": {
+    "message": "保存先"
+  },
+  "sidepanel_images": {
+    "message": "画像"
+  },
+  "sidepanel_selectedFolder": {
+    "message": "選択したフォルダー"
+  },
+  "sidepanel_chromeDownloads": {
+    "message": "Chrome のダウンロード"
+  },
+  "sidepanel_justNow": {
+    "message": "たった今"
+  },
+  "sidepanel_restartTaskQuestion": {
+    "message": "このタスクを再実行しますか？"
+  },
+  "sidepanel_duplicateWarning": {
+    "message": "再実行するとファイルが重複する可能性があります。先にブラウザーのダウンロードを確認してください。"
+  },
+  "sidepanel_restartAnyway": {
+    "message": "再実行する"
+  },
+  "common_close": {
+    "message": "閉じる"
+  },
+  "chapterStatus_queued": {
+    "message": "待機中"
+  },
+  "chapterStatus_downloading": {
+    "message": "ダウンロード中"
+  },
+  "chapterStatus_completed": {
+    "message": "保存済み"
+  },
+  "chapterStatus_failed": {
+    "message": "失敗"
+  },
+  "chapterStatus_partial_success": {
+    "message": "一部保存済み"
+  },
+  "chapterStatus_skipped": {
+    "message": "スキップ"
+  },
+  "chapterStatus_canceled": {
+    "message": "キャンセル済み"
+  },
+  "sidepanel_retryTaskQuestion": {
+    "message": "これらの話を再試行しますか？"
+  },
+  "sidepanel_retryAnyway": {
+    "message": "再試行する"
+  },
+  "sidepanel_historyReadFailed": {
+    "message": "履歴を読み込めませんでした。"
+  },
+  "sidepanel_historyStale": {
+    "message": "履歴が最新ではない可能性があります。"
+  },
+  "sidepanel_volumeNumber": {
+    "message": "第 $value1$ 巻",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chaptersView": {
+    "message": "話"
+  },
+  "sidepanel_closeReview": {
+    "message": "確認を閉じる"
+  },
+  "sidepanel_hideReview": {
+    "message": "確認を閉じる"
+  },
+  "sidepanel_stageDownloading": {
+    "message": "ダウンロード中"
+  },
+  "sidepanel_stagePacking": {
+    "message": "圧縮中"
+  },
+  "sidepanel_stageSaving": {
+    "message": "保存中"
+  },
+  "sidepanel_stageCanceling": {
+    "message": "キャンセル中…"
+  },
+  "sidepanel_saveConfirmation": {
+    "message": "完了確認待ち"
+  },
+  "sidepanel_cancelCleanup": {
+    "message": "処理の終了待ち"
+  },
+  "sidepanel_archiveCaption": {
+    "message": "$value1$ アーカイブ",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_taskDetailCount": {
+    "message": "$value2$ 話中 $value1$ 話保存済み",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_retryRemaining": {
+    "message": "残りのチャプターを再試行"
+  },
+  "sidepanel_retryRemainingNote": {
+    "message": "保存済みのチャプターは保持されます。残りのチャプターを再試行してください。"
+  },
+  "sidepanel_restoreFolderNote": {
+    "message": "続行するには元のフォルダーへのアクセスを許可してください。"
+  },
+  "sidepanel_checkDownloadsNote": {
+    "message": "重複保存を避けるため、再開前にブラウザーのダウンロードを確認してください。"
+  },
+  "sidepanel_checkDownloads": {
+    "message": "ダウンロードを確認"
+  },
+  "sidepanel_chapterResults": {
+    "message": "チャプターの結果"
   }
 }

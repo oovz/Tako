@@ -1,3 +1,4 @@
+import { BookOpen } from "lucide-react"
 import { useState } from "react"
 import { useCoverPreview } from "@/entrypoints/sidepanel/hooks/useCoverPreview"
 import type { CoverPreviewIdentity } from "@/entrypoints/sidepanel/services/cover-preview-loader"
@@ -16,7 +17,7 @@ export function CoverPreview({
   const [failedUrl, setFailedUrl] = useState<string>()
   const ready = preview.status === "ready" && preview.url !== failedUrl
   const loading = preview.status === "loading"
-  const src = ready ? preview.url : chrome.runtime.getURL("icon/128.png")
+  const src = ready ? preview.url : undefined
 
   return (
     <div
@@ -24,16 +25,25 @@ export function CoverPreview({
       data-preview-state={loading ? "loading" : ready ? "ready" : "fallback"}
       aria-busy={loading}
     >
-      <img
-        src={src}
-        alt={alt}
-        className={cn("h-full w-full", loading && "opacity-0", className)}
-        onError={() => {
-          if (ready) setFailedUrl(src)
-        }}
-        draggable={false}
-      />
-      {loading && <div className="absolute inset-0 bg-muted" />}
+      {ready ? (
+        <img
+          src={src}
+          alt={alt}
+          className={cn("h-full w-full", loading && "opacity-0", className)}
+          onError={() => {
+            if (ready) setFailedUrl(src)
+          }}
+          draggable={false}
+        />
+      ) : (
+        <div
+          className="cover-placeholder"
+          aria-hidden={alt ? undefined : true}
+          aria-label={alt || undefined}
+        >
+          {!loading && <BookOpen aria-hidden="true" />}
+        </div>
+      )}
     </div>
   )
 }

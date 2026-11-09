@@ -34,7 +34,9 @@ test.describe("MangaMillion navigation", () => {
       MangaMillion.BASIC_SERIES.series.seriesTitle
     )
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    if (await sp.getByRole("radio", { name: "Chapters", exact: true }).count())
+      await sp.getByRole("radio", { name: "Chapters", exact: true }).click()
     await expect(
       sp.getByRole("checkbox", { name: /Chapter 1:Romance Dawn/i })
     ).toBeEnabled()
@@ -86,7 +88,9 @@ test.describe("MangaMillion navigation", () => {
 
     await waitForTabSeriesTitle(context, tabId, "胆大党")
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    if (await sp.getByRole("radio", { name: "Chapters", exact: true }).count())
+      await sp.getByRole("radio", { name: "Chapters", exact: true }).click()
     await expect(
       sp.getByRole("checkbox", { name: /第1话 冒险的序幕/i })
     ).toBeEnabled()
@@ -112,7 +116,9 @@ test.describe("MangaMillion navigation", () => {
 
     await waitForTabSeriesTitle(context, tabId, "Dandadan")
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    if (await sp.getByRole("radio", { name: "Chapters", exact: true }).count())
+      await sp.getByRole("radio", { name: "Chapters", exact: true }).click()
     await expect(
       sp.getByRole("checkbox", { name: /1:That's How Love Starts/i })
     ).toBeEnabled()

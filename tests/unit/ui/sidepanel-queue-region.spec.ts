@@ -34,7 +34,6 @@ const commonProps = {
   isLoading: false,
   readStatus: "ready" as const,
   onRefresh: vi.fn(),
-  isInlineSelectionOpen: false,
   cancelingTaskIds: new Set<string>(),
   retryingTaskIds: new Set<string>(),
   restartingTaskIds: new Set<string>(),
@@ -47,7 +46,6 @@ const commonProps = {
   onRestartTask: vi.fn(),
   onMoveTaskToTop: vi.fn(),
   onRemoveTask: vi.fn(),
-  onViewFullHistory: vi.fn(),
 }
 
 function renderQueueRegion(
@@ -79,9 +77,7 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     expect(html).toContain(
       "Chrome file saving could not be confirmed. Retrying may create duplicate files."
     )
-    expect(html).toContain(
-      'aria-label="Retry all chapters (may create duplicates)"'
-    )
+    expect(html).toContain('aria-label="Restart task"')
     expect(html).toContain("Tako could not create the archive.")
   })
 
@@ -124,7 +120,7 @@ describe("SidePanelQueueRegion unified queue layout", () => {
 
   it("shows the empty view after a successful read", () => {
     const html = renderQueueRegion({ ...commonProps, queueTasks: [] })
-    expect(html).toContain("No downloads yet")
+    expect(html).toContain("No active downloads.")
     expect(html).not.toContain('role="alert"')
   })
 
@@ -143,32 +139,15 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     )
   })
 
-  it("does not render queued or history rows while inline selection is open", () => {
+  it("keeps terminal recovery in Queue while saved chapters belong to Recent", () => {
     const html = renderQueueRegion({
       ...commonProps,
       queueTasks: [makeTask("queued", "queued")],
-      historyTasks: [makeTask("history", "completed")],
-      isInlineSelectionOpen: true,
+      historyTasks: [makeTask("history", "failed")],
     })
-
-    expect(html).not.toContain("Series queued")
-    expect(html).not.toContain("Series history")
+    expect(html).toContain("Series queued")
+    expect(html).toContain("Series history")
+    expect(html).toContain("Needs attention")
     expect(html).not.toContain("Recent history")
-  })
-
-  it("keeps active progress at intrinsic height while inline selection is open", () => {
-    const html = renderQueueRegion({
-      ...commonProps,
-      queueTasks: [
-        makeTask("active", "downloading"),
-        makeTask("queued", "queued"),
-      ],
-      isInlineSelectionOpen: true,
-    })
-
-    expect(html).toContain("basis-auto")
-    expect(html).toContain("grow-0")
-    expect(html).toContain("Series active")
-    expect(html).not.toContain("Series queued")
   })
 })

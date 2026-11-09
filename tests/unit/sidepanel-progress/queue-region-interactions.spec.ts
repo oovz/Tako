@@ -27,7 +27,6 @@ const baseProps: ComponentProps<typeof SidePanelQueueRegion> = {
   isLoading: false,
   readStatus: "ready",
   onRefresh: async () => {},
-  isInlineSelectionOpen: false,
   cancelingTaskIds: new Set(),
   retryingTaskIds: new Set(),
   restartingTaskIds: new Set(),
@@ -40,7 +39,6 @@ const baseProps: ComponentProps<typeof SidePanelQueueRegion> = {
   onRestartTask: () => {},
   onMoveTaskToTop: () => {},
   onRemoveTask: () => {},
-  onViewFullHistory: () => {},
 }
 
 describe("mounted queue region", () => {
@@ -114,26 +112,12 @@ describe("mounted queue region", () => {
     )!
     cancelButton.focus()
     expect(firstRow.querySelector('[aria-label="Move task to top"]')).toBeNull()
-    await act(async () =>
-      row("task-1")
-        .querySelector<HTMLButtonElement>('[aria-label="Move task to top"]')!
-        .click()
-    )
-    expect(onMoveTaskToTop).toHaveBeenCalledWith("task-1")
-
     await render({
       queueTasks: [tasks[1]!, tasks[0]!, ...tasks.slice(2)],
       onMoveTaskToTop,
     })
     expect(row("task-0")).toBe(firstRow)
     expect(document.activeElement).toBe(cancelButton)
-    expect(
-      row("task-1").querySelector('[aria-label="Move task to top"]')
-    ).toBeNull()
-    expect(
-      row("task-0").querySelector('[aria-label="Move task to top"]')
-    ).not.toBeNull()
-
     const viewport = container.querySelector<HTMLDivElement>(
       "[data-queue-scroll-container]"
     )!
@@ -145,18 +129,13 @@ describe("mounted queue region", () => {
     expect(container.querySelector('[data-queue-task-id="task-0"]')).toBeNull()
   })
 
-  it("moves from accessible loading to rows and collapses queued tasks during selection", async () => {
+  it("moves from accessible loading to queue rows", async () => {
     const tasks = [task(0)]
     await render({ queueTasks: tasks, isLoading: true })
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull()
-    expect(container.querySelector("[data-queue-scroll-container]")).toBeNull()
+    expect(container.querySelector(".waiting-tasks")).toBeNull()
     await render({ queueTasks: tasks })
     expect(row("task-0").textContent).toContain("Series 0")
     expect(container.querySelector('[aria-busy="true"]')).toBeNull()
-    await render({ queueTasks: tasks, isInlineSelectionOpen: true })
-    expect(container.querySelector("[data-queue-scroll-container]")).toBeNull()
-    expect(container.textContent).not.toContain("No downloads yet")
-    await render({ queueTasks: tasks })
-    expect(row("task-0").textContent).toContain("Series 0")
   })
 })

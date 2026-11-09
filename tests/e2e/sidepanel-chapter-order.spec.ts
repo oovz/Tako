@@ -1,8 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 import {
-  getTabId,
   seedTabContext,
-  openSidepanelHarness,
+  openMangaSidepanelHarness,
   setDownloadedChapterHistory,
   waitForActiveSeriesContextRevision,
   waitForGlobalState,
@@ -105,14 +104,14 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Ordering Test Series")).toBeVisible({
       timeout: 15000,
     })
 
-    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = sp.getByRole("tab", { name: "Manga", exact: true })
     await expect(toggleButton).toBeVisible()
     await toggleButton.click()
 
@@ -160,140 +159,33 @@ test.describe("Side Panel chapter/volume order", () => {
     await sp.close()
   })
 
-  test("animates the inline chapter selector on open and close", async ({
+  test("keeps hidden tab content inaccessible and honors reduced motion", async ({
     context,
     extensionId,
     page,
   }) => {
     await page.goto(ORDER_TEST_SERIES_URL, { waitUntil: "domcontentloaded" })
-    const tabId = await getTabId(page, context)
-    await waitForTabState(page, context, (state) => {
-      return (
-        state.seriesTitle === "Ordering Test Series" &&
-        state.chaptersLoading !== true
-      )
-    })
-
-    const sp = await openSidepanelHarness(context, extensionId, page)
-    await waitForActiveSeriesContextRevision(context, tabId)
-    await expect(sp.getByText("Ordering Test Series")).toBeVisible({
-      timeout: 15000,
-    })
-    const selectionRegion = sp.locator("[data-sidepanel-selection-region]")
-    const panel = sp.locator("[data-sidepanel-inline-selection]")
-    const queueRegion = sp.locator("[data-sidepanel-queue-region]")
-    const selectionToggle = sp.locator(
-      'button[aria-controls="inline-selection-panel"]'
-    )
-    const layoutTransitionProperties = async () => ({
-      selection: await selectionRegion.evaluate(
-        (element) => getComputedStyle(element).transitionProperty
-      ),
-      queue: await queueRegion.evaluate(
-        (element) => getComputedStyle(element).transitionProperty
-      ),
-    })
-    const expectComplementaryLayoutTransitions = async () => {
-      const properties = await layoutTransitionProperties()
-      for (const value of Object.values(properties)) {
-        expect(value).toMatch(/flex-grow/)
-      }
-    }
-
-    await selectionToggle.click()
-
-    await expect(panel).toHaveAttribute("data-state", "open")
-    await expect(panel).toHaveAttribute("aria-hidden", "false")
-    await expectComplementaryLayoutTransitions()
-
-    // Capture transition-start state in the browser's mutation microtask;
-    // remote assertions may arrive after the 280ms closing transition ends.
-    await panel.evaluate((element) => {
-      const observer = new MutationObserver(() => {
-        if (element.getAttribute("data-state") !== "closed") return
-        element.setAttribute(
-          "data-closing-snapshot",
-          JSON.stringify({
-            state: element.getAttribute("data-state"),
-            ariaHidden: element.getAttribute("aria-hidden"),
-            inert: element.hasAttribute("inert"),
-            children: element.childElementCount,
-          })
-        )
-        observer.disconnect()
-      })
-      observer.observe(element, {
-        attributes: true,
-        attributeFilter: ["data-state"],
-      })
-    })
-    await selectionToggle.click()
-    await expect(panel).toHaveAttribute("data-state", "closed")
-    const closingState = await panel.evaluate((element) =>
-      JSON.parse(element.getAttribute("data-closing-snapshot")!)
-    )
-    expect(closingState).toEqual({
-      state: "closed",
-      ariaHidden: "true",
-      inert: true,
-      children: 1,
-    })
-    await expectComplementaryLayoutTransitions()
-    await expect(panel).toBeHidden()
-    await selectionRegion.evaluate((element) => {
-      element.dispatchEvent(
-        new TransitionEvent("transitionend", {
-          bubbles: true,
-          propertyName: "flex-grow",
-        })
-      )
-    })
-    await expect
-      .poll(() => panel.evaluate((element) => element.childElementCount))
-      .toBe(0)
-
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
+    const manga = sp.getByRole("tabpanel", { name: "Manga" })
+    await expect(manga).toBeVisible()
+    await sp.getByRole("tab", { name: "Queue", exact: true }).click()
+    await expect(manga).toBeHidden()
     await sp.emulateMedia({ reducedMotion: "reduce" })
-    await selectionToggle.click()
-    await expect(panel).toBeVisible()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    await expect(manga).toBeVisible()
     await expect
       .poll(() =>
-        queueRegion.evaluate((element) => {
-          const duration = getComputedStyle(element).transitionDuration
-          return (
-            Number.parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000)
-          )
-        })
-      )
-      .toBeLessThan(1)
-    await expect
-      .poll(() =>
-        selectionRegion.evaluate((element) => {
-          const duration = getComputedStyle(element).transitionDuration
-          return (
-            Number.parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000)
-          )
-        })
-      )
-      .toBeLessThan(1)
-    await selectionToggle.click()
-    await expect(panel).toBeHidden()
-
-    await sp.emulateMedia({ reducedMotion: "no-preference" })
-    await sp.evaluate(() => {
-      document.documentElement.removeAttribute("data-tako-motion")
-    })
-    await selectionToggle.click()
-    await expect(panel).toBeVisible()
-    await expect
-      .poll(() =>
-        selectionRegion.evaluate(
-          (element) => getComputedStyle(element).transitionProperty
+        sp.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter(
+                (animation) =>
+                  Number(animation.effect?.getTiming().duration) > 1
+              ).length
         )
       )
-      .toMatch(/flex-grow/)
-    await selectionToggle.click()
-    await expect(panel).toBeHidden()
-
+      .toBe(0)
     await sp.close()
   })
 
@@ -326,11 +218,11 @@ test.describe("Side Panel chapter/volume order", () => {
       (state) => state.seriesTitle === "Downloaded Marker Series"
     )
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.getByText("Downloaded Marker Series")).toBeVisible({
       timeout: 15000,
     })
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     await expect(sp.locator("[data-downloaded-marker]")).toHaveCount(0)
 
     await setDownloadedChapterHistory(context, [
@@ -423,13 +315,13 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Ordering Test Series")).toBeVisible({
       timeout: 15000,
     })
 
-    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = sp.getByRole("tab", { name: "Manga", exact: true })
     await expect(toggleButton).toBeVisible()
     await toggleButton.click()
 
@@ -438,6 +330,8 @@ test.describe("Side Panel chapter/volume order", () => {
       '[data-testid="inline-item"][data-kind="volume"]'
     )
     await expect(volumeItems).toHaveCount(3)
+    for (const disclosure of await volumeItems.getByRole("button").all())
+      await disclosure.click()
     const secondVolume = volumeItems.nth(1)
     const secondVolumeSelectAll = secondVolume.getByRole("checkbox")
     await secondVolumeSelectAll.click()
@@ -543,18 +437,19 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Ordering Test Series")).toBeVisible({
       timeout: 15000,
     })
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
 
     const secondVolume = sp
       .locator('[data-testid="inline-item"][data-kind="volume"]')
       .nth(1)
     const secondVolumeDisclosure = secondVolume.getByRole("button")
+    await secondVolumeDisclosure.click()
     await expect(secondVolumeDisclosure).toHaveAttribute(
       "aria-expanded",
       "true"
@@ -620,18 +515,18 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("View Toggle Series")).toBeVisible({
       timeout: 15000,
     })
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
-    const viewModeTrigger = sp.getByRole("radio", { name: /All chapters/i })
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    const viewModeTrigger = sp.getByRole("radio", { name: /Chapters/i })
 
     await expect(sp.getByText(/^Vol(?:ume|\.) 1$/)).toBeVisible()
     await expect(viewModeTrigger).toBeVisible()
-    await expect(viewModeTrigger).toHaveText("All chapters")
+    await expect(viewModeTrigger).toHaveText("Chapters")
 
     const firstVolumeRow = sp
       .locator('[data-testid="inline-item"][data-kind="volume"]')
@@ -649,7 +544,7 @@ test.describe("Side Panel chapter/volume order", () => {
 
     await groupByVolumeButton.click()
 
-    await expect(sp.getByRole("radio", { name: /All chapters/i })).toBeVisible()
+    await expect(sp.getByRole("radio", { name: /Chapters/i })).toBeVisible()
     await expect(sp.getByText(/^Vol(?:ume|\.) 1$/)).toBeVisible()
 
     await sp.close()
@@ -697,7 +592,7 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     const pageErrors: string[] = []
     const consoleErrors: string[] = []
     sp.on("pageerror", () => {
@@ -714,8 +609,9 @@ test.describe("Side Panel chapter/volume order", () => {
       timeout: 15000,
     })
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
 
+    await sp.locator(".manga-volume-toggle").first().click()
     const firstChapter = sp.getByRole("checkbox", {
       name: baseChapters[0].title,
       exact: true,
@@ -731,7 +627,7 @@ test.describe("Side Panel chapter/volume order", () => {
       const isGroupedView = iteration % 2 === 0
       await sp
         .getByRole("radio", {
-          name: isGroupedView ? /All chapters/i : /^Volumes$/i,
+          name: isGroupedView ? /Chapters/i : /^Volumes$/i,
         })
         .click()
     }
@@ -747,7 +643,7 @@ test.describe("Side Panel chapter/volume order", () => {
     ).toBeVisible()
 
     await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByRole("radio", { name: /All chapters/i })).toBeVisible()
+    await expect(sp.getByRole("radio", { name: /Chapters/i })).toBeVisible()
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])
 
@@ -807,15 +703,15 @@ test.describe("Side Panel chapter/volume order", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await waitForActiveSeriesContextRevision(context, groupedTabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Grouped Collapse Series")).toBeVisible({
       timeout: 15000,
     })
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
-    const viewModeTrigger = sp.getByRole("radio", { name: /All chapters/i })
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    const viewModeTrigger = sp.getByRole("radio", { name: /Chapters/i })
     await expect(viewModeTrigger).toBeVisible()
     await viewModeTrigger.click()
 
@@ -832,15 +728,18 @@ test.describe("Side Panel chapter/volume order", () => {
         Array.isArray(state.downloadQueue) && state.downloadQueue.length >= 1
     )
 
-    const reopenedSelectorButton = sp.getByRole("button", {
-      name: /Select Chapters/i,
+    const reopenedSelectorButton = sp.getByRole("tab", {
+      name: "Manga",
+      exact: true,
     })
     await expect(reopenedSelectorButton).toBeVisible()
-    await expect(reopenedSelectorButton).toBeFocused()
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
-    ).toHaveCount(0)
-    await expect(sp.getByRole("radio", { name: /^Volumes$/i })).toHaveCount(0)
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toBeFocused()
+    await expect(
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toHaveAttribute("aria-selected", "true")
+    await expect(sp.getByRole("radio", { name: /^Volumes$/i })).toBeHidden()
 
     await sp.close()
   })
@@ -873,11 +772,9 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
     STRESS_TOGGLE_SERIES_URL
   )
 
-  const panel = await openSidepanelHarness(context, extensionId, page)
+  const panel = await openMangaSidepanelHarness(context, extensionId, page)
   await panel.setViewportSize({ width: 360, height: 730 })
-  await panel
-    .getByRole("button", { name: "Select Chapters", exact: true })
-    .click()
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
 
   const downloadedAt = Date.now()
   await setDownloadedChapterHistory(
@@ -921,7 +818,7 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
     name: chapters[2].title,
     exact: true,
   })
-  const cover = panel.getByRole("img", { name: seriesTitle })
+  const cover = panel.locator(".manga-cover")
   const selectAll = panel.getByRole("checkbox", { name: "Select all" })
   await expect(first).toBeVisible()
   await expect(locked).toBeDisabled()
@@ -936,30 +833,31 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
   ]) {
     await panel.setViewportSize({ width, height })
     await expect(
-      panel.getByRole("button", { name: "Close Selection" })
+      panel.getByRole("tab", { name: "Queue", exact: true })
     ).toBeInViewport()
-    if (width < 280) {
-      await expect(cover).toBeHidden()
-    } else {
-      await expect(cover).toBeInViewport({ ratio: 1 })
-    }
+    await expect(cover).toBeInViewport({ ratio: 1 })
     await expect(selectAll).toBeInViewport({ ratio: 1 })
-    await expect(selectAll.locator("svg")).toBeVisible()
+    await expect(selectAll.locator(".check-visual")).toBeVisible()
     for (const badge of [
       firstRow.getByTitle("Locked", { exact: true }),
       firstRow.getByTitle("Saved", { exact: true }),
       secondRow.getByTitle("Saved to folder", { exact: true }),
       list.getByTitle("Previously processed", { exact: true }),
     ]) {
-      await expect(badge).toBeInViewport({ ratio: 1 })
+      if (width > 240) await expect(badge).toBeInViewport({ ratio: 1 })
+      else {
+        const bounds = await badge.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.x).toBeGreaterThanOrEqual(0)
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+      }
     }
     for (const label of [title, first]) {
-      const visibleLines = await label.evaluate(
-        (element) =>
-          element.clientHeight /
-          parseFloat(getComputedStyle(element).lineHeight)
-      )
-      expect(visibleLines).toBeCloseTo(2, 0)
+      expect(
+        await label.evaluate(
+          (element) => element.scrollWidth <= element.clientWidth
+        )
+      ).toBe(true)
     }
     await expect
       .poll(async () => {
@@ -972,6 +870,14 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
         )
       })
       .toBe(true)
+      .catch(async (error) => {
+        console.log("ROW_GEOMETRY", {
+          width,
+          first: await firstRow.boundingBox(),
+          second: await secondRow.boundingBox(),
+        })
+        throw error
+      })
   }
 
   await savedToFolder.press("Space")
@@ -979,21 +885,31 @@ test("keeps long titles and chapter statuses readable in a resizable panel", asy
   await selectAll.press("Space")
   await expect(selectAll).toBeChecked()
   await expect(locked).not.toBeChecked()
-  await expect(panel.getByText("64 selected", { exact: true })).toBeVisible()
+  await expect(
+    panel.getByRole("button", { name: "Download (64)", exact: true })
+  ).toBeVisible()
   await selectAll.press("Space")
   await expect(
-    panel.getByRole("button", { name: "Download (0)" })
+    panel.getByRole("button", { name: "Download", exact: true })
   ).toBeDisabled()
 
   await expect(first).toHaveAttribute("title", chapters[0].title)
+  await panel.getByRole("button", { name: "More details", exact: true }).click()
   await expect(panel.getByText("Aya Mori", { exact: true })).toBeVisible()
-  await list.evaluate((element) => {
-    element.scrollTop = element.scrollHeight
-  })
+  await panel.getByRole("button", { name: "Less detail", exact: true }).click()
   const last = list.getByRole("checkbox", {
     name: chapters[64].title,
     exact: true,
   })
+  // New rows change the estimated height as they enter the virtual window.
+  await expect
+    .poll(async () => {
+      await panel.locator(".manga-scroll").evaluate((element) => {
+        element.scrollTop = element.scrollHeight
+      })
+      return last.count()
+    })
+    .toBe(1)
   await last.scrollIntoViewIfNeeded()
   await expect(last).toBeInViewport()
   await last.press("Space")

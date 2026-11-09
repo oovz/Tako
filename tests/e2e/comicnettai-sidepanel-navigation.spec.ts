@@ -1,6 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
+  openMangaSidepanelHarness,
   openSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateCleared,
@@ -34,7 +35,9 @@ test.describe("Comic Nettai navigation", () => {
       ComicNettai.BASIC_SERIES.series.seriesTitle
     )
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    if (await sp.getByRole("radio", { name: "Chapters", exact: true }).count())
+      await sp.getByRole("radio", { name: "Chapters", exact: true }).click()
     await expect(sp.getByRole("checkbox", { name: /第44話/ })).toBeDisabled()
     await expect(sp.getByText("Locked", { exact: true }).first()).toBeVisible()
     await expect(sp.getByRole("checkbox", { name: /^第49話$/ })).toBeEnabled()
@@ -51,7 +54,7 @@ test.describe("Comic Nettai navigation", () => {
     await page.goto(bookUrl, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
 
     await waitForTabSeriesTitle(

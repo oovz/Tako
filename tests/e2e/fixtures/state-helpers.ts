@@ -189,6 +189,14 @@ export async function openSidepanelHarness(
   return sidepanelPage
 }
 
+export async function openMangaSidepanelHarness(
+  ...args: Parameters<typeof openSidepanelHarness>
+): Promise<Page> {
+  const panel = await openSidepanelHarness(...args)
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
+  return panel
+}
+
 export async function reloadSidepanelHarness(
   sidepanelPage: Page,
   boundPage: Page,

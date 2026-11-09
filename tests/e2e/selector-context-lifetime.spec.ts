@@ -1,7 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 import { getExtensionServiceWorker } from "./fixtures/session-rule-helpers"
 import {
-  openSidepanelHarness,
+  openMangaSidepanelHarness,
   seedTabContext,
   waitForActiveSeriesContextRevision,
 } from "./fixtures/state-helpers"
@@ -10,7 +10,7 @@ import {
   MANGADEX_TEST_SERIES_URL,
 } from "./fixtures/test-domains-constants"
 
-test("selector survives unrelated tabs and windows and closes on owning-tab navigation", async ({
+test("Manga remains on unrelated updates and disappears on unsupported owning-tab navigation", async ({
   context,
   page,
   extensionId,
@@ -29,27 +29,28 @@ test("selector survives unrelated tabs and windows and closes on owning-tab navi
     },
     MANGADEX_TEST_SERIES_URL
   )
-  const panel = await openSidepanelHarness(context, extensionId, page)
+  const panel = await openMangaSidepanelHarness(context, extensionId, page)
   await waitForActiveSeriesContextRevision(context, tabId)
-  await panel
-    .getByRole("button", { name: "Select Chapters", exact: true })
-    .click()
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
   await panel.getByText("Chapter 1", { exact: true }).click()
-  const selection = panel.locator("[data-sidepanel-inline-selection]")
+  const selection = panel.locator("#panel-view-manga")
   const selectedChapter = panel.getByRole("checkbox", { name: "Chapter 1" })
   await expect(selectedChapter).toBeChecked()
 
   // Record every collapse so a later automatic reopen cannot hide a failure.
   await panel.evaluate(() => {
-    const region = document.querySelector("[data-sidepanel-inline-selection]")!
+    const region = document.querySelector("#panel-view-manga")!
     document.documentElement.dataset.selectorCollapsed = "false"
     new MutationObserver((records) => {
-      if (records.some((record) => record.oldValue === "open")) {
+      if (
+        records.some((record) => record.attributeName === "hidden") &&
+        (region as HTMLElement).hidden
+      ) {
         document.documentElement.dataset.selectorCollapsed = "true"
       }
     }).observe(region, {
       attributes: true,
-      attributeFilter: ["data-state"],
+      attributeFilter: ["hidden"],
       attributeOldValue: true,
     })
   })
@@ -81,7 +82,7 @@ test("selector survives unrelated tabs and windows and closes on owning-tab navi
       )
     )
     .toBe("complete")
-  await expect(selection).toHaveAttribute("data-state", "open")
+  await expect(selection).toBeVisible()
   await expect(selectedChapter).toBeChecked()
 
   const otherWindowId = await worker.evaluate(async (url) => {
@@ -102,7 +103,7 @@ test("selector survives unrelated tabs and windows and closes on owning-tab navi
       }, otherWindowId)
     )
     .toBe("complete")
-  await expect(selection).toHaveAttribute("data-state", "open")
+  await expect(selection).toBeVisible()
   await expect(selectedChapter).toBeChecked()
   await expect(panel.locator("html")).toHaveAttribute(
     "data-selector-collapsed",
@@ -110,31 +111,30 @@ test("selector survives unrelated tabs and windows and closes on owning-tab navi
   )
 
   // Closing and reopening within the mounted panel retains its selection.
-  const close = panel.getByRole("button", {
-    name: "Close Selection",
+  const close = panel.getByRole("tab", {
+    name: "Queue",
     exact: true,
   })
   await close.click()
-  const trigger = panel.getByRole("button", {
-    name: "Select Chapters",
+  const trigger = panel.getByRole("tab", {
+    name: "Manga",
     exact: true,
   })
   await trigger.click()
   await expect(selectedChapter).toBeChecked()
   await close.click()
-  await expect(trigger).toBeFocused()
+  await expect(close).toBeFocused()
   await trigger.click()
 
   await page.goto(buildExampleUrl("/owning-tab-navigation"))
-  await expect(selection).toHaveAttribute("data-state", "closed")
-  await expect(selection).toHaveAttribute("aria-hidden", "true")
+  await expect(selection).toHaveCount(0)
   await expect(panel.getByRole("checkbox", { name: "Chapter 1" })).toHaveCount(
     0
   )
   await worker.evaluate(async (id) => chrome.windows.remove(id), otherWindowId)
 })
 
-test("selector closes on a new series revision and owning-window tab activation", async ({
+test("Manga updates for a new revision and returns to Queue on unsupported tab activation", async ({
   context,
   page,
   extensionId,
@@ -153,11 +153,9 @@ test("selector closes on a new series revision and owning-window tab activation"
     },
     MANGADEX_TEST_SERIES_URL
   )
-  const panel = await openSidepanelHarness(context, extensionId, page)
+  const panel = await openMangaSidepanelHarness(context, extensionId, page)
   await waitForActiveSeriesContextRevision(context, tabId)
-  await panel
-    .getByRole("button", { name: "Select Chapters", exact: true })
-    .click()
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
   await panel.getByText("Chapter 1", { exact: true }).click()
   const selectedChapter = panel.getByRole("checkbox", { name: "Chapter 1" })
   await expect(selectedChapter).toBeChecked()
@@ -184,11 +182,9 @@ test("selector closes on a new series revision and owning-window tab activation"
   )
   expect(response.success).toBe(true)
   await expect(panel.getByText("Second Series", { exact: true })).toBeVisible()
-  const selection = panel.locator("[data-sidepanel-inline-selection]")
-  await expect(selection).toHaveAttribute("data-state", "closed")
-  await panel
-    .getByRole("button", { name: "Select Chapters", exact: true })
-    .click()
+  const selection = panel.locator("#panel-view-manga")
+  await expect(selection).toBeVisible()
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
   await expect(selectedChapter).not.toBeChecked()
   await panel.getByText("Chapter 1", { exact: true }).click()
   await expect(selectedChapter).toBeChecked()
@@ -206,16 +202,14 @@ test("selector closes on a new series revision and owning-window tab activation"
     },
     { tabId, url: buildExampleUrl("/another-tab") }
   )
-  await expect(selection).toHaveAttribute("data-state", "closed")
+  await expect(selection).toHaveCount(0)
   await worker.evaluate(
     async (id) => chrome.tabs.update(id, { active: true }),
     tabId
   )
-  await expect(panel.getByText("Second Series", { exact: true })).toBeVisible()
-  await expect(selection).toHaveAttribute("data-state", "closed")
-  await panel
-    .getByRole("button", { name: "Select Chapters", exact: true })
-    .click()
+  await expect(panel.getByRole("tab", { name: "Manga" })).toBeVisible()
+  await expect(selection).toBeHidden()
+  await panel.getByRole("tab", { name: "Manga", exact: true }).click()
   await expect(selectedChapter).toBeChecked()
   await worker.evaluate(async (id) => chrome.tabs.remove(id), otherTabId)
 })

@@ -2,6 +2,7 @@ import { test, expect } from "./fixtures/extension"
 import {
   getSessionState,
   getTabId,
+  openMangaSidepanelHarness,
   openSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateCleared,
@@ -38,7 +39,8 @@ test.describe("Manhuagui navigation", () => {
     }>(context, `tab_${tabId}`)
     expect(state?.metadata?.coverUrl).toBe(series.coverUrl)
 
-    const cover = sp.getByRole("img", { name: series.seriesTitle })
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    const cover = sp.locator(".manga-cover img")
     await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
@@ -61,7 +63,7 @@ test.describe("Manhuagui navigation", () => {
     await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await page.bringToFront()
 
@@ -109,7 +111,7 @@ test.describe("Manhuagui navigation", () => {
 
     await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await page.bringToFront()
 
@@ -166,7 +168,7 @@ test.describe("Manhuagui navigation", () => {
     await page.goto(seriesUrl, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await page.bringToFront()
 
@@ -220,7 +222,7 @@ test.describe("Manhuagui navigation", () => {
       ])
     )
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     const volumeRows = sp.locator(
       '[data-testid="inline-item"][data-kind="volume"]'
     )
@@ -246,7 +248,7 @@ test.describe("Manhuagui navigation", () => {
     await page.goto(series1Url, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await page.bringToFront()
 

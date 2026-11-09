@@ -1,19 +1,20 @@
-import { useCallback, useMemo, useRef } from "react"
+import { usePanelScrollMargin } from "../hooks/usePanelScrollMargin"
+import { usePanelLayoutMotion } from "../hooks/usePanelLayoutMotion"
+import { useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-
-import { cn } from "@/src/shared/utils"
-import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
+import { toast } from "sonner"
+import type { QueueTaskSummary } from "@/src/domain/queue/state"
+import type { ActiveTaskProgress as ActiveTaskProgressState } from "../hooks/useActiveTaskProgress"
+import type { CancelTaskResult } from "../types"
+import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import type { CommandCenterTaskActionHandler } from "./command-center-queue-helpers"
 import {
   CommandCenterQueue,
   type CommandCenterQueueProps,
-} from "@/entrypoints/sidepanel/components/CommandCenterQueue"
-import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
-import type { QueueTaskSummary } from "@/src/domain/queue/state"
-import { t } from "@/src/runtime/i18n"
-import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
+} from "./CommandCenterQueue"
 import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
-import type { StorageReadStatus } from "@/src/ui/shared/hooks/useChromeStorageValue"
-import type { CommandCenterTaskActionHandler } from "./command-center-queue-helpers"
+import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
+import { t } from "@/src/runtime/i18n"
 
 interface SidePanelQueueRegionProps {
   queueTasks: QueueTaskSummary[]
@@ -21,7 +22,6 @@ interface SidePanelQueueRegionProps {
   isLoading: boolean
   readStatus: StorageReadStatus
   onRefresh: () => Promise<void>
-  isInlineSelectionOpen: boolean
   cancelingTaskIds: Set<string>
   retryingTaskIds: Set<string>
   restartingTaskIds: Set<string>
@@ -34,216 +34,199 @@ interface SidePanelQueueRegionProps {
   onRestartTask: CommandCenterTaskActionHandler
   onMoveTaskToTop: CommandCenterTaskActionHandler
   onRemoveTask: CommandCenterTaskActionHandler
-  onViewFullHistory: () => void | Promise<void>
 }
 
-type QueueCommands = Omit<CommandCenterQueueProps, "tasks" | "emptyState">
-
-function QueueRegionTask({
-  task,
-  commands,
-}: {
-  task: QueueTaskSummary
-  commands: QueueCommands
-}) {
-  return (
-    <CommandCenterQueue
-      {...commands}
-      tasks={[task]}
-      activeTaskProgress={
-        task.status === "downloading" ? commands.activeTaskProgress : null
-      }
-      showActiveProgress={
-        task.status === "downloading" && commands.showActiveProgress
-      }
-    />
-  )
-}
-
-function QueueTaskList({
+type Commands = Omit<CommandCenterQueueProps, "tasks">
+function WaitingTasks({
   tasks,
   commands,
-  isLoading,
+  scroll,
 }: {
   tasks: QueueTaskSummary[]
-  commands: QueueCommands
-  isLoading: boolean
+  commands: Commands
+  scroll: HTMLDivElement | null
 }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  // TanStack Virtual's imperative functions cannot be compiler-memoized.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: tasks.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 78,
-    overscan: 6,
-    // Preserve measured task identities across queue reordering.
-    getItemKey: (index) => tasks[index]?.id ?? index,
-  })
-  const measureRow = useCallback(
-    (element: HTMLDivElement | null) => {
-      if (element) virtualizer.measureElement(element)
-    },
-    [virtualizer]
+  const list = useRef<HTMLDivElement>(null)
+  const scrollRef = useMemo(() => ({ current: scroll }), [scroll])
+  const scrollMargin = usePanelScrollMargin(scroll, list)
+  usePanelLayoutMotion(
+    scrollRef,
+    "[data-task-id]",
+    tasks.map((task) => task.id).join(",")
   )
-
-  if (isLoading || tasks.length === 0) return null
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: tasks.length,
+    getScrollElement: () => scroll,
+    getItemKey: (index) => tasks[index].id,
+    scrollMargin,
+    // Wrapped text can have fractional height; rounding down overlaps rows.
+    measureElement: (element, entry) =>
+      Math.ceil(entry?.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight),
+    estimateSize: () => 74,
+    overscan: 8,
+  })
   return (
-    <div
-      ref={scrollRef}
-      data-queue-scroll-container
-      className="min-h-0 flex-1 overflow-y-auto border-y border-border/50"
-    >
+    <div ref={list} className="waiting-tasks">
       {tasks.length <= 24 ? (
-        tasks.map((task, index) => (
-          <div key={task.id} data-index={index} data-queue-task-id={task.id}>
-            <QueueRegionTask task={task} commands={commands} />
-          </div>
-        ))
+        <CommandCenterQueue {...commands} tasks={tasks} />
       ) : (
         <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            position: "relative",
-          }}
+          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
         >
-          {virtualizer.getVirtualItems().map((item) => {
-            const task = tasks[item.index]
-            if (!task) return null
-            return (
-              <div
-                key={task.id}
-                data-index={item.index}
-                data-queue-task-id={task.id}
-                ref={measureRow}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  transform: `translateY(${item.start}px)`,
-                  contentVisibility: "auto",
-                  containIntrinsicSize: "auto 78px",
-                }}
-              >
-                <QueueRegionTask task={task} commands={commands} />
-              </div>
-            )
-          })}
+          {virtualizer.getVirtualItems().map((item) => (
+            <div
+              key={item.key}
+              ref={virtualizer.measureElement}
+              data-index={item.index}
+              style={{
+                position: "absolute",
+                top: 0,
+                width: "100%",
+                transform: "translateY(" + (item.start - scrollMargin) + "px)",
+              }}
+            >
+              <CommandCenterQueue {...commands} tasks={[tasks[item.index]]} />
+            </div>
+          ))}
         </div>
       )}
     </div>
   )
 }
-
-function QueueLoadingState({ visible }: { visible: boolean }) {
-  if (!visible) return null
-  return (
-    <div
-      className="flex flex-col gap-2 p-3"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={t("common_loading")}
-    >
-      <div
-        className="h-16 rounded-md border border-border/60 bg-muted/30"
-        aria-hidden="true"
-      />
-      <div
-        className="h-16 rounded-md border border-border/60 bg-muted/30"
-        aria-hidden="true"
-      />
-      <div
-        className="h-16 rounded-md border border-border/60 bg-muted/30"
-        aria-hidden="true"
-      />
-    </div>
-  )
-}
-
-function QueueHistory(props: SidePanelQueueRegionProps) {
-  if (props.isLoading || props.isInlineSelectionOpen) return null
-  return (
-    <HistorySection
-      tasks={props.historyTasks}
-      isInlineSelectionOpen={props.isInlineSelectionOpen}
-      onViewFullHistory={props.onViewFullHistory}
-      onRetryFailed={props.onRetryFailed}
-      onRestartTask={props.onRestartTask}
-      onRemoveTask={props.onRemoveTask}
-      retryingTaskIds={props.retryingTaskIds}
-      restartingTaskIds={props.restartingTaskIds}
-      removingTaskIds={props.removingTaskIds}
-    />
-  )
-}
-
-function QueueEmptyState({
-  readStatus,
-  isInlineSelectionOpen,
-  queueTasks,
-  historyTasks,
-}: Pick<
-  SidePanelQueueRegionProps,
-  "readStatus" | "isInlineSelectionOpen" | "queueTasks" | "historyTasks"
->) {
-  if (
-    readStatus !== "ready" ||
-    isInlineSelectionOpen ||
-    queueTasks.length > 0 ||
-    historyTasks.length > 0
-  )
-    return null
-  return (
-    <h2 className="px-4 py-5 text-sm font-medium text-muted-foreground">
-      {t("sidepanel_noDownloadsYet")}
-    </h2>
-  )
-}
-
 export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
-  const { queueTasks, isInlineSelectionOpen } = props
-  const visibleTasks = useMemo(
-    () =>
-      isInlineSelectionOpen
-        ? queueTasks.filter((task) => task.status === "downloading")
-        : queueTasks,
-    [isInlineSelectionOpen, queueTasks]
+  const [scroll, setScroll] = useState<HTMLDivElement | null>(null)
+  const [moving, setMoving] = useState(false)
+  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
+  const dragOrder = useRef<string[] | null>(null)
+  const active = props.queueTasks.filter(
+    (task) => task.status === "downloading"
   )
-  const commands: QueueCommands = {
-    firstQueuedTaskId: queueTasks.find((task) => task.status === "queued")?.id,
-    activeTaskProgress: props.activeTaskProgress,
-    showActiveProgress: props.showActiveProgress,
-    onCancelTask: props.onCancelTask,
-    cancelingTaskIds: props.cancelingTaskIds,
-    retryingTaskIds: props.retryingTaskIds,
-    restartingTaskIds: props.restartingTaskIds,
-    removingTaskIds: props.removingTaskIds,
-    movingTaskIds: props.movingTaskIds,
-    onRetryFailed: props.onRetryFailed,
-    onRestartTask: props.onRestartTask,
-    onMoveTaskToTop: props.onMoveTaskToTop,
-    onRemoveTask: props.onRemoveTask,
+  const queued = props.queueTasks.filter((task) => task.status === "queued")
+  const attention = props.historyTasks.filter(
+    (task) => task.status !== "completed" || task.saveConfirmedAt === undefined
+  )
+  const ids = queued.map((task) => task.id)
+  const reorder = async (taskId: string, position: number, expected = ids) => {
+    const current = expected.indexOf(taskId)
+    if (moving || current === -1 || position < 1 || position > expected.length)
+      return
+    const next = expected.filter((id) => id !== taskId)
+    next.splice(position - 1, 0, taskId)
+    setMoving(true)
+    try {
+      await queueCommandClient.reorderQueuedTasks(expected, next)
+    } catch {
+      toast.error(t("sidepanel_queueChanged"))
+      await props.onRefresh()
+    } finally {
+      setMoving(false)
+    }
+  }
+  const commands: Commands = {
+    ...props,
+    firstQueuedTaskId: ids[0],
+    queuedTaskIds: ids,
+    onReorder: reorder,
+    movingTaskIds: moving ? new Set(ids) : props.movingTaskIds,
   }
   return (
     <div
+      className="queue-region"
+      ref={setScroll}
+      data-queue-scroll-container
       data-sidepanel-queue-region
-      data-state={isInlineSelectionOpen ? "open" : "closed"}
-      className={cn(
-        "flex min-h-0 basis-auto shrink-0 flex-col overflow-hidden bg-background transition-[flex-grow] duration-[280ms] ease-out",
-        isInlineSelectionOpen ? "grow-0" : "grow"
-      )}
+      onDragStart={(event) => {
+        if (
+          !(event.target instanceof Element) ||
+          !event.target.closest(".task-grip")
+        )
+          return
+        const task = event.target.closest<HTMLElement>("[data-task-id]")
+        if (!task) return
+        dragOrder.current = ids
+        event.dataTransfer.effectAllowed = "move"
+        event.dataTransfer.setData("text/plain", task.dataset.taskId!)
+      }}
+      onDragOver={(event) => {
+        if (!dragOrder.current || !(event.target instanceof Element)) return
+        const row = event.target.closest<HTMLElement>('[data-queued="true"]')
+        if (!row) return
+        event.preventDefault()
+        const rect = row.getBoundingClientRect()
+        const after = event.clientY > rect.top + rect.height / 2
+        setDrop({ id: row.dataset.taskId!, after })
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        const order = dragOrder.current
+        const row =
+          event.target instanceof Element
+            ? event.target.closest<HTMLElement>('[data-queued="true"]')
+            : null
+        if (order && row) {
+          const source = event.dataTransfer.getData("text/plain")
+          const remaining = order.filter((id) => id !== source)
+          const index = remaining.indexOf(row.dataset.taskId!)
+          const bounds = row.getBoundingClientRect()
+          const after = event.clientY > bounds.top + bounds.height / 2
+          // Dragover is continuous; its visual state may not commit before drop.
+          if (index >= 0) void reorder(source, index + (after ? 2 : 1), order)
+        }
+        dragOrder.current = null
+        setDrop(null)
+      }}
+      onDragEnd={() => {
+        dragOrder.current = null
+        setDrop(null)
+      }}
+      data-drop-id={drop?.id}
+      data-drop-after={drop?.after}
     >
+      {drop && (
+        <style>
+          {'[data-task-id="' +
+            CSS.escape(drop.id) +
+            '"]{box-shadow:inset 0 ' +
+            (drop.after ? "-2" : "2") +
+            "px var(--primary)}"}
+        </style>
+      )}
       <QueueReadNotice status={props.readStatus} onRetry={props.onRefresh} />
-      <QueueLoadingState visible={props.isLoading && !isInlineSelectionOpen} />
-      <QueueTaskList
-        tasks={visibleTasks}
-        commands={commands}
-        isLoading={props.isLoading}
-      />
-      <QueueHistory {...props} />
-      <QueueEmptyState {...props} />
+      {props.isLoading ? (
+        <p className="panel-empty" role="status" aria-busy="true">
+          {t("common_loading")}
+        </p>
+      ) : (
+        <>
+          <div className="queue-current">
+            <h2 className="queue-section-label">{t("sidepanel_inProgress")}</h2>
+            {active.length ? (
+              <CommandCenterQueue {...commands} tasks={active} />
+            ) : (
+              <p className="panel-empty">{t("sidepanel_noActiveDownloads")}</p>
+            )}
+            {attention.length > 0 && (
+              <section>
+                <h2 className="queue-section-label">
+                  {t("sidepanel_needsAttention")}
+                </h2>
+                <CommandCenterQueue {...commands} tasks={attention} />
+              </section>
+            )}
+          </div>
+          {queued.length > 0 && (
+            <>
+              <h2 className="queue-section-label">{t("sidepanel_upNext")}</h2>
+              <WaitingTasks
+                tasks={queued}
+                commands={commands}
+                scroll={scroll}
+              />
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }

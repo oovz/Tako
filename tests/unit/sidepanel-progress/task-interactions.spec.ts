@@ -77,6 +77,7 @@ describe("task actions through mounted components", () => {
       ...chrome,
       runtime: { getURL: (path: string) => path, sendMessage },
       storage: {
+        onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
         session: {
           get: async (key: string) =>
             Object.hasOwn(session, key) ? { [key]: session[key] } : {},
@@ -212,7 +213,9 @@ describe("task actions through mounted components", () => {
     await click("Cancel download")
     expect(onCancelTask).toHaveBeenCalledWith("queued")
     expect(toastError).toHaveBeenCalledWith("Try again")
-    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).toBeNull()
   })
 
   it("retains active confirmation after failure or pending, then dismisses after success", async () => {
@@ -229,18 +232,24 @@ describe("task actions through mounted components", () => {
     )
     await click("Cancel download")
     expect(onCancelTask).not.toHaveBeenCalled()
-    const confirmLabel = button("Yes").textContent!
+    const confirmLabel = button("Cancel task").textContent!
     await click(confirmLabel)
     expect(container.textContent).toContain("Try again")
     await click(confirmLabel)
-    expect(container.querySelector('[role="group"]')).not.toBeNull()
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).not.toBeNull()
     await click(confirmLabel)
-    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).toBeNull()
     expect(onCancelTask).toHaveBeenCalledTimes(3)
     await click("Cancel download")
     expect(container.textContent).not.toContain("Try again")
-    await click("No")
-    expect(container.querySelector('[role="group"]')).toBeNull()
+    await click("Keep downloading")
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).toBeNull()
   })
 
   it.each(["retry", "restart", "remove"] as const)(
@@ -252,9 +261,9 @@ describe("task actions through mounted components", () => {
         remove: "REMOVE_TASK",
       }[action]
       const label = {
-        retry: t("sidepanel_retryFailedChapters"),
-        restart: t("sidepanel_restartAllChapters"),
-        remove: t("common_remove"),
+        retry: t("sidepanel_retryRemaining"),
+        restart: t("sidepanel_restartTask"),
+        remove: t("common_dismiss"),
       }[action]
       const status = action === "retry" ? "partial_success" : "failed"
       const tasks = ["first", "second"].map((id) => ({
@@ -283,7 +292,7 @@ describe("task actions through mounted components", () => {
         expect(first.disabled).toBe(true)
         await vi.waitFor(() => expect(second.disabled).toBe(false))
         if (action !== "remove")
-          expect(recoveryControl("first", t("common_remove"))!.disabled).toBe(
+          expect(recoveryControl("first", t("common_dismiss"))!.disabled).toBe(
             false
           )
         await act(async () => first.click())
@@ -318,9 +327,9 @@ describe("task actions through mounted components", () => {
     }
     await render(createElement(RecoveryQueue, { tasks: [unavailable] }))
     expect(
-      recoveryControl("missing", t("sidepanel_restartAllChapters"))
+      recoveryControl("missing", t("sidepanel_restartTask"))
     ).toBeUndefined()
-    const remove = recoveryControl("missing", t("common_remove"))!
+    const remove = recoveryControl("missing", t("common_dismiss"))!
     expect(remove.disabled).toBe(false)
     await act(async () => remove.click())
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce())
@@ -340,14 +349,14 @@ describe("task actions through mounted components", () => {
     }
     await render(createElement(RecoveryQueue, { tasks: [original] }))
     expect(
-      recoveryControl("retried", t("sidepanel_retryFailedChapters"))
+      recoveryControl("retried", t("sidepanel_retryRemaining"))
     ).toBeUndefined()
     expect(
-      recoveryControl("retried", t("sidepanel_restartAllChapters"))
+      recoveryControl("retried", t("sidepanel_restartTask"))
     ).toBeUndefined()
     expect(container.querySelector('[role="status"]')).toBeNull()
     expect(container.querySelector('[role="progressbar"]')).toBeNull()
-    const remove = recoveryControl("retried", t("common_remove"))!
+    const remove = recoveryControl("retried", t("common_dismiss"))!
     expect(remove.disabled).toBe(false)
     await act(async () => remove.click())
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce())

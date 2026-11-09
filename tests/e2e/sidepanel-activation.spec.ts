@@ -134,12 +134,13 @@ test.describe("Side Panel activation", () => {
     const sp = await openSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await waitForSidepanelSeries(sp, "Hunter x Hunter")
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
       timeout: 10000,
     })
     // Series-aware card should be present with a "Select chapters" control
     await expect(
-      sp.getByRole("button", { name: /Select chapters/i })
+      sp.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible()
     await sp.close()
   })
@@ -160,11 +161,10 @@ test.describe("Side Panel activation", () => {
     const sp = await openSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     // On unsupported pages, the series region shows a compact no-series guidance state
-    await expect(sp.getByText(/No series detected/i)).toBeVisible()
-    // The shared "Select chapters" entry point is still rendered as part of the Command Center
     await expect(
-      sp.getByRole("button", { name: /Select chapters/i })
-    ).toBeVisible()
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toHaveAttribute("aria-selected", "true")
+    await expect(sp.getByRole("tab", { name: "Manga" })).toHaveCount(0)
     await sp.close()
   })
 
@@ -242,7 +242,9 @@ test.describe("Side Panel activation", () => {
     await expect(sp.locator("#root")).toBeVisible()
 
     // Should show no-series guidance for about:blank
-    await expect(sp.getByText(/No series detected/i)).toBeVisible()
+    await expect(
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toHaveAttribute("aria-selected", "true")
 
     await sp.close()
     await page.close()
@@ -286,11 +288,12 @@ test.describe("Side Panel activation", () => {
 
     // Open side panel for supported tab
     const sp = await openSidepanelHarness(context, extensionId, supportedPage)
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
       timeout: 10000,
     })
     await expect(
-      sp.getByRole("button", { name: /Select chapters/i })
+      sp.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible()
 
     await unsupportedPage.bringToFront()
@@ -301,7 +304,9 @@ test.describe("Side Panel activation", () => {
       extensionId,
       unsupportedPage
     )
-    await expect(spUnsupported.getByText(/No series detected/i)).toBeVisible()
+    await expect(spUnsupported.getByRole("tab", { name: "Manga" })).toHaveCount(
+      0
+    )
 
     await sp.close()
     await spUnsupported.close()
@@ -333,13 +338,14 @@ test.describe("Side Panel activation", () => {
     const sp = await openSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await waitForSidepanelSeries(sp, "No Chapters Test Series")
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     await expect(sp.getByText("No Chapters Test Series")).toBeVisible({
       timeout: 10000,
     })
     await expect(sp.getByText(/No chapters found/i)).toBeVisible()
 
     const disabledNoChaptersButton = sp.getByRole("button", {
-      name: /No chapters/i,
+      name: /Download/i,
     })
     await expect(disabledNoChaptersButton).toBeVisible()
     await expect(disabledNoChaptersButton).toBeDisabled()

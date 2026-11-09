@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ErrorBanner } from "@/entrypoints/sidepanel/components/ErrorBanner"
 import { SidePanelHeader } from "@/entrypoints/sidepanel/components/SidePanelHeader"
-import { HistorySection } from "@/entrypoints/sidepanel/components/HistorySection"
-import type { QueueTaskSummary } from "@/src/domain/queue/state"
+import { RecentDownloads } from "@/entrypoints/sidepanel/components/RecentDownloads"
+import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import type { PersistentError } from "@/src/runtime/persistent-error-schema"
 
 describe("panel support views", () => {
@@ -132,44 +132,68 @@ describe("panel support views", () => {
     expect(container.textContent).toContain("0")
   })
 
-  it("shows only five recent tasks and hides the history shortcut while selecting chapters", () => {
-    const tasks: QueueTaskSummary[] = Array.from({ length: 6 }, (_, index) => ({
-      id: `task-${index}`,
-      destination: { kind: "downloads-api" },
-      seriesKey: `mangadex#${index}`,
-      seriesTitle: `Series ${index}`,
-      siteIntegration: "mangadex",
-      status: "completed",
-      chapters: { total: 1, completed: 1, unsuccessful: 0 },
-      timestamps: { created: 1, completed: 2 },
-      isRetried: false,
-      isRetryTask: false,
-    }))
-    const render = (isInlineSelectionOpen: boolean, history = tasks) =>
-      renderToStaticMarkup(
-        createElement(
-          TooltipProvider,
-          null,
-          createElement(HistorySection, {
-            tasks: history,
-            isInlineSelectionOpen,
-            onViewFullHistory: vi.fn(),
-            onRetryFailed: vi.fn(),
-            onRestartTask: vi.fn(),
-            onRemoveTask: vi.fn(),
+  it("keeps loading and read failures distinct from an empty recent history and offers retry", async () => {
+    const retry = vi.fn()
+    const render = async (status: "loading" | "error" | "ready") =>
+      act(async () =>
+        root.render(
+          createElement(RecentDownloads, {
+            chapters: [],
+            status,
+            onRetry: retry,
+            onViewHistory: vi.fn(),
           })
         )
       )
-    const document = window.document.implementation.createHTMLDocument()
-    document.body.innerHTML = render(false)
-    expect(
-      Array.from(document.querySelectorAll("h3")).map(
-        (heading) => heading.textContent
+    await render("loading")
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull()
+    expect(container.textContent).not.toContain("No saved chapters")
+    await render("error")
+    expect(container.querySelector('[role="alert"]')).not.toBeNull()
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[role="alert"] button')!
+        .click()
+    )
+    expect(retry).toHaveBeenCalledOnce()
+    await render("ready")
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(container.textContent).toContain("No saved chapters yet.")
+  })
+
+  it("shows twenty recent chapters with their source and keeps full history available when empty", () => {
+    const chapters: DownloadedChapterRecord[] = Array.from(
+      { length: 21 },
+      (_, index) => ({
+        siteIntegrationId: "mangadex",
+        seriesId: "series",
+        chapterId: String(index),
+        seriesTitle: "Series " + index,
+        title: "Chapter " + index,
+        url: "https://mangadex.org/chapter/" + index,
+        downloadedAt: index + 1,
+        saveConfirmedAt: index + 1,
+        outputDestination: "downloads-api",
+        format: "cbz",
+      })
+    )
+    const render = (items = chapters) =>
+      renderToStaticMarkup(
+        createElement(RecentDownloads, {
+          chapters: items,
+          onViewHistory: vi.fn(),
+        })
       )
-    ).toEqual(["Series 0", "Series 1", "Series 2", "Series 3", "Series 4"])
-    expect(document.body.textContent).toContain("View Full History")
-    document.body.innerHTML = render(true)
-    expect(document.body.textContent).not.toContain("View Full History")
-    expect(render(false, [])).toBe("")
+    const document = window.document.implementation.createHTMLDocument()
+    document.body.innerHTML = render()
+    expect(document.querySelectorAll(".recent-row")).toHaveLength(20)
+    expect(document.querySelector(".recent-copy strong")?.textContent).toBe(
+      "Series 20"
+    )
+    expect(document.body.textContent).toContain("MangaDex")
+    expect(document.querySelector("time")?.getAttribute("datetime")).toBe(
+      new Date(21).toISOString()
+    )
+    expect(render([])).toContain("View history in Options")
   })
 })

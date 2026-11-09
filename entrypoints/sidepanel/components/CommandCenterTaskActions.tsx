@@ -29,6 +29,7 @@ import {
 } from "./command-center-queue-helpers"
 
 interface CommandCenterTaskActionsProps {
+  presentation?: "icons" | "recovery"
   taskId: string
   status: QueueTaskSummary["status"]
   outputUncertain?: boolean
@@ -109,7 +110,16 @@ function getTaskActionDescriptor(
   }[action]
   return {
     id: action,
-    label: actionLabel(action, props.outputUncertain),
+    label:
+      props.presentation === "recovery"
+        ? t(
+            action === "retry-failed"
+              ? "sidepanel_retryRemaining"
+              : action === "restart"
+                ? "sidepanel_restartTask"
+                : "common_dismiss"
+          )
+        : actionLabel(action, props.outputUncertain),
     pending: controls.pending,
     ...ACTION_PRESENTATION[action],
     invoke: () => controls.handler?.(props.taskId),
@@ -207,6 +217,31 @@ function OverflowTaskActions({ actions }: { actions: TaskActionDescriptor[] }) {
 
 export function CommandCenterTaskActions(props: CommandCenterTaskActionsProps) {
   const plan = getTaskActionPlan(props.status, props)
+  if (props.presentation === "recovery")
+    return (
+      <div className="recovery-actions">
+        {plan.inline.map((id) => {
+          const action = getTaskActionDescriptor(id, props)
+          return (
+            <button
+              type="button"
+              key={id}
+              aria-label={action.label}
+              className={id === "remove" ? "quiet-recovery" : undefined}
+              disabled={action.pending}
+              onClick={action.invoke}
+            >
+              {action.label}
+            </button>
+          )
+        })}
+        <OverflowTaskActions
+          actions={plan.overflow.map((action) =>
+            getTaskActionDescriptor(action, props)
+          )}
+        />
+      </div>
+    )
   return (
     <div className="flex items-center gap-0.5 shrink-0">
       {plan.inline.map((action) => (

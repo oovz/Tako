@@ -8,7 +8,7 @@ import { expectSavedChapterArchive } from "../live/fixtures/download-workflow-he
 import { assertLiveSeriesMetadata } from "../live/fixtures/series-metadata-helpers"
 import {
   getTabId,
-  openSidepanelHarness,
+  openMangaSidepanelHarness,
   waitForGlobalState,
   waitForTabSeriesTitle,
   waitForTabStateById,
@@ -97,12 +97,16 @@ test.describe("site downloads through the chapter selector", () => {
           normalizeImageFilenames: true,
           imagePaddingDigits: 3,
         })
-        const panel = await openSidepanelHarness(context, extensionId, page)
+        const panel = await openMangaSidepanelHarness(
+          context,
+          extensionId,
+          page
+        )
         try {
           await expect(
             panel.getByText(fixture.title, { exact: true }).first()
           ).toBeVisible()
-          await panel.getByRole("button", { name: /Select Chapters/i }).click()
+          await panel.getByRole("tab", { name: "Manga", exact: true }).click()
           if (fixture.id === "copymanga" || fixture.id === "mycomic") {
             expect(state.volumes.length).toBeGreaterThanOrEqual(3)
             // Collapse mounted groups in order so later virtualized headers appear.
@@ -124,7 +128,7 @@ test.describe("site downloads through the chapter selector", () => {
             }
           }
           const allChapters = panel.getByRole("radio", {
-            name: /All chapters/i,
+            name: /Chapters/i,
           })
           if (await allChapters.count()) await allChapters.click()
           const selector = panel.locator("[data-virtualized]")

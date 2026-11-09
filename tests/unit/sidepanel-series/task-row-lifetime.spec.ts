@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, createElement, StrictMode, type ComponentProps } from "react"
+import { act, createElement, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -7,8 +7,7 @@ import { CommandCenterTaskRow } from "@/entrypoints/sidepanel/components/Command
 import type { ActiveTaskProgress } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 
-type RowProps = ComponentProps<typeof CommandCenterTaskRow>
-
+type Props = ComponentProps<typeof CommandCenterTaskRow>
 const task: QueueTaskSummary = {
   id: "task-one",
   seriesKey: "mangadex#one",
@@ -19,7 +18,6 @@ const task: QueueTaskSummary = {
   chapters: { total: 4, completed: 1, unsuccessful: 0 },
   timestamps: { created: 1 },
 }
-
 const progress: ActiveTaskProgress = {
   generation: "one",
   revision: 1,
@@ -27,204 +25,123 @@ const progress: ActiveTaskProgress = {
   taskId: "task-one",
   status: "downloading",
   stage: "downloading",
-  phaseFraction: 0,
+  phaseFraction: 0.5,
+  overallFraction: 0.45,
   outputCommitted: false,
   imagesProcessed: 5,
   totalImages: 10,
   activeChapterCount: 1,
   activeChapters: [],
 }
-
-describe("task row progress lifetime", () => {
+describe("task progress and details lifetime", () => {
   let root: Root
   let container: HTMLDivElement
-  let mounted: boolean
-
-  function render(overrides: Partial<RowProps> = {}, strict = false) {
-    const props: RowProps = {
-      task,
-      isCanceling: false,
-      isRetrying: false,
-      isRestarting: false,
-      isRemoving: false,
-      isMoving: false,
-      isConfirmingCancel: false,
-      cancelError: null,
-      activeTaskProgress: progress,
-      showActiveProgress: true,
-      onBeginCancel: vi.fn(),
-      onConfirmCancel: vi.fn(),
-      onDismissCancel: vi.fn(),
-      ...overrides,
-    }
-    const view = createElement(
-      TooltipProvider,
-      null,
-      createElement(CommandCenterTaskRow, props)
-    )
-    act(() =>
-      root.render(strict ? createElement(StrictMode, null, view) : view)
-    )
-  }
-
-  function advance(milliseconds: number) {
-    act(() => vi.advanceTimersByTime(milliseconds))
-  }
-
-  function expectProgress(visible: boolean) {
-    expect(container.querySelectorAll('[role="progressbar"]')).toHaveLength(
-      visible ? 2 : 0
-    )
-  }
-
+  const listeners = new Set<unknown>()
+  const sendMessage = vi.fn()
   beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1000)
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("chrome", {
       ...chrome,
-      runtime: { getURL: (path: string) => path },
+      runtime: { getURL: (path: string) => path, sendMessage },
+      storage: {
+        onChanged: {
+          addListener: (listener: unknown) => listeners.add(listener),
+          removeListener: (listener: unknown) => listeners.delete(listener),
+        },
+      },
     })
+    sendMessage.mockResolvedValue({ success: true, task: null })
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)
-    mounted = true
   })
-
-  afterEach(() => {
-    if (mounted) act(() => root.unmount())
+  afterEach(async () => {
+    await act(async () => root.unmount())
     container.remove()
-    vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.clearAllMocks()
+    listeners.clear()
   })
-
-  it("shows only matching active progress and holds a short update through the 500 ms boundary", () => {
-    render({ activeTaskProgress: null })
-    expectProgress(false)
-    render({ activeTaskProgress: { ...progress, taskId: "another-task" } })
-    expectProgress(false)
-    render({ showActiveProgress: false })
-    expectProgress(false)
-    render()
-    expectProgress(true)
-    advance(100)
-    render({ activeTaskProgress: null })
-    expectProgress(true)
-    expect(container.textContent).toContain("1/4")
-    advance(399)
-    expectProgress(true)
-    advance(1)
-    expectProgress(false)
-  })
-
-  it("cancels a pending hide when progress resumes while keeping the original visible-since time", () => {
-    render()
-    advance(100)
-    render({ showActiveProgress: false })
-    expect(vi.getTimerCount()).toBe(1)
-    advance(100)
-    render({ activeTaskProgress: { ...progress, revision: 2 } })
-    expect(vi.getTimerCount()).toBe(0)
-    advance(500)
-    expectProgress(true)
-    render({ showActiveProgress: false })
-    expectProgress(false)
-    expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it("starts a new visibility window after the preceding progress display has closed", () => {
-    render()
-    advance(600)
-    render({ activeTaskProgress: null })
-    expectProgress(false)
-    render()
-    advance(10)
-    render({ activeTaskProgress: null })
-    advance(489)
-    expectProgress(true)
-    advance(1)
-    expectProgress(false)
-  })
-
-  it("releases a pending hide timer when its mounted row is removed", () => {
-    render()
-    advance(100)
-    render({ activeTaskProgress: null })
-    expect(vi.getTimerCount()).toBe(1)
-    act(() => root.unmount())
-    mounted = false
-    expect(vi.getTimerCount()).toBe(0)
-    advance(1000)
-  })
-
-  it("retains a single-chapter row safely when its live projection clears", () => {
-    const single = {
-      ...task,
-      chapters: { total: 1, completed: 0, unsuccessful: 0 },
-    }
-    render({
-      task: single,
-      activeTaskProgress: {
-        ...progress,
-        overallFraction: 0.5,
-        chapterTitle: "Only chapter",
-        activeChapters: [
-          {
-            chapterId: "chapter",
-            imagesProcessed: 5,
-            totalImages: 10,
-            stage: "downloading",
-            phaseFraction: 0.5,
-            updatedAt: 1,
-          },
-        ],
-      },
-    })
-    expectProgress(true)
-    advance(100)
-    expect(() =>
-      render({ task: single, activeTaskProgress: null })
-    ).not.toThrow()
-    expectProgress(true)
-    expect(container.textContent).toContain("1/1")
-    advance(500)
-    expectProgress(false)
-  })
-
-  it("retains action focus when the row receives another live progress revision", () => {
-    const onCancelTask = vi.fn()
-    render({ onCancelTask })
-    const cancel = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Cancel download"]'
-    )!
+  async function render(overrides: Partial<Props> = {}) {
+    await act(async () =>
+      root.render(
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(CommandCenterTaskRow, {
+            task,
+            activeTaskProgress: progress,
+            showActiveProgress: true,
+            isCanceling: false,
+            isRetrying: false,
+            isRestarting: false,
+            isRemoving: false,
+            isMoving: false,
+            isConfirmingCancel: false,
+            cancelError: null,
+            onBeginCancel: vi.fn(),
+            onConfirmCancel: vi.fn(),
+            onDismissCancel: vi.fn(),
+            onCancelTask: vi.fn(),
+            ...overrides,
+          })
+        )
+      )
+    )
+  }
+  it("shows task progress and keeps the estimate monotonic while a live projection clears", async () => {
+    await render()
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("45%")
+    const cancel = container.querySelector<HTMLButtonElement>(".task-ring")!
     cancel.focus()
+    await render({ activeTaskProgress: null })
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("45%")
     expect(document.activeElement).toBe(cancel)
-    render({
-      onCancelTask,
-      activeTaskProgress: { ...progress, revision: 2, imagesProcessed: 6 },
+    expect(container.querySelector("progress")).toBeNull()
+    await render({
+      activeTaskProgress: { ...progress, overallFraction: 0.6, revision: 2 },
     })
-    expect(
-      container.querySelector('button[aria-label="Cancel download"]')
-    ).toBe(cancel)
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("60%")
     expect(document.activeElement).toBe(cancel)
   })
-
-  it("retains one clock lifetime through StrictMode subscription replay", () => {
-    render({}, true)
-    expectProgress(true)
-    expect(vi.getTimerCount()).toBe(0)
-    advance(100)
-    render({ activeTaskProgress: null }, true)
-    expect(vi.getTimerCount()).toBe(1)
-    advance(399)
-    expectProgress(true)
-    advance(1)
-    expectProgress(false)
-    render({}, true)
-    advance(100)
-    render({ activeTaskProgress: null }, true)
-    act(() => root.unmount())
-    mounted = false
-    expect(vi.getTimerCount()).toBe(0)
+  it("never claims completion before saving is confirmed", async () => {
+    await render({
+      activeTaskProgress: { ...progress, overallFraction: 1, stage: "saving" },
+    })
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("99%")
+    expect(
+      container.querySelector(".task-chapter-status")?.textContent
+    ).toContain("Waiting for confirmation")
+  })
+  it("does not use another task's progress and resets the ring for a new task identity", async () => {
+    await render({ activeTaskProgress: { ...progress, taskId: "different" } })
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("25%")
+    await render({
+      task: {
+        ...task,
+        id: "new",
+        chapters: { total: 2, completed: 0, unsuccessful: 0 },
+      },
+      activeTaskProgress: null,
+    })
+    expect(container.querySelector(".ring-percent")?.textContent).toBe("0%")
+  })
+  it("subscribes only for an active or expanded task and releases the subscription", async () => {
+    await render({ task: { ...task, status: "queued" } })
+    expect(listeners.size).toBe(0)
+    expect(sendMessage).not.toHaveBeenCalled()
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".queue-task-toggle")!.click()
+    )
+    expect(listeners.size).toBe(1)
+    expect(sendMessage).toHaveBeenCalledWith({
+      target: "background",
+      type: "GET_SIDEPANEL_TASK",
+      payload: { taskId: task.id },
+    })
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".queue-task-toggle")!.click()
+    )
+    expect(listeners.size).toBe(0)
   })
 })

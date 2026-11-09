@@ -8,11 +8,38 @@ export function useInlineSelectionState({
   windowId,
   tabId,
   seriesRevision,
-}: Pick<SidepanelSeriesContextData, "windowId" | "tabId" | "seriesRevision">) {
+  siteId,
+  seriesId,
+  items,
+  isChaptersLoading,
+}: Pick<SidepanelSeriesContextData, "windowId" | "tabId" | "seriesRevision"> &
+  Partial<
+    Pick<
+      SidepanelSeriesContextData,
+      "siteId" | "seriesId" | "items" | "isChaptersLoading"
+    >
+  >) {
   const [chapterSelectionsBySeries, setChapterSelectionsBySeries] =
     useState<ChapterSelectionsBySeries>({})
   const [presentationBySeries, setPresentationBySeries] =
     useState<InlineSelectionPresentationBySeries>({})
+  const seriesKey = siteId && seriesId ? siteId + "#" + seriesId : undefined
+  if (
+    seriesKey &&
+    items &&
+    !isChaptersLoading &&
+    !presentationBySeries[seriesKey]
+  ) {
+    setPresentationBySeries({
+      ...presentationBySeries,
+      [seriesKey]: {
+        viewMode: "volumes",
+        collapsedGroupIds: items.flatMap((item) =>
+          "chapters" in item ? [item.groupId] : []
+        ),
+      },
+    })
+  }
   const [selectionContext, setSelectionContext] = useState({
     windowId,
     tabId,

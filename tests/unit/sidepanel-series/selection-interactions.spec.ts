@@ -49,7 +49,10 @@ describe("mounted series selection", () => {
 
   function button(label: string): HTMLButtonElement {
     const control = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes(label)
+      (element) =>
+        element.getAttribute("aria-label") === label ||
+        (!element.hasAttribute("aria-label") &&
+          element.textContent?.includes(label))
     )
     if (!control) throw new Error(`Missing button: ${label}`)
     return control
@@ -95,8 +98,9 @@ describe("mounted series selection", () => {
     expect(checkbox("Chapter locked").getAttribute("aria-checked")).toBe(
       "false"
     )
-    const disclosure =
-      container.querySelector<HTMLButtonElement>("[aria-expanded]")!
+    const disclosure = container.querySelector<HTMLButtonElement>(
+      ".manga-volume-toggle"
+    )!
     const volumeCheckbox = checkbox("Select all 2 chapters in volume Volume 1")
     expect(volumeCheckbox.getAttribute("aria-checked")).toBe("false")
     await click(volumeCheckbox)
@@ -118,25 +122,57 @@ describe("mounted series selection", () => {
     expect(selections["mangadex#one"]).toBeUndefined()
     expect(volumeCheckbox.getAttribute("aria-checked")).toBe("false")
     await click(disclosure)
-    expect(container.querySelector('[aria-label="Chapter one"]')).toBeNull()
+    expect(
+      container.querySelector('[aria-label="Chapter one"]')?.closest("[inert]")
+    ).not.toBeNull()
     expect(presentation["mangadex#one"].collapsedGroupIds).toEqual(["volume-1"])
     expect(selections["mangadex#other"]).toEqual(["other-chapter"])
   })
 
   it("retains series view and collapse choices across context switches", async () => {
     await render()
-    await click(container.querySelector<HTMLButtonElement>("[aria-expanded]")!)
-    await click(button("All chapters"))
+    await click(
+      container.querySelector<HTMLButtonElement>(".manga-volume-toggle")!
+    )
+    await click(button("Chapters"))
     expect(checkbox("Chapter one")).toBeTruthy()
-    await click(button("All chapters"))
+    await click(button("Chapters"))
     expect(presentation["mangadex#one"].viewMode).toBe("chapters")
     await render(series({ seriesId: "other" }))
     expect(presentation["mangadex#other"]).toBeUndefined()
     await render()
-    expect(button("All chapters").getAttribute("aria-checked")).toBe("true")
+    expect(button("Chapters").getAttribute("aria-checked")).toBe("true")
     await click(button("Volumes"))
-    expect(container.querySelector('[aria-label="Chapter one"]')).toBeNull()
+    expect(
+      container.querySelector('[aria-label="Chapter one"]')?.closest("[inert]")
+    ).not.toBeNull()
     expect(presentation["mangadex#one"].collapsedGroupIds).toEqual(["volume-1"])
+  })
+
+  it("shows a rejected enqueue inside the review sheet without losing its choices", async () => {
+    await render()
+    await click(checkbox("Chapter one"))
+    await click(
+      container.querySelector<HTMLButtonElement>(
+        '[aria-label="Review selection"]'
+      )!
+    )
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog).not.toBeNull()
+    sendMessage.mockResolvedValueOnce({
+      success: false,
+      error: "Rejected",
+      code: "stale_series_context",
+    })
+    await click(container.querySelector<HTMLButtonElement>(".panel-primary")!)
+    await vi.waitFor(() =>
+      expect(dialog.querySelector('[role="alert"]')).not.toBeNull()
+    )
+    expect(selections["mangadex#one"]).toEqual(["one"])
+    expect(
+      dialog.querySelector('[role="checkbox"]')?.getAttribute("aria-checked")
+    ).toBe("true")
+    expect(onAfterStart).not.toHaveBeenCalled()
   })
 
   it("preserves selections after enqueue failure and clears only the accepted series on success", async () => {
@@ -245,8 +281,9 @@ describe("mounted series selection", () => {
         ],
       })
     )
-    const disclosure =
-      container.querySelector<HTMLButtonElement>("[aria-expanded]")!
+    const disclosure = container.querySelector<HTMLButtonElement>(
+      ".manga-volume-toggle"
+    )!
     const selectVolume = checkbox(
       "Select all 1 chapters in volume Single chapter"
     )
@@ -255,7 +292,9 @@ describe("mounted series selection", () => {
     expect(selectVolume.getAttribute("aria-checked")).toBe("false")
     await click(disclosure)
     expect(disclosure.getAttribute("aria-expanded")).toBe("false")
-    expect(container.querySelector('[aria-label="Chapter one"]')).toBeNull()
+    expect(
+      container.querySelector('[aria-label="Chapter one"]')?.closest("[inert]")
+    ).not.toBeNull()
     await click(disclosure)
     expect(disclosure.getAttribute("aria-expanded")).toBe("true")
     await click(checkbox("Chapter one"))

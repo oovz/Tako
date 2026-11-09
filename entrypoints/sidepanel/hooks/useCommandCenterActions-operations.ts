@@ -6,34 +6,13 @@ import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
 import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 
-function showUndoToast(receipt: PendingUndoReceipt): void {
-  toast(
-    receipt.type === "cancel_queued"
-      ? t("sidepanel_taskRemovedFromQueue")
-      : t("sidepanel_historyRemoved"),
-    {
-      duration: Math.max(1, receipt.expiresAt - Date.now()),
-      action: {
-        label: t("common_undo"),
-        onClick: () => {
-          void queueCommandClient
-            .undoQueueAction(receipt.token)
-            .catch((error) => {
-              logger.error("[CommandCenter] Failed to undo task action:", error)
-              toast.error(t("sidepanel_undoFailed"))
-            })
-        },
-      },
-    }
-  )
-}
-
 export async function cancelCommandCenterTask(
-  taskId: string
+  taskId: string,
+  onUndo?: (receipt: PendingUndoReceipt, taskId: string) => void
 ): Promise<CancelTaskResult> {
   try {
     const result = await queueCommandClient.cancelTask(taskId)
-    if (result.kind === "queued") showUndoToast(result.undo)
+    if (result.kind === "queued") onUndo?.(result.undo, taskId)
     return { kind: "completed" }
   } catch (error) {
     logger.error("[CommandCenter] Failed to cancel task:", error)
@@ -74,16 +53,18 @@ export const moveCommandCenterTaskToTop = taskCommand(
   "sidepanel_toastMoveTopFailed"
 )
 
-async function removeTaskWithUndo(taskId: string): Promise<void> {
-  const undo = await queueCommandClient.removeTask(taskId)
-  if (undo !== undefined) showUndoToast(undo)
+export async function removeCommandCenterTask(
+  taskId: string,
+  onUndo?: (receipt: PendingUndoReceipt, taskId: string) => void
+): Promise<void> {
+  try {
+    const undo = await queueCommandClient.removeTask(taskId)
+    if (undo) onUndo?.(undo, taskId)
+  } catch (error) {
+    logger.error("[CommandCenter] Failed to remove task:", error)
+    toast.error(t("sidepanel_toastRemoveFailed"))
+  }
 }
-
-export const removeCommandCenterTask = taskCommand(
-  removeTaskWithUndo,
-  "remove task",
-  "sidepanel_toastRemoveFailed"
-)
 
 export async function openCommandCenterSettings(): Promise<void> {
   try {

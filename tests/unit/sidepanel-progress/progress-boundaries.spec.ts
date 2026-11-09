@@ -199,8 +199,8 @@ describe("rendered progress boundaries", () => {
           })
         )
       )
-    expect(renderRow(progress({ activeChapterCount: 0 }))).toContain("2/4")
-    expect(renderRow(progress({ activeChapterCount: 8 }))).toContain("4/4")
+    expect(renderRow(progress({ activeChapterCount: 0 }))).toContain("1/4")
+    expect(renderRow(progress({ activeChapterCount: 8 }))).toContain("1/4")
     expect(
       renderRow(progress({ taskId: "another-task", activeChapterCount: 2 }))
     ).toContain("1/4")

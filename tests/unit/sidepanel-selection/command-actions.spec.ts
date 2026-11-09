@@ -4,22 +4,18 @@ import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { toast } from "sonner"
+import {
+  QueueUndoProvider,
+  QueueUndoRegion,
+} from "@/entrypoints/sidepanel/components/QueueUndo"
 import { useCommandCenterActions } from "@/entrypoints/sidepanel/hooks/useCommandCenterActions"
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 
 function clickUndo() {
-  const action = vi.mocked(toast).mock.calls.at(-1)?.[1]?.action
-  if (typeof action !== "object" || action === null || !("onClick" in action)) {
-    throw new Error("Expected a toast action")
-  }
-  const container = document.createElement("div")
-  const root = createRoot(container)
-  act(() =>
-    root.render(createElement("button", { onClick: action.onClick }, "Undo"))
-  )
-  act(() => container.querySelector("button")!.click())
-  act(() => root.unmount())
+  const button = document.querySelector<HTMLButtonElement>(".queue-undo button")
+  if (!button) throw new Error("Expected the panel Undo control")
+  act(() => button.click())
 }
 
 describe("mounted queue commands", () => {
@@ -31,7 +27,7 @@ describe("mounted queue commands", () => {
 
   function View() {
     actions = useCommandCenterActions()
-    return null
+    return createElement(QueueUndoRegion)
   }
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
@@ -51,11 +47,17 @@ describe("mounted queue commands", () => {
       },
     })
     container = document.createElement("div")
+    document.body.append(container)
     root = createRoot(container)
-    act(() => root.render(createElement(View)))
+    act(() =>
+      root.render(
+        createElement(QueueUndoProvider, { children: createElement(View) })
+      )
+    )
   })
   afterEach(() => {
     act(() => root.unmount())
+    container.remove()
     Object.keys(stored).forEach((key) => delete stored[key])
     vi.resetAllMocks()
     vi.unstubAllGlobals()
@@ -63,9 +65,20 @@ describe("mounted queue commands", () => {
 
   it("suppresses a repeated cancel, releases pending state, and offers the background Undo receipt", async () => {
     const response = Promise.withResolvers<unknown>()
-    sendMessage
-      .mockReturnValueOnce(response.promise)
-      .mockResolvedValue({ success: true })
+    sendMessage.mockImplementation((message) =>
+      message.type === "CANCEL_TASK"
+        ? response.promise
+        : message.type === "RENEW_QUEUE_UNDO"
+          ? {
+              success: true,
+              undo: {
+                token: message.payload.token,
+                type: "cancel_queued",
+                expiresAt: Date.now() + 5000,
+              },
+            }
+          : { success: true }
+    )
     let pending!: ReturnType<typeof actions.handleCancelTask>
     await act(async () => {
       pending = actions.handleCancelTask("queued")
@@ -85,8 +98,18 @@ describe("mounted queue commands", () => {
     })
     expect(actions.cancelingTaskIds.size).toBe(0)
     clickUndo()
-    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2))
-    expect(sendMessage.mock.calls[1][0]).toMatchObject({
+    await vi.waitFor(() =>
+      expect(
+        sendMessage.mock.calls.some(
+          ([message]) => message.type === "UNDO_QUEUE_ACTION"
+        )
+      ).toBe(true)
+    )
+    expect(
+      sendMessage.mock.calls.find(
+        ([message]) => message.type === "UNDO_QUEUE_ACTION"
+      )?.[0]
+    ).toMatchObject({
       type: "UNDO_QUEUE_ACTION",
       payload: { token: "undo-token" },
     })
@@ -117,14 +140,22 @@ describe("mounted queue commands", () => {
       type: "remove_history",
       expiresAt: Date.now() + 3000,
     }
-    sendMessage
-      .mockResolvedValueOnce({ success: true, data: { undo } })
-      .mockResolvedValue({ success: false, error: "expired" })
+    sendMessage.mockImplementation((message) =>
+      message.type === "REMOVE_TASK"
+        ? { success: true, data: { undo } }
+        : message.type === "RENEW_QUEUE_UNDO"
+          ? { success: true, undo }
+          : { success: false, error: "expired" }
+    )
     await act(async () => actions.handleRemoveTask("history-task"))
     expect(actions.removingTaskIds.size).toBe(0)
     clickUndo()
     await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
-    expect(sendMessage.mock.calls[1][0]).toMatchObject({
+    expect(
+      sendMessage.mock.calls.find(
+        ([message]) => message.type === "UNDO_QUEUE_ACTION"
+      )?.[0]
+    ).toMatchObject({
       type: "UNDO_QUEUE_ACTION",
       payload: { token: "history-undo" },
     })

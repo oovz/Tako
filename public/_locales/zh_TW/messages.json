@@ -1892,5 +1892,278 @@
   },
   "destination_chromeFallback": {
     "message": "已切換至 Chrome 下載"
+  },
+  "sidepanel_tab_queue": {
+    "message": "佇列"
+  },
+  "sidepanel_tab_manga": {
+    "message": "漫畫"
+  },
+  "sidepanel_tab_recent": {
+    "message": "最近"
+  },
+  "sidepanel_navigation": {
+    "message": "側欄導覽"
+  },
+  "sidepanel_inProgress": {
+    "message": "進行中"
+  },
+  "sidepanel_upNext": {
+    "message": "接下來"
+  },
+  "sidepanel_needsAttention": {
+    "message": "需要處理"
+  },
+  "sidepanel_noActiveDownloads": {
+    "message": "目前沒有下載中的工作。"
+  },
+  "sidepanel_noRecentDownloads": {
+    "message": "尚未儲存任何章節。"
+  },
+  "sidepanel_viewHistoryOptions": {
+    "message": "在選項中檢視記錄"
+  },
+  "sidepanel_savedCount": {
+    "message": "已儲存 $value1$/$value2$",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_taskPercent": {
+    "message": "工作已完成 $value1$%",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterCount": {
+    "message": "$value1$ 章",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneChapter": {
+    "message": "1 章"
+  },
+  "sidepanel_volumeCount": {
+    "message": "$value1$ 卷",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneVolume": {
+    "message": "1 卷"
+  },
+  "sidepanel_chapterNumber": {
+    "message": "第 $value1$ 章",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterProgress": {
+    "message": "目前章節圖片進度"
+  },
+  "sidepanel_waitingForSave": {
+    "message": "儲存中 · 等待確認"
+  },
+  "sidepanel_imageCount": {
+    "message": "$value1$/$value2$ 張圖片",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_cancelTask": {
+    "message": "取消工作"
+  },
+  "sidepanel_cancelTaskQuestion": {
+    "message": "取消此工作？"
+  },
+  "sidepanel_cancelTaskNote": {
+    "message": "已儲存的檔案會保留，已交給 Chrome 的傳輸會繼續。"
+  },
+  "sidepanel_keepDownloading": {
+    "message": "繼續下載"
+  },
+  "sidepanel_reorderTask": {
+    "message": "調整工作順序"
+  },
+  "sidepanel_queuePosition": {
+    "message": "佇列位置"
+  },
+  "sidepanel_moveTask": {
+    "message": "移動"
+  },
+  "sidepanel_queueChanged": {
+    "message": "佇列已變更，請重新移動工作。"
+  },
+  "sidepanel_undoExpired": {
+    "message": "復原已過期。"
+  },
+  "sidepanel_moreDetails": {
+    "message": "更多詳細資料"
+  },
+  "sidepanel_lessDetail": {
+    "message": "收起詳細資料"
+  },
+  "sidepanel_reviewSelection": {
+    "message": "檢查所選章節"
+  },
+  "sidepanel_clearSelection": {
+    "message": "清除選取"
+  },
+  "sidepanel_downloadAction": {
+    "message": "下載"
+  },
+  "sidepanel_saveFormat": {
+    "message": "儲存格式"
+  },
+  "sidepanel_saveTo": {
+    "message": "儲存至"
+  },
+  "sidepanel_images": {
+    "message": "圖片"
+  },
+  "sidepanel_selectedFolder": {
+    "message": "所選資料夾"
+  },
+  "sidepanel_chromeDownloads": {
+    "message": "Chrome 下載"
+  },
+  "sidepanel_justNow": {
+    "message": "剛剛"
+  },
+  "sidepanel_restartTaskQuestion": {
+    "message": "重新開始此工作？"
+  },
+  "sidepanel_duplicateWarning": {
+    "message": "重新開始可能產生重複檔案，請先檢查瀏覽器下載記錄。"
+  },
+  "sidepanel_restartAnyway": {
+    "message": "仍要重新開始"
+  },
+  "common_close": {
+    "message": "關閉"
+  },
+  "chapterStatus_queued": {
+    "message": "排隊中"
+  },
+  "chapterStatus_downloading": {
+    "message": "下載中"
+  },
+  "chapterStatus_completed": {
+    "message": "已儲存"
+  },
+  "chapterStatus_failed": {
+    "message": "失敗"
+  },
+  "chapterStatus_partial_success": {
+    "message": "部分儲存"
+  },
+  "chapterStatus_skipped": {
+    "message": "已略過"
+  },
+  "chapterStatus_canceled": {
+    "message": "已取消"
+  },
+  "sidepanel_retryTaskQuestion": {
+    "message": "重試這些章節？"
+  },
+  "sidepanel_retryAnyway": {
+    "message": "仍要重試"
+  },
+  "sidepanel_historyReadFailed": {
+    "message": "無法載入記錄。"
+  },
+  "sidepanel_historyStale": {
+    "message": "記錄可能不是最新的。"
+  },
+  "sidepanel_volumeNumber": {
+    "message": "第 $value1$ 卷",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chaptersView": {
+    "message": "章節"
+  },
+  "sidepanel_closeReview": {
+    "message": "關閉檢查"
+  },
+  "sidepanel_hideReview": {
+    "message": "收起檢查"
+  },
+  "sidepanel_stageDownloading": {
+    "message": "下載中"
+  },
+  "sidepanel_stagePacking": {
+    "message": "封裝中"
+  },
+  "sidepanel_stageSaving": {
+    "message": "儲存中"
+  },
+  "sidepanel_stageCanceling": {
+    "message": "正在取消…"
+  },
+  "sidepanel_saveConfirmation": {
+    "message": "等待確認"
+  },
+  "sidepanel_cancelCleanup": {
+    "message": "等待清理"
+  },
+  "sidepanel_archiveCaption": {
+    "message": "$value1$ 封存檔",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_taskDetailCount": {
+    "message": "已儲存 $value1$ 章，共 $value2$ 章",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_retryRemaining": {
+    "message": "重試剩餘章節"
+  },
+  "sidepanel_retryRemainingNote": {
+    "message": "已儲存的章節會保留。請重試剩餘章節。"
+  },
+  "sidepanel_restoreFolderNote": {
+    "message": "請授予原資料夾存取權限以繼續。"
+  },
+  "sidepanel_checkDownloadsNote": {
+    "message": "重新開始前請檢查瀏覽器下載紀錄，避免重複儲存檔案。"
+  },
+  "sidepanel_checkDownloads": {
+    "message": "查看下載紀錄"
+  },
+  "sidepanel_chapterResults": {
+    "message": "章節結果"
   }
 }

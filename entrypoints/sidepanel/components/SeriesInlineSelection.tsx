@@ -1,7 +1,16 @@
-import React, { useCallback, useMemo } from "react"
+import { playPanelMotion, stopPanelMotion } from "../hooks/panel-motion"
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import { PanelCheckbox } from "./PanelCheckbox"
+import { DownloadLabel } from "./DownloadLabel"
+import { SeriesContextCard } from "./SeriesContextCard"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   InlineSelectionPresentationBySeries,
@@ -27,7 +36,9 @@ import {
   getInlineSelectionViewSummary,
   updateInlineSelectionPresentation,
 } from "@/entrypoints/sidepanel/components/series-inline-selection-helpers"
-import { Download, ListChecks, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
+import { PanelIcon } from "./PanelIcon"
+import { SelectionReview } from "./SelectionReview"
 import { t } from "@/src/runtime/i18n"
 
 interface SeriesInlineSelectionProps {
@@ -87,109 +98,94 @@ function SeriesSelectionToolbar({
   viewMode: InlineSelectionViewMode
   updatePresentation: PresentationUpdater
 }) {
+  const pill = useRef<HTMLSpanElement>(null)
+  const from = useRef<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    const previous = from.current
+    from.current = null
+    const element = pill.current
+    if (
+      !previous ||
+      !element ||
+      !matchMedia("(prefers-reduced-motion: no-preference)").matches ||
+      document.documentElement.dataset.takoMotion === "reduce"
+    )
+      return
+    stopPanelMotion(element)
+    const end = element.getBoundingClientRect()
+    const delta = previous.left + previous.width / 2 - end.left - end.width / 2
+    playPanelMotion(
+      element,
+      [
+        {
+          transform:
+            "translateX(" +
+            delta +
+            "px) scaleX(" +
+            previous.width / end.width +
+            ")",
+        },
+        {
+          transform: "translateX(" + delta * 0.55 + "px) scale(1.14,.91)",
+          offset: 0.42,
+        },
+        { transform: "translateX(0) scale(.98,1.02)", offset: 0.81 },
+        { transform: "translateX(0) scale(1)" },
+      ],
+      230
+    )
+  }, [viewMode])
   const allSelected = selectedCount > 0 && selectedCount === selectableCount
-  const partiallySelected = selectedCount > 0 && !allSelected
-  const selectAllLabel = t("sidepanel_selectAllChapters")
-
   return (
-    <div className="sticky top-0 z-10 border-b border-border bg-background">
-      <div className="flex flex-col gap-2 px-3 py-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <Checkbox
-            id="select-all-ctx"
-            aria-label={selectAllLabel}
-            title={selectAllLabel}
-            checked={partiallySelected ? "indeterminate" : allSelected}
-            onCheckedChange={onSelectAll}
-            disabled={isEnqueuing || selectableCount === 0}
-            className="size-8 cursor-pointer rounded-md border-input data-[state=unchecked]:hover:bg-muted"
-            uncheckedIndicator={
-              selectedCount === 0 && (
-                <ListChecks aria-hidden="true" className="size-4" />
-              )
+    <div className="manga-controls">
+      {canToggleView ? (
+        <ToggleGroup
+          type="single"
+          value={viewMode}
+          className="chapter-modes"
+          data-view={viewMode}
+          onValueChange={(value) => {
+            if (
+              (value === "volumes" || value === "chapters") &&
+              value !== viewMode
+            ) {
+              from.current = pill.current?.getBoundingClientRect() ?? null
+              updatePresentation((previous) => ({
+                ...previous,
+                viewMode: value,
+              }))
             }
-          />
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {selectedCount > 0
-              ? t("sidepanel_selectedCount", [String(selectedCount)])
-              : t("sidepanel_availableCount", [String(selectableCount)])}
-          </span>
-        </div>
-
-        {canToggleView && (
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(value) => {
-              if (value === "volumes" || value === "chapters") {
-                updatePresentation((previous) =>
-                  previous.viewMode === value
-                    ? previous
-                    : { ...previous, viewMode: value }
-                )
-              }
-            }}
-            className="rounded-md bg-muted p-1"
+          }}
+        >
+          <span ref={pill} className="mode-pill" aria-hidden="true" />
+          <ToggleGroupItem value="volumes" aria-label={t("sidepanel_volumes")}>
+            <PanelIcon name="volumes" />
+            <span>{t("sidepanel_volumes")}</span>
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="chapters"
+            aria-label={t("sidepanel_chaptersView")}
           >
-            <ToggleGroupItem
-              value="volumes"
-              aria-label={t("sidepanel_volumes")}
-              className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
-            >
-              {t("sidepanel_volumes")}
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="chapters"
-              aria-label={t("sidepanel_allChapters")}
-              className="h-8 flex-1 rounded-sm border-0 px-2 text-xs font-medium text-muted-foreground transition-colors duration-150 hover:bg-background hover:text-foreground data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-none"
-            >
-              {t("sidepanel_allChapters")}
-            </ToggleGroupItem>
-          </ToggleGroup>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SeriesSelectionFooter({
-  download,
-  selectedCount,
-  onStart,
-}: {
-  download: ReturnType<typeof useDownload>
-  selectedCount: number
-  onStart: () => Promise<void>
-}) {
-  return (
-    <>
-      {download.errorMessage && (
-        <p
-          role="alert"
-          className="border-t border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
-        >
-          {download.errorMessage}
-        </p>
+            <PanelIcon name="chapters" />
+            <span>{t("sidepanel_chaptersView")}</span>
+          </ToggleGroupItem>
+        </ToggleGroup>
+      ) : (
+        <h3>{t("sidepanel_chaptersView")}</h3>
       )}
-
-      <div className="shrink-0 bg-background px-3 py-2.5">
-        <Button
-          type="button"
-          className="h-10 w-full gap-2 text-sm font-semibold tabular-nums"
-          onClick={download.isEnqueuing ? undefined : onStart}
-          disabled={selectedCount === 0}
-          aria-disabled={download.isEnqueuing || undefined}
-          aria-busy={download.isEnqueuing || undefined}
-        >
-          {download.isEnqueuing ? (
-            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-          ) : (
-            <Download aria-hidden="true" className="size-4" />
-          )}
-          {t("sidepanel_downloadCount", [String(selectedCount)])}
-        </Button>
-      </div>
-    </>
+      <PanelCheckbox
+        label={t("sidepanel_selectAllChapters")}
+        id="select-all-ctx"
+        aria-label={t("sidepanel_selectAllChapters")}
+        title={t("sidepanel_selectAllChapters")}
+        checked={
+          selectedCount > 0 && !allSelected ? "indeterminate" : allSelected
+        }
+        onCheckedChange={onSelectAll}
+        disabled={isEnqueuing || selectableCount === 0}
+        className="select-all-toggle"
+      />
+    </div>
   )
 }
 
@@ -201,6 +197,10 @@ export function SeriesInlineSelection({
   setPresentationBySeries,
   onAfterStart,
 }: SeriesInlineSelectionProps) {
+  const [reviewIds, setReviewIds] = useState<string[] | null>(null)
+  const reviewTrigger = useRef<HTMLButtonElement>(null)
+  const [scroll, setScroll] = useState<HTMLDivElement | null>(null)
+  const [body, setBody] = useState<HTMLDivElement | null>(null)
   const seriesKey = useMemo(
     () => buildSeriesKey(data.siteId, data.seriesId),
     [data.siteId, data.seriesId]
@@ -296,36 +296,112 @@ export function SeriesInlineSelection({
     const didStart = await download.startDownload(selectedChapterIdsToStart)
     if (!didStart) return
     clearSeriesSelections()
+    setReviewIds(null)
     onAfterStart?.()
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <SeriesSelectionToolbar
-        selectedCount={selectedCount}
-        selectableCount={selectableCount}
-        isEnqueuing={download.isEnqueuing}
-        onSelectAll={selection.handleSelectAll}
-        canToggleView={viewSummary.canToggleView}
-        viewMode={viewMode}
-        updatePresentation={updatePresentation}
-      />
+    <div className="manga-selection">
+      <div className="manga-body" ref={setBody}>
+        <div
+          className="manga-scroll"
+          ref={setScroll}
+          inert={reviewIds !== null}
+        >
+          <SeriesContextCard data={data} />
+          <SeriesSelectionToolbar
+            selectedCount={selectedCount}
+            selectableCount={selectableCount}
+            isEnqueuing={download.isEnqueuing}
+            onSelectAll={selection.handleSelectAll}
+            canToggleView={viewSummary.canToggleView}
+            viewMode={viewMode}
+            updatePresentation={updatePresentation}
+          />
 
-      <ChapterSelector
-        items={items}
-        viewMode={viewMode}
-        expandedGroups={expandedGroups}
-        isEnqueuing={download.isEnqueuing}
-        onToggleGroup={selection.handleVolumeToggle}
-        onToggleChapter={selection.handleChapterSelect}
-        onVolumeSelectAll={selection.handleVolumeSelectAll}
-      />
-
-      <SeriesSelectionFooter
-        download={download}
-        selectedCount={selectedCount}
-        onStart={handleStart}
-      />
+          <ChapterSelector
+            scrollElement={scroll}
+            items={items}
+            viewMode={viewMode}
+            expandedGroups={expandedGroups}
+            isEnqueuing={download.isEnqueuing}
+            onToggleGroup={selection.handleVolumeToggle}
+            onToggleChapter={selection.handleChapterSelect}
+            onVolumeSelectAll={selection.handleVolumeSelectAll}
+          />
+        </div>
+        {body && (
+          <SelectionReview
+            container={body}
+            ids={reviewIds}
+            chapters={allChapters}
+            pending={download.isEnqueuing}
+            errorMessage={download.errorMessage}
+            onClose={() => setReviewIds(null)}
+            onToggle={selection.handleChapterSelect}
+            onClear={() => selection.handleSelectAll(false)}
+            trigger={reviewTrigger}
+          />
+        )}
+      </div>
+      {download.errorMessage && reviewIds === null && (
+        <p className="selection-error" role="alert">
+          {download.errorMessage}
+        </p>
+      )}
+      <div className="selection-footer">
+        <div
+          className="batch-actions"
+          data-selected={selectedCount > 0 || reviewIds !== null}
+        >
+          <div className="review-slot">
+            <button
+              type="button"
+              ref={reviewTrigger}
+              className="batch-review"
+              aria-label={t(
+                reviewIds === null
+                  ? "sidepanel_reviewSelection"
+                  : "sidepanel_hideReview"
+              )}
+              aria-haspopup="dialog"
+              aria-expanded={reviewIds !== null}
+              disabled={download.isEnqueuing}
+              tabIndex={selectedCount > 0 || reviewIds !== null ? 0 : -1}
+              onClick={() =>
+                setReviewIds(
+                  reviewIds !== null
+                    ? null
+                    : allChapters
+                        .filter((chapter) => chapter.selected)
+                        .map((chapter) => chapter.id)
+                )
+              }
+            >
+              <PanelIcon name="list" />
+            </button>
+          </div>
+          <Button
+            type="button"
+            className="panel-primary"
+            disabled={selectedCount === 0 || download.isEnqueuing}
+            aria-busy={download.isEnqueuing}
+            aria-label={
+              selectedCount
+                ? t("sidepanel_downloadCount", [String(selectedCount)])
+                : t("sidepanel_downloadAction")
+            }
+            onClick={handleStart}
+          >
+            {download.isEnqueuing ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : (
+              <PanelIcon name="download" />
+            )}
+            <DownloadLabel count={selectedCount} />
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

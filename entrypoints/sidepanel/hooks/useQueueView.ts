@@ -16,6 +16,7 @@ import { z } from "zod"
 
 const QueueTaskSummaryStorageSchema = z.object({
   id: z.string(),
+  chapterRange: z.string().optional(),
   seriesKey: z.string(),
   seriesTitle: z.string(),
   siteIntegration: z.string(),
@@ -62,6 +63,7 @@ function normalizeQueueTaskSummary(value: unknown): QueueTaskSummary {
 
   return {
     id: data.id,
+    chapterRange: data.chapterRange,
     seriesKey: data.seriesKey,
     seriesTitle: data.seriesTitle,
     siteIntegration: data.siteIntegration,

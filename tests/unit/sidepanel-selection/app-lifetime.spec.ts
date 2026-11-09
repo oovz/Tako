@@ -90,23 +90,11 @@ describe("real side panel composition", () => {
       },
     }
   }
-  function trigger() {
-    return container.querySelector<HTMLButtonElement>(
-      'button[aria-controls="inline-selection-panel"]'
-    )!
+  function tab(view: "queue" | "manga" | "recent") {
+    return container.querySelector<HTMLButtonElement>("#panel-tab-" + view)!
   }
-  function region() {
-    return container.querySelector<HTMLElement>(
-      "[data-sidepanel-selection-region]"
-    )!
-  }
-  function finishTransition(
-    propertyName = "flex-grow",
-    target: Element = region()
-  ) {
-    const event = new Event("transitionend", { bubbles: true })
-    Object.defineProperty(event, "propertyName", { value: propertyName })
-    act(() => target.dispatchEvent(event))
+  function panel(view: string) {
+    return container.querySelector<HTMLElement>("#panel-view-" + view)!
   }
 
   beforeEach(() => {
@@ -198,7 +186,7 @@ describe("real side panel composition", () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(trigger()).not.toBeNull()
+    expect(tab("queue")).not.toBeNull()
   }
 
   it("renders the queue landmark before browser hydration", () => {
@@ -207,75 +195,94 @@ describe("real side panel composition", () => {
     expect(html).toContain('href="#sidepanel-main"')
   })
 
-  it("keeps the selector until its own closing layout transition, and ignores stale and bubbled transitions", async () => {
+  it("starts on Queue, keeps Manga second, and retains selection across tabs", async () => {
     await mount()
-    act(() => trigger().click())
-    expect(region().dataset.state).toBe("open")
-    expect(container.querySelector("#select-all-ctx")).not.toBeNull()
-    act(() => trigger().click())
-    expect(region().dataset.state).toBe("closed")
-    finishTransition("opacity")
-    finishTransition("flex-grow", region().firstElementChild!)
-    expect(container.querySelector("#select-all-ctx")).not.toBeNull()
-    act(() => trigger().click())
-    finishTransition()
-    expect(region().dataset.state).toBe("open")
-    expect(container.querySelector("#select-all-ctx")).not.toBeNull()
-    act(() => trigger().click())
-    finishTransition()
-    expect(container.querySelector("#select-all-ctx")).toBeNull()
-  })
-
-  it("closes on a new series revision and retains the series selection after reopening", async () => {
-    await mount()
-    act(() => trigger().click())
+    expect(
+      [...container.querySelectorAll('[role="tab"]')].map(
+        (item) => item.textContent
+      )
+    ).toEqual(["Queue", "Manga", "Recent"])
+    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+    act(() => tab("manga").click())
     act(() =>
       container.querySelector<HTMLButtonElement>("#select-all-ctx")!.click()
     )
+    act(() => tab("recent").click())
+    expect(panel("manga").hidden).toBe(true)
+    act(() => tab("manga").click())
+    expect(
+      container.querySelector("#select-all-ctx")?.getAttribute("aria-checked")
+    ).toBe("true")
+    expect(container.textContent).not.toContain("Search")
+  })
+
+  it("keeps Queue selected when Manga appears and returns focus when Manga disappears", async () => {
+    stored.activeTabContextByWindow = {
+      1: {
+        windowId: 1,
+        activeTabId: 11,
+        revision: 5,
+        timestamp: 1,
+        context: null,
+      },
+    }
+    await mount()
+    expect(tab("manga")).toBeNull()
     stored.activeTabContextByWindow = projection(4)
     await act(async () =>
       listeners.forEach((listener) =>
-        listener(
-          { [SESSION_STORAGE_KEYS.activeTabContextByWindow]: {} },
-          "session"
-        )
+        listener({ activeTabContextByWindow: {} }, "session")
       )
     )
-    expect(region().dataset.state).toBe("closed")
-    finishTransition()
-    act(() => trigger().click())
-    expect(
-      container.querySelector("#select-all-ctx")?.getAttribute("data-state")
-    ).toBe("checked")
+    expect(tab("manga")).not.toBeNull()
+    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+    act(() => tab("manga").click())
+    stored.activeTabContextByWindow = {
+      1: {
+        windowId: 1,
+        activeTabId: 11,
+        revision: 5,
+        timestamp: 1,
+        context: null,
+      },
+    }
+    await act(async () =>
+      listeners.forEach((listener) =>
+        listener({ activeTabContextByWindow: {} }, "session")
+      )
+    )
+    expect(tab("manga")).toBeNull()
+    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(tab("queue"))
   })
 
-  it("collapses immediately with reduced motion and restores trigger focus after enqueue", async () => {
+  it("returns to Queue after an accepted enqueue and clears only the submitted selection", async () => {
     await mount()
     document.documentElement.dataset.takoMotion = "reduce"
-    act(() => trigger().click())
+    act(() => tab("manga").click())
     act(() =>
       container.querySelector<HTMLButtonElement>("#select-all-ctx")!.click()
     )
-    const start = [
-      ...container.querySelectorAll<HTMLButtonElement>("button"),
-    ].find((button) =>
-      button.textContent?.includes(t("sidepanel_downloadCount", ["1"]))
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>(".panel-primary")!.click()
     )
-    expect(start).toBeDefined()
-    await act(async () => start!.click())
     await vi.waitFor(() =>
-      expect(
-        sendMessage.mock.calls.some(
-          ([message]) => message.type === "START_DOWNLOAD"
-        )
-      ).toBe(true)
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "START_DOWNLOAD",
+          payload: expect.objectContaining({ selectedChapterIds: ["one"] }),
+        })
+      )
     )
-    await act(async () => {
-      await Promise.resolve()
-    })
-    expect(region().dataset.state).toBe("closed")
-    expect(container.querySelector("#select-all-ctx")).toBeNull()
-    expect(document.activeElement).toBe(trigger())
+    await vi.waitFor(() =>
+      expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+    )
+    expect(tab("queue").getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(tab("queue"))
+    act(() => tab("manga").click())
+    expect(
+      container.querySelector("#select-all-ctx")?.getAttribute("aria-checked")
+    ).toBe("false")
   })
 
   it("keeps unread counts unavailable and retains real counts after a stale queue read", async () => {
@@ -395,35 +402,9 @@ describe("real side panel composition", () => {
     )
     const active = queueRegion.querySelector('[data-queue-task-id="active"]')!
     const queued = queueRegion.querySelector('[data-queue-task-id="next"]')!
-    expect(active.querySelector('[role="status"]')).not.toBeNull()
-    expect(active.querySelector('[role="progressbar"]')).not.toBeNull()
+    expect(active.querySelector(".task-chapter-status")).not.toBeNull()
+    expect(active.querySelector("progress")).not.toBeNull()
     expect(queued.querySelector('[role="status"]')).toBeNull()
     expect(queued.querySelector('[role="progressbar"]')).toBeNull()
-  })
-
-  it("keeps a closed transitioning selector inaccessible and restores focus after enqueue", async () => {
-    await mount()
-    act(() => trigger().click())
-    const panel = container.querySelector("#inline-selection-panel")!
-    expect(panel.getAttribute("aria-hidden")).toBe("false")
-    expect(panel.hasAttribute("inert")).toBe(false)
-    act(() =>
-      container.querySelector<HTMLButtonElement>("#select-all-ctx")!.click()
-    )
-    const start = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("button")
-    ).find((button) =>
-      button.textContent?.includes(t("sidepanel_downloadCount", ["1"]))
-    )!
-    start.focus()
-    expect(document.activeElement).toBe(start)
-    await act(async () => start.click())
-    await vi.waitFor(() => expect(document.activeElement).toBe(trigger()))
-    expect(panel.getAttribute("aria-hidden")).toBe("true")
-    expect(panel.hasAttribute("inert")).toBe(true)
-    expect(container.querySelector("#select-all-ctx")).not.toBeNull()
-    finishTransition()
-    expect(container.querySelector("#select-all-ctx")).toBeNull()
-    expect(document.activeElement).toBe(trigger())
   })
 })

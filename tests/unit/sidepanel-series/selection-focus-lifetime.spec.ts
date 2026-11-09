@@ -3,9 +3,6 @@
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { Collapsible } from "@/components/ui/collapsible"
-import { useInlineSelectionPresence } from "@/entrypoints/sidepanel/SidePanelApp-selection"
-import { SeriesContextCard } from "@/entrypoints/sidepanel/components/SeriesContextCard"
 import { SeriesInlineSelection } from "@/entrypoints/sidepanel/components/SeriesInlineSelection"
 import { useInlineSelectionState } from "@/entrypoints/sidepanel/hooks/useInlineSelectionState"
 import { deriveSeriesContextFromActiveTabContext } from "@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers"
@@ -23,38 +20,25 @@ describe("accepted selection enqueue focus lifetime", () => {
 
   function View({ data }: { data: SidepanelSeriesContextData }) {
     selection = useInlineSelectionState(data)
-    const presence = useInlineSelectionPresence(
-      selection.isInlineSelectionOpen,
-      selection.setInlineSelectionOpen
-    )
     return createElement(
-      Collapsible,
-      {
-        open: selection.isInlineSelectionOpen,
-        onOpenChange: presence.updateInlineSelectionOpen,
-      },
-      createElement(SeriesContextCard, {
+      "div",
+      null,
+      createElement("button", { id: "queue" }, "Queue"),
+      createElement(SeriesInlineSelection, {
         data,
-        isExpanded: selection.isInlineSelectionOpen,
-        triggerRef: presence.inlineSelectionTriggerRef,
-      }),
-      presence.isInlineSelectionVisible &&
-        createElement(SeriesInlineSelection, {
-          data,
-          chapterSelectionsBySeries: selection.chapterSelectionsBySeries,
-          setChapterSelectionsBySeries: selection.setChapterSelectionsBySeries,
-          presentationBySeries: selection.presentationBySeries,
-          setPresentationBySeries: selection.setPresentationBySeries,
-          onAfterStart: () => {
-            // Observe an async event callback failure without leaving an unhandled rejection.
-            try {
-              presence.closeInlineSelectionAndRestoreFocus()
-              onClosed()
-            } catch (error) {
-              onCloseError(error)
-            }
-          },
-        })
+        chapterSelectionsBySeries: selection.chapterSelectionsBySeries,
+        setChapterSelectionsBySeries: selection.setChapterSelectionsBySeries,
+        presentationBySeries: selection.presentationBySeries,
+        setPresentationBySeries: selection.setPresentationBySeries,
+        onAfterStart: () => {
+          try {
+            container.querySelector<HTMLButtonElement>("#queue")?.focus()
+            onClosed()
+          } catch (error) {
+            onCloseError(error)
+          }
+        },
+      })
     )
   }
 
@@ -105,10 +89,14 @@ describe("accepted selection enqueue focus lifetime", () => {
         return delivery.promise
       })
       await render()
-      const trigger = container.querySelector<HTMLButtonElement>(
-        '[aria-controls="inline-selection-panel"]'
-      )!
-      await act(async () => trigger.click())
+      const trigger = container.querySelector<HTMLButtonElement>("#queue")!
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(
+            '[role="radio"][aria-label="Chapters"]'
+          )!
+          .click()
+      )
       await act(async () =>
         container
           .querySelector<HTMLButtonElement>(
@@ -138,7 +126,7 @@ describe("accepted selection enqueue focus lifetime", () => {
             seriesRevision: 3,
           })
         )
-        expect(trigger.isConnected).toBe(false)
+        expect(trigger.isConnected).toBe(true)
         expect(
           container.querySelector('[aria-controls="inline-selection-panel"]')
         ).toBeNull()
@@ -151,7 +139,6 @@ describe("accepted selection enqueue focus lifetime", () => {
       await act(async () => delivery.resolve(acceptedResponse))
       await vi.waitFor(() => expect(onClosed).toHaveBeenCalledOnce())
       expect(onCloseError).not.toHaveBeenCalled()
-      expect(selection.isInlineSelectionOpen).toBe(false)
       expect(
         selection.chapterSelectionsBySeries["mangadex#one"]
       ).toBeUndefined()

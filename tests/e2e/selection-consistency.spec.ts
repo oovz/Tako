@@ -2,7 +2,7 @@ import { test, expect } from "./fixtures/extension"
 import {
   getSessionState,
   seedTabContext,
-  openSidepanelHarness,
+  openMangaSidepanelHarness,
   waitForActiveSeriesContextRevision,
   waitForTabStateById,
   waitForGlobalState,
@@ -20,7 +20,7 @@ async function switchSelectorToFlatChapterView(
   sidepanelPage: import("@playwright/test").Page
 ): Promise<void> {
   const showAllChaptersButton = sidepanelPage.getByRole("radio", {
-    name: /All chapters/i,
+    name: /Chapters/i,
   })
   if (await showAllChaptersButton.count()) {
     await showAllChaptersButton.click()
@@ -61,13 +61,13 @@ test.describe("selection consistency across tabs", () => {
     })
 
     // Open Side Panel bound to Tab A to send selection action (no need to open inline selector here)
-    const spA = await openSidepanelHarness(context, extensionId, page)
+    const spA = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(spA.locator("#root")).toBeVisible()
     await expect(spA.getByText("Hunter x Hunter")).toBeVisible({
       timeout: 15000,
     })
 
-    const toggleButton = spA.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = spA.getByRole("tab", { name: "Manga", exact: true })
     await expect(toggleButton).toBeVisible()
     await toggleButton.click()
 
@@ -141,7 +141,7 @@ test.describe("chapter selection flow", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await sp.setViewportSize({ width: 200, height: 640 })
     await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
@@ -149,7 +149,7 @@ test.describe("chapter selection flow", () => {
       timeout: 15000,
     })
 
-    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = sp.getByRole("tab", { name: "Manga", exact: true })
     await expect(toggleButton).toBeVisible()
     await expect(toggleButton).toBeInViewport({ ratio: 1 })
     expect(
@@ -158,7 +158,7 @@ test.describe("chapter selection flow", () => {
     await toggleButton.click()
 
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
+      sp.getByRole("tab", { name: "Queue", exact: true })
     ).toBeVisible()
 
     const downloadButton = sp.getByRole("button", { name: /Download/i })
@@ -187,11 +187,11 @@ test.describe("chapter selection flow", () => {
     )
 
     await expect(
-      sp.getByRole("button", { name: /Select Chapters/i })
+      sp.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible()
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
-    ).toHaveCount(0)
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toHaveAttribute("aria-selected", "true")
   })
   test("keeps the selector open when clicking elsewhere in the panel", async ({
     context,
@@ -225,19 +225,19 @@ test.describe("chapter selection flow", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await waitForActiveSeriesContextRevision(context, tabId)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Hunter x Hunter")).toBeVisible({
       timeout: 15000,
     })
 
-    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = sp.getByRole("tab", { name: "Manga", exact: true })
     await expect(toggleButton).toBeVisible()
     await toggleButton.click()
 
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
+      sp.getByRole("tab", { name: "Queue", exact: true })
     ).toBeVisible()
 
     // Click outside selection region: click on the sidepanel series title
@@ -245,20 +245,20 @@ test.describe("chapter selection flow", () => {
 
     // Selection should remain open
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
+      sp.getByRole("tab", { name: "Queue", exact: true })
     ).toBeVisible()
     await expect(sp.getByText("Chapter 1")).toBeVisible()
 
     // Clicking the toggle button again closes selection
-    const closeButton = sp.getByRole("button", { name: /Close Selection/i })
+    const closeButton = sp.getByRole("tab", { name: "Queue", exact: true })
     await closeButton.click()
 
     await expect(
-      sp.getByRole("button", { name: /Select Chapters/i })
+      sp.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible()
     await expect(
-      sp.getByRole("button", { name: /Close Selection/i })
-    ).toHaveCount(0)
+      sp.getByRole("tab", { name: "Queue", exact: true })
+    ).toHaveAttribute("aria-selected", "true")
   })
 
   test("resets chapter selection when the panel reopens", async ({
@@ -292,12 +292,12 @@ test.describe("chapter selection flow", () => {
       )
     })
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(
-      sp.getByRole("button", { name: /Select Chapters/i })
+      sp.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible({ timeout: 15000 })
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
     await switchSelectorToFlatChapterView(sp)
     await sp.getByRole("checkbox").nth(1).click()
     await expect(
@@ -325,12 +325,12 @@ test.describe("chapter selection flow", () => {
       { key: selectionKey, url: selectedChapterUrl! }
     )
 
-    const reopened = await openSidepanelHarness(context, extensionId, page)
+    const reopened = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(reopened.locator("#root")).toBeVisible()
     await expect(
-      reopened.getByRole("button", { name: /Select Chapters/i })
+      reopened.getByRole("tab", { name: "Manga", exact: true })
     ).toBeVisible({ timeout: 15000 })
-    await reopened.getByRole("button", { name: /Select Chapters/i }).click()
+    await reopened.getByRole("tab", { name: "Manga", exact: true }).click()
 
     await expect(
       reopened.getByRole("button", { name: /Download \(1\)/i })
@@ -410,13 +410,13 @@ test.describe("chapter selection flow", () => {
     expect(lockedChapter).toBeTruthy()
     expect(openChapter).toBeTruthy()
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Locked Selection Series")).toBeVisible({
       timeout: 15000,
     })
 
-    const toggleButton = sp.getByRole("button", { name: /Select Chapters/i })
+    const toggleButton = sp.getByRole("tab", { name: "Manga", exact: true })
     await toggleButton.click()
 
     await expect(sp.getByText(lockedChapter!.title)).toBeVisible()

@@ -49,19 +49,17 @@ test.describe("Queue cancel and restart behavior", () => {
     })
 
     await expect(sp.locator("#root")).toBeVisible()
-    await sp.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp.getByText("Cancel this Tako task?")).toBeVisible()
-    await sp.getByRole("button", { name: "Yes" }).click()
+    await sp.getByRole("button", { name: "Cancel download" }).click()
+    await expect(sp.getByText("Cancel this task?")).toBeVisible()
+    await sp.getByRole("button", { name: "Cancel task" }).click()
 
     await waitForGlobalState(context, (state) => {
       const t = state.downloadQueue.find((task) => task.id === "active-task")
       return !!t && t.status === "canceled"
     })
 
-    const completedTaskRow = sp
-      .getByRole("heading", { name: "Completed Series" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='Remove']][1]")
-    await completedTaskRow.getByRole("button", { name: "Remove" }).click()
+    const completedTaskRow = sp.locator('[data-task-id="completed-task"]')
+    await completedTaskRow.getByRole("button", { name: "Dismiss" }).click()
 
     await waitForGlobalState(
       context,
@@ -97,11 +95,11 @@ test.describe("Queue cancel and restart behavior", () => {
     })
 
     await expect(sp.locator("#root")).toBeVisible()
-    await sp.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp.getByText("Cancel this Tako task?")).toBeVisible()
+    await sp.getByRole("button", { name: "Cancel download" }).click()
+    await expect(sp.getByText("Cancel this task?")).toBeVisible()
 
-    await sp.getByRole("button", { name: "No" }).click()
-    await expect(sp.getByText("Cancel this Tako task?")).toHaveCount(0)
+    await sp.getByRole("button", { name: "Keep downloading" }).click()
+    await expect(sp.getByText("Cancel this task?")).toBeHidden()
 
     await waitForGlobalState(context, (state) => {
       const t = state.downloadQueue.find(
@@ -148,7 +146,9 @@ test.describe("Queue cancel and restart behavior", () => {
     await expect(sp.getByText("Has Failures")).toBeVisible()
 
     // There should be a single "Retry failed" action for the failed task
-    const retryButton = sp.getByRole("button", { name: "Retry failed" })
+    const retryButton = sp.getByRole("button", {
+      name: "Retry remaining chapters",
+    })
     await expect(retryButton).toBeVisible()
     await retryButton.click()
 
@@ -189,9 +189,9 @@ test.describe("Queue cancel and restart behavior", () => {
     })
 
     // UI: Retry button should be removed once the original task has been retried
-    await expect(sp.getByRole("button", { name: "Retry failed" })).toHaveCount(
-      0
-    )
+    await expect(
+      sp.getByRole("button", { name: "Retry remaining chapters" })
+    ).toHaveCount(0)
 
     await sp.close()
   })
@@ -233,7 +233,7 @@ test.describe("Queue cancel and restart behavior", () => {
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Retry Partial")).toBeVisible()
 
-    await sp.getByRole("button", { name: "Retry failed" }).click()
+    await sp.getByRole("button", { name: "Retry remaining chapters" }).click()
 
     await waitForGlobalState(context, (state) => {
       const original = state.downloadQueue.find(

@@ -111,9 +111,9 @@ test.describe("Queue actions and cross-window behavior", () => {
     await expect(sp2.getByText(/1\s*active/)).toBeVisible()
     await expect(sp2.getByText(/0\s*queued/)).toBeVisible()
 
-    await sp1.getByRole("button", { name: "Cancel" }).click()
-    await expect(sp1.getByText("Cancel this Tako task?")).toBeVisible()
-    await sp1.getByRole("button", { name: "Yes" }).click()
+    await sp1.getByRole("button", { name: "Cancel download" }).click()
+    await expect(sp1.getByText("Cancel this task?")).toBeVisible()
+    await sp1.getByRole("button", { name: "Cancel task" }).click()
 
     await waitForGlobalState(context, (state) => {
       const t = state.downloadQueue.find(
@@ -297,7 +297,7 @@ test.describe("Queue actions and cross-window behavior", () => {
       await expect(sp.locator("#root")).toBeVisible()
       await expect(sp.getByText("Active No Folder")).toBeVisible()
       await expect(sp.getByText("Completed With Folder")).toBeVisible()
-      await expect(sp.getByText("Recent history")).toBeVisible()
+      await expect(sp.getByText("Needs attention")).toBeVisible()
       await expect(
         sp.getByRole("button", { name: /open folder/i })
       ).toHaveCount(0)

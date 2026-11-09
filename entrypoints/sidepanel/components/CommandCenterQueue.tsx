@@ -28,6 +28,8 @@ export interface CommandCenterQueueProps {
   emptyState?: React.ReactNode
   activeTaskProgress?: ActiveTaskProgressState | null
   showActiveProgress?: boolean
+  queuedTaskIds?: string[]
+  onReorder?: (taskId: string, position: number) => void | Promise<void>
   firstQueuedTaskId?: string
 }
 
@@ -103,9 +105,16 @@ function QueueTaskRow({
   cancellation: QueueCancellation
 }) {
   return (
-    <div>
+    <div data-queue-task-id={task.id}>
       <CommandCenterTaskRow
         task={task}
+        queuePosition={
+          queue.queuedTaskIds
+            ? queue.queuedTaskIds.indexOf(task.id) + 1
+            : undefined
+        }
+        queuedCount={queue.queuedTaskIds?.length}
+        onReorder={queue.onReorder}
         isCanceling={queue.cancelingTaskIds?.has(task.id) === true}
         isRetrying={queue.retryingTaskIds?.has(task.id) === true}
         isRestarting={queue.restartingTaskIds?.has(task.id) === true}

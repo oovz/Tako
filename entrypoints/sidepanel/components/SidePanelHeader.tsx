@@ -1,5 +1,3 @@
-import { Settings } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -31,18 +29,14 @@ export function SidePanelHeader({
     : t("sidepanel_openOptionsAdvanced")
 
   return (
-    <header className="sticky top-0 flex items-center justify-between px-3 py-2 border-b border-border bg-background z-30">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-          <span className="text-base font-semibold tabular-nums text-foreground">
-            {formatSidePanelCount(activeCount)}
-          </span>
+    <header className="panel-status">
+      <div className="panel-counts">
+        <span>
+          <b>{formatSidePanelCount(activeCount)}</b>{" "}
           <span>{t("common_active")}</span>
         </span>
-        <span className="inline-flex items-baseline gap-1.5 text-xs text-muted-foreground">
-          <span className="text-base font-semibold tabular-nums text-foreground">
-            {formatSidePanelCount(queuedCount)}
-          </span>
+        <span>
+          <b>{formatSidePanelCount(queuedCount)}</b>{" "}
           <span>{t("common_queued")}</span>
         </span>
       </div>
@@ -55,7 +49,17 @@ export function SidePanelHeader({
             onClick={onOpenSettings}
             aria-label={settingsLabel}
           >
-            <Settings aria-hidden="true" className="size-5" />
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+              <path strokeWidth="3" d="M8 6h.1m7 6h.1m-5 6h.1" />
+            </svg>
             {hasOptionsActionItems && (
               <span
                 aria-hidden="true"

@@ -4,7 +4,7 @@ import { unzipSync } from "fflate"
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
-  openSidepanelHarness,
+  openMangaSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateById,
 } from "./fixtures/state-helpers"
@@ -370,17 +370,19 @@ test.describe("MangaDex downloads", () => {
           )
           .toBe(true)
 
-        let sidepanel = await openSidepanelHarness(context, extensionId, page)
+        let sidepanel = await openMangaSidepanelHarness(
+          context,
+          extensionId,
+          page
+        )
         try {
           await expect(
             sidepanel.getByRole("heading", {
-              level: 2,
+              level: 1,
               name: series.seriesTitle,
             })
           ).toBeVisible()
-          await sidepanel
-            .getByRole("button", { name: /Select Chapters/i })
-            .click()
+          await sidepanel.getByRole("tab", { name: "Manga" }).click()
           const completedRow = sidepanel
             .locator(`[role="checkbox"][id="${firstChapter.id}"]`)
             .locator("..")
@@ -396,11 +398,9 @@ test.describe("MangaDex downloads", () => {
 
         // Reopening the extension page rehydrates the persisted projection,
         // covering both live notification and panel-reload behavior.
-        sidepanel = await openSidepanelHarness(context, extensionId, page)
+        sidepanel = await openMangaSidepanelHarness(context, extensionId, page)
         try {
-          await sidepanel
-            .getByRole("button", { name: /Select Chapters/i })
-            .click()
+          await sidepanel.getByRole("tab", { name: "Manga" }).click()
           const rehydratedCompletedRow = sidepanel
             .locator(`[role="checkbox"][id="${firstChapter.id}"]`)
             .locator("..")

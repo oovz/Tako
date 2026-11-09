@@ -10,7 +10,10 @@ import {
 } from "@/entrypoints/sidepanel/hooks/sidepanelSeriesContextHelpers"
 import { SESSION_STORAGE_KEYS } from "@/src/runtime/storage-keys"
 import type { MangaPageState } from "@/src/types/tab-state"
-import { useChromeStorageValue } from "@/src/ui/shared/hooks/useChromeStorageValue"
+import {
+  useChromeStorageValue,
+  type StorageReadStatus,
+} from "@/src/ui/shared/hooks/useChromeStorageValue"
 import type { DownloadedChapterRecord } from "@/src/domain/history/types"
 import { useSidepanelDownloadedChapters } from "./useSidepanelSeriesContextHistory"
 import logger from "@/src/runtime/logger"
@@ -33,6 +36,9 @@ export interface SidepanelSeriesContextData {
   siteId: string | undefined
   author?: string
   coverUrl?: string
+  downloadedChapters?: DownloadedChapterRecord[]
+  historyReadStatus?: StorageReadStatus
+  retryHistory?: () => void
   retrySeriesContext?: () => void
 }
 
@@ -117,7 +123,8 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
       initialValue: { kind: "unsupported" },
       parse: parseStoredContext,
     })
-  const downloadedChapters = useSidepanelDownloadedChapters()
+  const history = useSidepanelDownloadedChapters()
+  const downloadedChapters = history.chapters
 
   useEffect(() => {
     // A Side Panel can open after an MV3 worker restart or a dropped page
@@ -175,6 +182,9 @@ export function useSidepanelSeriesContext(): SidepanelSeriesContextData {
     seriesRevision:
       activeTabContext.kind === "ready" ? activeTabContext.revision : undefined,
     ...data,
+    downloadedChapters,
+    historyReadStatus: history.status,
+    retryHistory: history.retry,
     retrySeriesContext:
       activeTabContext.kind === "error" ? retrySeriesContext : undefined,
     // Until the session snapshot has hydrated, an initial "unsupported"

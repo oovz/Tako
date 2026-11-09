@@ -100,16 +100,14 @@ test.describe("Navigation state management", () => {
     )
 
     const sidepanel = await openSidepanelHarness(context, extensionId, page)
-    await expect(
-      sidepanel.getByRole("button", { name: /Select chapters/i })
-    ).toBeVisible()
+    await expect(sidepanel.getByRole("tab", { name: "Manga" })).toBeVisible()
     await page.bringToFront()
 
     await page.goto(buildExampleUrl("/"), { waitUntil: "domcontentloaded" })
 
     await reloadSidepanelHarness(sidepanel, page)
     await page.bringToFront()
-    await expect(sidepanel.getByText(/No series detected/i)).toBeVisible()
+    await expect(sidepanel.getByRole("tab", { name: "Manga" })).toHaveCount(0)
 
     await sidepanel.close()
   })

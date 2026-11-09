@@ -1,6 +1,7 @@
 import { test, expect } from "./fixtures/extension"
 import {
   getTabId,
+  openMangaSidepanelHarness,
   openSidepanelHarness,
   waitForTabSeriesTitle,
   waitForTabStateCleared,
@@ -31,8 +32,8 @@ test.describe("Shonen Jump+ navigation", () => {
       ShonenJumpPlus.BASIC_SERIES.series.seriesTitle
     )
 
-    const series = ShonenJumpPlus.BASIC_SERIES.series
-    const cover = sp.getByRole("img", { name: series.seriesTitle })
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    const cover = sp.locator(".manga-cover img")
     await expect(cover).toHaveAttribute("src", /^blob:/)
     await expect
       .poll(() =>
@@ -42,7 +43,9 @@ test.describe("Shonen Jump+ navigation", () => {
       )
       .toBe(true)
 
-    await sp.getByRole("button", { name: /Select Chapters/i }).click()
+    await sp.getByRole("tab", { name: "Manga", exact: true }).click()
+    if (await sp.getByRole("radio", { name: "Chapters", exact: true }).count())
+      await sp.getByRole("radio", { name: "Chapters", exact: true }).click()
     const lockedChapter = sp.getByRole("checkbox", { name: /^140話$/ })
     await expect(lockedChapter).toBeDisabled()
     await expect(sp.getByText("Locked", { exact: true }).first()).toBeVisible()
@@ -62,7 +65,7 @@ test.describe("Shonen Jump+ navigation", () => {
     await page.goto(episode1Url, { waitUntil: "domcontentloaded" })
     const tabId = await getTabId(page, context)
 
-    const sp = await openSidepanelHarness(context, extensionId, page)
+    const sp = await openMangaSidepanelHarness(context, extensionId, page)
     await expect(sp.locator("#root")).toBeVisible()
     await page.bringToFront()
 

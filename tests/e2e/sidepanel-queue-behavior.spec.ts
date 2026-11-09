@@ -293,11 +293,12 @@ test.describe("Side panel queue behavior", () => {
     await expect(sp.getByText("History Link Task")).toBeVisible({
       timeout: 15000,
     })
+    await sp.getByRole("tab", { name: "Recent" }).click()
     await expect(
-      sp.getByRole("button", { name: "View Full History" })
+      sp.getByRole("button", { name: "View history in Options" })
     ).toBeVisible({ timeout: 15000 })
 
-    await sp.getByRole("button", { name: "View Full History" }).click()
+    await sp.getByRole("button", { name: "View history in Options" }).click()
 
     await expect
       .poll(() => existingOptionsPage.url())

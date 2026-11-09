@@ -100,7 +100,8 @@ describe("ChapterSelector semantics", () => {
       })
     )
 
-    expect(markup.match(/<button/g)).toHaveLength(2)
+    expect(markup.match(/<button/g)).toHaveLength(3)
+    expect(markup).toContain('inert=""')
     expect(markup).not.toContain('role="button"')
     expect(markup).toContain('aria-expanded="false"')
   })
@@ -144,7 +145,7 @@ describe("ChapterSelector semantics", () => {
   )
 
   it("keeps virtualization enabled when a large volume is collapsed or expanded", () => {
-    const chapters = Array.from({ length: 48 }, (_, index) => ({
+    const chapters = Array.from({ length: 200 }, (_, index) => ({
       id: `chapter-${index + 1}`,
       title: `Chapter ${index + 1}`,
       url: `https://example.com/${index + 1}`,

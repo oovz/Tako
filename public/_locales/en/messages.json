@@ -1904,5 +1904,278 @@
   },
   "destination_chromeFallback": {
     "message": "Switched to Chrome Downloads"
+  },
+  "sidepanel_tab_queue": {
+    "message": "Queue"
+  },
+  "sidepanel_tab_manga": {
+    "message": "Manga"
+  },
+  "sidepanel_tab_recent": {
+    "message": "Recent"
+  },
+  "sidepanel_navigation": {
+    "message": "Side panel navigation"
+  },
+  "sidepanel_inProgress": {
+    "message": "In progress"
+  },
+  "sidepanel_upNext": {
+    "message": "Up next"
+  },
+  "sidepanel_needsAttention": {
+    "message": "Needs attention"
+  },
+  "sidepanel_noActiveDownloads": {
+    "message": "No active downloads."
+  },
+  "sidepanel_noRecentDownloads": {
+    "message": "No saved chapters yet."
+  },
+  "sidepanel_viewHistoryOptions": {
+    "message": "View history in Options"
+  },
+  "sidepanel_savedCount": {
+    "message": "$value1$/$value2$ saved",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_taskPercent": {
+    "message": "Task $value1$% complete",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterCount": {
+    "message": "$value1$ chapters",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneChapter": {
+    "message": "1 chapter"
+  },
+  "sidepanel_volumeCount": {
+    "message": "$value1$ volumes",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_oneVolume": {
+    "message": "1 volume"
+  },
+  "sidepanel_chapterNumber": {
+    "message": "Ch. $value1$",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chapterProgress": {
+    "message": "Current chapter image progress"
+  },
+  "sidepanel_waitingForSave": {
+    "message": "Saving · awaiting confirmation"
+  },
+  "sidepanel_imageCount": {
+    "message": "$value1$/$value2$ images",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_cancelTask": {
+    "message": "Cancel task"
+  },
+  "sidepanel_cancelTaskQuestion": {
+    "message": "Cancel this task?"
+  },
+  "sidepanel_cancelTaskNote": {
+    "message": "Saved files stay. Transfers already in Chrome Downloads continue."
+  },
+  "sidepanel_keepDownloading": {
+    "message": "Keep downloading"
+  },
+  "sidepanel_reorderTask": {
+    "message": "Reorder task"
+  },
+  "sidepanel_queuePosition": {
+    "message": "Queue position"
+  },
+  "sidepanel_moveTask": {
+    "message": "Move"
+  },
+  "sidepanel_queueChanged": {
+    "message": "The queue changed. Try moving the task again."
+  },
+  "sidepanel_undoExpired": {
+    "message": "Undo is no longer available."
+  },
+  "sidepanel_moreDetails": {
+    "message": "More details"
+  },
+  "sidepanel_lessDetail": {
+    "message": "Less detail"
+  },
+  "sidepanel_reviewSelection": {
+    "message": "Review selection"
+  },
+  "sidepanel_clearSelection": {
+    "message": "Clear all"
+  },
+  "sidepanel_downloadAction": {
+    "message": "Download"
+  },
+  "sidepanel_saveFormat": {
+    "message": "Save format"
+  },
+  "sidepanel_saveTo": {
+    "message": "Save to"
+  },
+  "sidepanel_images": {
+    "message": "Images"
+  },
+  "sidepanel_selectedFolder": {
+    "message": "Selected folder"
+  },
+  "sidepanel_chromeDownloads": {
+    "message": "Chrome Downloads"
+  },
+  "sidepanel_justNow": {
+    "message": "Just now"
+  },
+  "sidepanel_restartTaskQuestion": {
+    "message": "Restart this task?"
+  },
+  "sidepanel_duplicateWarning": {
+    "message": "Restarting may create duplicate files. Check browser downloads first."
+  },
+  "sidepanel_restartAnyway": {
+    "message": "Restart anyway"
+  },
+  "common_close": {
+    "message": "Close"
+  },
+  "chapterStatus_queued": {
+    "message": "Queued"
+  },
+  "chapterStatus_downloading": {
+    "message": "Downloading"
+  },
+  "chapterStatus_completed": {
+    "message": "Saved"
+  },
+  "chapterStatus_failed": {
+    "message": "Failed"
+  },
+  "chapterStatus_partial_success": {
+    "message": "Partly saved"
+  },
+  "chapterStatus_skipped": {
+    "message": "Skipped"
+  },
+  "chapterStatus_canceled": {
+    "message": "Canceled"
+  },
+  "sidepanel_retryTaskQuestion": {
+    "message": "Retry these chapters?"
+  },
+  "sidepanel_retryAnyway": {
+    "message": "Retry anyway"
+  },
+  "sidepanel_historyReadFailed": {
+    "message": "Couldn’t load history."
+  },
+  "sidepanel_historyStale": {
+    "message": "History may be out of date."
+  },
+  "sidepanel_volumeNumber": {
+    "message": "Volume $value1$",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_chaptersView": {
+    "message": "Chapters"
+  },
+  "sidepanel_closeReview": {
+    "message": "Close review"
+  },
+  "sidepanel_hideReview": {
+    "message": "Hide review"
+  },
+  "sidepanel_stageDownloading": {
+    "message": "Downloading"
+  },
+  "sidepanel_stagePacking": {
+    "message": "Packing"
+  },
+  "sidepanel_stageSaving": {
+    "message": "Saving"
+  },
+  "sidepanel_stageCanceling": {
+    "message": "Canceling…"
+  },
+  "sidepanel_saveConfirmation": {
+    "message": "Waiting for confirmation"
+  },
+  "sidepanel_cancelCleanup": {
+    "message": "Waiting for cleanup"
+  },
+  "sidepanel_archiveCaption": {
+    "message": "$value1$ archive",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      }
+    }
+  },
+  "sidepanel_taskDetailCount": {
+    "message": "$value1$ of $value2$ saved",
+    "placeholders": {
+      "value1": {
+        "content": "$1"
+      },
+      "value2": {
+        "content": "$2"
+      }
+    }
+  },
+  "sidepanel_retryRemaining": {
+    "message": "Retry remaining chapters"
+  },
+  "sidepanel_retryRemainingNote": {
+    "message": "Saved chapters are kept. Retry the remaining chapters."
+  },
+  "sidepanel_restoreFolderNote": {
+    "message": "Grant access to the original folder to continue."
+  },
+  "sidepanel_checkDownloadsNote": {
+    "message": "Check browser downloads before restarting to avoid duplicate files."
+  },
+  "sidepanel_checkDownloads": {
+    "message": "Check downloads"
+  },
+  "sidepanel_chapterResults": {
+    "message": "Chapter results"
   }
 }

@@ -57,6 +57,7 @@ describe("task row content and controls", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("chrome", {
       ...chrome,
+      storage: { onChanged: { addListener: vi.fn(), removeListener: vi.fn() } },
       runtime: { getURL: (path: string) => path, sendMessage },
     })
     sendMessage.mockImplementation(async (request: { type: string }) =>
@@ -118,35 +119,35 @@ describe("task row content and controls", () => {
     trigger.focus()
     await act(async () => trigger.click())
     expect(onCancelTask).not.toHaveBeenCalled()
-    const cancel = button(t("common_no"))
+    const cancel = button(t("sidepanel_keepDownloading"))
     expect(document.activeElement).toBe(cancel)
-    await act(async () =>
-      cancel.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Tab", bubbles: true })
-      )
-    )
-    expect(document.activeElement?.textContent).toBe("Yes")
     await act(async () =>
       document.activeElement!.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
       )
     )
-    expect(container.querySelector('[role="group"]')).toBeNull()
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).toBeNull()
     expect(document.activeElement).toBe(trigger)
     await act(async () => trigger.click())
     await act(async () => root.render(queue(new Set(["task-one"]))))
-    expect(button(t("common_no")).disabled).toBe(true)
+    expect(button(t("sidepanel_keepDownloading")).disabled).toBe(true)
     expect(
-      container.querySelector('[role="group"]')?.getAttribute("aria-busy")
+      container
+        .querySelector('[data-open="true"] [role="group"]')
+        ?.getAttribute("aria-busy")
     ).toBe("true")
     await act(async () =>
       container
-        .querySelector('[role="group"]')!
+        .querySelector('[data-open="true"] [role="group"]')!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
         )
     )
-    expect(container.querySelector('[role="group"]')).not.toBeNull()
+    expect(
+      container.querySelector('[data-open="true"] [role="group"]')
+    ).not.toBeNull()
     expect(onCancelTask).not.toHaveBeenCalled()
   })
 
@@ -155,14 +156,14 @@ describe("task row content and controls", () => {
     const onRemoveTask = vi.fn(async (_taskId: string) => {})
     const props = rowProps({ isRetrying: true, onRetryFailed, onRemoveTask })
     await render(props)
-    expect(button(t("sidepanel_retryFailedChapters")).disabled).toBe(true)
-    expect(button(t("common_remove")).disabled).toBe(false)
-    await act(async () => button(t("sidepanel_retryFailedChapters")).click())
-    await act(async () => button(t("common_remove")).click())
+    expect(button(t("sidepanel_retryRemaining")).disabled).toBe(true)
+    expect(button(t("common_dismiss")).disabled).toBe(false)
+    await act(async () => button(t("sidepanel_retryRemaining")).click())
+    await act(async () => button(t("common_dismiss")).click())
     expect(onRetryFailed).not.toHaveBeenCalled()
     expect(onRemoveTask).toHaveBeenCalledWith("task-one")
     await render({ ...props, isRetrying: false })
-    await act(async () => button(t("sidepanel_retryFailedChapters")).click())
+    await act(async () => button(t("sidepanel_retryRemaining")).click())
     expect(onRetryFailed).toHaveBeenCalledWith("task-one")
   })
 
@@ -175,7 +176,9 @@ describe("task row content and controls", () => {
       failureCategory: "provider_changed",
     })
     await render(rowProps({ task: captured }))
-    expect(container.querySelector("h3")?.textContent).toBe("Series One")
+    expect(container.querySelector(".task-outcome > strong")?.textContent).toBe(
+      "Series One"
+    )
     expect(container.textContent).toContain("MangaDex")
     expect(container.textContent).toContain("2/4")
     expect(container.textContent).toContain(t("taskFolder_originalUnavailable"))
@@ -204,7 +207,10 @@ describe("task row content and controls", () => {
   it("uses task authorization for its cover request", async () => {
     await render(
       rowProps({
-        task: task({ coverUrl: "https://uploads.mangadex.org/cover.jpg" }),
+        task: task({
+          status: "downloading",
+          coverUrl: "https://uploads.mangadex.org/cover.jpg",
+        }),
       })
     )
     expect(sendMessage).toHaveBeenCalledWith(

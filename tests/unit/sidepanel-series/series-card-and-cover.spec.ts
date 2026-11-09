@@ -1,33 +1,18 @@
 // @vitest-environment happy-dom
-import { act, createElement, createRef } from "react"
+import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { Collapsible } from "@/components/ui/collapsible"
 import { SeriesContextCard } from "@/entrypoints/sidepanel/components/SeriesContextCard"
 import { CoverPreview } from "@/entrypoints/sidepanel/components/CoverPreview"
-import { TAB_NOT_SUPPORTED_MSG } from "@/entrypoints/sidepanel/messages"
 import { series } from "./fixtures"
 
 describe("series card and cover presentation", () => {
   let root: Root
   let container: HTMLDivElement
   const sendMessage = vi.fn()
-  const onOpenChange = vi.fn()
-  const triggerRef = createRef<HTMLButtonElement>()
-
-  async function render(data = series(), open = false) {
+  async function render(data = series()) {
     await act(async () =>
-      root.render(
-        createElement(
-          Collapsible,
-          { open, onOpenChange },
-          createElement(SeriesContextCard, {
-            data,
-            isExpanded: open,
-            triggerRef,
-          })
-        )
-      )
+      root.render(createElement(SeriesContextCard, { data }))
     )
   }
 
@@ -55,52 +40,30 @@ describe("series card and cover presentation", () => {
     vi.unstubAllGlobals()
   })
 
-  it("shows loading before stale failure or series data and gives retry its own action", async () => {
-    const retry = vi.fn()
-    await render(series({ isLoading: true, retrySeriesContext: retry }))
-    expect(container.querySelector("h1")).toBeNull()
-    expect(container.querySelector("button")).toBeNull()
-    await render(series({ retrySeriesContext: retry }))
-    const action = container.querySelector("button")!
-    expect(action.disabled).toBe(false)
-    expect(action.hasAttribute("aria-expanded")).toBe(false)
-    expect(action.hasAttribute("aria-controls")).toBe(false)
-    await act(async () => action.click())
-    expect(retry).toHaveBeenCalledOnce()
-    expect(onOpenChange).not.toHaveBeenCalled()
-    await render(series({ blockingMessage: TAB_NOT_SUPPORTED_MSG }))
-    expect(container.querySelector("button")?.disabled).toBe(true)
-    await render(series({ mangaTitle: "" }))
-    expect(container.querySelector("h1")).not.toBeNull()
-    expect(container.querySelector("button")).toBeNull()
-  })
-
-  it("renders series counts and closes an expanded selector while chapters reload", async () => {
+  it("shows the author and counts without repeating the site integration", async () => {
     await render(
       series({ author: "Artist", chapterListNotice: "adult-consent-required" })
     )
     expect(container.querySelector("h1")?.textContent).toBe("Series One")
     expect(container.textContent).toContain("Artist")
     expect(container.textContent).not.toContain("MangaDex")
-    expect(container.textContent).toContain("3 Chapters")
-    expect(container.textContent).toContain("1 Volumes")
-    expect(triggerRef.current).toBe(container.querySelector("button"))
-    triggerRef.current!.focus()
-    expect(document.activeElement).toBe(triggerRef.current)
-    await act(async () => triggerRef.current!.click())
-    expect(onOpenChange).toHaveBeenLastCalledWith(true)
-    await render(series({ items: [], isChaptersLoading: true }), true)
-    expect(container.textContent).not.toMatch(/Artist|MangaDex/)
-    expect(triggerRef.current!.disabled).toBe(false)
-    expect(triggerRef.current!.getAttribute("aria-expanded")).toBe("true")
-    await act(async () => triggerRef.current!.click())
-    expect(onOpenChange).toHaveBeenLastCalledWith(false)
-    await render(series({ items: [] }))
-    expect(triggerRef.current!.disabled).toBe(true)
-    await render(series({ isChaptersLoading: true }))
-    expect(triggerRef.current!.disabled).toBe(true)
-    await render(series({ tabId: undefined }))
-    expect(triggerRef.current!.disabled).toBe(true)
+    expect(container.textContent).toContain("3 chapters")
+    expect(container.textContent).toContain("1 volume")
+  })
+
+  it("makes the narrow header details reversible without changing selection", async () => {
+    await render(series({ author: "A long author name" }))
+    const details = container.querySelector<HTMLButtonElement>(
+      ".manga-details-toggle"
+    )!
+    expect(details.getAttribute("aria-expanded")).toBe("false")
+    await act(async () => details.click())
+    expect(details.getAttribute("aria-expanded")).toBe("true")
+    expect(
+      container.querySelector(".manga-header")?.getAttribute("data-details")
+    ).toBe("true")
+    await act(async () => details.click())
+    expect(details.getAttribute("aria-expanded")).toBe("false")
   })
 
   it.each([
@@ -186,12 +149,8 @@ describe("series card and cover presentation", () => {
     expect(
       container.firstElementChild?.getAttribute("data-preview-state")
     ).toBe("fallback")
-    expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "chrome-extension://test/icon/128.png"
-    )
-    await act(async () =>
-      container.querySelector("img")!.dispatchEvent(new Event("error"))
-    )
+    expect(container.querySelector("img")).toBeNull()
+    expect(container.querySelector(".cover-placeholder")).not.toBeNull()
     sendMessage.mockResolvedValueOnce({
       success: true,
       integrationId: identity.integrationId,
