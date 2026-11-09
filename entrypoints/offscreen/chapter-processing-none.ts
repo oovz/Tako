@@ -1,3 +1,7 @@
+import {
+  buildCoverOutputFilename,
+  buildImageOutputFilename,
+} from "@/src/shared/output-filenames"
 import logger from "@/src/runtime/logger"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
 import { assertNonemptyImagePayload } from "@/src/shared/site-integration-utils"
@@ -8,11 +12,7 @@ import {
   downloadChapterImages,
   isResourceLimit,
 } from "./chapter-image-downloads"
-import {
-  buildCoverOutputFilename,
-  buildImageOutputFilename,
-  buildOptionalComicInfoXml,
-} from "./chapter-processing-helpers"
+import { buildOptionalComicInfoXml } from "./chapter-processing-helpers"
 import { FsaWriteError, toFsaWriteError } from "./error-categories"
 import {
   createFsaDestinationFailureOutcome,

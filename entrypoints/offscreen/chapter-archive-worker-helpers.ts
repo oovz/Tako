@@ -1,13 +1,11 @@
+import { buildCoverOutputFilename } from "@/src/shared/output-filenames"
 import type { Chapter } from "@/src/types/chapter"
 import logger from "@/src/runtime/logger"
 import { sanitizeFilename } from "@/src/shared/filename-sanitizer"
 import { MAX_ARCHIVE_BYTES, MAX_CHAPTER_IMAGES } from "@/src/constants/timeouts"
 import type { OffscreenLiveResourceLease } from "@/src/runtime/offscreen-live-resource-ledger"
 import { ArchiveWorkerSession } from "./archive-worker-session"
-import {
-  buildCoverOutputFilename,
-  buildOptionalComicInfoXml,
-} from "./chapter-processing-helpers"
+import { buildOptionalComicInfoXml } from "./chapter-processing-helpers"
 import { ChapterResourceLimitError } from "./chapter-image-downloads"
 import type { ArchiveNormalizationSettings } from "./chapter-processing-types"
 import type { SeriesMetadataInput } from "./helpers"

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildCoverOutputFilename,
   buildImageOutputFilename,
-} from "@/entrypoints/offscreen/chapter-processing-helpers"
+} from "@/src/shared/output-filenames"
 
 describe("chapter output filename contracts", () => {
   it.each([
