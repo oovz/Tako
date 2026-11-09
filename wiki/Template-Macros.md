@@ -8,10 +8,10 @@ Templates choose the folders and names Tako uses for downloaded chapters. A macr
 
 Open **Options → Storage & Files**. The two template fields are:
 
-| Field                       | Default              | What it controls                                                      |
-| --------------------------- | -------------------- | --------------------------------------------------------------------- |
-| **Directory Path Template** | `TMD/<SERIES_TITLE>` | Folders beneath your download location                                |
-| **Filename Template**       | `<CHAPTER_TITLE>`    | The chapter archive name, or the chapter folder for individual images |
+| Field                                          | Default              | What it controls                                                      |
+| ---------------------------------------------- | -------------------- | --------------------------------------------------------------------- |
+| **Save subfolder path**                        | `TMD/<SERIES_TITLE>` | Folders beneath your download location                                |
+| **Archive filename** / **Chapter folder name** | `<CHAPTER_TITLE>`    | The chapter archive name, or the chapter folder for individual images |
 
 For a series called _Example Manga_ and a chapter called _Chapter 1_, the defaults produce:
 
@@ -20,6 +20,8 @@ TMD/Example Manga/Chapter 1.cbz
 ```
 
 Choose the format separately. Tako adds `.cbz` or `.zip` automatically. With **No Archive**, the chapter name becomes a folder containing the images.
+
+Use **Files inside each archive** to change image names or include cover and metadata files. With **No Archive**, the same controls appear under **Files inside each chapter folder**.
 
 Use `/` between folders in the directory field. Putting `.cbz` in that field creates a folder with that suffix.
 
