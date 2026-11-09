@@ -32,7 +32,7 @@
 
 1. [从 Chrome 应用商店安装 Tako](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb)。
 2. 在支持的网站打开漫画系列或章节页面，点击 Tako 图标。
-3. 在侧边栏中选择章节，点击**下载**。
+3. 打开侧边栏的**漫画**页，选择章节，点击**下载**。
 
 Tako 默认将章节保存为 CBZ。要更改格式或文件命名规则，请打开**选项 → 存储与文件**。
 

@@ -32,7 +32,7 @@ Queue batches of chapters from different series in Chrome’s side panel. Keep b
 
 1. [Install Tako from the Chrome Web Store](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
 2. Open a series or chapter on a supported site and click the Tako icon.
-3. Select your chapters in the side panel, then click **Download**.
+3. Open **Manga** in the side panel, select your chapters, then click **Download**.
 
 Tako saves chapters as CBZ files by default. For other formats and naming options, open **Options → Storage & Files**.
 

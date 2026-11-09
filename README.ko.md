@@ -32,7 +32,7 @@ Chrome 사이드 패널에서 여러 작품의 챕터를 대기열에 추가할 
 
 1. [Chrome 웹 스토어에서 Tako를 설치하세요](https://chromewebstore.google.com/detail/tako-manga-downloader/hlodmckfkmbenkknmailfekehgajpmbb).
 2. 지원 사이트에서 작품이나 챕터를 열고 Tako 아이콘을 클릭하세요.
-3. 사이드 패널에서 챕터를 선택하고 **다운로드**를 클릭하세요.
+3. 사이드 패널의 **만화** 탭에서 챕터를 선택하고 **다운로드**를 클릭하세요.
 
 Tako는 기본적으로 챕터를 CBZ로 저장합니다. 형식이나 파일 이름 규칙을 바꾸려면 **옵션 → 저장 및 파일**을 여세요.
 

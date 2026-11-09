@@ -26,8 +26,10 @@ Keep that folder in place while the extension is installed. For a local build, u
 
 1. Open a manga on a [supported site](Supported-Sites). Most sites use the series page; Shonen Jump+ (少年ジャンプ＋) uses an episode page.
 2. Click the Tako icon to open Chrome's Side Panel.
-3. Select the chapters you want and click **Download**.
-4. Follow progress in the queue. When saving finishes, the result shows **Saved** or **Saved to folder**.
+3. Open **Manga**, select the chapters you want, and click **Download**.
+4. Follow progress in **Queue**. Open **Recent** to see saved chapters.
+
+The side panel opens on **Queue**. **Manga** appears when the active tab has a supported series. Drag a queued task’s handle to change its position, or click the handle to enter a position. **Recent** shows saved chapters and links to the full history in Options.
 
 Tako starts with CBZ files saved through Chrome Downloads. You can open a CBZ with a compatible comic reader.
 
