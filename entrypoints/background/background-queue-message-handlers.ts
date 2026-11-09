@@ -1,3 +1,4 @@
+import { DownloadTaskStateSchema } from "@/src/runtime/queue-state-schemas"
 import type { BackgroundRuntimeHandlerDependencies } from "@/entrypoints/background/background-runtime-handler-dependencies"
 import type { RuntimeMessageHandlerMap } from "@/src/runtime/runtime-message-dispatcher"
 import type {
@@ -11,6 +12,9 @@ type QueueMessageType =
   | "RETRY_FAILED_CHAPTERS"
   | "RESTART_TASK"
   | "MOVE_TASK_TO_TOP"
+  | "GET_SIDEPANEL_TASK"
+  | "REORDER_QUEUED_TASKS"
+  | "RENEW_QUEUE_UNDO"
   | "CLEAR_ALL_HISTORY"
   | "REMOVE_TASK"
   | "CANCEL_TASK"
@@ -35,6 +39,23 @@ export function createBackgroundQueueMessageHandlers(
       )
       return { success: true }
     },
+    GET_SIDEPANEL_TASK: async (message) => {
+      const task = await deps.queueRepository.getTask(message.payload.taskId)
+      return {
+        success: true,
+        task: task ? DownloadTaskStateSchema.parse(task) : null,
+      }
+    },
+    REORDER_QUEUED_TASKS: async (message) => {
+      await deps.queueApplicationCommands.reorderQueuedTasks(message.payload)
+      return { success: true }
+    },
+    RENEW_QUEUE_UNDO: async (message) => ({
+      success: true,
+      undo: await deps.queueApplicationCommands.renewQueueUndo(
+        message.payload.token
+      ),
+    }),
     MOVE_TASK_TO_TOP: async (message) => {
       await deps.queueApplicationCommands.moveTaskToTop(message.payload.taskId)
       return { success: true }

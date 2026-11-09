@@ -570,6 +570,59 @@ export const runtimeMessageRegistry = {
     allowedSenders: ["sidepanel", "options"],
     readiness: "runtime-ready",
   }),
+  GET_SIDEPANEL_TASK: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("GET_SIDEPANEL_TASK"),
+      payload: z.strictObject({ taskId: z.string().min(1) }),
+    }),
+    response: z.union([
+      z.strictObject({
+        success: z.literal(true),
+        task: DownloadTaskStateSchema.nullable(),
+      }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "query",
+    allowedSenders: ["sidepanel"],
+    readiness: "runtime-ready",
+  }),
+  REORDER_QUEUED_TASKS: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("REORDER_QUEUED_TASKS"),
+      ...CommandEnvelopeShape,
+      payload: z.strictObject({
+        expectedTaskIds: z.array(z.string().min(1)),
+        taskIds: z.array(z.string().min(1)),
+      }),
+    }),
+    response: successOrFailure(),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["sidepanel"],
+    readiness: "runtime-ready",
+  }),
+  RENEW_QUEUE_UNDO: defineRuntimeMessage({
+    request: z.strictObject({
+      target: z.literal("background"),
+      type: z.literal("RENEW_QUEUE_UNDO"),
+      ...CommandEnvelopeShape,
+      payload: z.strictObject({ token: z.string().min(1) }),
+    }),
+    response: z.union([
+      z.strictObject({
+        success: z.literal(true),
+        undo: PendingUndoReceiptSchema,
+      }),
+      RuntimeFailureSchema,
+    ]),
+    target: "background",
+    kind: "command",
+    allowedSenders: ["sidepanel"],
+    readiness: "runtime-ready",
+  }),
   MOVE_TASK_TO_TOP: defineRuntimeMessage({
     request: z.strictObject({
       target: z.literal("background"),

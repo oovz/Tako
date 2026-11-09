@@ -334,3 +334,20 @@ describe("toQueueTaskSummary", () => {
     expect(summary.activeBlock).toBe("provider_network_policy_pending")
   })
 })
+
+it("distinguishes contiguous and sparse chapter batches without inventing intermediate selections", () => {
+  const summary = (numbers: number[]) =>
+    toQueueTaskSummary(
+      makeTask({
+        chapters: numbers.map((chapterNumber, index) =>
+          makeChapter("https://example.com/" + index, "queued", {
+            chapterNumber,
+            index: index + 1,
+          })
+        ),
+      })
+    ).chapterRange
+  expect(summary([8, 9, 10])).toBe("8–10")
+  expect(summary([1, 4])).toBe("1, 4")
+  expect(summary([1, 3, 5, 7])).toBe("1, 3, 5…")
+})

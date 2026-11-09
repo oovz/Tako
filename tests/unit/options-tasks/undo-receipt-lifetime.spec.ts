@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { Toaster, toast } from "sonner"
 import { useOptionsDownloadActions } from "@/entrypoints/options/hooks/useDownloadsTabState-actions"
+import {
+  QueueUndoProvider,
+  QueueUndoRegion,
+} from "@/entrypoints/sidepanel/components/QueueUndo"
 import { useCommandCenterActions } from "@/entrypoints/sidepanel/hooks/useCommandCenterActions"
 import { t } from "@/src/runtime/i18n"
 import type { RuntimeMessage } from "@/src/runtime/runtime-message-contracts"
@@ -21,7 +25,12 @@ function OptionsView() {
 
 function SidepanelView() {
   cancel = useCommandCenterActions().handleCancelTask
-  return createElement(Toaster)
+  return createElement(QueueUndoRegion)
+}
+function SidepanelRoot() {
+  return createElement(QueueUndoProvider, {
+    children: createElement(SidepanelView),
+  })
 }
 
 beforeEach(() => {
@@ -63,7 +72,7 @@ afterEach(() => {
 async function mountSurface(surface: "options" | "sidepanel") {
   await act(async () =>
     root.render(
-      createElement(surface === "options" ? OptionsView : SidepanelView)
+      createElement(surface === "options" ? OptionsView : SidepanelRoot)
     )
   )
 }
@@ -77,6 +86,10 @@ async function showQueuedReceipt(surface: "options" | "sidepanel") {
   const response = Promise.withResolvers<unknown>()
   sendMessage.mockImplementation((message: RuntimeMessage) => {
     if (message.type === "CANCEL_TASK") return response.promise
+    if (message.type === "RENEW_QUEUE_UNDO") {
+      receipt.expiresAt = Date.now() + 5000
+      return { success: true, undo: { ...receipt } }
+    }
     expect(message.type).toBe("UNDO_QUEUE_ACTION")
     if (message.type === "UNDO_QUEUE_ACTION") {
       expect(message.payload.token).toBe(receipt.token)
@@ -111,7 +124,11 @@ it.each(["options", "sidepanel"] as const)(
     const undo = findUndo()
     expect(undo).toBeDefined()
     await act(async () => undo!.click())
-    expect(sendMessage.mock.calls.map(([message]) => message)).toEqual([
+    expect(
+      sendMessage.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.type !== "RENEW_QUEUE_UNDO")
+    ).toEqual([
       expect.objectContaining({
         type: "CANCEL_TASK",
         payload: { taskId: "queued-task" },
@@ -130,12 +147,40 @@ it.each(["options", "sidepanel"] as const)(
     await mountSurface(surface)
     const receipt = await showQueuedReceipt(surface)
     expect(findUndo()).toBeDefined()
+    const elsewhere = document.createElement("button")
+    document.body.append(elsewhere)
+    await act(async () => elsewhere.focus())
     await act(async () =>
       vi.advanceTimersByTimeAsync(receipt.expiresAt - Date.now() + 1_000)
     )
+    elsewhere.remove()
     expect(findUndo()).toBeUndefined()
-    expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual([
-      "CANCEL_TASK",
-    ])
+    expect(
+      sendMessage.mock.calls
+        .map(([message]) => message.type)
+        .filter((type) => type !== "RENEW_QUEUE_UNDO")
+    ).toEqual(["CANCEL_TASK"])
   }
 )
+
+it("renews focused sidepanel Undo past its original expiry and expires after focus leaves without stealing it", async () => {
+  await mountSurface("sidepanel")
+  await showQueuedReceipt("sidepanel")
+  const undo = findUndo()!
+  await act(async () => undo.focus())
+  await act(async () => vi.advanceTimersByTimeAsync(8000))
+  expect(findUndo()).toBe(undo)
+  expect(document.activeElement).toBe(undo)
+  expect(
+    sendMessage.mock.calls.some(
+      ([message]) => message.type === "RENEW_QUEUE_UNDO"
+    )
+  ).toBe(true)
+  const elsewhere = document.createElement("button")
+  document.body.append(elsewhere)
+  await act(async () => elsewhere.focus())
+  await act(async () => vi.advanceTimersByTimeAsync(6000))
+  expect(findUndo()).toBeUndefined()
+  expect(document.activeElement).toBe(elsewhere)
+  elsewhere.remove()
+})

@@ -17,6 +17,8 @@ import {
   interruptDownloadTask as decideTaskInterruption,
   failTaskForSave as decideSaveFailure,
   moveQueuedTaskToTop as decideMoveQueuedTaskToTop,
+  reorderQueuedTasks as decideReorderQueuedTasks,
+  renewPendingUndoAction as decideRenewPendingUndo,
   reconcileExpiredPendingUndoActions as decideExpiredPendingUndoReconciliation,
   recoverQueueAfterStartup as decideStartupRecovery,
   recordTaskDispatchError as decideTaskDispatchError,
@@ -353,6 +355,21 @@ export class QueueRepository {
     )
   }
 
+  async reorderQueuedTasks(
+    input: Parameters<typeof decideReorderQueuedTasks>[1]
+  ) {
+    const detached = structuredClone(input)
+    return await this.executeDecision((state) =>
+      decideReorderQueuedTasks(state, detached)
+    )
+  }
+
+  async renewPendingUndoAction(token: string) {
+    return await this.executeDecision((state) =>
+      decideRenewPendingUndo(state, { token, now: Date.now() })
+    )
+  }
+
   async clearTerminalHistory(): Promise<
     ReturnType<typeof decideClearTerminalHistory>["result"]
   > {
@@ -516,10 +533,11 @@ export class QueueRepository {
   }
 
   async finalizePendingUndoAction(
-    token: string
+    token: string,
+    now?: number
   ): Promise<ReturnType<typeof decidePendingUndoFinalization>["result"]> {
     return await this.executeDecision((state) =>
-      decidePendingUndoFinalization(state, { token })
+      decidePendingUndoFinalization(state, { token, now })
     )
   }
 

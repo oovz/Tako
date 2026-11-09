@@ -13,6 +13,8 @@ import {
   finalizePendingUndoAction,
   interruptDownloadTask,
   moveQueuedTaskToTop,
+  reorderQueuedTasks,
+  renewPendingUndoAction,
   reconcileExpiredPendingUndoActions,
   recordTaskDispatchError,
   recoverQueueAfterStartup,
@@ -2014,5 +2016,109 @@ describe("queue aggregate kernel rejection matrices", () => {
       missing,
       "task-not-found"
     )
+  })
+})
+
+describe("queued order and accessible Undo", () => {
+  it("moves freely between queued positions while preserving active ownership and terminal entries", () => {
+    const state = createState(
+      [
+        createTask("active", "downloading"),
+        createTask("a"),
+        createTask("done", "completed"),
+        createTask("b"),
+        createTask("c"),
+      ],
+      createLease()
+    )
+    const result = reorderQueuedTasks(state, {
+      expectedTaskIds: ["a", "b", "c"],
+      taskIds: ["c", "a", "b"],
+    })
+    expect(result.result.outcome).toBe("applied")
+    expect(result.next.queue.map((task) => task.id)).toEqual([
+      "active",
+      "c",
+      "done",
+      "a",
+      "b",
+    ])
+    expect(result.next.lease).toEqual(state.lease)
+    expect(state.queue.map((task) => task.id)).toEqual([
+      "active",
+      "a",
+      "done",
+      "b",
+      "c",
+    ])
+  })
+  it("rejects an order based on a task that the scheduler has already started", () => {
+    const state = createState([createTask("a", "downloading"), createTask("b")])
+    const result = reorderQueuedTasks(state, {
+      expectedTaskIds: ["a", "b"],
+      taskIds: ["b", "a"],
+    })
+    expect(result.result).toEqual({
+      outcome: "rejected",
+      reason: "stale-order",
+    })
+    expect(result.changedKeys).toEqual([])
+  })
+  it.each([[["a", "a"]], [["a", "other"]], [["a"]]])(
+    "rejects an incomplete or duplicated order %j",
+    (ids) => {
+      const state = createState([createTask("a"), createTask("b")])
+      const result = reorderQueuedTasks(state, {
+        expectedTaskIds: ["a", "b"],
+        taskIds: ids,
+      })
+      expect(result.result).toEqual({
+        outcome: "rejected",
+        reason: "invalid-order",
+      })
+      expect(result.next).toBe(state)
+    }
+  )
+  it("renews a live Undo and ignores an expiry callback scheduled before that renewal", () => {
+    const action = createPendingUndoAction({
+      token: "held",
+      type: "cancel_queued",
+      taskSnapshot: createTask("a"),
+      previousQueuePosition: 0,
+      now: 1000,
+    })
+    const renewed = renewPendingUndoAction(createState([], null, [action]), {
+      token: "held",
+      now: 5000,
+    })
+    expect(renewed.result.outcome).toBe("applied")
+    const staleAlarm = finalizePendingUndoAction(renewed.next, {
+      token: "held",
+      now: 6000,
+    })
+    expect(staleAlarm.result.outcome).toBe("unchanged")
+    expect(staleAlarm.next.pendingUndoActions).toHaveLength(1)
+    expect(
+      restorePendingUndoAction(staleAlarm.next, { token: "held", now: 7000 })
+        .result.outcome
+    ).toBe("applied")
+  })
+  it("does not revive an expired Undo and eventually finalizes an abandoned offer", () => {
+    const action = createPendingUndoAction({
+      token: "expired",
+      type: "cancel_queued",
+      taskSnapshot: createTask("a"),
+      previousQueuePosition: 0,
+      now: 1000,
+    })
+    const state = createState([], null, [action])
+    expect(
+      renewPendingUndoAction(state, { token: "expired", now: 6000 }).result
+        .outcome
+    ).toBe("rejected")
+    expect(
+      finalizePendingUndoAction(state, { token: "expired", now: 6000 }).next
+        .pendingUndoActions
+    ).toEqual([])
   })
 })

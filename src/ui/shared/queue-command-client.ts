@@ -62,6 +62,31 @@ export const queueCommandClient = {
     await sendRetainedQueueAction({ type: "RESTART_TASK", payload: { taskId } })
   },
 
+  async reorderQueuedTasks(
+    expectedTaskIds: string[],
+    taskIds: string[]
+  ): Promise<void> {
+    assertSuccess(
+      await sendRuntimeMessage({
+        target: "background",
+        type: "REORDER_QUEUED_TASKS",
+        ...createCommandEnvelope(),
+        payload: { expectedTaskIds, taskIds },
+      })
+    )
+  },
+
+  async renewUndo(token: string): Promise<PendingUndoReceipt> {
+    const response = await sendRuntimeMessage({
+      target: "background",
+      type: "RENEW_QUEUE_UNDO",
+      ...createCommandEnvelope(),
+      payload: { token },
+    })
+    if (!response.success) throw new Error(response.error)
+    return response.undo
+  },
+
   async moveTaskToTop(taskId: string): Promise<void> {
     assertSuccess(
       await sendRuntimeMessage({

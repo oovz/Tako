@@ -9,7 +9,11 @@ export async function finalizePendingUndo(
   stateManager: QueueRepository,
   token: string
 ): Promise<void> {
-  await stateManager.finalizePendingUndoAction(token)
+  const result = await stateManager.finalizePendingUndoAction(token, Date.now())
+  if (result.outcome === "unchanged") {
+    await schedulePendingUndoAction(stateManager, result.action)
+    return
+  }
   await cancelPendingUndoExpiry(token)
 }
 

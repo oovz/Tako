@@ -55,12 +55,25 @@ function isTargetUnavailable(
     : undefined
 }
 
+function chapterRange(chapters: TaskChapter[]): string | undefined {
+  if (chapters.length === 0) return undefined
+  const numbers = chapters.map(
+    (chapter) => chapter.chapterNumber ?? chapter.index
+  )
+  const first = numbers[0]
+  if (numbers.length === 1) return String(first)
+  if (numbers.every((number, index) => number === first + index))
+    return first + "–" + numbers.at(-1)
+  return numbers.slice(0, 3).join(", ") + (numbers.length > 3 ? "…" : "")
+}
+
 export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
   const destination = getEffectiveTaskDestination(task)
   const failureChapter = firstUnsuccessfulChapter(task.chapters)
 
   return {
     id: task.id,
+    chapterRange: chapterRange(task.chapters),
     seriesKey: composeSeriesKey(task.siteIntegrationId, task.mangaId),
     seriesTitle: task.seriesTitle,
     siteIntegration: task.siteIntegrationId,

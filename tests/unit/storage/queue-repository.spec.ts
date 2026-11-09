@@ -1,3 +1,4 @@
+import { createPendingUndoAction } from "@/src/domain/queue/pending-undo"
 import { HistoryRepository } from "@/src/storage/history-repository"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -207,6 +208,84 @@ describe("QueueRepository", () => {
         setBadgeBackgroundColor: vi.fn(async () => undefined),
       },
     } as unknown as typeof chrome)
+  })
+
+  it("persists a complete queued order once and rejects stale order after cold hydration", async () => {
+    const active = createTask({ id: "active", status: "downloading" })
+    const queued = ["a", "b", "c"].map((id) => createTask({ id }))
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = [active, ...queued]
+    const repository = new QueueRepository()
+    expect(
+      await repository.reorderQueuedTasks({
+        expectedTaskIds: ["a", "b", "c"],
+        taskIds: ["c", "a", "b"],
+      })
+    ).toEqual({ outcome: "applied" })
+    expect(localSet).toHaveBeenCalledTimes(1)
+    const restarted = new QueueRepository()
+    expect((await restarted.getQueue()).map((task) => task.id)).toEqual([
+      "active",
+      "c",
+      "a",
+      "b",
+    ])
+    expect(
+      await restarted.reorderQueuedTasks({
+        expectedTaskIds: ["a", "b", "c"],
+        taskIds: ["b", "a", "c"],
+      })
+    ).toEqual({ outcome: "rejected", reason: "stale-order" })
+    expect(localSet).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the previous durable order and projection when a reorder write fails", async () => {
+    const queued = ["a", "b"].map((id) => createTask({ id }))
+    local[LOCAL_STORAGE_KEYS.downloadQueue] = queued
+    const repository = new QueueRepository()
+    localSet.mockRejectedValueOnce(new Error("Disk unavailable"))
+    await expect(
+      repository.reorderQueuedTasks({
+        expectedTaskIds: ["a", "b"],
+        taskIds: ["b", "a"],
+      })
+    ).rejects.toThrow("Disk unavailable")
+    expect(sessionSet).not.toHaveBeenCalled()
+    expect(await new QueueRepository().getQueue()).toEqual(queued)
+  })
+
+  it("preserves a renewed Undo through cold hydration and rejects an obsolete expiry", async () => {
+    local[LOCAL_STORAGE_KEYS.pendingUndoActions] = [
+      createPendingUndoAction({
+        token: "focused",
+        type: "cancel_queued",
+        taskSnapshot: createTask(),
+        previousQueuePosition: 0,
+        now: 1000,
+      }),
+    ]
+    const clock = vi.spyOn(Date, "now").mockReturnValue(5000)
+    try {
+      const repository = new QueueRepository()
+      expect(await repository.renewPendingUndoAction("focused")).toMatchObject({
+        outcome: "applied",
+        undo: { expiresAt: 10000 },
+      })
+      const restarted = new QueueRepository()
+      expect(
+        await restarted.finalizePendingUndoAction("focused", 6000)
+      ).toMatchObject({ outcome: "unchanged" })
+      expect(
+        await restarted.restorePendingUndoAction({
+          token: "focused",
+          now: 7000,
+        })
+      ).toMatchObject({ outcome: "applied" })
+      expect((await restarted.getQueue()).map((task) => task.id)).toEqual([
+        "task-1",
+      ])
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it("allows a restarted task to be restarted after another interruption", async () => {

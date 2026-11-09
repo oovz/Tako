@@ -8,6 +8,7 @@ import type { ChapterStatus } from "@/src/types/chapter"
 import {
   applyExpiredPendingUndoAction,
   createPendingUndoAction,
+  PENDING_UNDO_WINDOW_MS,
   partitionPendingUndoActions,
   reinsertPendingUndoTask,
   toPendingUndoReceipt,
@@ -1868,6 +1869,82 @@ export function moveQueuedTaskToTop(
   }
 }
 
+/** Replace queued positions atomically only while the caller's order is current. */
+export function reorderQueuedTasks(
+  state: QueueAggregateState,
+  input: { expectedTaskIds: string[]; taskIds: string[] }
+): QueueKernelDecision<
+  Applied | Unchanged | Rejected<"stale-order" | "invalid-order">
+> {
+  const queued = state.queue.filter((task) => task.status === "queued")
+  if (
+    queued.length !== input.expectedTaskIds.length ||
+    queued.some((task, index) => task.id !== input.expectedTaskIds[index])
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "stale-order" },
+    }
+  }
+  const byId = new Map(queued.map((task) => [task.id, task]))
+  if (
+    input.taskIds.length !== queued.length ||
+    new Set(input.taskIds).size !== queued.length ||
+    input.taskIds.some((id) => !byId.has(id))
+  ) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "invalid-order" },
+    }
+  }
+  if (queued.every((task, index) => task.id === input.taskIds[index])) {
+    return { next: state, changedKeys: [], result: { outcome: "unchanged" } }
+  }
+  const ordered = input.taskIds.map((id) => byId.get(id)!)
+  let index = 0
+  return {
+    next: {
+      ...state,
+      queue: state.queue.map((task) =>
+        task.status === "queued" ? ordered[index++] : task
+      ),
+    },
+    changedKeys: QUEUE_KEY,
+    result: { outcome: "applied" },
+  }
+}
+
+export function renewPendingUndoAction(
+  state: QueueAggregateState,
+  input: { token: string; now: number }
+): QueueKernelDecision<
+  Applied<{ undo: PendingUndoReceipt }> | Rejected<"undo-expired">
+> {
+  const action = state.pendingUndoActions.find(
+    (item) => item.token === input.token
+  )
+  if (!action || action.expiresAt <= input.now) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "rejected", reason: "undo-expired" },
+    }
+  }
+  const renewed = { ...action, expiresAt: input.now + PENDING_UNDO_WINDOW_MS }
+  return {
+    next: {
+      ...state,
+      pendingUndoActions: state.pendingUndoActions.map((item) =>
+        item === action ? renewed : item
+      ),
+    },
+    changedKeys: UNDO_KEY,
+    result: { outcome: "applied", undo: toPendingUndoReceipt(renewed) },
+  }
+}
+
 export function clearTerminalHistory(
   state: QueueAggregateState
 ): QueueKernelDecision<
@@ -2240,9 +2317,11 @@ export function restorePendingUndoAction(
 
 export function finalizePendingUndoAction(
   state: QueueAggregateState,
-  input: { token: string }
+  input: { token: string; now?: number }
 ): QueueKernelDecision<
-  Applied<{ action: PendingUndoAction }> | Rejected<"undo-not-found">
+  | Applied<{ action: PendingUndoAction }>
+  | Unchanged<{ action: PendingUndoAction }>
+  | Rejected<"undo-not-found">
 > {
   const actionIndex = state.pendingUndoActions.findIndex(
     (action) => action.token === input.token
@@ -2255,6 +2334,13 @@ export function finalizePendingUndoAction(
     }
   }
   const action = state.pendingUndoActions[actionIndex]
+  if (input.now !== undefined && action.expiresAt > input.now) {
+    return {
+      next: state,
+      changedKeys: [],
+      result: { outcome: "unchanged", action },
+    }
+  }
   const taskAlreadyPresent = state.queue.some(
     (task) => task.id === action.taskSnapshot.id
   )

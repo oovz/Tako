@@ -252,6 +252,23 @@ export class QueueApplicationCommands {
     return { newTaskId: result.restartTask.id }
   }
 
+  async reorderQueuedTasks(input: {
+    expectedTaskIds: string[]
+    taskIds: string[]
+  }): Promise<void> {
+    const result = await this.deps.queueRepository.reorderQueuedTasks(input)
+    if (result.outcome === "rejected")
+      throw new Error("The queue changed. Try moving the task again.")
+  }
+
+  async renewQueueUndo(token: string): Promise<PendingUndoReceipt> {
+    const result = await this.deps.queueRepository.renewPendingUndoAction(token)
+    if (result.outcome !== "applied")
+      throw new Error("The Undo period has ended.")
+    await schedulePendingUndoAction(this.deps.queueRepository, result.undo)
+    return result.undo
+  }
+
   async moveTaskToTop(taskId: string): Promise<void> {
     const result = await this.deps.queueRepository.moveQueuedTaskToTop(taskId)
     if (result.outcome === "applied" || result.outcome === "unchanged") return
