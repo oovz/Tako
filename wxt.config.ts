@@ -13,9 +13,7 @@ export default defineConfig({
   manifest: createExtensionManifest,
 
   webExt: {
-    startUrls: [
-      "https://mangamillion.shueisha.co.jp/en/title/121",
-    ],
+    startUrls: ["https://mangamillion.shueisha.co.jp/en/title/121"],
     disabled: false,
   },
 
