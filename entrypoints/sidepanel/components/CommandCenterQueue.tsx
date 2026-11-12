@@ -1,6 +1,4 @@
 import React, { useState, type Dispatch, type SetStateAction } from "react"
-import { toast } from "sonner"
-
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoints/sidepanel/hooks/useActiveTaskProgress"
 import { CommandCenterTaskRow } from "@/entrypoints/sidepanel/components/CommandCenterTaskRow"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
@@ -13,6 +11,8 @@ import type { CancelTaskResult } from "@/entrypoints/sidepanel/types"
 
 export interface CommandCenterQueueProps {
   tasks: QueueTaskSummary[]
+  lane?: "active" | "waiting"
+  taskActionErrors?: Readonly<Record<string, string>>
   onCancelTask?: (
     taskId: string
   ) => CancelTaskResult | Promise<CancelTaskResult>
@@ -39,10 +39,17 @@ type CancelErrors = Record<string, string>
 type StateSetter<T> = Dispatch<SetStateAction<T>>
 
 function clearCancelError(errors: CancelErrors, taskId: string): CancelErrors {
-  if (!(taskId in errors)) return errors
+  if (!Object.hasOwn(errors, taskId)) return errors
   const nextErrors = { ...errors }
   delete nextErrors[taskId]
   return nextErrors
+}
+
+function getRowError(
+  errors: Readonly<Record<string, string>> | undefined,
+  taskId: string
+): string | undefined {
+  return errors && Object.hasOwn(errors, taskId) ? errors[taskId] : undefined
 }
 
 function beginTaskCancellation(
@@ -57,7 +64,9 @@ function beginTaskCancellation(
     return
   }
   void Promise.resolve(onCancelTask?.(task.id)).then((result) => {
-    if (result?.kind === "failed") toast.error(result.message)
+    if (result?.kind === "failed") {
+      setErrors((errors) => ({ ...errors, [task.id]: result.message }))
+    }
   })
 }
 
@@ -73,6 +82,7 @@ async function confirmTaskCancellation(
     return
   }
   if (result?.kind === "already-pending") return
+  setErrors((errors) => clearCancelError(errors, taskId))
   setConfirming((currentTaskId) =>
     currentTaskId === taskId ? null : currentTaskId
   )
@@ -108,6 +118,7 @@ function QueueTaskRow({
     <div data-queue-task-id={task.id}>
       <CommandCenterTaskRow
         task={task}
+        lane={queue.lane}
         queuePosition={
           queue.queuedTaskIds
             ? queue.queuedTaskIds.indexOf(task.id) + 1
@@ -121,7 +132,8 @@ function QueueTaskRow({
         isRemoving={queue.removingTaskIds?.has(task.id) === true}
         isMoving={queue.movingTaskIds?.has(task.id) === true}
         isConfirmingCancel={cancellation.confirmingTaskId === task.id}
-        cancelError={cancellation.errors[task.id] ?? null}
+        cancelError={getRowError(cancellation.errors, task.id) ?? null}
+        taskActionError={getRowError(queue.taskActionErrors, task.id)}
         activeTaskProgress={queue.activeTaskProgress}
         showActiveProgress={queue.showActiveProgress === true}
         isFirstQueuedTask={queue.firstQueuedTaskId === task.id}

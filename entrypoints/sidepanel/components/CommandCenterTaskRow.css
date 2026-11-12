@@ -1,0 +1,108 @@
+.task-row-meta {
+  position: relative;
+  display: block;
+}
+.task-row-meta > [data-replaced="true"],
+.queue-position[data-placeholder="true"] {
+  visibility: hidden;
+}
+[data-task-feedback-summary] {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+[data-task-feedback-summary][data-tone="error"],
+.task-feedback-trigger[data-tone="error"] {
+  color: #8a352f;
+}
+[data-task-feedback-summary][data-tone="warning"],
+.task-feedback-trigger[data-tone="warning"] {
+  color: #725726;
+}
+.task-feedback-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: var(--active-meter);
+  height: var(--active-meter);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+}
+.task-actions .task-feedback-trigger {
+  display: inline-flex;
+}
+.task-feedback-trigger > svg:first-child {
+  width: 15px;
+  height: 15px;
+}
+.task-feedback-trigger > svg:last-child {
+  width: 9px;
+  height: 9px;
+}
+.task-feedback-trigger:is(:hover, [aria-expanded="true"]) {
+  background: var(--wash);
+  border-color: var(--line);
+}
+.task-grip-slot {
+  inline-size: 30px;
+}
+.task-feedback-trigger[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+.task-feedback-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.task-feedback-actions button[data-primary="true"] {
+  font-weight: 650;
+}
+.task-feedback-actions button > svg {
+  width: 13px;
+  height: 13px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-tako-motion="reduce"])
+    .task-feedback-trigger
+    > svg:last-child {
+    transition: transform var(--manga-disclosure) var(--settle);
+  }
+}
+.task-detail-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin: 0 var(--activity-inset) 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: #f8efed;
+  color: #8a352f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.task-detail-notice button {
+  min-height: 24px;
+  padding-inline: 6px;
+}
+.task-detail-notice button:hover {
+  text-decoration: underline;
+}
+.queue-task .task-recovery-confirmation {
+  margin-inline: var(--activity-inset);
+}
+@container (max-width: 280px) {
+  .task-grip-slot {
+    inline-size: 26px;
+  }
+}

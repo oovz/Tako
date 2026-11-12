@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { ErrorBanner } from "@/entrypoints/sidepanel/components/ErrorBanner"
+import { PanelFeedbackRegion } from "@/entrypoints/sidepanel/components/PanelFeedbackRegion"
 import { SidePanelHeader } from "@/entrypoints/sidepanel/components/SidePanelHeader"
 import { RecentDownloads } from "@/entrypoints/sidepanel/components/RecentDownloads"
 import type { DownloadedChapterRecord } from "@/src/domain/history/types"
@@ -79,13 +79,16 @@ describe("panel support views", () => {
     vi.unstubAllGlobals()
   })
 
-  it("dismisses the selected sanitized error and leaves folder failures to the folder banner", async () => {
-    await act(async () => root.render(createElement(ErrorBanner)))
+  it("dismisses a sanitized error and omits legacy folder alerts", async () => {
+    await act(async () => root.render(createElement(PanelFeedbackRegion)))
     expect(container.textContent).not.toContain("secret-diagnostic")
-    expect(container.textContent).toContain("Warning")
-    expect(container.querySelectorAll("button")).toHaveLength(2)
+    expect(
+      container.querySelectorAll('button[aria-label="Dismiss"]')
+    ).toHaveLength(2)
     await act(async () =>
-      container.querySelector<HTMLButtonElement>("button")!.click()
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!
+        .click()
     )
     expect(sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -99,7 +102,9 @@ describe("panel support views", () => {
         listener({ persistent_errors: {} }, "local")
       )
     )
-    expect(container.querySelectorAll("button")).toHaveLength(0)
+    expect(
+      container.querySelectorAll('button[aria-label="Dismiss"]')
+    ).toHaveLength(0)
     expect(container.textContent).toContain("initialization failed")
     expect(listeners.size).toBe(2)
   })

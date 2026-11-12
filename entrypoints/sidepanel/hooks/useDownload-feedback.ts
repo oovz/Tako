@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
-import { t } from "@/src/runtime/i18n"
+import { usePanelFeedback } from "../components/PanelFeedback"
 
 export function useDownloadFeedback() {
+  const reportFeedback = usePanelFeedback()
   const [isEnqueuing, setIsEnqueuing] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const mountedRef = useRef(true)
@@ -21,10 +21,8 @@ export function useDownloadFeedback() {
 
   const succeed = useCallback(() => {
     if (!mountedRef.current) return
-    toast.success(t("sidepanel_addedToQueue"), {
-      position: "bottom-center",
-    })
-  }, [])
+    reportFeedback("queued")
+  }, [reportFeedback])
 
   const fail = useCallback((message: string) => {
     if (mountedRef.current) setErrorMessage(message)

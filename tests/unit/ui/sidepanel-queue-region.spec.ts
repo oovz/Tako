@@ -61,7 +61,7 @@ function renderQueueRegion(
 }
 
 describe("SidePanelQueueRegion unified queue layout", () => {
-  it("preserves the producer error and offers manual recovery when handoff is uncertain", () => {
+  it("renders a collapsed row feedback control when handoff is uncertain", () => {
     const html = renderQueueRegion({
       ...commonProps,
       queueTasks: [],
@@ -74,11 +74,8 @@ describe("SidePanelQueueRegion unified queue layout", () => {
         },
       ],
     })
-    expect(html).toContain(
-      "Chrome file saving could not be confirmed. Retrying may create duplicate files."
-    )
-    expect(html).toContain('aria-label="Restart task"')
-    expect(html).toContain("Tako could not create the archive.")
+    expect(html).toContain("data-task-feedback-trigger")
+    expect(html).toContain('aria-label="Failed"')
   })
 
   it("shows an unavailable view with a retry action", () => {
@@ -104,7 +101,6 @@ describe("SidePanelQueueRegion unified queue layout", () => {
       ],
     })
     expect(html).toContain("Previously processed")
-    expect(html).toContain("Final saving was not confirmed.")
     expect(html).not.toContain(">Saved<")
   })
 
@@ -147,7 +143,8 @@ describe("SidePanelQueueRegion unified queue layout", () => {
     })
     expect(html).toContain("Series queued")
     expect(html).toContain("Series history")
-    expect(html).toContain("Needs attention")
+    expect(html).toContain("Up next")
+    expect(html).not.toContain("Needs attention")
     expect(html).not.toContain("Recent history")
   })
 })

@@ -5,6 +5,7 @@ import {
   RotateCcw,
   Trash2,
   XCircle,
+  type LucideIcon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -28,8 +29,7 @@ import {
   type CommandCenterTaskActionHandler,
 } from "./command-center-queue-helpers"
 
-interface CommandCenterTaskActionsProps {
-  presentation?: "icons" | "recovery"
+export interface CommandCenterTaskActionsProps {
   taskId: string
   status: QueueTaskSummary["status"]
   outputUncertain?: boolean
@@ -50,13 +50,21 @@ interface CommandCenterTaskActionsProps {
   onRemoveTask?: CommandCenterTaskActionHandler
 }
 
-interface TaskActionDescriptor {
-  id: CommandCenterTaskActionId
+export interface TaskActionDescriptor {
+  id: CommandCenterTaskActionId | RecoveryTaskLink["id"]
   label: string
   pending: boolean | undefined
   destructive: boolean
-  Icon: typeof XCircle
+  Icon: LucideIcon
   invoke: () => void | Promise<void>
+}
+
+export interface RecoveryTaskLink {
+  id: "check-downloads" | "open-folder-actions"
+  label: string
+  Icon: LucideIcon
+  invoke: () => void | Promise<void>
+  pending?: boolean
 }
 
 const ACTION_PRESENTATION = {
@@ -99,7 +107,8 @@ function actionLabel(
 
 function getTaskActionDescriptor(
   action: CommandCenterTaskActionId,
-  props: CommandCenterTaskActionsProps
+  props: CommandCenterTaskActionsProps,
+  recovery = false
 ): TaskActionDescriptor {
   const controls = {
     cancel: { pending: props.isCanceling, handler: props.onBeginCancel },
@@ -111,7 +120,7 @@ function getTaskActionDescriptor(
   return {
     id: action,
     label:
-      props.presentation === "recovery"
+      recovery && (action === "remove" || !props.outputUncertain)
         ? t(
             action === "retry-failed"
               ? "sidepanel_retryRemaining"
@@ -215,33 +224,28 @@ function OverflowTaskActions({ actions }: { actions: TaskActionDescriptor[] }) {
   )
 }
 
+export function getTaskFeedbackActions(
+  props: CommandCenterTaskActionsProps,
+  links: RecoveryTaskLink[],
+  terminal: boolean
+): TaskActionDescriptor[] {
+  const plan = getTaskActionPlan(props.status, props)
+  return [
+    ...links.map((link) => ({
+      ...link,
+      destructive: false,
+      pending: link.pending,
+    })),
+    ...[...plan.inline, ...plan.overflow]
+      .sort(
+        (left, right) => Number(left === "remove") - Number(right === "remove")
+      )
+      .map((action) => getTaskActionDescriptor(action, props, terminal)),
+  ]
+}
+
 export function CommandCenterTaskActions(props: CommandCenterTaskActionsProps) {
   const plan = getTaskActionPlan(props.status, props)
-  if (props.presentation === "recovery")
-    return (
-      <div className="recovery-actions">
-        {plan.inline.map((id) => {
-          const action = getTaskActionDescriptor(id, props)
-          return (
-            <button
-              type="button"
-              key={id}
-              aria-label={action.label}
-              className={id === "remove" ? "quiet-recovery" : undefined}
-              disabled={action.pending}
-              onClick={action.invoke}
-            >
-              {action.label}
-            </button>
-          )
-        })}
-        <OverflowTaskActions
-          actions={plan.overflow.map((action) =>
-            getTaskActionDescriptor(action, props)
-          )}
-        />
-      </div>
-    )
   return (
     <div className="flex items-center gap-0.5 shrink-0">
       {plan.inline.map((action) => (

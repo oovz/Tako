@@ -95,6 +95,7 @@ export function toQueueTaskSummary(task: DownloadTaskState): QueueTaskSummary {
     chapters: countChapters(task.chapters),
     timestamps: {
       created: task.created,
+      started: task.started,
       completed: task.completed,
     },
     outputUncertain: hasUncertainNativeOutput(task.chapters),

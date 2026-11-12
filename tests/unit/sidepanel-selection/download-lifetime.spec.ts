@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
 
 import { webcrypto } from "node:crypto"
-import { act, createElement } from "react"
+import { act, createElement, Fragment } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useDownload } from "@/entrypoints/sidepanel/hooks/useDownload"
 import type { MangaPageState } from "@/src/types/tab-state"
 import { t } from "@/src/runtime/i18n"
-import { toast } from "sonner"
-
-vi.mock("sonner", () => ({ toast: { success: vi.fn() } }))
+import {
+  PanelFeedbackProvider,
+  usePanelNotices,
+} from "@/entrypoints/sidepanel/components/PanelFeedback"
 
 const mangaState: MangaPageState = {
   sourceUrl: "https://mangadex.org/title/series",
@@ -42,14 +43,35 @@ describe("mounted enqueue lifetime", () => {
       mangaState,
       seriesRevision: revision ?? undefined,
     })
+    return null
+  }
+
+  function FeedbackReadout() {
+    const feedback = usePanelNotices()
     return createElement(
       "output",
       null,
       JSON.stringify({
-        pending: download.isEnqueuing,
-        error: download.errorMessage,
+        notices: feedback?.notices.map((notice) => t(notice.messageKey)),
       })
     )
+  }
+
+  function Harness({
+    show = true,
+    revision,
+  }: {
+    show?: boolean
+    revision?: number | null
+  }) {
+    return createElement(PanelFeedbackProvider, {
+      children: createElement(
+        Fragment,
+        null,
+        show ? createElement(View, { revision }) : null,
+        createElement(FeedbackReadout)
+      ),
+    })
   }
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
@@ -72,7 +94,7 @@ describe("mounted enqueue lifetime", () => {
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)
-    act(() => root.render(createElement(View)))
+    act(() => root.render(createElement(Harness)))
   })
   afterEach(() => {
     act(() => root.unmount())
@@ -106,10 +128,9 @@ describe("mounted enqueue lifetime", () => {
       expect(await pending).toBe(true)
     })
     expect(download.isEnqueuing).toBe(false)
-    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+    expect(JSON.parse(container.textContent).notices).toEqual([
       t("sidepanel_addedToQueue"),
-      expect.anything()
-    )
+    ])
   })
 
   it("reports missing selections and logical failures, then permits another attempt", async () => {
@@ -140,7 +161,7 @@ describe("mounted enqueue lifetime", () => {
   })
 
   it("requires a current context before starting work", async () => {
-    act(() => root.render(createElement(View, { revision: null })))
+    act(() => root.render(createElement(Harness, { revision: null })))
     await act(async () =>
       expect(await download.startDownload(["one"])).toBe(false)
     )
@@ -170,9 +191,11 @@ describe("mounted enqueue lifetime", () => {
       pending = download.startDownload(["one"])
     })
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1))
-    act(() => root.unmount())
-    response.resolve({ success: true, taskId: "accepted-task" })
-    expect(await pending).toBe(true)
-    expect(toast.success).not.toHaveBeenCalled()
+    act(() => root.render(createElement(Harness, { show: false })))
+    await act(async () => {
+      response.resolve({ success: true, taskId: "accepted-task" })
+      expect(await pending).toBe(true)
+    })
+    expect(JSON.parse(container.textContent).notices).toEqual([])
   })
 })

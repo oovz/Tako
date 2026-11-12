@@ -8,14 +8,14 @@ import { useOptionsActionItemSeverity } from "./hooks/useOptionsActionItemSeveri
 import { useQueueView } from "./hooks/useQueueView"
 import { useSidepanelSeriesContext } from "./hooks/useSidepanelSeriesContext"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Toaster } from "@/components/ui/sonner"
-import { ErrorBanner } from "./components/ErrorBanner"
+import { PanelFeedbackProvider } from "./components/PanelFeedback"
+import { PanelFeedbackRegion } from "./components/PanelFeedbackRegion"
 import { SidePanelHeader } from "./components/SidePanelHeader"
 import { SidePanelQueueRegion } from "./components/SidePanelQueueRegion"
 import { resolveSeriesCardMessage } from "./components/SeriesContextCard"
 import { SeriesInlineSelection } from "./components/SeriesInlineSelection"
 import { RecentDownloads } from "./components/RecentDownloads"
-import { QueueUndoProvider, QueueUndoRegion } from "./components/QueueUndo"
+import { QueueUndoProvider } from "./components/QueueUndo"
 import { useSidePanelDocumentPreferences } from "./SidePanelApp-document"
 
 type PanelView = "queue" | "manga" | "recent"
@@ -24,9 +24,11 @@ export function SidePanelApp() {
   useSidePanelDocumentPreferences()
   return (
     <TooltipProvider delayDuration={300}>
-      <QueueUndoProvider>
-        <PanelContent />
-      </QueueUndoProvider>
+      <PanelFeedbackProvider>
+        <QueueUndoProvider>
+          <PanelContent />
+        </QueueUndoProvider>
+      </PanelFeedbackProvider>
     </TooltipProvider>
   )
 }
@@ -69,11 +71,9 @@ function PanelContent() {
   }
   return (
     <div className="tako-sidepanel">
-      <Toaster position="top-right" richColors closeButton />
       <a className="sr-only focus:not-sr-only" href="#sidepanel-main">
         {t("sidepanel_skipToContent")}
       </a>
-      <ErrorBanner />
       <SidePanelHeader
         activeCount={available ? queue.activeCount : null}
         queuedCount={available ? queue.queuedCount : null}
@@ -132,20 +132,19 @@ function PanelContent() {
           aria-labelledby="panel-tab-queue"
           hidden={visibleView !== "queue"}
         >
-          {contextNotice &&
-            !data.retrySeriesContext &&
-            queue.queueView.length === 0 && (
-              <p className="panel-empty">{contextNotice.description}</p>
-            )}
-          {data.retrySeriesContext && (
-            <div className="panel-context-error" role="status">
-              <span>{t("sidepanel_seriesLoadFailed")}</span>
-              <button type="button" onClick={data.retrySeriesContext}>
-                {t("common_retry")}
-              </button>
-            </div>
-          )}
           <SidePanelQueueRegion
+            intro={
+              data.retrySeriesContext ? (
+                <div className="panel-context-error" role="status">
+                  <span>{t("sidepanel_seriesLoadFailed")}</span>
+                  <button type="button" onClick={data.retrySeriesContext}>
+                    {t("common_retry")}
+                  </button>
+                </div>
+              ) : contextNotice && queue.queueView.length === 0 ? (
+                <p className="panel-empty">{contextNotice.description}</p>
+              ) : null
+            }
             queueTasks={queue.queueView}
             historyTasks={queue.historyTasks}
             isLoading={queue.isLoading}
@@ -157,6 +156,7 @@ function PanelContent() {
             retryingTaskIds={actions.retryingTaskIds}
             restartingTaskIds={actions.restartingTaskIds}
             removingTaskIds={actions.removingTaskIds}
+            taskActionErrors={actions.taskActionErrors}
             movingTaskIds={actions.movingTaskIds}
             onCancelTask={actions.handleCancelTask}
             onRetryFailed={actions.handleRetryFailed}
@@ -202,7 +202,7 @@ function PanelContent() {
           />
         </section>
       </main>
-      <QueueUndoRegion />
+      <PanelFeedbackRegion />
     </div>
   )
 }

@@ -86,6 +86,27 @@
   "sidepanel_settingsTooltip": {
     "message": "Settings"
   },
+  "sidepanel_settingsOpenFailed": {
+    "message": "Could not open Settings"
+  },
+  "sidepanel_historyOpenFailed": {
+    "message": "Could not open download history"
+  },
+  "sidepanel_reloadExtension": {
+    "message": "Reload extension"
+  },
+  "taskFolder_openActionsFailed": {
+    "message": "Could not open folder actions."
+  },
+  "sidepanel_checkDownloadsFailed": {
+    "message": "Could not open Chrome Downloads."
+  },
+  "sidepanel_taskStoppedEarly": {
+    "message": "The download stopped before it finished."
+  },
+  "sidepanel_taskDetailsLoadFailed": {
+    "message": "Could not load chapter results."
+  },
   "sidepanel_settingsNeedAttention": {
     "message": "Settings need attention"
   },
@@ -1927,9 +1948,6 @@
   },
   "sidepanel_upNext": {
     "message": "Up next"
-  },
-  "sidepanel_needsAttention": {
-    "message": "Needs attention"
   },
   "sidepanel_noActiveDownloads": {
     "message": "No active downloads."

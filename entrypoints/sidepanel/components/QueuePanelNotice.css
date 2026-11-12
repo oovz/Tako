@@ -1,0 +1,92 @@
+.queue-panel-notice {
+  --queue-notice-duration: 175ms;
+  --queue-notice-easing: cubic-bezier(0.3, 0, 1, 1);
+  display: grid;
+  flex: none;
+  grid-template-rows: 0fr;
+}
+.queue-panel-notice[data-open="true"] {
+  --queue-notice-duration: 240ms;
+  --queue-notice-easing: var(--settle);
+  grid-template-rows: 1fr;
+}
+.queue-panel-notice-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+.queue-panel-notice-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  background: var(--wash);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+  transform: translateY(-100%);
+}
+.queue-panel-notice[data-open="true"] .queue-panel-notice-body {
+  transform: translateY(0);
+}
+.queue-panel-notice-body > svg {
+  color: var(--muted);
+}
+.queue-panel-notice-body p {
+  overflow-wrap: anywhere;
+}
+.queue-panel-notice-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 600;
+  transform: translateY(0);
+}
+.queue-panel-notice-action[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: progress;
+}
+.queue-panel-notice-action:not([aria-disabled="true"]):hover {
+  border-color: var(--input);
+}
+.queue-panel-notice-action:not([aria-disabled="true"]):active {
+  background: var(--wash);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:not([data-tako-motion="reduce"]) .queue-panel-notice {
+    transition: grid-template-rows var(--queue-notice-duration)
+      var(--queue-notice-easing);
+  }
+  html:not([data-tako-motion="reduce"]) .queue-panel-notice-body {
+    transition: transform var(--queue-notice-duration)
+      var(--queue-notice-easing);
+  }
+  html:not([data-tako-motion="reduce"]) .queue-panel-notice-action {
+    transition:
+      transform var(--manga-feedback) var(--settle),
+      border-color var(--manga-feedback) ease-out,
+      background-color var(--manga-feedback) ease-out;
+  }
+  html:not([data-tako-motion="reduce"])
+    .queue-panel-notice-action:not([aria-disabled="true"]):active {
+    transform: translateY(1px);
+  }
+  html:not([data-tako-motion="reduce"])
+    .queue-panel-notice-action[aria-busy="true"]
+    svg {
+    animation: queue-panel-notice-spin 800ms linear infinite;
+  }
+}
+@keyframes queue-panel-notice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

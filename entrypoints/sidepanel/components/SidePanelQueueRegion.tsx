@@ -1,8 +1,7 @@
 import { usePanelScrollMargin } from "../hooks/usePanelScrollMargin"
 import { usePanelLayoutMotion } from "../hooks/usePanelLayoutMotion"
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { toast } from "sonner"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "../hooks/useActiveTaskProgress"
 import type { CancelTaskResult } from "../types"
@@ -12,11 +11,12 @@ import {
   CommandCenterQueue,
   type CommandCenterQueueProps,
 } from "./CommandCenterQueue"
-import { QueueReadNotice } from "@/src/ui/shared/QueueReadNotice"
+import { QueuePanelNotice } from "./QueuePanelNotice"
 import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 import { t } from "@/src/runtime/i18n"
 
 interface SidePanelQueueRegionProps {
+  intro?: ReactNode
   queueTasks: QueueTaskSummary[]
   historyTasks: QueueTaskSummary[]
   isLoading: boolean
@@ -27,6 +27,7 @@ interface SidePanelQueueRegionProps {
   restartingTaskIds: Set<string>
   removingTaskIds: Set<string>
   movingTaskIds: Set<string>
+  taskActionErrors?: Readonly<Record<string, string>>
   activeTaskProgress: ActiveTaskProgressState | null
   showActiveProgress: boolean
   onCancelTask: (taskId: string) => CancelTaskResult | Promise<CancelTaskResult>
@@ -37,6 +38,47 @@ interface SidePanelQueueRegionProps {
 }
 
 type Commands = Omit<CommandCenterQueueProps, "tasks">
+type QueueLane = "active" | "waiting"
+
+function captureQueueLanes(
+  queueTasks: QueueTaskSummary[],
+  historyTasks: QueueTaskSummary[],
+  previous?: ReadonlyMap<string, QueueLane>
+) {
+  const lanes = new Map<string, QueueLane>()
+  // Keep only the current projections. A task already ended when the panel
+  // opens falls back to the durable evidence that it started.
+  for (const task of historyTasks) {
+    lanes.set(
+      task.id,
+      previous?.get(task.id) ??
+        (task.timestamps.started === undefined ? "waiting" : "active")
+    )
+  }
+  for (const task of queueTasks) {
+    lanes.set(task.id, task.status === "downloading" ? "active" : "waiting")
+  }
+  return { queueTasks, historyTasks, lanes }
+}
+
+function useQueueLanes(
+  queueTasks: QueueTaskSummary[],
+  historyTasks: QueueTaskSummary[]
+) {
+  const [placement, setPlacement] = useState(() =>
+    captureQueueLanes(queueTasks, historyTasks)
+  )
+  if (
+    placement.queueTasks !== queueTasks ||
+    placement.historyTasks !== historyTasks
+  ) {
+    const next = captureQueueLanes(queueTasks, historyTasks, placement.lanes)
+    setPlacement(next)
+    return next.lanes
+  }
+  return placement.lanes
+}
+
 function WaitingTasks({
   tasks,
   commands,
@@ -69,7 +111,7 @@ function WaitingTasks({
   return (
     <div ref={list} className="waiting-tasks">
       {tasks.length <= 24 ? (
-        <CommandCenterQueue {...commands} tasks={tasks} />
+        <CommandCenterQueue {...commands} lane="waiting" tasks={tasks} />
       ) : (
         <div
           style={{ height: virtualizer.getTotalSize(), position: "relative" }}
@@ -86,7 +128,11 @@ function WaitingTasks({
                 transform: "translateY(" + (item.start - scrollMargin) + "px)",
               }}
             >
-              <CommandCenterQueue {...commands} tasks={[tasks[item.index]]} />
+              <CommandCenterQueue
+                {...commands}
+                lane="waiting"
+                tasks={[tasks[item.index]]}
+              />
             </div>
           ))}
         </div>
@@ -97,14 +143,31 @@ function WaitingTasks({
 export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
   const [scroll, setScroll] = useState<HTMLDivElement | null>(null)
   const [moving, setMoving] = useState(false)
+  const [reorderConflict, setReorderConflict] = useState(false)
   const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null)
   const dragOrder = useRef<string[] | null>(null)
+  const lanes = useQueueLanes(props.queueTasks, props.historyTasks)
   const active = props.queueTasks.filter(
     (task) => task.status === "downloading"
   )
   const queued = props.queueTasks.filter((task) => task.status === "queued")
-  const attention = props.historyTasks.filter(
-    (task) => task.status !== "completed" || task.saveConfirmedAt === undefined
+  const recovery = props.historyTasks.filter(
+    (task) =>
+      task.status === "failed" ||
+      task.status === "partial_success" ||
+      (task.status === "completed" && task.saveConfirmedAt === undefined)
+  )
+  const currentRows = [
+    ...active,
+    ...recovery.filter((task) => lanes.get(task.id) === "active"),
+  ]
+  const waitingRows = [
+    ...queued,
+    ...recovery.filter((task) => lanes.get(task.id) === "waiting"),
+  ].sort(
+    (left, right) =>
+      (left.queueIndex ?? Number.MAX_SAFE_INTEGER) -
+      (right.queueIndex ?? Number.MAX_SAFE_INTEGER)
   )
   const ids = queued.map((task) => task.id)
   const reorder = async (taskId: string, position: number, expected = ids) => {
@@ -116,8 +179,9 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
     setMoving(true)
     try {
       await queueCommandClient.reorderQueuedTasks(expected, next)
+      setReorderConflict(false)
     } catch {
-      toast.error(t("sidepanel_queueChanged"))
+      setReorderConflict(true)
       await props.onRefresh()
     } finally {
       setMoving(false)
@@ -130,7 +194,7 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
     onReorder: reorder,
     movingTaskIds: moving ? new Set(ids) : props.movingTaskIds,
   }
-  return (
+  const scrollRegion = (
     <div
       className="queue-region"
       ref={setScroll}
@@ -192,7 +256,6 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
             "px var(--primary)}"}
         </style>
       )}
-      <QueueReadNotice status={props.readStatus} onRetry={props.onRefresh} />
       {props.isLoading ? (
         <p className="panel-empty" role="status" aria-busy="true">
           {t("common_loading")}
@@ -201,25 +264,21 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
         <>
           <div className="queue-current">
             <h2 className="queue-section-label">{t("sidepanel_inProgress")}</h2>
-            {active.length ? (
-              <CommandCenterQueue {...commands} tasks={active} />
+            {currentRows.length ? (
+              <CommandCenterQueue
+                {...commands}
+                lane="active"
+                tasks={currentRows}
+              />
             ) : (
               <p className="panel-empty">{t("sidepanel_noActiveDownloads")}</p>
             )}
-            {attention.length > 0 && (
-              <section>
-                <h2 className="queue-section-label">
-                  {t("sidepanel_needsAttention")}
-                </h2>
-                <CommandCenterQueue {...commands} tasks={attention} />
-              </section>
-            )}
           </div>
-          {queued.length > 0 && (
+          {waitingRows.length > 0 && (
             <>
               <h2 className="queue-section-label">{t("sidepanel_upNext")}</h2>
               <WaitingTasks
-                tasks={queued}
+                tasks={waitingRows}
                 commands={commands}
                 scroll={scroll}
               />
@@ -228,5 +287,17 @@ export function SidePanelQueueRegion(props: SidePanelQueueRegionProps) {
         </>
       )}
     </div>
+  )
+  return (
+    <>
+      <QueuePanelNotice
+        readStatus={props.readStatus}
+        reorderConflict={reorderConflict}
+        onRetry={props.onRefresh}
+        onDismissConflict={() => setReorderConflict(false)}
+      />
+      {props.intro}
+      {scrollRegion}
+    </>
   )
 }

@@ -179,22 +179,28 @@ describe("mounted series selection", () => {
     await render()
     await click(container.querySelector<HTMLButtonElement>("#select-all-ctx")!)
     expect(selections["mangadex#one"]).toEqual(["one", "extra"])
-    sendMessage.mockResolvedValueOnce({
-      success: false,
-      error: "Rejected",
-      code: "stale_series_context",
-    })
+    const rejection = Promise.withResolvers<unknown>()
+    const acceptance = Promise.withResolvers<unknown>()
+    sendMessage
+      .mockReturnValueOnce(rejection.promise)
+      .mockReturnValueOnce(acceptance.promise)
     await click(button("Download (2)"))
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce())
+    await act(async () =>
+      rejection.resolve({
+        success: false,
+        error: "Rejected",
+        code: "stale_series_context",
+      })
+    )
     expect(container.querySelector('[role="alert"]')).not.toBeNull()
     expect(selections["mangadex#one"]).toEqual(["one", "extra"])
     expect(onAfterStart).not.toHaveBeenCalled()
     await click(button("Download (2)"))
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2))
+    await act(async () =>
+      acceptance.resolve({ success: true, taskId: "new-task" })
+    )
     expect(sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: "START_DOWNLOAD",

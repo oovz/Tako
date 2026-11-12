@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { act, createElement, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { CommandCenterTaskRow } from "@/entrypoints/sidepanel/components/CommandCenterTaskRow"
@@ -52,6 +51,7 @@ describe("task row content and controls", () => {
   let root: Root
   let container: HTMLDivElement
   const sendMessage = vi.fn()
+  const createTab = vi.fn()
 
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
@@ -59,6 +59,7 @@ describe("task row content and controls", () => {
       ...chrome,
       storage: { onChanged: { addListener: vi.fn(), removeListener: vi.fn() } },
       runtime: { getURL: (path: string) => path, sendMessage },
+      tabs: { create: createTab },
     })
     sendMessage.mockImplementation(async (request: { type: string }) =>
       request.type === "GET_COVER_PREVIEW"
@@ -98,6 +99,35 @@ describe("task row content and controls", () => {
     )
     if (!control) throw new Error(`Missing button: ${label}`)
     return control
+  }
+
+  async function openRecoveryPanel() {
+    const trigger = container.querySelector<HTMLButtonElement>(
+      "[data-task-feedback-trigger]"
+    )
+    if (!trigger) throw new Error("Missing task feedback trigger")
+    const panel = document.getElementById(
+      trigger.getAttribute("aria-controls") ?? ""
+    )
+    if (
+      !panel?.matches("[data-task-feedback-panel]") ||
+      !trigger.closest("[data-task-id]")?.contains(panel)
+    ) {
+      throw new Error("Missing inline task feedback panel")
+    }
+    if (trigger.getAttribute("aria-expanded") === "false") {
+      await act(async () => trigger.click())
+    }
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    expect(panel.closest("[inert]")).toBeNull()
+    return panel
+  }
+
+  function recoveryButton(panel: HTMLElement, label: string) {
+    return Array.from(panel.querySelectorAll("button")).find(
+      (control) =>
+        (control.getAttribute("aria-label") ?? control.textContent) === label
+    )
   }
 
   it("shows confirmation as a focus boundary and restores the same row action after Escape", async () => {
@@ -156,14 +186,20 @@ describe("task row content and controls", () => {
     const onRemoveTask = vi.fn(async (_taskId: string) => {})
     const props = rowProps({ isRetrying: true, onRetryFailed, onRemoveTask })
     await render(props)
-    expect(button(t("sidepanel_retryRemaining")).disabled).toBe(true)
-    expect(button(t("common_dismiss")).disabled).toBe(false)
-    await act(async () => button(t("sidepanel_retryRemaining")).click())
-    await act(async () => button(t("common_dismiss")).click())
+    const panel = await openRecoveryPanel()
+    const retry = recoveryButton(panel, t("sidepanel_retryRemaining"))!
+    const dismiss = recoveryButton(panel, t("common_dismiss"))!
+    expect(retry.disabled).toBe(true)
+    expect(dismiss.disabled).toBe(false)
+    await act(async () => retry.click())
+    await act(async () => dismiss.click())
     expect(onRetryFailed).not.toHaveBeenCalled()
     expect(onRemoveTask).toHaveBeenCalledWith("task-one")
     await render({ ...props, isRetrying: false })
-    await act(async () => button(t("sidepanel_retryRemaining")).click())
+    const readyPanel = await openRecoveryPanel()
+    await act(async () =>
+      recoveryButton(readyPanel, t("sidepanel_retryRemaining"))!.click()
+    )
     expect(onRetryFailed).toHaveBeenCalledWith("task-one")
   })
 
@@ -176,33 +212,113 @@ describe("task row content and controls", () => {
       failureCategory: "provider_changed",
     })
     await render(rowProps({ task: captured }))
-    expect(container.querySelector(".task-outcome > strong")?.textContent).toBe(
+    expect(container.querySelector(".task-heading > h3")?.textContent).toBe(
       "Series One"
     )
+    expect(
+      button("Series One · Chapter results").getAttribute("aria-expanded")
+    ).toBe("false")
     expect(container.textContent).toContain("MangaDex")
-    expect(container.textContent).toContain("2/4")
-    expect(container.textContent).toContain(t("taskFolder_originalUnavailable"))
-    expect(container.textContent).toContain(t("downloadError_providerChanged"))
+    const panel = await openRecoveryPanel()
+    expect(panel.textContent).toContain("2/4")
+    expect(panel.textContent).toContain(t("taskFolder_originalUnavailable"))
+    expect(panel.textContent).toContain(t("downloadError_providerChanged"))
     expect(
-      container.querySelector("[data-task-destination]")?.textContent
+      panel.querySelector("[data-task-destination]")?.textContent
     ).toContain("My series/Volume 1")
-    expect(
-      container.querySelector('[aria-label="Retry failed chapters"]')
-    ).toBeNull()
-    expect(
-      container.querySelector('[aria-label="Retry all chapters"]')
-    ).toBeNull()
-    await act(async () => button(t("taskFolder_openActions")).click())
+    expect(recoveryButton(panel, t("sidepanel_retryRemaining"))).toBeUndefined()
+    expect(recoveryButton(panel, t("sidepanel_restartTask"))).toBeUndefined()
+    await act(async () =>
+      recoveryButton(panel, t("taskFolder_openActions"))!.click()
+    )
     expect(sendMessage).toHaveBeenCalledWith({
       target: "background",
       type: "OPEN_OPTIONS",
-      payload: { page: "activity" },
+      payload: { page: "activity", taskId: "task-one" },
     })
     await render(
       rowProps({ task: { ...captured, folderAccessRequired: undefined } })
     )
-    expect(container.textContent).not.toContain(t("taskFolder_openActions"))
+    const withoutFolderAccess = await openRecoveryPanel()
+    expect(
+      recoveryButton(withoutFolderAccess, t("taskFolder_openActions"))
+    ).toBeUndefined()
   })
+
+  it("puts output verification first and confirms a retry chosen from feedback", async () => {
+    const onRetryFailed = vi.fn(async (_taskId: string) => {})
+    await render(
+      rowProps({
+        task: task({
+          outputUncertain: true,
+          failureCategory: "browser_output_unconfirmed",
+        }),
+        onRetryFailed,
+      })
+    )
+    const panel = await openRecoveryPanel()
+    expect(panel.querySelector("button")?.textContent).toBe(
+      t("sidepanel_checkDownloads")
+    )
+    expect(panel.textContent).toContain(
+      t("downloadError_browserOutputUnconfirmed")
+    )
+    const retry = recoveryButton(panel, t("sidepanel_retryUncertainHandoff"))!
+    expect(retry).toBeTruthy()
+    await act(async () => retry.click())
+    expect(onRetryFailed).not.toHaveBeenCalled()
+    expect(container.textContent).toContain(t("sidepanel_duplicateWarning"))
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(button(t("common_cancel")))
+    )
+    await act(async () => button(t("sidepanel_retryAnyway")).click())
+    expect(onRetryFailed).toHaveBeenCalledWith("task-one")
+  })
+
+  it.each([
+    ["taskFolder_openActions", "taskFolder_openActionsFailed"],
+    ["sidepanel_checkDownloads", "sidepanel_checkDownloadsFailed"],
+  ] as const)(
+    "reports a rejected %s action in the row and clears it on retry",
+    async (label, failureKey) => {
+      if (label === "taskFolder_openActions") {
+        sendMessage.mockResolvedValueOnce({ success: false, error: "blocked" })
+      } else {
+        createTab
+          .mockRejectedValueOnce(new Error("blocked"))
+          .mockResolvedValueOnce({})
+      }
+      await render(
+        rowProps({
+          task: task({
+            folderAccessRequired:
+              label === "taskFolder_openActions" ? true : undefined,
+            outputUncertain: label === "sidepanel_checkDownloads",
+          }),
+        })
+      )
+      const panel = await openRecoveryPanel()
+      await act(async () => recoveryButton(panel, t(label))!.click())
+      expect(
+        container.querySelector("[data-task-feedback-summary]")?.textContent
+      ).toBe(t(failureKey))
+      expect(
+        container
+          .querySelector("[data-task-feedback-trigger]")
+          ?.getAttribute("aria-label")
+      ).toBe(t(failureKey))
+      const retryPanel = await openRecoveryPanel()
+      await act(async () => recoveryButton(retryPanel, t(label))!.click())
+      expect(
+        container.querySelector(
+          '[data-task-id="task-one"] [aria-live="assertive"]'
+        )?.textContent
+      ).toBe("")
+      expect(
+        container.querySelector("[data-task-feedback-summary]")?.textContent
+      ).toBe(t("status_partialSuccess"))
+    }
+  )
 
   it("uses task authorization for its cover request", async () => {
     await render(
@@ -244,30 +360,22 @@ describe("task row content and controls", () => {
     },
   ])(
     "keeps the known completed output evidence in its status: $label",
-    ({ outputDestination, saveConfirmedAt, label, unconfirmed }) => {
-      const html = renderToStaticMarkup(
-        createElement(
-          TooltipProvider,
-          null,
-          createElement(
-            CommandCenterTaskRow,
-            rowProps({
-              task: task({
-                status: "completed",
-                outputDestination,
-                saveConfirmedAt,
-              }),
-            })
-          )
-        )
+    async ({ outputDestination, saveConfirmedAt, label, unconfirmed }) => {
+      await render(
+        rowProps({
+          task: task({
+            status: "completed",
+            outputDestination,
+            saveConfirmedAt,
+          }),
+        })
       )
-      const document = window.document.implementation.createHTMLDocument()
-      document.body.innerHTML = html
-      expect(document.body.textContent).toContain(t(label))
       expect(
-        document.body.textContent?.includes(
-          t("output_saveUnconfirmedDescription")
-        )
+        container.querySelector("[data-task-feedback-summary]")?.textContent
+      ).toBe(t(label))
+      const panel = await openRecoveryPanel()
+      expect(
+        panel.textContent?.includes(t("output_saveUnconfirmedDescription"))
       ).toBe(unconfirmed)
     }
   )

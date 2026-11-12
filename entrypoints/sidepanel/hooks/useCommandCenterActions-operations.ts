@@ -1,4 +1,3 @@
-import { toast } from "sonner"
 import logger from "@/src/runtime/logger"
 import { openOptionsPage } from "@/src/runtime/open-options"
 import { t } from "@/src/runtime/i18n"
@@ -24,13 +23,14 @@ function taskCommand(
   command: (taskId: string) => Promise<unknown>,
   label: string,
   failureKey: string
-): (taskId: string) => Promise<void> {
+): (taskId: string) => Promise<string | null> {
   return async (taskId) => {
     try {
       await command(taskId)
+      return null
     } catch (error) {
       logger.error(`[CommandCenter] Failed to ${label}:`, error)
-      toast.error(t(failureKey))
+      return t(failureKey)
     }
   }
 }
@@ -56,28 +56,33 @@ export const moveCommandCenterTaskToTop = taskCommand(
 export async function removeCommandCenterTask(
   taskId: string,
   onUndo?: (receipt: PendingUndoReceipt, taskId: string) => void
-): Promise<void> {
+): Promise<string | null> {
   try {
     const undo = await queueCommandClient.removeTask(taskId)
     if (undo) onUndo?.(undo, taskId)
+    return null
   } catch (error) {
     logger.error("[CommandCenter] Failed to remove task:", error)
-    toast.error(t("sidepanel_toastRemoveFailed"))
+    return t("sidepanel_toastRemoveFailed")
   }
 }
 
-export async function openCommandCenterSettings(): Promise<void> {
+export async function openCommandCenterSettings(): Promise<boolean> {
   try {
     await openOptionsPage()
+    return true
   } catch (error) {
     logger.error("[CommandCenter] Failed to open Options page:", error)
+    return false
   }
 }
 
-export async function openCommandCenterHistory(): Promise<void> {
+export async function openCommandCenterHistory(): Promise<boolean> {
   try {
     await openOptionsPage("activity")
+    return true
   } catch (error) {
     logger.error("[CommandCenter] Failed to open full history:", error)
+    return false
   }
 }

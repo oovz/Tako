@@ -4,6 +4,7 @@ import { buildExampleUrl } from "./fixtures/test-domains-constants"
 import {
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 import type { ChapterState } from "../../src/types/tab-state"
@@ -59,7 +60,8 @@ test.describe("Queue cancel and restart behavior", () => {
     })
 
     const completedTaskRow = sp.locator('[data-task-id="completed-task"]')
-    await completedTaskRow.getByRole("button", { name: "Dismiss" }).click()
+    const feedback = await openTaskFeedback(completedTaskRow)
+    await feedback.getByRole("button", { name: "Dismiss" }).click()
 
     await waitForGlobalState(
       context,
@@ -146,7 +148,9 @@ test.describe("Queue cancel and restart behavior", () => {
     await expect(sp.getByText("Has Failures")).toBeVisible()
 
     // There should be a single "Retry failed" action for the failed task
-    const retryButton = sp.getByRole("button", {
+    const row = sp.locator('[data-task-id="failed-with-mix"]')
+    const feedback = await openTaskFeedback(row)
+    const retryButton = feedback.getByRole("button", {
       name: "Retry remaining chapters",
     })
     await expect(retryButton).toBeVisible()
@@ -189,8 +193,12 @@ test.describe("Queue cancel and restart behavior", () => {
     })
 
     // UI: Retry button should be removed once the original task has been retried
+    const updatedFeedback = await openTaskFeedback(row)
     await expect(
-      sp.getByRole("button", { name: "Retry remaining chapters" })
+      updatedFeedback.getByRole("button", { name: "Dismiss" })
+    ).toBeVisible()
+    await expect(
+      updatedFeedback.getByRole("button", { name: "Retry remaining chapters" })
     ).toHaveCount(0)
 
     await sp.close()
@@ -233,7 +241,12 @@ test.describe("Queue cancel and restart behavior", () => {
     await expect(sp.locator("#root")).toBeVisible()
     await expect(sp.getByText("Retry Partial")).toBeVisible()
 
-    await sp.getByRole("button", { name: "Retry remaining chapters" }).click()
+    const feedback = await openTaskFeedback(
+      sp.locator('[data-task-id="retry-partial"]')
+    )
+    await feedback
+      .getByRole("button", { name: "Retry remaining chapters" })
+      .click()
 
     await waitForGlobalState(context, (state) => {
       const original = state.downloadQueue.find(

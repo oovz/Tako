@@ -124,6 +124,31 @@ describe("projectToQueueView", () => {
     expect(result.nonTerminalCount).toBe(3)
   })
 
+  it("keeps the former queue slot and start evidence after a task fails", () => {
+    const tasks = [
+      makeTask({ id: "first" }),
+      makeTask({ id: "previously-queued", status: "failed", completed: 5 }),
+      makeTask({
+        id: "previously-active",
+        status: "failed",
+        started: 2,
+        completed: 6,
+      }),
+      makeTask({ id: "last" }),
+    ]
+    const { queueView, historyView } = projectToQueueView(tasks)
+
+    expect(queueView.map((task) => task.queueIndex)).toEqual([0, 3])
+    expect(historyView).toMatchObject([
+      { id: "previously-active", queueIndex: 2, timestamps: { started: 2 } },
+      {
+        id: "previously-queued",
+        queueIndex: 1,
+        timestamps: { started: undefined },
+      },
+    ])
+  })
+
   it("counts and orders multiple active downloads before queued tasks", () => {
     const tasks: DownloadTaskState[] = [
       makeTask({ id: "queued-1", status: "queued", created: 4 }),

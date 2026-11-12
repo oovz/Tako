@@ -6,7 +6,6 @@ import type { ActiveTaskProgress as ActiveTaskProgressState } from "@/entrypoint
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
 import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
 import { t } from "@/src/runtime/i18n"
-import { getDownloadFailureMessage } from "@/src/runtime/download-error-presentation"
 
 export interface CommandCenterTaskActionAvailability {
   canCancel: boolean
@@ -233,13 +232,4 @@ export function getTaskProgressPresentation(
       task.chapters.completed + inFlightChapterCount
     ),
   }
-}
-
-export function getTaskFailureMessage(
-  task: QueueTaskSummary
-): string | undefined {
-  return getDownloadFailureMessage(
-    task.failureCategory,
-    task.outputUncertain === true
-  )
 }

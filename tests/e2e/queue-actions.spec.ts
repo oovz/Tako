@@ -7,6 +7,7 @@ import {
 import {
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
   getExtensionWorker,
 } from "./fixtures/queue-test-helpers"
@@ -280,6 +281,7 @@ test.describe("Queue actions and cross-window behavior", () => {
           seriesTitle: "Completed With Folder",
           status: "completed",
           created: now - 10000,
+          started: now - 9000,
           completed: now - 8000,
           lastSuccessfulDownloadId: 12345,
           chapters: [makeChapter(buildExampleUrl("/cwf1"), "completed")],
@@ -296,8 +298,10 @@ test.describe("Queue actions and cross-window behavior", () => {
 
       await expect(sp.locator("#root")).toBeVisible()
       await expect(sp.getByText("Active No Folder")).toBeVisible()
-      await expect(sp.getByText("Completed With Folder")).toBeVisible()
-      await expect(sp.getByText("Needs attention")).toBeVisible()
+      await expect(
+        sp.locator(".queue-current").getByText("Completed With Folder")
+      ).toBeVisible()
+      await expect(sp.getByText("Needs attention")).toHaveCount(0)
       await expect(
         sp.getByRole("button", { name: /open folder/i })
       ).toHaveCount(0)
@@ -340,10 +344,11 @@ test.describe("Queue actions and cross-window behavior", () => {
       await expect(sp.getByText("Update Failed Series")).toBeVisible({
         timeout: 10000,
       })
+      const feedback = await openTaskFeedback(
+        sp.locator('[data-task-id="update-failed-task"]')
+      )
       await expect(
-        sp.getByText(
-          /The download failed\. See the extension console for technical details\./i
-        )
+        feedback.getByText("The download stopped before it finished.")
       ).toBeVisible({ timeout: 5000 })
       await expect(
         sp.getByText(/Extension updated during download/i)

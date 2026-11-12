@@ -4,6 +4,7 @@ import { buildExampleUrl } from "./fixtures/test-domains-constants"
 import {
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 import type { DownloadTaskState } from "../../src/domain/queue/state"
@@ -13,7 +14,7 @@ const exampleRootUrl = buildExampleUrl("/")
 test.describe("Partial-success and aborted task history", () => {
   test.describe.configure({ mode: "serial" })
 
-  test("shows partially completed tasks in recent history", async ({
+  test("keeps partial completion in the started task's Queue lane", async ({
     context,
     extensionId,
     page,
@@ -25,8 +26,9 @@ test.describe("Partial-success and aborted task history", () => {
       makeTask({
         id: "partial-task",
         seriesTitle: "Partial Success Series",
-        status: "partial_success" as DownloadTaskState["status"],
+        status: "partial_success",
         created: now - 10000,
+        started: now - 9000,
         completed: now - 5000,
         chapters: [
           makeChapter(buildExampleUrl("/p1"), "completed"),
@@ -44,11 +46,14 @@ test.describe("Partial-success and aborted task history", () => {
       waitUntil: "domcontentloaded",
     })
 
-    await expect(sp.locator("#root")).toBeVisible()
+    const task = sp.locator('.queue-current [data-task-id="partial-task"]')
+    await expect(task.getByText("Partial Success Series")).toBeVisible()
     await expect(
-      sp
-        .getByRole("region", { name: "Recent history" })
-        .getByText("Partial Success Series")
+      task.locator(".task-chapter-status").getByText("2/3 saved")
+    ).toBeVisible()
+    const feedback = await openTaskFeedback(task)
+    await expect(
+      feedback.getByRole("button", { name: "Retry remaining chapters" })
     ).toBeVisible()
   })
 
@@ -87,10 +92,11 @@ test.describe("Partial-success and aborted task history", () => {
     await expect(sp.getByText("Aborted Series")).toBeVisible({
       timeout: 10000,
     })
+    const feedback = await openTaskFeedback(
+      sp.locator('[data-task-id="aborted-task-1"]')
+    )
     await expect(
-      sp.getByText(
-        /The download failed\. See the extension console for technical details\./i
-      )
+      feedback.getByText("The download stopped before it finished.")
     ).toBeVisible({ timeout: 5000 })
     await expect(sp.getByText(/Browser closed during download/i)).toHaveCount(0)
 

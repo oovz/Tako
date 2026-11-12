@@ -1,4 +1,4 @@
-import type { BrowserContext, Worker } from "@playwright/test"
+import type { BrowserContext, Locator, Worker } from "@playwright/test"
 
 import { seedDownloadQueueStateInContext } from "./state-helpers"
 import { createTaskSettingsSnapshot } from "@/src/runtime/settings-snapshot"
@@ -109,3 +109,11 @@ export async function seedGlobalQueue(
 }
 
 export { getExtensionWorker }
+
+export async function openTaskFeedback(row: Locator): Promise<Locator> {
+  const trigger = row.locator("[data-task-feedback-trigger]")
+  await trigger.waitFor()
+  if ((await trigger.getAttribute("aria-expanded")) !== "true")
+    await trigger.click()
+  return row.locator("[data-task-feedback-panel]")
+}

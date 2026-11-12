@@ -7,10 +7,11 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { toast } from "sonner"
+import { Check, CircleAlert, Undo2 } from "lucide-react"
 import type { PendingUndoReceipt } from "@/src/domain/queue/state"
 import { queueCommandClient } from "@/src/ui/shared/queue-command-client"
 import { t } from "@/src/runtime/i18n"
+import { PanelFeedbackSlots } from "./PanelFeedbackSlots"
 
 interface Offer {
   receipt: PendingUndoReceipt
@@ -64,7 +65,7 @@ function UndoOffer({
   const [hovered, setHovered] = useState(false)
   const [pending, setPending] = useState(false)
   const [expired, setExpired] = useState(false)
-  const region = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
   const undoButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     undoButton.current?.focus()
@@ -104,8 +105,8 @@ function UndoOffer({
   }, [protectedOffer, offer.receipt.expiresAt, token, remove])
   return (
     <div
-      className="queue-undo"
-      ref={region}
+      className="queue-undo panel-feedback-row"
+      data-tone={failed ? "error" : "success"}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
       onFocusCapture={() => setFocused(true)}
@@ -114,52 +115,66 @@ function UndoOffer({
           setFocused(false)
       }}
     >
-      <span role="status">
+      {failed ? (
+        <CircleAlert size={15} aria-hidden="true" />
+      ) : (
+        <Check size={15} aria-hidden="true" />
+      )}
+      <p role={failed ? "alert" : "status"}>
         {t(
-          expired
-            ? "sidepanel_undoExpired"
-            : offer.receipt.type === "cancel_queued"
-              ? "sidepanel_taskRemovedFromQueue"
-              : "sidepanel_historyRemoved"
+          failed
+            ? "sidepanel_undoFailed"
+            : expired
+              ? "sidepanel_undoExpired"
+              : offer.receipt.type === "cancel_queued"
+                ? "sidepanel_taskRemovedFromQueue"
+                : "sidepanel_historyRemoved"
         )}
-      </span>
+      </p>
       <button
         ref={undoButton}
         type="button"
+        className="panel-feedback-action"
         aria-disabled={pending || expired}
         onClick={async () => {
           if (pending || expired) return
           setPending(true)
+          setFailed(false)
           try {
             await queueCommandClient.undoQueueAction(token)
             remove(token)
             // The restored projection may arrive after the command response.
             document.getElementById("panel-tab-queue")?.focus()
           } catch {
-            toast.error(t("sidepanel_undoFailed"))
+            setFailed(true)
           } finally {
             setPending(false)
           }
         }}
       >
-        {t("common_undo")}
+        <Undo2 size={13} aria-hidden="true" />
+        <span>{t("common_undo")}</span>
       </button>
     </div>
   )
 }
 export function QueueUndoRegion() {
   const context = useContext(Context)
-  if (!context?.offers.length) return null
+  if (!context) return null
   return (
     <div className="queue-undo-region">
-      {context.offers.map((offer) => (
-        <UndoOffer
-          key={offer.receipt.token}
-          offer={offer}
-          update={context.update}
-          remove={context.remove}
-        />
-      ))}
+      <PanelFeedbackSlots
+        items={context.offers.map((offer) => ({
+          key: offer.receipt.token,
+          content: (
+            <UndoOffer
+              offer={offer}
+              update={context.update}
+              remove={context.remove}
+            />
+          ),
+        }))}
+      />
     </div>
   )
 }

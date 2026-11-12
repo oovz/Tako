@@ -86,6 +86,27 @@
   "sidepanel_settingsTooltip": {
     "message": "設定"
   },
+  "sidepanel_settingsOpenFailed": {
+    "message": "設定を開けませんでした"
+  },
+  "sidepanel_historyOpenFailed": {
+    "message": "ダウンロード履歴を開けませんでした"
+  },
+  "sidepanel_reloadExtension": {
+    "message": "拡張機能を再読み込み"
+  },
+  "taskFolder_openActionsFailed": {
+    "message": "フォルダーの操作を開けませんでした。"
+  },
+  "sidepanel_checkDownloadsFailed": {
+    "message": "Chrome のダウンロードを開けませんでした。"
+  },
+  "sidepanel_taskStoppedEarly": {
+    "message": "ダウンロードが完了する前に停止しました。"
+  },
+  "sidepanel_taskDetailsLoadFailed": {
+    "message": "話の結果を読み込めませんでした。"
+  },
   "sidepanel_settingsNeedAttention": {
     "message": "設定の確認が必要です"
   },
@@ -1915,9 +1936,6 @@
   },
   "sidepanel_upNext": {
     "message": "待機中"
-  },
-  "sidepanel_needsAttention": {
-    "message": "対応が必要"
   },
   "sidepanel_noActiveDownloads": {
     "message": "ダウンロード中のタスクはありません。"

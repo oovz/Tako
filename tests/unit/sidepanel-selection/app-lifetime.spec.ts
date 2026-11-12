@@ -303,17 +303,18 @@ describe("real side panel composition", () => {
     const queueRegion = container.querySelector(
       "[data-sidepanel-queue-region]"
     )!
+    const queuePanel = container.querySelector("#panel-view-queue")!
     expect(queueRegion.querySelector('[aria-busy="true"]')).not.toBeNull()
     await act(async () => pending.reject(new Error("Projection unavailable")))
     expect(Number.isNaN(headerCount("common_active"))).toBe(true)
     expect(Number.isNaN(headerCount("common_queued"))).toBe(true)
-    expect(queueRegion.querySelector('[role="alert"]')).not.toBeNull()
+    expect(queuePanel.querySelector('[role="alert"]')).not.toBeNull()
     readSession.mockImplementation(async (keys: string | string[]) =>
       sessionData(keys)
     )
     await act(async () =>
-      queueRegion
-        .querySelector<HTMLButtonElement>('[role="alert"] button')!
+      queuePanel
+        .querySelector<HTMLButtonElement>(".queue-panel-notice button")!
         .click()
     )
     expect(headerCount("common_active")).toBe(1)
@@ -334,7 +335,7 @@ describe("real side panel composition", () => {
         listener({ [SESSION_STORAGE_KEYS.queueView]: {} }, "session")
       )
     )
-    expect(queueRegion.querySelector('[role="alert"]')).not.toBeNull()
+    expect(queuePanel.querySelector('[role="alert"]')).not.toBeNull()
     expect(headerCount("common_active")).toBe(1)
     expect(headerCount("common_queued")).toBe(2)
     expect(queueRegion.querySelectorAll("h3")).toHaveLength(3)

@@ -86,6 +86,27 @@
   "sidepanel_settingsTooltip": {
     "message": "設定"
   },
+  "sidepanel_settingsOpenFailed": {
+    "message": "無法開啟設定"
+  },
+  "sidepanel_historyOpenFailed": {
+    "message": "無法開啟下載記錄"
+  },
+  "sidepanel_reloadExtension": {
+    "message": "重新載入擴充功能"
+  },
+  "taskFolder_openActionsFailed": {
+    "message": "無法開啟資料夾操作。"
+  },
+  "sidepanel_checkDownloadsFailed": {
+    "message": "無法開啟 Chrome 下載內容。"
+  },
+  "sidepanel_taskStoppedEarly": {
+    "message": "下載在完成前停止。"
+  },
+  "sidepanel_taskDetailsLoadFailed": {
+    "message": "無法載入章節結果。"
+  },
   "sidepanel_settingsNeedAttention": {
     "message": "設定需要關注"
   },
@@ -1915,9 +1936,6 @@
   },
   "sidepanel_upNext": {
     "message": "接下來"
-  },
-  "sidepanel_needsAttention": {
-    "message": "需要處理"
   },
   "sidepanel_noActiveDownloads": {
     "message": "目前沒有下載中的工作。"

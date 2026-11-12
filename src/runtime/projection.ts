@@ -79,7 +79,12 @@ export function projectToQueueView(
   downloadQueue: DownloadTaskState[]
 ): QueueViewProjection {
   const { active, queued, terminal } = partitionQueueSummaries(
-    downloadQueue.map(toQueueTaskSummary)
+    // A waiting task may fail before it starts. Project its aggregate slot so
+    // the panel can keep its recovery row between the same queued neighbors.
+    downloadQueue.map((task, queueIndex) => ({
+      ...toQueueTaskSummary(task),
+      queueIndex,
+    }))
   )
 
   active.sort((a, b) => a.timestamps.created - b.timestamps.created)

@@ -155,6 +155,7 @@ export interface QueueAggregateState {
 
 export interface QueueTaskSummary {
   chapterRange?: string
+  queueIndex?: number
   useChromeFallback?: true
   id: string
   seriesKey: string
@@ -176,6 +177,7 @@ export interface QueueTaskSummary {
   }
   timestamps: {
     created: number
+    started?: number
     completed?: number
   }
   outputUncertain?: boolean

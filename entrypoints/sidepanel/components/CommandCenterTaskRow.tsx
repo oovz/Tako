@@ -1,13 +1,15 @@
-import { memo, useEffect, useId, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react"
+import { CircleAlert, Download, FolderOpen, X } from "lucide-react"
 import { PanelIcon } from "./PanelIcon"
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { InlineConfirmation } from "@/src/ui/shared/components/InlineConfirmation"
 import { openOptionsPage } from "@/src/runtime/open-options"
+import logger from "@/src/runtime/logger"
 import { TaskDestinationCaption } from "@/src/ui/shared/TaskDestinationCaption"
 import { getDisplayName } from "@/src/site-integrations/catalog"
 import { t } from "@/src/runtime/i18n"
 import { getOutputResultLabel } from "@/src/runtime/output-result-presentation"
+import { getDownloadErrorMessage } from "@/src/runtime/download-error-presentation"
 import { useI18n } from "@/src/ui/shared/hooks/useI18n"
 import type { ActiveTaskProgress as ActiveTaskProgressState } from "../hooks/useActiveTaskProgress"
 import type { QueueTaskSummary } from "@/src/domain/queue/state"
@@ -17,18 +19,28 @@ import {
   getProgressChapterContext,
   getProgressStageCaption,
 } from "./ActiveTaskProgress-model"
-import { CommandCenterTaskActions } from "./CommandCenterTaskActions"
+import {
+  CommandCenterTaskActions,
+  type RecoveryTaskLink,
+} from "./CommandCenterTaskActions"
 import { CoverPreview } from "./CoverPreview"
+import {
+  TaskRowFeedback,
+  TaskRowFeedbackButton,
+  type TaskFeedback,
+} from "./TaskRowFeedback"
+import { TaskRowReveal } from "./TaskRowReveal"
 import {
   getRetryAvailability,
   getTaskActionAvailability,
-  getTaskFailureMessage,
   getTaskStatusLabel,
   type CommandCenterTaskActionHandler,
 } from "./command-center-queue-helpers"
+import "./CommandCenterTaskRow.css"
 
 interface CommandCenterTaskRowProps {
   task: QueueTaskSummary
+  lane?: "active" | "waiting"
   isCanceling: boolean
   isRetrying: boolean
   isRestarting: boolean
@@ -36,6 +48,7 @@ interface CommandCenterTaskRowProps {
   isMoving: boolean
   isConfirmingCancel: boolean
   cancelError: string | null
+  taskActionError?: string
   activeTaskProgress: ActiveTaskProgressState | null | undefined
   showActiveProgress: boolean
   isFirstQueuedTask?: boolean
@@ -52,19 +65,51 @@ interface CommandCenterTaskRowProps {
   onReorder?: (taskId: string, position: number) => void | Promise<void>
 }
 
+function getRecoveryNote(task: QueueTaskSummary, canRetry: boolean) {
+  if (task.outputUncertain)
+    return getDownloadErrorMessage("browser_output_unconfirmed")
+  if (task.targetUnavailable) return t("taskFolder_originalUnavailable")
+  if (task.folderAccessRequired)
+    return task.failureCategory === "folder_permission_required"
+      ? null
+      : t("sidepanel_restoreFolderNote")
+  if (canRetry) return t("sidepanel_retryRemainingNote")
+  if (task.status === "completed" && task.saveConfirmedAt === undefined)
+    return t("output_saveUnconfirmedDescription")
+  return null
+}
+
 function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
   useI18n()
   const { task, activeTaskProgress } = props
   const [expanded, setExpanded] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [ordering, setOrdering] = useState(false)
   const [position, setPosition] = useState(String(props.queuePosition ?? 1))
   const [recovery, setRecovery] = useState<"retry" | "restart" | null>(null)
+  const [recoveryLinkError, setRecoveryLinkError] = useState<string | null>(
+    null
+  )
+  const pendingLink = useRef<RecoveryTaskLink["id"] | null>(null)
+  const [openingLink, setOpeningLink] = useState<RecoveryTaskLink["id"] | null>(
+    null
+  )
   const id = useId()
   const cancelButton = useRef<HTMLButtonElement>(null)
   const reorderButton = useRef<HTMLButtonElement>(null)
   const keepButton = useRef<HTMLButtonElement>(null)
+  const disclosure = useRef<HTMLButtonElement>(null)
+  const feedbackTrigger = useRef<HTMLButtonElement>(null)
+  const restoreCancelFocus = useRef(false)
   const active = task.status === "downloading"
   const queued = task.status === "queued"
+  const terminal = !active && !queued
+  const layout =
+    props.lane ??
+    (active || (terminal && task.timestamps.started !== undefined)
+      ? "active"
+      : "waiting")
+  const activeLayout = layout === "active"
   const details = useTaskDetails(task.id, expanded || active)
   const cancelPending = props.isCanceling || Boolean(details.task?.activeCancel)
   const progress =
@@ -138,22 +183,86 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
     isFirstQueuedTask: props.isFirstQueuedTask,
   })
   const retry = getRetryAvailability(task, Boolean(props.onRetryFailed))
-  const failure = getTaskFailureMessage(task)
   useEffect(() => {
     if (!props.isConfirmingCancel) return
     const trigger = cancelButton.current
+    const fallback = disclosure.current
     keepButton.current?.focus()
     return () => {
-      trigger?.focus()
+      if (trigger?.isConnected) trigger.focus()
+      else fallback?.focus()
     }
   }, [props.isConfirmingCancel])
   const runRecovery = (kind: "retry" | "restart") => {
-    if (task.outputUncertain) setRecovery(kind)
-    else
+    if (task.outputUncertain) {
+      feedbackTrigger.current?.focus()
+      setFeedbackOpen(false)
+      setRecovery(kind)
+    } else
       void (kind === "retry" ? props.onRetryFailed : props.onRestartTask)?.(
         task.id
       )
   }
+  const openRecoveryLink = useCallback(
+    async (
+      link: RecoveryTaskLink["id"],
+      open: () => Promise<unknown>,
+      failureKey:
+        "taskFolder_openActionsFailed" | "sidepanel_checkDownloadsFailed"
+    ) => {
+      if (pendingLink.current) return
+      pendingLink.current = link
+      setOpeningLink(link)
+      setRecoveryLinkError(null)
+      try {
+        await open()
+      } catch (error) {
+        logger.warn(
+          "[CommandCenter] Could not open a task recovery action:",
+          error
+        )
+        setRecoveryLinkError(t(failureKey))
+      } finally {
+        pendingLink.current = null
+        setOpeningLink(null)
+      }
+    },
+    []
+  )
+  const checkDownloads: RecoveryTaskLink = {
+    id: "check-downloads",
+    Icon: Download,
+    label: t("sidepanel_checkDownloads"),
+    pending: openingLink === "check-downloads",
+    invoke: () =>
+      openRecoveryLink(
+        "check-downloads",
+        () => chrome.tabs.create({ url: "chrome://downloads/" }),
+        "sidepanel_checkDownloadsFailed"
+      ),
+  }
+  const openFolderActions: RecoveryTaskLink = {
+    id: "open-folder-actions",
+    Icon: FolderOpen,
+    label: t("taskFolder_openActions"),
+    pending: openingLink === "open-folder-actions",
+    invoke: () =>
+      openRecoveryLink(
+        "open-folder-actions",
+        () => openOptionsPage("activity", task.id),
+        "taskFolder_openActionsFailed"
+      ),
+  }
+  const recoveryLinks = [
+    ...(task.outputUncertain ? [checkDownloads] : []),
+    ...(task.folderAccessRequired ? [openFolderActions] : []),
+  ]
+  const actionErrors = [
+    props.cancelError,
+    props.taskActionError,
+    recoveryLinkError,
+  ].filter((message): message is string => Boolean(message))
+  const canRetryFailed = retry.canRetryFailed && !task.targetUnavailable
   const actionProps = {
     taskId: task.id,
     status: task.status,
@@ -164,77 +273,184 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
     isRemoving: props.isRemoving,
     isMoving: props.isMoving,
     canCancel: availability.canCancel,
-    canRetryFailed: retry.canRetryFailed && !task.targetUnavailable,
+    canRetryFailed,
     canRestart: availability.canRestart && !task.targetUnavailable,
     canMoveToTop: !props.onReorder && availability.canMoveToTop,
     canRemove: availability.canRemove,
-    onBeginCancel: props.onBeginCancel,
+    onBeginCancel: (taskId: string) => {
+      restoreCancelFocus.current =
+        queued &&
+        document.activeElement?.getAttribute("aria-label") ===
+          t("sidepanel_cancelDownload")
+      props.onBeginCancel(taskId)
+    },
     onRetryFailed: () => runRecovery("retry"),
     onRestartTask: () => runRecovery("restart"),
     onMoveTaskToTop: props.onMoveTaskToTop,
     onRemoveTask: props.onRemoveTask,
   }
+  const recoveryCause =
+    task.failureCategory === "unknown" ||
+    (task.failureCategory === "browser_output_unconfirmed" &&
+      task.outputUncertain)
+      ? null
+      : task.failureCategory
+        ? getDownloadErrorMessage(task.failureCategory)
+        : null
+  const recoveryNote = getRecoveryNote(task, canRetryFailed)
+  const statusLabel = getTaskStatusLabel(
+    task.status,
+    task.activeBlock,
+    task.outputDestination,
+    task.saveConfirmedAt
+  )
+  const feedback: TaskFeedback | null =
+    terminal || actionErrors.length > 0
+      ? {
+          summary: actionErrors[0] ?? statusLabel,
+          tone:
+            actionErrors.length > 0 || task.status === "failed"
+              ? "error"
+              : "warning",
+          description:
+            (terminal ? recoveryCause : statusLabel) ??
+            (task.status === "failed" && !recoveryNote
+              ? t("sidepanel_taskStoppedEarly")
+              : null),
+          guidance: recoveryNote,
+          messages: actionErrors.slice(1),
+        }
+      : null
+  useEffect(() => {
+    if (!props.cancelError || !restoreCancelFocus.current) return
+    restoreCancelFocus.current = false
+    if (document.activeElement === document.body)
+      feedbackTrigger.current?.focus()
+  }, [props.cancelError])
+  const savedCount = t("sidepanel_savedCount", [
+    String(task.chapters.completed),
+    String(task.chapters.total),
+  ])
+  const showSavedCount =
+    activeLayout &&
+    (task.status !== "completed" || task.saveConfirmedAt !== undefined)
+  if (!feedback && feedbackOpen) setFeedbackOpen(false)
+  const feedbackPanelId = id + "-feedback"
+  const feedbackControl = feedback && (
+    <TaskRowFeedbackButton
+      feedback={feedback}
+      panelId={feedbackPanelId}
+      open={feedbackOpen}
+      triggerRef={feedbackTrigger}
+      onToggle={() => setFeedbackOpen((open) => !open)}
+    />
+  )
+  const feedbackPanel = feedback && (
+    <TaskRowFeedback
+      panelId={feedbackPanelId}
+      open={feedbackOpen}
+      onClose={() => {
+        setFeedbackOpen(false)
+        feedbackTrigger.current?.focus()
+      }}
+      feedback={feedback}
+      taskActions={
+        active && props.isConfirmingCancel
+          ? { ...actionProps, onBeginCancel: props.onConfirmCancel }
+          : actionProps
+      }
+      recoveryLinks={recoveryLinks}
+      terminal={terminal}
+    >
+      {terminal &&
+        !activeLayout &&
+        (task.status !== "completed" || task.saveConfirmedAt !== undefined) && (
+          <p>{savedCount}</p>
+        )}
+      {terminal && (task.targetUnavailable || task.folderAccessRequired) && (
+        <TaskDestinationCaption
+          destination={task.destination}
+          requestedPath={task.requestedPath}
+          useChromeFallback={task.useChromeFallback}
+        />
+      )}
+    </TaskRowFeedback>
+  )
   return (
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className={active || queued ? "queue-task" : "queue-task failed-task"}
+      className="queue-task"
       data-task-id={task.id}
       data-active={active}
       data-queued={queued}
       data-expanded={expanded}
+      data-recovery={terminal}
+      data-layout={layout}
     >
-      {(active || queued) && (
-        <div className="queue-task-head">
-          <button
-            type="button"
-            className="queue-task-toggle"
-            aria-expanded={expanded}
-            aria-controls={id}
-            onClick={() => setExpanded(!expanded)}
-          >
-            <span className="task-disclosure">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-              >
-                <path d="M5 12h14" />
-                <path className="expand-stem" d="M12 5v14" />
-              </svg>
+      <div className="queue-task-head">
+        <button
+          type="button"
+          ref={disclosure}
+          className="queue-task-toggle"
+          aria-label={
+            terminal
+              ? `${task.seriesTitle} · ${t("sidepanel_chapterResults")}`
+              : undefined
+          }
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="task-disclosure">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+            >
+              <path d="M5 12h14" />
+              <path className="expand-stem" d="M12 5v14" />
+            </svg>
+          </span>
+          {activeLayout && (
+            <span className="task-cover">
+              <CoverPreview
+                identity={
+                  task.coverUrl
+                    ? {
+                        integrationId: task.siteIntegration,
+                        coverUrl: task.coverUrl,
+                        source: { kind: "task", taskId: task.id },
+                      }
+                    : undefined
+                }
+                alt=""
+                className="object-cover"
+              />
             </span>
-            {active && (
-              <span className="task-cover">
-                <CoverPreview
-                  identity={
-                    task.coverUrl
-                      ? {
-                          integrationId: task.siteIntegration,
-                          coverUrl: task.coverUrl,
-                          source: { kind: "task", taskId: task.id },
-                        }
-                      : undefined
-                  }
-                  alt=""
-                  className="object-cover"
-                />
-              </span>
-            )}
-            {queued && props.queuePosition && (
-              <span className="queue-position">
-                {String(props.queuePosition).padStart(2, "0")}
-              </span>
-            )}
-            <span className="task-heading">
-              <h3 title={task.seriesTitle}>{task.seriesTitle}</h3>
-              <span className="panel-meta">
-                {active ? (
-                  t("sidepanel_savedCount", [
-                    String(task.chapters.completed),
-                    String(task.chapters.total),
-                  ])
+          )}
+          {!activeLayout &&
+          (props.queuePosition || (terminal && props.onReorder)) ? (
+            <span
+              className="queue-position"
+              data-placeholder={terminal || undefined}
+              aria-hidden={terminal || undefined}
+            >
+              {terminal ? "00" : String(props.queuePosition).padStart(2, "0")}
+            </span>
+          ) : null}
+          <span className="task-heading">
+            <h3 title={task.seriesTitle}>{task.seriesTitle}</h3>
+            <span className="task-row-meta">
+              <span
+                className="panel-meta"
+                data-replaced={Boolean(feedback)}
+                aria-hidden={feedback ? true : undefined}
+              >
+                {showSavedCount ? (
+                  savedCount
                 ) : (
                   <>
                     <span className="queue-chapter-count">
@@ -245,7 +461,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
                         [String(task.chapters.total)]
                       )}
                     </span>
-                    {queued && task.chapterRange && (
+                    {!activeLayout && task.chapterRange && (
                       <span className="queue-chapter-range">
                         {t("sidepanel_chapterNumber", [task.chapterRange])}
                       </span>
@@ -255,9 +471,16 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
                   </>
                 )}
               </span>
+              {feedback && (
+                <span data-task-feedback-summary data-tone={feedback.tone}>
+                  {feedback.summary}
+                </span>
+              )}
             </span>
-          </button>
-          {active ? (
+          </span>
+        </button>
+        {activeLayout ? (
+          (feedbackControl ?? (
             <button
               type="button"
               className="task-ring"
@@ -277,7 +500,7 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
               aria-controls={id + "-cancel"}
               aria-expanded={props.isConfirmingCancel}
               disabled={cancelPending || !availability.canCancel}
-              onClick={() => props.onBeginCancel(task.id)}
+              onClick={() => actionProps.onBeginCancel(task.id)}
             >
               <svg viewBox="0 0 42 42" aria-hidden="true">
                 <circle className="ring-track" cx="21" cy="21" r="18" />
@@ -298,94 +521,101 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
                 {t("sidepanel_taskPercent", [String(percent)])}
               </span>
             </button>
-          ) : (
-            <div className="task-actions">
-              {queued && props.onReorder && (
-                <button
-                  type="button"
-                  className="task-grip"
-                  ref={reorderButton}
-                  draggable={!props.isMoving}
-                  aria-label={t("sidepanel_reorderTask")}
-                  title={t("sidepanel_reorderTask")}
-                  aria-expanded={ordering}
-                  disabled={props.isMoving}
-                  onClick={() => {
-                    setPosition(String(props.queuePosition ?? 1))
-                    setOrdering(!ordering)
-                  }}
-                >
-                  <PanelIcon name="grip" />
-                </button>
-              )}
-              <CommandCenterTaskActions {...actionProps} />
-            </div>
-          )}
-        </div>
-      )}
-      {active && (
-        <div
-          id={id + "-cancel"}
-          className="task-cancel-reveal"
-          data-open={props.isConfirmingCancel}
-          inert={!props.isConfirmingCancel}
-        >
-          <div>
-            <div
-              className="task-cancel"
-              role="group"
-              aria-label={t("sidepanel_cancelTask")}
-              aria-busy={cancelPending}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && !cancelPending)
-                  props.onDismissCancel()
-              }}
-            >
-              <strong>{t("sidepanel_cancelTaskQuestion")}</strong>
-              <p>{t("sidepanel_cancelTaskNote")}</p>
-              <div>
-                <button
-                  ref={keepButton}
-                  type="button"
-                  onClick={props.onDismissCancel}
-                  disabled={cancelPending}
-                >
-                  {t("sidepanel_keepDownloading")}
-                </button>
-                <button
-                  className="destructive-action"
-                  type="button"
-                  onClick={() => props.onConfirmCancel(task.id)}
-                  disabled={cancelPending}
-                >
-                  {t("sidepanel_cancelTask")}
-                </button>
-              </div>
-              {props.cancelError && <p role="alert">{props.cancelError}</p>}
-            </div>
+          ))
+        ) : (
+          <div className="task-actions">
+            {queued && props.onReorder && (
+              <button
+                type="button"
+                className="task-grip"
+                ref={reorderButton}
+                draggable={!props.isMoving}
+                aria-label={t("sidepanel_reorderTask")}
+                title={t("sidepanel_reorderTask")}
+                aria-expanded={ordering}
+                disabled={props.isMoving}
+                onClick={() => {
+                  setPosition(String(props.queuePosition ?? 1))
+                  setOrdering(!ordering)
+                }}
+              >
+                <PanelIcon name="grip" />
+              </button>
+            )}
+            {terminal && props.onReorder && (
+              <span className="task-grip-slot" aria-hidden="true" />
+            )}
+            {feedbackControl ?? <CommandCenterTaskActions {...actionProps} />}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+      <span className="sr-only" aria-live="assertive">
+        {actionErrors[0]}
+      </span>
       {active && (
+        <TaskRowReveal
+          id={id + "-cancel"}
+          open={props.isConfirmingCancel && !feedbackOpen}
+          label={t("sidepanel_cancelTask")}
+          busy={cancelPending}
+          onEscape={props.onDismissCancel}
+        >
+          <strong>{t("sidepanel_cancelTaskQuestion")}</strong>
+          <p>{t("sidepanel_cancelTaskNote")}</p>
+          <div>
+            <button
+              ref={keepButton}
+              type="button"
+              onClick={props.onDismissCancel}
+              disabled={cancelPending}
+            >
+              {t("sidepanel_keepDownloading")}
+            </button>
+            <button
+              className="destructive-action"
+              type="button"
+              onClick={() => props.onConfirmCancel(task.id)}
+              disabled={cancelPending}
+            >
+              {t("sidepanel_cancelTask")}
+            </button>
+          </div>
+        </TaskRowReveal>
+      )}
+      {feedbackPanel}
+      {activeLayout && (
         <div
           className="task-chapter-status"
           title={progress?.chapterTitle ?? currentChapter?.title}
         >
           <span>
-            <strong>
-              {currentChapter
-                ? t("sidepanel_chapterNumber", [
-                    String(
-                      currentChapter.chapterNumber ?? currentChapter.index
-                    ),
-                  ])
-                : progress?.chapterTitle}
-            </strong>
-            {currentChapter || progress?.chapterTitle ? " · " : ""}
-            {phase}
+            {terminal ? (
+              showSavedCount ? (
+                savedCount
+              ) : (
+                t("sidepanel_chapterCount", [String(task.chapters.total)])
+              )
+            ) : (
+              <>
+                <strong>
+                  {currentChapter
+                    ? t("sidepanel_chapterNumber", [
+                        String(
+                          currentChapter.chapterNumber ?? currentChapter.index
+                        ),
+                      ])
+                    : progress?.chapterTitle}
+                </strong>
+                {currentChapter || progress?.chapterTitle ? " · " : ""}
+                {phase}
+              </>
+            )}
           </span>
-          <span>{phaseDetail}</span>
-          {progress?.stage === "downloading" &&
+          <span>
+            {terminal ? getDisplayName(task.siteIntegration) : phaseDetail}
+          </span>
+          {!terminal &&
+            progress?.stage === "downloading" &&
             !cancelPending &&
             numbers.totalImages > 0 && (
               <progress
@@ -394,71 +624,6 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
                 max={numbers.totalImages}
               />
             )}
-        </div>
-      )}
-      {!active && !queued && (
-        <div className="task-outcome">
-          <strong>{task.seriesTitle}</strong>
-          <p className="failure-reason">
-            {failure ??
-              getTaskStatusLabel(
-                task.status,
-                task.activeBlock,
-                task.outputDestination,
-                task.saveConfirmedAt
-              )}
-          </p>
-          <p className="panel-meta">
-            {t("sidepanel_savedCount", [
-              String(task.chapters.completed),
-              String(task.chapters.total),
-            ])}{" "}
-            · {getDisplayName(task.siteIntegration)}
-          </p>
-          {task.targetUnavailable ? (
-            <p className="recovery-note">
-              {t("taskFolder_originalUnavailable")}
-            </p>
-          ) : task.folderAccessRequired ? (
-            <p className="recovery-note">{t("sidepanel_restoreFolderNote")}</p>
-          ) : task.outputUncertain ? (
-            <p className="recovery-note">{t("sidepanel_checkDownloadsNote")}</p>
-          ) : retry.canRetryFailed ? (
-            <p className="recovery-note">{t("sidepanel_retryRemainingNote")}</p>
-          ) : task.status === "completed" &&
-            task.saveConfirmedAt === undefined ? (
-            <p className="recovery-note">
-              {t("output_saveUnconfirmedDescription")}
-            </p>
-          ) : null}
-          {(task.targetUnavailable || task.folderAccessRequired) && (
-            <TaskDestinationCaption
-              destination={task.destination}
-              requestedPath={task.requestedPath}
-              useChromeFallback={task.useChromeFallback}
-            />
-          )}
-          {task.outputUncertain && (
-            <button
-              type="button"
-              className="text-action"
-              onClick={() =>
-                void chrome.tabs.create({ url: "chrome://downloads/" })
-              }
-            >
-              {t("sidepanel_checkDownloads")}
-            </button>
-          )}
-          {task.folderAccessRequired && (
-            <button
-              type="button"
-              className="text-action"
-              onClick={() => void openOptionsPage("activity")}
-            >
-              {t("taskFolder_openActions")}
-            </button>
-          )}
-          <CommandCenterTaskActions {...actionProps} presentation="recovery" />
         </div>
       )}
       {recovery && (
@@ -532,18 +697,6 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
           </button>
         </form>
       )}
-      {!active && !queued && (
-        <button
-          type="button"
-          className="task-results-toggle"
-          aria-expanded={expanded}
-          aria-controls={id}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>{" "}
-          {t("sidepanel_chapterResults")}
-        </button>
-      )}
       <CollapsibleContent className="task-details" id={id}>
         {active && (
           <p className="task-detail-meta">
@@ -560,9 +713,17 @@ function CommandCenterTaskRowView(props: CommandCenterTaskRowProps) {
           </p>
         )}
         {details.error ? (
-          <button className="text-action" type="button" onClick={details.retry}>
-            {t("common_retry")}
-          </button>
+          <div className="task-detail-notice">
+            <CircleAlert size={14} aria-hidden="true" />
+            <p role="alert">{t("sidepanel_taskDetailsLoadFailed")}</p>
+            <button
+              className="task-recovery-dismiss"
+              type="button"
+              onClick={details.retry}
+            >
+              {t("common_retry")}
+            </button>
+          </div>
         ) : !details.task ? (
           <p className="panel-meta">{t("common_loading")}</p>
         ) : (

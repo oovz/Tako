@@ -9,6 +9,7 @@ import {
   getExtensionWorker,
   makeChapter,
   makeTask,
+  openTaskFeedback,
   seedGlobalQueue,
 } from "./fixtures/queue-test-helpers"
 import { buildExampleUrl } from "./fixtures/test-domains-constants"
@@ -72,7 +73,7 @@ test.describe("Side panel queue behavior", () => {
     await sp.close()
   })
 
-  test("restarting a canceled task creates a fresh task with all chapters and no retried badge in the side panel", async ({
+  test("keeps cancellation out of Queue and allows a fresh restart from Activity", async ({
     context,
     extensionId,
     page,
@@ -126,12 +127,16 @@ test.describe("Side panel queue behavior", () => {
     await sp.goto(`chrome-extension://${extensionId}/sidepanel.html`, {
       waitUntil: "domcontentloaded",
     })
-    await expect(sp.locator("#root")).toBeVisible()
-    await expect(
-      sp.getByRole("button", { name: "Restart all chapters" })
-    ).toBeVisible({ timeout: 15000 })
-
-    await sp.getByRole("button", { name: "Restart all chapters" }).click()
+    await expect(sp.getByRole("heading", { name: "In progress" })).toBeVisible()
+    await expect(sp.getByText("Restartable Series")).toHaveCount(0)
+    const activity = await context.newPage()
+    await activity.goto(
+      `chrome-extension://${extensionId}/options.html?tab=activity`
+    )
+    const canceledCard = activity.locator(".options-task-card", {
+      hasText: "Restartable Series",
+    })
+    await canceledCard.getByRole("button", { name: "Restart task" }).click()
 
     await waitForGlobalState(context, (state) => {
       const original = state.downloadQueue.find(
@@ -155,14 +160,11 @@ test.describe("Side panel queue behavior", () => {
       )
     })
 
-    await expect(sp.getByText(/^retried$/i)).toHaveCount(0)
-    await expect(
-      sp.getByRole("button", { name: "Restart all chapters" })
-    ).toHaveCount(0)
+    await activity.close()
     await sp.close()
   })
 
-  test("history view shows five items and backfills after removing one", async ({
+  test("the bounded Queue recovery view backfills after a row is dismissed", async ({
     context,
     extensionId,
     page,
@@ -177,11 +179,12 @@ test.describe("Side panel queue behavior", () => {
         return makeTask({
           id: `history-task-${position}`,
           seriesTitle: `History Task ${position}`,
-          status: "completed",
+          status: "failed",
           created: now - (position + 10) * 1000,
+          started: now - (position + 8) * 1000,
           completed: now - position * 1000,
           chapters: [
-            makeChapter(buildExampleUrl(`/history-${position}`), "completed"),
+            makeChapter(buildExampleUrl(`/history-${position}`), "failed"),
           ],
         })
       }
@@ -197,7 +200,7 @@ test.describe("Side panel queue behavior", () => {
         >(context, "historyView")
         return (
           historyView
-            ?.filter((task) => task.status === "completed")
+            ?.filter((task) => task.status === "failed")
             .map((task) => task.seriesTitle)
             .slice(0, 5) ?? []
         )
@@ -221,10 +224,9 @@ test.describe("Side panel queue behavior", () => {
     await expect(sp.getByText("History Task 5")).toBeVisible()
     await expect(sp.getByText("History Task 6")).toHaveCount(0)
 
-    const firstHistoryTaskRow = sp
-      .getByRole("heading", { name: "History Task 1" })
-      .locator("xpath=ancestor::div[.//button[@aria-label='Remove']][1]")
-    await firstHistoryTaskRow.getByRole("button", { name: "Remove" }).click()
+    const firstHistoryTaskRow = sp.locator('[data-task-id="history-task-1"]')
+    const feedback = await openTaskFeedback(firstHistoryTaskRow)
+    await feedback.getByRole("button", { name: "Dismiss" }).click()
 
     await waitForGlobalState(
       context,
@@ -290,9 +292,6 @@ test.describe("Side panel queue behavior", () => {
       waitUntil: "domcontentloaded",
     })
     await expect(sp.locator("#root")).toBeVisible()
-    await expect(sp.getByText("History Link Task")).toBeVisible({
-      timeout: 15000,
-    })
     await sp.getByRole("tab", { name: "Recent" }).click()
     await expect(
       sp.getByRole("button", { name: "View history in Options" })

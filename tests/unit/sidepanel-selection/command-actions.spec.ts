@@ -3,14 +3,11 @@
 import { act, createElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { toast } from "sonner"
-import {
-  QueueUndoProvider,
-  QueueUndoRegion,
-} from "@/entrypoints/sidepanel/components/QueueUndo"
+import { QueueUndoProvider } from "@/entrypoints/sidepanel/components/QueueUndo"
+import { PanelFeedbackProvider } from "@/entrypoints/sidepanel/components/PanelFeedback"
+import { PanelFeedbackRegion } from "@/entrypoints/sidepanel/components/PanelFeedbackRegion"
 import { useCommandCenterActions } from "@/entrypoints/sidepanel/hooks/useCommandCenterActions"
-
-vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
+import { t } from "@/src/runtime/i18n"
 
 function clickUndo() {
   const button = document.querySelector<HTMLButtonElement>(".queue-undo button")
@@ -27,14 +24,15 @@ describe("mounted queue commands", () => {
 
   function View() {
     actions = useCommandCenterActions()
-    return createElement(QueueUndoRegion)
+    return createElement(PanelFeedbackRegion)
   }
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
     vi.stubGlobal("chrome", {
       ...chrome,
       runtime: { sendMessage },
       storage: {
+        onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
         session: {
           get: async (key: string) =>
             Object.hasOwn(stored, key) ? { [key]: stored[key] } : {},
@@ -49,11 +47,17 @@ describe("mounted queue commands", () => {
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)
-    act(() =>
+    sendMessage.mockResolvedValue({ success: true, data: [] })
+    await act(async () =>
       root.render(
-        createElement(QueueUndoProvider, { children: createElement(View) })
+        createElement(
+          PanelFeedbackProvider,
+          null,
+          createElement(QueueUndoProvider, { children: createElement(View) })
+        )
       )
     )
+    sendMessage.mockReset()
   })
   afterEach(() => {
     act(() => root.unmount())
@@ -130,8 +134,10 @@ describe("mounted queue commands", () => {
         kind: "completed",
       })
     )
-    expect(toast).not.toHaveBeenCalled()
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(actions.taskActionErrors).toEqual({})
+    expect(container.textContent).not.toContain(
+      t("sidepanel_toastCancelFailed")
+    )
   })
 
   it("offers history removal Undo and reports a rejected Undo without retaining task ownership", async () => {
@@ -150,7 +156,9 @@ describe("mounted queue commands", () => {
     await act(async () => actions.handleRemoveTask("history-task"))
     expect(actions.removingTaskIds.size).toBe(0)
     clickUndo()
-    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain(t("sidepanel_undoFailed"))
+    )
     expect(
       sendMessage.mock.calls.find(
         ([message]) => message.type === "UNDO_QUEUE_ACTION"
@@ -175,6 +183,15 @@ describe("mounted queue commands", () => {
         payload: { page: "activity" },
       },
     ])
+  })
+
+  it.each([
+    ["openSettings", "sidepanel_settingsOpenFailed"],
+    ["openFullHistory", "sidepanel_historyOpenFailed"],
+  ] as const)("shows panel feedback when %s fails", async (action, key) => {
+    sendMessage.mockResolvedValue({ success: false, error: "tab unavailable" })
+    await act(async () => actions[action]())
+    expect(container.textContent).toContain(t(key))
   })
 
   it("tracks different tasks and command kinds independently while requests overlap", async () => {
@@ -214,6 +231,12 @@ describe("mounted queue commands", () => {
         remove: actions.removingTaskIds,
         move: actions.movingTaskIds,
       })
+      const errorKeys = {
+        retry: "sidepanel_toastRetryFailed",
+        restart: "sidepanel_toastRestartFailed",
+        remove: "sidepanel_toastRemoveFailed",
+        move: "sidepanel_toastMoveTopFailed",
+      }
       const response = Promise.withResolvers<unknown>()
       sendMessage
         .mockReturnValueOnce(response.promise)
@@ -229,7 +252,8 @@ describe("mounted queue commands", () => {
         await pending
       })
       expect(pendingSets()[kind].size).toBe(0)
-      expect(toast.error).toHaveBeenCalledTimes(1)
+      expect(actions.taskActionErrors).toEqual({ task: t(errorKeys[kind]) })
+      expect(container.textContent).not.toContain(t(errorKeys[kind]))
       const requestTypes = {
         retry: "RETRY_FAILED_CHAPTERS",
         restart: "RESTART_TASK",
@@ -242,6 +266,22 @@ describe("mounted queue commands", () => {
       })
       await act(async () => operations[kind]())
       expect(sendMessage).toHaveBeenCalledTimes(2)
+      expect(actions.taskActionErrors).toEqual({})
     }
   )
+
+  it("does not let an earlier action error replace the newer action on the same task", async () => {
+    const retry = Promise.withResolvers<unknown>()
+    sendMessage
+      .mockReturnValueOnce(retry.promise)
+      .mockResolvedValueOnce({ success: true })
+    let earlier!: Promise<void>
+    await act(async () => {
+      earlier = actions.handleRetryFailed("task")
+      await actions.handleRestartTask("task")
+      retry.resolve({ success: false, error: "older operation failed" })
+      await earlier
+    })
+    expect(actions.taskActionErrors).toEqual({})
+  })
 })

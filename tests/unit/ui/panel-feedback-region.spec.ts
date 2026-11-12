@@ -15,9 +15,9 @@ vi.mock("@/entrypoints/sidepanel/hooks/useInitFailure", () => ({
   useInitFailure: useInitFailureMock,
 }))
 
-import { ErrorBanner } from "@/entrypoints/sidepanel/components/ErrorBanner"
+import { PanelFeedbackRegion } from "@/entrypoints/sidepanel/components/PanelFeedbackRegion"
 
-describe("ErrorBanner", () => {
+describe("panel-wide feedback", () => {
   beforeEach(() => {
     useErrorsMock.mockReturnValue({
       errors: [],
@@ -30,9 +30,10 @@ describe("ErrorBanner", () => {
   })
 
   it("renders nothing when there are no persistent or initialization errors", () => {
-    const html = renderToStaticMarkup(React.createElement(ErrorBanner))
+    const html = renderToStaticMarkup(React.createElement(PanelFeedbackRegion))
 
-    expect(html).toBe("")
+    expect(html).not.toContain('role="alert"')
+    expect(html).not.toContain('role="status"')
   })
 
   it("renders initialization failure from session state", () => {
@@ -41,12 +42,12 @@ describe("ErrorBanner", () => {
       error: "ERR_STORAGE_CORRUPTION secret-detail",
     })
 
-    const html = renderToStaticMarkup(React.createElement(ErrorBanner))
+    const html = renderToStaticMarkup(React.createElement(PanelFeedbackRegion))
 
     expect(html).toContain("Extension initialization failed")
     expect(html).not.toContain("ERR_STORAGE_CORRUPTION")
     expect(html).not.toContain("secret-detail")
-    expect(html).toContain("Error")
+    expect(html).toContain("Reload extension")
   })
 
   it("renders both initialization failure and persistent errors", () => {
@@ -67,7 +68,7 @@ describe("ErrorBanner", () => {
       acknowledgeError: vi.fn(),
     })
 
-    const html = renderToStaticMarkup(React.createElement(ErrorBanner))
+    const html = renderToStaticMarkup(React.createElement(PanelFeedbackRegion))
 
     expect(html).toContain("Extension initialization failed")
     expect(html).toContain(
@@ -90,14 +91,14 @@ describe("ErrorBanner", () => {
       acknowledgeError: vi.fn(),
     })
 
-    const html = renderToStaticMarkup(React.createElement(ErrorBanner))
+    const html = renderToStaticMarkup(React.createElement(PanelFeedbackRegion))
 
     expect(html).toContain("This site may have changed.")
     expect(html).not.toContain("unexpected schema")
     expect(html).not.toContain("token=secret")
   })
 
-  it("leaves FSA handle failures to the dedicated actionable banner", () => {
+  it("omits legacy folder alerts handled by the folder recovery flow", () => {
     useErrorsMock.mockReturnValue({
       errors: [
         {
@@ -110,8 +111,9 @@ describe("ErrorBanner", () => {
       acknowledgeError: vi.fn(),
     })
 
-    const html = renderToStaticMarkup(React.createElement(ErrorBanner))
+    const html = renderToStaticMarkup(React.createElement(PanelFeedbackRegion))
 
-    expect(html).toBe("")
+    expect(html).not.toContain('role="alert"')
+    expect(html).not.toContain('role="status"')
   })
 })
