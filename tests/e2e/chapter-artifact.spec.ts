@@ -189,7 +189,6 @@ test("live synopsis comparison excludes Mangago's browser-added expansion contro
         language: "en",
         author: "Author",
         genres: ["Adventure"],
-        year: 1998,
         description: "A full synopsis.",
       },
     },
