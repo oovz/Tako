@@ -91,6 +91,46 @@ async function waitForSidepanelSeries(
 }
 
 test.describe("Side Panel activation", () => {
+  test("shows the panel while saved UI preferences are still loading", async ({
+    context,
+    extensionId,
+    page,
+  }) => {
+    await setLocalState(context, SETTINGS_STORAGE_KEYS.global, {
+      ...DEFAULT_SETTINGS,
+      uiLanguage: "ja",
+      motionPreference: "system",
+    })
+    await page.addInitScript(() => {
+      const { promise, resolve } = Promise.withResolvers<void>()
+      window.addEventListener("release-ui-preferences", () => resolve(), {
+        once: true,
+      })
+      const send = chrome.runtime.sendMessage.bind(chrome.runtime)
+      Object.defineProperty(chrome.runtime, "sendMessage", {
+        value: async (message: { type: string }) => {
+          const response = await send(message)
+          if (message.type === "GET_UI_PREFERENCES") await promise
+          return response
+        },
+      })
+    })
+    await page.goto(`chrome-extension://${extensionId}/sidepanel.html`)
+
+    const queueTab = page.getByRole("tab", { selected: true })
+    await expect(queueTab).toBeVisible()
+    await expect(page.getByRole("banner").getByRole("button")).toBeEnabled()
+    const html = page.locator("html")
+    await expect(html).toHaveAttribute("data-tako-motion", "reduce")
+
+    await page.evaluate(() =>
+      window.dispatchEvent(new Event("release-ui-preferences"))
+    )
+    await expect(queueTab).toHaveText("キュー")
+    await expect(html).toHaveAttribute("lang", "ja")
+    await expect(html).not.toHaveAttribute("data-tako-motion")
+  })
+
   test("opens side panel on supported series page and keeps the action enabled", async ({
     context,
     extensionId,
